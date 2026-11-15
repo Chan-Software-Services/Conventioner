@@ -18,6 +18,7 @@ sources:
   - T284
   - T311
   - T317
+  - T375
 ---
 
 # Testing Conventioner
@@ -474,9 +475,10 @@ A stack that is OOM-killed shows `OOMKilled: true` in `docker inspect`; raise it
   CI's e2e action keeps `--with-deps`, and `install-deps` when the browser comes from its cache, which is right on GitHub's Ubuntu runners.
 - **`nm-test.sh` runs take turns for their E2E phase**: two `scripts/nm-test.sh` runs (with neither switch) on one machine
   run their unit suites side by side, but the second waits, saying
-  `nm-test: waiting for the end-to-end lock since ...` and naming the run it waits for, until the first's stack is down,
+  `nm-test: waiting for the heavy-run lock since ...` and naming the run it waits for, until the first's stack is down,
   because a stack starting or stopping breaks another run's browser with
-  `net::ERR_NETWORK_CHANGED`. `lsof ~/.local/state/conventioner/e2e.lock` lists the holder and
+  `net::ERR_NETWORK_CHANGED`. The lock is the machine's heavy-run lock, so the E2E phase also takes turns with
+  the agent team's `team-heavy` runs. `lsof ~/.local/state/agent-team/heavy.lock` lists the holder and
   every waiting run; [CI and the gate](implementation/testing/ci-and-the-gate.md#the-no-mistakes-gate)
   has the lock's rules. A dev stack or a hand-run Playwright takes no turn and can still meet it.
   A stack's own start no longer reaches its first spec: Playwright's global setup waits until the
