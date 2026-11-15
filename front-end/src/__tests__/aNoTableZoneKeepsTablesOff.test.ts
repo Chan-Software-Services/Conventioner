@@ -145,8 +145,10 @@ describe('the way off the no-table zones', () => {
     const tall = { widthMm: 60_000, heightMm: 64_000 };
     const { calls, result: by } = mathCalls(() => offZones(many, pillars, tall));
     expect(by).toEqual({ dxMm: 0, dyMm: 0 });
-    // A drag asks it every frame: 7,996 calls as written, held to twice that. The work is
-    // counted, since a clock reads the machine's other work too.
+    // A drag asks it every frame. The 7,996 calls as written are the set-up's alone (each
+    // table's box and the box of them all): the push gives up at its first look, past its cap on
+    // pairs, and giving up calls nothing of `Math`. So the limit, twice that, fails when the push
+    // stops giving up at its pair cap, and sees nothing smaller.
     expect(calls).toBeLessThan(16_000);
   });
 

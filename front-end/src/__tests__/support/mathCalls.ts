@@ -4,7 +4,7 @@
  * input makes the same calls on any machine, however busy, where a clock reads the machine's other
  * work too; so a speed limit in the unit suite is a limit on this count, measured once and given
  * room, and a change that makes the code look at markedly more (a search that loses its bound, a
- * check that loses its nearness test) passes it by a wide margin.
+ * check that loses its nearness test) exceeds the limit by a wide margin.
  *
  * It counts only what goes through `Math`: work that calls none of its functions is not seen.
  */

@@ -335,7 +335,9 @@ describe('a row spread evenly to the ends of an open path', () => {
     ];
     const options = { ...TABLE, gapMm: 0, side: 'right' as const, obstacles: [inTheWay] };
     const { calls, result: poses } = mathCalls(() => spreadEvenly(runs, options));
-    // 28,805 calls as written: the search that had no end is held to twice that.
+    // 28,805 calls as written, held to twice that. On this input the count does not move when
+    // the row's own early way out is taken away, since the search's other bounds end it first: a
+    // search with no end fails by the test's timeout, and this limit by a row that does more.
     expect(calls).toBeLessThan(60_000);
     expect(poses.length).toBeGreaterThan(0);
     expect(leastSeparation(poses)).toBeGreaterThanOrEqual(-0.05);
@@ -575,7 +577,7 @@ describe('rows beside a path, an aisle apart', () => {
     expect(counts(placed)).toEqual([10, 4, 0]);
   });
 
-  it('places four rows along 60 m among 400 standing tables in no more work than a frame holds', () => {
+  it('places four rows along 60 m among 400 standing tables in no more than twice the work it takes as written', () => {
     // An S through a hall 70 m across, as the preview reckons it on every move of the pointer.
     const points = [p(5000, 20_000), p(22_000, 12_000), p(40_000, 22_000), p(62_000, 14_000)];
     const obstacles = Array.from({ length: 400 }, (_, i) =>
@@ -588,8 +590,9 @@ describe('rows beside a path, an aisle apart', () => {
     const runs = smoothRuns(points);
     const { calls, result: placed } = mathCalls(() => rows(runs, 'right', 4, 1200, { obstacles }));
     expect(counts(placed).every((count) => count > 25)).toBe(true);
-    // 1,018,708 calls as written, about 16 ms alone, a frame: the work is counted, since a clock
-    // reads the machine's other work too, and held to twice that.
+    // 1,018,708 calls as written, about 16 ms alone, a frame, as the preview has for each move
+    // of the pointer: the work is counted, since a clock reads the machine's other work too, and
+    // the limit is twice the work as written, not a frame's.
     expect(calls).toBeLessThan(2_000_000);
   });
 });

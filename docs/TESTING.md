@@ -217,7 +217,8 @@ Add more component tests in `front-end/src/__tests__/`.
 A speed limit in the unit suite counts the work and never reads the clock, since elapsed time measures the machine's other work too and fails a run made beside other work.
 [`mathCalls`](../front-end/src/__tests__/support/mathCalls.ts) counts the calls a piece of geometry makes to `Math`'s functions, the same on any machine, and each limit is twice the count measured when it was written.
 It sees only work that goes through `Math`.
-`aSpeedLimitCountsWork.test.ts` fails when a unit test reads `performance.now()`, `hrtime` or a difference from `Date.now()`.
+`aSpeedLimitCountsWork.test.ts` fails when a file the unit suite runs, or a helper under `src/__tests__/support/` or `src/__tests__/helpers/`, names `performance.now`, `performance.mark`, `performance.measure`, `hrtime`, `Date.now(`, `.getTime(` or `console.time`, and lists each such line.
+A date used as data trips it too: write the date out, so it reads the same on every run.
 
 Configuration: `front-end/vitest.config.ts` with `happy-dom` environment.
 

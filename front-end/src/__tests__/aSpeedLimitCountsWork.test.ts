@@ -31,19 +31,24 @@ describe('the count of calls to Math', () => {
     expect(Math.hypot).toBe(before.hypot.value);
   });
 
-  it('is the only speed limit: no test in the unit suite reads the clock to time its work', () => {
-    const sources = import.meta.glob('./**/*.{test,spec}.{ts,tsx}', {
-      query: '?raw',
-      import: 'default',
-      eager: true,
-    }) as Record<string, string>;
-    const clock = new RegExp(
-      ['performance', 'now'].join('\\.') + '|hrtime|' + 'Date\\.now\\(\\) *-',
+  it('is the only speed limit: no test in the unit suite, and no helper of one, reads the clock', () => {
+    // Every file the suite runs and every helper beside this one. This file is not in its own
+    // glob, so the pattern below does not find itself.
+    const sources = import.meta.glob(
+      ['../**/*.{test,spec}.{ts,tsx}', './support/**/*.ts', './helpers/**/*.ts'],
+      { query: '?raw', import: 'default', eager: true },
+    ) as Record<string, string>;
+    expect(Object.keys(sources).length).toBeGreaterThan(200);
+    const clock = /performance\.(now|mark|measure)|hrtime|Date\.now\(|\.getTime\(|console\.time/;
+    const reads = Object.entries(sources).flatMap(([path, source]) =>
+      source
+        .split('\n')
+        .map((line, i) => (clock.test(line) ? `${path}:${i + 1}: ${line.trim()}` : ''))
+        .filter(Boolean),
     );
-    const timed = Object.entries(sources)
-      .filter(([, source]) => clock.test(source))
-      .map(([path]) => path);
-    // AttendanceStatusView's is a comment on why it puts the real timers back.
-    expect(timed).toEqual(['./AttendanceStatusView.test.ts']);
+    // A line listed here reads the clock. Where it times work, count the work with `mathCalls`.
+    // Where it is a date as data, write the date out (`new Date('2026-03-01T10:00:00Z')`), which
+    // reads the same on every run.
+    expect(reads).toEqual([]);
   });
 });
