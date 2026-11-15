@@ -18,6 +18,7 @@ sources:
   - T284
   - T311
   - T317
+  - T381
 ---
 
 # Testing Conventioner
@@ -212,6 +213,11 @@ and the person may take its `resolutionAction`, and renders nothing when there a
 blockers - all without a line of guard-specific logic, which is the point of the guard
 registry ([`back-end/guards.py`](../back-end/guards.py)).
 Add more component tests in `front-end/src/__tests__/`.
+
+A speed limit in the unit suite counts the work and never reads the clock, since elapsed time measures the machine's other work too and fails a run made beside other work.
+[`mathCalls`](../front-end/src/__tests__/support/mathCalls.ts) counts the calls a piece of geometry makes to `Math`'s functions, the same on any machine, and each limit is twice the count measured when it was written.
+It sees only work that goes through `Math`.
+`aSpeedLimitCountsWork.test.ts` fails when a unit test reads `performance.now()`, `hrtime` or a difference from `Date.now()`.
 
 Configuration: `front-end/vitest.config.ts` with `happy-dom` environment.
 

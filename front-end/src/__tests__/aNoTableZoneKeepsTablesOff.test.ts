@@ -20,6 +20,7 @@ import {
 } from '@/components/layout/layoutGeometry';
 import type { SavedLayout } from '@/components/layout/layoutSave';
 import { MAX_ZONES, useLayoutEditor } from '@/components/layout/useLayoutEditor';
+import { mathCalls } from './support/mathCalls';
 
 const SIX_FOOT = { id: 'six-foot', name: 'Standard 6 ft', widthMm: 1830, depthMm: 760 };
 
@@ -142,12 +143,11 @@ describe('the way off the no-table zones', () => {
       return { left: x, top: y, right: x + 800, bottom: y + 800 };
     });
     const tall = { widthMm: 60_000, heightMm: 64_000 };
-    // The clock the suite fakes would read no time at all.
-    vi.useRealTimers();
-    const started = performance.now();
-    expect(offZones(many, pillars, tall)).toEqual({ dxMm: 0, dyMm: 0 });
-    // A drag asks it every frame: it must stay well inside one.
-    expect(performance.now() - started).toBeLessThan(20);
+    const { calls, result: by } = mathCalls(() => offZones(many, pillars, tall));
+    expect(by).toEqual({ dxMm: 0, dyMm: 0 });
+    // A drag asks it every frame: 7,996 calls as written, held to twice that. The work is
+    // counted, since a clock reads the machine's other work too.
+    expect(calls).toBeLessThan(16_000);
   });
 
   it('never takes a centre out of the hall', () => {
