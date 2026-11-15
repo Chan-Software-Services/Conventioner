@@ -3,9 +3,10 @@
 # Deterministic full-suite test runner; the no-mistakes gate runs it with --real-data-only.
 #
 # Runs its E2E stack under a project name of its own, on host ports Docker picks,
-# so it runs safely alongside the primary stack and other runs, and takes turns with other runs for
-# its E2E phase (see the lock). Tears the stack down and removes its virtual environment however the
-# run ends: an EXIT trap, and guards that outlive a SIGKILL (see Teardown).
+# so it runs safely alongside the primary stack and other runs, and takes turns with other runs and
+# the team's heavy runs for its E2E phase (see the lock). Tears the stack down and removes its
+# virtual environment however the run ends: an EXIT trap, and guards that outlive a SIGKILL (see
+# Teardown).
 #
 # Usage:
 #     ./scripts/nm-test.sh
@@ -19,7 +20,7 @@
 # job's build, bundle budget and eval check, and Playwright on a stack of its own. CI alone runs
 # docker compose build, gitleaks, zizmor, actionlint, the knowledge graph's drift check and CodeQL.
 #
-# --skip-e2e runs every suite but Playwright, and so starts no stack and takes no end-to-end lock,
+# --skip-e2e runs every suite but Playwright, and so starts no stack and takes no heavy-run lock,
 # leaving Playwright to CI's required e2e shards.
 #
 # --real-data-only runs the real-data checks and stops: the gate passes it, since it pushes the
@@ -285,14 +286,19 @@ cd "$REPO_ROOT"
 # The images every run with the same dependencies shares: built only when none has their tag yet.
 "$REPO_ROOT/scripts/th-compose.sh" ensure-images
 
-# One E2E phase at a time on this machine, from the stack's start to its teardown: a stack starting
-# or stopping breaks another run's browser with net::ERR_NETWORK_CHANGED. The teardown guard
-# inherits the lock, so a killed run keeps it until its stack is down; every other command runs
-# without it. T19's ticket 11 replaces this with `team-capacity run --kind gate:conventioner`,
-# keeping the lock as the fallback when team-capacity is absent.
+# One E2E phase at a time on this machine, from the stack's start to its teardown, and never beside
+# another heavy run: the lock is the machine's heavy-run lock, which the team's `team-heavy run`
+# takes too. A stack starting or stopping breaks another run's browser with
+# net::ERR_NETWORK_CHANGED. The teardown guard inherits the lock, so a killed run keeps it until its
+# stack is down; every other command runs without it. Under a team-heavy run, that run holds the
+# lock already and this one takes nothing (scripts/e2e-lock.sh). T19's ticket 11 replaces this with
+# `team-capacity run --kind gate:conventioner`, keeping the lock as the fallback when team-capacity
+# is absent.
 # shellcheck source=scripts/e2e-lock.sh
 source "$SCRIPT_DIR/e2e-lock.sh"
-take_e2e_lock $((45 * 60)) "$COMPOSE_PROJECT_NAME (pid $$, $REPO_ROOT)"
+# Never "<label> (pid <pid>) since" or "<label> (pid <pid>, T<n>) since", team-heavy's own form:
+# the worktree after the pid keeps it apart.
+take_e2e_lock $((45 * 60)) "conventioner e2e $COMPOSE_PROJECT_NAME (pid $$, $REPO_ROOT)"
 start_teardown_guard
 
 without_e2e_lock "$REPO_ROOT/scripts/th-compose.sh" up -d

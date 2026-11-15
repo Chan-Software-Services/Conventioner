@@ -2,6 +2,7 @@
 only says it started and then waits, so a test can abort the run in its first phase as the gate does."""
 
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -14,6 +15,8 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 BASH = shutil.which("bash")
+# team-heavy's HOLDER_FORM: a holder's line of its own form, its label, pid and task.
+TEAM_HEAVY_HOLDER_FORM = r"^(.*) \(pid ([0-9]+)(, (T[0-9]+))?\) since "
 
 
 def repo_with_scripts(tmp_path):
@@ -202,7 +205,8 @@ def stubbed(tmp_path):
     env.update(
         PYTHON_CMD=str(python),
         TMPDIR=str(tmp_path),
-        XDG_STATE_HOME=str(tmp_path / "state"),
+        # The heavy-run lock is under $HOME: the test's own, never the machine's.
+        HOME=str(tmp_path / "home"),
         PATH=f"{bin_dir}:{env['PATH']}",
     )
 
@@ -216,7 +220,7 @@ def stubbed(tmp_path):
         )
         return result, calls.read_text().splitlines()
 
-    return run, tmp_path / "state" / "conventioner" / "e2e.lock"
+    return run, tmp_path / "home" / ".local" / "state" / "agent-team" / "heavy.lock"
 
 
 UNIT_SUITES = [
@@ -243,7 +247,7 @@ def suites(calls):
     return [call for call in calls if not call.startswith("python -m pip")]
 
 
-def test_without_the_switch_the_run_ends_with_playwright_on_a_stack_of_its_own_under_the_lock(stubbed):
+def test_without_the_switch_the_run_ends_with_playwright_on_a_stack_of_its_own_under_the_lock(stubbed, tmp_path):
     run, lock = stubbed
 
     result, calls = run()
@@ -260,9 +264,24 @@ def test_without_the_switch_the_run_ends_with_playwright_on_a_stack_of_its_own_u
         "th-compose.sh down -v --remove-orphans",
     ):
         assert call in e2e
-    assert "nmtest-" in lock.read_text()
+    assert re.match(rf"conventioner e2e nmtest-(\d+) \(pid \1, {re.escape(str(tmp_path / 'repo'))}\) since ", lock.read_text())
+    # Never a line of team-heavy's own form, which the team would read as a team-heavy's pid.
+    assert not re.match(TEAM_HEAVY_HOLDER_FORM, lock.read_text())
     assert "E2E tests: OK" in result.stdout
     assert "left to CI" not in result.stdout
+
+
+def test_under_a_heavy_run_the_e2e_phase_runs_without_taking_the_lock_again(stubbed):
+    run, lock = stubbed
+
+    result, calls = run(TEAM_HEAVY_HELD="1")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    for call in ("th-compose.sh up -d", "seed_fixture.sh ", "npx playwright test", "th-compose.sh down -v --remove-orphans"):
+        assert call in calls
+    assert not lock.exists()
+    assert "nm-test: under a heavy run, which holds the heavy-run lock for it" in result.stdout
+    assert "E2E tests: OK" in result.stdout
 
 
 def test_skip_e2e_runs_every_other_suite_and_leaves_playwright_to_ci(stubbed):

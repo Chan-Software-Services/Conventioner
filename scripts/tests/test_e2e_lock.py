@@ -1,5 +1,7 @@
 """e2e-lock.sh, sourced by real Bash processes that take turns for the lock, with flock and without."""
 
+import contextlib
+import fcntl
 import os
 import shutil
 import queue
@@ -27,12 +29,12 @@ read -r _ || true  # until stdin closes
 
 @pytest.fixture(params=["flock", "python"])
 def env(request, tmp_path):
-    """The lock under a state home of the test's own, taken with flock(1), or with Python's fcntl
-    on a PATH that has no flock."""
+    """The lock under a home of the test's own, never the machine's, taken with flock(1), or with
+    Python's fcntl on a PATH that has no flock; with no heavy run above it, whatever runs the tests."""
     if request.param == "flock" and not shutil.which("flock"):
         pytest.skip("flock is not installed")
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("XDG_", "E2E_"))}
-    env.update(XDG_STATE_HOME=str(tmp_path / "state"), PYTHON=sys.executable, WAIT="10")
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("XDG_", "E2E_", "TEAM_HEAVY_"))}
+    env.update(HOME=str(tmp_path / "home"), PYTHON=sys.executable, WAIT="10")
     if request.param == "python":
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
@@ -114,15 +116,88 @@ def runs(env):
         run.kill()
 
 
-def test_an_unheld_lock_is_taken_at_once_and_its_directory_made(runs, tmp_path):
+@pytest.fixture
+def lock(tmp_path):
+    """The machine's heavy-run lock, where team-heavy keeps it, under the test's home."""
+    return tmp_path / "home" / ".local" / "state" / "agent-team" / "heavy.lock"
+
+
+# A holder's line of team-heavy's own form, as its `run` writes it.
+HEAVY_LINE = "tests/run in ~/agent-team (pid 7, T1) since 2026-01-01 00:00:00 +0000\n"
+
+
+@contextlib.contextmanager
+def heavy_run(lock):
+    """Holds the lock as a team-heavy run does: an exclusive flock on the file, opened read-write,
+    and its holder's line written into it."""
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(lock, os.O_RDWR | os.O_CREAT)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock.write_text(HEAVY_LINE)
+        yield
+    finally:
+        os.close(fd)
+
+
+def test_an_unheld_lock_is_taken_at_once_and_its_directory_made(runs, lock):
     holder = runs(HOLD, "nmtest-1 (pid 1, /work/a)")
 
     lines = holder.wait_for("held")
 
-    assert len(lines) == 2 and "nm-test: has the end-to-end lock at " in lines[0]
-    lock = tmp_path / "state" / "conventioner" / "e2e.lock"
+    assert len(lines) == 2 and "nm-test: has the heavy-run lock at " in lines[0]
     assert lock.read_text().startswith("nmtest-1 (pid 1, /work/a) since ")
     assert holder.release() == 0
+
+
+def test_the_lock_is_the_heavy_runs_file_whatever_the_state_home(runs, lock, tmp_path):
+    # team-heavy keeps its lock under $HOME alone, so a state home elsewhere must not move this one.
+    holder = runs(HOLD, "nmtest-1 (pid 1, /work/a)", XDG_STATE_HOME=str(tmp_path / "state"))
+
+    holder.wait_for("held")
+
+    assert lock.read_text().startswith("nmtest-1 (pid 1, /work/a) since ")
+    assert not (tmp_path / "state").exists()
+    assert holder.release() == 0
+
+
+def test_a_run_waits_while_a_heavy_run_holds_the_lock_and_takes_it_once_that_ends(runs, lock):
+    with heavy_run(lock):
+        run = runs(HOLD, "nmtest-1 (pid 1, /work/a)")
+        waiting = run.wait_for("waiting")
+
+        assert "nm-test: waiting for the heavy-run lock since " in waiting[-1]
+        assert f"held by {HEAVY_LINE}" in waiting[-1]
+        time.sleep(1)
+        assert run.process.poll() is None
+        assert run.lines.empty()
+        assert lock.read_text() == HEAVY_LINE
+    assert "nm-test: has the heavy-run lock at " in run.wait_for("held")[0]
+    assert lock.read_text().startswith("nmtest-1 (pid 1, /work/a) since ")
+    assert run.release() == 0
+
+
+def test_under_a_heavy_run_the_lock_is_that_runs_and_is_not_taken_again(runs, lock):
+    # team-heavy runs its command with TEAM_HEAVY_HELD set and the lock held: a second take would
+    # wait for the run it is part of.
+    with heavy_run(lock):
+        run = runs(
+            f"""
+source {LIBRARY}
+take_e2e_lock 2 "$WHO"
+without_e2e_lock "$BASH" -c 'echo ran without it'
+""",
+            "nmtest-1 (pid 1, /work/a)",
+            TEAM_HEAVY_HELD="1",
+        )
+        out, status = run.rest()
+
+        assert status == 0, out
+        assert out.splitlines() == [
+            "nm-test: under a heavy run, which holds the heavy-run lock for it",
+            "ran without it",
+        ]
+        assert lock.read_text() == HEAVY_LINE
 
 
 def test_a_second_run_waits_saying_for_whom_and_takes_the_lock_once_it_is_free(runs):
@@ -132,11 +207,11 @@ def test_a_second_run_waits_saying_for_whom_and_takes_the_lock_once_it_is_free(r
     second = runs(HOLD, "nmtest-2 (pid 2, /work/b)")
     waiting = second.wait_for("waiting")
 
-    assert "nm-test: waiting for the end-to-end lock since " in waiting[-1]
+    assert "nm-test: waiting for the heavy-run lock since " in waiting[-1]
     assert "held by nmtest-1 (pid 1, /work/a) since " in waiting[-1]
     assert second.process.poll() is None
     assert first.release() == 0
-    assert "nm-test: has the end-to-end lock at " in second.wait_for("held")[0]
+    assert "nm-test: has the heavy-run lock at " in second.wait_for("held")[0]
     assert second.release() == 0
 
 
@@ -189,7 +264,7 @@ read -r _ || true  # until stdin closes
         assert second.lines.empty()
     finally:
         done.touch()
-    assert "nm-test: has the end-to-end lock at " in second.wait_for("held")[0]
+    assert "nm-test: has the heavy-run lock at " in second.wait_for("held")[0]
     assert second.release() == 0
 
 
@@ -212,7 +287,7 @@ read -r _ || true  # until stdin closes
         second.wait_for("waiting")
 
         first.kill()
-        assert "nm-test: has the end-to-end lock at " in second.wait_for("held")[0]
+        assert "nm-test: has the heavy-run lock at " in second.wait_for("held")[0]
         assert second.release() == 0
     finally:
         done.touch()
