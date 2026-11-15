@@ -21,6 +21,7 @@ import {
   type RowSide,
   type Run,
 } from '@/components/layout/layoutGeometry';
+import { mathCalls } from './support/mathCalls';
 
 const TABLE = { widthMm: 1830, depthMm: 760 };
 const p = (xMm: number, yMm: number): PointMm => ({ xMm, yMm });
@@ -333,9 +334,11 @@ describe('a row spread evenly to the ends of an open path', () => {
       p(-4110.251405176703, 3203.7070537558106),
     ];
     const options = { ...TABLE, gapMm: 0, side: 'right' as const, obstacles: [inTheWay] };
-    const start = performance.now();
-    const poses = spreadEvenly(runs, options);
-    expect(performance.now() - start).toBeLessThan(500);
+    const { calls, result: poses } = mathCalls(() => spreadEvenly(runs, options));
+    // 28,805 calls as written, held to twice that. On this input the count does not move when
+    // the row's own early way out is taken away, since the search's other bounds end it first: a
+    // search with no end fails by the test's timeout, and this limit by a row that does more.
+    expect(calls).toBeLessThan(60_000);
     expect(poses.length).toBeGreaterThan(0);
     expect(leastSeparation(poses)).toBeGreaterThanOrEqual(-0.05);
     for (const pose of poses) {
@@ -353,14 +356,11 @@ describe('a row spread evenly to the ends of an open path', () => {
       }),
     );
     for (const side of ['left', 'right'] as const) {
-      const start = performance.now();
-      const poses = spreadEvenly(smoothRuns(points), {
-        ...TABLE,
-        gapMm: 0,
-        side,
-        obstacles: across,
-      });
-      expect(performance.now() - start).toBeLessThan(500);
+      const { calls, result: poses } = mathCalls(() =>
+        spreadEvenly(smoothRuns(points), { ...TABLE, gapMm: 0, side, obstacles: across }),
+      );
+      // 252,849 calls on the left and 269,161 on the right as written, about 5 ms alone.
+      expect(calls).toBeLessThan(500_000);
       for (const pose of poses) {
         for (const shape of across) {
           expect(separation(cornersAt(pose), shape)).toBeGreaterThanOrEqual(-0.05);
@@ -577,7 +577,7 @@ describe('rows beside a path, an aisle apart', () => {
     expect(counts(placed)).toEqual([10, 4, 0]);
   });
 
-  it('places four rows along 60 m among 400 standing tables well inside a frame', () => {
+  it('places four rows along 60 m among 400 standing tables in no more than twice the work it takes as written', () => {
     // An S through a hall 70 m across, as the preview reckons it on every move of the pointer.
     const points = [p(5000, 20_000), p(22_000, 12_000), p(40_000, 22_000), p(62_000, 14_000)];
     const obstacles = Array.from({ length: 400 }, (_, i) =>
@@ -588,17 +588,11 @@ describe('rows beside a path, an aisle apart', () => {
       }),
     );
     const runs = smoothRuns(points);
-    const once = () => rows(runs, 'right', 4, 1200, { obstacles });
-    once();
-    const times: number[] = [];
-    for (let i = 0; i < 9; i += 1) {
-      const start = performance.now();
-      once();
-      times.push(performance.now() - start);
-    }
-    times.sort((a, b) => a - b);
-    expect(counts(once()).every((count) => count > 25)).toBe(true);
-    // A frame is 16 ms; a loaded CI machine is given room. The build note has the measure.
-    expect(times[4]).toBeLessThan(50);
+    const { calls, result: placed } = mathCalls(() => rows(runs, 'right', 4, 1200, { obstacles }));
+    expect(counts(placed).every((count) => count > 25)).toBe(true);
+    // 1,018,708 calls as written, about 16 ms alone, a frame, as the preview has for each move
+    // of the pointer: the work is counted, since a clock reads the machine's other work too, and
+    // the limit is twice the work as written, not a frame's.
+    expect(calls).toBeLessThan(2_000_000);
   });
 });
