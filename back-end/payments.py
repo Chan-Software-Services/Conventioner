@@ -574,8 +574,10 @@ _OWNED_FIELDS = ("state", "freed", "set_by_hand", "revision")
 @dataclass(frozen=True)
 class OwedTransition:
     """What ``owed_day_transition`` did to one vendor's day: the state the day read as
-    (``before``), the state it left (``after``), the record as read, and the revision written
-    (None for a record deleted or nothing written)."""
+    (``before``), the state it left (``after``), the record as read, the revision written (None
+    for a record deleted or nothing written), and whether what the day reads as changed, which
+    alone the history records: a write that only tidies a stopped free's record on a held day
+    leaves the day reading as it did."""
 
     key: Dict[str, str]
     before: OwedState
@@ -583,11 +585,7 @@ class OwedTransition:
     record: Optional[Dict[str, Any]]
     revision: Optional[int]
     wrote: bool
-
-    @property
-    def changed(self) -> bool:
-        """Whether what the day reads as changed: the history records only such a change."""
-        return self.before != self.after
+    changed: bool
 
     def undo(self) -> None:
         """Put the record back as it was read, for a free whose seat could not be freed, and only
@@ -618,6 +616,15 @@ class OwedTransition:
         amounts_owed_collection.update_one(still_written, restore)
 
 
+def _held_after(event: OwedEvent, held: bool) -> bool:
+    """Whether the day is held once ``event`` has happened: seated, it is; freed or dropped, not."""
+    if event == OwedEvent.SEATED:
+        return True
+    if event in (OwedEvent.FREED, OwedEvent.FREED_WITH_DEDUCTION, OwedEvent.DROPPED_BY_RUN):
+        return False
+    return held
+
+
 def owed_day_transition(
     market_id: str, vendor_email: str, date: str, event: OwedEvent, *,
     held: Optional[Seat], by: Optional[str], cents: Optional[int] = None,
@@ -646,8 +653,9 @@ def owed_day_transition(
         before = _reading(doc, stored, held is not None)
         after = next_owed_state(stored, event, held=held is not None, cents=cents, seat=seat,
                                 by=by, at=_now())
+        changed = before != on_day(after, _held_after(event, held is not None))
         if after == stored and trusted:
-            return OwedTransition(key, before, after, doc, None, False)
+            return OwedTransition(key, before, after, doc, None, False, changed)
         if doc is None:
             revision = 1
             try:
@@ -656,19 +664,19 @@ def owed_day_transition(
                      "revision": revision})
             except DuplicateKeyError:
                 continue
-            return OwedTransition(key, before, after, doc, revision, True)
+            return OwedTransition(key, before, after, doc, revision, True, changed)
         read = doc.get("revision")
         holding = {**key, "_id": doc["_id"],
                    "revision": read if read is not None else {"$exists": False}}
         if isinstance(after, FollowsSeat):
             if amounts_owed_collection.delete_one(holding).deleted_count:
-                return OwedTransition(key, before, after, doc, None, True)
+                return OwedTransition(key, before, after, doc, None, True, changed)
             continue
         revision = (read or 0) + 1
         if amounts_owed_collection.update_one(holding, {"$set": {
                 "state": after.to_stored(), **legacy_fields(after), "revision": revision,
         }}).matched_count:
-            return OwedTransition(key, before, after, doc, revision, True)
+            return OwedTransition(key, before, after, doc, revision, True, changed)
     raise OwedDayChanged()
 
 

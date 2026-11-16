@@ -429,6 +429,33 @@ class TestTheOwner:
         assert owed.documents == []
         assert (moved.wrote, moved.changed) == (False, False)
 
+    def test_tidying_a_stopped_frees_record_on_a_held_day_changes_nothing_it_reads(self, owed):
+        owed.insert_one(_stored(FreedWaived(FREED, EDITOR, AT, None)))
+
+        moved = Payments.owed_day_transition(MARKET, ANA, DAY, OwedEvent.ADMIN_CALCULATED,
+                                             held=SEAT, by=ADMIN)
+
+        assert (moved.before, moved.wrote, moved.changed) == (FollowsSeat(), True, False)
+
+    @pytest.mark.parametrize("name", ["freed(s, a)", "freed(s, none)", "freed_waived(s, b)",
+                                      "freed_waived(s, none)"])
+    def test_seating_a_freed_day_again_changes_what_it_reads(self, owed, name):
+        """A freed line becomes the held seat's line, so what the day reads as changed."""
+        owed.insert_one(_stored(STATES[name]))
+
+        moved = Payments.owed_day_transition(MARKET, ANA, DAY, OwedEvent.SEATED, held=None,
+                                             by=ADMIN)
+
+        assert moved.changed is True
+
+    def test_seating_a_held_day_with_an_amount_set_changes_nothing_it_reads(self, owed):
+        owed.insert_one(_stored(SetByHand(A)))
+
+        moved = Payments.owed_day_transition(MARKET, ANA, DAY, OwedEvent.SEATED, held=SEAT,
+                                             by=ADMIN)
+
+        assert (moved.wrote, moved.changed) == (False, False)
+
     def test_a_cleared_legacy_record_reading_as_the_seat_is_taken_away(self, owed):
         """The release before cleared a seated-again day's fields and kept the record: it reads
         as following the seat, which is no record, so the next event on it deletes it."""

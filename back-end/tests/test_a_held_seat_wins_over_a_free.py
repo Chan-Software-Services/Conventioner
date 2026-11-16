@@ -517,3 +517,15 @@ class TestEveryWriteForgetsTheStaleFreedRecordsOfItsDays:
                                        by=ADMIN)
 
         assert stores.owed.documents == []
+
+    def test_the_calculated_price_on_a_held_day_with_a_stopped_frees_record_records_nothing(
+            self, admin, stores):  # noqa: F811
+        """The line reads its seat's price before and after, so nothing is recorded: what the day
+        reads as is what decides, not the stopped free's record the write tidies (review of 01)."""
+        a_stale_freed_record(SUN)
+
+        PaymentsApi.use_calculated_price(MARKET, ANA, SUN, ADMIN)
+
+        sunday = line(SUN)
+        assert (sunday["freed"], sunday["owedCents"], sunday["owedSetBy"]) == (False, 3500, None)
+        assert entries(stores, "change-owed") == []
