@@ -350,8 +350,11 @@ One elevation shadow, extracted from the newer screens, where it is already used
 
 ```css
 --shadow-card:
-  0 0 0 1px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.07), 0 6px 14px rgba(0, 0, 0, 0.08);
+  0 0 0 1px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.07),
+  0 6px 14px rgba(0, 0, 0, 0.08);
 ```
+
+**A card that informs is flat**, where the cards worked in are lifted: on the [layout's page](implementation/modules/floorplan-placement.md#the-editor) the Sections card stands on `--mm-beige` with a 1px `--mm-border` edge and no shadow, so the white, lifted card of the selection or the tool under it reads as the one in hand (T422, the QC walk of 2026-11-16); its quiet lines take `--mm-text-muted-on-beige`, since `--mm-text-muted` is 4.23:1 there.
 
 **The legacy halo is retired**: `0 0 4px 5px rgba(0,0,0,.25)` and its inset twin. A shadow with no offset has no light source, and a spread larger than its blur is a ring, not a shadow - which is why the older cards read as outlined in grey fog. The inset variant is what makes the setup fields look pressed and skeuomorphic. That rule is elevation's; the focus halo below is a focus indicator, deliberately a flat ring that hugs the control.
 
@@ -717,6 +720,8 @@ Measured, the green glow is 1.58:1 against white and 1.50:1 against beige, below
 
 **A selected row is the on toggle's look**, so selection and focus never read alike (T123).
 A toggle that is on (`.btn[aria-pressed='true']` in `primitives.css`) is the one selected state the language had: a `--mm-chip-positive` ground inside a `--mm-green` border.
+**A tool that is on is filled instead** (T422, the QC walk of 2026-11-16): the layout editor's toolbar draws its tool on in `--mm-green` with white ink, its key white too, deepening to `--mm-green-hover` and `--mm-green-pressed` under the pointer and held down (white 4.59, 5.23 and 5.91:1), since the tool is a mode every press on the map obeys, where a filter's toggle only narrows a list; each tool's key stands after its name in `--text-xs` and `--mm-text-muted`, the disabled ink on a tool that cannot be used.
+A menu's choice that stays chosen ([`RowMenu.vue`](../front-end/src/components/RowMenu.vue)'s ticked items, the layout map's Floorplan menu) draws its tick as the app's checkbox is, a `--mm-green` square with a white check.
 **A tap shows on the control, never as the browser's box** (T142): `base.css` turns off the tap highlight, which flashed a square light-blue box over a tapped control whatever its shape, and a `.btn` shows its press itself, its pressed fill under `:active`, a step past its hover's ([a fill of its own](#the-contrast-contract)).
 The [Vendors page](business/flows/vendors.md)'s open vendor takes the same pair (`.vendor-row--open` in [`VendorsView.vue`](../front-end/src/views/VendorsView.vue)), where it drew a 2px black outline; its row keeps its own ink, and a focused row keeps its white ground and draws the green border.
 The tint is a chip's own ground, so inside a selected row a chip keeps its ink on white, and its muted lines, the address under a name and the date count, take `--mm-text-muted-on-beige`, since `--mm-text-muted` is 4.27:1 on the tint; `contrast.test.ts` holds the row's text, its muted lines and its 3.75:1 border to the tint.
