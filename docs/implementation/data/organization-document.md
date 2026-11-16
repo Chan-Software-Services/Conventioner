@@ -40,7 +40,7 @@ describes:
   - back-end/tests/test_a_roll_forward_rebuilds_the_people_from_the_lists.py
   - back-end/tests/test_a_persons_organizations_in_either_shape.py
   - back-end/api/organizations.py#change_org_place
-verified: 2026-11-13
+verified: 2026-11-16
 sources:
   - E20/F04/S01
   - E21/F03/S01
@@ -194,6 +194,7 @@ Every market check asks a row there, and the market read serves every row's answ
 The Markets list (`get_markets_for_user`) is every market with the person's role on it, then every market of their organizations, each kept only where the market's own read would serve it to them (T181).
 It reads each document as the read does (`_readable_market`), resolves the person's role by the read's rule (`_summary_role`, through `market_role_of`, with the organization parsed as the read parses it, from the list's memo, so an organization whose document fails validation grants nothing through it here either) and asks the read's question of that role (`read_refused`).
 A document the model refuses is logged by `_log_unreadable_market` and left out with the rest still listed, and a market whose read row refuses the person is left out too, so no card opens onto "not found".
+Both of its finds leave out the market's `exampleColumns` (`LISTED_FIELDS`), the columns the start kept of its file with their answers, which no card reads ([the CSV proposal and start](../modules/csv-proposal-and-start.md)).
 The entry's `actionRefusals` are asked of the same role, and of whether the reader is a chosen reviewer (`is_chosen`, by their address, as the read asks it), so each control the card and Manage market offer is offered to exactly the people the market lets take it.
 [`back-end/tests/test_the_market_list_shows_what_the_read_serves.py`](../../../back-end/tests/test_the_market_list_shows_what_the_read_serves.py) pins it at the Flask client: every listed market opens for its reader, and an unknown role in a roles map or an organization that does not parse (its people name no owner) leaves the market out of the list as it leaves it out of the read, an organization stored with its owner also in `admins` grants its admins Admin and its members Viewer in both, and a chosen Viewer's entry answers every row as their read does.
 

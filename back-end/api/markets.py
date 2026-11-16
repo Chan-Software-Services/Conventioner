@@ -1190,8 +1190,6 @@ def _decorate_market_summary(
     # A Discord check's stored inputs, which no list entry serves, as no market read does.
     from api.discord_connection import leave_out_what_is_not_served
     leave_out_what_is_not_served(market)
-    # Every answer a market keeps, which would grow the list by every market it names (ADR 0023).
-    leave_out_every_answer(market)
     phase = phase_from_market_document(market)
     _stamp_effective_market_state(market, phase)
     # The table's answers for the role the entry names, asked of the market's rows as the read
@@ -1233,6 +1231,12 @@ def _listed(
         document, market, role, lookups, chosen=Actions.is_chosen(user_email, market))
 
 
+#: What the Markets list reads of a stored market: all of it but the columns the start kept of its
+#: file, which hold the file's answers (ADR 0018, ADR 0023) and which no card reads, so they never
+#: leave the database for the list.
+LISTED_FIELDS = {market_doc_key("example_columns"): 0}
+
+
 def get_markets_for_user(user_email: str) -> List[Dict[str, Any]]:
     """
     Get all markets a user has access to (via explicit role or organization): exactly those the
@@ -1253,11 +1257,11 @@ def get_markets_for_user(user_email: str) -> List[Dict[str, Any]]:
     # wildcard index on the map serves (``lookup_indexes``). It was read by turning every market's
     # map into an array first, which no index can serve: every Markets page read every market.
     markets_with_role = markets_collection.find(
-        live({f"{market_doc_key('roles')}.{user_id}": {"$exists": True}})
+        live({f"{market_doc_key('roles')}.{user_id}": {"$exists": True}}), LISTED_FIELDS
     )
     org_ids = [org['id'] for org in user_orgs]
     org_markets = markets_collection.find(
-        live(market_doc_filter("organization_id", {"$in": org_ids}))
+        live(market_doc_filter("organization_id", {"$in": org_ids})), LISTED_FIELDS
     ) if org_ids else []
 
     for documents in (markets_with_role, org_markets):

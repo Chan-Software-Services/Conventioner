@@ -132,16 +132,43 @@ def test_leaving_them_out_never_touches_the_stored_document(market):
     assert doc["exampleColumns"] == [_column(answers=ANSWERS)]
 
 
+class _EveryFindKept(FakeSlugMarketsCollection):
+    """The markets collection, keeping the projection of every find it was asked."""
+
+    def __init__(self, docs):
+        super().__init__(docs)
+        self.projections = []
+
+    def find(self, query, projection=None):
+        self.projections.append(projection)
+        return super().find(query, projection)
+
+
+ORG = "org-1"
+ORG_MARKET = "market-of-the-organization"
+
+
 @pytest.mark.parametrize("email", [OWNER, EDITOR, VIEWER])
 def test_the_markets_list_never_carries_them(monkeypatch, email):
-    doc = stored_market(_id="mongo-m1", roles=ROLES, exampleColumns=[_column(answers=ANSWERS)])
-    monkeypatch.setattr(MarketsApi, "markets_collection", FakeSlugMarketsCollection([doc]))
-    monkeypatch.setattr(OrgsApi, "organization_documents_of", lambda _user_id: [])
+    """Neither the market a role lists nor the one an organization lists is read with its columns:
+    the Markets page's cards read none of them, and a market keeps every answer there (T352)."""
+    by_role = stored_market(_id="mongo-m1", roles=ROLES, exampleColumns=[_column(answers=ANSWERS)])
+    by_organization = stored_market(
+        id=ORG_MARKET, name="Of the organization", _id="mongo-m2", roles={"user-other": "owner"},
+        organizationId=ORG, exampleColumns=[_column(answers=ANSWERS)])
+    markets = _EveryFindKept([by_role, by_organization])
+    monkeypatch.setattr(MarketsApi, "markets_collection", markets)
+    monkeypatch.setattr(OrgsApi, "organization_documents_of", lambda _user_id: [{
+        "id": ORG, "_id": "mongo-org-1", "name": "Test Org", "owner": "user-other",
+        "admins": [], "members": list(PEOPLE.values()), "markets": [ORG_MARKET]}])
 
-    [listed] = MarketsApi.get_markets_for_user(email)
+    listed = MarketsApi.get_markets_for_user(email)
 
-    assert listed["id"] == MARKET
-    assert listed["exampleColumns"] == [_column()]
+    assert sorted(entry["id"] for entry in listed) == sorted([MARKET, ORG_MARKET])
+    assert all("exampleColumns" not in entry for entry in listed)
+    assert len(markets.projections) == 2
+    assert all(projection and projection.get("exampleColumns") in (0, False)
+               for projection in markets.projections), markets.projections
 
 
 def _assignable(monkeypatch, module):

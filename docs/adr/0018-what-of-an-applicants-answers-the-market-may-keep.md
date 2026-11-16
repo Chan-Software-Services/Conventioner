@@ -37,7 +37,8 @@ It decided that rule for what may be sent to a third party, not for what may be 
 ## Consequences
 
 - This reverses the start's stated invariant: the file is still never stored, but what it said of each kept column is.
-- Everyone who may read the market reads `exampleColumns`, on the market's read and the Markets list; each of them already reads every application.
+- Everyone who may read the market reads `exampleColumns`, on the market's read; each of them already reads every application.
+  Amended 2026-11-16 (T352): the Markets list served it too, though no card reads it, and the list's reads now leave it out.
 - [ADR 0023](0023-every-answer-for-an-option-to-offer.md) narrows this decision: for an option to offer, a column whose answers are not mostly different also keeps every answer less what `_names_someone` catches, which only someone who may change the form reads, while it can still change.
 - A later import does not refresh it, since the form locks at the first application and nothing reads it after.
 - Widening what may be kept narrowed what may be sent: a heading either filter matches is not sent to TypeSafe (ADR 0007's consequences).
