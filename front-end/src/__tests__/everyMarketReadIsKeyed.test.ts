@@ -33,8 +33,9 @@ const SRC = resolvePath(process.cwd(), 'src');
 const NOT_THE_APP = [join(SRC, '__tests__'), join(SRC, 'dev')];
 
 /**
- * Each file that may watch a market id, the most times it may, and why none of them reads the
- * server by hand. Re-checked against the code on the branch, 2026-11-17.
+ * Each file that may watch a market id, the most times it may, and why its watches are allowed:
+ * none reads the server by hand but the two that keep their own guard on an overtaken read.
+ * Re-checked against the code on the branch, 2026-11-17.
  */
 const MAY_WATCH_A_MARKET_ID: Record<string, { most: number; why: string }> = {
   'utils/openMarket.ts': {

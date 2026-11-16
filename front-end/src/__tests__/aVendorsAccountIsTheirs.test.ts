@@ -169,11 +169,14 @@ describe("the drawer's Payment tab never shows one vendor's account on another's
     expect(w.get('[data-testid="payment-owed"]').text()).toBe('$10.00');
     expect(q('payment-confirm-window')).toBeNull();
 
+    expect(w.emitted('changed')).toBeUndefined();
     removed.settle({ data: account(999900) });
     await flushPromises();
 
     expect(w.get('[data-testid="payment-owed"]').text()).toBe('$10.00');
     expect(w.text()).not.toContain('9,999.00');
+    // Payments is told once to read its totals again, the payment being removed on Ana.
+    expect(w.emitted('changed')).toHaveLength(1);
   });
 
   it("takes an amount owed changed on Ana that answers after the move into nothing on Ben's tab", async () => {

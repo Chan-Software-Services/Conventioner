@@ -6,7 +6,7 @@
  * still out. That answer, landing after, put their application back on the page the next person
  * opens, kept their answers to be sent after the next sign-in, or, as a 401, signed the next
  * vendor out. The store notes the sign-in each request was made in, and a request that answers
- * after it ended writes nothing and answers as signed out.
+ * after it ended writes nothing and has nothing to show or say.
  *
  * Each request's status is its own answer and its caller's: the store's one shared `loading`,
  * which turned false when any request answered, is gone, and the form's "Saving…" is its own.
