@@ -13,7 +13,7 @@ describes:
   - back-end/api/organizations.py#get_history
   - back-end/tests/test_the_organizations_history.py
   - back-end/api/organizations.py#get_default_permission_history
-verified: 2026-11-13
+verified: 2026-11-16
 sources:
   - wayfinding/readable-journey/08
   - E40/F01/S01
@@ -57,7 +57,7 @@ It began as the placement history, because a placement that differs from what th
 The placement history kept placements only, on the view that a narrow trail that gets read beats a general one that gets ignored.
 Daniel widened it (T92, Q23: "yes every change is logged"): an organizer investigating a problem or a mistake asks who did what on the market, whatever it was, and one history answers that where several partial records would each answer part of it.
 The decision, and what stays state and what stays apart, is [ADR 0017](../../adr/0017-one-history-for-every-change.md).
-Every write that changes a market, its applications or its vendors records its entry into it (E40/F01/S02), once its change has landed, under the E39 action its check asked; [what each write records](#what-each-write-records) lists them.
+Every write that changes a market, its applications or its vendors records its entry into it (E40/F01/S02), once its change has landed, under the E39 action its check asked, but for five records no request asks, each named with its reason; [what each write records](#what-each-write-records) lists them.
 
 The glossary concepts: [Assignment](../../business/concepts/assignment.md) and [Placement and pin](../../business/concepts/placement-and-pin.md).
 
@@ -375,6 +375,9 @@ No rule is a person, so a rule's verdict is never an entry of its own: the write
 Not recorded, each for its reason in `NOT_A_CHANGE` and `NOT_RECORDED` of [`back-end/tests/test_every_write_records.py`](../../../back-end/tests/test_every_write_records.py): a review claim ([ADR 0014](../../adr/0014-reviewers-claim-and-a-verdict-is-a-conditional-write.md)), which is who holds a card open and not a change; reads and exports; a vendor signing in or out; a market's creation, whose own history starts empty and which [its organization's history](#what-an-organization-records) records; its deletion, which takes the history with it while its organization's history keeps that it went (the [deletion trail](../modules/market-deletion.md) records a market only when its organization is deleted); the floorplan routes that keep nothing, or an upload the market uses only once a layout is saved; and starting Discord's approval screen, which keeps a state in the person's session and nothing on the market.
 Two rows record nothing of their own: "Update info the assignment or price reads", asked beside "Update a vendor's info" by the same write, which records it under that row, and who may be chosen as a reviewer, which changes nothing itself.
 That test sends every write route as the screen sends it and asserts its one entry; it fails on a market write route, or a row of the table, that records nothing without saying why there, and on an entry Mongo could not store.
+It also ties each entry to the asking (T105-9): a spy on `Actions.refusal` collects the rows each write asked and was let in by, leaving out a row asked on top of another and one read through `Actions.may`, which lets nobody in, and an entry under any other row fails.
+The exceptions are an applicant's own save, which no row asks, and the five records no request asks, each with its reason in its `UNASKED`: a first import's move into Review, the floorplans a start from a file drops, a vendor's own check-in or its undo, the deal of an application that waited to be dealt, recorded under the write it arrived by, and the test-market seeder's phase moves.
+Its `REACHING_THE_UNASKED` sends a request that reaches each of those a route can reach, all but the seeder's, and asserts the one record it is allowed as.
 Its `TestWhatAnEntryHolds` pins what some entries hold beyond that, among them an import's counts of the automatic rejections it returned and a taken role's `role` before, under the row that takes it.
 
 **Entries are stored structured, never as a sentence**: the wording belongs to the surface showing it, [`front-end/src/utils/marketHistory.ts`](../../../front-end/src/utils/marketHistory.ts), which composes each area's words from its own file under [`historyReaders/`](../../../front-end/src/utils/historyReaders/) ([two features never share a line](../conventions/two-features-never-share-a-line.md#the-historys-words)), a placement's among them, and must be changeable without a migration.
