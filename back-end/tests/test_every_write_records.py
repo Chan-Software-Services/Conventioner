@@ -6,19 +6,26 @@ about, and the changed fields before and after - or, for an import or a run, its
 route this file does not send fails ``test_every_write_route_records_or_says_why_not``, and an
 action no write records fails ``test_every_action_in_the_table_records_or_says_why_not``, so a new
 write cannot be permitted without being recorded unless someone says here why it is not a change.
+
+Each entry is also tied to the asking (T105-9): a spy on ``Actions.refusal`` collects the rows each
+write asked and was let in by, and every entry it records must be under one of them, the
+applicant's own save, or one of ``UNASKED``, the records no request asks, each with its reason.
 """
 import copy
+import importlib
+import inspect
 from datetime import date, datetime, timezone
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple
 
 import bson
 import pytest
 
 from conftest import (
-    COMPLETE_PLAN, FakeApplicationsCollection, a_solver_vendor, mongo_matches, mongo_project, reject_malformed_update,
-    accounts_by_id, sessions_load_through_get_user, skip_without_real_dependencies, stored_market,
+    COMPLETE_PLAN, REVIEW_SETUP_DECIDED, FakeApplicationsCollection, a_solver_vendor, mongo_matches,
+    mongo_project, reject_malformed_update, accounts_by_id, sessions_load_through_get_user,
+    skip_without_real_dependencies, stored_market,
 )
 
 skip_without_real_dependencies()
@@ -38,6 +45,7 @@ import api.vendor_check_in as VendorCheckIn  # noqa: E402
 import csv_import as CsvImport  # noqa: E402
 import discord_client as Discord  # noqa: E402
 import db_config  # noqa: E402
+import guards  # noqa: E402
 import history as History  # noqa: E402
 import layout as Layout  # noqa: E402
 import payments as Payments  # noqa: E402
@@ -45,7 +53,7 @@ import review_team as ReviewTeam  # noqa: E402
 from bson.errors import InvalidDocument  # noqa: E402
 from utils.application_token import generate_application_token  # noqa: E402
 from datatypes import MarketPerson, MarketPhase, PaymentEntry, fill_plan_ids  # noqa: E402
-from test_csv_import import MAPPING, _csv, _market_doc  # noqa: E402
+from test_csv_import import COMPLETE_SETUP, MAPPING, _csv, _market_doc  # noqa: E402
 from test_csv_proposal_api import CSV as A_GOOGLE_FORM_EXPORT  # noqa: E402
 from test_essential_fields import VALID_ANSWERS, _applicant_market_doc  # noqa: E402
 from test_the_placement_endpoint import SETUP_OBJECT, placement  # noqa: E402
@@ -999,6 +1007,197 @@ def test_a_store_that_fails_never_fails_the_write(write, client, world):
     assert response.status_code < 300, response.get_json()
 
 
+# --- Each entry under a row its request asked (T105-9) ---------------------------------------------
+
+@dataclass
+class Asking:
+    """What a sent write asked of the table and what it recorded, side by side."""
+
+    #: The rows the write asked and was let in by, each as its own asking: a row asked on top of
+    #: another asks that one inside its own asking, and ``Actions.may`` reads whether someone may,
+    #: which lets nobody in, so neither is the write's.
+    rows: List[str] = field(default_factory=list)
+    #: Each entry the write recorded, with every function the call that recorded it ran through.
+    recorded: List[Tuple[Dict[str, Any], FrozenSet[str]]] = field(default_factory=list)
+
+
+def _callers() -> FrozenSet[str]:
+    """Every function on the stack, by module and name."""
+    return frozenset(f"{frame.f_globals.get('__name__')}.{frame.f_code.co_name}"
+                     for frame in (info.frame for info in inspect.stack(context=0)))
+
+
+@pytest.fixture
+def asking(monkeypatch, world) -> Asking:
+    """A spy on the asking and the recording that changes neither: each row a write asks is
+    answered as the table answers it, and each entry is written as it is written."""
+    seen = Asking()
+    refusal, may, write = Actions.refusal, Actions.may, History._write
+    depth = [0]
+
+    def nested(ask):
+        def asked(*args, **kwargs):
+            depth[0] += 1
+            try:
+                return ask(*args, **kwargs)
+            finally:
+                depth[0] -= 1
+        return asked
+
+    def asked(row, *args, **kwargs):
+        outermost = depth[0] == 0
+        refused = nested(refusal)(row, *args, **kwargs)
+        if outermost and refused is None:
+            seen.rows.append(row.id)
+        return refused
+
+    def recorded(*args, **kwargs):
+        held = len(world.history.documents)
+        write(*args, **kwargs)
+        callers = _callers()
+        seen.recorded.extend((entry, callers) for entry in world.history.documents[held:])
+
+    monkeypatch.setattr(Actions, "refusal", asked)
+    monkeypatch.setattr(Actions, "may", nested(may))
+    monkeypatch.setattr(History, "_write", recorded)
+    return seen
+
+
+@dataclass(frozen=True)
+class Unasked:
+    """An entry written under a row its request never asked: by the function ``by``, called on a
+    request through one of ``under`` (anywhere, when empty), under ``action``, or under whatever
+    action the write it stands for stored, when None."""
+
+    name: str
+    by: str
+    under: Tuple[str, ...]
+    action: Optional[Actions.Action]
+    because: str
+
+    def holds(self, entry: Dict[str, Any], callers: FrozenSet[str]) -> bool:
+        return (self.by in callers and (not self.under or not callers.isdisjoint(self.under))
+                and (self.action is None or entry["action"] == self.action.id))
+
+
+FIRST_IMPORTS_MOVE = Unasked(
+    "the first import's phase move", "api.markets.take_move", ("csv_import.enter_review",),
+    Actions.MOVE_PHASE,
+    "a Google Form market's first import is its way into Review: the move follows from the rows "
+    "the import row let in, judged as any move is, and is never asked of the person")
+STARTS_RELEASE = Unasked(
+    "the start's floorplans released", "api.markets.release_removed_floorplans",
+    ("csv_start.confirm",), Actions.CHANGE_SETUP,
+    "the plan the start writes drops the floorplans of locations it no longer has: the import row "
+    "lets the start write its plan, and the release records what that plan dropped")
+VENDORS_OWN_CHECK_IN = Unasked(
+    "a vendor's own check-in", "api.attendance._record_door",
+    ("api.vendor_check_in.check_in", "api.vendor_check_in.undo_check_in"), Actions.CHECK_IN,
+    "a vendor holds no role: their sign-in and the market's door code are the check (ADR 0022), "
+    "and the entry is the door's, with no actor")
+ARRIVALS_DEAL = Unasked(
+    "the deal of an arriving application", "review_team._deal_arriving", (), None,
+    "an application waiting to be dealt is dealt by whichever request next holds the market, and "
+    "its entry is the write it arrived by, under that write's action and actor, never the "
+    "request's that dealt it")
+SEEDERS_MOVES = Unasked(
+    "the test markets' phase moves", "api.markets.take_move",
+    ("seed_test_markets.seed_test_market",), Actions.MOVE_PHASE,
+    "an operator's seed, run from a shell and never a request: it reads the owner's phase row "
+    "with Actions.may, which lets nobody in, and no route reaches it, so no write here sends it")
+
+#: The records no request asks, each kept as it is, and why.
+UNASKED = (FIRST_IMPORTS_MOVE, STARTS_RELEASE, VENDORS_OWN_CHECK_IN, ARRIVALS_DEAL, SEEDERS_MOVES)
+
+
+def _named(qualified: str) -> Callable:
+    module, name = qualified.rsplit(".", 1)
+    return getattr(importlib.import_module(module), name)
+
+
+def _the_applicants_own(entry: Dict[str, Any], callers: FrozenSet[str]) -> bool:
+    """A vendor's save of their application: they hold no role, and their sign-in is the check."""
+    return entry["action"] == History.APPLY and "history.record_applicant" in callers
+
+
+def _unasked_records(asking: Asking):
+    """Each entry not under a row its write asked, with the record it is allowed as, or None."""
+    for entry, callers in asking.recorded:
+        if entry["action"] in asking.rows or _the_applicants_own(entry, callers):
+            continue
+        yield entry, next((unasked for unasked in UNASKED if unasked.holds(entry, callers)), None)
+
+
+@pytest.mark.parametrize("write", WRITES, ids=lambda write: write.name)
+def test_a_write_records_only_under_a_row_it_asked(write, client, world, asking):
+    response = write.send(client, world)
+
+    assert response.status_code < 300, response.get_json()
+    assert asking.recorded
+    assert [(entry["action"], entry["kind"]) for entry, unasked in _unasked_records(asking)
+            if unasked is None] == [], asking.rows
+
+
+def _a_first_import(client, world):
+    world.patch(guards, "_utc_now", lambda: datetime(2026, 7, 1, tzinfo=timezone.utc))
+    world.markets.doc = copy.deepcopy(_market_doc(
+        setup=COMPLETE_SETUP, phase=MarketPhase.DRAFT, **REVIEW_SETUP_DECIDED))
+    row = ('2026/05/02 9:14:03,nadia@ember.test,Nadia Okonkwo,Ember Ceramics,'
+           '"2026-08-01, 2026-08-08",2,Gold,half,,"Garden, Main Hall"')
+    return client.post(f"/markets/{MARKET}/applications/import",
+                       json={"csvContent": _csv(row), "mapping": MAPPING})
+
+
+def _a_start_that_drops_a_floorplan(client, world):
+    plan = fill_plan_ids(COMPLETE_PLAN)
+    plan["floorplans"] = [{"id": "fp-1", "locationId": "a-location-gone", "tables": []}]
+    world.market(MarketPhase.DRAFT, applicationForm={"fields": []}, setupObject=plan)
+    return client.post(f"/markets/{MARKET}/csv-proposal/confirm",
+                       json={"csvContent": A_GOOGLE_FORM_EXPORT, "year": 2026})
+
+
+def _the_next_card_after_an_arrival_waited(client, world):
+    world.market(MarketPhase.APPLICATIONS, roles={"user-owner": "owner"},
+                 reviewTeam={"reviewers": [{"userId": "user-owner", "email": OWNER}], "turn": 0})
+    world.applications.insert_one(_application(
+        "app-1", VENDOR, arriving={"actor": VENDOR, "action": History.APPLY}))
+    return client.post(f"/markets/{MARKET}/review/next", json={})
+
+
+#: A request that reaches each unasked record a route can reach, and the record it reaches.
+REACHING_THE_UNASKED = [
+    pytest.param(_a_first_import, FIRST_IMPORTS_MOVE, id="a first import"),
+    pytest.param(_a_start_that_drops_a_floorplan, STARTS_RELEASE,
+                 id="a start that drops a floorplan"),
+    pytest.param(_door(organizer=False, undo=False), VENDORS_OWN_CHECK_IN,
+                 id="a vendor's own check-in"),
+    pytest.param(_door(organizer=False, undo=True), VENDORS_OWN_CHECK_IN,
+                 id="a vendor's own check-in undone"),
+    pytest.param(_the_next_card_after_an_arrival_waited, ARRIVALS_DEAL,
+                 id="the next card after an arrival waited"),
+]
+
+
+@pytest.mark.parametrize("send, unasked", REACHING_THE_UNASKED)
+def test_an_unasked_record_is_the_one_it_is_allowed_as(send, unasked, client, world, asking):
+    response = send(client, world)
+
+    assert response.status_code < 300, response.get_json()
+    assert [allowed for _entry, allowed in _unasked_records(asking)] == [unasked]
+
+
+def test_every_unasked_record_a_route_reaches_is_sent_here():
+    assert {param.values[1].name for param in REACHING_THE_UNASKED} == {
+        unasked.name for unasked in UNASKED if unasked is not SEEDERS_MOVES}
+
+
+@pytest.mark.parametrize("unasked", UNASKED, ids=lambda unasked: unasked.name)
+def test_an_unasked_record_names_functions_that_exist(unasked):
+    """A rename that moves the record fails here, rather than leaving a name nothing matches."""
+    for qualified in (unasked.by, *unasked.under):
+        assert callable(_named(qualified)), qualified
+
+
 class TestWhatAnEntryHolds:
     def test_an_import_of_many_rows_is_one_entry_with_its_counts(self, client, world):
         _import(client, world)
@@ -1269,4 +1468,3 @@ class TestWhatAnEntryHolds:
 
         [entry] = world.history.documents
         assert {"rejected", "returned"} <= set(entry["detail"])
-
