@@ -81,6 +81,10 @@ A new control is one line under its screen, and a new screen is a block beside t
 
 - Connect, Disconnect, and each choice: Connect Discord and give roles
 
+**Tools, the Public map card**
+
+- turning the map on or off, and each question chosen: Publish the map
+
 **The form tab, and the review's highlights**
 
 - the questions, the highlights, the automatic rejections: Change the form
