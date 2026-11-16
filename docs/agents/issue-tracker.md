@@ -9,8 +9,8 @@ GitHub is used for pull requests only.
 ## Where things live
 
 - **The durable backlog** is `~/agent-team-records/projects/conventioner/backlog/`, and **the Wayfinder maps** are `~/agent-team-records/projects/conventioner/wayfinding/<effort>/`.
-  `~/agent-team-records` is the team home, a checkout of the private repo `chanjdaniel/agent-team-records`; its `projects/conventioner/` also holds the brain dumps (`brain-dump/`) and the QC walks (`qc/`).
-  The team's code, its toolkits and scripts, is `~/agent-team` (`chanjdaniel/agent-team`), which holds no planning.
+  `~/agent-team-records` is the team home, a checkout of the private repo `Chan-Software-Services/agent-team-records`; its `projects/conventioner/` also holds the brain dumps (`brain-dump/`) and the QC walks (`qc/`).
+  The team's code, its toolkits and scripts, is `~/agent-team` (`Chan-Software-Services/agent-team`), which holds no planning.
 - **The history came with it**: the planning was imported from Conventioner `dev` at `4aa7e30429768dbe09bc8037abd115486f6fd7fb` (the source sha), and `git log --follow` on a file in the team home lists the commits Conventioner had for it.
   Until then it was `.scratch/` and four `.lavish/` pages in this repo.
   The 2026-10-23 history rewrite removed those from every commit, so the planning lives only in the team home now; the source sha still holds the rest of this repo, such as `docs/MVP_KNOWN_GAPS.md`.
