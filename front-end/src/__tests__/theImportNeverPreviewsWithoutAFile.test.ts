@@ -1,0 +1,171 @@
+/**
+ * The CSV import never previews without a file (T419, T277 probe 6).
+ *
+ * On Map columns, "Preview import" sends the values check. Back was offered while it was out and
+ * started over, dropping the file, and the check's late answer then moved the page from Upload to
+ * Preview with no file, whose Import posted an empty `csvContent`. A form read sent by "Add a
+ * question for it" answered the same way, opening the amend dialog over Upload.
+ * Back now waits while a request is out, and Start over drops every answer still to come.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { ref } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
+
+import CsvImportView from '@/views/CsvImportView.vue';
+import { IntakeMode, MarketPhase, type Market } from '@/assets/types/datatypes';
+import { answerLeaveQuestion } from '@/utils/useUnsavedWork';
+import { answersRefusing } from './support/servedAnswers';
+
+const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn() }));
+const open = vi.hoisted(() => ({ market: null as unknown, refresh: vi.fn() }));
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+  useRoute: () => ({ params: { marketId: 'market-1' } }),
+  onBeforeRouteLeave: () => {},
+  onBeforeRouteUpdate: () => {},
+}));
+vi.mock('@/utils/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/api')>();
+  return { ...actual, api };
+});
+vi.mock('@/utils/openMarket', () => ({
+  useOpenMarket: () => ({ market: open.market, status: ref('ready'), refresh: open.refresh }),
+}));
+
+/** A market in Review, so the confirm posts the import with no reviewers write before it. */
+const MARKET = {
+  id: 'market-1',
+  name: 'Riverside',
+  phase: MarketPhase.Applications,
+  intakeMode: IntakeMode.Csv,
+  actionRefusals: answersRefusing(),
+  reviewTeam: { reviewers: [] },
+  reviewerCandidates: [],
+} as unknown as Market;
+
+const FILE = 'Email Address\nana-vendor@example.com';
+
+let valuesCheck: PromiseWithResolvers<unknown>;
+
+beforeEach(() => {
+  setActivePinia(createPinia());
+  api.get.mockReset();
+  api.get.mockResolvedValue({ data: {} });
+  api.put.mockReset();
+  api.post.mockReset();
+  valuesCheck = Promise.withResolvers<unknown>();
+  api.post.mockImplementation(async (url: string) => {
+    if (url.endsWith('/import/inspect')) {
+      return {
+        data: {
+          headers: ['Email Address'],
+          sampleValues: [['ana-vendor@example.com']],
+          rowCount: 1,
+          targets: [{ key: 'applicant_email', label: 'Email', required: true, kind: 'identity' }],
+          groups: [],
+          suggestedMapping: { applicant_email: 0 },
+        },
+      };
+    }
+    if (url.endsWith('/import/preview')) return valuesCheck.promise;
+    return { data: { created: 1, phase: MarketPhase.Applications } };
+  });
+  open.refresh.mockReset();
+  open.refresh.mockResolvedValue(undefined);
+  open.market = ref(MARKET);
+});
+
+let wrapper: VueWrapper | null = null;
+afterEach(() => {
+  answerLeaveQuestion(false);
+  wrapper?.unmount();
+  wrapper = null;
+});
+
+async function onMapColumns(): Promise<VueWrapper> {
+  wrapper = mount(CsvImportView, {
+    global: { stubs: { MarketFrame: { template: '<div><slot /></div>' }, AmendFormDialog: true } },
+    attachTo: document.body,
+  });
+  const input = wrapper.get('[data-testid="import-file-input"]');
+  const file = new File([FILE], 'responses.csv', { type: 'text/csv' });
+  Object.defineProperty(input.element, 'files', { value: [file] });
+  await input.trigger('change');
+  await flushPromises();
+  expect(wrapper.find('[data-testid="import-map"]').exists()).toBe(true);
+  return wrapper;
+}
+
+async function press(view: VueWrapper, testid: string) {
+  await view.get(`[data-testid="${testid}"]`).trigger('click');
+  await flushPromises();
+}
+
+/** Back pressed as a person would: a click on a disabled button does nothing in a browser. */
+async function pressBackIfOffered(view: VueWrapper) {
+  const back = view.get<HTMLButtonElement>('[data-testid="import-back-button"]');
+  if (!back.element.disabled) await press(view, 'import-back-button');
+}
+
+/** The bodies the import itself was posted with. */
+function importBodies(): Array<{ csvContent?: string }> {
+  return api.post.mock.calls
+    .filter(([url]) => String(url).endsWith('/applications/import'))
+    .map(([, body]) => body as { csvContent?: string });
+}
+
+describe('Back during the values check', () => {
+  it('is refused while the values check is out', async () => {
+    const view = await onMapColumns();
+    await press(view, 'import-preview-button');
+    const back = view.get<HTMLButtonElement>('[data-testid="import-back-button"]');
+    expect(back.element.disabled).toBe(true);
+  });
+
+  it("leaves the check's late answer no way to open Preview without a file", async () => {
+    const view = await onMapColumns();
+    await press(view, 'import-preview-button');
+    await pressBackIfOffered(view);
+    valuesCheck.resolve({ data: { validRows: 1, newRows: 1 } });
+    await flushPromises();
+    // Either Back was refused and the answer opened Preview with the file, or Back went to Upload
+    // and the answer was dropped; never Preview without a file.
+    const onPreview = view.find('[data-testid="import-preview"]').exists();
+    if (onPreview) expect(view.find('[data-testid="import-filename"]').exists()).toBe(true);
+    else expect(view.find('[data-testid="import-upload"]').exists()).toBe(true);
+  });
+
+  it('leaves Import no way to post an empty file', async () => {
+    const view = await onMapColumns();
+    await press(view, 'import-preview-button');
+    await pressBackIfOffered(view);
+    valuesCheck.resolve({ data: { validRows: 1, newRows: 1 } });
+    await flushPromises();
+    const confirm = view.find<HTMLButtonElement>('[data-testid="import-confirm-button"]');
+    if (confirm.exists() && !confirm.element.disabled) await press(view, 'import-confirm-button');
+    for (const body of importBodies()) expect(body.csvContent).toBe(FILE);
+  });
+});
+
+describe('Start over while a request is out', () => {
+  it('drops the form read "Add a question for it" sent, so no dialog opens over Upload', async () => {
+    const view = await onMapColumns();
+    const formRead = Promise.withResolvers<unknown>();
+    api.get.mockImplementation(async (url: string) =>
+      url.endsWith('/application-form') ? formRead.promise : { data: {} },
+    );
+    const select = view.get<HTMLSelectElement>('[data-testid="import-target-select-0"]');
+    select.element.value = '__needs_a_field__';
+    await select.trigger('change');
+    await flushPromises();
+    await press(view, 'import-add-a-field-button');
+    // Nothing marks the form read as busy, so Back is offered: Start over.
+    await press(view, 'import-back-button');
+    expect(view.find('[data-testid="import-upload"]').exists()).toBe(true);
+    formRead.resolve({ data: { application_form: { fields: [] }, formRevision: 1 } });
+    await flushPromises();
+    expect(view.findComponent({ name: 'AmendFormDialog' }).props('open')).toBe(false);
+  });
+});

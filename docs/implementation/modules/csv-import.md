@@ -41,6 +41,7 @@ sources:
   - T274
   - T271
   - T315
+  - T419
 ---
 
 # The CSV import
@@ -173,7 +174,20 @@ A first import's reviewers are chosen on its preview step, whose confirm, when t
 - [Priority and tie-breaks](../../business/rules/priority-and-tie-breaks.md): a row must carry its own `submitted_at` for first come, first served to decide anything.
 - [A re-import upserts on the market and the address](../../adr/0011-re-import-upserts-on-market-and-email.md).
 
-`back-end/tests/test_csv_import.py`, `back-end/tests/test_a_re_imports_back_to_review_lands_with_the_answers.py`, `front-end/src/__tests__/aFileThatIsNotCsv.test.ts`, `front-end/src/__tests__/aResponsesFileTooLargeToSend.test.ts`, `front-end/src/__tests__/theImportAsksBeforeItDropsAMapping.test.ts`, `front-end/e2e/csv-import.spec.ts`, `front-end/e2e/the-import-lines-up.spec.ts` and `front-end/e2e/the-import-asks-before-it-drops-a-mapping.spec.ts` pin it; the synthetic exports it is held to are [the Google Form corpus](../../../back-end/tests/test_data/README.md).
+These pin it, sorted by path:
+
+- `back-end/tests/test_a_re_imports_back_to_review_lands_with_the_answers.py`
+- `back-end/tests/test_csv_import.py`
+- `front-end/e2e/csv-import.spec.ts`
+- `front-end/e2e/the-import-asks-before-it-drops-a-mapping.spec.ts`
+- `front-end/e2e/the-import-lines-up.spec.ts`
+- `front-end/e2e/the-import-never-previews-without-a-file.spec.ts`
+- `front-end/src/__tests__/aFileThatIsNotCsv.test.ts`
+- `front-end/src/__tests__/aResponsesFileTooLargeToSend.test.ts`
+- `front-end/src/__tests__/theImportAsksBeforeItDropsAMapping.test.ts`
+- `front-end/src/__tests__/theImportNeverPreviewsWithoutAFile.test.ts`
+
+The synthetic exports it is held to are [the Google Form corpus](../../../back-end/tests/test_data/README.md).
 
 What the organizer does on the import, step by step, is [importing a Google Form's responses](../../business/flows/import.md).
 

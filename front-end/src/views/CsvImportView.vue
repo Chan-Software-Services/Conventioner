@@ -1016,6 +1016,8 @@ function samplesFor(index: number): string {
 }
 
 function startOver() {
+  // The file goes, so every answer still out for it is dropped: none may land on Upload.
+  visit += 1;
   step.value = 'upload';
   fileName.value = '';
   csvContent.value = '';
@@ -1622,6 +1624,7 @@ watch(marketId, () => {
           v-if="step !== 'upload' && step !== 'done'"
           class="button-secondary"
           data-testid="import-back-button"
+          :disabled="busy"
           @click="step === 'map' ? startOver() : (step = step === 'preview' ? 'map' : 'preview')"
         >
           Back
