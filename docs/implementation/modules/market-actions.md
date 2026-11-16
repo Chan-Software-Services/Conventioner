@@ -481,7 +481,7 @@ The search cannot see a raw read of `market.roles` or `organization.admins`: com
 The same file pins every row's default, label, group and fixed flag against the epic's table, and for each row that its default role may, that every role above may, and that the role below is refused with its sentence; and which row each loader-backed write and read asks.
 
 **A test that fakes who may patches `user_has_permission` or `Actions.refusal`**: the first still sees the role the row asks on the market (its default unless the market holds the row), so a fake that answers by role keeps working.
-`ask` asks through `Actions.refusal` as the module holds it, so a patch of `refusal` answers `ask`, `_market_change` and the two loaders over it too, and `test_every_write_records.py`'s spy on it sees a write that asks through `ask`.
+`ask` asks through `Actions.refusal` as the module holds it, so a patch of `refusal` answers `ask` and `_market_change` too, and `test_every_write_records.py`'s spy on it sees a write that asks through `ask`.
 
 ## Why
 
