@@ -72,7 +72,7 @@ pip install -r requirements.txt -r requirements-dev.txt
 python -m pytest tests/ -v
 ```
 
-Install **both** files. `requirements-dev.txt` is only `pytest`, uv (for the lock check) and what they need; it does not pull in the runtime
+Install **both** files. `requirements-dev.txt` is only `pytest`, coverage.py (for [the test map](implementation/testing/the-test-map.md)), uv (for the lock check) and what they need; it does not pull in the runtime
 dependencies, and the suite imports the application. `scripts/nm-test.sh` installs both, which is
 why it passes where a hand-run `pip install -r requirements-dev.txt` does not.
 The suite also uploads a real PDF floorplan, with an empty `PATH`, so it proves the Python requirements alone draw a PDF, as they must on production's Vercel function, which installs no system package.

@@ -1,14 +1,18 @@
-import { test as base, expect, type Page } from '@playwright/test';
+import { test as playwrightTest, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { LoginPage } from './pages/LoginPage';
 import { settle } from './helpers/settle';
 import { stack } from './helpers/stack';
 import { hideDevToolsPanel } from './helpers/hideDevToolsPanel';
+import { withTheTestMap } from './helpers/testMap';
 import {
   annotateANetworkChange,
   attachWhatTheBrowserSaid,
   watchTheBrowser,
 } from './helpers/browserSaid';
+
+/** Playwright's `test`, recording the test map when `TEST_MAP_OUT` is set (`helpers/testMap.ts`). */
+const base = withTheTestMap(playwrightTest);
 
 export const TEST_USER = {
   email: 'e2e@example.com',
