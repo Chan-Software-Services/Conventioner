@@ -87,8 +87,8 @@ export const test = base.extend<
   { mongoSession: void }
 >({
   /**
-   * Each worker process starts its one Mongo session (`helpers/mongo.ts`) before its first test,
-   * so the start, slow on a loaded CI runner, is not counted against a test that seeds.
+   * Each worker process starts its Mongo session (`helpers/mongo.ts`) before its first test, so
+   * that first start, slow on a loaded CI runner, is not counted against a test that seeds.
    */
   mongoSession: [
     async ({}, use) => {

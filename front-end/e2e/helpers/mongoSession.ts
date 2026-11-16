@@ -1,8 +1,8 @@
 /**
  * The worker thread `mongo.ts` starts in each process of the suite, holding one mongosh in the
- * stack's Mongo container for the life of that process: one `docker exec`, one mongosh start, one
- * connection, where each script once paid all three. It runs the scripts one at a time, in the
- * order they come.
+ * stack's Mongo container for that process, started again only when a script runs out its time or
+ * mongosh ends: one `docker exec`, one mongosh start, one connection, where each script once paid
+ * all three. It runs the scripts one at a time, in the order they come.
  *
  * Run by Node itself, not Playwright's loader, so it imports Node's modules, `typescript` and
  * `.ts` files named whole.

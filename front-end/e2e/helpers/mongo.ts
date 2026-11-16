@@ -58,7 +58,7 @@ function sessionThread(): Thread {
 }
 
 /**
- * Start the session ahead of the first script, so its one start is not counted against a test
+ * Start the session ahead of the first script, so its first start is not counted against a test
  * (`fixtures.ts` starts it for each worker process).
  */
 export async function startMongoSession(): Promise<void> {
