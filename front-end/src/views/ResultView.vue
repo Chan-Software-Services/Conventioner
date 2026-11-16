@@ -854,6 +854,11 @@ function swapSeats(withEmail: string): void {
   gap: var(--space-6);
 }
 
+/* A failed read's sentence wraps in even lines on a phone, never one word alone on the last. */
+.tables-body > .read-failed :deep(p) {
+  text-wrap: balance;
+}
+
 /* Stays in view over the tables it filters. */
 .filter-band {
   position: sticky;

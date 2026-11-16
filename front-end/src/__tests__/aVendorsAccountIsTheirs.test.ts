@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import VendorPaymentTab from '@/components/VendorPaymentTab.vue';
-import type { Payment, VendorAccount } from '@/utils/payments';
+import { PAYMENT_WRITTEN, type Payment, type VendorAccount } from '@/utils/payments';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 vi.mock('@/utils/api', async (importOriginal) => {
@@ -142,12 +142,15 @@ describe("the drawer's Payment tab never shows one vendor's account on another's
     expect(w.get('[data-testid="payment-owed"]').text()).toBe('$10.00');
     expect(q('record-payment-window')).toBeNull();
 
+    expect(w.emitted('changed')).toBeUndefined();
     recorded.settle({ data: account(999900) });
     await flushPromises();
 
     expect(w.get('[data-testid="payment-owed"]').text()).toBe('$10.00');
     expect(w.text()).not.toContain('9,999.00');
     expect(q('record-payment-window')).toBeNull();
+    // Payments is told once to read its totals again, the payment being recorded on Ana.
+    expect(w.emitted('changed')).toHaveLength(1);
   });
 
   it("takes a removal confirmed on Ana that answers after the move into nothing on Ben's tab", async () => {
@@ -219,11 +222,13 @@ describe("the drawer's Payment tab never shows one vendor's account on another's
     expect(w.get('[data-testid="payment-owed"]').text()).toBe('$10.00');
     expect(q('change-owed-window')).toBeNull();
 
+    expect(w.emitted('changed')).toBeUndefined();
     changed.settle({ data: account(999900) });
     await flushPromises();
 
     expect(w.get('[data-testid="payment-owed"]').text()).toBe('$10.00');
     expect(w.text()).not.toContain('9,999.00');
+    expect(w.emitted('changed')).toHaveLength(1);
   });
 
   it('reads Ana again on coming back to her, never the account last shown for Ben', async () => {
@@ -242,5 +247,83 @@ describe("the drawer's Payment tab never shows one vendor's account on another's
     await flushPromises();
     expect(w.get('[data-testid="payment-owed"]').text()).toBe('$40.00');
     expect(api.get).toHaveBeenLastCalledWith('/markets/m-a/payments/ana%40example.com');
+  });
+});
+
+describe('a payment written from a dialog', () => {
+  const written = vi.fn();
+
+  /** The tab on Ana inside a page that hears of a write that outlived the tab (Payments). */
+  async function onAnaInAPage(): Promise<VueWrapper> {
+    written.mockReset();
+    api.get.mockImplementation((url: string) =>
+      Promise.resolve({ data: url.includes('ana') ? account(3000) : account(1000) }),
+    );
+    wrapper = mount(VendorPaymentTab, {
+      props: { marketId: 'm-a', email: 'ana@example.com', canRecord: true },
+      attachTo: document.body,
+      global: { provide: { [PAYMENT_WRITTEN as symbol]: written } },
+    });
+    await flushPromises();
+    return wrapper;
+  }
+
+  /** Record $35 cash on Ana, its answer held. */
+  async function recordOnAna(w: VueWrapper) {
+    await w.get('[data-testid="payment-record"]').trigger('click');
+    await flushPromises();
+    const amount = q<HTMLInputElement>('record-payment-amount')!;
+    amount.value = '35';
+    amount.dispatchEvent(new Event('input'));
+    q<HTMLInputElement>('record-payment-method-cash')!.click();
+    await flushPromises();
+    let settle!: (value: unknown) => void;
+    let refuse!: (error: unknown) => void;
+    api.post.mockReturnValueOnce(
+      new Promise((resolve, reject) => {
+        settle = resolve;
+        refuse = reject;
+      }),
+    );
+    q<HTMLButtonElement>('record-payment-submit-button')!.click();
+    await flushPromises();
+    return { settle, refuse };
+  }
+
+  it('answered on the tab it was made on tells Payments once, through the tab', async () => {
+    const w = await onAnaInAPage();
+    const recorded = await recordOnAna(w);
+
+    recorded.settle({ data: account(-500) });
+    await flushPromises();
+
+    expect(w.emitted('changed')).toHaveLength(1);
+    expect(written).not.toHaveBeenCalled();
+  });
+
+  it('answering once the tab is gone, the drawer closed, tells Payments through the page', async () => {
+    const w = await onAnaInAPage();
+    const recorded = await recordOnAna(w);
+
+    w.unmount();
+    wrapper = null;
+    recorded.settle({ data: account(-500) });
+    await flushPromises();
+
+    expect(written).toHaveBeenCalledTimes(1);
+  });
+
+  it('refused after the move tells Payments nothing new', async () => {
+    const w = await onAnaInAPage();
+    const recorded = await recordOnAna(w);
+    await w.setProps({ email: 'ben@example.com' });
+    await flushPromises();
+
+    recorded.refuse({ isAxiosError: true, response: { status: 500, data: {} } });
+    await flushPromises();
+
+    expect(w.emitted('changed')).toBeUndefined();
+    expect(written).not.toHaveBeenCalled();
+    expect(w.get('[data-testid="payment-owed"]').text()).toBe('$10.00');
   });
 });

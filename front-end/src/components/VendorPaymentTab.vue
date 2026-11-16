@@ -24,7 +24,7 @@
  * only into the account it was opened on (`adopt`), so a confirmation of Ana's answering on Ben's
  * tab changes nothing there.
  */
-import { computed, ref, watch } from 'vue';
+import { computed, inject, onScopeDispose, ref, watch } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
 import ChangeOwedDialog from '@/components/ChangeOwedDialog.vue';
 import RecordPaymentDialog from '@/components/RecordPaymentDialog.vue';
@@ -34,6 +34,7 @@ import { useServerRead } from '@/utils/useServerRead';
 import { getFormattedTimestamp } from '@/utils/utils';
 import { dateLabel } from '@/utils/vendorDetails';
 import {
+  PAYMENT_WRITTEN,
   accountAsItStands,
   balanceChip,
   balanceText,
@@ -99,14 +100,37 @@ function show(dialog: Open): void {
 
 // A move to another vendor or market closes what was open on the last one: a reset of what the
 // tab shows, never a read.
+let moves = 0;
 watch(
   openOn,
   () => {
+    moves += 1;
     open.value = null;
     confirmSpent.value = false;
   },
   { flush: 'sync' },
 );
+
+let gone = false;
+onScopeDispose(() => (gone = true));
+const paymentWritten = inject(PAYMENT_WRITTEN, null);
+/**
+ * A dialog's write, as it is sent. Answered on the account it was made on, the dialog says so
+ * itself (`saved`, `refreshed`). Answered once the tab moved to another vendor or market, the
+ * dialog is gone with the account it was keyed by: the answer is taken into nothing here, and
+ * Payments is told to read its totals again. Answered once the tab itself is gone, the page that
+ * showed it is told instead. A refused or failed write tells nothing more than the dialog did.
+ */
+function sending(write: Promise<VendorAccount>): void {
+  const sentAt = moves;
+  write.then(
+    () => {
+      if (gone) paymentWritten?.();
+      else if (moves !== sentAt) emit('changed');
+    },
+    () => undefined,
+  );
+}
 
 /** A write's answer, taken into the account it was made on: nothing on another vendor's tab. */
 function saved(on: AccountKey | null, updated: VendorAccount): void {
@@ -404,6 +428,7 @@ function struckPrice(line: PaymentLine): boolean {
         @close="open = null"
         @saved="saved(openOn, $event)"
         @refreshed="refreshed(openOn, $event)"
+        @sending="sending"
       />
       <ChangeOwedDialog
         :key="`owed ${accountName}`"
@@ -415,6 +440,7 @@ function struckPrice(line: PaymentLine): boolean {
         @close="open = null"
         @saved="saved(openOn, $event)"
         @refreshed="refreshed(openOn, $event)"
+        @sending="sending"
       />
       <AppDialog
         :open="!!confirmText"
