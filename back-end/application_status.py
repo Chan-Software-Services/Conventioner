@@ -156,10 +156,10 @@ def is_judgeable(application: Dict[str, Any]) -> bool:
 #: (E38/F10/S01): long enough to notice a slip while reading the next card, short enough that
 #: nobody else has acted on it. After it, changing a verdict is the change row's (E38/F06/S01).
 UNDO_WINDOW = timedelta(minutes=2)
-#: What an undo returns an application to, kept on it by the verdict that left it (``undo_to``): its
-#: status, giver, time and follow-up owner as they were, while it was awaiting a verdict. Kept by the
-#: server, so an undo never returns an application to what a request names; a verdict that changed
-#: one keeps nothing, since an undo is never a change of a verdict.
+#: What an undo returns an application to, kept on it by the verdict that left it (``undo_to``):
+#: its status, giver, time and follow-up owner as they were, while it was awaiting a verdict. Kept
+#: by the server, so an undo never returns an application to what a request names; a verdict that
+#: changed one keeps nothing, since an undo is never a change of a verdict.
 UNDO_KEEPS = ("status", "verdict_by", "verdict_at", "follow_up_owner")
 
 
@@ -194,7 +194,7 @@ def undoable_by(doc: Dict[str, Any], user_id: Optional[str],
     return (now or datetime.now(timezone.utc)) - at <= UNDO_WINDOW
 
 
-# --- Waiting for the deal (E38/F07/S03, ADR 0020) --------------------------------------------------
+# --- Waiting for the deal (E38/F07/S03, ADR 0020) -------------------------------------------------
 
 @dataclass(frozen=True)
 class Arrival:
@@ -229,9 +229,9 @@ def _upsert(app: Application, body: Dict[str, Any]) -> Tuple[Application, bool]:
     duplicate.
 
     That failure is a ``DuplicateKeyError``, which an upsert can raise even though it matched
-    nothing -- the winner's insert lands between this one's read and its own write -- so it is caught
-    and the winner's document is returned. Either way the caller gets the one application that
-    exists, which is what it asked for.
+    nothing -- the winner's insert lands between this one's read and its own write -- so it is
+    caught and the winner's document is returned. Either way the caller gets the one application
+    that exists, which is what it asked for.
     """
     ApplicationsApi.ensure_application_indexes()
     identity = ApplicationsApi.applicant_filter(
@@ -502,8 +502,8 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
     verdict nor answers changed in between are written over (E33/F03/S02, E34/F03/S01, T270).
     An undo, a rule's return, a hand-on and answers changed under a person's verdict mark the
     application for the deal by the event's ``arrival``; a person's follow-up keeps whatever mark
-    it had; every verdict ends the wait. Changed answers hold only the status and the verdict's time, and an organizer's
-    nothing (``_answers_move``).
+    it had; every verdict ends the wait. Changed answers hold only the status and the verdict's
+    time, and an organizer's nothing (``_answers_move``).
     """
     state = state_of(doc)
     if state not in TABLE[type(event)]:
@@ -744,9 +744,10 @@ def deal(app_id: str, reviewer: Optional[MarketPerson], was: Optional[Dict[str, 
 def deal_follow_up(app_id: str, reviewer: MarketPerson,
                    owner_was: Optional[Dict[str, Any]]) -> bool:
     """Hand a follow-up on to the reviewer it is dealt to, a removed reviewer's or one whose owner
-    may no longer own a follow-up here: its owner and its reviewer both become them, it keeps its status, and it waits for the deal no
-    longer. Written only while it still needs a follow-up from ``owner_was``, so one taken on or
-    decided meanwhile is left as it is. Only ``review_team.py`` calls it, holding the market."""
+    may no longer own a follow-up here: its owner and its reviewer both become them, it keeps its
+    status, and it waits for the deal no longer. Written only while it still needs a follow-up
+    from ``owner_was``, so one taken on or decided meanwhile is left as it is. Only
+    ``review_team.py`` calls it, holding the market."""
     ApplicationsApi.ensure_application_indexes()
     result = ApplicationsApi.applications_collection.update_one(
         {"id": app_id, "status": ApplicationStatus.NEEDS_FOLLOW_UP.value,
