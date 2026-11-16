@@ -166,7 +166,10 @@ const menuId = `${props.testid}-${useId()}-menu`;
       :id="menuId"
       ref="list"
       class="row-menu-list"
-      :class="{ 'row-menu-list--above': opens === 'above' }"
+      :class="{
+        'row-menu-list--above': opens === 'above',
+        'row-menu-list--ticks': items.some((item) => item.checked !== undefined),
+      }"
       role="menu"
       :aria-label="label"
       :data-testid="testid"
@@ -294,11 +297,24 @@ const menuId = `${props.testid}-${useId()}-menu`;
   bottom: calc(100% + var(--space-1));
 }
 
+/* A menu of choices that stay chosen is a small list of ticks, as wide as its words, on a card. */
+.row-menu-list--ticks {
+  min-width: 0;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius-card);
+}
+
 /* A choice that stays chosen: its tick before its words, drawn as the app's checkbox is. */
 .row-menu-item--tick {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  /* A thumb's reach on a touch screen, the line's own at a desk. */
+  min-height: var(--target-min);
+  padding: var(--space-1);
+  border-radius: var(--radius-control);
 }
 
 .row-menu-item[aria-disabled='true'] {
@@ -315,10 +331,10 @@ const menuId = `${props.testid}-${useId()}-menu`;
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 13px;
+  height: 13px;
   border: 1px solid var(--mm-text-muted);
-  border-radius: var(--radius-control);
+  border-radius: calc(var(--radius-control) / 3);
   background: white;
   color: white;
   font-size: var(--text-xs);
