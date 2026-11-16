@@ -1094,8 +1094,8 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
           </template>
         </aside>
       </div>
-      <!-- What is set up once or seldom, out of the panel: the table types, the floorplan's image
-           and scale, and the keys (the QC walk of 2026-11-16). -->
+      <!-- What is set up once or seldom, out of the panel: the table types, and the floorplan's
+           image and scale (the QC walk of 2026-11-16). -->
       <AppDialog
         v-if="editing && location"
         :open="settingsOpen"

@@ -1,7 +1,7 @@
 /**
  * The layout page's frame (T422, the QC walk of 2026-11-16, items 7, 9 and 10): the toolbar is one
  * line of tools, each with its key, and the history; the tool's options stand in a card the page
- * renders at the panel's head, never over the map, so the map holds still; Escape goes back to
+ * renders in the panel under the sections, never over the map, so the map holds still; Escape goes back to
  * Select; the zoom stands on the map's corner; and the keyboard button and `?` show the shortcuts,
  * beside the page where the window has room, remembered in the browser.
  */

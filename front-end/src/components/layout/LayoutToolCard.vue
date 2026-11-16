@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * The card of the layout editor's tool on (T422, the QC walk of 2026-11-16): Add table, Row of
- * tables or Fill an area, at the head of the layout page's panel in place of the selection's card,
- * so the map never moves as the tool changes. The page renders it beside the editor
+ * tables or Fill an area, in the layout page's panel under the sections, in place of the selection's
+ * card, so the map never moves as the tool changes. The page renders it beside the editor
  * (`LayoutView.vue`), which holds the tool on and the section and type it adds; the editor holds
  * what the tool does with them.
  *
@@ -184,7 +184,7 @@ const aisleError = computed(() => (rowsOf(rowChoices.rows) > 1 ? rowErrors.value
 </template>
 
 <style scoped>
-/* The tool's card at the panel's head, drawn as the panel's cards are. */
+/* The tool's card in the panel, drawn as the panel's cards are. */
 .layout-tool-card {
   display: flex;
   flex-direction: column;

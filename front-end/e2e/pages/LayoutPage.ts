@@ -140,7 +140,7 @@ export class LayoutPage {
   readonly shortcuts: Locator;
   readonly shortcutsToggle: Locator;
   readonly shortcutsClose: Locator;
-  /** The tool's card at the panel's head, while an adding tool is on. */
+  /** The tool's card in the panel, while an adding tool is on. */
   readonly toolCard: Locator;
   /** The zoom bar on the map's corner, and its Floorplan menu of how the image is drawn. */
   readonly zoomControls: Locator;

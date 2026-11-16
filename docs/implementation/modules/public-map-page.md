@@ -50,7 +50,7 @@ Each row is a button, "<name>" over "Table <code>, <location>"; a press opens th
 **Nothing a vendor typed becomes markup or a link of its own**: the three answers come cleaned by the server, are drawn as text, and a link is built here again only from an `http` or `https` address with a host (`websiteLink`) or a handle of 1 to 30 letters, digits, dots and underscores (`instagramLink`), so a value the server let through by mistake still never becomes a `javascript:` link.
 Every link opens in a new tab with `rel="noopener noreferrer"`.
 
-**A table's id names it across the market**, so the address's `table` and a seat's `tableId` need no location; the seed gives each hall's tables their own prefix, as [the public map](public-map.md) says the server does not enforce.
+**A table's id names it across the market**, so the address's `table` and a seat's `tableId` need no location; the seed gives each hall's tables their own prefix, since the server keeps ids unique only within one layout.
 
 ## Tests
 
