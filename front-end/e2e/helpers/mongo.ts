@@ -28,7 +28,10 @@ interface Thread {
 
 let thread: Thread | null = null;
 
-/** The session's thread (`mongoSession.ts`), started on first use and kept for the process. */
+/**
+ * The session's thread (`mongoSession.ts`), started on first use and kept until it dies or fails to
+ * answer a `mongoEval`; the next call then starts a fresh one.
+ */
 function sessionThread(): Thread {
   if (thread) return thread;
   const signal = new Int32Array(new SharedArrayBuffer(4));
