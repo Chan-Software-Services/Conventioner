@@ -18,14 +18,18 @@ field owned here. The two modules import each other, and neither reads the other
 ``review_team.py`` stays the single owner of dealing (ADR 0020): it decides whom an application
 goes to, holding the market, and calls the deal functions here to write it.
 """
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, Optional
+from enum import Enum
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 import api.applications as ApplicationsApi
-from datatypes import AnswerUpdate, Application, ApplicationStatus, MarketPerson, VerdictGiver
+from datatypes import (
+    AnswerUpdate, Application, ApplicationStatus, IntakeMode, MarketPerson, VerdictGiver,
+)
 
 #: The fields only this module writes: an application's review state. Each move between states
 #: writes several of them in one update, which is why they are owned together. ``origin`` is how an
@@ -35,7 +39,8 @@ OWNED_FIELDS = (
     "added_by", "added_at", "origin", "arriving", "reviewer",
 )
 
-#: Statuses nobody has decided yet.
+#: Statuses nobody has decided yet, as the owner's own filters read them: an open application is
+#: stored ``open``, or ``under_review`` from before. Every reader asks ``state_of`` instead.
 UNDECIDED_STATUSES = (ApplicationStatus.OPEN.value, ApplicationStatus.UNDER_REVIEW.value)
 #: The statuses a reviewer gives, each with who gave it: a verdict, or a follow-up (E34).
 MARKED_STATUSES = (ApplicationStatus.REVIEWER_APPROVED, ApplicationStatus.REVIEWER_REJECTED,
@@ -46,19 +51,102 @@ VERDICT_STATUSES = (ApplicationStatus.REVIEWER_APPROVED.value,
                     ApplicationStatus.REVIEWER_REJECTED.value)
 
 
+# --- The states -----------------------------------------------------------------------------------
+
+class State(str, Enum):
+    """Where an application stands in its review: the six states of the transition table, which
+    ``docs/implementation/data/application-document.md#the-review-state`` states once.
+
+    Read off the stored fields by ``state_of``; never stored themselves, so no stored status
+    changes its spelling. An approval and a rejection each say whose they are, since that decides
+    what may happen to them next: a vendor added by hand is approved by being added, and a rule's
+    rejection is judged again by the rules.
+    """
+
+    OPEN = "open"
+    FOLLOW_UP = "follow_up"
+    APPROVED_BY_A_PERSON = "approved(person)"
+    APPROVED_ADDED = "approved(added)"
+    REJECTED_BY_A_PERSON = "rejected(person)"
+    REJECTED_BY_A_RULE = "rejected(rule)"
+
+    @property
+    def undecided(self) -> bool:
+        """Whether no verdict is given yet: open, or waiting on a follow-up."""
+        return self in (State.OPEN, State.FOLLOW_UP)
+
+
+#: How an application came to the market, read by ``origin_of``: applied on its page, imported
+#: from a file, or added by hand. Its own axis, apart from the verdict.
+APPLIED, IMPORTED, ADDED = "applied", "imported", "added"
+_ORIGINS = (APPLIED, IMPORTED, ADDED)
+
+#: The statuses the old offers flow carried an approval on to (``NoApprovedApplicationsGuard``:
+#: "the solver must have resolved every approved application to either assigned or unassigned").
+#: Never written today; each still reads as the approval it came from.
+_CARRIED_APPROVALS = (
+    ApplicationStatus.UNASSIGNED.value, ApplicationStatus.ASSIGNED.value,
+    ApplicationStatus.ASSIGNMENT_SENT.value, ApplicationStatus.VENDOR_ACCEPTED.value,
+    ApplicationStatus.VENDOR_REFUSED.value,
+)
+
+
+def origin_of(doc: Dict[str, Any], intake: Optional[IntakeMode] = None) -> str:
+    """How this application came to the market: its stored ``origin``; else ``added`` when someone
+    added it by hand (``added_by``); else ``imported`` on a market whose vendors are imported, and
+    ``applied`` on one whose vendors apply, or with no ``intake`` given, since then only "added or
+    not" is asked."""
+    stored = doc.get("origin")
+    if stored in _ORIGINS:
+        return stored
+    if doc.get("added_by"):
+        return ADDED
+    return IMPORTED if intake is IntakeMode.CSV else APPLIED
+
+
+def state_of(doc: Dict[str, Any]) -> State:
+    """The state of an application, as stored or as a reviewer saw it, by one rule.
+
+    ``open``, ``under_review`` or no status at all is open; a follow-up is a follow-up; an approval
+    is approved by being added when the application was added by hand and never applied or was
+    imported since, else by a person; a rejection is a rule's when a rule gave it, else a person's.
+    The statuses nothing writes any more read as what the old flow reached them from: the offers'
+    statuses as the approval they carried, ``cancelled`` as a person's rejection, since the
+    table-share notice counts it with the rejected as not taking part. A status no member names is
+    refused, as reading the application would refuse it.
+    """
+    status = doc.get("status")
+    if status in (None, "") or status in UNDECIDED_STATUSES:
+        return State.OPEN
+    if status == ApplicationStatus.NEEDS_FOLLOW_UP.value:
+        return State.FOLLOW_UP
+    if status == ApplicationStatus.REVIEWER_APPROVED.value or status in _CARRIED_APPROVALS:
+        return State.APPROVED_ADDED if origin_of(doc) == ADDED else State.APPROVED_BY_A_PERSON
+    if status == ApplicationStatus.REVIEWER_REJECTED.value:
+        by_rule = (doc.get("verdict_by") or {}).get("kind") == "rule"
+        return State.REJECTED_BY_A_RULE if by_rule else State.REJECTED_BY_A_PERSON
+    if status == ApplicationStatus.CANCELLED.value:
+        return State.REJECTED_BY_A_PERSON
+    raise ValueError(f"No application status is spelled {status!r}.")
+
+
+def is_undecided(doc: Dict[str, Any]) -> bool:
+    """Whether an application, as stored or as a reviewer saw it, awaits a verdict: open, or a
+    follow-up."""
+    return state_of(doc).undecided
+
+
 def is_decided(doc: Dict[str, Any]) -> bool:
-    """Whether an application, as stored or as a reviewer saw it, carries a verdict."""
-    return doc.get("status") in VERDICT_STATUSES
+    """Whether an application, as stored or as a reviewer saw it, carries a verdict: a reviewer's
+    write over it changes a verdict (E38/F06/S01)."""
+    return not is_undecided(doc)
 
 
 def is_judgeable(application: Dict[str, Any]) -> bool:
-    """Whether a market's automatic rejections may judge this stored application: an undecided
-    one, or one a rule rejected; never one a person decided. The import's preview asks it of an
-    application as the import would leave it (E38/F03/S02)."""
-    status = application.get("status")
-    return status in UNDECIDED_STATUSES or (
-        status == ApplicationStatus.REVIEWER_REJECTED.value
-        and (application.get("verdict_by") or {}).get("kind") == "rule")
+    """Whether a market's automatic rejections may judge this stored application: an open one, or
+    one a rule rejected; never one a person decided, nor a follow-up. The import's preview asks it
+    of an application as the import would leave it (E38/F03/S02)."""
+    return state_of(application) in (State.OPEN, State.REJECTED_BY_A_RULE)
 
 
 #: How long the person who gave a verdict, or marked a follow-up, may take it back themselves
@@ -74,19 +162,22 @@ UNDO_KEEPS = ("status", "verdict_by", "verdict_at", "follow_up_owner")
 
 def undo_to_of(doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """What undoing a verdict given on this application, as read, would return it to (E38/F10/S01):
-    its ``UNDO_KEEPS`` while it awaits a verdict - undecided or needing a follow-up - else None."""
-    if doc.get("status") not in UNDECIDED_STATUSES + (ApplicationStatus.NEEDS_FOLLOW_UP.value,):
+    its ``UNDO_KEEPS`` while it awaits a verdict - open or needing a follow-up - else None."""
+    if not is_undecided(doc):
         return None
     return {key: doc.get(key) for key in UNDO_KEEPS}
 
 
-def undoable_by(doc: Dict[str, Any], user_id: Optional[str]) -> bool:
+def undoable_by(doc: Dict[str, Any], user_id: Optional[str],
+                now: Optional[datetime] = None) -> bool:
     """Whether this person may still undo what they marked on this application: a verdict or a
-    follow-up that they gave, by user id, within ``UNDO_WINDOW`` of it, which kept what the
-    application was before it (``undo_to``, E38/F10/S01)."""
-    if doc.get("status") not in {status.value for status in MARKED_STATUSES} or not user_id:
+    follow-up that they gave, by user id, within ``UNDO_WINDOW`` of it, on an application that was
+    awaiting one, which kept what the application was before it (``undo_to``, E38/F10/S01)."""
+    if state_of(doc) not in (State.FOLLOW_UP, State.APPROVED_BY_A_PERSON,
+                             State.REJECTED_BY_A_PERSON) or not user_id:
         return False
-    if not isinstance(doc.get("undo_to"), dict):
+    undo_to = doc.get("undo_to")
+    if not isinstance(undo_to, dict) or not is_undecided(undo_to):
         return False
     by = doc.get("verdict_by") or {}
     if by.get("kind") != "person" or by.get("user_id") != user_id:
@@ -97,7 +188,7 @@ def undoable_by(doc: Dict[str, Any], user_id: Optional[str]) -> bool:
         return False
     if at.tzinfo is None:
         at = at.replace(tzinfo=timezone.utc)
-    return datetime.now(timezone.utc) - at <= UNDO_WINDOW
+    return (now or datetime.now(timezone.utc)) - at <= UNDO_WINDOW
 
 
 # --- An application arrives, or is added ----------------------------------------------------------
@@ -159,9 +250,9 @@ def update_application_form_data(
     its verdict's time are still those (null and absent alike), so answers are never stored under a
     verdict given after the caller decided what to write (a re-import, T270).
 
-    ``back_to_review`` returns it to open in the same update, clearing what
-    ``update_application_status`` clears for a status without a giver: the verdict's giver, time
-    and reason, the follow-up's owner, the claim and ``undo_to``. One update, so no stop between
+    ``back_to_review`` returns it to open in the same update, clearing what every move to open
+    clears (``RuleReturns``'s move): the verdict's giver, time and reason, the follow-up's owner,
+    the claim and ``undo_to``. One update, so no stop between
     the answers and the status can leave a vendor approved on answers nobody saw.
     """
     ApplicationsApi.ensure_application_indexes()
@@ -205,110 +296,301 @@ def write_answer_updates(
         {"id": app_id}, update).matched_count > 0
 
 
-# --- A verdict, a follow-up, an undo --------------------------------------------------------------
+# --- The transition table, and the events that move along it --------------------------------------
+#
+# Each event is a value naming what happened; ``move`` reads where it takes an application from the
+# state as read, or that the table refuses it. The event functions below write the move, held on what
+# was read, so a write landing in between is never written over: the caller reads again or refuses.
+# ``move`` is pure, so a preview and the write it previews read one answer.
 
-def update_application_status(
-    app_id: str, status: ApplicationStatus, by: Optional[VerdictGiver] = None,
-    reason: Optional[str] = None, if_unchanged_since: Optional[Dict[str, Any]] = None,
-    owner: Optional[MarketPerson] = None, unless_decided: bool = False,
-    kept_for_undo: Optional[Dict[str, Any]] = None,
-) -> bool:
-    """Set a new status on an application. Returns whether it was written.
+@dataclass(frozen=True)
+class GiveVerdict:
+    """A person gives a verdict, or marks a follow-up, on an application awaiting one."""
 
-    A verdict is written with its giver and time in the same update (E34/F01/S01), and a rule's
-    with its reason (E33/F03/S02); one without a giver is refused, so no application claims a
-    verdict nobody gave. Any other status clears all three, and a person's verdict over a rule's
-    leaves no rule's reason behind.
+    status: ApplicationStatus
+    by: VerdictGiver
+    owner: Optional[MarketPerson] = None
 
-    ``if_unchanged_since`` is the application as the caller read it: the write lands only if its
-    status, its verdict's time and its answers' time (``updated_at``) are still those, so neither a
-    verdict given in between nor answers changed in between - an applicant's edit, a re-import, an
-    organizer's update (T270) - is written over (E33/F03/S02, E34/F03/S01).
 
-    A follow-up is marked like a verdict, by someone, and has an ``owner``: the marker unless named
-    (E34/F01/S02). Any other status clears the owner.
+@dataclass(frozen=True)
+class ChangeVerdict:
+    """A person writes a verdict, or a follow-up, over a verdict already given (E38/F06/S01)."""
 
-    ``unless_decided`` writes only on an application that carries no verdict, for a reviewer who
-    gives verdicts but may not change one (E38/F06/S01): asked in the write itself, so a verdict
-    landing between the caller's read and this is never written over.
+    status: ApplicationStatus
+    by: VerdictGiver
+    owner: Optional[MarketPerson] = None
 
-    ``kept_for_undo`` is what ``undo_to_of`` made of the application as a person giving a verdict
-    read it (E38/F10/S01): kept on it as ``undo_to``, and the write lands only while the status, the
-    verdict's time and the follow-up's owner are still those, so what is kept is what was there.
-    Any other status written here clears it, so only the verdict that kept it can be undone.
-    """
-    if status in MARKED_STATUSES and by is None:
-        raise ValueError("A verdict is written with the person or rule that gave it.")
-    ApplicationsApi.ensure_application_indexes()
-    update: Dict[str, Any] = {"$set": {"status": status.value}}
-    if by is None:
-        update["$unset"] = {"verdict_by": "", "verdict_at": "", "verdict_reason": ""}
-    else:
-        update["$set"]["verdict_by"] = by.model_dump()
-        update["$set"]["verdict_at"] = datetime.now(timezone.utc).isoformat()
-        if reason:
-            update["$set"]["verdict_reason"] = reason
-        else:
-            update["$unset"] = {"verdict_reason": ""}
+
+@dataclass(frozen=True)
+class Undo:
+    """The giver of a verdict takes it back within ``UNDO_WINDOW`` (E38/F10/S01)."""
+
+    user_id: Optional[str]
+
+
+@dataclass(frozen=True)
+class RuleRejects:
+    """An automatic rejection meets the answers (E33/F03/S02)."""
+
+    rule: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class RuleReturns:
+    """No automatic rejection meets the answers of an application a rule rejected any longer."""
+
+
+@dataclass(frozen=True)
+class HandOnFollowUp:
+    """A follow-up is handed to someone else (E34/F02/S01)."""
+
+    owner: MarketPerson
+
+
+Event = Union[GiveVerdict, ChangeVerdict, Undo, RuleRejects, RuleReturns, HandOnFollowUp]
+
+#: The transition table, as data: the states each event moves an application from. A state an
+#: event does not list is refused. Where an event moves to, and the narrower refusals inside a
+#: listed state, are ``move``'s.
+TABLE: Dict[type, Tuple[State, ...]] = {
+    GiveVerdict: (State.OPEN, State.FOLLOW_UP),
+    # A rule's rejection is a verdict: overturning it is a change, the change row's (E38/F06/S01).
+    ChangeVerdict: (State.APPROVED_BY_A_PERSON, State.APPROVED_ADDED, State.REJECTED_BY_A_PERSON,
+                    State.REJECTED_BY_A_RULE),
+    # Only a verdict given on an application awaiting one kept what to return to.
+    Undo: (State.FOLLOW_UP, State.APPROVED_BY_A_PERSON, State.REJECTED_BY_A_PERSON),
+    # Again, with another rule or reason, so the reason shown is the rule that meets it now.
+    RuleRejects: (State.OPEN, State.REJECTED_BY_A_RULE),
+    RuleReturns: (State.REJECTED_BY_A_RULE,),
+    HandOnFollowUp: (State.FOLLOW_UP,),
+}
+
+#: Why an added vendor's approval may only change to a rejection: nobody applied, so there is no
+#: application to follow up on or to approve again.
+ADDED_ONLY_REJECTED = "A vendor added by hand can only be rejected."
+
+
+@dataclass(frozen=True)
+class Refused:
+    """The table refuses an event from the state read. ``reason`` is the table's own words, where
+    it has some; without, the caller refuses as its route always has. Falsy, as a write that did
+    not land is."""
+
+    reason: Optional[str] = None
+
+    def __bool__(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class Move:
+    """What an event writes: the owned fields it sets and takes away, in one update, and the fields
+    held as read, so it lands only on the application the caller read."""
+
+    to: State
+    set: Dict[str, Any]
+    unset: Tuple[str, ...]
+    pins: Dict[str, Any]
+
+    def update(self) -> Dict[str, Any]:
+        update: Dict[str, Any] = {}
+        if self.set:
+            update["$set"] = dict(self.set)
+        if self.unset:
+            update["$unset"] = {key: "" for key in self.unset}
+        return update
+
+    def query(self, app_id: str) -> Dict[str, Any]:
+        return {"id": app_id, **self.pins}
+
+
+#: What a write is answered with: whether it landed, or the table's refusal, which is falsy too.
+Written = Union[bool, Refused]
+
+_CLAIM = ("held_by", "held_until")
+_VERDICT = ("verdict_by", "verdict_at", "verdict_reason")
+
+
+def _as_read(value: Any) -> Any:
+    """A field held as read: null and absent alike, as an application is stored with
+    ``verdict_at: null`` until its first verdict."""
+    return value if value is not None else {"$in": [None]}
+
+
+def _held(doc: Dict[str, Any], *fields: str) -> Dict[str, Any]:
+    return {field: _as_read(doc.get(field)) for field in fields}
+
+
+def _a_persons_verdict(doc: Dict[str, Any], status: ApplicationStatus, by: VerdictGiver,
+                       owner: Optional[MarketPerson], now: datetime,
+                       ) -> Tuple[Dict[str, Any], List[str]]:
+    """What a person's verdict, or follow-up, sets and takes away, whether given or changed: the
+    status, its giver and time (E34/F01/S01), the follow-up's owner, the marker unless named
+    (E34/F02/S02), and no rule's reason left behind. It releases whoever held the card (E34/F03/S02),
+    and a verdict ends any wait for the deal. Whose share it was (``reviewer``) stays."""
+    sets: Dict[str, Any] = {"status": status.value, "verdict_by": by.model_dump(),
+                            "verdict_at": now.isoformat()}
+    unset = ["verdict_reason", *_CLAIM]
     if status is ApplicationStatus.NEEDS_FOLLOW_UP:
-        named = owner or MarketPerson(user_id=by.user_id, email=by.email or "")  # the marker
-        update["$set"]["follow_up_owner"] = named.model_dump()
+        named = owner or MarketPerson(user_id=by.user_id, email=by.email or "")
+        sets["follow_up_owner"] = named.model_dump()
     else:
-        update.setdefault("$unset", {})["follow_up_owner"] = ""
-    # A new status releases whoever held it (E34/F03/S02): the card it was open on is done with.
-    update.setdefault("$unset", {}).update(ApplicationsApi.CLAIM_UNSET)
-    query: Dict[str, Any] = {"id": app_id}
-    if if_unchanged_since is not None:
-        query["status"] = if_unchanged_since.get("status")
-        # Null or absent alike: an application is stored with ``verdict_at: null`` until a verdict.
-        query["verdict_at"] = if_unchanged_since.get("verdict_at") or {"$in": [None]}
-        if if_unchanged_since.get("updated_at"):
-            query["updated_at"] = if_unchanged_since["updated_at"]
-    if kept_for_undo is not None and by is not None and by.kind == "person":
-        pins = {"status": kept_for_undo.get("status"),
-                "verdict_at": kept_for_undo.get("verdict_at") or {"$in": [None]},
-                "follow_up_owner": kept_for_undo.get("follow_up_owner")}
-        if any(key in query and query[key] != value for key, value in pins.items()):
-            return False  # what the caller saw is not what it read: it cannot be both
-        query.update(pins)
-        update["$set"]["undo_to"] = kept_for_undo
-    else:
-        update["$unset"]["undo_to"] = ""
-    if unless_decided:
-        query["$nor"] = [{"status": {"$in": list(VERDICT_STATUSES)}}]
-    result = ApplicationsApi.applications_collection.update_one(query, update)
-    return result.matched_count > 0
+        unset += ["follow_up_owner", ApplicationsApi.ARRIVING_FIELD]
+    return sets, unset
 
 
-def restore_before_verdict(app_id: str, undo_to: Dict[str, Any],
-                           if_unchanged_since: Dict[str, Any]) -> bool:
-    """Return an application to what a verdict found it as (``undo_to``, E38/F10/S01): its status,
-    giver, time and follow-up owner as they were, so a follow-up comes back marked by whoever
-    marked it. Written only while the status and the verdict's time are those the undoer saw, which
-    are the verdict's that kept ``undo_to``. Returns whether it was written.
+def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> Union[Move, Refused]:
+    """Where ``event`` takes this application, as read, or the table's refusal of it.
+
+    Pure: it reads nothing and writes nothing, so the table-driven test, a preview and the event's
+    write all read the same answer. Every move holds the status and the verdict's time as read; a
+    verdict, a rule's and a person's, holds the answers' time (``updated_at``) too, so neither a
+    verdict nor answers changed in between are written over (E33/F03/S02, E34/F03/S01, T270).
     """
-    ApplicationsApi.ensure_application_indexes()
-    kept = {key: undo_to.get(key) for key in UNDO_KEEPS}
-    update: Dict[str, Any] = {
-        "$set": {key: value for key, value in kept.items() if value is not None},
-        "$unset": {**{key: "" for key, value in kept.items() if value is None},
-                   "undo_to": "", "verdict_reason": "", **ApplicationsApi.CLAIM_UNSET},
-    }
-    result = ApplicationsApi.applications_collection.update_one({
-        "id": app_id, "status": if_unchanged_since.get("status"),
-        "verdict_at": if_unchanged_since.get("verdict_at") or {"$in": [None]},
-    }, update)
-    return result.matched_count > 0
+    state = state_of(doc)
+    if state not in TABLE[type(event)]:
+        return Refused()
+    now = now or datetime.now(timezone.utc)
+    held = _held(doc, "status", "verdict_at")
 
+    if isinstance(event, (GiveVerdict, ChangeVerdict)):
+        if event.status not in MARKED_STATUSES:
+            return Refused()
+        if state is State.APPROVED_ADDED and event.status is not ApplicationStatus.REVIEWER_REJECTED:
+            return Refused(ADDED_ONLY_REJECTED)
+        sets, unset = _a_persons_verdict(doc, event.status, event.by, event.owner, now)
+        pins = {**held, **_held(doc, "updated_at")}
+        if isinstance(event, GiveVerdict):
+            # What its giver's undo returns it to, held as it is kept (E38/F10/S01).
+            sets["undo_to"] = undo_to_of(doc)
+            pins.update(_held(doc, "follow_up_owner"))
+        else:
+            unset.append("undo_to")
+        return Move(to=state_of({**doc, **sets}), set=sets, unset=tuple(unset), pins=pins)
 
-def reassign_follow_up_owner(app_id: str, owner: MarketPerson) -> bool:
-    """Hand a follow-up to someone else (E34/F02/S01). Written only while it still needs one."""
-    ApplicationsApi.ensure_application_indexes()
-    result = ApplicationsApi.applications_collection.update_one(
-        {"id": app_id, "status": ApplicationStatus.NEEDS_FOLLOW_UP.value},
-        {"$set": {"follow_up_owner": owner.model_dump()}},
+    if isinstance(event, Undo):
+        undo_to = doc.get("undo_to")
+        if not undoable_by(doc, event.user_id, now) or not isinstance(undo_to, dict):
+            return Refused()
+        kept = {key: undo_to.get(key) for key in UNDO_KEEPS}
+        return Move(
+            to=state_of(kept),
+            set={key: value for key, value in kept.items() if value is not None},
+            unset=(*(key for key, value in kept.items() if value is None),
+                   "undo_to", "verdict_reason", *_CLAIM),
+            pins=held,
+        )
+
+    if isinstance(event, RuleRejects):
+        if (state is State.REJECTED_BY_A_RULE
+                and (doc.get("verdict_by") or {}).get("rule") == event.rule
+                and doc.get("verdict_reason") == event.reason):
+            return Refused()
+        return Move(
+            to=State.REJECTED_BY_A_RULE,
+            set={"status": ApplicationStatus.REVIEWER_REJECTED.value,
+                 "verdict_by": VerdictGiver(kind="rule", rule=event.rule).model_dump(),
+                 "verdict_at": now.isoformat(), "verdict_reason": event.reason},
+            unset=("follow_up_owner", "undo_to", ApplicationsApi.ARRIVING_FIELD, *_CLAIM),
+            pins={**held, **_held(doc, "updated_at")},
+        )
+
+    if isinstance(event, RuleReturns):
+        return Move(
+            to=State.OPEN,
+            set={"status": ApplicationStatus.OPEN.value},
+            unset=(*_VERDICT, "follow_up_owner", "undo_to", *_CLAIM),
+            pins={**held, **_held(doc, "updated_at")},
+        )
+
+    # HandOnFollowUp: held on its still needing one, whoever marked it; what an undo returns to
+    # stays, so the marking can still be undone by whoever gave it.
+    return Move(
+        to=State.FOLLOW_UP,
+        set={"follow_up_owner": event.owner.model_dump()},
+        unset=(),
+        pins={"status": ApplicationStatus.NEEDS_FOLLOW_UP.value},
     )
-    return result.matched_count > 0
+
+
+def _write(read: Dict[str, Any], event: Event, pins: Optional[Dict[str, Any]] = None) -> Written:
+    """Write ``event``'s move from the application as read, held on what was read: whether it
+    landed, or the table's refusal."""
+    moved = move(read, event)
+    if isinstance(moved, Refused):
+        return moved
+    ApplicationsApi.ensure_application_indexes()
+    query = {**moved.query(read["id"]), **(pins or {})}
+    return ApplicationsApi.applications_collection.update_one(
+        query, moved.update()).matched_count > 0
+
+
+def _as_seen(read: Dict[str, Any], seen: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The answers' time a reviewer saw, to hold a verdict on, or None when what they saw is not
+    what was read since: another status or verdict, which the write must not land over."""
+    if (seen.get("status") != read.get("status")
+            or (seen.get("verdict_at") or None) != (read.get("verdict_at") or None)):
+        return None
+    return {"updated_at": _as_read(seen.get("updated_at") or read.get("updated_at"))}
+
+
+def give_verdict(read: Dict[str, Any], seen: Dict[str, Any], status: ApplicationStatus,
+                 by: VerdictGiver, owner: Optional[MarketPerson] = None) -> Written:
+    """A person's verdict, or follow-up, on an application awaiting one, as they saw it (``seen``:
+    its status, verdict's time and answers' time) and as the caller read it since. It keeps what
+    the application was for its giver's undo (``undo_to``, E38/F10/S01). False when it changed."""
+    held = _as_seen(read, seen)
+    if held is None:
+        return False
+    return _write(read, GiveVerdict(status, by, owner), held)
+
+
+def change_verdict(read: Dict[str, Any], seen: Dict[str, Any], status: ApplicationStatus,
+                   by: VerdictGiver, owner: Optional[MarketPerson] = None) -> Written:
+    """A person's verdict, or follow-up, over a verdict already given (E38/F06/S01): the change
+    row's, which the caller asks. It keeps nothing to undo. An added vendor's approval changes only
+    to a rejection (``ADDED_ONLY_REJECTED``). False when the application changed since ``seen``."""
+    held = _as_seen(read, seen)
+    if held is None:
+        return False
+    return _write(read, ChangeVerdict(status, by, owner), held)
+
+
+def undo(read: Dict[str, Any], seen: Dict[str, Any], by: VerdictGiver) -> Written:
+    """Return an application to what its giver's verdict found it as (``undo_to``, E38/F10/S01): its
+    status, giver, time and follow-up owner as they were, so a follow-up comes back marked by
+    whoever marked it. Refused once it is not theirs to undo; False when it changed since ``seen``,
+    the verdict as written."""
+    if _as_seen(read, seen) is None:
+        return False
+    return _write(read, Undo(by.user_id))
+
+
+def rule_rejects(read: Dict[str, Any], rule: str, reason: str) -> Written:
+    """An automatic rejection by ``rule``, for ``reason``, of an open application, or again of one
+    a rule rejected for another reason (E33/F03/S02). Refused for one it already rejected so."""
+    return _write(read, RuleRejects(rule, reason))
+
+
+def rule_returns(read: Dict[str, Any]) -> Written:
+    """Return an application a rule rejected to open, once no rule meets it."""
+    return _write(read, RuleReturns())
+
+
+def hand_on_follow_up(read: Dict[str, Any], owner: MarketPerson) -> Written:
+    """Hand a follow-up to someone else (E34/F02/S01). Written only while it still needs one."""
+    return _write(read, HandOnFollowUp(owner))
+
+
+def store_open(app_id: str) -> bool:
+    """Give an application stored with no status the stored ``open`` it reads as, once its answers
+    are written. Held on its still having none."""
+    ApplicationsApi.ensure_application_indexes()
+    return ApplicationsApi.applications_collection.update_one(
+        {"id": app_id, "status": {"$in": [None, ""]}},
+        {"$set": {"status": ApplicationStatus.OPEN.value}},
+    ).matched_count > 0
 
 
 # --- Whose share it is (E38/F07/S02, ADR 0020): written only for ``review_team.py`` ---------------
@@ -402,7 +684,7 @@ def deal_follow_up(app_id: str, reviewer: MarketPerson, owner_was: Dict[str, Any
 
 # --- The offers' deadline -------------------------------------------------------------------------
 
-def sweep_unanswered_offers(market_id: str) -> int:
+def sweep_offers(market_id: str) -> int:
     """Mark every ``assignment_sent`` application for a market as ``vendor_refused``.
 
     This is the deadline mechanism: the admin holds the deadline, and this operation

@@ -20,7 +20,7 @@ import api.applications as ApplicationsApi
 import application_status as ReviewState
 import essential_fields as EssentialFields
 from client_errors import BadRequestError
-from datatypes import AnswerCondition, ApplicationStatus, Market, RejectionRule, VerdictGiver
+from datatypes import AnswerCondition, Market, RejectionRule
 
 #: A checkbox's two answers, as a rule names them.
 TICKED = "ticked"
@@ -218,22 +218,15 @@ def judge(
     """
     rejected = returned = 0
     for doc in ApplicationsApi.judgeable_applications(market_id, application_id):
-        by_rule = doc.get("status") == ApplicationStatus.REVIEWER_REJECTED.value
         # What the organizer reads, an update of an answer in its place (E41/F01/S01).
         met = book.rejecting(ApplicationsApi.effective_answers(doc))
         if met is None:
-            if by_rule and overturns and not book.results_published \
-                    and ReviewState.update_application_status(
-                        doc["id"], ApplicationStatus.OPEN, if_unchanged_since=doc):
+            # Only a rule's rejection returns (the owner refuses the rest).
+            if overturns and not book.results_published and ReviewState.rule_returns(doc):
                 returned += 1
             continue
         rule_key, reason = met
-        if by_rule and (doc.get("verdict_by") or {}).get("rule") == rule_key \
-                and doc.get("verdict_reason") == reason:
-            continue
-        if ReviewState.update_application_status(
-                doc["id"], ApplicationStatus.REVIEWER_REJECTED,
-                by=VerdictGiver(kind="rule", rule=rule_key), reason=reason,
-                if_unchanged_since=doc):
+        # Refused when this rule already rejected it for this reason, so nothing is written.
+        if ReviewState.rule_rejects(doc, rule_key, reason):
             rejected += 1
     return Judged(rejected=rejected, returned=returned)

@@ -16,7 +16,8 @@ import api.applicants as ApplicantsApi  # noqa: E402
 import api.applications as ApplicationsApi  # noqa: E402
 import market_write as MarketWrite  # noqa: E402
 import rejection_rules as Rules  # noqa: E402
-from conftest import FakeApplicationsCollection, client_market, complete_setup  # noqa: E402
+from conftest import (  # noqa: E402
+    FakeApplicationsCollection, client_market, complete_setup, seen_as_read)
 from datatypes import (  # noqa: E402
     Application, ApplicationForm, ApplicationStatus, MarketPhase, RejectionRule, VerdictGiver)
 
@@ -145,7 +146,8 @@ class TestWhatJudgingNeverDoes:
         def read_then_a_person_decides(market_id, application_id=None):
             docs = [dict(doc) for doc in read(market_id, application_id)]
             ApplicantsApi.review_application(
-                "market-123", "a", ApplicationStatus.REVIEWER_APPROVED, by=ALEX)
+                "market-123", "a", ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
+                seen=seen_as_read("a"))
             return docs
 
         monkeypatch.setattr(ApplicationsApi, "judgeable_applications", read_then_a_person_decides)
@@ -177,7 +179,7 @@ class TestWhoSeesTheReason:
         Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123")
 
         ApplicantsApi.review_application(
-            "market-123", "a", ApplicationStatus.REVIEWER_APPROVED, by=ALEX)
+            "market-123", "a", ApplicationStatus.REVIEWER_APPROVED, by=ALEX, seen=seen_as_read("a"))
 
         assert stored[0]["verdict_by"]["kind"] == "person"
         assert "verdict_reason" not in stored[0]

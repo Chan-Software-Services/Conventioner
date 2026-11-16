@@ -224,12 +224,14 @@ class TestAnEditor:
         assert response.get_json() == {"error": CHANGE_REFUSED}
         assert client.stored[app_id] == before
 
-    def test_is_refused_a_change_without_saying_what_they_saw(self, client):
+    def test_is_refused_a_verdict_without_saying_what_they_saw(self, client):
         _as(client, "editor@market.test")
 
         response = _review(client, "approved", REJECTED, seen=False)
 
-        assert response.status_code == 403
+        assert response.status_code == 400
+        assert response.get_json() == {
+            "error": "Say what the application was when you opened it."}
         assert client.stored["approved"]["status"] == APPROVED.value
 
     def test_who_saw_it_open_is_told_who_decided_it_in_between_and_nothing_is_written(

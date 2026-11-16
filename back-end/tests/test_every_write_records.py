@@ -7,6 +7,7 @@ route this file does not send fails ``test_every_write_route_records_or_says_why
 action no write records fails ``test_every_action_in_the_table_records_or_says_why_not``, so a new
 write cannot be permitted without being recorded unless someone says here why it is not a change.
 """
+from conftest import seen_as_stored
 import copy
 from datetime import date, datetime, timezone
 from dataclasses import dataclass
@@ -376,7 +377,7 @@ def _verdict(client, world):
     world.market(MarketPhase.APPLICATIONS)
     world.applications.insert_one(_application("app-1", VENDOR))
     return client.put(f"/markets/{MARKET}/applications/app-1/review",
-                      json={"status": "reviewer_approved"})
+                      json={"status": "reviewer_approved", "seen": seen_as_stored("app-1")})
 
 
 def _verdicts(client, world):
@@ -384,7 +385,9 @@ def _verdicts(client, world):
     world.applications.insert_one(_application("app-1", VENDOR))
     world.applications.insert_one(_application("app-2", "ben@example.com"))
     return client.post(f"/markets/{MARKET}/applications/verdicts", json={
-        "status": "reviewer_rejected", "applications": [{"id": "app-1"}, {"id": "app-2"}]})
+        "status": "reviewer_rejected",
+        "applications": [{"id": "app-1", "seen": seen_as_stored("app-1")},
+                         {"id": "app-2", "seen": seen_as_stored("app-2")}]})
 
 
 def _changed_verdict(client, world):
@@ -393,7 +396,7 @@ def _changed_verdict(client, world):
         "app-1", VENDOR, status="reviewer_approved", verdict_at="2026-10-02T00:00:00+00:00",
         verdict_by={"kind": "person", "user_id": "user-owner", "email": OWNER}))
     return client.put(f"/markets/{MARKET}/applications/app-1/review",
-                      json={"status": "reviewer_rejected"})
+                      json={"status": "reviewer_rejected", "seen": seen_as_stored("app-1")})
 
 
 def _just_given(app_id, email):
@@ -1097,7 +1100,7 @@ class TestWhatAnEntryHolds:
         """Each verdict is recorded, not only the latest."""
         _verdict(client, world)
         client.put(f"/markets/{MARKET}/applications/app-1/review",
-                   json={"status": "reviewer_rejected"})
+                   json={"status": "reviewer_rejected", "seen": seen_as_stored("app-1")})
 
         assert [entry["detail"]["after"]["status"] for entry in world.history.documents] == [
             "reviewer_approved", "reviewer_rejected"]
@@ -1107,7 +1110,8 @@ class TestWhatAnEntryHolds:
         world.applications.insert_one(_application("app-1", VENDOR))
 
         client.post(f"/markets/{MARKET}/applications/verdicts", json={
-            "status": "needs_follow_up", "applications": [{"id": "app-1"}]})
+            "status": "needs_follow_up",
+            "applications": [{"id": "app-1", "seen": seen_as_stored("app-1")}]})
 
         [entry] = world.history.documents
         assert entry["detail"] == {
@@ -1122,7 +1126,8 @@ class TestWhatAnEntryHolds:
             follow_up_owner={"user_id": "user-sam", "email": SAM}))
 
         client.post(f"/markets/{MARKET}/applications/verdicts", json={
-            "status": "reviewer_approved", "applications": [{"id": "app-1"}]})
+            "status": "reviewer_approved",
+            "applications": [{"id": "app-1", "seen": seen_as_stored("app-1")}]})
 
         [entry] = world.history.documents
         assert entry["detail"] == {

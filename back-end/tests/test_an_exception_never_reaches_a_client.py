@@ -2056,7 +2056,7 @@ class TestAFailureARouteSurvivesIsLoggedWithoutItsMessage:
         use_market(monkeypatch, stored_market(phase=MarketPhase.OFFERS, setupObject=COMPLETE_PLAN))
         monkeypatch.setattr(MarketsApi, "evaluate_transition", lambda *_args: [])
         monkeypatch.setattr(
-            ReviewState, "sweep_unanswered_offers", fail_with(RuntimeError(LIBRARY_MESSAGE)),
+            ReviewState, "sweep_offers", fail_with(RuntimeError(LIBRARY_MESSAGE)),
         )
 
         with caplog.at_level(logging.DEBUG):

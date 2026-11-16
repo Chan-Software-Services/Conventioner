@@ -1885,8 +1885,10 @@ def _named_status(name: Any) -> Optional[ApplicationStatus]:
 def review_application(market_id: str, application_id: str) -> Response:
     """Record a review verdict, or a follow-up, on an application, and its giver (E34/F01/S01).
 
-    Body: { "status": "reviewer_approved", "seen": { "status": "open", "verdictAt": null },
-            "ownerEmail": "..." }  - ``seen`` and ``ownerEmail`` optional.
+    Body: { "status": "reviewer_approved",
+            "seen": { "status": "open", "verdictAt": null, "updatedAt": "..." },
+            "ownerEmail": "..." }  - ``ownerEmail`` optional. ``seen`` is what the reviewer saw when
+    they opened it, which the verdict is held on: without it, 400 (``SEEN_REQUIRED``).
     """
     person, context, refused = _reviewer_on(market_id)
     if refused:
@@ -1918,7 +1920,8 @@ def review_selection(market_id: str) -> Response:
 
     Body: { "status": "reviewer_approved",
             "applications": [{ "id": "...", "seen": { "status": "open", "verdictAt": null } }] }
-    Answers { "written": [ids], "skipped": [{ "id", "email", "reason" }] }.
+    Answers { "written": [ids], "skipped": [{ "id", "email", "reason" }] }; an entry naming no
+    ``seen`` is skipped with ``SEEN_REQUIRED``.
     """
     person, context, refused = _reviewer_on(market_id)
     if refused:

@@ -10,6 +10,7 @@ changes no verdict already given: that is the change row's, refused in its own w
 """
 import pytest
 
+from conftest import seen_as_stored
 from test_choosing_reviewers_deals_the_open_applications import (  # noqa: F401  (the fixture)
     ADMIN, ANA, BEN, CAT, DEE, EDITOR, MARKET, OWNER, VIEWER, _choose, _client, _read, world,
 )
@@ -54,12 +55,13 @@ def _doc(world, app_id):
 
 def _verdict(who, app_id="app-v1", status="reviewer_approved"):
     return _client(who).put(f"/markets/{MARKET}/applications/{app_id}/review",
-                            json={"status": status})
+                            json={"status": status, "seen": seen_as_stored(app_id)})
 
 
 def _selection(who, app_ids=("app-v1", "app-v2"), status="reviewer_rejected"):
     return _client(who).post(f"/markets/{MARKET}/applications/verdicts", json={
-        "status": status, "applications": [{"id": app_id} for app_id in app_ids]})
+        "status": status,
+        "applications": [{"id": app_id, "seen": seen_as_stored(app_id)} for app_id in app_ids]})
 
 
 def _follow_up(who, app_id="app-v3"):

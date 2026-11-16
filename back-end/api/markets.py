@@ -2209,7 +2209,7 @@ def take_move(context: MarketContext, to_phase: str, by: Optional[str] = None) -
     swept: Dict[str, int] = {}
     if from_phase == MarketPhase.OFFERS.value and to_phase == MarketPhase.MARKET_DAYS.value:
         try:
-            swept["swept"] = ReviewState.sweep_unanswered_offers(market_id)
+            swept["swept"] = ReviewState.sweep_offers(market_id)
             logger.info(
                 "Swept %d assignment_sent applications to vendor_refused for market %s",
                 swept["swept"],

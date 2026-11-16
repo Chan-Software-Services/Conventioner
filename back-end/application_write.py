@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import api.applications as ApplicationsApi
 import application_status as ReviewState
 import essential_fields as EssentialFields
-from datatypes import Application, ApplicationStatus
+from datatypes import Application
 from market_documents import market_doc_field
 
 logger = logging.getLogger(__name__)
@@ -153,7 +153,7 @@ def record_application_answers(
     if held is not None and not written:
         return ANSWERS_MOVED, None
     if not app_doc.get("status"):
-        ReviewState.update_application_status(app_id, ApplicationStatus.OPEN)
+        ReviewState.store_open(app_id)
 
     updated_doc = ApplicationsApi.find_application_by_id(app_id)
     return None, Application(**(updated_doc or app_doc))
