@@ -38,7 +38,8 @@ The table cell by cell, and every behaviour it keeps: [the autosave](../implemen
 
 - A change to what an event does in a phase is one cell of one table, and a test per cell (`theAutosaveIsOneTransitionTable.test.ts`) sees it, beside a walk over every state reachable from clean that checks no pause runs under the hold.
 - T271's behaviour suite (`useAutosave.test.ts`, `anAutosaveMayKeepARefusedCopy.test.ts`) passes unchanged: the interface every screen uses is the same.
-- One visible change: a failed line gives way to the next edit, which is sent within its pause, and comes back if that save fails too; before, the failed line stood through the edit's pause.
+- A location's layout, which keeps its copy on a refusal, no longer sends that copy again when the pause of an edit made while the refused save was out ends; the copy goes with the next edit, Retry or a flush, leaving the page's included.
+- One visible change on Market Setup: a failed line gives way to the next edit, which is sent within its pause, and comes back if that save fails too; before, the failed line stood through the edit's pause.
 - The review lists and the form tab can save one write at a time on the same table, rather than each keeping its own flags.
 
 ## Where the table departs from T277's sketch
