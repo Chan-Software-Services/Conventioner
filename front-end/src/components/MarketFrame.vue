@@ -53,7 +53,7 @@ const props = defineProps<{
 const emit = defineEmits<{ retry: [] }>();
 
 const store = useMarketStore();
-const { status } = storeToRefs(store);
+const { status, rereadFailed } = storeToRefs(store);
 
 /**
  * What the open tab says while its work is not here yet, or is over (E31/F03/S02). Every tab
@@ -133,7 +133,7 @@ onBeforeUnmount(() => observer?.disconnect());
         <!-- The market's name and its tabs, the same on every market page (E22/F04/S02). While the
              market is on its way the bar holds its place; a market that is missing has none. -->
         <MarketBar
-          v-if="market || status === 'loading' || status === 'idle'"
+          v-if="market || status === 'loading' || status === 'empty'"
           ref="bar"
           :market="market"
         />
@@ -151,6 +151,24 @@ onBeforeUnmount(() => observer?.disconnect());
                frame's height; on a phone it scrolls with the rail. -->
           <slot name="pinned" />
         </template>
+      </div>
+      <!-- A re-read of the market failed: said once here for every market screen, until one lands
+           (T421). What is shown stays, so no screen's unsaved work is dropped over a bad network. -->
+      <div
+        v-if="market && rereadFailed"
+        class="market-reread-failed"
+        role="alert"
+        data-testid="market-reread-failed"
+      >
+        <p>Could not update the market. It is shown as it was last read.</p>
+        <button
+          type="button"
+          class="btn btn--secondary btn--compact"
+          data-testid="market-reread-retry"
+          @click="retry"
+        >
+          Try again
+        </button>
       </div>
       <p v-if="market && note" class="market-tab-note" data-testid="market-tab-note">
         {{ note }}
@@ -207,14 +225,30 @@ onBeforeUnmount(() => observer?.disconnect());
 
 /* Inset as a page insets its content, so the note lines up with what it explains: the phone's gutter
    only where the page takes it too, on a screen that fits a phone. */
-.market-read-only {
+.market-read-only,
+.market-reread-failed {
   margin: var(--space-6) var(--space-6) 0;
 }
 
 @media (width <= 640px) {
-  .market-fits-a-phone .market-read-only {
+  .market-fits-a-phone .market-read-only,
+  .market-fits-a-phone .market-reread-failed {
     margin: var(--space-4) var(--space-4) 0;
   }
+}
+
+/* Red, as a refusal reads; Try again after the sentence where it fits, under it where it does not. */
+.market-reread-failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--mm-red);
+  font-size: var(--text-sm);
+}
+
+.market-reread-failed p {
+  margin: 0;
 }
 
 .market-frame {
