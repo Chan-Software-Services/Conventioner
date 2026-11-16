@@ -1,4 +1,4 @@
-import { computed, ref, type Ref } from 'vue';
+import { computed, type Ref } from 'vue';
 import { api, getApiErrorMessage } from '@/utils/api';
 import { fetchMarketApplications } from '@/utils/applicantApi';
 // One rendering of an answer for the drawer, its dialog and the review card alike (E41/F01/S01).
@@ -9,6 +9,7 @@ import {
   applicantName,
 } from '@/utils/essentialFields';
 import { getFormattedDate } from '@/utils/utils';
+import { useServerRead } from '@/utils/useServerRead';
 import { datesTheyNeed } from '@/utils/datesWithinReach';
 import { addedLine, verdictLine } from '@/utils/verdicts';
 import { priceLine } from '@/utils/pricing';
@@ -135,6 +136,94 @@ function priceOf(row: MarketTableRowResponse, address: string) {
   return { priceCents: price?.cents ?? null, priceGroup: price?.group ?? null };
 }
 
+/** Where every vendor sits, as the placements reads say it. */
+interface Placements {
+  tableRows: MarketTableRowResponse[];
+  /** The names the tables read gave, the server's `display_name` of each vendor it knows. */
+  servedNames: VendorNames;
+  /**
+   * Who needs a table: the run's own and the vendors added by hand (E38/F08/S02). The tables read
+   * serves every applicant (E36/F02/S02) and says it of each.
+   */
+  needingATable: Set<string>;
+  unplacedReasons: Map<string, PlacementReason>;
+  placementOverrides: Map<string, PlacementOverride[]>;
+  unassignedEmails: Set<string>;
+}
+
+/** One read of a market's vendors: the applications, and where each sits or why that was refused. */
+interface VendorDetailsRead {
+  applications: Application[];
+  placements: Placements | null;
+  /** Why the placements could not be read, said beside the applications that were (T123). */
+  placementsRefusal: string;
+}
+
+/**
+ * The applications, and where each vendor sits, read side by side but standing apart (T123).
+ *
+ * One `Promise.all` once emptied all three on any refusal: an approved application with incomplete
+ * answers made the server refuse the two assignment reads, until T139, and the drawer then said a
+ * market with questions "asks no questions of its own". A refused placements read now lands with
+ * the applications, the server's reason in `placementsRefusal`; a refused applications read fails
+ * the whole read.
+ */
+async function readVendorDetails(id: string): Promise<VendorDetailsRead> {
+  const encoded = encodeURIComponent(id);
+  const placements = Promise.all([
+    api.get<AssignmentStatisticsResponse>(`/markets/${encoded}/assignment-statistics`),
+    api.get<{
+      rows: MarketTableRowResponse[];
+      vendorNames: VendorNames;
+      vendors?: { email: string; needsATable: boolean }[];
+    }>(`/markets/${encoded}/tables`),
+  ]);
+  const [applicationsRead, placementsRead] = await Promise.allSettled([
+    fetchMarketApplications(id),
+    placements,
+  ]);
+  if (applicationsRead.status === 'rejected') throw applicationsRead.reason;
+  const applications = Array.isArray(applicationsRead.value) ? applicationsRead.value : [];
+  if (placementsRead.status === 'rejected') {
+    return {
+      applications,
+      placements: null,
+      placementsRefusal: getApiErrorMessage(
+        placementsRead.reason,
+        'Where the vendors sit could not be read.',
+      ),
+    };
+  }
+  const [statsResp, tablesResp] = placementsRead.value;
+  const statsList = statsResp.data?.unassignedVendors ?? [];
+  return {
+    applications,
+    placements: {
+      tableRows: Array.isArray(tablesResp.data?.rows) ? tablesResp.data.rows : [],
+      servedNames: tablesResp.data?.vendorNames ?? {},
+      needingATable: new Set(
+        (tablesResp.data?.vendors ?? [])
+          .filter((vendor) => vendor.needsATable)
+          .map((vendor) => vendor.email.trim().toLowerCase()),
+      ),
+      unplacedReasons: reasonIndex(statsResp.data?.unplacedDates ?? []),
+      placementOverrides: overrideIndex(statsResp.data?.overriddenPlacements ?? []),
+      unassignedEmails: new Set(
+        statsList.map((item) => extractEmail(item).toLowerCase()).filter(Boolean),
+      ),
+    },
+    placementsRefusal: '',
+  };
+}
+
+export interface VendorDetailsOptions {
+  /**
+   * Read only when asked (`load`), as the drawer reads on opening: true by default. A screen that
+   * lists the vendors, Vendors and Payments, reads on arriving at each market.
+   */
+  lazy?: boolean;
+}
+
 /**
  * A market's vendors, each with their application and their seats (E35/F01/S01): what the Vendors
  * list reads, and what the vendor drawer shows wherever it opens - from a seat, at the door, in
@@ -142,26 +231,33 @@ function priceOf(row: MarketTableRowResponse, address: string) {
  *
  * Every application is kept, decided or not: the drawer opens on an applicant still in review. The
  * Vendors list counts the vendors who need a table (`needsATable`), as the server says of each.
+ *
+ * One keyed read (`useServerRead`, T421): a move to another market drops what was held in the same
+ * tick, and an answer for the market left, or one a newer read overtook, never lands.
  */
-export function useVendorDetails(marketId: Ref<string>, market: Ref<Market | null | undefined>) {
-  const applications = ref<Application[]>([]);
-  const tableRows = ref<MarketTableRowResponse[]>([]);
-  /** The names the tables read gave, the server's `display_name` of each vendor it knows. */
-  const servedNames = ref<VendorNames>({});
-  /**
-   * Who needs a table: the run's own and the vendors added by hand (E38/F08/S02). The tables read
-   * serves every applicant (E36/F02/S02) and says it of each.
-   */
-  const needingATable = ref<Set<string>>(new Set());
-  const unplacedReasons = ref<Map<string, PlacementReason>>(new Map());
-  const placementOverrides = ref<Map<string, PlacementOverride[]>>(new Map());
-  const unassignedEmails = ref<Set<string>>(new Set());
-  const isLoading = ref(false);
-  const loaded = ref(false);
-  const loadError = ref('');
+export function useVendorDetails(
+  marketId: Ref<string>,
+  market: Ref<Market | null | undefined>,
+  options: VendorDetailsOptions = {},
+) {
+  const read = useServerRead<string, VendorDetailsRead>(
+    () => marketId.value || null,
+    readVendorDetails,
+    { failure: 'The vendors could not be loaded.', lazy: options.lazy ?? true },
+  );
 
+  const applications = computed<Application[]>(() => read.data.value?.applications ?? []);
+  const placements = computed(() => read.data.value?.placements ?? null);
+  const tableRows = computed<MarketTableRowResponse[]>(() => placements.value?.tableRows ?? []);
+  const isLoading = computed(
+    () => read.phase.value === 'loading' || read.phase.value === 'refreshing',
+  );
+  /** Whether the vendors of this market were read: the applications are held. */
+  const loaded = computed(() => read.data.value !== null);
+  /** The read's failure, or why where the vendors sit was refused beside the applications read. */
+  const loadError = computed(() => read.sentence.value || read.data.value?.placementsRefusal || '');
   /** Whether the last read had where every vendor sits: the tables and the statistics. */
-  const placementsRead = ref(false);
+  const placementsRead = computed(() => placements.value !== null);
 
   /**
    * What to call each vendor: the name their application gives (`applicantName`, the client's
@@ -176,7 +272,7 @@ export function useVendorDetails(marketId: Ref<string>, market: Ref<Market | nul
       const name = applicantName(application.formData as Record<string, unknown> | undefined);
       if (email && name) names[email] = name;
     }
-    return { ...names, ...servedNames.value };
+    return { ...names, ...placements.value?.servedNames };
   });
 
   /** The name on each vendor's identification, which a search finds as well (`vendorMatches`). */
@@ -190,82 +286,9 @@ export function useVendorDetails(marketId: Ref<string>, market: Ref<Market | nul
     return names;
   });
 
-  function forgetPlacements(): void {
-    tableRows.value = [];
-    servedNames.value = {};
-    needingATable.value = new Set();
-    unplacedReasons.value = new Map();
-    placementOverrides.value = new Map();
-    unassignedEmails.value = new Set();
-    placementsRead.value = false;
-  }
-
-  /**
-   * The applications, and where each vendor sits, read side by side but standing apart (T123).
-   *
-   * One `Promise.all` once emptied all three on any refusal: an approved application with
-   * incomplete answers made the server refuse the two assignment reads, until T139, and the drawer
-   * then said a market with questions "asks no questions of its own". A failed placement read now
-   * leaves the applications standing, with the server's reason in `loadError` and `placementsRead`
-   * false.
-   */
-  async function load(): Promise<void> {
-    const id = marketId.value;
-    if (!id) return;
-    loadError.value = '';
-    isLoading.value = true;
-    const encoded = encodeURIComponent(id);
-    const placements = Promise.all([
-      api.get<AssignmentStatisticsResponse>(`/markets/${encoded}/assignment-statistics`),
-      api.get<{
-        rows: MarketTableRowResponse[];
-        vendorNames: VendorNames;
-        vendors?: { email: string; needsATable: boolean }[];
-      }>(`/markets/${encoded}/tables`),
-    ]);
-    const [applicationsRead, placementsReadNow] = await Promise.allSettled([
-      fetchMarketApplications(id),
-      placements,
-    ]);
-    try {
-      if (applicationsRead.status === 'rejected') {
-        loadError.value = getApiErrorMessage(
-          applicationsRead.reason,
-          'The vendors could not be loaded.',
-        );
-        applications.value = [];
-        forgetPlacements();
-        return;
-      }
-      const applicationList = applicationsRead.value;
-      applications.value = Array.isArray(applicationList) ? applicationList : [];
-      loaded.value = true;
-      if (placementsReadNow.status === 'rejected') {
-        loadError.value = getApiErrorMessage(
-          placementsReadNow.reason,
-          'Where the vendors sit could not be read.',
-        );
-        forgetPlacements();
-        return;
-      }
-      const [statsResp, tablesResp] = placementsReadNow.value;
-      needingATable.value = new Set(
-        (tablesResp.data?.vendors ?? [])
-          .filter((vendor) => vendor.needsATable)
-          .map((vendor) => vendor.email.trim().toLowerCase()),
-      );
-      unplacedReasons.value = reasonIndex(statsResp.data?.unplacedDates ?? []);
-      placementOverrides.value = overrideIndex(statsResp.data?.overriddenPlacements ?? []);
-      const statsList = statsResp.data?.unassignedVendors ?? [];
-      unassignedEmails.value = new Set(
-        statsList.map((item) => extractEmail(item).toLowerCase()).filter(Boolean),
-      );
-      tableRows.value = Array.isArray(tablesResp.data?.rows) ? tablesResp.data.rows : [];
-      servedNames.value = tablesResp.data?.vendorNames ?? {};
-      placementsRead.value = true;
-    } finally {
-      isLoading.value = false;
-    }
+  /** Read the market's vendors, or again: resolves when this read lands, fails or is overtaken. */
+  function load(): Promise<void> {
+    return read.reread();
   }
 
   const marketDates = computed<MarketDateObject[]>(
@@ -309,7 +332,7 @@ export function useVendorDetails(marketId: Ref<string>, market: Ref<Market | nul
         email,
         displayEmail: emailRaw || `Applicant ${index + 1}`,
         assignmentsByDate,
-        isAssigned: !unassignedEmails.value.has(email) && assignmentsByDate.size > 0,
+        isAssigned: !placements.value?.unassignedEmails.has(email) && assignmentsByDate.size > 0,
         assignedDateCount: assignmentsByDate.size,
         // A hand placement can give more than they asked for; never read as "3 of 2".
         reachableDateCount: Math.max(
@@ -325,7 +348,7 @@ export function useVendorDetails(marketId: Ref<string>, market: Ref<Market | nul
         tableShareNotice: application.tableShareNotice ?? null,
         // Someone added by hand says so, in place of a verdict nobody reviewed (E36/F03/S01).
         verdict: addedLine(application) ?? verdictLine(application),
-        needsATable: needingATable.value.has(email),
+        needsATable: placements.value?.needingATable.has(email) ?? false,
         status: application.status,
         added: Boolean(application.addedBy),
       };
@@ -373,12 +396,12 @@ export function useVendorDetails(marketId: Ref<string>, market: Ref<Market | nul
 
   /** Why they hold no table that day, as the server computed it; absent where they have one. */
   function reasonFor(email: string, date: string): PlacementReason | undefined {
-    return unplacedReasons.value.get(vendorOnDate(email, date));
+    return placements.value?.unplacedReasons.get(vendorOnDate(email, date));
   }
 
   /** What their placement that day overrides, when it was made by hand and contradicts them. */
   function overridesFor(email: string, date: string): PlacementOverride[] | undefined {
-    return placementOverrides.value.get(vendorOnDate(email, date));
+    return placements.value?.placementOverrides.get(vendorOnDate(email, date));
   }
 
   function isOrphaned(email: string, date: string): boolean {

@@ -8,8 +8,9 @@
  *
  * A write is followed by a re-read, never a patch, as every market write is.
  */
-import { ref, watch, type Ref } from 'vue';
+import { computed, type Ref } from 'vue';
 import { api } from '@/utils/api';
+import { useServerRead } from '@/utils/useServerRead';
 
 export interface VendorNoteEntry {
   request: string;
@@ -31,28 +32,34 @@ export function requestOutstanding(entry: VendorNoteEntry | undefined): boolean 
   return !!entry?.request && !entry.requestHandledAt;
 }
 
+/**
+ * A market's notes, read as the page opens on it and again whenever it opens on another: one keyed
+ * read (`useServerRead`, T421), so a move to another market drops the last market's notes in the
+ * same tick, and an answer for the market left never lands on this market's rows.
+ */
 export function useVendorNotes(marketId: Ref<string>) {
-  const notes = ref<Record<string, VendorNoteEntry>>({});
+  const read = useServerRead<string, Record<string, VendorNoteEntry>>(
+    () => marketId.value || null,
+    async (id) => {
+      const { data } = await api.get(`/markets/${encodeURIComponent(id)}/vendor-notes`);
+      return (data?.notes ?? {}) as Record<string, VendorNoteEntry>;
+    },
+    { failure: 'The notes could not be read.' },
+  );
 
-  async function load(): Promise<void> {
-    if (!marketId.value) return;
-    try {
-      const { data } = await api.get(`/markets/${encodeURIComponent(marketId.value)}/vendor-notes`);
-      notes.value = (data?.notes ?? {}) as Record<string, VendorNoteEntry>;
-    } catch {
-      // Notes are beside the page's work, never its subject: a page that cannot read them still
-      // does its job, without them.
-      notes.value = {};
-    }
+  // Notes are beside the page's work, never its subject: a page that cannot read them still does
+  // its job, without them, and says nothing of it.
+  const notes = computed<Record<string, VendorNoteEntry>>(() => read.data.value ?? {});
+
+  /** Read them again, after a write: resolves when this read lands, fails or is overtaken. */
+  function load(): Promise<void> {
+    return read.reread();
   }
 
   /** One vendor's entry, by address however it is cased. */
   function entryFor(email: string): VendorNoteEntry | undefined {
     return notes.value[email.trim().toLowerCase()];
   }
-
-  // Read as the page opens on a market, and again whenever it opens on another.
-  watch(marketId, load, { immediate: true });
 
   return { notes, load, entryFor };
 }
