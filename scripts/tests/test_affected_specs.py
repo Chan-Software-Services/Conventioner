@@ -1,0 +1,515 @@
+"""The E2E specs a builder runs (T349): `scripts/affected-specs.py` reads the test map and a diff,
+and chooses the spec files the change reaches, in order, up to a cap of CI minutes.
+
+Each test makes a small repository with a spec or three, a helper, front-end modules and a back
+end, commits a base with an `origin/dev` ref at it, changes it, and reads what the selector
+chooses from a fixture map, by its command line as a builder runs it.
+"""
+import importlib.util
+import json
+import os
+import stat
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+
+import pytest
+
+SCRIPT = Path(__file__).resolve().parents[1] / "affected-specs.py"
+
+spec = importlib.util.spec_from_file_location("affected_specs", SCRIPT)
+affected_specs = importlib.util.module_from_spec(spec)
+sys.modules["affected_specs"] = affected_specs
+spec.loader.exec_module(affected_specs)
+
+DOOR_PY = textwrap.dedent(
+    '''\
+    import json
+
+    LIMIT = 3
+
+
+    def door(market):
+        def inner(row):
+            return row["name"]
+
+        return [inner(r) for r in market]
+
+
+    def check_in(vendor):
+        vendor["here"] = True
+        return vendor
+    '''
+)
+
+MARKETS_PY = textwrap.dedent(
+    '''\
+    def list_markets():
+        return []
+
+
+    def load(market_id):
+        return {"id": market_id}
+    '''
+)
+
+# a.spec reaches the door; b.spec checks in; c.spec reads the stats. All three load the app shell
+# and list the markets, as every real spec does.
+MAP = {
+    "commit": "f00dfeed",
+    "specs": {
+        "a.spec.ts": {
+            "modules": ["front-end/src/App.vue", "front-end/src/views/Door.vue"],
+            "endpoints": ["GET /door", "GET /markets"],
+        },
+        "b.spec.ts": {
+            "modules": ["front-end/src/App.vue"],
+            "endpoints": ["GET /markets", "POST /checkin"],
+        },
+        "c.spec.ts": {
+            "modules": ["front-end/src/App.vue", "front-end/src/views/Stats.vue"],
+            "endpoints": ["GET /markets", "GET /stats"],
+        },
+    },
+    "endpoints": {
+        "GET /markets": {"back-end/api/markets.py": ["list_markets", "load"]},
+        "GET /door": {"back-end/api/door.py": ["door", "door.inner"]},
+        "POST /checkin": {"back-end/api/door.py": ["check_in"]},
+        "GET /stats": {"back-end/api/stats.py": ["stats"]},
+    },
+}
+
+BASE_FILES = {
+    "front-end/e2e/a.spec.ts": "import { test } from './fixtures';\nimport { seat } from './helpers/seat';\n",
+    "front-end/e2e/b.spec.ts": "import { test } from './fixtures';\n",
+    "front-end/e2e/c.spec.ts": "import { test } from './fixtures';\n",
+    "front-end/e2e/fixtures.ts": "export const test = 1;\n",
+    # a.spec imports seat, which imports the market seed: a helper two levels deep.
+    "front-end/e2e/helpers/seat.ts": "import { seedMarket } from './seeds';\nexport const seat = 1;\n",
+    "front-end/e2e/helpers/seeds.ts": "export const seedMarket = 1;\n",
+    "front-end/playwright.config.ts": "export default {};\n",
+    "front-end/src/App.vue": "<template><div /></template>\n",
+    "front-end/src/views/Door.vue": "<template><div /></template>\n",
+    "front-end/src/views/Stats.vue": "<template><div /></template>\n",
+    "back-end/api/door.py": DOOR_PY,
+    "back-end/api/markets.py": MARKETS_PY,
+    "back-end/api/stats.py": "def stats():\n    return 1\n",
+}
+
+
+def git(repo, *args):
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
+    ).stdout
+
+
+def write(repo, files):
+    for path, text in files.items():
+        target = repo / path
+        if text is None:
+            target.unlink()
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+
+
+@pytest.fixture
+def repo(tmp_path):
+    """A repository at its base, `origin/dev` there, with the fixture map beside it."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    git(root, "init", "-q", "-b", "dev")
+    git(root, "config", "user.email", "fixture@example.invalid")
+    git(root, "config", "user.name", "Fixture")
+    git(root, "config", "commit.gpgsign", "false")
+    write(root, BASE_FILES)
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "base")
+    git(root, "update-ref", "refs/remotes/origin/dev", "HEAD")
+    git(root, "switch", "-q", "-c", "work")
+    (tmp_path / "test-map.json").write_text(json.dumps(MAP))
+    return root
+
+
+def seconds_file(tmp_path, seconds):
+    """A shard-results directory, laid out as `gh run download` lays out the e2e-results artifacts,
+    one report a shard, each spec's tests summed across them."""
+    results = tmp_path / "results"
+    for n, (spec_file, total) in enumerate(seconds.items(), start=1):
+        shard = results / f"e2e-results-shard-{n}"
+        shard.mkdir(parents=True)
+        report = {
+            "suites": [
+                {
+                    "file": spec_file,
+                    "specs": [{"tests": [{"results": [{"duration": total * 1000}]}]}],
+                }
+            ]
+        }
+        (shard / "results.json").write_text(json.dumps(report))
+    return results
+
+
+def choose(repo, *args, env=None, fixture_map=True):
+    """The selector's --list --json, from the repository, with the fixture map unless told not to,
+    when it finds the map itself."""
+    command = [sys.executable, str(SCRIPT), "--list", "--json", *args]
+    if fixture_map:
+        command += ["--map", str(repo.parent / "test-map.json")]
+    done = subprocess.run(
+        command, cwd=repo, capture_output=True, text=True, env={**os.environ, **(env or {})}
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+    return json.loads(done.stdout)
+
+
+def chosen(result):
+    return {row["spec"]: row for row in result["run"] + result["left"]}
+
+
+class TestRuleOneChangedSpecsAndHelpers:
+    def test_a_changed_spec_is_chosen_and_scores_one(self, repo):
+        write(repo, {"front-end/e2e/c.spec.ts": "import { test } from './fixtures';\n// more\n"})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"c.spec.ts"}
+        assert rows["c.spec.ts"]["score"] == 1
+        assert rows["c.spec.ts"]["changed"] is True
+        assert rows["c.spec.ts"]["why"] == ["changed spec"]
+
+    def test_a_helper_two_levels_deep_reaches_the_spec_importing_it(self, repo):
+        write(repo, {"front-end/e2e/helpers/seeds.ts": "export const seedMarket = 2;\n"})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"a.spec.ts"}
+        assert rows["a.spec.ts"]["score"] == 1
+        assert rows["a.spec.ts"]["changed"] is False
+        assert rows["a.spec.ts"]["why"] == ["imports helpers/seeds.ts"]
+
+    def test_a_spec_the_change_deletes_is_not_chosen(self, repo):
+        write(repo, {"front-end/e2e/c.spec.ts": None})
+        assert chosen(choose(repo)) == {}
+
+    def test_uncommitted_and_untracked_changes_count(self, repo):
+        write(repo, {"front-end/e2e/b.spec.ts": "import { test } from './fixtures';\n// edit\n"})
+        write(repo, {"front-end/e2e/d.spec.ts": "import { test } from './fixtures';\n"})
+        assert set(chosen(choose(repo))) == {"b.spec.ts", "d.spec.ts"}
+
+    def test_committed_changes_count_from_the_merge_base(self, repo):
+        write(repo, {"front-end/e2e/b.spec.ts": "// edit\n"})
+        git(repo, "commit", "-qam", "edit b")
+        # dev moves on after the branch forked: its own change is not the branch's.
+        git(repo, "switch", "-q", "dev")
+        write(repo, {"front-end/e2e/c.spec.ts": "// dev's edit\n"})
+        git(repo, "commit", "-qam", "edit c on dev")
+        git(repo, "update-ref", "refs/remotes/origin/dev", "HEAD")
+        git(repo, "switch", "-q", "work")
+        assert set(chosen(choose(repo))) == {"b.spec.ts"}
+
+
+class TestRuleTwoFrontEndModules:
+    def test_a_module_one_spec_loads_scores_one(self, repo):
+        write(repo, {"front-end/src/views/Door.vue": "<template><p /></template>\n"})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"a.spec.ts"}
+        assert rows["a.spec.ts"]["score"] == 1
+        assert rows["a.spec.ts"]["why"] == ["loads front-end/src/views/Door.vue (1/1)"]
+
+    def test_a_module_every_spec_loads_scores_little(self, repo):
+        write(repo, {"front-end/src/App.vue": "<template><p /></template>\n"})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"a.spec.ts", "b.spec.ts", "c.spec.ts"}
+        assert [row["score"] for row in rows.values()] == [pytest.approx(1 / 3)] * 3
+
+    def test_a_unit_test_under_src_reaches_no_spec(self, repo):
+        write(repo, {"front-end/src/__tests__/Door.test.ts": "// a unit test\n"})
+        assert chosen(choose(repo)) == {}
+
+
+class TestRuleThreeBackEndFunctions:
+    def test_a_changed_function_reaches_the_specs_calling_its_endpoints(self, repo):
+        write(repo, {"back-end/api/door.py": DOOR_PY.replace("= True", "= 'yes'")})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"b.spec.ts"}
+        assert rows["b.spec.ts"]["score"] == 1
+        assert rows["b.spec.ts"]["why"] == ["back-end/api/door.py:check_in via POST /checkin (1/1)"]
+
+    def test_a_nested_function_is_named_as_the_map_names_it(self, repo):
+        write(repo, {"back-end/api/door.py": DOOR_PY.replace('row["name"]', 'row["id"]')})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"a.spec.ts"}
+        assert rows["a.spec.ts"]["why"] == ["back-end/api/door.py:door.inner via GET /door (1/1)"]
+
+    def test_a_deleted_function_is_found_by_its_old_name(self, repo):
+        without = DOOR_PY[: DOOR_PY.index("\n\ndef check_in")] + "\n"
+        write(repo, {"back-end/api/door.py": without})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"b.spec.ts"}
+        assert rows["b.spec.ts"]["why"] == ["back-end/api/door.py:check_in via POST /checkin (1/1)"]
+
+    def test_a_deleted_file_is_found_by_its_old_functions(self, repo):
+        write(repo, {"back-end/api/stats.py": None})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"c.spec.ts"}
+        assert rows["c.spec.ts"]["score"] == 1
+
+    def test_a_change_outside_any_function_selects_its_files_specs_and_scores_nothing(self, repo):
+        write(repo, {"back-end/api/door.py": DOOR_PY.replace("LIMIT = 3", "LIMIT = 4")})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"a.spec.ts", "b.spec.ts"}
+        assert {row["score"] for row in rows.values()} == {0}
+        assert rows["b.spec.ts"]["why"] == ["back-end/api/door.py, outside any function the map knows"]
+
+    def test_a_blank_or_comment_line_between_functions_reaches_nothing(self, repo):
+        write(repo, {"back-end/api/door.py": DOOR_PY.replace("\n\ndef check_in", "\n# the door\n\n\ndef check_in")})
+        assert chosen(choose(repo)) == {}
+
+    def test_a_function_the_map_does_not_know_counts_for_every_function_of_its_file(self, repo):
+        write(repo, {"back-end/api/door.py": DOOR_PY + "\n\ndef helper():\n    return 2\n"})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"a.spec.ts", "b.spec.ts"}
+        assert {row["score"] for row in rows.values()} == {0}
+
+    def test_a_change_with_no_lines_counts_for_every_function_of_its_file(self, repo):
+        (repo / "back-end/api/door.py").chmod(0o755)
+        rows = chosen(choose(repo))
+        assert set(rows) == {"a.spec.ts", "b.spec.ts"}
+
+    def test_the_back_ends_tests_reach_no_spec(self, repo):
+        write(repo, {"back-end/tests/test_door.py": "def test_door():\n    assert True\n"})
+        assert chosen(choose(repo)) == {}
+
+
+class TestRuleFourEverySpec:
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "front-end/playwright.config.ts",
+            "front-end/e2e/global-setup.ts",
+            "front-end/package-lock.json",
+            "front-end/vite.config.ts",
+            "front-end/index.html",
+            "docker-compose.worktree.yml",
+            "back-end/Dockerfile",
+            "back-end/requirements-dev.txt",
+            "scripts/seed_fixture.sh",
+        ],
+    )
+    def test_a_file_the_suite_stands_on_chooses_every_spec(self, repo, path):
+        write(repo, {path: "changed\n"})
+        # e.spec.ts is newer than the map: the tree's specs are chosen too.
+        write(repo, {"front-end/e2e/e.spec.ts": "import { test } from './fixtures';\n"})
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "e.spec.ts and the change")
+        rows = chosen(choose(repo))
+        assert set(rows) == {"a.spec.ts", "b.spec.ts", "c.spec.ts", "e.spec.ts"}
+        assert rows["a.spec.ts"]["why"] == [f"{path} runs every spec"]
+
+    def test_the_fixtures_are_a_helper_every_spec_imports(self, repo):
+        write(repo, {"front-end/e2e/fixtures.ts": "export const test = 2;\n"})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"a.spec.ts", "b.spec.ts", "c.spec.ts"}
+        assert {row["score"] for row in rows.values()} == {1}
+
+
+class TestTheOrderAndTheCap:
+    def test_specs_run_by_score_then_the_shorter_first(self, repo, tmp_path):
+        # App.vue gives each spec 1/3; Door.vue gives a.spec 1 more. b and c tie: c is shorter.
+        write(repo, {"front-end/src/App.vue": "<p />\n", "front-end/src/views/Door.vue": "<p />\n"})
+        results = seconds_file(tmp_path, {"a.spec.ts": 300, "b.spec.ts": 120, "c.spec.ts": 60})
+        result = choose(repo, "--results", str(results))
+        assert [row["spec"] for row in result["run"]] == ["a.spec.ts", "c.spec.ts", "b.spec.ts"]
+        assert [row["minutes"] for row in result["run"]] == [5, 1, 2]
+
+    def test_the_cap_leaves_the_rest_to_ci_but_never_a_changed_spec(self, repo, tmp_path):
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n"})  # a.spec: 1
+        write(repo, {"front-end/src/App.vue": "<p />\n"})  # each: 1/3
+        write(repo, {"front-end/e2e/c.spec.ts": "// edit\n"})  # c.spec: 1 more, changed
+        results = seconds_file(tmp_path, {"a.spec.ts": 20 * 60, "b.spec.ts": 5 * 60, "c.spec.ts": 40 * 60})
+        result = choose(repo, "--results", str(results), "--minutes", "30")
+        # a.spec (4/3, 20 minutes), then c.spec (4/3, 40 minutes, changed: past the cap, it runs
+        # anyway); b.spec (1/3, 5 minutes) would have fitted after a.spec alone, but not after both.
+        assert [row["spec"] for row in result["run"]] == ["a.spec.ts", "c.spec.ts"]
+        assert [row["spec"] for row in result["left"]] == ["b.spec.ts"]
+        assert result["minutes_run"] == 60
+
+    def test_the_cap_stops_at_the_first_spec_past_it(self, repo, tmp_path):
+        # a.spec scores most and is past the cap alone; b and c would fit after it, but the run
+        # is the order's head, not the cheapest specs.
+        write(repo, {"front-end/src/App.vue": "<p />\n", "front-end/src/views/Door.vue": "<p />\n"})
+        results = seconds_file(tmp_path, {"a.spec.ts": 300, "b.spec.ts": 60, "c.spec.ts": 60})
+        result = choose(repo, "--results", str(results), "--minutes", "3")
+        assert result["run"] == []
+        assert [row["spec"] for row in result["left"]] == ["a.spec.ts", "b.spec.ts", "c.spec.ts"]
+
+    def test_the_minutes_fall_back_to_the_committed_timings_then_their_median(self, repo):
+        write(
+            repo,
+            {
+                "front-end/scripts/e2e-shard-timings.json": json.dumps(
+                    {"a.spec.ts": 60, "b.spec.ts": 180, "x.spec.ts": 600}
+                ),
+                "front-end/src/App.vue": "<p />\n",
+            },
+        )
+        rows = chosen(choose(repo))
+        # c.spec.ts has no timing: the median of the timed files, 3 minutes.
+        assert {s: r["minutes"] for s, r in rows.items()} == {
+            "a.spec.ts": 1,
+            "b.spec.ts": 3,
+            "c.spec.ts": 3,
+        }
+
+
+class TestWhereTheMapComesFrom:
+    def fake_gh(self, tmp_path, script):
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        gh = bin_dir / "gh"
+        gh.write_text("#!/usr/bin/env python3\n" + textwrap.dedent(script))
+        gh.chmod(gh.stat().st_mode | stat.S_IEXEC)
+        return {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+
+    def test_with_no_map_it_says_so_and_runs_what_playwrights_only_changed_would(self, repo, tmp_path):
+        env = self.fake_gh(tmp_path, "import sys\nsys.exit(1)\n")
+        write(repo, {"front-end/e2e/helpers/seeds.ts": "// edit\n"})
+        write(repo, {"front-end/e2e/c.spec.ts": "// edit\n"})
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n", "back-end/api/stats.py": None})
+        write(repo, {"front-end/playwright.config.ts": "// edit\n"})
+        result = choose(repo, env=env, fixture_map=False)
+        assert result["map"] is None
+        assert set(chosen(result)) == {"a.spec.ts", "c.spec.ts"}
+        done = subprocess.run(
+            [sys.executable, str(SCRIPT), "--list"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            env={**os.environ, **env},
+        )
+        assert done.returncode == 0, done.stderr
+        assert "no test map" in done.stdout
+
+    def test_the_newest_dev_map_is_downloaded_once_a_run(self, repo, tmp_path):
+        log = tmp_path / "gh.log"
+        env = self.fake_gh(
+            tmp_path,
+            f"""\
+            import json, os, sys
+            args = sys.argv[1:]
+            open({str(log)!r}, "a").write(" ".join(args) + "\\n")
+            if args[0] == "api":
+                print(json.dumps({{"artifacts": [
+                    {{"name": "test-map", "expired": False, "created_at": "2026-11-16T03:00:00Z",
+                      "workflow_run": {{"id": 99, "head_branch": "fix/a-branch", "head_sha": "bb"}}}},
+                    {{"name": "test-map", "expired": True, "created_at": "2026-11-16T02:00:00Z",
+                      "workflow_run": {{"id": 88, "head_branch": "dev", "head_sha": "cc"}}}},
+                    {{"name": "test-map", "expired": False, "created_at": "2026-11-16T01:00:00Z",
+                      "workflow_run": {{"id": 77, "head_branch": "dev", "head_sha": "dd"}}}}]}}))
+            elif args[:2] == ["run", "download"]:
+                assert args[2] == "77", args
+                out = args[args.index("-D") + 1]
+                os.makedirs(out, exist_ok=True)
+                if "-n" in args:
+                    open(os.path.join(out, "test-map.json"), "w").write(
+                        open({str(repo.parent / "test-map.json")!r}).read())
+                else:
+                    shard = os.path.join(out, "e2e-results-shard-1")
+                    os.makedirs(shard)
+                    open(os.path.join(shard, "results.json"), "w").write(json.dumps({{"suites": [
+                        {{"file": "a.spec.ts", "specs": [{{"tests": [{{"results": [
+                            {{"duration": 120000}}]}}]}}]}}]}}))
+            """,
+        )
+        older = repo / ".stack-logs" / "test-map" / "55"
+        older.mkdir(parents=True)
+        (older / "test-map.json").write_text(json.dumps(MAP))
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        first = choose(repo, env=env, fixture_map=False)
+        assert first["map"]["run"] == 77
+        assert set(chosen(first)) == {"a.spec.ts"}
+        assert chosen(first)["a.spec.ts"]["minutes"] == 2
+        second = choose(repo, env=env, fixture_map=False)
+        assert second["map"] == first["map"]
+        downloads = [line for line in log.read_text().splitlines() if line.startswith("run download")]
+        assert len(downloads) == 2  # the map and the shard results, once
+        assert (repo / ".stack-logs" / "test-map" / "77" / "test-map.json").is_file()
+        assert not older.exists()
+
+    def test_offline_it_reads_the_map_it_downloaded_before(self, repo, tmp_path):
+        cached = repo / ".stack-logs" / "test-map" / "77"
+        cached.mkdir(parents=True)
+        (cached / "test-map.json").write_text(json.dumps(MAP))
+        env = self.fake_gh(tmp_path, "import sys\nsys.exit(1)\n")
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        result = choose(repo, env=env, fixture_map=False)
+        assert result["map"]["run"] == 77
+        assert result["map"]["offline"] is True
+        assert set(chosen(result)) == {"a.spec.ts"}
+
+
+class TestTheRun:
+    def fake_npx(self, tmp_path):
+        bin_dir = tmp_path / "npxbin"
+        bin_dir.mkdir()
+        npx = bin_dir / "npx"
+        args = tmp_path / "npx-args.json"
+        npx.write_text(
+            "#!/usr/bin/env python3\nimport json, os, sys\n"
+            f"json.dump({{'cwd': os.getcwd(), 'args': sys.argv[1:]}}, open({str(args)!r}, 'w'))\n"
+            "sys.exit(3)\n"
+        )
+        npx.chmod(npx.stat().st_mode | stat.S_IEXEC)
+        return {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}, args
+
+    def run(self, repo, env, *extra):
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "--run", "--map", str(repo.parent / "test-map.json"), *extra],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            env={**os.environ, **env},
+        )
+
+    def test_it_runs_the_chosen_files_alone_and_answers_with_playwrights_status(self, repo, tmp_path):
+        env, args = self.fake_npx(tmp_path)
+        # `a.spec.ts` as a bare filter would also run `ba.spec.ts`, which the change does not reach.
+        write(repo, {"front-end/e2e/ba.spec.ts": "import { test } from './fixtures';\n"})
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "ba.spec.ts")
+        git(repo, "update-ref", "refs/remotes/origin/dev", "HEAD")
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        done = self.run(repo, env, "--", "--retries=0")
+        assert done.returncode == 3, done.stdout + done.stderr
+        called = json.loads(args.read_text())
+        assert Path(called["cwd"]).resolve() == (repo / "front-end").resolve()
+        e2e = (repo / "front-end" / "e2e").resolve()
+        assert called["args"] == [
+            "playwright",
+            "test",
+            "/^" + affected_specs.escape(f"{e2e}/a.spec.ts") + "$/",
+            "--retries=0",
+        ]
+        assert "a.spec.ts" in done.stdout
+        assert "loads front-end/src/views/Door.vue" in done.stdout
+
+    def test_a_spec_the_worktree_does_not_have_is_left_out(self, repo, tmp_path):
+        env, args = self.fake_npx(tmp_path)
+        test_map = dict(MAP, specs=dict(MAP["specs"]))
+        test_map["specs"]["new-on-dev.spec.ts"] = {
+            "modules": ["front-end/src/views/Door.vue"],
+            "endpoints": [],
+        }
+        (repo.parent / "test-map.json").write_text(json.dumps(test_map))
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        done = self.run(repo, env)
+        called = json.loads(args.read_text())
+        assert len(called["args"]) == 3
+        assert "new-on-dev.spec.ts" in done.stdout
+        assert "not in this worktree" in done.stdout
+
+    def test_nothing_reached_runs_nothing(self, repo, tmp_path):
+        env, args = self.fake_npx(tmp_path)
+        write(repo, {"docs/a-node.md": "words\n"})
+        done = self.run(repo, env)
+        assert done.returncode == 0
+        assert not args.exists()
+        assert "nothing to run" in done.stdout

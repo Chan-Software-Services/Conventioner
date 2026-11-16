@@ -5,6 +5,7 @@ describes:
   - scripts/test_map.py
   - back-end/tests/test_map_plugin.py
   - front-end/e2e/helpers/testMap.ts
+  - scripts/affected-specs.py
 verified: 2026-11-16
 sources:
   - T349
@@ -13,7 +14,7 @@ sources:
 # The test map
 
 **The test map says, for each E2E spec file, which app modules its pages loaded and which back-end endpoints it called, and for each endpoint, which back-end functions it runs.**
-It is made to tell which E2E specs a change reaches, without running all of them.
+It is made to tell which E2E specs a change reaches, without running all of them, which `scripts/affected-specs.py` does for a builder ([choosing a builder's specs](#choosing-a-builders-specs)).
 CI's `test-map` job writes it on every push to `dev`, as the artifact `test-map` of that run, kept 90 days ([CI and the gate](ci-and-the-gate.md)).
 A pull request's run records nothing and has no `test-map` job.
 
@@ -70,6 +71,44 @@ Code that runs before the app dispatches a request, such as the session's loadin
 The newest map is the newest push to `dev` whose run made one, which is `dev`'s last push unless that run was cancelled, a shard recorded nothing, or the back end's suite failed under coverage; then it is the push before.
 A branch is ahead of it by its own commits and by what `dev` took since its run, and an artifact goes after 90 days.
 So a spec, a module or a function that is newer than the map is not in it, and a reader of the map takes a branch's own diff from its merge-base for what the map cannot know.
+
+## Choosing a builder's specs
+
+[`scripts/affected-specs.py`](../../../scripts/affected-specs.py) reads the map and a branch's diff, and runs the E2E spec files the change reaches, from the worktree root, on the worktree's stack:
+
+```sh
+python3 scripts/affected-specs.py --run [-- <playwright arguments>]
+python3 scripts/affected-specs.py --list [--json]
+```
+
+The diff is from the merge-base with `origin/dev` to the worktree, uncommitted and untracked files included, both sides of every hunk read.
+The map is the newest `test-map` artifact of a push to `dev`, which it downloads once a run, beside that run's shard reports, to `.stack-logs/test-map/<run id>/`, removing the ones it downloaded before; offline, it reads the one it has.
+`--map`, `--results`, `--base` and `--head` (with `--list`) name a map, shard reports and commits instead, as for replaying a merged pull request.
+
+A spec is chosen by four rules:
+
+1. **The change edits it, or a file it imports**, transitively: a helper two levels down counts, and so does a `front-end/src/` file a spec imports itself.
+2. **Its pages loaded a changed file under `front-end/src/`.**
+3. **It called an endpoint whose requests ran a changed back-end function.**
+   The function is the one holding a changed line on either side of the hunk, so a deleted function is found by its old name; a blank or comment-only line names none.
+   A change outside every function, such as an import or a constant, or in a function the map does not list, counts for every function of its file, choosing every spec that reaches the file.
+   The back end's own tests reach no spec.
+4. **Every spec, for a file the whole suite stands on**: `e2e/fixtures.ts`, `e2e/global-setup.ts`, `playwright.config.ts`, `package-lock.json`, `vite.config.ts` and `index.html` in `front-end/`, a compose file, a Dockerfile, a back-end lock or `scripts/seed_fixture.sh`.
+
+The chosen specs are ordered by score: each changed thing a spec reaches adds 1 divided by how many specs reach it, so a module every spec loads (`App.vue`) or an endpoint every spec's setup calls adds almost nothing, while one that three specs reach decides the order.
+A changed spec, and each changed file a spec imports, adds 1; a change counted for a whole back-end file, and rule 4, add nothing, though they still choose.
+Specs of one score run the shorter first.
+
+They run in that order until the next would pass the cap, 30 CI minutes (`--minutes`), by the minutes each spec took in the map's run's shard reports, then in `front-end/scripts/e2e-shard-timings.json`, then the median of those.
+A spec the change edits runs whatever the cap.
+It prints what it runs and what it leaves to CI, each with its reasons, and with `--run` leaves out a spec the map names that the worktree does not have yet, saying so, and answers with Playwright's exit code.
+
+With no map at all (no `gh`, offline with none downloaded, or no push to `dev` has made one yet), it says so and chooses by rule 1 alone, which is what Playwright's own `--only-changed` chooses.
+
+The selection is a builder's, never a gate's or a merge's: CI's full run on every pull request runs every spec, so a spec the cap or the map left out still runs before anything merges, and its failure comes back as a red check.
+A spec can fail through the data its setup seeds, where no map of the code a spec runs tells it from the other specs seeding the same way; that is the miss the full run is for.
+
+`scripts/tests/test_affected_specs.py` holds each rule, the order and the cap, the download and the fallback to a small repository, a fixture map and fixture shard reports.
 
 ## Building one by hand
 

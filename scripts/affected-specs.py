@@ -1,0 +1,580 @@
+#!/usr/bin/env python3
+"""The E2E spec files a change reaches, by the test map (T349), run in order up to a cap of CI
+minutes; CI's full run on the pull request runs the rest.
+
+    python3 scripts/affected-specs.py --run  [options] [-- <playwright arguments>]
+    python3 scripts/affected-specs.py --list [options] [--json]
+
+From the worktree root, on the worktree's stack (`team-stack up`, `team-stack seed`, and
+`eval "$(~/agent-team/bin/team-stack env)"`, so Playwright reaches it). The change is the diff from
+the merge-base with `origin/dev` to the worktree, uncommitted and untracked files included
+(`--base` and `--head` name two commits instead, for `--list`). The map is the newest `test-map`
+artifact of a push to `dev`, downloaded once a run to `.stack-logs/test-map/<run id>/` beside that
+run's shard results (`--map` and `--results` name files instead). A spec is chosen:
+
+1. when the change edits it, or a file it imports, transitively (scores 1);
+2. when its pages loaded a changed file under `front-end/src/` (scores 1 / the specs that did);
+3. when it called an endpoint whose requests ran a changed back-end function, found by the
+   hunk's lines on either side, so a deleted function by its old name (scores 1 / the specs that
+   reach it); a change outside any function, or in one the map does not know, counts for every
+   function of its file, choosing the specs that reach the file and scoring nothing;
+4. every spec, when the change edits a file the whole suite stands on (`RUN_EVERY_SPEC`).
+
+The chosen specs run by score, the shorter first on a tie, until the next would pass the cap
+(`--minutes`, 30 by default) of CI minutes, by the map's run's shard results, then
+`front-end/scripts/e2e-shard-timings.json`, then the median of those; a spec the change edits runs
+whatever the cap. With no map at all (no `gh`, offline, none made yet) it says so and chooses by
+rule 1 alone, which is what Playwright's own `--only-changed` chooses.
+`docs/implementation/testing/the-test-map.md` says what the map holds.
+
+Exit codes: Playwright's with `--run`, 0 with nothing to run or `--list`, 2 a usage error.
+"""
+import argparse
+import json
+import os
+import re
+import shutil
+import statistics
+import subprocess
+import sys
+from collections import defaultdict
+from pathlib import Path
+from typing import Dict, List, Optional, Sequence, Set, Tuple
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from test_map import function_at, function_spans  # noqa: E402
+
+E2E = "front-end/e2e/"
+SRC = "front-end/src/"
+TIMINGS = "front-end/scripts/e2e-shard-timings.json"
+CACHE = ".stack-logs/test-map"
+CAP_MINUTES = 30.0
+# A spec with no timing anywhere: a minute.
+UNTIMED_SECONDS = 60.0
+
+# What every spec stands on: the fixtures every test is made from, the setup and config of the
+# run, the front end's build and dependencies, and the stack and data every spec runs against.
+RUN_EVERY_SPEC = re.compile(
+    r"^(?:front-end/(?:e2e/fixtures\.ts|e2e/global-setup\.ts|playwright\.config\.ts"
+    r"|package-lock\.json|vite\.config\.ts|index\.html)"
+    r"|docker-compose[^/]*\.ya?ml|(?:.*/)?Dockerfile[^/]*|back-end/requirements[^/]*\.txt"
+    r"|scripts/seed_fixture\.sh)$"
+)
+
+# `import ... from '<x>'`, `export ... from '<x>'`, `import '<x>'` and `import('<x>')`.
+IMPORT = re.compile(r"""(?:\bfrom|\bimport)\s*\(?\s*['"]([^'"\n]+)['"]""")
+
+
+def git(root: Path, *args: str) -> str:
+    done = subprocess.run(
+        ["git", "-C", str(root), *args], capture_output=True, text=True, check=False
+    )
+    if done.returncode != 0:
+        raise SystemExit(f"affected-specs: git {' '.join(args)}: {done.stderr.strip()}")
+    return done.stdout
+
+
+class Tree:
+    """The files at one side of the diff: a commit's, or the worktree's when `rev` is None."""
+
+    def __init__(self, root: Path, rev: Optional[str]):
+        self.root, self.rev = root, rev
+        self._cache: Dict[str, Optional[str]] = {}
+
+    def read(self, path: str) -> Optional[str]:
+        if path not in self._cache:
+            if self.rev is None:
+                file = self.root / path
+                self._cache[path] = file.read_text(errors="replace") if file.is_file() else None
+            else:
+                done = subprocess.run(
+                    ["git", "-C", str(self.root), "show", f"{self.rev}:{path}"],
+                    capture_output=True,
+                    check=False,
+                )
+                self._cache[path] = (
+                    done.stdout.decode(errors="replace") if done.returncode == 0 else None
+                )
+        return self._cache[path]
+
+    def files(self, under: str) -> List[str]:
+        if self.rev is None:
+            top = self.root / under
+            found = [
+                str(p.relative_to(self.root))
+                for p in top.rglob("*")
+                if p.is_file() and "node_modules" not in p.parts
+            ]
+            return sorted(found)
+        return git(self.root, "ls-tree", "-r", "--name-only", self.rev, "--", under).split("\n")[
+            :-1
+        ]
+
+
+HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+
+
+def changed_lines(root: Path, base: str, head: Optional[str]) -> Dict[str, Tuple[Set[int], Set[int]]]:
+    """{path: (head lines changed, base lines changed)} from `base` to `head` or the worktree.
+
+    Only lines a hunk has on each side: a deletion has none on the head side and an addition none
+    on the base side, so a deleted function is named by the base's lines alone. An untracked file
+    is all head lines.
+    """
+    options = ["-c", "core.quotePath=false", "diff", "-U0", "--no-renames", "--no-ext-diff",
+               "--no-color", "--src-prefix=a/", "--dst-prefix=b/"]  # fmt: skip
+    sides = [base] + ([head] if head else [])
+    out: Dict[str, Tuple[Set[int], Set[int]]] = defaultdict(lambda: (set(), set()))
+    old: Optional[str] = None
+    path: Optional[str] = None
+    for line in git(root, *options, *sides, "--").splitlines():
+        if line.startswith("--- "):
+            old = line[6:] if line != "--- /dev/null" else None
+        elif line.startswith("+++ "):
+            path = line[6:] if line != "+++ /dev/null" else old
+        elif line.startswith("@@") and path:
+            m = HUNK.match(line)
+            if not m:
+                continue
+            ostart, ocount = int(m.group(1)), int(m.group(2) or 1)
+            start, count = int(m.group(3)), int(m.group(4) or 1)
+            out[path][0].update(range(start, start + count))
+            out[path][1].update(range(ostart, ostart + ocount))
+    # A change with no hunk (a binary file, a change of mode) is a path with no lines.
+    for name in git(root, "-c", "core.quotePath=false", "diff", "--name-only", "--no-renames",
+                    *sides, "--").splitlines():  # fmt: skip
+        out[name]
+    if head is None:
+        worktree = Tree(root, None)
+        for name in git(root, "-c", "core.quotePath=false", "ls-files", "--others",
+                        "--exclude-standard").splitlines():  # fmt: skip
+            text = worktree.read(name) or ""
+            out[name][0].update(range(1, len(text.splitlines()) + 1))
+    return dict(out)
+
+
+def changed_functions(path: str, lines: Tuple[Set[int], Set[int]], head: Tree, base: Tree) -> Set[str]:
+    """The functions a change to a Python file touches, by the qualified names the map uses, or
+    `<module>` for a line outside every function (or a file whose change has no lines, such as a
+    change of mode). A blank or comment-only line changes nothing that runs, so it names none."""
+    if not lines[0] and not lines[1]:
+        return {"<module>"}
+    found: Set[str] = set()
+    for tree, side in ((head, lines[0]), (base, lines[1])):
+        source = tree.read(path) or ""
+        text = source.splitlines()
+        spans = function_spans(source)
+        for line in side:
+            words = text[line - 1].strip() if 0 < line <= len(text) else ""
+            if words and not words.startswith("#"):
+                found.add(function_at(spans, line))
+    return found
+
+
+def resolve(importer: str, target: str, tree: Tree) -> Optional[str]:
+    """The repository path a relative (or `@/`) import of a front-end file names, if it is one."""
+    if target.startswith("@/"):
+        joined = SRC + target[2:]
+    elif target.startswith("."):
+        parts = importer.split("/")[:-1]
+        for part in target.split("/"):
+            if part == "..":
+                parts = parts[:-1]
+            elif part != ".":
+                parts.append(part)
+        joined = "/".join(parts)
+    else:
+        return None
+    for candidate in (joined, joined + ".ts", joined + "/index.ts"):
+        if tree.read(candidate) is not None:
+            return candidate
+    return joined
+
+
+def import_closure(spec_path: str, tree: Tree) -> Set[str]:
+    """Every file a spec imports, transitively, by repository path; front-end files only."""
+    seen: Set[str] = set()
+    todo = [spec_path]
+    while todo:
+        current = todo.pop()
+        text = tree.read(current)
+        if text is None or not current.endswith((".ts", ".mts", ".js", ".vue")):
+            continue
+        for target in IMPORT.findall(text):
+            found = resolve(current, target, tree)
+            if found and found not in seen and found != spec_path:
+                seen.add(found)
+                todo.append(found)
+    return seen
+
+
+def short(path: str) -> str:
+    return path[len(E2E) :] if path.startswith(E2E) else path
+
+
+class Selection:
+    def __init__(self) -> None:
+        self.score: Dict[str, float] = defaultdict(float)
+        self.why: Dict[str, List[str]] = defaultdict(list)
+        self.changed: Set[str] = set()
+
+    def add(self, spec: str, score: float, why: str) -> None:
+        self.score[spec] += score
+        if why not in self.why[spec]:
+            self.why[spec].append(why)
+
+
+def select(
+    changes: Dict[str, Tuple[Set[int], Set[int]]],
+    head: Tree,
+    base: Tree,
+    test_map: Optional[dict],
+) -> Tuple[Selection, Set[str]]:
+    """The specs the change reaches, and the specs at the head; with no map, by rule 1 alone."""
+    selection = Selection()
+    at_head = {short(p) for p in head.files(E2E) if p.endswith(".spec.ts")}
+    deleted = {short(p) for p in changes if p.startswith(E2E) and short(p) not in at_head}
+
+    # Rule 1: a changed spec, and every spec importing a changed file.
+    for spec in sorted(at_head):
+        path = E2E + spec
+        if path in changes:
+            selection.add(spec, 1, "changed spec")
+            selection.changed.add(spec)
+        for imported in sorted(import_closure(path, head)):
+            if imported in changes:
+                selection.add(spec, 1, f"imports {short(imported)}")
+    if test_map is None:
+        return selection, at_head
+
+    specs = {s: v for s, v in test_map["specs"].items() if s not in deleted}
+    universe = (set(specs) | at_head) - deleted
+    by_module: Dict[str, Set[str]] = defaultdict(set)
+    by_endpoint: Dict[str, Set[str]] = defaultdict(set)
+    for spec, reached in specs.items():
+        for module in reached["modules"]:
+            by_module[module].add(spec)
+        for endpoint in reached["endpoints"]:
+            by_endpoint[endpoint].add(spec)
+    endpoints: Dict[str, Dict[str, List[str]]] = test_map["endpoints"]
+
+    for path, lines in sorted(changes.items()):
+        # Rule 4: every spec.
+        if RUN_EVERY_SPEC.match(path):
+            for spec in sorted(universe):
+                selection.add(spec, 0, f"{path} runs every spec")
+        # Rule 2: a module the spec's pages loaded.
+        if path.startswith(SRC):
+            reached = by_module.get(path, set())
+            for spec in sorted(reached):
+                selection.add(spec, 1 / len(reached), f"loads {path} (1/{len(reached)})")
+        # Rule 3: a back-end function an endpoint the spec called runs.
+        if path.startswith("back-end/") and path.endswith(".py"):
+            if path.startswith("back-end/tests/"):
+                continue
+            known = {fn for files in endpoints.values() for fn in files.get(path, ())}
+            whole_file = False
+            for function in sorted(changed_functions(path, lines, head, base)):
+                if function not in known:
+                    whole_file = True
+                    continue
+                via: Dict[str, str] = {}
+                for endpoint in sorted(endpoints):
+                    if function in endpoints[endpoint].get(path, ()):
+                        for spec in by_endpoint.get(endpoint, ()):
+                            via.setdefault(spec, endpoint)
+                for spec in sorted(via):
+                    selection.add(
+                        spec,
+                        1 / len(via),
+                        f"{path}:{function} via {via[spec]} (1/{len(via)})",
+                    )
+            if whole_file:
+                reached = set()
+                for endpoint, files in endpoints.items():
+                    if path in files:
+                        reached |= by_endpoint.get(endpoint, set())
+                for spec in sorted(reached):
+                    selection.add(spec, 0, f"{path}, outside any function the map knows")
+    for spec in list(selection.score):
+        if spec not in universe:
+            del selection.score[spec]
+    return selection, at_head
+
+
+def report_seconds(directory: Path) -> Dict[str, float]:
+    """Each spec file's seconds over the Playwright JSON reports under `directory`, every attempt
+    counted, as `front-end/scripts/e2e-shards.ts refresh` sums them."""
+
+    def milliseconds(suite: dict) -> float:
+        total = 0.0
+        for spec in suite.get("specs", []):
+            for test in spec.get("tests", []):
+                for result in test.get("results", []):
+                    total += result.get("duration", 0)
+        return total + sum(milliseconds(inner) for inner in suite.get("suites", []))
+
+    sums: Dict[str, float] = defaultdict(float)
+    for report in sorted(directory.rglob("*.json")) if directory.is_dir() else []:
+        try:
+            data = json.loads(report.read_text())
+        except (OSError, ValueError):
+            continue
+        for suite in data.get("suites", []):
+            if suite.get("file"):
+                sums[suite["file"]] += milliseconds(suite)
+    return {spec: total / 1000 for spec, total in sums.items()}
+
+
+class Seconds:
+    """A spec's CI seconds: the shard results, then the committed timings, then their median."""
+
+    def __init__(self, results: Optional[Path], timings: Optional[str]):
+        self.results = report_seconds(results) if results else {}
+        try:
+            self.timings = {k: float(v) for k, v in json.loads(timings or "{}").items()}
+        except ValueError:
+            self.timings = {}
+        known = list({**self.timings, **self.results}.values())
+        self.median = statistics.median(known) if known else UNTIMED_SECONDS
+
+    def __call__(self, spec: str) -> float:
+        return self.results.get(spec, self.timings.get(spec, self.median))
+
+
+def ranked(selection: Selection, seconds: Seconds, cap: float) -> Tuple[List[dict], List[dict]]:
+    """The specs to run and the specs left to CI, each in score order, the shorter first on a tie;
+    the run stops at the first spec past the cap, but a changed spec runs whatever the cap."""
+    order = sorted(selection.score, key=lambda s: (-selection.score[s], seconds(s), s))
+    run: List[dict] = []
+    left: List[dict] = []
+    minutes = 0.0
+    stopped = False
+    for rank, spec in enumerate(order, start=1):
+        row = {
+            "rank": rank,
+            "spec": spec,
+            "score": selection.score[spec],
+            "minutes": seconds(spec) / 60,
+            "changed": spec in selection.changed,
+            "why": selection.why[spec],
+        }
+        if row["changed"] or (not stopped and minutes + row["minutes"] <= cap):
+            run.append(row)
+            minutes += row["minutes"]
+        else:
+            stopped = True
+            left.append(row)
+    return run, left
+
+
+def gh(root: Path, *args: str) -> Optional[str]:
+    try:
+        done = subprocess.run(
+            ["gh", *args], cwd=root, capture_output=True, text=True, timeout=300, check=False
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return done.stdout if done.returncode == 0 else None
+
+
+def newest_map(root: Path) -> Tuple[Optional[dict], Optional[dict], Optional[Path]]:
+    """(the map, where it came from, its run's shard results) of the newest push to `dev` that
+    made one, downloaded once a run; offline, the newest one downloaded before."""
+    cache = root / CACHE
+    listing = gh(root, "api", "repos/{owner}/{repo}/actions/artifacts?name=test-map&per_page=50")
+    run_id: Optional[int] = None
+    if listing is not None:
+        try:
+            artifacts = json.loads(listing).get("artifacts", [])
+        except ValueError:
+            artifacts = []
+        on_dev = [
+            a
+            for a in artifacts
+            if a.get("name") == "test-map"
+            and not a.get("expired")
+            and (a.get("workflow_run") or {}).get("head_branch") == "dev"
+        ]
+        on_dev.sort(key=lambda a: a.get("created_at", ""), reverse=True)
+        if on_dev:
+            run_id = int(on_dev[0]["workflow_run"]["id"])
+            if not (cache / str(run_id) / "test-map.json").is_file():
+                download(root, cache, run_id)
+    if run_id is None or not (cache / str(run_id) / "test-map.json").is_file():
+        offline = listing is None or run_id is not None
+        earlier = sorted(
+            (int(d.name) for d in cache.iterdir() if d.name.isdigit() and (d / "test-map.json").is_file())
+            if cache.is_dir()
+            else []
+        )
+        if not earlier or not offline:
+            return None, None, None
+        run_id = earlier[-1]
+        source = {"run": run_id, "offline": True}
+    else:
+        source = {"run": run_id, "offline": False}
+    folder = cache / str(run_id)
+    test_map = json.loads((folder / "test-map.json").read_text())
+    source["commit"] = test_map.get("commit")
+    source["path"] = str(folder.relative_to(root))
+    return test_map, source, folder / "results"
+
+
+def download(root: Path, cache: Path, run_id: int) -> None:
+    """The run's `test-map` and its shards' Playwright reports, into `<cache>/<run id>/`, whole or
+    not at all: a partial download is in a directory of its own until it is complete."""
+    partial = cache / f".{run_id}.{os.getpid()}"
+    shutil.rmtree(partial, ignore_errors=True)
+    partial.mkdir(parents=True)
+    try:
+        if gh(root, "run", "download", str(run_id), "-n", "test-map", "-D", str(partial)) is None:
+            return
+        if not (partial / "test-map.json").is_file():
+            return
+        # The shard results are only the minutes: the committed timings stand in without them.
+        gh(root, "run", "download", str(run_id), "-p", "e2e-results-shard-*",
+           "-D", str(partial / "results"))  # fmt: skip
+        try:
+            partial.rename(cache / str(run_id))
+        except OSError:
+            return  # another run of this script downloaded it first
+        # Only the newest map is read again, offline: the older ones go.
+        for older in cache.iterdir():
+            if older.name.isdigit() and int(older.name) < run_id:
+                shutil.rmtree(older, ignore_errors=True)
+    finally:
+        shutil.rmtree(partial, ignore_errors=True)
+
+
+def escape(text: str) -> str:
+    """A path for a Playwright filter, `/source/` and all, as front-end/scripts/e2e-shards.ts
+    escapes it."""
+    return re.sub(r"([.*+?^${}()|\[\]\\/])", r"\\\1", text)
+
+
+def describe_source(source: Optional[dict]) -> str:
+    if source is None:
+        return (
+            "affected-specs: no test map (no `gh`, offline, or no push to dev has made one yet): "
+            "choosing only the changed specs and those importing a changed file, as Playwright's "
+            "--only-changed would"
+        )
+    commit = (source.get("commit") or "")[:8]
+    if "file" in source:
+        return f"affected-specs: the test map {source['file']}, at {commit}"
+    if source.get("offline"):
+        return (
+            f"affected-specs: GitHub did not answer: the test map of dev run {source['run']}, "
+            f"at {commit}, downloaded before to {source['path']}"
+        )
+    return f"affected-specs: the test map of dev run {source['run']}, at {commit}, in {source['path']}"
+
+
+def count_specs(count: int) -> str:
+    return f"{count} spec" + ("" if count == 1 else "s")
+
+
+def print_rows(rows: Sequence[dict], absent: Set[str]) -> None:
+    for row in rows:
+        why = row["why"][:3] + ([f"and {len(row['why']) - 3} more"] if len(row["why"]) > 3 else [])
+        mark = " (not in this tree)" if row["spec"] in absent else ""
+        print(
+            f"  {row['rank']:>4} {row['minutes']:>6.1f} min  {row['score']:6.3f}  "
+            f"{row['spec']}{mark}: {'; '.join(why)}"
+        )
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    playwright_args: List[str] = []
+    if "--" in argv:
+        at = argv.index("--")
+        argv, playwright_args = argv[:at], argv[at + 1 :]
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    what = parser.add_mutually_exclusive_group(required=True)
+    what.add_argument("--run", action="store_true", help="run the chosen specs with Playwright")
+    what.add_argument("--list", action="store_true", help="print the chosen specs, running none")
+    parser.add_argument("--base", help="the base of the diff (the merge-base with origin/dev)")
+    parser.add_argument("--head", help="the head of the diff, a commit (the worktree); --list only")
+    parser.add_argument("--map", type=Path, help="a test-map.json in place of the newest dev's")
+    parser.add_argument("--results", type=Path, help="Playwright JSON reports for the minutes")
+    parser.add_argument("--minutes", type=float, default=CAP_MINUTES, help="the cap, in CI minutes")
+    parser.add_argument("--json", action="store_true", help="--list as JSON")
+    args = parser.parse_args(argv)
+    if args.head and args.run:
+        parser.error("--head is for --list: --run runs the worktree's own specs")
+
+    root = Path(git(Path.cwd(), "rev-parse", "--show-toplevel").strip())
+    base = args.base or git(root, "merge-base", "origin/dev", "HEAD").strip()
+    base = git(root, "rev-parse", "--verify", f"{base}^{{commit}}").strip()
+    head_rev = git(root, "rev-parse", "--verify", f"{args.head}^{{commit}}").strip() if args.head else None
+    head, base_tree = Tree(root, head_rev), Tree(root, base)
+
+    if args.map:
+        test_map = json.loads(args.map.read_text())
+        source: Optional[dict] = {"file": str(args.map), "commit": test_map.get("commit")}
+        results = args.results
+    else:
+        test_map, source, results = newest_map(root)
+        results = args.results or results
+    seconds = Seconds(results, head.read(TIMINGS))
+    changes = changed_lines(root, base, head_rev)
+    selection, at_head = select(changes, head, base_tree, test_map)
+    absent = set(selection.score) - at_head
+    if args.run:
+        for spec in absent:
+            del selection.score[spec]
+    run, left = ranked(selection, seconds, args.minutes)
+
+    if args.json:
+        print(json.dumps({
+            "base": base, "head": head_rev, "map": source, "changed": sorted(changes),
+            "run": run, "left": left, "absent": sorted(absent),
+            "minutes_run": sum(r["minutes"] for r in run),
+            "minutes_left": sum(r["minutes"] for r in left),
+        }, indent=1))  # fmt: skip
+        return 0
+
+    print(describe_source(source))
+    print(
+        f"affected-specs: {len(changes)} files changed from {base[:8]} "
+        f"({'--base' if args.base else 'the merge-base with origin/dev'}) "
+        f"to {head_rev[:8] if head_rev else 'the worktree'}"
+    )
+    minutes_run = sum(r["minutes"] for r in run)
+    if not run and not left:
+        print("affected-specs: the change reaches no spec: nothing to run")
+    elif not run:
+        print(f"affected-specs: the first spec is past the cap of {args.minutes:g} CI minutes: nothing to run")
+    else:
+        verb = "runs" if args.run else "would run"
+        print(
+            f"{verb} {count_specs(len(run))}, {minutes_run:.1f} CI minutes "
+            f"(the cap is {args.minutes:g}; a changed spec runs past it):"
+        )
+        print_rows(run, absent)
+    if left:
+        print(
+            f"leaves {count_specs(len(left))}, {sum(r['minutes'] for r in left):.1f} CI minutes, "
+            "to CI's full run on the pull request:"
+        )
+        print_rows(left, absent)
+    if args.run and absent:
+        print(
+            "left out, not in this worktree (newer on dev than the branch): "
+            + ", ".join(sorted(absent))
+        )
+    if not args.run or not run:
+        return 0
+    e2e = (root / E2E).resolve()
+    filters = ["/^" + escape(f"{e2e}/{row['spec']}") + "$/" for row in run]
+    print(f"affected-specs: npx playwright test <the {count_specs(len(run))} above>", flush=True)
+    return subprocess.run(
+        ["npx", "playwright", "test", *filters, *playwright_args], cwd=root / "front-end"
+    ).returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main())
