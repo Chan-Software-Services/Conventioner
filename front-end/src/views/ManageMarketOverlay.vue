@@ -14,7 +14,7 @@
  * write is sent to the address of that key, and a write's re-read overtakes every read asked before
  * it, so an older answer never puts back what the write changed.
  */
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, shallowRef, watch } from 'vue';
 import {
   type Market,
   MarketPhase,
@@ -108,7 +108,7 @@ const openOn = () => (props.manageOpen ? (props.market?.id ?? null) : null);
 
 /**
  * Manage market's own read of the market it is open on, from the opening's first read to each
- * write's re-read: the rename field takes the name of each read that lands.
+ * write's re-read.
  */
 const read = useServerRead<string, Market>(
   openOn,
@@ -116,24 +116,33 @@ const read = useServerRead<string, Market>(
     api
       .get(`/markets/${encodeURIComponent(id)}`)
       .then((response) => parseMarketFromApi(response.data.market)),
-  {
-    failure: 'The market could not be loaded.',
-    landed: (market) => {
-      renameValue.value = market.name;
-    },
+  { failure: 'The market could not be loaded.' },
+);
+// The rename field takes each name a read brings that differs from the last, so a re-read after
+// an add, a role change or a refused rename leaves a name being typed alone.
+watch(
+  () => read.data.value?.name,
+  (name) => {
+    if (name !== undefined) renameValue.value = name;
   },
 );
 /**
- * The market as Manage market last read it; after its first read failed, the opener's copy of the
- * same market, with the failure said, so the dialog still works on a bad network as it did.
+ * After the opening's first read failed, the opener's copy of the same market, with each change
+ * to who may do what taken into it: what the dialog works on until a read lands, kept through each
+ * write's re-read, so the dialog still works on a bad network as it did. Forgotten on a move.
  */
-const marketData = computed(() => {
-  if (read.data.value) return read.data.value;
+const openersCopy = shallowRef<Market | null>(null);
+watch(read.key, () => (openersCopy.value = null), { flush: 'sync' });
+watch(read.phase, (phase) => {
   const opener = props.market;
-  return read.phase.value === 'failed' && opener && opener.id === read.key.value ? opener : null;
+  if (phase === 'failed' && !openersCopy.value && opener && opener.id === read.key.value) {
+    openersCopy.value = opener;
+  }
 });
+/** The market as Manage market last read it, or the opener's copy after its first read failed. */
+const marketData = computed(() => read.data.value ?? openersCopy.value);
 /** Its first read is out: the dialog names the market it was opened on, and says it is loading. */
-const loading = computed(() => read.phase.value === 'loading');
+const loading = computed(() => read.phase.value === 'loading' && !marketData.value);
 /** A read that failed, said by the shell: the first, or a re-read with the market kept. */
 const errorMessage = computed(() =>
   read.phase.value === 'failed' || read.phase.value === 'refresh_failed' ? read.sentence.value : '',
@@ -601,6 +610,7 @@ function handleDeleteCancel() {
 function handleTableChanged(table: PermissionTableRow[]) {
   const marketId = read.key.value;
   if (marketId) read.adopt(marketId, (market) => ({ ...market, permissionTable: table }));
+  if (openersCopy.value) openersCopy.value = { ...openersCopy.value, permissionTable: table };
   changesMade.value++;
 }
 

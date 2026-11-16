@@ -192,6 +192,55 @@ describe('a failed first read', () => {
     await flushPromises();
     expect(api.put).toHaveBeenCalledWith('/markets/market-a/name', { name: 'Market A renamed' });
   });
+
+  it("takes a change to who may do what into the opener's copy it shows", async () => {
+    const A = market('market-a', 'Market A');
+    const changedRow = { ...ROW, label: 'Assign tables, changed' } as PermissionTableRow;
+    api.get.mockImplementation((url: string) =>
+      url === '/markets/market-a'
+        ? Promise.reject(new Error('unreachable'))
+        : Promise.resolve({ data: { entries: [], next: null } }),
+    );
+    const w = mountOn(A);
+    await flushPromises();
+    const permissions = () => w.findComponent(MarketPermissions);
+    expect(permissions().props('market').permissionTable).toEqual([ROW]);
+
+    permissions().vm.$emit('changed', [changedRow]);
+    await flushPromises();
+
+    expect(permissions().props('market').permissionTable).toEqual([changedRow]);
+  });
+
+  it("keeps the opener's copy drawn while a write's re-read is out, never Loading in its place", async () => {
+    const A = market('market-a', 'Market A');
+    const reads: ReturnType<typeof held<unknown>>[] = [];
+    api.get.mockImplementation((url: string) => {
+      if (url !== '/markets/market-a')
+        return Promise.resolve({ data: { entries: [], next: null } });
+      const read = held<unknown>();
+      reads.push(read);
+      return read.promise;
+    });
+    api.put.mockResolvedValue({ data: {} });
+    mountOn(A);
+    await flushPromises();
+    reads[0]!.refuse(new Error('unreachable'));
+    await flushPromises();
+    expect(byTestId('manage-market-window')?.querySelector('.content')).not.toBeNull();
+
+    await typeName('Market A renamed');
+    byTestId('manage-market-rename-save-button')!.click();
+    await flushPromises();
+    expect(reads).toHaveLength(2);
+
+    const window = byTestId('manage-market-window')!;
+    expect(window.querySelector('.content')).not.toBeNull();
+    expect(dialogText()).not.toContain('Loading...');
+    reads[1]!.settle({ data: { market: { ...A, name: 'Market A renamed' } } });
+    await flushPromises();
+    expect(window.querySelector('.market-name')?.textContent).toBe('Market A renamed');
+  });
 });
 
 describe('a re-read asked before a write never lands after it', () => {
@@ -233,6 +282,30 @@ describe('a re-read asked before a write never lands after it', () => {
       'Summer Market',
     );
     expect(byTestId('manage-market-rename-input')?.value).toBe('Summer Market');
+  });
+
+  it('a re-read that brings the same name back keeps the name being typed', async () => {
+    const before = market('market-1', 'Spring Market');
+    const reads: ReturnType<typeof held<unknown>>[] = [];
+    api.get.mockImplementation((url: string) => {
+      if (url !== '/markets/market-1')
+        return Promise.resolve({ data: { entries: [], next: null } });
+      const read = held<unknown>();
+      reads.push(read);
+      return read.promise;
+    });
+    const w = mountOn(before);
+    await flushPromises();
+    reads[0]!.settle({ data: { market: before } });
+    await flushPromises();
+
+    w.findComponent(MarketPermissions).vm.$emit('marketChanged');
+    await flushPromises();
+    await typeName('Summer Mar');
+    reads[1]!.settle({ data: { market: { ...before } } });
+    await flushPromises();
+
+    expect(byTestId('manage-market-rename-input')?.value).toBe('Summer Mar');
   });
 
   it('a change to who may do what, answered while an older re-read is out, is not undone by it', async () => {
