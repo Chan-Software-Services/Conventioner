@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from conftest import (
-    FakeMarketsCollection, client_market, mongo_matches, mongo_project,
+    FakeMarketsCollection, assigning, client_market, mongo_matches, mongo_project,
     sessions_load_through_get_user, stored_market,
 )
 from test_the_history import FakeHistoryCollection
@@ -227,8 +227,8 @@ class TestTheOwnerSetsAndResetsARow:
         assert world.history.docs == []
 
     def test_the_history_is_read_newest_first_and_holds_only_the_tables_changes(self, world):
-        History.record("market-123", OWNER, Actions.ASSIGN, kind=History.FREED,
-                       detail={"date": "2026-11-18", "table_code": "A 1"})
+        assigning("market-123", OWNER).record(
+            kind=History.FREED, detail={"date": "2026-11-18", "table_code": "A 1"})
         MarketsApi.set_permission("market-123", "check-in", "admin", OWNER)
         MarketsApi.set_permission("market-123", "add-vendor", "owner", OWNER)
 

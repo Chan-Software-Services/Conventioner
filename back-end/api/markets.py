@@ -420,21 +420,6 @@ def _market_change(
     return MarketChange(market, organization, asked)
 
 
-def _load_market_to_change(
-    market_id: str, requesting_user: str, action: Actions.Action,
-) -> Market:
-    """``_market_change``'s market, for a write that records by hand (until T105-9 moves it)."""
-    return _market_change(market_id, requesting_user, action).market
-
-
-def _load_market_and_organization_to_change(
-    market_id: str, requesting_user: str, action: Actions.Action,
-) -> LoadedMarket:
-    """``_load_market_to_change``, with the organization it read to ask the row."""
-    change = _market_change(market_id, requesting_user, action)
-    return LoadedMarket(change.market, change.organization)
-
-
 def application_form_lock_reason(market: Market) -> Optional[str]:
     """The single source of truth for whether a market's application form may be edited.
 

@@ -20,6 +20,12 @@ and a structured detail. The wording belongs to whichever surface shows it
 (``front-end/src/utils/marketHistory.ts`` and its ``historyReaders/``, for every list of it) and must be changeable without a migration - the same rule
 ``placement_reasons`` follows.
 
+**A change records under the row it asked** (T105-9, ADR 0032): a market's entry is written
+through the asking its write's check returned (``Actions.Asked.record``), or, for the few records
+no request asks, through ``unasked``, each caller with its reason. ``_record`` is private, so no
+entry can name a row passed by hand beside a check made elsewhere; an applicant's own change, which
+no row asks, is ``record_applicant``'s.
+
 **A run is one entry**, not none and not one per placement. Omitting runs would leave the history
 lying by omission, because a placement that changed between two hand edits would have no
 explanation. One entry per placement would drown the hand edits under machine rows, and the hand
@@ -157,15 +163,19 @@ def _now() -> str:
 
 
 #: Part of an entry, given as it is or as a builder: a callable with no arguments, run inside
-#: ``record``'s guard.
+#: ``_record``'s guard.
 Part = Union[Dict[str, Any], None, Callable[[], Optional[Dict[str, Any]]]]
 
 
-def record(
+def _record(
     market_id: str, actor: Optional[str], action: Union[Action, str], *,
     kind: Optional[str] = None, vendors: Iterable[str] = (), subject: Part = None, detail: Part,
 ) -> None:
     """Write one entry. Never raises: a history that can break a change is worse than no history.
+
+    Private (T105-9, ADR 0032): a change records through the asking its check returned
+    (``Actions.Asked.record``) or through ``unasked``, never by naming a row here, and
+    ``tests/test_only_an_asking_writes_a_markets_history.py`` fails any other module that calls it.
 
     ``action`` is the table's row the change asked, or ``APPLY`` for what an applicant's own save
     did beyond their answers (the deal of their application, E38/F07/S03).
@@ -185,7 +195,7 @@ def record(
 
 @dataclass(frozen=True)
 class UnaskedRecorder:
-    """A recorder for a change no request asked its row of (``unasked``): it writes as ``record``
+    """A recorder for a change no request asked its row of (``unasked``): it writes as ``_record``
     does, under ``row`` as ``actor``, and keeps why nothing asked it."""
 
     market_id: str
@@ -197,8 +207,8 @@ class UnaskedRecorder:
         self, *, kind: Optional[str] = None, vendors: Iterable[str] = (), subject: Part = None,
         detail: Part,
     ) -> None:
-        record(self.market_id, self.actor, self.row, kind=kind, vendors=vendors, subject=subject,
-               detail=detail)
+        _record(self.market_id, self.actor, self.row, kind=kind, vendors=vendors, subject=subject,
+                detail=detail)
 
 
 def unasked(
@@ -206,10 +216,12 @@ def unasked(
 ) -> UnaskedRecorder:
     """The one door for a change on a market recorded under a row no request asked (T105-9): a
     record its request's asking cannot write (``Actions.Asked.record``), such as a vendor's own
-    check-in, under the door's row with no actor. ``row`` is a row of the table, or as ``record``
+    check-in, under the door's row with no actor. ``row`` is a row of the table, or as ``_record``
     takes it, a row's id or ``APPLY``: the deal of an arriving application is recorded under what
-    the write it arrived by stored. ``because`` says why nothing asked it; the records no request
-    asks are listed with their reasons in ``tests/test_every_write_records.py`` (``UNASKED``)."""
+    the write it arrived by stored. ``because`` says why nothing asked it, a constant beside its
+    caller. Only the functions ``tests/test_only_an_asking_writes_a_markets_history.py`` lists
+    (``DOORS``) call it, each with its constant, and the records they make are listed with their
+    reasons in ``tests/test_every_write_records.py`` (``UNASKED``)."""
     return UnaskedRecorder(market_id, actor, row, because)
 
 
@@ -603,7 +615,7 @@ def record_for_organization(
     organization_id: str, actor: Optional[str], action_id: str, *, kind: Optional[str] = None,
     subject: Part = None, detail: Part, entry_id: Optional[str] = None,
 ) -> None:
-    """Write one entry of an organization's own history. Never raises, as ``record`` never does:
+    """Write one entry of an organization's own history. Never raises, as ``_record`` never does:
     the change it records has already landed. ``entry_id`` writes it once however often it is
     recorded: a market's deletion records under its trail id, so a retry adds no second entry."""
     _write({ORGANIZATION_ID_FIELD: organization_id}, actor, action_id, kind, (), subject, detail,

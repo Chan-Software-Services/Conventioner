@@ -7,28 +7,18 @@ asks its row in one call (``MarketsApi._market_change``), and the plan's rules a
 only when they change (``Actions.ask_assign_if_the_rules_change``).
 
 The records no request asked have their own door, ``History.unasked``, tested with the history.
+That nothing else writes a market's history is held by
+``test_only_an_asking_writes_a_markets_history.py``.
 """
-import ast
-from pathlib import Path
-from types import SimpleNamespace
-
 import pytest
 
 from conftest import COMPLETE_PLAN, FakeMarketsCollection, client_market, stored_market
 from test_the_history import history  # noqa: F401 - the fixture
 import api.applicants as ApplicantsApi
-import api.attendance as AttendanceApi
-import api.door as DoorApi
 import api.market_actions as Actions
 import api.markets as MarketsApi
-import api.payments as PaymentsApi
 import api.permissions as PermissionsApi
-import api.placements as PlacementsApi
-import api.vendor_check_in as VendorCheckInApi
-import csv_import as CsvImport
-import csv_start as CsvStart
 import history as History
-import payments as Payments
 import review_team as ReviewTeam
 from client_errors import BadRequestError, ForbiddenError
 from datatypes import AssignmentOptionObject, MarketPerson, MarketPhase, MarketRole
@@ -125,8 +115,7 @@ class TestRecordingWhatWasAsked:
         assert entry["detail"] == {"freed": True}
 
     def test_a_record_that_cannot_be_saved_is_swallowed(self, holding, monkeypatch):
-        """The change has landed by the time it is recorded, as ``History.record`` holds."""
-        import history as History
+        """The change has landed by the time it is recorded, as the history's writer holds."""
 
         class Broken:
             def insert_one(self, _doc):
@@ -212,7 +201,8 @@ class TestLoadingAMarketToChange:
         assert str(refused.value) == MarketsApi.ARCHIVED_REFUSAL
 
     def test_on_an_archived_market_the_row_is_asked_first(self, stored, holding):
-        """As the old loaders answered: who may not take the row is told so, archived or not."""
+        """As the loaders before it answered: who may not take the row is told so, archived or
+        not."""
         stored(MarketPhase.ARCHIVED)
         holding(MarketRole.VIEWER)
 
@@ -220,27 +210,6 @@ class TestLoadingAMarketToChange:
             MarketsApi._market_change("market-123", ASKER, Actions.CHANGE_SETUP)
 
         assert str(refused.value) == Actions.refusal_sentence(Actions.CHANGE_SETUP)
-
-    @pytest.mark.parametrize("loader", [
-        MarketsApi._load_market_to_change, MarketsApi._load_market_and_organization_to_change,
-    ], ids=lambda loader: loader.__name__)
-    def test_the_old_loaders_load_through_it(self, monkeypatch, loader):
-        market, organization = client_market(), object()
-        calls = []
-
-        def change(*args):
-            calls.append(args)
-            return MarketsApi.MarketChange(market, organization, None)
-
-        monkeypatch.setattr(MarketsApi, "_market_change", change)
-
-        loaded = loader("market-123", ASKER, Actions.CHANGE_FORM)
-
-        assert calls == [("market-123", ASKER, Actions.CHANGE_FORM)]
-        if loader is MarketsApi._load_market_to_change:
-            assert loaded is market
-        else:
-            assert loaded == MarketsApi.LoadedMarket(market, organization)
 
 
 class TestTheRulesAskAssignWhenTheyChange:
@@ -280,33 +249,6 @@ class TestTheRulesAskAssignWhenTheyChange:
         assert str(refused.value) == Actions.refusal_sentence(Actions.ASSIGN)
 
 
-def _calls_in(module) -> list:
-    """Each call in ``module``'s source by the name it calls, dotted as written, with its line."""
-    tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
-    calls = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            calls.append((ast.unparse(node.func), node.lineno))
-    return calls
-
-
-class TestTheMarketsModuleRecordsWhatItAsked:
-    """The first batch of T105-9's migration: every write in the markets module records through
-    the asking its own check returned, or a recorder its caller gave, so no entry of its names a
-    row by hand. Ticket 14's guard holds every module to it."""
-
-    def test_it_records_no_entry_by_hand(self):
-        assert [line for name, line in _calls_in(MarketsApi) if name == "History.record"] == []
-
-    def test_its_writes_load_through_the_asking_not_the_old_loaders(self):
-        old = {"_load_market_to_change", "_load_market_and_organization_to_change"}
-        assert [line for name, line in _calls_in(MarketsApi) if name in old] == []
-
-    def test_it_opens_no_door_for_a_record_nothing_asked(self):
-        """Its callers do, with their reasons: the import, the start and the seeder."""
-        assert [line for name, line in _calls_in(MarketsApi) if name == "History.unasked"] == []
-
-
 class TestAMoveRecordsThroughItsCallersRecorder:
     @pytest.fixture
     def moving(self, monkeypatch):
@@ -344,43 +286,6 @@ class TestAMoveRecordsThroughItsCallersRecorder:
 
         [entry] = history.docs
         assert (entry["action"], entry["actor"]) == (Actions.MOVE_PHASE.id, ASKER)
-
-
-#: T105-9's second batch: the placements, the payments, the door and attendance, which record
-#: through the asking their own check returned, or a recorder their caller gave.
-SECOND_BATCH = [PlacementsApi, PaymentsApi, Payments, DoorApi, AttendanceApi, VendorCheckInApi]
-
-
-def _calls_by_function(module, name) -> list:
-    """Each top-level function of ``module`` that calls ``name``, dotted as written, once a call."""
-    tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
-    return [
-        function.name
-        for function in tree.body if isinstance(function, ast.FunctionDef)
-        for node in ast.walk(function)
-        if isinstance(node, ast.Call) and ast.unparse(node.func) == name
-    ]
-
-
-class TestThePlacementsPaymentsAndTheDoorRecordWhatTheyAsked:
-    @pytest.mark.parametrize("module", SECOND_BATCH, ids=lambda module: module.__name__)
-    def test_none_records_an_entry_by_hand(self, module):
-        assert [line for name, line in _calls_in(module) if name == "History.record"] == []
-
-    @pytest.mark.parametrize("module", SECOND_BATCH, ids=lambda module: module.__name__)
-    def test_none_loads_through_the_old_loaders(self, module):
-        old = {"MarketsApi._load_market_to_change",
-               "MarketsApi._load_market_and_organization_to_change"}
-        assert [line for name, line in _calls_in(module) if name in old] == []
-
-    def test_only_the_vendors_own_check_in_opens_the_door_for_a_record_nothing_asked(self):
-        """Its two doors, the check-in and its undo, with no actor: the vendor's sign-in and the
-        door code are its check, and no row of the table asks it."""
-        opened = {module.__name__: _calls_by_function(module, "History.unasked")
-                  for module in SECOND_BATCH}
-
-        assert opened == {**{module.__name__: [] for module in SECOND_BATCH},
-                          VendorCheckInApi.__name__: ["check_in", "undo_check_in"]}
 
 
 class _Seat:
@@ -425,36 +330,6 @@ class TestThePlacementWritersRecordThroughTheirCallersAsking:
                 Actions.Asked(Actions.ASSIGN, "market-123", ASKER, "Only an Admin may."))
 
         assert history.docs == []
-
-
-#: T105-9's third batch: the verdicts, the import, the start and the review team. ``app.py`` is
-#: read as a file, since importing it to read its source would start the whole app.
-APP = SimpleNamespace(
-    __name__="app", __file__=str(Path(ApplicantsApi.__file__).parents[1] / "app.py"))
-THIRD_BATCH = [APP, ApplicantsApi, CsvImport, CsvStart, ReviewTeam]
-
-
-class TestTheVerdictsTheImportTheStartAndTheReviewTeamRecordWhatTheyAsked:
-    @pytest.mark.parametrize("module", THIRD_BATCH, ids=lambda module: module.__name__)
-    def test_none_records_an_entry_by_hand(self, module):
-        assert [line for name, line in _calls_in(module) if name == "History.record"] == []
-
-    @pytest.mark.parametrize("module", THIRD_BATCH, ids=lambda module: module.__name__)
-    def test_none_loads_through_the_old_loaders(self, module):
-        old = {"MarketsApi._load_market_to_change",
-               "MarketsApi._load_market_and_organization_to_change"}
-        assert [line for name, line in _calls_in(module) if name in old] == []
-
-    def test_only_the_records_no_request_asked_open_the_door(self):
-        """The first import's move into Review, the floorplans the start releases, and the deal of
-        an application that arrived by an earlier write, under that write's row and person."""
-        opened = {module.__name__: _calls_by_function(module, "History.unasked")
-                  for module in THIRD_BATCH}
-
-        assert opened == {**{module.__name__: [] for module in THIRD_BATCH},
-                          CsvImport.__name__: ["enter_review"],
-                          CsvStart.__name__: ["confirm"],
-                          ReviewTeam.__name__: ["_deal_arriving"]}
 
 
 def _reviewing(changing_refused=None):
@@ -516,51 +391,3 @@ class TestTheReviewTeamRecordsThroughWhatItIsGiven:
                 Actions.Asked(Actions.CHOOSE_REVIEWERS, market.id, ASKER, "Only an Admin may."))
 
         assert history.docs == []
-
-
-BACK_END = Path(ApplicantsApi.__file__).parents[1]
-
-
-def _as_a_file(relative: str) -> SimpleNamespace:
-    """A module read as its file alone: importing the floorplans' or the Discord card's modules
-    to read their source would pull in their routes' dependencies."""
-    return SimpleNamespace(__name__=relative[:-3].replace("/", "."), __file__=str(BACK_END / relative))
-
-
-#: T105-9's fourth batch: the Discord connection, vendor info, added vendors, layouts and the
-#: floorplans, which record through the asking their own check returned.
-FOURTH_BATCH = [_as_a_file(path) for path in (
-    "api/discord_connection.py", "api/vendor_info.py", "api/added_vendors.py", "api/layouts.py",
-    "api/floorplans.py", "api/floorplans_save.py", "api/floorplans_access.py",
-)]
-
-OLD_LOADERS = ("_load_market_to_change", "_load_market_and_organization_to_change")
-
-
-class TestTheRemainingModulesRecordWhatTheyAsked:
-    @pytest.mark.parametrize("module", FOURTH_BATCH, ids=lambda module: module.__name__)
-    def test_none_records_an_entry_by_hand(self, module):
-        assert [line for name, line in _calls_in(module) if name == "History.record"] == []
-
-    @pytest.mark.parametrize("module", FOURTH_BATCH, ids=lambda module: module.__name__)
-    def test_none_loads_through_the_old_loaders(self, module):
-        assert [line for name, line in _calls_in(module) if name.endswith(OLD_LOADERS)] == []
-
-    @pytest.mark.parametrize("module", FOURTH_BATCH, ids=lambda module: module.__name__)
-    def test_none_opens_the_door_for_a_record_nothing_asked(self, module):
-        assert [line for name, line in _calls_in(module) if name == "History.unasked"] == []
-
-    def test_no_production_module_records_by_hand_or_loads_through_the_old_loaders(self):
-        """Every batch moved: only the history module's own writer and the asking's record call
-        ``History.record``, and the old loaders are left with no caller but their tests."""
-        writers = {BACK_END / "history.py", BACK_END / "api" / "market_actions.py"}
-        left = [
-            f"{path.relative_to(BACK_END)}:{line} {name}"
-            for path in sorted(BACK_END.rglob("*.py"))
-            if not {"tests", "__pycache__", "flask_session"} & set(path.relative_to(BACK_END).parts)
-            and path not in writers
-            for name, line in _calls_in(SimpleNamespace(__file__=str(path)))
-            if name == "History.record" or name.endswith(OLD_LOADERS)
-        ]
-
-        assert left == []

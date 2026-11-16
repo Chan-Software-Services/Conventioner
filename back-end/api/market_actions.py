@@ -350,16 +350,17 @@ class Asked:
         self, *, kind: Optional[str] = None, vendors: Iterable[str] = (),
         subject: Any = None, detail: Any,
     ) -> None:
-        """Write the change's entry under the row asked, as ``History.record`` writes it: never
-        raises for the entry, with the subject and the detail built under its guard."""
+        """Write the change's entry under the row asked, through the history's private writer
+        (``History._record``): never raises for the entry, with the subject and the detail built
+        under its guard."""
         if self.refused is not None:
             raise RecordedARefusal(
                 f"A change on market {self.market_id} was recorded under {self.row.id!r}, which "
                 "its person was refused.")
         # Here, not at the top: the history imports this module for its rows.
         import history as History
-        History.record(self.market_id, self.actor, self.row, kind=kind, vendors=vendors,
-                       subject=subject, detail=detail)
+        History._record(self.market_id, self.actor, self.row, kind=kind, vendors=vendors,
+                        subject=subject, detail=detail)
 
 
 def ask(

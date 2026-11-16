@@ -57,6 +57,7 @@ from test_csv_import import COMPLETE_SETUP, MAPPING, _csv, _market_doc  # noqa: 
 from test_csv_proposal_api import CSV as A_GOOGLE_FORM_EXPORT  # noqa: E402
 from test_essential_fields import VALID_ANSWERS, _applicant_market_doc  # noqa: E402
 from test_the_placement_endpoint import SETUP_OBJECT, placement  # noqa: E402
+from test_only_an_asking_writes_a_markets_history import DOORS  # noqa: E402
 
 MARKET = "market-123"
 OWNER = "owner@example.com"
@@ -1195,6 +1196,15 @@ def test_an_unasked_record_names_functions_that_exist(unasked):
     """A rename that moves the record fails here, rather than leaving a name nothing matches."""
     for qualified in (unasked.by, *unasked.under):
         assert callable(_named(qualified)), qualified
+
+
+def test_every_unasked_record_is_made_through_a_door_allowed_its_reason():
+    """Each record here is made under one of the guard's doors, and each door makes one: the
+    guard holds who may open the door, this file what each opening records."""
+    named = {unasked.name: {unasked.by, *unasked.under} & set(DOORS) for unasked in UNASKED}
+
+    assert [name for name, doors in named.items() if not doors] == []
+    assert set().union(*named.values()) == set(DOORS)
 
 
 class TestWhatAnEntryHolds:

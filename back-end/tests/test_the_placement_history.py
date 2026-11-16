@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from conftest import a_solver_vendor, assigning, FakeMarketsCollection, stored_market
+from conftest import a_solver_vendor, assigning, let_in, FakeMarketsCollection, stored_market
 
 import api.market_actions as Actions
 import api.markets as MarketsApi
@@ -166,8 +166,8 @@ class TestTheEndpoint:
     def test_the_history_answers_them_narrowed_to_the_assignment_group(self, collection, history):
         """Served as stored: an entry's detail is data, so its keys stay as they were written."""
         PlacementsApi.write_placement("market-123", placement(), "organizer@x.test")
-        History.record("market-123", "organizer@x.test", Actions.CHECK_IN,
-                       vendors=["ana@example.com"], detail={})
+        let_in(Actions.CHECK_IN, "market-123", "organizer@x.test").record(
+            vendors=["ana@example.com"], detail={})
 
         body, status = MarketsApi.get_history(
             "market-123", "organizer@x.test", {"group": "Assignment"})

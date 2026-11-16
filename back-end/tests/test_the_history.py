@@ -6,7 +6,7 @@ structured detail. Assignment history reads the same store narrowed to the ``ass
 """
 import pytest
 
-from conftest import assigning
+from conftest import assigning, let_in
 import api.market_actions as Actions
 import history as History
 from test_reading_the_history import PagedHistory, _matches
@@ -38,8 +38,11 @@ def placement_history(monkeypatch):
 
 
 class TestAnEntry:
+    """The history's one writer, private to it (``_record``): what an entry it writes holds, by
+    whichever door, the asking's or the unasked one."""
+
     def test_it_names_the_market_who_when_the_action_and_what_it_was_about(self, history):
-        History.record(
+        History._record(
             "m1", "dana@example.com", Actions.GIVE_VERDICTS, kind="verdict",
             vendors=["Ana@Example.com"], subject={"application_id": "app-1"},
             detail={"before": {"status": "pending"}, "after": {"status": "approved"}},
@@ -59,7 +62,7 @@ class TestAnEntry:
         }
 
     def test_an_action_with_one_change_needs_no_finer_kind(self, history):
-        History.record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail={})
+        History._record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail={})
 
         [entry] = history.docs
         assert entry["action"] == "change-setup"
@@ -76,26 +79,26 @@ class TestAnEntry:
 
         monkeypatch.setattr(History, "history_collection", Broken())
 
-        History.record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail={})
+        History._record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail={})
 
     def test_a_detail_that_cannot_be_built_is_swallowed(self, history):
         """Built inside the guard: a builder that raises loses the entry, never the change."""
         def broken():
             raise RuntimeError("the stored plan no longer parses")
 
-        History.record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail=broken)
+        History._record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail=broken)
 
         assert history.docs == []
 
     def test_a_write_that_changed_nothing_records_nothing(self, history):
-        History.record("m1", "dana@example.com", Actions.CHANGE_SETUP,
-                       detail=lambda: History.changes({"name": "A"}, {"name": "A"}))
+        History._record("m1", "dana@example.com", Actions.CHANGE_SETUP,
+                        detail=lambda: History.changes({"name": "A"}, {"name": "A"}))
 
         assert history.docs == []
 
 
 class TestARecordNoRequestAsked:
-    """The one door for an entry under a row no request asked (T105-9): it writes as ``record``
+    """The one door for an entry under a row no request asked (T105-9): it writes as ``_record``
     does, and says why nothing asked it."""
 
     @pytest.fixture
@@ -205,8 +208,8 @@ class TestReadingTheAssignmentAction:
 
     def test_it_holds_only_that_actions_entries(self, history):
         History.record_freed(assigning("m1", "a@x.test"), "v@x.test", "2026-08-01", "A 1")
-        History.record("m1", "a@x.test", Actions.CHECK_IN, vendors=["v@x.test"], detail={})
-        History.record("m1", "a@x.test", Actions.ASSIGN, kind=History.RULES, detail={})
+        let_in(Actions.CHECK_IN, "m1", "a@x.test").record(vendors=["v@x.test"], detail={})
+        assigning("m1", "a@x.test").record(kind=History.RULES, detail={})
 
         assert sorted(e["kind"] for e in assignments("m1")) == [History.FREED, History.RULES]
 
@@ -263,9 +266,9 @@ class TestReadingItBeforeTheMigration:
 
 
 def test_deleting_a_market_takes_every_entry_of_its_history(history):
-    History.record("m1", "a@x.test", Actions.CHANGE_SETUP, detail={})
+    let_in(Actions.CHANGE_SETUP, "m1", "a@x.test").record(detail={})
     History.record_freed(assigning("m1", "a@x.test"), "v@x.test", "2026-08-01", "A 1")
-    History.record("m2", "a@x.test", Actions.CHANGE_SETUP, detail={})
+    let_in(Actions.CHANGE_SETUP, "m2", "a@x.test").record(detail={})
 
     assert History.delete_for_market("m1") == 2
     assert History.delete_for_market("m2") == 1
