@@ -247,6 +247,43 @@ describe('Payments never shows another market', () => {
     expect(fetchMarketApplications).toHaveBeenCalledWith('market-a');
     expect(emails(w)).toEqual([ANA]);
   });
+
+  it('hides a failed re-read while the next is out, showing the payments it kept', async () => {
+    const next = held<MarketPayments>();
+    loadMarketPayments
+      .mockResolvedValueOnce(paymentsOf(ANA))
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockReturnValueOnce(next.promise);
+    fetchMarketApplications.mockResolvedValue([]);
+    const w = mount(PaymentsView, {
+      attachTo: document.body,
+      global: {
+        stubs: {
+          MarketFrame: RETRYING_FRAME,
+          NothingAssigned: true,
+          RouterLink: true,
+          VendorDrawer: true,
+        },
+      },
+    });
+    await flushPromises();
+    expect(emails(w)).toEqual([ANA]);
+
+    await w.get('[data-testid="frame-retry"]').trigger('click');
+    await flushPromises();
+    expect(w.find('.payments-error').exists()).toBe(true);
+    expect(emails(w)).toEqual([]);
+
+    await w.get('[data-testid="frame-retry"]').trigger('click');
+    await flushPromises();
+    expect(w.find('.payments-error').exists()).toBe(false);
+    expect(emails(w)).toEqual([ANA]);
+
+    next.settle(paymentsOf(ANA, BEN));
+    await flushPromises();
+    expect(w.find('.payments-error').exists()).toBe(false);
+    expect(emails(w)).toEqual([ANA, BEN]);
+  });
 });
 
 describe('Vendors never shows another market', () => {

@@ -73,7 +73,11 @@ const paymentsRead = useServerRead(() => readId.value || null, loadMarketPayment
 });
 /** What the server counted, or null until it answers. */
 const found = computed<MarketPayments | null>(() => paymentsRead.data.value);
-const loadError = computed(() => paymentsRead.sentence.value);
+const loadError = computed(() =>
+  paymentsRead.phase.value === 'failed' || paymentsRead.phase.value === 'refresh_failed'
+    ? paymentsRead.sentence.value
+    : '',
+);
 
 /**
  * Whether this market's payments and its vendors' names have both been read, or failed to be: the

@@ -120,14 +120,29 @@ const rosterRead = useServerRead<string, Roster>(
 );
 const dates = computed(() => rosterRead.data.value?.dates ?? []);
 const roster = computed(() => rosterRead.data.value?.roster ?? []);
-const isLoading = computed(() => rosterRead.phase.value === 'loading');
 /** When the roster was last read from the server, in milliseconds, or null before the first. */
 const readAt = rosterRead.readAt;
 const wasRead = computed(() => rosterRead.data.value !== null);
-/** The first read failed: the page that could not be read, with Try again. */
-const readError = computed(() =>
-  rosterRead.phase.value === 'failed' ? rosterRead.sentence.value : '',
+/** The open market's failed first read, kept through the clock's quiet re-reads until one lands. */
+const firstFailure = ref<{ key: string; sentence: string } | null>(null);
+watch(
+  [rosterRead.phase, rosterRead.sentence],
+  ([phase, sentence]) => {
+    if (phase === 'failed' && rosterRead.key.value)
+      firstFailure.value = { key: rosterRead.key.value, sentence };
+    else if (phase !== 'loading') firstFailure.value = null;
+  },
+  { flush: 'sync' },
 );
+/** The first read failed: the page that could not be read, with Try again. */
+const readError = computed(() => {
+  if (rosterRead.phase.value === 'failed') return rosterRead.sentence.value;
+  const kept = firstFailure.value;
+  return rosterRead.phase.value === 'loading' && kept?.key === rosterRead.key.value
+    ? kept.sentence
+    : '';
+});
+const isLoading = computed(() => rosterRead.phase.value === 'loading' && !readError.value);
 /** A Refresh, or the clock's re-read, in flight, so Refresh cannot be pressed twice. */
 const refreshing = computed(() => rosterRead.phase.value === 'refreshing');
 /** A re-read that failed: the rows stay, and this says they are old. */
@@ -143,7 +158,14 @@ const errorMessage = computed(() =>
 );
 // Moved to another market, the refusal is forgotten, so coming back to the market it was made on
 // never says it again. A reset of what the page shows, never a read: the roster's read is keyed.
-watch(rosterRead.key, () => (refusal.value = null), { flush: 'sync' });
+watch(
+  rosterRead.key,
+  () => {
+    refusal.value = null;
+    firstFailure.value = null;
+  },
+  { flush: 'sync' },
+);
 const show = ref<Show>('all');
 const search = ref('');
 /**
@@ -317,6 +339,7 @@ function whoFor(row: RosterRow): string {
 /** Try again after the first read failed, and Refresh: a read at once, which keeps the rows if it
  *  fails once they were read. */
 function retry(): void {
+  firstFailure.value = null;
   void rosterRead.reread();
 }
 
@@ -328,7 +351,7 @@ function retry(): void {
 let rereading: ReturnType<typeof setInterval> | null = null;
 function tick(): void {
   if (document.visibilityState !== 'visible') return;
-  if (isLoading.value || refreshing.value) return;
+  if (rosterRead.phase.value === 'loading' || refreshing.value) return;
   void rosterRead.reread();
 }
 function backInView(): void {
