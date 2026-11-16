@@ -825,12 +825,27 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
     moveEach(ids, (boxes) => spreadMoves(boxes, axis));
   }
 
+  /** On a layout that follows the plan, the numbers a section's tables hold, lowest first, so a
+   *  renumber deals them out again and closes no gap (D22): a number is a seat, and a vendor may
+   *  sit at it. A table holding none is given the lowest number no other holds. */
+  function ownNumbers(own: readonly FloorplanTable[]): number[] {
+    const held = own
+      .map((table) => table.number)
+      .filter((number): number is number => number !== null);
+    const taken = new Set(held);
+    for (let next = 1; held.length < own.length; next += 1) {
+      if (!taken.has(next)) held.push(next);
+    }
+    return held.sort((a, b) => a - b);
+  }
+
   function renumber(sectionId: string) {
     if (seatsSettled()) return;
     change((tables) => {
       const own = tables.filter((table) => table.sectionId === sectionId);
       const order = readingOrder(own, (table) => sizeOf(table).depthMm);
-      const numbers = new Map(order.map((table, index) => [table.id, index + 1]));
+      const dealt = following() ? ownNumbers(own) : own.map((_, index) => index + 1);
+      const numbers = new Map(order.map((table, index) => [table.id, dealt[index]]));
       if (own.every((table) => table.number === numbers.get(table.id))) return tables;
       return tables.map((table) => {
         const number = numbers.get(table.id);

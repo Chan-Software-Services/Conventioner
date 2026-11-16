@@ -228,7 +228,9 @@ describe('following: a number is its seat, past Draft and in it', () => {
       ],
     });
     editor.renumber('gold');
-    expect(seats()).toEqual(['g1:gold:3', 'g3:gold:1', 'g5:gold:2']);
+    // The section's own numbers, dealt in reading order: no seat leaves the map and none is
+    // drawn where it was not, as a removal closes no gap (D22).
+    expect(seats()).toEqual(['g1:gold:5', 'g3:gold:1', 'g5:gold:3']);
   });
 
   it('gives a table types past Draft as the market settled them, and in Draft another', () => {
