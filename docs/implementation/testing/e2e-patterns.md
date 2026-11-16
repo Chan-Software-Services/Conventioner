@@ -20,6 +20,8 @@ describes:
   - front-end/e2e/helpers/phoneWindow.ts#inTheWindow
   - front-end/e2e/helpers/stackReady.ts
   - front-end/e2e/helpers/signInWindow.ts
+  - front-end/e2e/helpers/mongoSession.ts
+  - front-end/e2e/helpers/mongoScript.ts
 verified: 2026-11-17
 sources:
   - E21/F02/S02
@@ -103,6 +105,11 @@ The Applications page opens on the review's All view, so a spec that walks the o
 Specs no longer plant a market in `localStorage`; nothing about a market is stored in the browser.
 
 **A spec shells into Mongo through `mongoEval`** ([`helpers/mongo.ts`](../../../front-end/e2e/helpers/mongo.ts)), never its own `docker exec`: the container, the address and the flags were once copied into fifteen files.
+Each process of the suite runs its scripts in one mongosh in the stack's Mongo container, held by a worker thread ([`helpers/mongoSession.ts`](../../../front-end/e2e/helpers/mongoSession.ts)) and started again only when a script runs out its time or mongosh ends, and `mongoEval` blocks until its script has run.
+Each script once had a `docker exec` and a fresh mongosh of its own, and on a loaded CI runner one such start took longer than the script's 10 seconds, failing a spec whose retry then passed.
+A script is in mongosh's own dialect, loaded as a file ([`helpers/mongoScript.ts`](../../../front-end/e2e/helpers/mongoScript.ts)), and answers what `mongosh --eval` printed: what it printed, and the value of its last statement when that is an expression.
+Its `const`s are its own, so two scripts may each declare a `market`.
+The `mongoSession` worker fixture in `fixtures.ts` starts the session before a worker process's first test, so that first start, given 60 seconds to connect, is not counted against a test.
 It is for what no endpoint does: a document shaped as an older build wrote it, a token only an email carries, a state a rule now forbids reaching.
 The container name comes from `helpers/containerNames.ts` (`E2E_MONGO_CONTAINER` overrides it), resolved from [the stack's identity](ci-and-the-gate.md#stack-identity).
 
