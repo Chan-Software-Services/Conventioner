@@ -111,7 +111,7 @@ Handing the open applications out among the reviewers, round robin in the order 
 _Avoid_: Assign (means giving a vendor a table)
 
 **Waiting**:
-An open application not yet in an able reviewer's share, or a follow-up whose owner may no longer own one here, while reviewers are chosen: the next deal takes it. With nobody chosen able to review, it keeps waiting until someone is, and a reviewer's next card deals it then.
+An open application, or a follow-up, that the write moving it into open or handing its follow-up on marked for the deal, and that no deal has taken yet, while reviewers are chosen: the next deal keeps it with an able reviewer, or a follow-up with an owner who still holds a role here, or deals it to the next reviewer in turn. With nobody chosen able to review, it keeps waiting until someone is, and a reviewer's next card deals it then.
 _Avoid_: Unassigned, stranded (what waiting replaced: an application left in nobody's share for good)
 
 **Solver-relevant answer**:
