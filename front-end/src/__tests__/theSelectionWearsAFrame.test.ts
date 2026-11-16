@@ -261,6 +261,31 @@ describe('a turn by a knob', () => {
     await pointer('pointerup', ...xy(turnedPoint(knob, centre, 23.4)), stageOf(w));
   });
 
+  it('turns again as Shift is pressed or let go, with no move of the pointer (D11)', async () => {
+    const { w, editor, at } = anEditor([table('a', 9000, 6000)]);
+    editor.select(['a']);
+    await nextTick();
+    const centre = { xMm: 9000, yMm: 6000 };
+    const [knob] = knobsOf(w);
+    await pointer('pointerdown', knob.xMm, knob.yMm, knob.el);
+    await pointer('pointermove', ...xy(turnedPoint(knob, centre, 23.4)), stageOf(w));
+    expect(at('a').rotation).toBe(30);
+    const shift = (type: 'keydown' | 'keyup') =>
+      window.dispatchEvent(
+        new KeyboardEvent(type, { key: 'Shift', shiftKey: type === 'keydown', bubbles: true }),
+      );
+    shift('keydown');
+    await nextTick();
+    expect(at('a').rotation).toBe(23);
+    expect(frameOf(w)!.rotation).toBe(23);
+    shift('keyup');
+    await nextTick();
+    expect(at('a').rotation).toBe(30);
+    await pointer('pointerup', ...xy(turnedPoint(knob, centre, 23.4)), stageOf(w));
+    editor.undo();
+    expect(at('a').rotation).toBe(0);
+  });
+
   it('keeps the frame of several as it stood while the drag lasts, and stands it square again after', async () => {
     const { w, editor, at } = anEditor([table('a', 9000, 6000), table('b', 13_000, 6000)]);
     editor.select(['a', 'b']);

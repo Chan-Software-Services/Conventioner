@@ -640,6 +640,8 @@ type Gesture =
       begun: boolean;
       /** How far the knob has turned them, in degrees. */
       by: number;
+      /** Where the pointer last was, so Shift pressed or let go turns again with no move. */
+      atMm: PointMm | null;
     }
   | { kind: 'pinch'; distance: number; middle: { xPx: number; yPx: number }; camera: Camera };
 
@@ -911,6 +913,7 @@ function onPointerDown(event: PointerEvent) {
       fromAngle: angleFrom(centre, toMm(event)),
       begun: false,
       by: 0,
+      atMm: null,
     };
   } else if (tool.value === 'add') {
     gesture = { kind: 'add', from };
@@ -1087,20 +1090,32 @@ function onPointerMove(event: PointerEvent) {
       },
     });
   } else if (gesture.kind === 'turn') {
-    let by = angleFrom(gesture.centre, toMm(event)) - gesture.fromAngle;
-    by = ((((by + 180) % 360) + 360) % 360) - 180;
-    // 15° steps; with Shift, whole degrees, for a fine turn.
-    by = snapAngle(by, event.shiftKey ? 1 : TURN_STEP);
-    if (!gesture.begun) {
-      if (by === 0) return;
-      gesture.begun = true;
-      dragging.value = true;
-      props.editor.begin();
-    }
-    gesture.by = ((by % 360) + 360) % 360;
-    if (turning.value) turning.value = { ...turning.value, by };
-    props.editor.turnTables(gesture.ids, by, gesture.centre);
+    turnTo(gesture, toMm(event), event.shiftKey);
   }
+}
+
+/** A knob's drag with the pointer at a place: the selection turned from where the drag began, in
+ *  15° steps, or with Shift (`fine`) by the whole degree, for a fine turn. */
+function turnTo(turn: Extract<Gesture, { kind: 'turn' }>, atMm: PointMm, fine: boolean) {
+  turn.atMm = atMm;
+  let by = angleFrom(turn.centre, atMm) - turn.fromAngle;
+  by = ((((by + 180) % 360) + 360) % 360) - 180;
+  by = snapAngle(by, fine ? 1 : TURN_STEP);
+  if (!turn.begun) {
+    if (by === 0) return;
+    turn.begun = true;
+    dragging.value = true;
+    props.editor.begin();
+  }
+  turn.by = ((by % 360) + 360) % 360;
+  if (turning.value) turning.value = { ...turning.value, by };
+  props.editor.turnTables(turn.ids, by, turn.centre);
+}
+
+/** Shift pressed or let go under a knob's drag turns the selection again, by the degree or back
+ *  to the step, with no move of the pointer (D11). */
+function reTurn(fine: boolean) {
+  if (gesture?.kind === 'turn' && gesture.atMm) turnTo(gesture, gesture.atMm, fine);
 }
 
 function endGesture(event: PointerEvent, cancelled: boolean) {
@@ -1365,7 +1380,10 @@ function turnByKey(degrees: number) {
 
 function onWindowKeydown(event: KeyboardEvent) {
   // Shift pressed under a line being drawn makes it a straight row, with no pointer move.
-  if (event.key === 'Shift') showStroke(true);
+  if (event.key === 'Shift') {
+    showStroke(true);
+    reTurn(true);
+  }
   if (event.defaultPrevented || inAField(event)) return;
   // A dialog over the page has the keys; a closed side panel, whose window stays in the page
   // hidden, has none.
@@ -1658,7 +1676,10 @@ function zoomByKey(direction: 1 | -1) {
 function onWindowKeyup(event: KeyboardEvent) {
   if (event.key === ' ') spaceHeld.value = false;
   // Shift let go under a line being drawn: it is read as drawn again, with no pointer move.
-  if (event.key === 'Shift') showStroke(false);
+  if (event.key === 'Shift') {
+    showStroke(false);
+    reTurn(false);
+  }
 }
 
 /** The pointer left the map: a pending row or area is shown through its points alone. */

@@ -76,13 +76,14 @@ async function knobsInReach(page: Page, layout: LayoutPage): Promise<string[]> {
 }
 
 /** Drag a turn knob round a centre on the screen by some degrees, in two moves, with a key held
- *  from before the press until after the release. */
+ *  from before the press until after the release; `hold` runs before the button is let go. */
 async function turnByKnob(
   page: Page,
   knob: Locator,
   centre: { x: number; y: number },
   degrees: number,
   key?: string,
+  hold?: () => Promise<void>,
 ) {
   const from = middleOf((await knob.boundingBox())!);
   const start = Math.atan2(from.y - centre.y, from.x - centre.x);
@@ -96,6 +97,7 @@ async function turnByKnob(
   await page.mouse.down();
   await page.mouse.move(at(degrees / 2).x, at(degrees / 2).y, { steps: 3 });
   await page.mouse.move(at(degrees).x, at(degrees).y, { steps: 3 });
+  await hold?.();
   await page.mouse.up();
   if (key) await page.keyboard.up(key);
 }
@@ -269,16 +271,29 @@ test.describe('A table moves by pointer', () => {
     await layout.saved(() => turnByKnob(page, layout.turnKnob, centre, 23.4, 'Alt'));
     table = await gold(request, seeded.marketId, 1);
     expect(table.rotation).toBe(98);
+    // Shift pressed and let go with the knob held and the pointer still turns it again at once:
+    // 23.4° on reads 23° with Shift down and 30° once it is let go (D11).
+    await layout.saved(() =>
+      turnByKnob(page, layout.turnKnob, centre, 23.4, undefined, async () => {
+        await expect(layout.selectionFrame).toHaveAttribute('transform', /rotate\(128\)/);
+        await page.keyboard.down('Shift');
+        await expect(layout.selectionFrame).toHaveAttribute('transform', /rotate\(121\)/);
+        await page.keyboard.up('Shift');
+        await expect(layout.selectionFrame).toHaveAttribute('transform', /rotate\(128\)/);
+      }),
+    );
+    table = await gold(request, seeded.marketId, 1);
+    expect(table.rotation).toBe(128);
 
     await layout.saved(() => page.keyboard.press('r'));
     table = await gold(request, seeded.marketId, 1);
-    expect(table.rotation).toBe(188);
+    expect(table.rotation).toBe(218);
 
     await layout.saved(() => layout.selectionTurn.click());
     table = await gold(request, seeded.marketId, 1);
-    expect(table.rotation).toBe(278);
+    expect(table.rotation).toBe(308);
     expect([table.xMm, table.yMm]).toEqual([15_000, 11_000]);
-    await expect(layout.table(GOLD_1)).toHaveAttribute('transform', /rotate\(278\)/);
+    await expect(layout.table(GOLD_1)).toHaveAttribute('transform', /rotate\(308\)/);
   });
 
   test('the frame of a table in a column of turned ones hugs it, its knobs never move off its corners, and the knob held stays under the pointer as it turns', async ({
