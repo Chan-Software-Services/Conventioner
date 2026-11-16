@@ -45,6 +45,8 @@ import { tableInWords } from '@/utils/placementChange';
 import { vendorMatches, type VendorNames } from '@/utils/vendorIdentity';
 import MarketFrame from '@/components/MarketFrame.vue';
 import VendorDrawer from '@/components/VendorDrawer.vue';
+import FilterToggles from '@/components/FilterToggles.vue';
+import AttendanceMap from '@/components/attendance/AttendanceMap.vue';
 import VendorNameButton from '@/components/VendorNameButton.vue';
 import VendorNotes from '@/components/VendorNotes.vue';
 import ListFreshness from '@/components/ListFreshness.vue';
@@ -58,6 +60,7 @@ import { useVendorNotes } from '@/utils/vendorNotes';
 import { calendarToday } from '@/utils/marketGuide';
 import { useOpenMarket } from '@/utils/openMarket';
 import { signedInEmail } from '@/utils/signedIn';
+import { withoutQueryKey } from '@/utils/routeQuery';
 
 /**
  * Where a vendor stands at the door on a date: a seat and no check-in (`expected`), a check-in made
@@ -127,6 +130,22 @@ function chooseDate(date: string) {
   void router.replace({ query: { ...route.query, date } });
 }
 
+/**
+ * The roster as a list, today's page, or as a map of the open day (T422, D38): the page's own
+ * state, in the address as `view=map`, replaced, so a change of day and a reload keep it.
+ */
+type View = 'list' | 'map';
+const VIEWS = [
+  { id: 'list', label: 'List' },
+  { id: 'map', label: 'Map' },
+];
+const view = computed<View>(() => (route.query.view === 'map' ? 'map' : 'list'));
+
+function chooseView(next: View) {
+  const query = withoutQueryKey(route.query, 'view');
+  void router.replace({ query: next === 'map' ? { ...query, view: 'map' } : query });
+}
+
 const signedInAs = computed(() => (signedInEmail() ?? '').toLowerCase());
 
 const names = computed<VendorNames>(() => {
@@ -184,6 +203,20 @@ const shownToday = computed(() => {
   });
 });
 const shown = computed(() => shownToday.value.filter(hasSeat));
+/** The seated vendors the search finds on the chosen date, which the map marks; the Show toggles
+ *  are the list's alone. */
+const foundOnMap = computed(() => {
+  const term = search.value.trim().toLowerCase();
+  if (!term) return [];
+  return roster.value
+    .filter((row) => row.date === selectedDate.value && hasSeat(row))
+    .filter(
+      (row) =>
+        (row.tableCode ?? '').toLowerCase().includes(term) ||
+        vendorMatches(term, row.vendorEmail, names.value),
+    )
+    .map((row) => row.vendorEmail);
+});
 /** Checked in on the chosen date with no table that day, under the seats, by the same filters. */
 const shownWithoutSeat = computed(() => shownToday.value.filter((row) => !hasSeat(row)));
 const withoutSeatToday = computed(
@@ -480,6 +513,15 @@ watch(marketId, openMarket, { immediate: true });
           <!-- When the roster was read, then Print roster and the door code: together at the row's
                end, or the end of a line of their own when the dates fill theirs. -->
           <div class="door-tools">
+            <FilterToggles
+              class="door-view"
+              :options="VIEWS"
+              label="Show as"
+              testid="attendance-view"
+              :modelValue="view"
+              :rest="view"
+              @update:modelValue="chooseView($event as View)"
+            />
             <ListFreshness
               class="door-freshness"
               testid="attendance"
@@ -519,7 +561,7 @@ watch(marketId, openMarket, { immediate: true });
           <h2 class="door-summary" data-testid="attendance-summary">
             {{ today.here }} of {{ today.expected }} checked in
           </h2>
-          <div class="door-show" role="group" aria-label="Show">
+          <div v-if="view === 'list'" class="door-show" role="group" aria-label="Show">
             <button
               type="button"
               class="btn btn--secondary btn--compact"
@@ -559,79 +601,93 @@ watch(marketId, openMarket, { immediate: true });
           />
         </div>
 
-        <p v-if="today.expected === 0 && withoutSeatToday === 0" class="door-note">
-          Nobody is assigned on this date.
-        </p>
-        <p v-else-if="lists.length === 0" class="door-note">Nobody here matches.</p>
-        <template v-for="list in lists" :key="list.key">
-          <h3 v-if="list.heading" class="door-heading" data-testid="attendance-unseated-heading">
-            {{ list.heading }}
-          </h3>
-          <ul class="door-list" :data-testid="`attendance-list-${list.key}`">
-            <li
-              v-for="row in list.rows"
-              :key="rowKey(row)"
-              class="door-row"
-              :class="{ 'door-row--read': !canCheckIn }"
-              data-testid="attendance-row"
-              :data-vendor="row.vendorEmail"
-            >
-              <VendorNameButton
-                class="door-who"
-                :email="row.vendorEmail"
-                :names="names"
-                testid="attendance-vendor"
-                @open="drawer.open(row.vendorEmail)"
-              />
-              <!-- Where they sit and whether they came, one line under the vendor's on a phone, so
+        <AttendanceMap
+          v-if="view === 'map'"
+          :market="market"
+          :rows="roster"
+          :date="selectedDate"
+          :found="foundOnMap"
+          :openVendor="drawer.email.value"
+          :notHere="notHere"
+          :hereWithoutSeat="withoutSeatToday"
+          @open="drawer.open($event)"
+          @showList="chooseView('list')"
+        />
+        <template v-else>
+          <p v-if="today.expected === 0 && withoutSeatToday === 0" class="door-note">
+            Nobody is assigned on this date.
+          </p>
+          <p v-else-if="lists.length === 0" class="door-note">Nobody here matches.</p>
+          <template v-for="list in lists" :key="list.key">
+            <h3 v-if="list.heading" class="door-heading" data-testid="attendance-unseated-heading">
+              {{ list.heading }}
+            </h3>
+            <ul class="door-list" :data-testid="`attendance-list-${list.key}`">
+              <li
+                v-for="row in list.rows"
+                :key="rowKey(row)"
+                class="door-row"
+                :class="{ 'door-row--read': !canCheckIn }"
+                data-testid="attendance-row"
+                :data-vendor="row.vendorEmail"
+              >
+                <VendorNameButton
+                  class="door-who"
+                  :email="row.vendorEmail"
+                  :names="names"
+                  testid="attendance-vendor"
+                  @open="drawer.open(row.vendorEmail)"
+                />
+                <!-- Where they sit and whether they came, one line under the vendor's on a phone, so
                    neither widens the column the action stands in (E38/F15/S04). -->
-              <span class="door-place">
-                <span class="door-table" data-testid="attendance-row-table">{{
-                  whereTheySit(row)
-                }}</span>
-                <span
-                  class="chip door-status"
-                  :class="statusTone(row)"
-                  data-testid="attendance-row-status"
-                  >{{ status(row) }}</span
-                >
-              </span>
-              <span v-if="canCheckIn" class="door-action">
-                <button
-                  v-if="!row.checkedInAt && checkInOpen"
-                  type="button"
-                  class="btn btn--primary btn--compact"
-                  :disabled="busyRows.has(rowKey(row))"
-                  :aria-label="`Check in ${whoFor(row)}`"
-                  data-testid="attendance-check-in"
-                  @click="write(row, 'post')"
-                >
-                  Check in
-                </button>
-                <button
-                  v-else-if="row.checkedInAt"
-                  type="button"
-                  class="btn btn--secondary btn--compact"
-                  :disabled="busyRows.has(rowKey(row))"
-                  :aria-label="`Undo ${whoFor(row)}'s check-in`"
-                  data-testid="attendance-undo"
-                  @click="write(row, 'delete')"
-                >
-                  Undo
-                </button>
-              </span>
-              <VendorNotes
-                class="door-notes"
-                :marketId="marketId"
-                :email="row.vendorEmail"
-                :entry="entryFor(row.vendorEmail)"
-                :canWrite="canWriteNotes"
-                onlyWhenNoted
-                :testid="`attendance-notes-${row.vendorEmail}`"
-                @changed="loadNotes"
-              />
-            </li>
-          </ul>
+                <span class="door-place">
+                  <span class="door-table" data-testid="attendance-row-table">{{
+                    whereTheySit(row)
+                  }}</span>
+                  <span
+                    class="chip door-status"
+                    :class="statusTone(row)"
+                    data-testid="attendance-row-status"
+                    >{{ status(row) }}</span
+                  >
+                </span>
+                <span v-if="canCheckIn" class="door-action">
+                  <button
+                    v-if="!row.checkedInAt && checkInOpen"
+                    type="button"
+                    class="btn btn--primary btn--compact"
+                    :disabled="busyRows.has(rowKey(row))"
+                    :aria-label="`Check in ${whoFor(row)}`"
+                    data-testid="attendance-check-in"
+                    @click="write(row, 'post')"
+                  >
+                    Check in
+                  </button>
+                  <button
+                    v-else-if="row.checkedInAt"
+                    type="button"
+                    class="btn btn--secondary btn--compact"
+                    :disabled="busyRows.has(rowKey(row))"
+                    :aria-label="`Undo ${whoFor(row)}'s check-in`"
+                    data-testid="attendance-undo"
+                    @click="write(row, 'delete')"
+                  >
+                    Undo
+                  </button>
+                </span>
+                <VendorNotes
+                  class="door-notes"
+                  :marketId="marketId"
+                  :email="row.vendorEmail"
+                  :entry="entryFor(row.vendorEmail)"
+                  :canWrite="canWriteNotes"
+                  onlyWhenNoted
+                  :testid="`attendance-notes-${row.vendorEmail}`"
+                  @changed="loadNotes"
+                />
+              </li>
+            </ul>
+          </template>
         </template>
       </template>
     </div>
@@ -687,6 +743,11 @@ watch(marketId, openMarket, { immediate: true });
   justify-content: flex-end;
   gap: var(--space-2);
   margin-inline-start: auto;
+}
+
+/* List and Map, a step apart from the time and Refresh after them, as Print roster is. */
+.door-view {
+  margin-inline-end: var(--space-2);
 }
 
 /* The time, Refresh and a failed read's line are the group's own items, so that line goes under
