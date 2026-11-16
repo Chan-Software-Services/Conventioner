@@ -1,7 +1,8 @@
 /**
  * What a layout's drawing says and paints (T257): the sections a layout draws, each one's colour of
- * the section palette, and a table's code and name. `LayoutMap.vue` draws from these and the page's
- * "Sections" card lists from them, so the map and its legend can never disagree.
+ * the section palette, and a table's code and name; and (T422) how a day's seats are painted.
+ * `LayoutMap.vue` draws from these and the page's "Sections" card lists from them, so the map and
+ * its legend can never disagree.
  */
 import type {
   FloorplanObject,
@@ -28,6 +29,64 @@ export const NO_SECTION_PAINT: Paint = {
   fill: '--layout-no-section-fill',
   edge: '--layout-no-section-edge',
 };
+
+/** A colour as the drawing writes it on an element: a token of `base.css` by its name, or a CSS
+ *  colour as it is (`white`). */
+export function paintValue(colour: string): string {
+  return colour.startsWith('--') ? `var(${colour})` : colour;
+}
+
+// ── A day's seats (T422) ─────────────────────────────────────────────────────
+
+/** Which part of a table a seat holds: the whole, or the left or right half (D41). */
+export type SeatHalf = 'whole' | 'left' | 'right';
+
+/** How a held seat is drawn (D40): `filled` in its section's tint, `outlined` white in its
+ *  section's hue. Attendance draws here filled and expected outlined; the public map, taken filled. */
+export type SeatTone = 'filled' | 'outlined';
+
+/** How a table or a half is drawn on a day's map: by its seat's tone, or `free` with no seat. */
+export type DrawnTone = SeatTone | 'free';
+
+export const SEAT_TONES: readonly DrawnTone[] = ['filled', 'outlined', 'free'];
+
+/** One seat of a day, as the map draws it: its `key` is the caller's own (a vendor, a seat of
+ *  the public answer), told back when the seat is pressed. */
+export interface MapSeat {
+  key: string;
+  tableId: string;
+  half: SeatHalf;
+  tone: SeatTone;
+  /** Who holds it, as the map names the seat to a screen reader. */
+  name: string;
+}
+
+/** A tone's paint: its fill and edge, the edge's dashes when it has any, and its number's ink. */
+export interface SeatPaint extends Paint {
+  dashes?: string;
+  ink: string;
+}
+
+/** The dashes of a free table's edge, in screen pixels. */
+export const FREE_DASHES = '4 3';
+
+/**
+ * How a table or a half is painted in a tone, from its section's paint. Every tone numbers in
+ * `--mm-black`, the one ink that reads at the 7:1 a table's number is held to on each of the three
+ * fills (`contrast.test.ts`): a section's hue on white is as low as 3.83, the muted ink on the
+ * floor 4.40. A free table's edge is the grey of a table in no section, which stands at 3:1 on the
+ * floor where the faint border token would not.
+ */
+export function seatPaint(tone: DrawnTone, section: Paint): SeatPaint {
+  if (tone === 'filled') return { ...section, ink: '--mm-black' };
+  if (tone === 'outlined') return { fill: 'white', edge: section.edge, ink: '--mm-black' };
+  return {
+    fill: '--layout-floor',
+    edge: '--layout-no-section-edge',
+    dashes: FREE_DASHES,
+    ink: '--mm-black',
+  };
+}
 
 export interface LayoutSection {
   section: SectionObject & { id: string };
