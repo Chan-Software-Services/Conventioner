@@ -191,7 +191,7 @@ Once the component is gone nothing out lands, and no `landed` or `gone` is calle
 It has no timer and no retry of its own: a read that needs a timeout gives one to axios, and a clock is the screen's.
 
 The market store itself is one (`landed` sets the pointer below, `gone` forgets it), and Attendance reads its roster through it ([attendance and the door](attendance-and-door.md#sharp-edges)).
-The vendors' read ([`vendorDetails.ts`](../../../front-end/src/utils/vendorDetails.ts)), which Vendors, Payments and the drawer share, words its failures as [the Vendors flow](../../business/flows/vendors.md) says, its re-read's refusal on while the next re-read is out (`vendorReadsBelongToTheirMarket.test.ts`).
+The vendors' read ([`vendorDetails.ts`](../../../front-end/src/utils/vendorDetails.ts)), which Vendors, Payments and the drawer share, says "The vendors could not be loaded." only when its first read fails and nothing is held; a failed re-read keeps the vendors as last read and says "Could not update. The vendors are as they were last read.", as the roster does, on while the next re-read is out and gone once one lands, as [the Vendors flow](../../business/flows/vendors.md) says (`vendorReadsBelongToTheirMarket.test.ts`).
 
 ## Sharp edges
 
