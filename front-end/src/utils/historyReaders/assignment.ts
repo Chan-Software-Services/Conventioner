@@ -6,7 +6,7 @@
  * - `assign/placed`, its rows
  * - `assign/rules`
  *
- * `assign/owed_taken_back` is Payments'.
+ * `assign/owed_taken_back` and `assign/owed_dropped` are Payments'.
  *
  * A placement that differs from what the solver produced is a fact someone will later ask about,
  * and a flag saying "hand-placed" cannot answer it (`E11/F04/S01`), so each change is said in full.

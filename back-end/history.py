@@ -104,6 +104,9 @@ DISCORD_MATCH_DECLINED = "discord_match_declined"
 # Assignment; its placement kinds are with the placements, below
 RULES = "rules"
 OWED_TAKEN_BACK = "owed_taken_back"
+#: A run left a vendor without a table on a day whose amount an Admin set, so the amount went with
+#: the day (T335, Daniel's decision 9.3).
+OWED_DROPPED = "owed_dropped"
 
 # Payments
 OWED_SET = "owed_set"

@@ -280,11 +280,16 @@ def run_assignment(market_id: str, requesting_user: str) -> Tuple[Dict[str, Any]
         placements_written=len(assignment.vendor_assignments),
         pins_preserved=sum(1 for row in assignment.vendor_assignments if row.hand_placed),
     )
-    # Every day held before the run or after it: a day it seats forgets its freed line, and a day
-    # it drops forgets any freed record a stopped free left on it while it was held.
+    # Every day the run seats forgets its freed line, and every day held before it and not after
+    # is dropped: it forgets any freed record a stopped free left on it while it was held, and
+    # an amount an Admin set for it goes with it (T335, Daniel's decision 9.3).
+    seated_after = {(normalized_email(row.email), row.date)
+                    for row in assignment.vendor_assignments}
     PaymentsApi.assignment_written(
-        market_id, seated=[*held_before, *assignment.vendor_assignments],
-        held_before=held_before, dropped=[], by=requesting_user)
+        market_id, seated=assignment.vendor_assignments, held_before=held_before,
+        dropped=[row for row in held_before
+                 if (normalized_email(row.email), row.date) not in seated_after],
+        by=requesting_user)
 
     # The same shape ``GET /markets/<id>/assignment`` returns, so a caller swapping to this one
     # reads the result the same way - the organization's display name included, because the

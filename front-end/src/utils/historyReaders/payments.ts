@@ -1,6 +1,7 @@
 /**
- * The Payments group's words (E44/F01): a vendor's payments, refunds and what they owe, and what
- * they owed taken back when the assignment seats them again.
+ * The Payments group's words (E44/F01): a vendor's payments, refunds and what they owe, what they
+ * owed taken back when the assignment seats them again, and an amount an Admin set dropped with a
+ * day a run left them without a table on (T335).
  *
  * Reads:
  * - `record-payment/`
@@ -13,6 +14,7 @@
  * - `change-owed/owed_calculated`
  * - `change-owed/*`, the rows of any kind
  * - `assign/owed_taken_back`, its sentence and its rows
+ * - `assign/owed_dropped`, its sentence and its rows
  */
 import type { MarketHistoryEntry } from '@/utils/marketHistory';
 import { formatPrice } from '@/utils/pricing';
@@ -148,6 +150,27 @@ export const readers: HistoryReaders = {
           ` again${onDay(entry.subject.date)}, taking back the ${entryMoney(entry, before.owed_cents)}` +
             ' set when the table was freed',
         ),
+      ];
+    },
+    changes: paymentChanges,
+  },
+  'assign/owed_dropped': {
+    parts(entry, context) {
+      const { actor, text, vendor, before, onDay } = sentence(entry, context);
+      // An amount stored without who set it says so by leaving them out.
+      const setBy = str(entry.subject.set_by);
+      const dropped =
+        `, so the ${entryMoney(entry, before.owed_cents)}${setBy ? ` ${setBy}` : ''} ` +
+        'set for that day was dropped';
+      // The migration's, which no one asked: the day it found held no table.
+      if (entry.subject.by_migration) {
+        return [vendor, text(` held no table${onDay(entry.subject.date)}${dropped}`)];
+      }
+      return [
+        actor,
+        text('allocated tables, leaving '),
+        vendor,
+        text(` without a table${onDay(entry.subject.date)}${dropped}`),
       ];
     },
     changes: paymentChanges,

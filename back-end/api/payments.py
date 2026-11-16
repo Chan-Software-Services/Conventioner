@@ -11,6 +11,7 @@ changing a table-day's amount owed asks ``Actions.CHANGE_OWED``, and recording a
 or removing an entry ``Actions.ADJUST_PAID``, each an Admin's by default (Q26, E44/F01/S02). An
 archived market refuses every write.
 """
+import functools
 import logging
 import uuid
 from typing import Any, Callable, Dict, Iterable, NamedTuple, Optional, Tuple
@@ -443,7 +444,9 @@ def assignment_written(
     record a free that stopped before its seat went left on it (T270). Where a free's $0 is taken
     back on a day not in ``held_before``, which alone read as freed, it is recorded under the row
     the seating asked (``Actions.ASSIGN``), as the amount it took back and what the day owes now,
-    read off the market as it stands. A dropped day forgets what it held.
+    read off the market as it stands. A dropped day forgets what it held, and an amount an Admin
+    set for it goes with it (Daniel's decision 9.3), recorded under the same row as the amount and
+    who set it (``owed_dropped``).
 
     The assignment's write has landed, so a day whose record kept changing never fails it: it is
     logged, and the day reads through ``on_day`` until its next write.
@@ -460,6 +463,14 @@ def assignment_written(
               for doc in Payments.records_that_may_move(market_id, {
                   date for (address, date), event in events.items()
                   if (address, date) not in held or event == Payments.OwedEvent.DROPPED_BY_RUN})}
+
+    @functools.cache
+    def market_now() -> Market:
+        """The market as it stands once the assignment's write has landed, read once for every
+        entry it records."""
+        return MarketsApi.market_from_document(
+            MarketsApi.markets_collection.find_one(live({"id": market_id})))
+
     for (address, date), event in events.items():
         if (address, date) not in moving:
             continue
@@ -470,22 +481,34 @@ def assignment_written(
             logger.warning("The owed day of market_id %s, date %s was not tidied after a write "
                            "of the assignment (%s).", market_id, date, type(missed).__name__)
             continue
-        if ((address, date) not in held and isinstance(moved.before, Payments.FreedWaived)
-                and moved.changed):
-            _record_taken_back(market_id, address, date, by)
+        if not moved.changed:
+            continue
+        if (event == Payments.OwedEvent.DROPPED_BY_RUN
+                and isinstance(moved.before, Payments.SetByHand)):
+            _record_dropped(market_id, market_now, address, date, moved.before.amount, by)
+        elif (address, date) not in held and isinstance(moved.before, Payments.FreedWaived):
+            _record_taken_back(market_id, market_now, address, date, by)
 
 
-def _record_taken_back(market_id: str, address: str, date: str, by: str) -> None:
+def _record_dropped(
+    market_id: str, market_now: Callable[[], Market], address: str, date: str,
+    amount: Payments.HandAmount, by: str,
+) -> None:
+    History.record(
+        market_id, by, Actions.ASSIGN, kind=History.OWED_DROPPED, vendors=[address],
+        subject=lambda: {"date": date, **_currency(market_now()), "set_by": amount.by},
+        detail=History.changes({"owed_cents": amount.cents}, {"owed_cents": None}))
+
+
+def _record_taken_back(
+    market_id: str, market_now: Callable[[], Market], address: str, date: str, by: str,
+) -> None:
     def detail():
-        market = MarketsApi.market_from_document(
-            MarketsApi.markets_collection.find_one(live({"id": market_id})))
-        line = _line(market, address, date) or {}
+        line = _line(market_now(), address, date) or {}
         return History.changes({"owed_cents": 0}, {"owed_cents": line.get("owedCents")})
 
     def subject():
-        market = MarketsApi.market_from_document(
-            MarketsApi.markets_collection.find_one(live({"id": market_id})))
-        return {"date": date, **_currency(market)}
+        return {"date": date, **_currency(market_now())}
 
     History.record(market_id, by, Actions.ASSIGN, kind=History.OWED_TAKEN_BACK,
                    vendors=[address], subject=subject, detail=detail)

@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 // `shared.ts` first, so this file loads the areas by the way an area's helper would.
 import { fieldValue } from '@/utils/historyReaders/shared';
-import { entryParts } from '@/utils/marketHistory';
+import { entryChanges, entryParts, type MarketHistoryEntry } from '@/utils/marketHistory';
 import {
   HISTORY_READERS,
   NAMED_VALUES,
@@ -59,6 +59,7 @@ const SENTENCES = [
   'apply/submitted',
   'assign/assigned',
   'assign/freed',
+  'assign/owed_dropped',
   'assign/owed_taken_back',
   'assign/placed',
   'assign/rules',
@@ -140,6 +141,7 @@ const ROWS = [
   'adjust-paid/*',
   'apply/edited',
   'apply/submitted',
+  'assign/owed_dropped',
   'assign/owed_taken_back',
   'assign/placed',
   'change-owed/*',
@@ -218,6 +220,101 @@ describe('the history readers', () => {
     expect(Object.keys(NAMED_VALUES).sort()).toEqual(['role', 'source', 'status']);
     expect(Object.keys(WORDED_VALUES).sort()).toEqual(['aisles', 'table_types']);
     expect(fieldValue('source', 'organization')).toBe('The organization’s default');
+  });
+});
+
+/** What owed a day a run dropped, and a free's $0 taken back by seating it again (T335). */
+describe('an amount owed the assignment changed', () => {
+  const NAMES = { 'ana@ember.test': 'Ana Rivera' };
+  const CAD = { currency: 'CAD' };
+
+  function anEntry(kind: string, subject: Record<string, unknown>, detail: unknown) {
+    return {
+      id: 'e1',
+      actor: 'dana@ember.test',
+      at: '2099-05-01T10:00:00+00:00',
+      action: 'assign',
+      kind,
+      vendors: ['ana@ember.test'],
+      subject,
+      detail,
+    } as MarketHistoryEntry;
+  }
+
+  function said(entry: MarketHistoryEntry, dayLeads = false): string {
+    return entryParts(entry, { names: NAMES, dayLeads })
+      .map((part) => (part.kind === 'text' ? part.text : `[${part.name || part.email}]`))
+      .join('');
+  }
+
+  const DROPPED = { before: { owed_cents: 0 }, after: { owed_cents: null } };
+  const byTheRun = anEntry(
+    'owed_dropped',
+    { date: '2099-05-08', ...CAD, set_by: 'admin@ember.test' },
+    DROPPED,
+  );
+  const byTheMigration = anEntry(
+    'owed_dropped',
+    { date: '2099-05-08', ...CAD, set_by: 'admin@ember.test', by_migration: true },
+    DROPPED,
+  );
+
+  it('says who allocated tables, the day, the amount dropped and who set it', () => {
+    expect(said(byTheRun)).toBe(
+      'dana@ember.test allocated tables, leaving [Ana Rivera] without a table on May 8, 2099, ' +
+        'so the $0.00 admin@ember.test set for that day was dropped',
+    );
+  });
+
+  it('says the day the migration found held no table, with no one making the change', () => {
+    expect(said({ ...byTheMigration, actor: null } as MarketHistoryEntry)).toBe(
+      '[Ana Rivera] held no table on May 8, 2099, so the $0.00 admin@ember.test set for that ' +
+        'day was dropped',
+    );
+  });
+
+  it('leaves the day to the list where the day leads it', () => {
+    expect(said(byTheRun, true)).toBe(
+      'dana@ember.test allocated tables, leaving [Ana Rivera] without a table, so the $0.00 ' +
+        'admin@ember.test set for that day was dropped',
+    );
+    expect(said({ ...byTheMigration, actor: null } as MarketHistoryEntry, true)).toBe(
+      '[Ana Rivera] held no table, so the $0.00 admin@ember.test set for that day was dropped',
+    );
+  });
+
+  it('leaves out who set an amount stored without them', () => {
+    const unnamed = { ...byTheRun.subject };
+    delete unnamed.set_by;
+    expect(said({ ...byTheRun, subject: unnamed })).toBe(
+      'dana@ember.test allocated tables, leaving [Ana Rivera] without a table on May 8, 2099, ' +
+        'so the $0.00 set for that day was dropped',
+    );
+  });
+
+  it('opens to the amount owed before and none after, and the day', () => {
+    for (const entry of [byTheRun, byTheMigration]) {
+      expect(entryChanges(entry)).toEqual({
+        changed: [{ field: 'Amount owed', before: '$0.00', after: 'none' }],
+        recorded: [{ field: 'Date', value: 'May 8, 2099' }],
+      });
+    }
+  });
+
+  it('reads a free’s $0 taken back exactly as before', () => {
+    const takenBack = anEntry(
+      'owed_taken_back',
+      { date: '2099-05-08', ...CAD },
+      { before: { owed_cents: 0 }, after: { owed_cents: 1500 } },
+    );
+    expect(said(takenBack)).toBe(
+      'dana@ember.test seated [Ana Rivera] again on May 8, 2099, taking back the $0.00 set when ' +
+        'the table was freed',
+    );
+    expect(entryChanges(takenBack)).toEqual({
+      changed: [{ field: 'Amount owed', before: '$0.00', after: '$15.00' }],
+      recorded: [{ field: 'Date', value: 'May 8, 2099' }],
+    });
   });
 });
 
