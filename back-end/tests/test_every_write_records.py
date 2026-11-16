@@ -1147,6 +1147,25 @@ def test_a_write_records_only_under_a_row_it_asked(write, client, world, asking)
             if unasked is None] == [], asking.rows
 
 
+def _a_free_that_deducts(client, world):
+    _priced_seat(world)
+    return client.delete(f"/markets/{MARKET}/placements",
+                         json={"email": VENDOR, "date": DATE, "deductOwed": True})
+
+
+def test_a_write_that_asks_two_rows_records_each_entry_under_its_own(client, world, asking):
+    """A free that also takes its amount off what the vendor owes asks Assign for the seat and
+    Change what is owed for the deduction, and records one entry under each: two entries, so it is
+    sent here rather than among ``WRITES``, each of which records one."""
+    response = _a_free_that_deducts(client, world)
+
+    assert response.status_code < 300, response.get_json()
+    assert [(entry["action"], entry["kind"]) for entry, _callers in asking.recorded] == [
+        (Actions.ASSIGN.id, History.FREED), (Actions.CHANGE_OWED.id, History.OWED_SET)]
+    assert {Actions.ASSIGN.id, Actions.CHANGE_OWED.id} <= set(asking.rows)
+    assert [entry for entry, unasked in _unasked_records(asking) if unasked is None] == []
+
+
 def _a_first_import(client, world):
     world.patch(guards, "_utc_now", lambda: datetime(2026, 7, 1, tzinfo=timezone.utc))
     world.markets.doc = copy.deepcopy(_market_doc(
