@@ -20,6 +20,7 @@ import pytest
 from pymongo.errors import DuplicateKeyError
 
 import api.attendance as AttendanceApi
+import api.market_actions as Actions
 import history as History
 import payments as Payments
 from real_mongo import harness
@@ -194,7 +195,7 @@ class TestOneCheckInPerVendorDay:
         harness.warm(market_records.attendance, 20)
 
         answered = race(20, lambda i: AttendanceApi.record_attendance(
-            MARKET, VENDOR, DAY, checked_in_by=f"{EDITOR}#{i}"))
+            Actions.Asked(Actions.CHECK_IN, MARKET, f"{EDITOR}#{i}", None), VENDOR, DAY))
 
         assert [status for _body, status in answered] == [200] * 20
         assert {body["message"] for body, _status in answered} == {"Checked in"}

@@ -367,7 +367,9 @@ class TestEveryCheckReadsTheMarketsRows:
 
         assert DoorApi.check_in("market-456", "ana@example.com", "2026-11-18", EDITOR) == (
             {"ok": True}, 200)
-        assert recorded == [("market-456", "ana@example.com", "2026-11-18")]
+        [(asked, *rest)] = recorded
+        assert (asked.row, asked.market_id, asked.actor, rest) == (
+            Actions.CHECK_IN, "market-456", EDITOR, ["ana@example.com", "2026-11-18"])
 
     def test_a_row_lowered_lets_a_lower_role_take_it(self, world):
         MarketsApi.set_permission("market-123", "move-phase", "editor", OWNER)

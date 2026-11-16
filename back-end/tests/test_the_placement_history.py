@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from conftest import a_solver_vendor, FakeMarketsCollection, stored_market
+from conftest import a_solver_vendor, assigning, FakeMarketsCollection, stored_market
 
 import api.market_actions as Actions
 import api.markets as MarketsApi
@@ -146,8 +146,8 @@ class TestReadingTheTrail:
         assert len(entries) == 2
 
     def test_the_newest_entry_comes_first(self, history):
-        History.record_freed("m", "a@x.test", "v@x.test", "2026-08-01", "A 1")
-        History.record_freed("m", "a@x.test", "v@x.test", "2026-08-01", "A 2")
+        History.record_freed(assigning("m", "a@x.test"), "v@x.test", "2026-08-01", "A 1")
+        History.record_freed(assigning("m", "a@x.test"), "v@x.test", "2026-08-01", "A 2")
         history.docs[0]["at"] = "2020-01-01T00:00:00+00:00"
         history.docs[1]["at"] = "2026-01-01T00:00:00+00:00"
 
@@ -156,8 +156,8 @@ class TestReadingTheTrail:
         ]
 
     def test_another_markets_entries_are_not_in_this_ones_trail(self, history):
-        History.record_freed("m1", "a@x.test", "v@x.test", "2026-08-01", "A 1")
-        History.record_freed("m2", "a@x.test", "v@x.test", "2026-08-01", "A 1")
+        History.record_freed(assigning("m1", "a@x.test"), "v@x.test", "2026-08-01", "A 1")
+        History.record_freed(assigning("m2", "a@x.test"), "v@x.test", "2026-08-01", "A 1")
 
         assert len(assignments("m1")) == 1
 
@@ -191,8 +191,8 @@ class TestTheEndpoint:
 
 class TestTheTrailIsKeptWithTheMarket:
     def test_deleting_a_market_takes_its_history_with_it(self, history):
-        History.record_freed("m1", "a@x.test", "v@x.test", "2026-08-01", "A 1")
-        History.record_freed("m2", "a@x.test", "v@x.test", "2026-08-01", "A 1")
+        History.record_freed(assigning("m1", "a@x.test"), "v@x.test", "2026-08-01", "A 1")
+        History.record_freed(assigning("m2", "a@x.test"), "v@x.test", "2026-08-01", "A 1")
 
         gone = History.delete_for_market("m1")
 
@@ -226,7 +226,7 @@ def test_deleting_a_market_deletes_its_trail_through_the_endpoint(monkeypatch, h
     monkeypatch.setattr(
         MarketsApi.PermissionsApi, "get_user_market_role", lambda *_a, **_k: MarketRole.OWNER
     )
-    History.record_freed("market-123", "a@x.test", "v@x.test", "2026-08-01", "A 1")
+    History.record_freed(assigning("market-123", "a@x.test"), "v@x.test", "2026-08-01", "A 1")
 
     MarketsApi.delete_market("market-123", "owner@example.com")
 
@@ -293,11 +293,12 @@ class TestAChangeAfterResultsSaysSo:
 
     @pytest.mark.parametrize("record", [
         lambda after: History.record_placed(
-            "m", "a@x.test", row("ana@example.com", "Hall A 1"), None, after_results=after),
+            assigning("m", "a@x.test"), row("ana@example.com", "Hall A 1"), None,
+            after_results=after),
         lambda after: History.record_freed(
-            "m", "a@x.test", "v@x.test", "2026-08-01", "A 1", after_results=after),
+            assigning("m", "a@x.test"), "v@x.test", "2026-08-01", "A 1", after_results=after),
         lambda after: History.record_swapped(
-            "m", "a@x.test", "2026-08-01", row("ana@example.com", "Hall A 1"),
+            assigning("m", "a@x.test"), "2026-08-01", row("ana@example.com", "Hall A 1"),
             row("ben@example.com", "Hall A 2"), after_results=after),
     ], ids=["placed", "freed", "swapped"])
     def test_the_key_is_written_only_when_true(self, history, record):

@@ -332,11 +332,13 @@ def placement_subject(kind: str, detail: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _record_placement(
-    market_id: str, actor: str, kind: str, vendors: List[str], detail: Dict[str, Any]
+    recorder: Recorder, kind: str, vendors: List[str], detail: Dict[str, Any]
 ) -> None:
-    record(
-        market_id, actor, ASSIGN, kind=kind, vendors=vendors,
-        subject=lambda: placement_subject(kind, detail), detail=detail,
+    """A seat change, through the asking of the Assignment row its write was let through on
+    (``Actions.ASSIGN``): every writer of the assignment asks it, so the entry names no row of its
+    own."""
+    recorder.record(
+        kind=kind, vendors=vendors, subject=lambda: placement_subject(kind, detail), detail=detail,
     )
 
 
@@ -355,12 +357,12 @@ def _while_here(detail: Dict[str, Any], while_here: bool) -> Dict[str, Any]:
 
 
 def record_placed(
-    market_id: str, actor: str, placement, left=None, *, after_results: bool = False,
+    recorder: Recorder, placement, left=None, *, after_results: bool = False,
     while_here: bool = False,
 ) -> None:
     """One vendor put in one seat by hand, and the seat they ``left`` on that date: ``before``,
     null when they had none. Entries older than ``before`` carry no such key."""
-    _record_placement(market_id, actor, PLACED, [placement.email], _while_here(_after_results({
+    _record_placement(recorder, PLACED, [placement.email], _while_here(_after_results({
         "date": placement.date,
         "table_code": placement.table_code,
         "table_choice": placement.table_choice,
@@ -370,21 +372,21 @@ def record_placed(
 
 
 def record_freed(
-    market_id: str, actor: str, email: str, date: str, table_code: str, *,
+    recorder: Recorder, email: str, date: str, table_code: str, *,
     after_results: bool = False, while_here: bool = False,
 ) -> None:
     """One seat emptied. Recorded even though nobody was placed: it is what a vendor dropping out
     looks like, and the question "where did they go" is asked about exactly this."""
-    _record_placement(market_id, actor, FREED, [email], _while_here(_after_results(
+    _record_placement(recorder, FREED, [email], _while_here(_after_results(
         {"date": date, "table_code": table_code}, after_results), while_here))
 
 
 def record_swapped(
-    market_id: str, actor: str, date: str, first, second, *, after_results: bool = False,
+    recorder: Recorder, date: str, first, second, *, after_results: bool = False,
     while_here: bool = False,
 ) -> None:
     """Two vendors traded seats - ONE entry, because it was one action."""
-    _record_placement(market_id, actor, SWAPPED, [first.email, second.email], _while_here(
+    _record_placement(recorder, SWAPPED, [first.email, second.email], _while_here(
         _after_results({
         "date": date,
         "seats": [
@@ -395,10 +397,10 @@ def record_swapped(
 
 
 def record_assignment_run(
-    market_id: str, actor: str, placements_written: int, pins_preserved: int
+    recorder: Recorder, placements_written: int, pins_preserved: int
 ) -> None:
     """One entry for the whole run, naming who pressed it and what it touched."""
-    _record_placement(market_id, actor, ASSIGNED, [], {
+    _record_placement(recorder, ASSIGNED, [], {
         "placements_written": placements_written,
         "pins_preserved": pins_preserved,
     })

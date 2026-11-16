@@ -45,7 +45,7 @@ Its table of who may do what is part of the record too, and its owner no longer 
 ## Where it is kept
 
 - **A market write loads through `_market_change()`** in [`back-end/api/markets.py`](../../../back-end/api/markets.py), which loads a market for a write, asks its row, and refuses an archived market with `MarketArchivedError`.
-  The writes outside the markets module still load through `_load_market_to_change()` and `_load_market_and_organization_to_change()`, which wrap it (T105-9).
+  So do the placements, the payments and the organizer's door; the writes in the other modules still load through `_load_market_to_change()` and `_load_market_and_organization_to_change()`, which wrap it (T105-9).
   It is a `ForbiddenError` ([an exception never reaches a client](../../implementation/conventions/an-exception-never-reaches-a-client.md)), so it answers a 403 carrying its words wherever it is raised; a refusal that needed a new branch per route would be one forgotten branch from a 500.
   A new write loads through it, never through `_load_market_for`, so it cannot forget the rule.
   A write that asks a second row asks it of the organization `_market_change()` read beside the market.

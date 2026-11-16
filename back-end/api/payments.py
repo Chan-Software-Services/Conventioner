@@ -187,7 +187,8 @@ def _record_entry(
     """Record one entry, once per request key: a repeat of the key records nothing, and answers
     the account when it is the entry first recorded, or ``AlreadyRecorded`` when it differs."""
     row = Actions.RECORD_PAYMENT if kind == Payments.PAYMENT else Actions.ADJUST_PAID
-    market = MarketsApi._load_market_to_change(market_id, requesting_user, row)
+    change = MarketsApi._market_change(market_id, requesting_user, row)
+    market = change.market
     address = _applicant(market_id, vendor_email)
     request_key, fields = _request_key(body)
     entry = _entry(fields, kind)
@@ -205,8 +206,7 @@ def _record_entry(
         if not Payments.same_entry(first, address, entry, kind):
             raise AlreadyRecorded(kind, _account(market, address))
         return _account(market, address)
-    History.record(
-        market_id, requesting_user, row,
+    change.asked.record(
         kind=None if kind == Payments.PAYMENT else History.REFUND_RECORDED, vendors=[address],
         subject={"payment_id": stored["id"], "payment_kind": kind, **_currency(market)},
         detail=lambda: History.changes(_fields(None), _fields(stored)),
@@ -235,7 +235,8 @@ def record_refund(
 def _change_entry(
     market_id: str, payment_id: str, requesting_user: str, body: Any = None,
 ) -> Dict[str, Any]:
-    market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.ADJUST_PAID)
+    change = MarketsApi._market_change(market_id, requesting_user, Actions.ADJUST_PAID)
+    market = change.market
     before = Payments.payment(market_id, str(payment_id or ""))
     if before is None or before.get("removed_at"):
         raise NotFoundError(NO_ENTRY)
@@ -250,9 +251,8 @@ def _change_entry(
         recorded_after = after
     if after is None:
         raise NotFoundError(NO_ENTRY)
-    History.record(
-        market_id, requesting_user, Actions.ADJUST_PAID, kind=kind,
-        vendors=[before.get("vendor_email")],
+    change.asked.record(
+        kind=kind, vendors=[before.get("vendor_email")],
         subject={"payment_id": before["id"],
                  "payment_kind": before.get("kind") or Payments.PAYMENT, **_currency(market)},
         detail=lambda: History.changes(_fields(before), _fields(recorded_after)),
@@ -293,12 +293,13 @@ def _currency(market: Market) -> Dict[str, Any]:
 
 
 def _record_owed(
-    market: Market, requesting_user: str, address: str, date: str, kind: str,
+    market: Market, asked: History.Recorder, address: str, date: str, kind: str,
     before: Dict[str, Any], after: Optional[Dict[str, Any]],
 ) -> None:
-    History.record(
-        market.id, requesting_user, Actions.CHANGE_OWED, kind=kind, vendors=[address],
-        subject={"date": date, **_currency(market)},
+    """A change to what a table-day owes, through the Change what is owed asking
+    (``Actions.CHANGE_OWED``) its write was let through on."""
+    asked.record(
+        kind=kind, vendors=[address], subject={"date": date, **_currency(market)},
         detail=lambda: History.changes({"owed_cents": before["owedCents"]},
                                        {"owed_cents": (after or {}).get("owedCents")}),
     )
@@ -309,7 +310,8 @@ def set_amount_owed(
 ) -> Dict[str, Any]:
     """Set what a vendor owes for one table-day, ``{cents}``, $0 being how a fee is waived (Q26).
     Asks ``Actions.CHANGE_OWED``; a day with no line, held or freed, is refused."""
-    market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.CHANGE_OWED)
+    change = MarketsApi._market_change(market_id, requesting_user, Actions.CHANGE_OWED)
+    market = change.market
     address = normalized_email(vendor_email)
     cents = _owed_cents(body)
     before = _line(market, address, date)
@@ -317,7 +319,7 @@ def set_amount_owed(
         raise NotFoundError(NO_LINE)
     Payments.set_amount_owed(market_id, address, date, cents, requesting_user)
     account = _account(market, address)
-    _record_owed(market, requesting_user, address, date, History.OWED_SET, before,
+    _record_owed(market, change.asked, address, date, History.OWED_SET, before,
                  _line(market, address, date))
     return account
 
@@ -327,7 +329,8 @@ def use_calculated_price(
 ) -> Dict[str, Any]:
     """Take back an amount set by hand on one table-day: it owes the calculated price again.
     Asks ``Actions.CHANGE_OWED``."""
-    market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.CHANGE_OWED)
+    change = MarketsApi._market_change(market_id, requesting_user, Actions.CHANGE_OWED)
+    market = change.market
     address = normalized_email(vendor_email)
     before = _line(market, address, date)
     if before is None:
@@ -336,7 +339,7 @@ def use_calculated_price(
         return _account(market, address)
     Payments.use_calculated_price(market_id, address, date)
     account = _account(market, address)
-    _record_owed(market, requesting_user, address, date, History.OWED_CALCULATED, before,
+    _record_owed(market, change.asked, address, date, History.OWED_CALCULATED, before,
                  _line(market, address, date))
     return account
 
@@ -351,13 +354,15 @@ class KeptLine(NamedTuple):
 
 
 def keep_freed_line(
-    market: Market, vendor_email: str, date: str, by: str, deduct: bool = False,
+    market: Market, vendor_email: str, date: str, by: str,
+    deduct: Optional[History.Recorder] = None,
 ) -> KeptLine:
     """Keep the line of the seat a vendor holds on ``date``, which is about to be freed: freeing a
-    table changes neither what they owe nor what they paid (Q26). With ``deduct``, the free asked
+    table changes neither what they owe nor what they paid (Q26). Given ``deduct``, the free asked
     "Also remove its $15.00 from what they owe?", and the same write sets the line's $0: the line
     stays, owing $0.00, and the amount paid is untouched, so a vendor who paid shows paid more
-    than owed, a refund to issue by hand.
+    than owed, a refund to issue by hand. ``deduct`` is the Change what is owed asking the free
+    made for it, which records the deduction; ``by`` is the person freeing it, whom the $0 names.
 
     The deduction's history entry runs from what the line owed as this request read it, while the
     seat was held, to 0, and reads nothing again: a line read once the seat is freed, off the
@@ -367,16 +372,16 @@ def keep_freed_line(
     seat = seats_by_vendor(market).get(address, {}).get(date)
     if seat is None:
         return KeptLine(lambda: None, lambda: None)
-    owed = _line(market, address, date) if deduct else None
+    owed = _line(market, address, date) if deduct is not None else None
     try:
         before, written = Payments.keep_freed_line(market.id, address, date, seat, by,
-                                                   deduct=deduct)
+                                                   deduct=deduct is not None)
     except Payments.OwedChangedUnderFree:
         raise ConflictError(OWED_CHANGED_UNDER_FREE) from None
 
     def record_deduction() -> None:
-        if owed is not None:
-            _record_owed(market, by, address, date, History.OWED_SET, owed, {"owedCents": 0})
+        if deduct is not None and owed is not None:
+            _record_owed(market, deduct, address, date, History.OWED_SET, owed, {"owedCents": 0})
 
     return KeptLine(
         lambda: Payments.restore_freed_line(market.id, address, date, written, before),
@@ -384,21 +389,24 @@ def keep_freed_line(
     )
 
 
-def deduct_freed_day(market: Market, vendor_email: str, date: str, by: str) -> None:
+def deduct_freed_day(
+    market: Market, vendor_email: str, date: str, asked: History.Recorder,
+) -> None:
     """The free's deduction on a day the vendor no longer holds, whose line is freed and holds no
     amount set by hand: a free from before T270 that stopped between its seat and its deduction
     left the day owing its full amount, and pressing Free again finishes it. Any other day is
-    left as it is."""
+    left as it is. ``asked`` is the Change what is owed asking the free made, which records it, as
+    its person."""
     address = normalized_email(vendor_email)
     owed = _line(market, address, date)
     if owed is None or not owed["freed"] or owed["owedSetBy"] is not None:
         return
-    if Payments.deduct_freed_day(market.id, address, date, by):
-        _record_owed(market, by, address, date, History.OWED_SET, owed, {"owedCents": 0})
+    if Payments.deduct_freed_day(market.id, address, date, asked.actor):
+        _record_owed(market, asked, address, date, History.OWED_SET, owed, {"owedCents": 0})
 
 
 def seated_again(
-    market_id: str, touched: List[Tuple[str, str]], held_before: List[Tuple[str, str]], by: str,
+    asked: History.Recorder, touched: List[Tuple[str, str]], held_before: List[Tuple[str, str]],
 ) -> None:
     """Every write of the assignment forgets the freed records of the vendor-days it touched
     (T270): a day it seats reads its new seat, and a day that was held already carries a freed
@@ -406,8 +414,10 @@ def seated_again(
 
     A deduction a free set that goes with them is recorded only for a day not in ``held_before``,
     the days held in the assignment the write read, since only such a day read as freed. It is
-    recorded under the row the seating asked (``Actions.ASSIGN``), as the amount it took back and
-    what the day owes now, read off the market as it stands."""
+    recorded through ``asked``, the Assignment row's asking the seating was let through on
+    (``Actions.ASSIGN``), as the amount it took back and what the day owes now, read off the market
+    as it stands."""
+    market_id = asked.market_id
     held = {(normalized_email(address), date) for address, date in held_before}
     for address, date, cents in Payments.clear_freed_lines(market_id, touched):
         if (address, date) in held:
@@ -424,5 +434,5 @@ def seated_again(
                 MarketsApi.markets_collection.find_one(live({"id": market_id})))
             return {"date": date, **_currency(market)}
 
-        History.record(market_id, by, Actions.ASSIGN, kind=History.OWED_TAKEN_BACK,
-                       vendors=[address], subject=subject, detail=detail)
+        asked.record(kind=History.OWED_TAKEN_BACK, vendors=[address], subject=subject,
+                     detail=detail)

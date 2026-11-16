@@ -15,10 +15,16 @@ import pytest
 
 from conftest import COMPLETE_PLAN, FakeMarketsCollection, client_market, stored_market
 from test_the_history import history  # noqa: F401 - the fixture
+import api.attendance as AttendanceApi
+import api.door as DoorApi
 import api.market_actions as Actions
 import api.markets as MarketsApi
+import api.payments as PaymentsApi
 import api.permissions as PermissionsApi
+import api.placements as PlacementsApi
+import api.vendor_check_in as VendorCheckInApi
 import history as History
+import payments as Payments
 from client_errors import BadRequestError, ForbiddenError
 from datatypes import AssignmentOptionObject, MarketPhase, MarketRole
 
@@ -333,3 +339,84 @@ class TestAMoveRecordsThroughItsCallersRecorder:
 
         [entry] = history.docs
         assert (entry["action"], entry["actor"]) == (Actions.MOVE_PHASE.id, ASKER)
+
+
+#: T105-9's second batch: the placements, the payments, the door and attendance, which record
+#: through the asking their own check returned, or a recorder their caller gave.
+SECOND_BATCH = [PlacementsApi, PaymentsApi, Payments, DoorApi, AttendanceApi, VendorCheckInApi]
+
+
+def _calls_by_function(module, name) -> list:
+    """Each top-level function of ``module`` that calls ``name``, dotted as written, once a call."""
+    tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+    return [
+        function.name
+        for function in tree.body if isinstance(function, ast.FunctionDef)
+        for node in ast.walk(function)
+        if isinstance(node, ast.Call) and ast.unparse(node.func) == name
+    ]
+
+
+class TestThePlacementsPaymentsAndTheDoorRecordWhatTheyAsked:
+    @pytest.mark.parametrize("module", SECOND_BATCH, ids=lambda module: module.__name__)
+    def test_none_records_an_entry_by_hand(self, module):
+        assert [line for name, line in _calls_in(module) if name == "History.record"] == []
+
+    @pytest.mark.parametrize("module", SECOND_BATCH, ids=lambda module: module.__name__)
+    def test_none_loads_through_the_old_loaders(self, module):
+        old = {"MarketsApi._load_market_to_change",
+               "MarketsApi._load_market_and_organization_to_change"}
+        assert [line for name, line in _calls_in(module) if name in old] == []
+
+    def test_only_the_vendors_own_check_in_opens_the_door_for_a_record_nothing_asked(self):
+        """Its two doors, the check-in and its undo, with no actor: the vendor's sign-in and the
+        door code are its check, and no row of the table asks it."""
+        opened = {module.__name__: _calls_by_function(module, "History.unasked")
+                  for module in SECOND_BATCH}
+
+        assert opened == {**{module.__name__: [] for module in SECOND_BATCH},
+                          VendorCheckInApi.__name__: ["check_in", "undo_check_in"]}
+
+
+class _Seat:
+    def __init__(self, email, table_code, table_choice="Full"):
+        self.email, self.table_code, self.table_choice = email, table_code, table_choice
+        self.date = "2026-08-01"
+
+
+#: Each placement writer, given a recorder: what the history's placement entries are written by.
+PLACEMENT_WRITERS = {
+    "placed": lambda recorder: History.record_placed(recorder, _Seat("ana@example.com", "A 1")),
+    "freed": lambda recorder: History.record_freed(
+        recorder, "ana@example.com", "2026-08-01", "A 1"),
+    "swapped": lambda recorder: History.record_swapped(
+        recorder, "2026-08-01", _Seat("ana@example.com", "A 1"), _Seat("ben@example.com", "A 2")),
+    "assigned": lambda recorder: History.record_assignment_run(recorder, 3, 1),
+}
+
+
+class TestThePlacementWritersRecordThroughTheirCallersAsking:
+    @pytest.mark.parametrize("kind", PLACEMENT_WRITERS)
+    def test_the_entry_is_under_the_assign_asking_as_its_person(self, kind, history):
+        PLACEMENT_WRITERS[kind](Actions.Asked(Actions.ASSIGN, "market-123", ASKER, None))
+
+        [entry] = history.docs
+        assert (entry["market_id"], entry["actor"], entry["action"], entry["kind"]) == (
+            "market-123", ASKER, Actions.ASSIGN.id, kind)
+
+    @pytest.mark.parametrize("kind", PLACEMENT_WRITERS)
+    def test_no_row_is_named_by_the_writer_itself(self, kind, history):
+        """The row is the recorder's: a writer given another row's asking records under that one,
+        so only the asking a change was let through on can name it."""
+        PLACEMENT_WRITERS[kind](Actions.Asked(Actions.CHANGE_OWED, "market-123", ASKER, None))
+
+        [entry] = history.docs
+        assert entry["action"] == Actions.CHANGE_OWED.id
+
+    @pytest.mark.parametrize("kind", PLACEMENT_WRITERS)
+    def test_a_refused_asking_records_nothing(self, kind, history):
+        with pytest.raises(Actions.RecordedARefusal):
+            PLACEMENT_WRITERS[kind](
+                Actions.Asked(Actions.ASSIGN, "market-123", ASKER, "Only an Admin may."))
+
+        assert history.docs == []

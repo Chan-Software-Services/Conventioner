@@ -1109,6 +1109,25 @@ def a_change_of(market, organization=None):
     return change
 
 
+def assigning(market_id, actor):
+    """The Assignment row's asking, let in, for a test that writes a placement entry the way a
+    write of the assignment does: through what its check returned (``Actions.ASSIGN``)."""
+    import api.market_actions as Actions
+    return Actions.Asked(Actions.ASSIGN, market_id, actor, None)
+
+
+def at_the_door(market_id, actor=None):
+    """The recorder a check-in or its undo records through: the organizer ``actor``'s "Check
+    vendors in" asking, let in, as the door's; or with no actor, the vendor's own, through the
+    unasked door as their vendor page's."""
+    import api.market_actions as Actions
+    import history as History
+    if actor is None:
+        return History.unasked(market_id, None, Actions.CHECK_IN,
+                               because="a test's check-in of the vendor's own")
+    return Actions.Asked(Actions.CHECK_IN, market_id, actor, None)
+
+
 class _SortableCursor:
     """A fake ``find``'s cursor: it sorts, limits and projects when it is read, as the driver's
     does, whatever order ``sort`` and ``limit`` were called in, and hands back copies."""

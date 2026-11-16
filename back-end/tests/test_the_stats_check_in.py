@@ -12,7 +12,7 @@ from datetime import date as Date
 
 import pytest
 
-from conftest import FakeMarketsCollection, stored_market
+from conftest import FakeMarketsCollection, at_the_door, stored_market
 from test_a_vendors_payments import PLAN
 from test_the_payments_page import ANA, BEN, CY, EDITOR, MARKET, SAT, SEATS, SUN
 
@@ -94,7 +94,8 @@ class TestCheckIn:
         seated()
         # Ben at the door, by the organizer; Cy on their vendor page with the door code.
         Door.check_in(MARKET, BEN, SAT, EDITOR)
-        AttendanceApi.record_attendance(MARKET, CY, SUN, via=AttendanceApi.VIA_DOOR_CODE)
+        AttendanceApi.record_attendance(
+            at_the_door(MARKET), CY, SUN, via=AttendanceApi.VIA_DOOR_CODE)
 
         check_in = stats()["checkIn"]
 
@@ -103,7 +104,7 @@ class TestCheckIn:
 
     def test_a_vendor_on_two_days_checked_in_on_one_is_not_yet_in_on_the_other(self, seated):
         seated()
-        AttendanceApi.record_attendance(MARKET, ANA, SAT, checked_in_by=EDITOR)
+        AttendanceApi.record_attendance(at_the_door(MARKET, EDITOR), ANA, SAT)
 
         check_in = stats()["checkIn"]
 
@@ -113,8 +114,8 @@ class TestCheckIn:
     def test_came_counts_a_vendor_who_came_on_both_days_once(self, seated):
         seated()
         for date in (SAT, SUN):
-            AttendanceApi.record_attendance(MARKET, ANA, date, checked_in_by=EDITOR)
-        AttendanceApi.record_attendance(MARKET, BEN, SAT, checked_in_by=EDITOR)
+            AttendanceApi.record_attendance(at_the_door(MARKET, EDITOR), ANA, date)
+        AttendanceApi.record_attendance(at_the_door(MARKET, EDITOR), BEN, SAT)
 
         check_in = stats()["checkIn"]
 
@@ -123,14 +124,14 @@ class TestCheckIn:
 
     def test_an_undone_check_in_does_not_count(self, seated):
         seated()
-        AttendanceApi.record_attendance(MARKET, BEN, SAT, checked_in_by=EDITOR)
-        AttendanceApi.undo_attendance(MARKET, BEN, SAT, undone_by=EDITOR)
+        AttendanceApi.record_attendance(at_the_door(MARKET, EDITOR), BEN, SAT)
+        AttendanceApi.undo_attendance(at_the_door(MARKET, EDITOR), BEN, SAT)
 
         assert stats()["checkIn"]["came"] == 0
 
     def test_an_archived_market_that_ran_keeps_its_counts(self, seated):
         live = seated(reached=[*REACHED_MARKET_DAYS, "archived"])
-        AttendanceApi.record_attendance(MARKET, ANA, SUN, checked_in_by=EDITOR)
+        AttendanceApi.record_attendance(at_the_door(MARKET, EDITOR), ANA, SUN)
         # Archived after its days, as a market is: nobody checks in at an archived one.
         live.doc["phase"] = MarketPhase.ARCHIVED.value
 
@@ -141,8 +142,9 @@ class TestCheckIn:
 
     def test_each_day_agrees_with_the_attendance_roster(self, seated):
         live = seated()
-        AttendanceApi.record_attendance(MARKET, ANA, SAT, checked_in_by=EDITOR)
-        AttendanceApi.record_attendance(MARKET, CY, SUN, via=AttendanceApi.VIA_DOOR_CODE)
+        AttendanceApi.record_attendance(at_the_door(MARKET, EDITOR), ANA, SAT)
+        AttendanceApi.record_attendance(
+            at_the_door(MARKET), CY, SUN, via=AttendanceApi.VIA_DOOR_CODE)
 
         roster = AttendanceApi.attendance_roster(live.doc)
 
@@ -155,7 +157,7 @@ class TestCheckIn:
 
     def test_the_count_reads_no_vendor_names(self, seated, monkeypatch):
         live = seated()
-        AttendanceApi.record_attendance(MARKET, ANA, SAT, checked_in_by=EDITOR)
+        AttendanceApi.record_attendance(at_the_door(MARKET, EDITOR), ANA, SAT)
 
         def refused(*_a, **_k):
             raise AssertionError("the check-in count read the vendors' names")

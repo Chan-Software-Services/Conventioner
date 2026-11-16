@@ -31,7 +31,9 @@ from flask import jsonify, request
 import api.applicants as ApplicantsApi
 import api.attendance as AttendanceApi
 import api.door as DoorApi
+import api.market_actions as Actions
 import db_config
+import history as History
 import sign_in_limits
 from datatypes import MarketPhase, phase_from_market_document
 from market_documents import vendor_page_market_by_slug
@@ -43,6 +45,12 @@ NO_SEAT = "You have no table on this date."
 NOT_TODAY = "Check-in is open on the day itself."
 WRONG_DOOR_CODE = "That isn't this market's door code. Check it, or ask at the door."
 NOT_YET = "Check-in opens when the market's days begin."
+
+#: Why a vendor's own check-in and its undo are recorded with no request asking the "Check vendors
+#: in" row, and with no actor beside the vendor the entry names.
+VENDORS_OWN_CHECK_IN_UNASKED = (
+    "a vendor holds no role on the market, so no row of the table asks their own check-in: their "
+    "sign-in for this market, the market's days and, to check in, the door code are its check")
 
 
 def _too_many(retry_after: Optional[int]):
@@ -103,7 +111,9 @@ def check_in(market_slug: str) -> Tuple[Any, int]:
         return _refused(WRONG_DOOR_CODE, 403)
 
     result, status = AttendanceApi.record_attendance(
-        market_doc["id"], email, day, checked_in_by=None, via=AttendanceApi.VIA_DOOR_CODE)
+        History.unasked(market_doc["id"], None, Actions.CHECK_IN,
+                        because=VENDORS_OWN_CHECK_IN_UNASKED),
+        email, day, via=AttendanceApi.VIA_DOOR_CODE)
     return jsonify(result), status
 
 
@@ -128,5 +138,7 @@ def undo_check_in(market_slug: str) -> Tuple[Any, int]:
     if day and not AttendanceApi.within_the_window(day):
         return _refused(NOT_TODAY, 409)
     result, status = AttendanceApi.undo_attendance(
-        market_doc["id"], token["email"], day, undone_by=None, via=AttendanceApi.VIA_VENDOR_PAGE)
+        History.unasked(market_doc["id"], None, Actions.CHECK_IN,
+                        because=VENDORS_OWN_CHECK_IN_UNASKED),
+        token["email"], day, via=AttendanceApi.VIA_VENDOR_PAGE)
     return jsonify(result), status

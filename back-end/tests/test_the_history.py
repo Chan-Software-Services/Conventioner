@@ -6,6 +6,7 @@ structured detail. Assignment history reads the same store narrowed to the ``ass
 """
 import pytest
 
+from conftest import assigning
 import api.market_actions as Actions
 import history as History
 from test_reading_the_history import PagedHistory, _matches
@@ -163,7 +164,8 @@ class TestAnEntryWrittenOnceUnderItsId:
 
 class TestAPlacementEntry:
     def test_it_is_an_assign_action_about_its_table_day(self, history):
-        History.record_freed("m1", "dana@example.com", "ana@example.com", "2026-08-01", "A 1")
+        History.record_freed(
+            assigning("m1", "dana@example.com"), "ana@example.com", "2026-08-01", "A 1")
 
         [entry] = history.docs
         assert entry["action"] == Actions.ASSIGN.id
@@ -177,13 +179,14 @@ class TestAPlacementEntry:
                 self.email, self.table_code = email, table_code
 
         History.record_swapped(
-            "m1", "dana@example.com", "2026-08-01", Seat("a@x.test", "A 1"), Seat("b@x.test", "A 2"),
+            assigning("m1", "dana@example.com"), "2026-08-01", Seat("a@x.test", "A 1"),
+            Seat("b@x.test", "A 2"),
         )
 
         assert history.docs[0]["subject"] == {"date": "2026-08-01", "table_codes": ["A 1", "A 2"]}
 
     def test_a_run_is_about_the_whole_market(self, history):
-        History.record_assignment_run("m1", "dana@example.com", 3, 1)
+        History.record_assignment_run(assigning("m1", "dana@example.com"), 3, 1)
 
         [entry] = history.docs
         assert entry["kind"] == History.ASSIGNED
@@ -201,14 +204,14 @@ class TestReadingTheAssignmentAction:
     """Assignment history is this store narrowed to the ``assign`` action, whatever its kind."""
 
     def test_it_holds_only_that_actions_entries(self, history):
-        History.record_freed("m1", "a@x.test", "v@x.test", "2026-08-01", "A 1")
+        History.record_freed(assigning("m1", "a@x.test"), "v@x.test", "2026-08-01", "A 1")
         History.record("m1", "a@x.test", Actions.CHECK_IN, vendors=["v@x.test"], detail={})
         History.record("m1", "a@x.test", Actions.ASSIGN, kind=History.RULES, detail={})
 
         assert sorted(e["kind"] for e in assignments("m1")) == [History.FREED, History.RULES]
 
     def test_an_entry_carries_all_it_holds_but_its_storage_keys(self, history):
-        History.record_freed("m1", "a@x.test", "v@x.test", "2026-08-01", "A 1")
+        History.record_freed(assigning("m1", "a@x.test"), "v@x.test", "2026-08-01", "A 1")
 
         [entry] = assignments("m1")
         assert set(entry) == {
@@ -231,7 +234,7 @@ class TestReadingItBeforeTheMigration:
         placement_history.insert_one(self.old_entry("m1", "2026-01-01T00:00:00+00:00", "Old 1"))
         placement_history.insert_one(self.old_entry("m1", "2026-03-01T00:00:00+00:00", "Old 2"))
         placement_history.insert_one(self.old_entry("m2", "2026-02-01T00:00:00+00:00", "Other"))
-        History.record_freed("m1", "a@x.test", "v@x.test", "2026-08-01", "New 1")
+        History.record_freed(assigning("m1", "a@x.test"), "v@x.test", "2026-08-01", "New 1")
         history.docs[0]["at"] = "2026-02-01T00:00:00+00:00"
 
         entries = assignments("m1")
@@ -253,7 +256,7 @@ class TestReadingItBeforeTheMigration:
     def test_deleting_a_market_takes_its_unmoved_entries_too(self, history, placement_history):
         placement_history.insert_one(self.old_entry("m1", "2026-01-01T00:00:00+00:00", "A 1"))
         placement_history.insert_one(self.old_entry("m2", "2026-01-01T00:00:00+00:00", "A 2"))
-        History.record_freed("m1", "a@x.test", "v@x.test", "2026-08-01", "A 3")
+        History.record_freed(assigning("m1", "a@x.test"), "v@x.test", "2026-08-01", "A 3")
 
         assert History.delete_for_market("m1") == 2
         assert [e["market_id"] for e in placement_history.docs] == ["m2"]
@@ -261,7 +264,7 @@ class TestReadingItBeforeTheMigration:
 
 def test_deleting_a_market_takes_every_entry_of_its_history(history):
     History.record("m1", "a@x.test", Actions.CHANGE_SETUP, detail={})
-    History.record_freed("m1", "a@x.test", "v@x.test", "2026-08-01", "A 1")
+    History.record_freed(assigning("m1", "a@x.test"), "v@x.test", "2026-08-01", "A 1")
     History.record("m2", "a@x.test", Actions.CHANGE_SETUP, detail={})
 
     assert History.delete_for_market("m1") == 2

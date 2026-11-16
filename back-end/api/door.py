@@ -5,7 +5,7 @@ The vendor's own check-in is on their vendor page, behind their sign-in and the 
 (``api/vendor_check_in.py``); this is the organizer's, keyed by the market's id and held to the table's "Check vendors in" row, EDITOR by default, so a
 volunteer at the door is added as an editor. It loads through the change loader, so an archived
 market's record is never changed, and it writes through ``record_attendance``, so the two doors
-record alike.
+record alike, through the row's asking the change loader returned.
 
 **The door code** is one live code per market, stored on the market document as ``doorCode``
 (``{code, madeAt, madeBy}``) and served only here: no market read serves it
@@ -40,9 +40,12 @@ DOOR_CODE_LENGTH = 6
 DOOR_CODE_KEY = market_doc_key("door_code")
 
 
-def _market_on_its_days(market_id: str, requesting_user: str):
-    market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.CHECK_IN)
-    return market if market.phase is MarketPhase.MARKET_DAYS else None
+def _market_on_its_days(
+    market_id: str, requesting_user: str,
+) -> Optional[MarketsApi.MarketChange]:
+    """The market loaded to change and its "Check vendors in" asking, or None outside its days."""
+    change = MarketsApi._market_change(market_id, requesting_user, Actions.CHECK_IN)
+    return change if change.market.phase is MarketPhase.MARKET_DAYS else None
 
 
 def check_in(
@@ -51,20 +54,20 @@ def check_in(
     """Record that a vendor is here on this date, made by ``requesting_user``: any market date
     that has begun somewhere, so a tap missed in the rush is corrected after, and never one that
     has not (``AttendanceApi.day_has_begun``, refused in ``record_attendance``)."""
-    if _market_on_its_days(market_id, requesting_user) is None:
+    change = _market_on_its_days(market_id, requesting_user)
+    if change is None:
         return {"error": NOT_PUBLISHED}, 409
-    return AttendanceApi.record_attendance(
-        market_id, vendor_email, date, checked_in_by=requesting_user,
-    )
+    return AttendanceApi.record_attendance(change.asked, vendor_email, date)
 
 
 def undo_check_in(
     market_id: str, vendor_email: str, date: str, requesting_user: str,
 ) -> Tuple[Dict[str, Any], int]:
     """Take back a check-in on this date, whoever made it."""
-    if _market_on_its_days(market_id, requesting_user) is None:
+    change = _market_on_its_days(market_id, requesting_user)
+    if change is None:
         return {"error": NOT_PUBLISHED}, 409
-    return AttendanceApi.undo_attendance(market_id, vendor_email, date, undone_by=requesting_user)
+    return AttendanceApi.undo_attendance(change.asked, vendor_email, date)
 
 
 def new_door_code() -> str:
@@ -123,9 +126,10 @@ def make_door_code(market_id: str, requesting_user: str) -> Tuple[Dict[str, Any]
     Raises:
         MarketChanged: the market moved since it was loaded; no code was made.
     """
-    market = _market_on_its_days(market_id, requesting_user)
-    if market is None:
+    change = _market_on_its_days(market_id, requesting_user)
+    if change is None:
         return {"error": NO_DOOR_CODE_YET}, 409
+    market = change.market
     before = _held_code(market_id)
     made = {
         "code": new_door_code(),
@@ -134,8 +138,5 @@ def make_door_code(market_id: str, requesting_user: str) -> Tuple[Dict[str, Any]
     }
     # Holding the phase it was loaded in, so a market archived since is not changed.
     write_market(market, {"$set": {DOOR_CODE_KEY: made}})
-    History.record(
-        market_id, requesting_user, Actions.CHECK_IN, kind=History.DOOR_CODE_MADE,
-        detail={"replaced": before is not None},
-    )
+    change.asked.record(kind=History.DOOR_CODE_MADE, detail={"replaced": before is not None})
     return _served(market.slug, made), 200
