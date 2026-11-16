@@ -214,7 +214,11 @@ class TestTheOrganizationsDefault:
 
     def test_its_history_is_newest_first_and_holds_only_the_defaults_changes(self, world):
         OrgsApi.set_default_permission(ORG_ID, "check-in", "admin", ORG_ADMIN)
-        OrgsApi.update_organization(ORG_ID, ORG_OWNER, "Ember Collective")
+        # A rename, recorded as ``update_organization`` records it: that call reads the owner's
+        # organizations by id, and this world's ids are addresses, which no people map keys.
+        History.record_for_organization(
+            ORG_ID, ORG_OWNER, History.CHANGE_ORGANIZATION, kind=History.RENAMED,
+            detail={"before": {"name": "Ember Markets"}, "after": {"name": "Ember Collective"}})
         OrgsApi.set_default_permission(ORG_ID, "export-csv", "editor", ORG_OWNER)
 
         entries = OrgsApi.get_default_permission_history(ORG_ID, ORG_MEMBER)

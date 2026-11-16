@@ -9,6 +9,7 @@ describes:
   - back-end/api/organizations.py#organization_documents_of
   - back-end/api/organizations.py#get_organizations_for_user
   - back-end/api/organizations.py#update_organization
+  - back-end/api/organizations.py#_refuse_a_name_you_already_hold
   - back-end/api/organizations.py#add_org_admin
   - back-end/api/organizations.py#add_org_member
   - back-end/api/organizations.py#remove_org_user
@@ -61,6 +62,7 @@ sources:
   - T274
   - T283
   - T315
+  - T352
 ---
 
 # The organization document, and roles
@@ -73,17 +75,17 @@ The glossary concept: [Organization and roles](../../business/concepts/organizat
 
 ## The organization
 
-| Field                 | What it is                                                                                                                                                |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                  | a UUID, the primary key; the name is a display field                                                                                                      |
-| `name`                | creating one with a name another organization has is refused ("Organization already exists"); a rename is not checked, and no index holds the name unique |
-| `people`              | its people, user id to `owner`, `admin` or `member`, exactly one `owner`, so a person has one place ([one map of people](#one-map-of-people))             |
-| `owner`               | the user id of its one owner, kept beside `people` for one release                                                                                        |
-| `admins`, `members`   | user ids, kept beside `people` for one release; an organization stored before `people` is read from them, folded                                          |
-| `markets`             | the ids of its markets, added when a market is created and pulled when one is deleted                                                                     |
-| `theme`               | carried, never applied                                                                                                                                    |
-| `default_permissions` | the rows of the table it sets for the markets it will hold: row id to `{role}`, absent when it sets none ([its default table](#its-default-table))        |
-| `deleting`            | `{at, by, trail_id}` while its deletion runs, absent on a live organization ([the tombstone](../modules/market-deletion.md#the-tombstone))                |
+| Field                 | What it is                                                                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                  | a UUID, the primary key; the name is a display field                                                                                                    |
+| `name`                | the name its people see, unique among the organizations of whoever creates or renames it ([its name](#an-organizations-name)); no index holds it unique |
+| `people`              | its people, user id to `owner`, `admin` or `member`, exactly one `owner`, so a person has one place ([one map of people](#one-map-of-people))           |
+| `owner`               | the user id of its one owner, kept beside `people` for one release                                                                                      |
+| `admins`, `members`   | user ids, kept beside `people` for one release; an organization stored before `people` is read from them, folded                                        |
+| `markets`             | the ids of its markets, added when a market is created and pulled when one is deleted                                                                   |
+| `theme`               | carried, never applied                                                                                                                                  |
+| `default_permissions` | the rows of the table it sets for the markets it will hold: row id to `{role}`, absent when it sets none ([its default table](#its-default-table))      |
+| `deleting`            | `{at, by, trail_id}` while its deletion runs, absent on a live organization ([the tombstone](../modules/market-deletion.md#the-tombstone))              |
 
 Every key is one word but `default_permissions`, which no other spelling of has ever been written, so the spelling question the market document has does not arise.
 Membership is recorded on both sides: each user's `organizations` lists the ids of the organizations they are in, kept in step by every membership write ([users and email](users-and-email.md)).
@@ -97,13 +99,24 @@ It serves each with what removing someone from it takes (E38/F15/S01): `marketCo
 
 **Who changes an organization**: only the owner renames it, adds an admin, changes someone's place between admin and member, or transfers ownership; the owner or an admin adds a member or changes its default table; the owner removes anyone but themselves, an admin only members.
 A person's place changes only through [the organization's people](../modules/organization-people.md), whose table says each of these and refuses the rest: "Add admin" of a member makes them an admin, the owner's `PUT /organizations/<org_id>/users/<user_id>` with `{"place": "admin" | "member"}` makes a member an admin or an admin a member (the place they hold already answers 200 and writes nothing, the owner's place is refused), "Add admin" of an admin and "Add member" of a member say they already are, 400, and adding the owner or an admin as a member is refused as before.
-Renaming is all an update does: it reads the body's `name`, a string that is not blank, and nothing else, so the owner, the admins, the members and the markets change only through the writes above, which keep each user's `organizations` in step.
+Renaming is all an update does: it reads the body's `name`, a string that is not blank and is not [another of the owner's organizations' names](#an-organizations-name), and nothing else, so the owner, the admins, the members and the markets change only through the writes above, which keep each user's `organizations` in step.
 Transferring ownership makes one of its admins or members the organization's owner and the old owner an admin; transferring it to its own owner, or to someone outside it ("Transfer ownership only to one of the organization's admins or members."), is refused before anything is written.
 The owner cannot be removed ("They own this organization, so they can't be removed from it."), and an account that owns an organization cannot be deleted until it transfers the organization's ownership.
 Removing someone who is neither an admin nor a member, another organizer having removed them first, answers 404 "They are no longer in this organization." before any write, as does a removal whose write finds them gone under it; nothing is recorded, and Manage organization reads that 404 as done ([remove a person](../../business/flows/organizations.md#b3-remove-a-person)); a market role taken twice answers alike ([roles on a market](#roles-on-a-market)).
 Deleting an organization is the owner's, deletes the drafts and archived markets it holds, and is refused while it holds a market mid-lifecycle ([when an organization may be deleted](../../business/rules/when-an-organization-may-be-deleted.md), through [market deletion](../modules/market-deletion.md)).
-**An organization being deleted reads as absent**: every read and write of it, the person's organizations, its pages, its rename, its default table and its people's writes included, passes its filter through `live` in [`back-end/tombstone.py`](../../../back-end/tombstone.py), so it leaves its people's lists and takes no change, and a write that matched nothing answers 404 "Organization not found"; its name stays taken until it is gone.
+**An organization being deleted reads as absent**: every read and write of it, the person's organizations, its pages, its rename, its default table and its people's writes included, passes its filter through `live` in [`back-end/tombstone.py`](../../../back-end/tombstone.py), so it leaves its people's lists and takes no change, and a write that matched nothing answers 404 "Organization not found".
 What the owner and the admins do with these, screen by screen, is [the organizations flows](../../business/flows/organizations.md).
+
+### An organization's name
+
+**A name is unique among the organizations a person belongs to, and nowhere else** (T352).
+Creating an organization, and renaming one, are refused when another live organization the creator or owner owns, administers or belongs to (`organization_documents_of`) has that name, compared with outer spaces stripped and casefolded: 409, `You already belong to an organization named "<its stored name>".`
+A rename leaves out the organization itself, so it may change its own capitals.
+`_refuse_a_name_you_already_hold` in [`back-end/api/organizations.py`](../../../back-end/api/organizations.py) is the one comparison both call.
+No other person's organization is read for it, so no answer says whether a name is taken elsewhere: another organizer makes one of the same name, and a name an organization being deleted or deleted had is free at once.
+The New organization dialog and Manage organization's rename row each show the refusal in the server's words.
+The same person creating two of one name at the same instant can race past the check, since each reads before the other writes and no index can hold a name unique among one person's organizations; that is accepted.
+[`test_organizations.py`](../../../back-end/tests/test_organizations.py) pins each case, and [`organization-names.spec.ts`](../../../front-end/e2e/organization-names.spec.ts) the two screens and the second organizer.
 
 ## One map of people
 
