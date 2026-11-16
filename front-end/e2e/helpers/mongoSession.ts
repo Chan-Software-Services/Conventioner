@@ -10,7 +10,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { parentPort, workerData, type MessagePort } from 'node:worker_threads';
-import { asLoadedFile, readAnswer, sessionLoop, type Answer } from './mongoScript.ts';
+import type { Answer } from './mongoScript.ts';
 
 /** What `mongo.ts` hands the thread when it starts it. */
 export interface SessionData {
@@ -28,7 +28,22 @@ export type Request = { kind: 'start' } | { kind: 'eval'; script: string };
 
 const data = workerData as SessionData;
 
+type Script = typeof import('./mongoScript.ts');
+
+/**
+ * `mongoScript.ts`, and `typescript` through it, loaded by `import()` rather than statically, so a
+ * thread that cannot load them still answers: each request gets the failure, at once, where
+ * `mongoEval` would otherwise wait out its whole wait for a thread that never read it.
+ */
+const loaded: Promise<Script | Answer> = import('./mongoScript.ts').catch(
+  (error: unknown): Answer => ({
+    ok: false,
+    error: `the Mongo session thread could not load its modules: ${String(error)}`,
+  }),
+);
+
 class Session {
+  private readonly script: Script;
   private readonly nonce = randomUUID();
   private readonly child: ChildProcessWithoutNullStreams;
   private printed = '';
@@ -36,7 +51,8 @@ class Session {
   private waiting: ((answer: Answer) => void) | null = null;
   ended = false;
 
-  constructor() {
+  constructor(script: Script) {
+    this.script = script;
     this.child = spawn('docker', [
       'exec',
       '-i',
@@ -45,7 +61,7 @@ class Session {
       data.uri,
       '--quiet',
       '--eval',
-      sessionLoop(this.nonce),
+      script.sessionLoop(this.nonce),
     ]);
     this.child.stdout.setEncoding('utf-8');
     this.child.stderr.setEncoding('utf-8');
@@ -68,7 +84,7 @@ class Session {
   }
 
   run(script: string): Promise<Answer> {
-    this.child.stdin.write(`${JSON.stringify({ file: asLoadedFile(script) })}\n`);
+    this.child.stdin.write(`${JSON.stringify({ file: this.script.asLoadedFile(script) })}\n`);
     return this.next(data.scriptMs, 'run the script');
   }
 
@@ -96,7 +112,7 @@ class Session {
 
   private answer(): void {
     if (!this.waiting) return;
-    const read = readAnswer(this.printed, this.nonce);
+    const read = this.script.readAnswer(this.printed, this.nonce);
     if (!read) return;
     this.printed = read.rest;
     this.waiting(read.answer);
@@ -113,7 +129,9 @@ let session: Session | null = null;
 /** The live session, started if there is none or the last one ended. */
 async function live(): Promise<Session | Answer> {
   if (session && !session.ended) return session;
-  const fresh = new Session();
+  const script = await loaded;
+  if ('ok' in script) return script;
+  const fresh = new Session(script);
   const started = await fresh.started();
   if (!started.ok) {
     fresh.stop();
