@@ -437,8 +437,10 @@ def claim_next_for_review(
     nobody else holds. For a ``chosen`` reviewer, their share (ADR 0020: those dealt to them, and
     the follow-ups they own) comes first, each part in that order, and with ``mine_only`` nothing
     else (E38/F07/S04); for anyone else ``mine_only`` means nothing. ``want`` is one they asked for
-    by name (a link to it), tried first. Taking it is conditioned on the claim it read, so two
-    reviewers asking at once are handed different cards. Their other claims are let go.
+    by name (a link to it), tried first. Taking it is conditioned on the claim and the status it
+    read, so two reviewers asking at once are handed different cards, and a card decided between
+    this read and its claim is passed over, never handed as if it were open (T277 P4). Their other
+    claims are let go.
     """
     now = _now(now)
     statuses = ReviewState.UNDECIDED_STATUSES + (
@@ -462,7 +464,8 @@ def claim_next_for_review(
         if holder is not None and holder != mine:
             continue
         taken = applications_collection.update_one(
-            {"id": doc["id"], "held_until": {"$in": [doc.get("held_until")]}},
+            {"id": doc["id"], "held_until": {"$in": [doc.get("held_until")]},
+             STATUS_FIELD: doc.get(STATUS_FIELD)},
             {"$set": {"held_by": mine,
                       "held_until": (now + CLAIM_LEASE).isoformat()}},
         )
