@@ -91,10 +91,14 @@ describe('readAnswer', () => {
 
 /**
  * The session's loop run by plain Node, with mongosh's `print`, `load` and `sleep` stood in for, and
- * its stdin a pipe left non-blocking, as mongosh leaves it. It is sent one script only after a pause.
+ * its stdin a pipe left non-blocking, as mongosh leaves it. It is sent one script only after a pause
+ * from its `ready`.
  */
 function runTheLoop(nonce: string, pauseMs: number) {
   const standIns = `
+    // A slow start, as on a loaded runner: the test must not close its write end before the loop
+    // has opened its stdin again.
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
     const nodeFs = require('fs');
     const nodeVm = require('vm');
     process.stdin; // Node, as mongosh does, makes a piped fd 0 non-blocking
@@ -111,6 +115,8 @@ function runTheLoop(nonce: string, pauseMs: number) {
   // A FIFO, so the loop's stdin is a pipe, as `docker exec -i` gives mongosh, where Node would give
   // a child a socket. Its read end is opened first, without waiting, so the open for writing finds
   // a reader; the child holds the read end, and sees the end of its stdin when the write end closes.
+  // The loop opens its stdin again before it says `ready`, and that open waits for a writer, so the
+  // write end closes only after `ready`.
   const folder = mkdtempSync(join(tmpdir(), 'session-loop-'));
   const fifo = join(folder, 'stdin');
   execFileSync('mkfifo', [fifo]);
@@ -122,12 +128,17 @@ function runTheLoop(nonce: string, pauseMs: number) {
   closeSync(readEnd);
   let printed = '';
   let said = '';
-  child.stdout!.on('data', (text: Buffer) => (printed += text.toString()));
+  let sent = false;
+  child.stdout!.on('data', (text: Buffer) => {
+    printed += text.toString();
+    if (sent || !readAnswer(printed, nonce)) return;
+    sent = true;
+    setTimeout(() => {
+      writeSync(writeEnd, `${JSON.stringify({ file: asLoadedFile('40 + 2') })}\n`);
+      closeSync(writeEnd);
+    }, pauseMs);
+  });
   child.stderr!.on('data', (text: Buffer) => (said += text.toString()));
-  setTimeout(() => {
-    writeSync(writeEnd, `${JSON.stringify({ file: asLoadedFile('40 + 2') })}\n`);
-    closeSync(writeEnd);
-  }, pauseMs);
   return new Promise<{ code: number | null; printed: string; said: string }>((resolve) =>
     child.on('close', (code) => {
       rmSync(folder, { recursive: true, force: true });
@@ -147,7 +158,7 @@ describe('sessionLoop', () => {
       // O_NONBLOCK, octal 04000: the loop was given the stdin mongosh leaves it.
       expect(parseInt(stdinFlags, 8) & 0o4000).toBe(0o4000);
       // Today's loop calls no `sleep`; this holds it there. The loop that read fd 0 and slept 5 ms
-      // on each `EAGAIN` fails here, with 56 sleeps in the 300 ms pause.
+      // on each `EAGAIN` fails here, with a sleep for about every 5 ms of the 300 ms pause.
       expect(sleeps).toBe(0);
       const ready = readAnswer(printed, nonce);
       expect(ready?.answer).toEqual({ ok: true, output: '' });
