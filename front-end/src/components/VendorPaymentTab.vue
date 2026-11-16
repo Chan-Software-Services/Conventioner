@@ -21,6 +21,7 @@ import { getApiErrorMessage } from '@/utils/api';
 import { getFormattedTimestamp } from '@/utils/utils';
 import { dateLabel } from '@/utils/vendorDetails';
 import {
+  accountAsItStands,
   balanceChip,
   balanceText,
   entryChange,
@@ -94,8 +95,9 @@ function saved(updated: VendorAccount): void {
   emit('changed');
 }
 
-/** A press refused as already recorded answered the account as it stands: shown behind the dialog,
- * which stays open with its refusal, since the entry recorded by the first press moved it. */
+/** A refusal that answered the account as it stands (a press already recorded, or an edit or a
+ * removal of an entry changed meanwhile): shown behind the dialog, which stays open with its
+ * refusal, since another write moved it. */
 function refreshed(updated: VendorAccount): void {
   account.value = updated;
   emit('changed');
@@ -147,6 +149,8 @@ async function confirm(): Promise<void> {
         : await removePayment(props.marketId, dialog.entry.id),
     );
   } catch (err: unknown) {
+    const standing = accountAsItStands(err);
+    if (standing) refreshed(standing);
     confirmError.value = getApiErrorMessage(err, 'That change could not be saved.');
   } finally {
     confirmBusy.value = false;

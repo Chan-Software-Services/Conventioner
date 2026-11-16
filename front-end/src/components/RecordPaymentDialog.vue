@@ -10,14 +10,15 @@
  * key as it opens and sends it on every press, so pressing again after an answer that never came
  * records nothing new. A press that differs from the entry already recorded with the key is
  * refused with the account as it stands, which the dialog hands on (`refreshed`) and keeps its
- * error shown, so the entry appears behind it.
+ * error shown, so the entry appears behind it. An edit of an entry that changed or was removed
+ * before it was saved is refused the same way, so the entry shows as it now reads (T335).
  */
 import { computed, ref, watch } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
 import { getApiErrorMessage } from '@/utils/api';
 import {
   PAYMENT_METHODS,
-  alreadyRecordedAccount,
+  accountAsItStands,
   editPayment,
   recordPayment,
   recordRefund,
@@ -45,7 +46,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: [];
   saved: [account: VendorAccount];
-  /** A press refused as already recorded: the account as it stands, with the dialog still open. */
+  /** A press refused as already recorded, or an edit of an entry changed meanwhile: the account
+   * as it stands, with the dialog still open. */
   refreshed: [account: VendorAccount];
 }>();
 
@@ -124,7 +126,7 @@ async function save(): Promise<void> {
       }),
     );
   } catch (err: unknown) {
-    const standing = alreadyRecordedAccount(err);
+    const standing = accountAsItStands(err);
     if (standing) emit('refreshed', standing);
     error.value = getApiErrorMessage(
       err,

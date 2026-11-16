@@ -209,7 +209,7 @@ export async function loadAccount(marketId: string, email: string): Promise<Vend
  * `requestKey` is the one press of Record it is (T270): the dialog makes it when it opens and
  * sends it on every press of that opening, so a press repeated after its answer was lost records
  * nothing new. A repeat that differs from the entry first recorded is refused 409, with the
- * account as it stands (`alreadyRecordedAccount`).
+ * account as it stands (`accountAsItStands`).
  */
 export async function recordPayment(
   marketId: string,
@@ -237,9 +237,10 @@ export async function recordRefund(
   ).data;
 }
 
-/** The account a refused repeat of a press of Record carries: a 409 saying the entry was already
- * recorded as first sent, and the account as it stands, which shows that entry. Null otherwise. */
-export function alreadyRecordedAccount(err: unknown): VendorAccount | null {
+/** The account a 409 carries as it stands, which the refused dialog shows behind it: a repeat of a
+ * press of Record that differs from the entry first recorded, or an edit or a removal of an entry
+ * that changed or was removed before it was written (T335). Null otherwise. */
+export function accountAsItStands(err: unknown): VendorAccount | null {
   if (getApiErrorStatus(err) !== 409) return null;
   const answer = (err as { response?: { data?: { account?: unknown } } }).response?.data;
   const account = answer?.account;

@@ -5,7 +5,8 @@
  * the opening, so pressing Record again after an answer that never came records nothing new; a new
  * opening makes a new key, and an edit sends none. When the server refuses a press that differs
  * from the entry first recorded with the key, the refusal carries the account as it stands: the
- * dialog keeps its error shown, and the Payment tab behind it shows that entry.
+ * dialog keeps its error shown, and the Payment tab behind it shows that entry. An edit of an entry
+ * changed or removed before it was saved is refused the same way (T335).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
@@ -210,6 +211,82 @@ describe('a payment is recorded once per press', () => {
     expect(el('record-payment-error').textContent).toBe(ALREADY);
     expect(tab.findAll('[data-testid="payment-entry"]')).toHaveLength(1);
     expect(tab.get('[data-testid="payment-paid"]').text()).toBe('$35.00');
+    expect(tab.emitted('changed')).toHaveLength(1);
+  });
+
+  it('hands on the account an edit refused as changed meanwhile carries, keeping the refusal shown', async () => {
+    const changed =
+      'This payment changed while your change was being saved, so it was not saved. It now reads as shown behind this: close this and edit it again if it should still change.';
+    const asItStands: VendorAccount = {
+      ...RECORDED,
+      payments: [{ ...ENTRY, cents: 2000, editedBy: 'other-admin@example.com' }],
+      paidCents: 2000,
+    };
+    const wrapper = await dialog({ mode: 'edit', entry: ENTRY });
+    api.put.mockRejectedValueOnce(
+      Object.assign(new Error('Request failed with status code 409'), {
+        isAxiosError: true,
+        response: { status: 409, data: { error: changed, account: asItStands } },
+      }),
+    );
+
+    await type('40');
+    await press();
+
+    expect(api.put.mock.calls[0][0]).toBe('/markets/market-1/payment-entries/p1');
+    expect(el('record-payment-error').textContent).toBe(changed);
+    expect(wrapper.emitted('refreshed')).toEqual([[asItStands]]);
+    expect(wrapper.emitted('saved')).toBeUndefined();
+  });
+
+  it('shows an entry edited meanwhile as it now reads behind the edit dialog on the Payment tab', async () => {
+    const removed =
+      'This payment was removed while your change was being saved, so it was not saved.';
+    api.get.mockResolvedValue({ data: RECORDED });
+    const tab = mount(VendorPaymentTab, {
+      props: {
+        marketId: 'market-1',
+        email: 'ana@example.com',
+        canRecord: true,
+        canAdjustPaid: true,
+      },
+      attachTo: document.body,
+    });
+    mounted = tab;
+    await flushPromises();
+
+    await tab.get('[data-testid="payment-entry-menu-button"]').trigger('click');
+    await tab.get('[data-testid="payment-entry-menu-edit"]').trigger('click');
+    await flushPromises();
+    api.put.mockRejectedValueOnce(
+      Object.assign(new Error('Request failed with status code 409'), {
+        isAxiosError: true,
+        response: {
+          status: 409,
+          data: {
+            error: removed,
+            account: {
+              ...RECORDED,
+              payments: [
+                {
+                  ...ENTRY,
+                  removedBy: 'other-admin@example.com',
+                  removedAt: '2099-04-02T12:00:00',
+                },
+              ],
+              paidCents: 0,
+            },
+          },
+        },
+      }),
+    );
+    await type('40');
+    await press();
+
+    expect(el('record-payment-window')).toBeTruthy();
+    expect(el('record-payment-error').textContent).toBe(removed);
+    expect(tab.get('[data-testid="payment-paid"]').text()).toBe('$0.00');
+    expect(tab.get('[data-testid="payment-entry-amount"]').element.tagName).toBe('S');
     expect(tab.emitted('changed')).toHaveLength(1);
   });
 });

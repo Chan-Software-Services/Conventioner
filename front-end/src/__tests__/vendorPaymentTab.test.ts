@@ -7,7 +7,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import VendorPaymentTab from '@/components/VendorPaymentTab.vue';
 import type { VendorAccount } from '@/utils/payments';
 
-const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
+const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), delete: vi.fn() }));
 vi.mock('@/utils/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/utils/api')>();
   return { ...actual, api };
@@ -78,6 +78,7 @@ describe('the Payment tab', () => {
   beforeEach(() => {
     api.get.mockReset();
     api.post.mockReset();
+    api.delete.mockReset();
   });
 
   it('reads one vendor’s account', async () => {
@@ -286,5 +287,72 @@ describe('the Payment tab', () => {
     );
     expect(entry.get('[data-testid="payment-entry-amount"]').element.tagName).toBe('S');
     expect(entry.find('[data-testid="payment-entry-menu-button"]').exists()).toBe(false);
+  });
+
+  it('keeps a removal refused as changed meanwhile open, with the account as it stands behind it', async () => {
+    const changed =
+      'This payment changed while it was being removed, so it was not removed. It now reads as shown behind this: close this and remove it again if it should still go.';
+    const asItStands: VendorAccount = {
+      ...ACCOUNT,
+      payments: [
+        {
+          ...ACCOUNT.payments[0],
+          cents: 2000,
+          editedBy: 'other-admin@example.com',
+          editedAt: '2099-04-02T12:00:00+00:00',
+        },
+      ],
+      paidCents: 2000,
+    };
+    const wrapper = await tab(true, ACCOUNT, { canAdjustPaid: true });
+    api.delete.mockRejectedValueOnce(
+      Object.assign(new Error('Request failed with status code 409'), {
+        isAxiosError: true,
+        response: { status: 409, data: { error: changed, account: asItStands } },
+      }),
+    );
+
+    await wrapper.get('[data-testid="payment-entry-menu-button"]').trigger('click');
+    await wrapper.get('[data-testid="payment-entry-menu-remove"]').trigger('click');
+    await flushPromises();
+    document
+      .querySelector<HTMLFormElement>('[data-testid="payment-confirm-window"] form')!
+      .requestSubmit();
+    await flushPromises();
+
+    expect(api.delete).toHaveBeenCalledWith('/markets/market-1/payment-entries/p1');
+    expect(document.querySelector('[data-testid="payment-confirm-window"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="payment-confirm-error"]')?.textContent).toBe(
+      changed,
+    );
+    expect(wrapper.get('[data-testid="payment-paid"]').text()).toBe('$20.00');
+    expect(wrapper.get('[data-testid="payment-entry-amount"]').text()).toBe('$20.00');
+    expect(wrapper.emitted('changed')).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it('keeps a removal refused with no account open, and the account as it was', async () => {
+    const wrapper = await tab(true, ACCOUNT, { canAdjustPaid: true });
+    api.delete.mockRejectedValueOnce(
+      Object.assign(new Error('Request failed with status code 404'), {
+        isAxiosError: true,
+        response: { status: 404, data: { error: 'This market has no such payment standing.' } },
+      }),
+    );
+
+    await wrapper.get('[data-testid="payment-entry-menu-button"]').trigger('click');
+    await wrapper.get('[data-testid="payment-entry-menu-remove"]').trigger('click');
+    await flushPromises();
+    document
+      .querySelector<HTMLFormElement>('[data-testid="payment-confirm-window"] form')!
+      .requestSubmit();
+    await flushPromises();
+
+    expect(document.querySelector('[data-testid="payment-confirm-error"]')?.textContent).toBe(
+      'This market has no such payment standing.',
+    );
+    expect(wrapper.get('[data-testid="payment-paid"]').text()).toBe('$35.00');
+    expect(wrapper.emitted('changed')).toBeUndefined();
+    wrapper.unmount();
   });
 });

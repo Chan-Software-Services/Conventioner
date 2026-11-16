@@ -17,8 +17,9 @@ outside the app, by e-transfer or cash (Q7), and an organizer records each payme
   holds the record's ``revision``; ``lines`` is a projection of that state and the held seat.
 - **The amount paid is the sum of the vendor's entries still standing**, each with who recorded it
   and when (Q15): a payment, or a refund an Admin records as a negative entry once it is given back
-  (Q26). An edit or a removal keeps what the entry read before in its own ``changes``, and a removed
-  entry is kept, marked, rather than deleted.
+  (Q26). An edit or a removal keeps what the entry read before in its own ``changes``, and lands
+  only on the entry as it read it (``entry_as_read``, T335); a removed entry is kept, marked,
+  rather than deleted.
 - **An entry is recorded once per press of Record** (T270): it keeps the ``request_key`` the dialog
   sent, unique on the market, so a press repeated after its answer was lost records nothing new.
 
@@ -40,6 +41,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from datatypes import PaymentEntry
@@ -169,34 +171,57 @@ def _trail(doc: Mapping[str, Any], by: str, what: str) -> Dict[str, Any]:
             "before": {key: doc.get(key) for key in ENTRY_FIELDS}}
 
 
+class EntryChanged(Exception):
+    """An edit or a removal whose entry no longer stood as it was read when the write came: another
+    change landed on it first (``removed`` False), or it was removed (``removed`` True). Nothing
+    was written; the person decided on the entry as it stood, so it is not tried again."""
+
+    def __init__(self, removed: bool):
+        super().__init__("removed" if removed else "changed")
+        self.removed = removed
+
+
+def entry_as_read(doc: Mapping[str, Any]) -> Dict[str, Any]:
+    """The filter that finds an entry only as ``doc`` read it: still standing (``removed_at`` null
+    or absent), with as many lines in its own history (``changes``), since every edit and removal
+    adds one."""
+    count = len(doc.get("changes") or [])
+    held: Dict[str, Any] = (
+        {"changes": {"$size": count}} if count
+        else {"$or": [{"changes": {"$exists": False}}, {"changes": {"$size": 0}}]})
+    return {MARKET_ID_FIELD: doc.get(MARKET_ID_FIELD), "id": doc.get("id"), "removed_at": None,
+            **held}
+
+
+def _change_as_read(market_id: str, doc: Mapping[str, Any], update: Dict[str, Any],
+                    ) -> Dict[str, Any]:
+    """Apply ``update`` to the entry only as ``doc`` read it, and return it as it now reads, or
+    raise ``EntryChanged``, reading it again to say whether it was changed or removed."""
+    after = payments_collection.find_one_and_update(
+        entry_as_read(doc), update, return_document=ReturnDocument.AFTER)
+    if after is None:
+        now = payment(market_id, doc.get("id") or "")
+        raise EntryChanged(removed=now is None or bool(now.get("removed_at")))
+    return after
+
+
 def edit_payment(
-    market_id: str, payment_id: str, entry: PaymentEntry, by: str,
-) -> Optional[Dict[str, Any]]:
-    """Change a standing entry's fields, keeping what it read before in its own history. Returns
-    the entry as it now reads, or None when this market has no such entry standing."""
-    doc = payment(market_id, payment_id)
-    if doc is None or doc.get("removed_at"):
-        return None
-    payments_collection.update_one(
-        {MARKET_ID_FIELD: market_id, "id": payment_id},
-        {"$set": _signed(entry, doc.get("kind") or PAYMENT),
-         "$push": {"changes": _trail(doc, by, "edited")}},
-    )
-    return payment(market_id, payment_id)
+    market_id: str, doc: Mapping[str, Any], entry: PaymentEntry, by: str,
+) -> Dict[str, Any]:
+    """Change a standing entry's fields, as ``doc`` read it, keeping what it read before in its own
+    history. Returns the entry as it now reads, or raises ``EntryChanged``."""
+    return _change_as_read(market_id, doc, {
+        "$set": _signed(entry, doc.get("kind") or PAYMENT),
+        "$push": {"changes": _trail(doc, by, "edited")}})
 
 
-def remove_payment(market_id: str, payment_id: str, by: str) -> Optional[Dict[str, Any]]:
-    """Take a standing entry out of the amount paid. It is kept, marked removed with who and
-    when, so its own history stands. Returns it as it now reads, or None when there is none."""
-    doc = payment(market_id, payment_id)
-    if doc is None or doc.get("removed_at"):
-        return None
-    payments_collection.update_one(
-        {MARKET_ID_FIELD: market_id, "id": payment_id},
-        {"$set": {"removed_by": by, "removed_at": _now()},
-         "$push": {"changes": _trail(doc, by, "removed")}},
-    )
-    return payment(market_id, payment_id)
+def remove_payment(market_id: str, doc: Mapping[str, Any], by: str) -> Dict[str, Any]:
+    """Take a standing entry, as ``doc`` read it, out of the amount paid. It is kept, marked removed
+    with who and when, so its own history stands. Returns it as it now reads, or raises
+    ``EntryChanged``."""
+    return _change_as_read(market_id, doc, {
+        "$set": {"removed_by": by, "removed_at": _now()},
+        "$push": {"changes": _trail(doc, by, "removed")}})
 
 
 def _last_first(found: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:

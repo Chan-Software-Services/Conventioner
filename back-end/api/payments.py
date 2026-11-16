@@ -55,17 +55,47 @@ ALREADY_RECORDED = {
 REQUEST_KEY = "requestKey"
 
 
-class AlreadyRecorded(ConflictError):
-    """A press of Record whose key the market already holds, with fields that differ from the
-    entry recorded with it: a 409, with the vendor's account as it stands, so the dialog shows
-    the entry already recorded behind it."""
+#: What an edit or a removal is told when the entry it read changed or was removed before it was
+#: written, by what it asked and what had happened to it, then by the entry's kind.
+ENTRY_CHANGED = {
+    ("edit", False): "This {kind} changed while your change was being saved, so it was not saved. "
+                     "It now reads as shown behind this: close this and edit it again if it "
+                     "should still change.",
+    ("edit", True): "This {kind} was removed while your change was being saved, so it was not "
+                    "saved.",
+    ("remove", False): "This {kind} changed while it was being removed, so it was not removed. It "
+                       "now reads as shown behind this: close this and remove it again if it "
+                       "should still go.",
+    ("remove", True): "This {kind} was already removed.",
+}
 
-    def __init__(self, kind: str, account: Dict[str, Any]):
-        super().__init__(ALREADY_RECORDED[kind])
+
+class AsItStands(ConflictError):
+    """A 409 carrying the vendor's account as it stands, so the dialog that was refused shows it
+    behind its refusal."""
+
+    def __init__(self, message: str, account: Dict[str, Any]):
+        super().__init__(message)
         self.account = account
 
     def body(self) -> Dict[str, Any]:
         return {"error": self.message, "account": self.account}
+
+
+class AlreadyRecorded(AsItStands):
+    """A press of Record whose key the market already holds, with fields that differ from the
+    entry recorded with it, so the dialog shows the entry already recorded behind it."""
+
+    def __init__(self, kind: str, account: Dict[str, Any]):
+        super().__init__(ALREADY_RECORDED[kind], account)
+
+
+class EntryChangedMeanwhile(AsItStands):
+    """An edit or a removal whose entry another change reached first (``Payments.EntryChanged``),
+    so the dialog shows the entry as it now reads behind it."""
+
+    def __init__(self, asked: str, removed: bool, kind: str, account: Dict[str, Any]):
+        super().__init__(ENTRY_CHANGED[(asked, removed)].format(kind=kind), account)
 
 
 def seats_by_vendor(market: Market) -> Dict[str, Dict[str, Payments.Seat]]:
@@ -246,29 +276,32 @@ def record_refund(
 def _change_entry(
     market_id: str, payment_id: str, requesting_user: str, body: Any = None,
 ) -> Dict[str, Any]:
+    """Edit the entry with ``body``, or remove it with none, holding the entry as this request read
+    it: one changed or removed before the write is refused with ``EntryChangedMeanwhile``."""
     market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.ADJUST_PAID)
     before = Payments.payment(market_id, str(payment_id or ""))
     if before is None or before.get("removed_at"):
         raise NotFoundError(NO_ENTRY)
-    if body is None:
-        after, kind = Payments.remove_payment(market_id, before["id"], requesting_user), \
-            History.PAYMENT_REMOVED
-        recorded_after: Optional[Dict[str, Any]] = None
-    else:
-        entry = _entry(body, before.get("kind") or Payments.PAYMENT)
-        after, kind = Payments.edit_payment(market_id, before["id"], entry, requesting_user), \
-            History.PAYMENT_EDITED
-        recorded_after = after
-    if after is None:
-        raise NotFoundError(NO_ENTRY)
+    entry_kind = before.get("kind") or Payments.PAYMENT
+    address = before.get("vendor_email") or ""
+    try:
+        if body is None:
+            Payments.remove_payment(market_id, before, requesting_user)
+            kind, recorded_after = History.PAYMENT_REMOVED, None
+        else:
+            entry = _entry(body, entry_kind)
+            recorded_after = Payments.edit_payment(market_id, before, entry, requesting_user)
+            kind = History.PAYMENT_EDITED
+    except Payments.EntryChanged as changed:
+        raise EntryChangedMeanwhile("remove" if body is None else "edit", changed.removed,
+                                    entry_kind, _account(market, address)) from None
     History.record(
         market_id, requesting_user, Actions.ADJUST_PAID, kind=kind,
         vendors=[before.get("vendor_email")],
-        subject={"payment_id": before["id"],
-                 "payment_kind": before.get("kind") or Payments.PAYMENT, **_currency(market)},
+        subject={"payment_id": before["id"], "payment_kind": entry_kind, **_currency(market)},
         detail=lambda: History.changes(_fields(before), _fields(recorded_after)),
     )
-    return _account(market, before.get("vendor_email") or "")
+    return _account(market, address)
 
 
 def edit_payment(
