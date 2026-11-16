@@ -298,9 +298,10 @@ def write_answer_updates(
 
 # --- The transition table, and the events that move along it --------------------------------------
 #
-# Each event is a value naming what happened; ``move`` reads where it takes an application from the
-# state as read, or that the table refuses it. The event functions below write the move, held on what
-# was read, so a write landing in between is never written over: the caller reads again or refuses.
+# Each event is a value naming what happened; ``move`` reads where it takes an application from
+# the state as read, or that the table refuses it. The event functions below write the move, held
+# on what was read, so a write landing in between is never written over: the caller reads again or
+# refuses.
 # ``move`` is pure, so a preview and the write it previews read one answer.
 
 @dataclass(frozen=True)
@@ -427,8 +428,9 @@ def _a_persons_verdict(doc: Dict[str, Any], status: ApplicationStatus, by: Verdi
                        ) -> Tuple[Dict[str, Any], List[str]]:
     """What a person's verdict, or follow-up, sets and takes away, whether given or changed: the
     status, its giver and time (E34/F01/S01), the follow-up's owner, the marker unless named
-    (E34/F02/S02), and no rule's reason left behind. It releases whoever held the card (E34/F03/S02),
-    and a verdict ends any wait for the deal. Whose share it was (``reviewer``) stays."""
+    (E34/F02/S02), and no rule's reason left behind. It releases whoever held the card
+    (E34/F03/S02), and a verdict ends any wait for the deal. Whose share it was (``reviewer``)
+    stays."""
     sets: Dict[str, Any] = {"status": status.value, "verdict_by": by.model_dump(),
                             "verdict_at": now.isoformat()}
     unset = ["verdict_reason", *_CLAIM]
@@ -457,7 +459,8 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
     if isinstance(event, (GiveVerdict, ChangeVerdict)):
         if event.status not in MARKED_STATUSES:
             return Refused()
-        if state is State.APPROVED_ADDED and event.status is not ApplicationStatus.REVIEWER_REJECTED:
+        rejected = event.status is ApplicationStatus.REVIEWER_REJECTED
+        if state is State.APPROVED_ADDED and not rejected:
             return Refused(ADDED_ONLY_REJECTED)
         sets, unset = _a_persons_verdict(doc, event.status, event.by, event.owner, now)
         pins = {**held, **_held(doc, "updated_at")}

@@ -7,7 +7,6 @@ route this file does not send fails ``test_every_write_route_records_or_says_why
 action no write records fails ``test_every_action_in_the_table_records_or_says_why_not``, so a new
 write cannot be permitted without being recorded unless someone says here why it is not a change.
 """
-from conftest import seen_as_stored
 import copy
 from datetime import date, datetime, timezone
 from dataclasses import dataclass
@@ -19,7 +18,8 @@ import pytest
 
 from conftest import (
     COMPLETE_PLAN, FakeApplicationsCollection, a_solver_vendor, mongo_matches, mongo_project, reject_malformed_update,
-    accounts_by_id, sessions_load_through_get_user, skip_without_real_dependencies, stored_market,
+    accounts_by_id, seen_as_stored, sessions_load_through_get_user, skip_without_real_dependencies,
+    stored_market,
 )
 
 skip_without_real_dependencies()

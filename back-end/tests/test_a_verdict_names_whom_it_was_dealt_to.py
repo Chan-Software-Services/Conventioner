@@ -5,9 +5,9 @@ history records it beside who decided it, so "who had this one, and who decided 
 in the vendor's History tab, help and mistakes told apart. With no reviewer nothing is added, and
 every verdict, follow-up, hand-on and change is still recorded either way.
 """
-from conftest import seen_as_stored
 import pytest
 
+from conftest import seen_as_stored
 from test_choosing_reviewers_deals_the_open_applications import (  # noqa: F401  (the fixture)
     ADMIN, ANA, BEN, CAT, EDITOR, MARKET, _choose, _client, world,
 )
