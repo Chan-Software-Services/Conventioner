@@ -252,16 +252,17 @@ def money_cell(cents: int, currency: Optional[str]) -> str:
 
 
 def _offers_payment_states(market: Market) -> bool:
-    """Whether anyone on the market may be in a payment state (``Payments.balance_state``): always
-    on a market that sets prices, and on one that does not only where some account compares
-    (``Payments.compares``): one owing an amount set by hand, or refunded beyond what it paid."""
-    if market.setup_object and market.setup_object.pricing:
+    """Whether anyone on the market may be in a payment state, as the Payments page reads it
+    (``Payments.offers_payment_states``); a market that sets prices reads no account for it."""
+    pricing = market.setup_object.pricing if market.setup_object else None
+    if pricing:
         return True
-    return any(Payments.compares(account) for account in PaymentsApi.accounts(market).values())
+    return Payments.offers_payment_states(None, PaymentsApi.accounts(market))
 
 
 def _no_account(currency: Optional[str]) -> Dict[str, Any]:
-    return {"currency": currency, "lines": [], "payments": [], "owedCents": 0, "paidCents": 0}
+    """The account of a vendor with no seat, line or entry, as ``Payments.account`` reads it."""
+    return Payments.account(currency, [], [])
 
 
 def _payment_columns(market: Market) -> List[Column]:
@@ -513,8 +514,7 @@ def vendor_shown(vendor: Vendor, filters: Filters) -> bool:
         return False
     if not _placed_matches(vendor, filters):
         return False
-    if filters.payment and Payments.balance_state(
-            vendor.account or _no_account(None)) != filters.payment:
+    if filters.payment and (vendor.account or _no_account(None))["balanceState"] != filters.payment:
         return False
     if filters.discord and vendor.discord_shown not in filters.discord:
         return False

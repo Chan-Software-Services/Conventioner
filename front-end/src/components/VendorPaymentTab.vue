@@ -22,7 +22,6 @@ import { getFormattedTimestamp } from '@/utils/utils';
 import { dateLabel } from '@/utils/vendorDetails';
 import {
   balanceChip,
-  balanceState,
   balanceText,
   entryChange,
   entryText,
@@ -174,7 +173,8 @@ function onEntryMenu(entry: Payment, id: string): void {
   show(id === 'remove' ? { kind: 'remove', entry } : { kind: 'edit', entry });
 }
 
-const state = computed(() => (account.value ? balanceState(account.value) : 'settled'));
+/** The served state, for the chip's `data-state`: `none` for an account in none. */
+const state = computed(() => account.value?.balanceState ?? 'none');
 
 /** What a line owes, as it reads: its amount, or that the market gives the seat no price. */
 function owedText(cents: number | null): string {
@@ -208,7 +208,7 @@ defineExpose({ reload: load });
         </dl>
         <span
           class="chip"
-          :class="balanceChip(account)"
+          :class="balanceChip(account.balanceState)"
           :data-state="state"
           data-testid="payment-balance"
         >

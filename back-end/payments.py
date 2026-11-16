@@ -776,19 +776,22 @@ def _payment(doc: Mapping[str, Any]) -> Dict[str, Any]:
 def account(
     currency: Optional[str], day_lines: List[Dict[str, Any]], paid: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    """A vendor's account as the drawer's Payment tab reads it: each line, each entry, and the
-    two totals. An unpriced line owes nothing toward the total, and a removed entry pays nothing."""
-    return {
+    """A vendor's account as the drawer's Payment tab reads it: each line, each entry, the two
+    totals, and how they compare (``balanceState`` and ``compares``), which every screen words as
+    it is served and keeps no copy of. An unpriced line owes nothing toward the total, and a
+    removed entry pays nothing."""
+    held: Dict[str, Any] = {
         "currency": currency,
         "lines": day_lines,
         "payments": [_payment(doc) for doc in paid],
         "owedCents": sum(line["owedCents"] or 0 for line in day_lines),
         "paidCents": sum(doc.get("cents") or 0 for doc in paid if not doc.get("removed_at")),
     }
+    return {**held, "balanceState": balance_state(held), "compares": compares(held)}
 
 
-#: How what a vendor paid compares with what they owe, as the Payment tab reads it
-#: (``balanceText`` in ``front-end/src/utils/payments.ts``): "Owes $27.00", "Paid in full", or
+#: How what a vendor paid compares with what they owe, served on every account for the screens to
+#: word (``balanceText`` in ``front-end/src/utils/payments.ts``): "Owes $27.00", "Paid in full", or
 #: "Paid $15.00 more than owed", a refund to issue (Q26). Nothing owed and nothing paid is none.
 OWES = "owes"
 PAID_IN_FULL = "paid"
@@ -822,6 +825,16 @@ def balance_state(vendor_account: Mapping[str, Any]) -> Optional[str]:
     return PAID_IN_FULL if vendor_account["owedCents"] > 0 else None
 
 
+def offers_payment_states(
+    currency: Optional[str], accounts: Mapping[str, Mapping[str, Any]],
+) -> bool:
+    """Whether anyone on the market may be in a payment state (``balance_state``), which the
+    Payments page's figures and filters and the export's payment filter are offered by: always on a
+    market that sets prices (a ``currency``), and on one that does not only where some account
+    ``compares``: one owing an amount set by hand, or refunded beyond what it paid."""
+    return currency is not None or any(compares(held) for held in accounts.values())
+
+
 # --- The market's money (E44/F02/S01) -------------------------------------------------------------
 
 def _figures(owed: int, paid: int, compared: bool = True) -> Dict[str, int]:
@@ -850,7 +863,8 @@ def market_summary(
 ) -> Dict[str, Any]:
     """The Payments page from every vendor's account: each vendor with a line or a payment, by
     address, with their ``balance_state`` (what the page's lists and the export's payment filter
-    both read), and the market's figures, also by tier and by date.
+    both read) and whether their account ``compares``, and the market's figures, also by tier and
+    by date.
 
     A payment is a vendor's, never a day's, so what a vendor paid is shared across their table-days
     in proportion to what each owes, or evenly where they owe nothing, and each day's share counts
@@ -874,9 +888,10 @@ def market_summary(
         held = accounts[email]
         if not held["lines"] and not held["payments"]:
             continue
-        vendors.append({"email": email, "owedCents": held["owedCents"],
-                        "paidCents": held["paidCents"], "balanceState": balance_state(held)})
         compared = compares(held)
+        vendors.append({"email": email, "owedCents": held["owedCents"],
+                        "paidCents": held["paidCents"], "balanceState": balance_state(held),
+                        "compares": compared})
         add(totals, held["owedCents"], held["paidCents"], compared)
         owed = [line["owedCents"] or 0 for line in held["lines"]]
         if not owed:

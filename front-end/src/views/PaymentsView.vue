@@ -286,7 +286,7 @@ const nobodyShown = computed(() => {
             Nobody holds a table or has paid yet.
           </p>
 
-          <!-- Drawn wherever some vendor owes (`owingCounted`), and summed by the same rule as the
+          <!-- Drawn wherever the server offers payment states (`owingCounted`), and summed by the same rule as the
                rows (T153 review finding 12): where nobody owes, every figure would be what was paid. -->
           <template v-if="vendors.length && counted">
             <section class="payments-section" aria-labelledby="payments-totals-title">
@@ -473,7 +473,7 @@ const nobodyShown = computed(() => {
                         >
                         <span
                           class="chip"
-                          :class="balanceChip({ ...vendor, currency: found.currency })"
+                          :class="balanceChip(vendor.balanceState)"
                           data-testid="payments-row-balance"
                           >{{ balanceText({ ...vendor, currency: found.currency }) }}</span
                         >

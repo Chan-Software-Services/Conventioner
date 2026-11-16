@@ -56,6 +56,8 @@ const ACCOUNT: VendorAccount = {
   ],
   owedCents: 7000,
   paidCents: 3500,
+  balanceState: 'owes',
+  compares: true,
 };
 
 async function tab(
@@ -92,6 +94,28 @@ describe('the Payment tab', () => {
     expect(wrapper.get('[data-testid="payment-balance"]').text()).toBe('Owes $35.00');
   });
 
+  it('tones and marks the chip by the state the server serves, not by its own reading', async () => {
+    // Owing $70.00 with $35.00 paid, but served as paid in full: the tab keeps no copy of the rule.
+    const wrapper = await tab(true, { ...ACCOUNT, balanceState: 'paid' });
+
+    const chip = wrapper.get('[data-testid="payment-balance"]');
+    expect(chip.attributes('data-state')).toBe('paid');
+    expect(chip.classes()).toContain('chip--positive');
+    expect(chip.text()).toBe('Paid in full');
+  });
+
+  it.each([
+    ['owes', 'chip--attention'],
+    ['over', 'chip--informational'],
+    [null, 'chip--neutral'],
+  ] as const)('marks a chip served %s', async (balanceState, chip) => {
+    const wrapper = await tab(true, { ...ACCOUNT, balanceState });
+
+    const balance = wrapper.get('[data-testid="payment-balance"]');
+    expect(balance.attributes('data-state')).toBe(balanceState ?? 'none');
+    expect(balance.classes()).toContain(chip);
+  });
+
   it('keeps a freed table’s line, still owed, saying it was freed and when', async () => {
     const wrapper = await tab(true);
 
@@ -124,7 +148,7 @@ describe('the Payment tab', () => {
 
   it('records a payment and reads the account it answers', async () => {
     const wrapper = await tab(true);
-    api.post.mockResolvedValue({ data: { ...ACCOUNT, paidCents: 7000 } });
+    api.post.mockResolvedValue({ data: { ...ACCOUNT, paidCents: 7000, balanceState: 'paid' } });
 
     await wrapper.get('[data-testid="payment-record"]').trigger('click');
     await flushPromises();
@@ -156,6 +180,8 @@ describe('the Payment tab', () => {
       payments: [],
       owedCents: 0,
       paidCents: 0,
+      balanceState: null,
+      compares: true,
     });
 
     expect(wrapper.text()).toContain('No table yet, so nothing is owed.');

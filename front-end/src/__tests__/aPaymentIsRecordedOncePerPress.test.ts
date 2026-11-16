@@ -25,6 +25,8 @@ const EMPTY: VendorAccount = {
   payments: [],
   owedCents: 0,
   paidCents: 0,
+  balanceState: null,
+  compares: true,
 };
 
 const ENTRY: Payment = {
@@ -42,7 +44,12 @@ const ENTRY: Payment = {
   removedAt: null,
 };
 
-const RECORDED: VendorAccount = { ...EMPTY, payments: [ENTRY], paidCents: 3500 };
+const RECORDED: VendorAccount = {
+  ...EMPTY,
+  payments: [ENTRY],
+  paidCents: 3500,
+  balanceState: 'over',
+};
 const ALREADY =
   'This payment was already recorded, as it was first sent. Close this and edit it if it should read differently.';
 

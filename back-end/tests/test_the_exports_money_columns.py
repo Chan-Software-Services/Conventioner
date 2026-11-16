@@ -253,6 +253,27 @@ class TestThePaymentFilter:
 
         assert set(_by_email(_export({"payment": "owes"}))) == owing == {ANA, EVE}
 
+    @pytest.mark.parametrize("state", ["owes", "paid", "over"])
+    def test_each_state_lists_the_vendors_the_payments_page_serves_in_it(self, market, state):
+        # One reading, the server's: the page's served state and the export's filter agree.
+        served = {vendor["email"] for vendor in PaymentsApi.market_payments(MARKET, EDITOR)["vendors"]
+                  if vendor["balanceState"] == state}
+
+        assert set(_by_email(_export({"payment": state}))) == served
+
+    @pytest.mark.parametrize("arrange", [
+        lambda market: None,
+        _nobody_owes_without_prices,
+        lambda market: (_nobody_owes_without_prices(market), _pay(CY, 4500, Payments.REFUND)),
+    ], ids=["priced", "no prices", "no prices, a refund beyond what was paid"])
+    def test_it_offers_the_states_where_the_payments_page_does(self, market, arrange):
+        arrange(market)
+
+        offered, _ = VendorExport.preview(MARKET, {"filters": {}}, EDITOR)
+
+        page = PaymentsApi.market_payments(MARKET, EDITOR)
+        assert bool(offered["offered"]["paymentStates"]) is page["offersPaymentStates"]
+
     def test_a_payment_reminder_is_one_export(self, market):
         rows = _export({"payment": "owes"}, columns=("name", "email", "stillOwed"))
 

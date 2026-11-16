@@ -62,6 +62,15 @@ export interface Payment {
   removedAt: string | null;
 }
 
+/**
+ * How what a vendor paid compares with what they owe, as the server reads it (`balance_state` in
+ * `back-end/payments.py`), the one reading the Payment tab, the Payments page's lists and the
+ * export's payment filter share: they owe, paid in full (square, with something owed), or paid more
+ * than owed. Null for a vendor in none: owing nothing and paying nothing, or owing nothing on a
+ * market without prices.
+ */
+export type BalanceState = 'owes' | 'paid' | 'over';
+
 export interface VendorAccount {
   /** The market's currency; null on a market that sets no prices. */
   currency: string | null;
@@ -69,6 +78,12 @@ export interface VendorAccount {
   payments: Payment[];
   owedCents: number;
   paidCents: number;
+  /** The state the server reads the two totals in. */
+  balanceState: BalanceState | null;
+  /** Whether what was paid compares with what is owed (`compares` in `back-end/payments.py`):
+   * always on a market with prices, and on one without only for an account owing an amount set by
+   * hand, or refunded beyond what it paid. */
+  compares: boolean;
 }
 
 export interface NewPayment {
@@ -92,56 +107,40 @@ export function money(cents: number, account: Pick<VendorAccount, 'currency'>): 
   return cents < 0 ? `-${amount}` : amount;
 }
 
-type Compared = Pick<VendorAccount, 'currency' | 'owedCents' | 'paidCents'>;
+type Served = Pick<VendorAccount, 'currency' | 'owedCents' | 'paidCents' | 'balanceState'>;
 
 /**
- * Whether what an account paid compares with what it owes, as the server reads it (`compares` in
- * `back-end/payments.py`): always on a market with prices, and on one without (no `currency`) only
- * for an account owing an amount set by hand, or one refunded beyond what it paid, whose negative
- * amount paid is money owed back to the market. The reading follows the account, not the market
- * (T153 review findings 10 and 14).
+ * How what they paid compares with what they owe, in the words of the state the server serves:
+ * "Owes $27.00", "Paid in full", or "Paid $15.00 more than owed", the case where a refund is to be
+ * issued (Q26). In no state, it reads as what was paid, "Paid $35.00", or "Nothing owed" where
+ * nothing was.
  */
-export function compares(account: Compared): boolean {
-  return account.currency != null || !!account.owedCents || account.paidCents < 0;
-}
-
-/**
- * How what they paid compares with what they owe: "Owes $27.00", "Paid in full", or "Paid $15.00
- * more than owed", the case where a refund is to be issued (Q26). Nothing owed and nothing paid is
- * "Nothing owed". An account that does not `compare` reads as what was paid, "Paid $35.00".
- */
-export function balanceText(account: Compared): string {
-  if (!compares(account)) {
-    return account.paidCents ? `Paid ${money(account.paidCents, account)}` : 'Nothing owed';
+export function balanceText(account: Served): string {
+  switch (account.balanceState) {
+    case 'owes':
+      return `Owes ${money(account.owedCents - account.paidCents, account)}`;
+    case 'paid':
+      return 'Paid in full';
+    case 'over':
+      return `Paid ${money(account.paidCents - account.owedCents, account)} more than owed`;
+    default:
+      return account.paidCents ? `Paid ${money(account.paidCents, account)}` : 'Nothing owed';
   }
-  const balance = account.owedCents - account.paidCents;
-  if (balance > 0) return `Owes ${money(balance, account)}`;
-  if (balance < 0) return `Paid ${money(-balance, account)} more than owed`;
-  return account.owedCents > 0 ? 'Paid in full' : 'Nothing owed';
 }
 
-/** Whether they owe, are square, or paid more: the comparison's tone. */
-export function balanceState(
-  account: Pick<VendorAccount, 'owedCents' | 'paidCents'>,
-): 'owing' | 'settled' | 'overpaid' {
-  const balance = account.owedCents - account.paidCents;
-  return balance > 0 ? 'owing' : balance < 0 ? 'overpaid' : 'settled';
-}
-
-const BALANCE_CHIP = {
-  owing: 'chip--attention',
-  settled: 'chip--positive',
-  overpaid: 'chip--informational',
-} as const;
+const BALANCE_CHIP: Record<BalanceState, string> = {
+  owes: 'chip--attention',
+  paid: 'chip--positive',
+  over: 'chip--informational',
+};
 
 /**
- * The comparison's chip, on the Payment tab and the Payments page alike: owing asks for attention,
- * square is positive, and paid more than owed, a refund to issue, informs. Nothing owed and nothing
- * paid takes no tone, nor does an account that does not `compare`.
+ * The served state's chip, on the Payment tab and the Payments page alike: owing asks for
+ * attention, square is positive, and paid more than owed, a refund to issue, informs. No state
+ * takes no tone.
  */
-export function balanceChip(account: Compared): string {
-  if (!account.owedCents && !account.paidCents) return 'chip--neutral';
-  return compares(account) ? BALANCE_CHIP[balanceState(account)] : 'chip--neutral';
+export function balanceChip(state: BalanceState | null): string {
+  return state ? BALANCE_CHIP[state] : 'chip--neutral';
 }
 
 /** A line's seat as it reads: "North Wing 1, Gold, full table", and the price group that set its price

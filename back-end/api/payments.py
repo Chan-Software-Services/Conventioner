@@ -132,11 +132,16 @@ def market_payments(market_id: str, requesting_user: str) -> Dict[str, Any]:
 def market_money(market: Market) -> Dict[str, Any]:
     """The Payments page's reading of a market, for whoever has asked the table already: the page
     itself (``market_payments``) and the Stats tab's headlines (``market_stats.py``), so the two
-    tell the same figures. ``currency`` is ``None`` where the market sets no prices."""
+    tell the same figures. ``currency`` is ``None`` where the market sets no prices, and
+    ``offersPaymentStates`` whether anyone may be in a payment state, which the page draws its
+    figures and offers its filters by (``Payments.offers_payment_states``)."""
     setup = market.setup_object
     currency = setup.pricing.currency if setup and setup.pricing else None
     tiers = [tier.name.strip() for tier in (setup.tiers if setup else [])]
-    return {"currency": currency, **Payments.market_summary(accounts(market), tiers)}
+    held = accounts(market)
+    return {"currency": currency,
+            "offersPaymentStates": Payments.offers_payment_states(currency, held),
+            **Payments.market_summary(held, tiers)}
 
 
 def _entry(body: Any, what: str) -> PaymentEntry:

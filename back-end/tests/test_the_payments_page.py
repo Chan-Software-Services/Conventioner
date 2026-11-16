@@ -105,6 +105,14 @@ class TestTheVendors:
             tab = PaymentsApi.vendor_account(MARKET, vendor["email"], EDITOR)
             assert vendor["balanceState"] == Payments.balance_state(tab)
 
+    def test_each_vendor_carries_the_state_and_comparison_their_payment_tab_is_served(
+            self, market):
+        # The page and the Payment tab word the one state the server serves (T335).
+        for vendor in page()["vendors"]:
+            tab = PaymentsApi.vendor_account(MARKET, vendor["email"], EDITOR)
+            assert (vendor["balanceState"], vendor["compares"]) == (
+                tab["balanceState"], tab["compares"])
+
     def test_a_vendor_owing_nothing_and_paying_nothing_is_in_no_state(
             self, market, market_records):
         entry = next(doc for doc in market_records.payments.documents if doc["vendor_email"] == DEE)
@@ -201,8 +209,17 @@ class TestTheTotals:
         # offers no filter there, and the export's payment filter reads no state there either.
         market.doc["setupObject"]["pricing"] = None
 
-        assert {v["email"]: v["balanceState"] for v in page()["vendors"]} == {
+        got = page()
+        assert {v["email"]: v["balanceState"] for v in got["vendors"]} == {
             ANA: None, BEN: None, CY: None, DEE: None}
+        assert {v["email"]: v["compares"] for v in got["vendors"]} == {
+            ANA: False, BEN: False, CY: False, DEE: False}
+        assert got["offersPaymentStates"] is False
+
+    def test_a_market_with_prices_offers_payment_states(self, market):
+        got = page()
+        assert got["offersPaymentStates"] is True
+        assert all(v["compares"] for v in got["vendors"])
 
     @pytest.mark.parametrize("owed, state", [(2000, Payments.PAID_MORE), (4000, Payments.OWES),
                                              (3000, Payments.PAID_IN_FULL)])
@@ -214,8 +231,11 @@ class TestTheTotals:
         market.doc["setupObject"]["pricing"] = None
         plant_amount_owed(MARKET, BEN, SAT, owed, "admin@example.com")
 
-        assert {v["email"]: v["balanceState"] for v in page()["vendors"]} == {
+        got = page()
+        assert {v["email"]: v["balanceState"] for v in got["vendors"]} == {
             ANA: None, BEN: state, CY: None, DEE: None}
+        assert [v["email"] for v in got["vendors"] if v["compares"]] == [BEN]
+        assert got["offersPaymentStates"] is True
 
     def test_an_amount_set_by_hand_on_a_market_with_no_prices_is_summed_by_the_account(
             self, market):

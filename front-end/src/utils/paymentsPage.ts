@@ -9,23 +9,20 @@
  */
 import type { LocationQuery, LocationQueryValue } from 'vue-router';
 import { api } from '@/utils/api';
-import { compares } from '@/utils/payments';
+import type { BalanceState } from '@/utils/payments';
 import { vendorHeadline, vendorMatches, type VendorNames } from '@/utils/vendorIdentity';
-
-/**
- * How what a vendor paid compares with what they owe, as the server reads it (`balance_state` in
- * `back-end/payments.py`), the one reading the page's lists and the export's payment filter share:
- * they owe, paid in full (square, with something owed), or paid more than owed. Null for a vendor
- * who owes nothing and paid nothing.
- */
-export type BalanceState = 'owes' | 'paid' | 'over';
 
 /** One vendor on the page: what they owe and what they paid, in cents, and how the two compare. */
 export interface PaymentsVendor {
   email: string;
   owedCents: number;
   paidCents: number;
+  /** The state their Payment tab reads too (`balance_state` in `back-end/payments.py`), which the
+   * export's payment filter reads. */
   balanceState: BalanceState | null;
+  /** Whether what they paid compares with what they owe (`compares`): where it does not, what
+   * they paid counts as paid but never as paid more than owed. */
+  compares: boolean;
 }
 
 /** What the page counts: the amount owed, the amount paid, and the two sides of the difference. */
@@ -41,6 +38,9 @@ export interface PaymentsFigures {
 export interface MarketPayments {
   /** The market's currency; null on a market that sets no prices. */
   currency: string | null;
+  /** Whether anyone may be in a payment state (`offers_payment_states`): always where the market
+   * sets prices, and where it sets none only where some vendor's account `compares`. */
+  offersPaymentStates: boolean;
   vendors: PaymentsVendor[];
   totals: PaymentsFigures;
   /** By tier, in the market's order; `tier` null for what vendors holding no table paid. */
@@ -65,20 +65,18 @@ export const PAYMENTS_SHOWN: readonly { id: PaymentsShown; label: string }[] = [
 
 type QueryValue = LocationQueryValue | LocationQueryValue[] | undefined;
 
-type Owing = Pick<MarketPayments, 'currency' | 'vendors'> | null | undefined;
+type Owing = Pick<MarketPayments, 'offersPaymentStates' | 'vendors'> | null | undefined;
 
 /**
- * Whether the market has money owed to count: always where it sets prices, and where it sets none
- * (`currency` null) only where some vendor's account `compares`: one owing an amount set by hand, or
- * refunded beyond what it paid. Elsewhere nothing is owed, so nobody is in a payment state
- * (`balance_state` in `back-end/payments.py`): the reading follows each vendor's account, not the
- * market (T153 review findings 10 and 14). The page draws the market's figures and offers its
- * filters only where this holds (finding 12).
+ * Whether the market has money owed to count, as the server reads it (`offersPaymentStates`):
+ * always where it sets prices, and where it sets none only where some vendor's account `compares`:
+ * one owing an amount set by hand, or refunded beyond what it paid. Elsewhere nothing is owed, so
+ * nobody is in a payment state: the reading follows each vendor's account, not the market (T153
+ * review findings 10 and 14). The page draws the market's figures and offers its filters only where
+ * this holds (finding 12).
  */
 export function owingCounted(payments: Owing): boolean {
-  if (!payments) return false;
-  const { currency } = payments;
-  return currency != null || payments.vendors.some((v) => compares({ ...v, currency }));
+  return !!payments?.offersPaymentStates;
 }
 
 /**
@@ -87,9 +85,7 @@ export function owingCounted(payments: Owing): boolean {
  * The page says so under the market's figures only then (T153 review finding 15).
  */
 export function paidOwingNothing(payments: Owing): boolean {
-  if (!payments) return false;
-  const { currency } = payments;
-  return payments.vendors.some((v) => v.paidCents > 0 && !compares({ ...v, currency }));
+  return !!payments?.vendors.some((v) => v.paidCents > 0 && !v.compares);
 }
 
 /**
