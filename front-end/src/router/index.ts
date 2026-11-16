@@ -200,6 +200,16 @@ const router = createRouter({
       component: () => import('@/views/VendorPage.vue'),
       meta: { public: true, vendorFacing: true },
     },
+    // A market's public map (T422): each market day's tables and who is at them, for anyone, with
+    // no sign-in. The vendors' side of the market, as its vendor page is, so the bar shows the logo
+    // alone, and a public page, so it fits a phone. A market whose map is not open answers "Page not
+    // found" on the same route, the bar falling back as on the vendor page.
+    {
+      path: '/:marketSlug/map',
+      name: 'public-map',
+      component: () => import('@/views/PublicMapView.vue'),
+      meta: { public: true, vendorFacing: true },
+    },
     // Anything deeper than one segment matched no route at all, so the app rendered a blank
     // page. `/:marketSlug` catches single-segment addresses and answers for itself.
     {

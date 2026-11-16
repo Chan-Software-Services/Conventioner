@@ -13,6 +13,7 @@ describes:
   - front-end/e2e/a-google-form-markets-vendor-page.spec.ts
   - back-end/market_documents.py#public_map_market_by_slug
   - back-end/tests/test_the_public_map.py
+  - front-end/e2e/the-public-map.spec.ts
 verified: 2026-11-10
 sources:
   - wayfinding/v0-1-0/06
@@ -72,6 +73,7 @@ An archived one that reached them counts, by its phase record, and where that re
 It is open only while the vendor page finds the market, its results are out (published, or it reached its market days), it is not archived, an Admin has turned it on, its public name question is still a short text question of the form, and a location is laid out with a table in a section; its read and its image then answer byte for byte as a slug naming no market does, with the vendor page's own body.
 A seat is never public before its vendor is told it, and an archived market can no longer be written, so its switch could never be turned off.
 What a public read may answer at all is [security invariants](../../implementation/conventions/security-invariants.md#each-request)' to say.
+The page then reads "Page not found", as at an address naming nothing ([the public map page](../../implementation/modules/public-map-page.md)), and [`the-public-map.spec.ts`](../../../front-end/e2e/the-public-map.spec.ts) holds that its text is an unknown slug's.
 
 **The organizer's own link to the page follows the gate.**
 The rail shows the vendor page's address, "Vendor page" with Copy, while the page answers: a form market from the first phase after draft, a CSV market once its results are published or it reached its market days; both until it is archived, and after that only for a market that ran ([the phase rail](../../implementation/modules/phase-rail.md)).

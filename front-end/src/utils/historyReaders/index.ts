@@ -18,6 +18,7 @@ import * as lifecycle from './lifecycle';
 import * as organization from './organization';
 import * as payments from './payments';
 import * as people from './people';
+import * as publicMap from './publicMap';
 import * as setup from './setup';
 import * as vendors from './vendors';
 import type { MarketHistoryEntry } from '@/utils/marketHistory';
@@ -33,6 +34,7 @@ const AREAS: Readonly<Record<string, HistoryArea>> = {
   organization,
   payments,
   people,
+  publicMap,
   setup,
   vendors,
 };
