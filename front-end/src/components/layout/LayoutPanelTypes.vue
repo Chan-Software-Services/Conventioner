@@ -1,10 +1,11 @@
 <script setup lang="ts">
 /**
- * The layout page's "Table types" card (T257): the market's types, each with its size and how many
- * of the market's tables are of it, shown to someone editing the layout. "Add a type" and each
- * type's Edit open a dialog of its name, width and depth (`LayoutTypeDialog.vue`); Remove takes a type no
- * table uses, and says how many use one it will not take; "Use saved types" adds a saved set's
- * types the market lacks by name, and "Save these types" saves them under a name.
+ * Layout settings' "Table types" section (T257, moved there by T422): the market's types, each
+ * with its size and how many of the market's tables are of it, shown to someone editing the
+ * layout. "Add a type" and each type's Edit open a dialog of its name, width and depth
+ * (`LayoutTypeDialog.vue`); Remove takes a type no table uses, and says how many use one it will
+ * not take; "Use saved types" adds a saved set's types the market lacks by name, and "Save these
+ * types" saves them under a name.
  *
  * Every change is a write of the whole list (`save`), which the page sends once the layout's own
  * pending change has landed; the dialogs hold through it and write its refusal into themselves.

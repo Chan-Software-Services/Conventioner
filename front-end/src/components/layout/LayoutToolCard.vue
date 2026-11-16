@@ -202,14 +202,8 @@ const aisleError = computed(() => (rowsOf(rowChoices.rows) > 1 ? rowErrors.value
   font-weight: 600;
 }
 
-.layout-tool-card__text,
 .layout-tool-card__back {
   margin: 0;
-  font-size: var(--text-sm);
-  color: var(--mm-black);
-}
-
-.layout-tool-card__back {
   font-size: var(--text-xs);
   color: var(--mm-text-muted);
 }

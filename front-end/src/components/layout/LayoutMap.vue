@@ -650,7 +650,7 @@ const labels = computed<DrawnLabel[]>(() => {
   return drawn;
 });
 
-defineExpose({ zoomIn, zoomOut, fit, zoomedIn });
+defineExpose({ zoomIn, zoomOut, fit });
 
 // ── The no-table zones ───────────────────────────────────────────────────────
 
@@ -989,7 +989,8 @@ function onKeydown(event: KeyboardEvent) {
       </text>
     </g>
 
-    <!-- What the editor draws over the map, in the map's millimetres: the turn handle. -->
+    <!-- What the editor draws over the map, in the map's millimetres: the selection's frame and
+         its corners' turn knobs. -->
     <slot :mmPerPx="mmPerPx" />
   </svg>
 </template>

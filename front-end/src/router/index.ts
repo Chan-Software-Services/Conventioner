@@ -210,8 +210,9 @@ const router = createRouter({
       component: () => import('@/views/PublicMapView.vue'),
       meta: { public: true, vendorFacing: true },
     },
-    // Anything deeper than one segment matched no route at all, so the app rendered a blank
-    // page. `/:marketSlug` catches single-segment addresses and answers for itself.
+    // Anything no route above names, a deeper address among them, matched no route at all, so
+    // the app rendered a blank page. `/:marketSlug` catches single-segment addresses and answers
+    // for itself.
     {
       path: '/:pathMatch(.*)*',
       name: 'not-found',

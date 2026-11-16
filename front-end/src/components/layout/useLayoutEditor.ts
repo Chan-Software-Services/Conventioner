@@ -28,7 +28,7 @@
  * place is said (`heldBack`). Settled, past Draft on a layout started in Draft: no seat changes,
  * and only where a table stands does.
  *
- * A gesture (a drag, a turn by the handle) is one change: between `begin` and `end` a command
+ * A gesture (a drag, a turn by a corner's knob) is one change: between `begin` and `end` a command
  * replaces the gesture's last one, drawn at once, and only `end` makes the step and the save.
  *
  * Tables picked up by keyboard are one change too, from `pickUp` to `drop`, but each key's move or

@@ -148,9 +148,9 @@ watch(
 /** Whether this person may change the layout here: the Market Setup row's answer, which refuses
  * everyone on an archived market. */
 const editable = computed(() => mayTake(market.value, MarketAction.ChangeSetup));
-/** Whether the market has left Draft, so the layout's seats are settled: where a table stands
- * still changes, but no table is added, removed, renumbered or given another section or type, and
- * no layout starts (`the-setup-settles-on-leaving-draft.md`). */
+/** Whether the market has left Draft, so a layout started in Draft has its seats settled: where a
+ * table stands still changes, but no table is added, removed, renumbered or given another section
+ * or type (`the-setup-settles-on-leaving-draft.md`); a layout started then follows the plan. */
 const settled = computed(() => Boolean(market.value?.setupLockReason));
 /** Whether the layout follows the plan: started after Draft, it draws the seats the plan settled
  * and numbers them up to each section's count, in any phase (T422, D21). */

@@ -333,7 +333,7 @@ export function roundTurn(degrees: number): number {
   return turn === 360 ? 0 : turn;
 }
 
-/** An angle held to the nearest whole `step`, as the turn handle does in 15° steps. */
+/** An angle held to the nearest whole `step`, as a corner's turn knob does in 15° steps. */
 export function snapAngle(degrees: number, step: number): number {
   return Math.round(degrees / step) * step;
 }

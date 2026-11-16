@@ -29,9 +29,3 @@ export const TOOL_KEYS: Record<string, Tool> = {
   a: 'fill',
   z: 'zone',
 };
-
-/** A tool's key as its button, its tooltip and `aria-keyshortcuts` name it. */
-export const keyOf = (tool: Tool): string =>
-  Object.entries(TOOL_KEYS)
-    .find(([, named]) => named === tool)![0]
-    .toUpperCase();

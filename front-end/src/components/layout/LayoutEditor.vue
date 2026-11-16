@@ -2540,7 +2540,9 @@ defineExpose({
   color: white;
 }
 
-/* A tool that cannot be used keeps its key in the one disabled ink. */
+/* A tool that cannot be used keeps its key in the one disabled ink, as its name has: the prototype
+   kept it `--mm-text-muted`, which is 4.23 on the disabled control's beige, under AA for text this
+   small (`--mm-text-muted-on-beige` in base.css). */
 .layout-tool:disabled .layout-tool__key {
   color: inherit;
 }
@@ -2550,6 +2552,8 @@ defineExpose({
   justify-content: center;
 }
 
+/* The prototype's 1.1rem is off the type scale, which stylelint and the layout sweep refuse; the
+   scale's nearest step is 16px, 1.6px smaller, and the button 2px narrower. */
 .layout-shortcuts-toggle__icon {
   font-size: var(--text-md);
 }
