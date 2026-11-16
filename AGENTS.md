@@ -1,35 +1,31 @@
 # Project agent memory
 
-Conventioner runs a vendor market from applications to the door, in production at `conventioner.io`: an organizer plans the market, takes applications on its own page or imports a Google Form's responses, reviews them, assigns every approved vendor a table by the market's rules, publishes the result, and checks vendors in on the day.
-This file holds what nearly every session needs; everything else is in the knowledge graph, reached through the index below.
+Conventioner runs a vendor market from applications to the door, in production at `conventioner.io`.
 
 ## Tech Stack
 
-- Front-end: Vue 3 + Vite + TypeScript (in `front-end/`), the app's own components and SVG icons with no component library ([ADR 0015](docs/adr/0015-the-app-owns-its-components.md)), Pinia state management; Node 24.22.1 and its npm, pinned in `.nvmrc` (`nvm install`).
-- Back-end: Python 3.12 / Flask + MongoDB (in `back-end/`); `back-end/.python-version`, the Dockerfile and CI agree.
-- Testing: Vitest (unit) + Playwright (e2e) for front-end; pytest for back-end.
-- CI: `.github/workflows/test.yml` runs on `dev` and `main` for both PRs and pushes.
-- The whole stack, its versions and its folders: [`docs/TECH_STACK.md`](docs/TECH_STACK.md).
+- Front-end: Vue 3 + Vite + TypeScript, the app's own components and SVG icons with no component library ([ADR 0015](docs/adr/0015-the-app-owns-its-components.md)), Pinia state management; Node 24.22.1 and its npm, pinned in `.nvmrc` (`nvm install`).
+- Back-end: Python 3.12 / Flask + MongoDB.
+- [The whole stack](docs/TECH_STACK.md), its versions and its folders.
 
 ## Branch Model
 
 - `dev` is the default/integration branch: all feature PRs target `dev`.
-- `main` is the deploy-only branch: reached ONLY by promoting a green `dev` commit through the Promote workflow (`gh workflow run promote.yml --ref dev -f commit=<sha>`, Daniel's to start; never a push to `main`, which its rulesets refuse), and deployed from by hand only.
-  `main` requires six checks and `dev` nine, `real-data-and-workflows`, `CodeQL` and `agent-review` among them ([CI and the gate](docs/implementation/testing/ci-and-the-gate.md#ci)); after a Release PR (merged with `--admin`, it gets no CI), merge `main` back into `dev`.
+- `main` is the deploy-only branch: reached ONLY by promoting a green `dev` commit through the Promote workflow (Daniel's to start; never a push to `main`, which its rulesets refuse).
+  After a Release PR (merged with `--admin`, it gets no CI), merge `main` back into `dev`.
 - Never commit directly to `main`.
   Never open PRs targeting `main` (except the release-please Release PR, which is automated).
-- **Promotion is a fast-forward, made only by Promote's GitHub App ([ADR 0027](docs/adr/0027-main-moves-only-through-promote.md)), and only Daniel deploys, by hand**: `.github/workflows/deploy.yml` runs only on `workflow_dispatch` from `main`, shipping the back end, checking `/healthz`, then the front end (`conventioner.io`, `api.conventioner.io`).
-  No push, merge or PR deploys: both `vercel.json` files set `git.deploymentEnabled: false`; never start a deploy yourself.
+- **Promotion is a fast-forward, made only by Promote's GitHub App ([ADR 0027](docs/adr/0027-main-moves-only-through-promote.md)), and only Daniel deploys, by hand**, with the Deploy workflow on `main`.
+  No push, merge or PR deploys; never start a deploy yourself.
   After an Instant Rollback, promote a build again or no deploy reaches the domain.
-  A hotfix goes through `dev` when nothing unreleased waits there, else through a `hotfix/` branch from `main`.
-  See [`docs/RELEASING.md#hotfixes`](docs/RELEASING.md#hotfixes).
+  A hotfix goes through `dev` when nothing unreleased waits there, else through a `hotfix/` branch from `main` ([hotfixes](docs/RELEASING.md#hotfixes)).
 
 ## Commits and releases
 
-- All commits MUST follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, etc.): release-please derives every version from them (`feat:` → minor, `fix:` → patch, breaking → major).
+- All commits MUST follow Conventional Commits: release-please derives every version from them (`feat:` → minor, `fix:` → patch, breaking → major).
 - Never edit `CHANGELOG.md` by hand: release-please writes it.
-- Never reintroduce `release-as` in `release-please-config.json`: it overrides the version calculation on *every* run until cleared, and the one-time `0.1.0` bootstrap that used it is gone.
-- Full release docs: [`docs/RELEASING.md`](docs/RELEASING.md).
+- Never reintroduce `release-as` in `release-please-config.json`: it overrides the version calculation on *every* run until cleared.
+- [Full release docs](docs/RELEASING.md).
 
 ## Irreversible-safety rules
 
@@ -42,123 +38,76 @@ This file holds what nearly every session needs; everything else is in the knowl
   Use fixture values, and never `--no-verify`; see [real data never leaves the PC](docs/implementation/conventions/security-invariants.md#real-data-never-leaves-the-pc).
 - **There is no fallback signing secret anywhere in this repository** and there must never be one again - not even "for dev".
   A committed fallback is a published key; see [ADR 0010](docs/adr/0010-no-secret-has-a-fallback.md).
-- Running production, its variables and its incidents: [`docs/OPERATIONS.md`](docs/OPERATIONS.md); rebuilding it from nothing: [`docs/VERCEL_DEPLOYMENT.md`](docs/VERCEL_DEPLOYMENT.md).
+- [Running production](docs/OPERATIONS.md), its variables and its incidents; [rebuilding it from nothing](docs/VERCEL_DEPLOYMENT.md).
 
 ## Running the stack and the suites
 
-- **Bring a worktree's stack up with `scripts/th-compose.sh up -d`**: email is off in it unless you pass `DISABLE_EMAIL=false`, and a fake answers for Discord unless you pass `DISCORD_FAKE=false`; mongo-express starts only with `--profile tools`.
-  The primary checkout's plain `docker compose up -d` needs `DISABLE_EMAIL=true`, or the password-reset E2E 500s on the missing `RESEND_API_KEY`, and `DISCORD_FAKE=true`, or the Discord E2E finds no Discord ([a fake Discord](docs/TESTING.md#a-fake-discord)).
+- **Bring a worktree's stack up with `scripts/th-compose.sh up -d`**: email is off in it unless you pass `DISABLE_EMAIL=false`, and a fake answers for Discord unless you pass `DISCORD_FAKE=false`.
+  The primary checkout's plain `docker compose up -d` needs `DISABLE_EMAIL=true` ([why](docs/TESTING.md#bypassing-captcha-and-email-in-tests)) and `DISCORD_FAKE=true` ([a fake Discord](docs/TESTING.md#a-fake-discord)).
   Every stack listens on `127.0.0.1` only, so dial it there, never at `localhost` ([why](docs/TESTING.md#testing-gotchas)).
-  A worktree's stack and ports come from its treehouse slot: [`scripts/README-treehouse.md`](scripts/README-treehouse.md).
-- **Run E2E**: `./scripts/seed_fixture.sh` then `cd front-end && npm run test:e2e`, on a running stack: the seed never starts one, and refuses when the stack's back end is not running.
+  A worktree's stack and ports come from its [treehouse slot](scripts/README-treehouse.md).
+- **Run E2E**: `./scripts/seed_fixture.sh` then `cd front-end && npm run test:e2e`, on a running stack: the seed never starts one.
   The seed empties the stack's database, so it refuses unless it is told the stack: the slot it sits in, the exported `th-compose.sh ports`, or `--primary` in the primary checkout ([why](docs/TESTING.md#quick-start-seed-fixture)).
-  Playwright config auto-detects worktree port via `stack().frontendPort`.
 - Back end: `cd back-end && python -m pytest tests/ -v`, with both `requirements.txt` and `requirements-dev.txt` installed.
-  Its real-MongoDB suite, which skips there: `scripts/real-mongo-test.sh`, which starts a MongoDB of its own and removes it, leaving no volume; never start one for it by hand with `docker run` ([why](docs/TESTING.md#the-real-mongodb-suite)).
+  Its real-MongoDB suite, which skips there: `scripts/real-mongo-test.sh`, which starts a MongoDB of its own and removes it; never start one for it by hand with `docker run` ([why](docs/TESTING.md#the-real-mongodb-suite)).
   Front-end unit tests: `cd front-end && npm run test:unit`.
 - **Run `npm run format` in `front-end/` before committing**: CI's `format:check` fails unformatted front-end code and `docs/`.
 - `scripts/nm-test.sh --skip-e2e` runs every suite but Playwright; without the flag it adds Playwright, on an isolated stack of its own.
-  The no-mistakes gate runs only its real-data checks (`--real-data-only`), and leaves the suites to CI.
-  Before a merge, Playwright runs only in CI's required `e2e` shards ([CI and the gate](docs/implementation/testing/ci-and-the-gate.md#the-no-mistakes-gate)).
-- Setting up a machine: [`docs/STARTUP.md`](docs/STARTUP.md); every suite and its gotchas: [`docs/TESTING.md`](docs/TESTING.md).
+  The no-mistakes gate runs only its real-data checks (`--real-data-only`), and leaves the suites to CI, where alone Playwright runs before a merge ([CI and the gate](docs/implementation/testing/ci-and-the-gate.md#the-no-mistakes-gate)).
+- [Setting up a machine](docs/STARTUP.md); [every suite and its gotchas](docs/TESTING.md).
 
 ## Knowledge graph
 
-- **Durable knowledge lives in the graph, entered at [`docs/README.md`](docs/README.md).**
-  Nodes live in `docs/business/{concepts,flows,rules,intents}/`, `docs/implementation/{modules,data,conventions,testing}/`, `docs/adr/` and `docs/records/`, each folder listed by its `README.md`; the runbooks, `docs/TESTING.md`, `docs/TECH_STACK.md` and `docs/design-system.md` are nodes where they stand.
-- **A node is a Markdown file with frontmatter**, exactly these keys in this order: `layer`, `kind`, `describes` (the code it is about: a file, a `dir/`, or `file#symbol`), `verified` (the day it was read against the code), `sources` (work-item ids, never links) and, on an ADR only, `status`.
-  Links are relative Markdown links, and a link across the business/implementation line is answered by one back.
-- **A PR that changes a described file touches the node or bumps `verified`.**
-  Find a file's nodes before changing it with `git grep -l '<path>' docs`; the required `knowledge-graph` check fails a PR that changes a described file without touching its node or bumping `verified`.
-- **`python3 scripts/knowledge_graph.py check`** checks the frontmatter, every link and anchor, reachability and back-links; run it after editing any Markdown.
+- **Durable knowledge lives in the graph, entered at [`docs/README.md`](docs/README.md)**, which lists every folder of nodes.
+- Before adding a node or editing a node's frontmatter, read [adding a node](docs/README.md#adding-a-node).
+- **A PR that changes a described file touches the node or bumps `verified`**: the required `knowledge-graph` check fails a PR that does neither.
+- **Run `python3 scripts/knowledge_graph.py check` after editing any Markdown.**
 - Before adding a row to a doc's shared list or table, read [two features never share a line](docs/implementation/conventions/two-features-never-share-a-line.md).
 
 ## Before changing an area, read its node
 
-The market on screen:
-
+- Before changing a file, run `git grep -l '<path>' docs` and read each node it lists; the lines below name what it does not find.
 - Before changing how a screen gets, holds or writes a market, read [one market, from the server](docs/implementation/conventions/one-market-from-the-server.md) and [the market store](docs/implementation/modules/market-store.md).
 - Before changing a market route or link, read [every market page has an address](docs/implementation/conventions/every-market-page-has-an-address.md).
-- Before changing the app bar, the sheet or who sees what in it, read [the app bar](docs/implementation/modules/app-bar.md).
 - Before changing the market bar, its tabs or a market screen's layout, read [the market frame](docs/implementation/modules/market-frame.md).
 - Before changing what a screen says in a phase or on an intake path, read [the market guide](docs/implementation/modules/market-guide.md).
-- Before changing the phase rail, read [the phase rail](docs/implementation/modules/phase-rail.md).
-- Before changing how the plan saves itself, read [the plan's autosave](docs/implementation/modules/plan-autosave.md).
 - Before a screen holds work the server does not have yet, read [unsaved work asks before it is dropped](docs/implementation/conventions/unsaved-work-asks-before-it-is-dropped.md).
 - Before changing styles, tokens or a control's look, read [the design language](docs/design-system.md) and [every control is named](docs/implementation/conventions/every-control-is-named.md).
 - Before adding or changing a reusable component, read [the component library](docs/implementation/modules/component-library.md).
 - Before writing or changing a dialog, read [dialogs](docs/implementation/conventions/dialogs.md).
-- Before changing the Stats tab or what it counts, read [the market's statistics](docs/business/flows/stats.md).
-
-The market's lifecycle:
-
-- Before changing a phase move or a precondition, read [the guards and the phase move](docs/implementation/modules/guards.md), [ADR 0005](docs/adr/0005-phase-is-the-only-lifecycle-state.md) and [ADR 0016](docs/adr/0016-one-stage-for-applications-and-review.md).
-- Before changing the phase history or "did this market run", read [the phase record](docs/implementation/modules/phase-record.md).
 - Before changing what Market Setup may change after draft, read [the setup settles on leaving draft](docs/business/rules/the-setup-settles-on-leaving-draft.md).
 - Before changing who may do what on a market, or adding a check, read [what each role may do](docs/business/rules/what-each-role-may-do.md), [the market's actions](docs/implementation/modules/market-actions.md) and [an archived market is read-only](docs/business/rules/an-archived-market-is-read-only.md).
-- Before changing the application form builder or its lock, read [the form locks at the first application](docs/business/rules/the-form-locks-at-the-first-application.md) and [essential fields](docs/implementation/modules/essential-fields.md).
-- Before changing who reviews which application, read [the review is dealt among chosen reviewers](docs/business/rules/the-review-is-dealt-among-chosen-reviewers.md) and [ADR 0020](docs/adr/0020-an-application-is-dealt-to-one-reviewer.md).
 - Before changing a verdict or when review closes, read [verdicts settle on entering assignment](docs/business/rules/verdicts-settle-on-entering-assignment.md).
-- Before changing Publish results or what an applicant sees of it, read [Publish results waits for the allocation](docs/business/rules/publish-results-waits-for-the-allocation.md) and [an applicant never reads a verdict early](docs/business/rules/an-applicant-never-reads-a-verdict-early.md).
-
-Vendors coming in:
-
-- Before changing intake mode or the applicant surface, read [intake mode decides how vendors arrive](docs/business/rules/intake-mode-decides-how-vendors-arrive.md), [a gated market answers as absent](docs/business/rules/a-gated-market-answers-as-absent.md), [ADR 0006](docs/adr/0006-intake-mode-fails-closed.md) and [ADR 0022](docs/adr/0022-the-vendor-page-is-signed-in.md).
-- Before changing the vendor page or applicant sign-in, read [ADR 0022](docs/adr/0022-the-vendor-page-is-signed-in.md) and [a vendor signs in before they have applied](docs/business/rules/a-vendor-signs-in-before-applying.md).
-- Before changing the CSV import, read [the CSV import](docs/implementation/modules/csv-import.md) and [the form amendment](docs/implementation/modules/form-amendment.md).
 - Before changing how an organizer updates a vendor's answers, or adding a reader of an application's answers, read [an update is kept beside the vendor's answer](docs/business/rules/an-update-is-kept-beside-the-vendors-answer.md) and [the application document](docs/implementation/data/application-document.md#an-organizers-update-of-an-answer).
-- Before changing the start from a CSV or what reaches TypeSafe, read [the CSV proposal and start](docs/implementation/modules/csv-proposal-and-start.md) and [ADR 0007](docs/adr/0007-what-may-be-sent-to-hosted-typesafe.md).
-
-The assignment:
-
 - Before changing the solver or a placement rule, read [the assignment solver](docs/implementation/modules/assignment-solver.md) and [the assignment behaviour suite](docs/implementation/testing/assignment-behaviour-suite.md); the rules it keeps are listed in [business/rules/](docs/business/rules/README.md).
 - Before changing a placement, a pin or a swap, read [placements](docs/implementation/modules/placements.md) and [ADR 0002](docs/adr/0002-a-pin-is-a-placement-row.md).
-- Before changing what an assignment remembers of its inputs, read [what an assignment was made from](docs/implementation/modules/made-from.md).
-- Before changing the assignment's state, Publish results' need for a run or what a change after results says, read [the assignment's lifecycle](docs/implementation/modules/assignment-lifecycle.md).
-- Before changing check-in or the attendance page, read [attendance and the door](docs/implementation/modules/attendance-and-door.md).
-- Before changing a layout, its editor or Fill an area, read [the layout](docs/implementation/modules/floorplan-placement.md).
-- Before changing the Discord card, the bot or what it asks of Discord, read [the Discord connection](docs/implementation/modules/discord.md).
-- Before changing the Pricing card or what an assignment costs, read [a price follows the table](docs/business/rules/a-price-follows-the-table.md).
 - Before changing how an amount reads, on screen or in a file, or an amount field, read [an amount reads to the cent](docs/business/rules/an-amount-reads-to-the-cent.md).
-- Before changing what a vendor owes or a payment, read [payments, and what a vendor owes](docs/implementation/data/payments.md); before changing the Payments page or what it totals, also [payments](docs/business/flows/payments.md).
-
-The data and the back end:
-
 - Before writing a raw Mongo read, filter or write on a market, read [the market document](docs/implementation/data/market-document.md).
 - Before writing to a market, read [the market write](docs/implementation/modules/market-write.md) and [ADR 0024](docs/adr/0024-a-market-write-holds-what-it-read.md).
 - Before recording a change on a market, or changing the market's history or how Manage market reads it, read [the market's history](docs/implementation/data/history.md), [ADR 0017](docs/adr/0017-one-history-for-every-change.md) and [reading the market's history](docs/business/flows/reading-the-markets-history.md).
-- Before changing how applications are stored, read [the application document](docs/implementation/data/application-document.md).
-- Before changing organizations, membership or market roles, read [the organization document, and roles](docs/implementation/data/organization-document.md).
 - Before changing accounts or how an address is compared, read [users, and the one spelling of an address](docs/implementation/data/users-and-email.md).
 - Before adding a query on a new field, read [lookup indexes](docs/implementation/data/lookup-indexes.md).
 - Before looking anything up by a value from a request body, read [a request value is a string](docs/implementation/conventions/a-request-value-is-a-string.md).
 - Before adding or moving a back-end Python dependency, read [Python dependencies are locked](docs/TECH_STACK.md#python-dependencies-are-locked).
-- Before changing the Node or npm version, or writing `front-end/package-lock.json`, read [Node and npm are pinned](docs/TECH_STACK.md#node-and-npm-are-pinned).
 - Before deleting a market or an organization, or adding a collection keyed by market, read [market deletion](docs/implementation/modules/market-deletion.md) and [when an organization may be deleted](docs/business/rules/when-an-organization-may-be-deleted.md).
-- Before changing a secret, a cookie setting, the request-origin check, a boot check, an environment variable or the real-data hooks, read [security invariants](docs/implementation/conventions/security-invariants.md) and the environment table in [`docs/RELEASING.md`](docs/RELEASING.md).
+- Before changing a secret, a cookie setting, the request-origin check, a boot check, an environment variable or the real-data hooks, read [security invariants](docs/implementation/conventions/security-invariants.md) and the environment table in [releasing](docs/RELEASING.md).
 - Before changing how a route answers an error, what a screen says of a failed request, or where signing in returns to, read [an exception never reaches a client](docs/implementation/conventions/an-exception-never-reaches-a-client.md).
-- Before answering a back end that refuses to boot, read [`docs/OPERATIONS.md`](docs/OPERATIONS.md#when-the-back-end-refuses-to-boot).
-
-Tests and CI:
-
+- Before answering a back end that refuses to boot, read [operations](docs/OPERATIONS.md#when-the-back-end-refuses-to-boot).
 - Before writing or changing an E2E spec, read [E2E patterns](docs/implementation/testing/e2e-patterns.md) and [E2E seeds](docs/implementation/testing/e2e-seeds.md).
 - Before adding a test that spans the organizer's journey, read [the market journey spec](docs/implementation/testing/the-market-journey-spec.md).
-- Before extending a layout's coverage, read [the layout's E2E](docs/implementation/testing/floorplan-e2e.md).
-- Before changing CI, `.no-mistakes.yaml` or `nm-test.sh`, read [CI and the gate](docs/implementation/testing/ci-and-the-gate.md).
 - Before adding or changing test data, read [test data](docs/implementation/testing/test-data.md).
 
 ## Agent skills
 
 ### Issue tracker
 
-- The durable Epic > Feature > Story backlog and the Wayfinder maps live in the team home, `~/agent-team-records/projects/conventioner/{backlog,wayfinding}/` (the private `chanjdaniel/agent-team-records` repo), not in this repo.
-- `.scratch/` is the task's transient, ignored working folder: `/to-spec` writes `.scratch/spec.md` and `/to-tickets` writes `.scratch/tickets/`.
+- The durable Epic > Feature > Story backlog and the Wayfinder maps live in the team home, `~/agent-team-records/projects/conventioner/{backlog,wayfinding}/`, not in this repo.
 - A Story's status moves in the team home as its Conventioner PR merges; GitHub is used for pull requests only, and its issue tracker is deliberately empty.
-- [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md) has the rest: the hierarchy, who moves status, and where every work-item id and `sources` string resolves.
+- [The tracker contract](docs/agents/issue-tracker.md) has the rest, and where every work-item id and `sources` string resolves.
 
 ## Maintaining this file
 
-- This file holds only what nearly every session needs before it knows which area it is in: the stack, the branch model, the irreversible-safety rules, the commands, the graph's contract and the index.
-- Durable knowledge about one area goes to a node in the graph, read against the code first ([adding a node](docs/README.md#adding-a-node)), not here.
-- When a new area gains a node, the index gains one line: "Before changing X, read [node]".
+- This file holds only what nearly every session needs before it knows which area it is in.
+- Durable knowledge about one area goes to a node in the graph, read against the code first, not here.
+- A new area gains an index line, "Before changing X, read [node]", only when the path lookup does not find its node.
 - Point to the authoritative file or command rather than repeating what the codebase already shows, and prefer rewriting or pruning a line over appending one.

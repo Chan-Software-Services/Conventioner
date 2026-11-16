@@ -23,6 +23,7 @@ import {
   type RowSide,
   type Run,
 } from '@/components/layout/layoutGeometry';
+import { mathCalls } from './support/mathCalls';
 
 const TABLE = { widthMm: 1830, depthMm: 760 };
 const p = (xMm: number, yMm: number): PointMm => ({ xMm, yMm });
@@ -394,13 +395,11 @@ describe('a row placed along a path', () => {
     const obstacles = Array.from({ length: 400 }, (_, i) =>
       cornersAt({ xMm: (i % 20) * 3000, yMm: 4600 + Math.floor(i / 20) * 400, rotation: 0 }),
     );
-    row(wall, 'right', 0, { obstacles });
-    const from = performance.now();
-    const poses = row(wall, 'right', 0, { obstacles });
-    const took = performance.now() - from;
+    const { calls, result: poses } = mathCalls(() => row(wall, 'right', 0, { obstacles }));
     expect(poses.length).toBeGreaterThanOrEqual(30);
-    // A frame is 16 ms; a loaded test machine is given three.
-    expect(took).toBeLessThan(48);
+    // 49,852 calls as written, under a millisecond alone where a frame is 16: the work is
+    // counted, since a clock reads the machine's other work too, and held to twice that.
+    expect(calls).toBeLessThan(100_000);
   });
 });
 

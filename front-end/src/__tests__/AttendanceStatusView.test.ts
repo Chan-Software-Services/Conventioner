@@ -210,7 +210,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // Fake timers freeze `performance.now`, which later tests read.
+  // One test's fake timers are not the next test's.
   vi.useRealTimers();
   localStorage.clear();
 });
