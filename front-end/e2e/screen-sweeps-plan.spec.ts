@@ -19,12 +19,24 @@ const FRONT_END = dirname(dirname(fileURLToPath(import.meta.url)));
 
 type ListedSuite = { title: string; file: string; suites?: ListedSuite[] };
 
+/**
+ * The environment the listing runs in: this run's, less the JSON reporter's output settings. A run
+ * that sends its JSON report to a file (`e2e-repeat.ts` sets `PLAYWRIGHT_JSON_OUTPUT_FILE`) would
+ * pass that on, and the listing would then print its list as text, not JSON, to stdout.
+ */
+function listingEnv(): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !name.startsWith('PLAYWRIGHT_JSON_OUTPUT_')),
+  );
+}
+
 /** Each describe Playwright registers, with the spec file it comes from, by `--list`. */
 function registeredDescribes(): { title: string; file: string }[] {
   const listed = JSON.parse(
     execFileSync('npx', ['playwright', 'test', '--list', '--reporter=json'], {
       cwd: FRONT_END,
       encoding: 'utf8',
+      env: listingEnv(),
       maxBuffer: 64 * 1024 * 1024,
     }),
   ) as { suites: ListedSuite[] };
