@@ -223,6 +223,8 @@ class TestTheOrganizationsDefault:
 
         entries = OrgsApi.get_default_permission_history(ORG_ID, ORG_MEMBER)
 
+        assert [e["kind"] for e in org_entries(world)
+                if e["action"] == History.CHANGE_ORGANIZATION] == [History.RENAMED]
         assert [(e["actor"], e["subject"]["action"]) for e in entries] == [
             (ORG_OWNER, "export-csv"), (ORG_ADMIN, "check-in")]
         assert "organizationId" not in entries[0]
