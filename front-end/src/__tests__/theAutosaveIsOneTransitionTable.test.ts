@@ -425,6 +425,12 @@ describe('the words, read from the phase', () => {
     );
   });
 
+  it('says the sentence alone on a screen that keeps its copy, once that copy is dropped', () => {
+    expect(messageOf(refused(false, 'This market is archived.'), true)).toBe(
+      'This market is archived.',
+    );
+  });
+
   it('says a refusal not kept with the plan coming back, ending its sentence first', () => {
     expect(messageOf(refused(false, 'Market is not a draft'))).toBe(
       'Market is not a draft. The plan is back as it was last saved.',

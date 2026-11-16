@@ -31,7 +31,7 @@ The phases are `clean` (nothing unsaved and nothing out, with `saved` while "Pla
 A `sending` phase says what follows the save out (`after`: `none`, no edit since it went; `pausing`, an edit since, its pause running; `wanted`, an edit since, whose pause ended or which the hold keeps), and `drop`, set once the person may no longer write, so its answer drops everything.
 The hold is a flag beside the phase, not a phase, since the Pricing card's hold outlives a failure, a refusal and a dropped edit; `held` is an edit waiting for it.
 `transition(state, event)` is a pure function answering the next state and whether to start a save; for a pair not in the table it answers the same state object and no send, so a pair nobody designed changes nothing.
-The status, its sentence and `unsaved` are read from the phase (`statusOf`, `messageOf`, `unsavedIn`), never stored beside it.
+The status, its sentence and `unsaved` are read from the phase (`statusOf`, `messageOf`, `unsavedIn`), never stored beside it; the sentence also reads whether the screen keeps its copy on a refusal.
 The composable around the table holds the state, the save out's promise, the pause and the 2 s timer of "Plan saved", and feeds it events: it runs the pause a state asks for, starts a save when the step says so, and asks who may write where a send would go, feeding `lost` when the person no longer may.
 
 In the table, `H` is the hold on, `-` a pair not in the table, and "send" starts a save of the working copy as it stands:
@@ -64,7 +64,7 @@ The status is `refused`, and the line (`market-setup-plan-refused`, in the error
 The next edit hides it, since the plan on screen is then no longer the one last saved.
 A sentence the server left without a full stop ("Market not found", from a market deleted in another tab) is given one, so the two read as two sentences.
 The view's `afterRefusal` re-reads the market and then adopts it itself, so the server's plan comes back even when the re-read failed or handed back the market the page already had, which leaves the market watch silent.
-A screen that keeps its copy instead says so with `keepOnRefusal` (a location's layout, [its editor](floorplan-placement.md#the-editor)): the edits stay unsaved, the line is the refusal's sentence alone, the next edit, Retry or a flush sends the copy again, and `forget` drops what was unsaved once that screen takes the server's copy; the plan does not set it.
+A screen that keeps its copy instead says so with `keepOnRefusal` (a location's layout, [its editor](floorplan-placement.md#the-editor)): the edits stay unsaved, the line is the refusal's sentence alone, also when the person may no longer write and the edits are dropped, the next edit, Retry or a flush sends the copy again, and `forget` drops what was unsaved once that screen takes the server's copy; the plan does not set it.
 Nothing is unsaved after it, so later re-reads reach the screen again; until T271 a refused save left the page skipping every re-read, the refused plan on screen until a reload.
 
 **A failure keeps the edits unsaved** and shows its sentence (`market-setup-plan-save-error`): the app's offline sentence for no answer, the server-fault sentence for a 5xx, and "The plan was not saved." for a failure with no sentence of its own.

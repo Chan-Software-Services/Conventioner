@@ -11,7 +11,8 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import LayoutView from '@/components/layout/LayoutView.vue';
 import LayoutEditor from '@/components/layout/LayoutEditor.vue';
-import type { LayoutEditor as Editor } from '@/components/layout/useLayoutEditor';
+import { useLayoutEditor, type LayoutEditor as Editor } from '@/components/layout/useLayoutEditor';
+import type { SavedLayout } from '@/components/layout/layoutSave';
 import { ROW_CHOICES_AT_FIRST, rowChoices } from '@/components/layout/layoutRow';
 import { useMarketStore } from '@/stores/market';
 import { MARKET_ID, marketRouter } from './support/marketScreen';
@@ -211,6 +212,33 @@ describe('a refused change once the market is settled elsewhere', () => {
     const shown = wrapper.findComponent({ name: 'LayoutMap' });
     expect(shown.exists()).toBe(true);
     expect(shown.props('layout').tables).toEqual(STORED.tables);
+    expect(editor.pending()).toBe(false);
+  });
+});
+
+describe('a save refused once the person may no longer write', () => {
+  // The layout keeps its copy on a refusal, and the page reads the server's layout again when the
+  // right to write goes, so the refusal's sentence stands alone: the plan's "back as it was last
+  // saved" is not this page's to say (T420's review).
+  it("says the server's sentence alone", async () => {
+    let may = true;
+    let refuse: (err: unknown) => void = () => {};
+    const editor = useLayoutEditor({
+      save: () =>
+        new Promise<SavedLayout>((_resolve, reject) => {
+          refuse = reject;
+        }),
+      may: () => may,
+    });
+    editor.adopt({ ...STORED, tables: [...STORED.tables] });
+    editor.moveTables(['g-1'], 1000, 0);
+    await vi.advanceTimersByTimeAsync(700);
+
+    may = false;
+    refuse(aRefusal(403, 'This market is archived.'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(editor.saveMessage.value).toBe('This market is archived.');
     expect(editor.pending()).toBe(false);
   });
 });

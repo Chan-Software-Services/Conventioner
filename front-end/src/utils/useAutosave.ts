@@ -215,11 +215,15 @@ export function statusOf(phase: AutosavePhase): AutosaveStatus {
   }
 }
 
-/** The status line's sentence. */
-export function messageOf(phase: AutosavePhase): string {
+/**
+ * The status line's sentence. A screen that keeps its copy on a refusal (`keepOnRefusal`) says the
+ * refusal's sentence alone, even once the copy is dropped because the person may no longer write:
+ * that screen takes the server's copy back by its own re-read, not by the refusal.
+ */
+export function messageOf(phase: AutosavePhase, keepsOnRefusal = false): string {
   if (phase.kind === 'failed') return phase.sentence;
   if (phase.kind !== 'refused') return '';
-  if (phase.kept) return phase.sentence;
+  if (phase.kept || keepsOnRefusal) return phase.sentence;
   // Some refusals carry no full stop ("Market not found"), so the line after it would run on.
   return (/[.!?…]$/.test(phase.sentence) ? phase.sentence : `${phase.sentence}.`) + TAKEN_BACK;
 }
@@ -445,7 +449,7 @@ export function useAutosave(options: AutosaveOptions) {
 
   return {
     status: readonly(computed(() => statusOf(state.value.phase))),
-    message: readonly(computed(() => messageOf(state.value.phase))),
+    message: readonly(computed(() => messageOf(state.value.phase, Boolean(options.keepOnRefusal)))),
     unsaved: computed(() => unsavedIn(state.value.phase)),
     edited,
     hold,
