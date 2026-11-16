@@ -276,6 +276,54 @@ describe('the drawer’s offer', () => {
     expect(document.querySelector(testid('discord-match-confirm-window'))).toBeNull();
   });
 
+  it('sends one update for two presses of Save update', async () => {
+    api.put.mockReturnValue(new Promise(() => {}));
+    const wrapper = offer();
+    await wrapper.find(testid('vendors-detail-discord-confirm')).trigger('click');
+    const form = document.querySelector<HTMLFormElement>(
+      `${testid('discord-match-confirm-window')} form`,
+    )!;
+
+    form.requestSubmit();
+    form.requestSubmit();
+    await flushPromises();
+
+    expect(api.put).toHaveBeenCalledTimes(1);
+    const save = document.querySelector<HTMLButtonElement>(
+      testid('discord-match-confirm-submit-button'),
+    )!;
+    expect(save.disabled).toBe(true);
+    expect(save.textContent?.trim()).toBe('Saving…');
+  });
+
+  it('belongs to the vendor it was opened for: the next one never hears its late answer', async () => {
+    let answer!: (value: unknown) => void;
+    api.put.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const wrapper = offer();
+    await wrapper.find(testid('vendors-detail-discord-confirm')).trigger('click');
+    (document.querySelector(testid('discord-match-confirm-submit-button')) as HTMLElement).click();
+    await flushPromises();
+
+    // The drawer moves to another vendor while the update is out: their confirmation is not this.
+    const birch = app('app-birch', 'Birch');
+    await wrapper.setProps({ application: birch });
+    expect(document.querySelector(testid('discord-match-confirm-window'))).toBeNull();
+    await wrapper.find(testid('vendors-detail-discord-confirm')).trigger('click');
+    const save = document.querySelector<HTMLButtonElement>(
+      testid('discord-match-confirm-submit-button'),
+    )!;
+    expect(save.disabled).toBe(false);
+    expect(save.textContent?.trim()).toBe('Save update');
+
+    const saved = { ...APPS[0], formData: { [QUESTION]: 'fern_studio_42' } };
+    answer({ data: { application: saved } });
+    await flushPromises();
+
+    expect(wrapper.emitted('confirmed')).toBeUndefined();
+    expect(wrapper.emitted('refreshed')).toEqual([[saved]]);
+    expect(document.querySelector(testid('discord-match-confirm-window'))).not.toBeNull();
+  });
+
   it('says why a confirmation was refused, in the server’s words', async () => {
     api.put.mockRejectedValue({
       isAxiosError: true,

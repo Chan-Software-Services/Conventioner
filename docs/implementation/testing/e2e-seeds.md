@@ -11,6 +11,7 @@ describes:
   - front-end/e2e/helpers/seeds.ts#seedMarketWithVendors
   - front-end/e2e/helpers/seeds.ts#seedPublishedMarketWithAssignments
   - front-end/e2e/helpers/seedAssignedMarket.ts
+  - front-end/e2e/helpers/seedAPricedVendor.ts
   - front-end/e2e/helpers/seedPhaseMarket.ts
   - front-end/e2e/helpers/seedDraftMarket.ts
   - front-end/e2e/helpers/seedApplicantMarket.ts
@@ -61,6 +62,7 @@ sources:
   - T318
   - T277
   - T316
+  - T411
 ---
 
 # E2E seeds
@@ -177,6 +179,12 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
   - `dates` gives it more than one date, a table on each
   - `intakeMode: 'form'` makes its vendors apply on its page, so it has results to publish
   - `laidOut` lays Main Hall out in Draft (`startLayout()`), Hall A's tables in a row across a hall 30 m wide, so the run places vendors at a layout's tables (T257)
+
+**`seedAPricedVendor()`** ([file](../../../front-end/e2e/helpers/seedAPricedVendor.ts))
+
+- Leaves: `seedMarketWithVendors()`'s market priced in CAD, walked to `assignment`, with alice (`PRICED_VENDOR`) on a Gold full table at $35 on its one date
+- Notes:
+  - her drawer's Payment tab owes $35 and records a payment, for a spec of Record payment's dialog
 
 **`seedPublishedMarketWithAssignments()`**
 

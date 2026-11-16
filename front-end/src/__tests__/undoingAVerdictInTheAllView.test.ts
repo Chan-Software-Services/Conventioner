@@ -1,9 +1,12 @@
 /**
  * The All view's verdicts offer the same Undo as One by one's (E38/F10/S01): a row's, in its drawer
  * while it is open, and a selection's on its done line, which then says what the undo skipped.
+ *
+ * Its two dialogs that write, the selection's confirmation and Needs a follow-up, hold while they
+ * write and keep an answer to the opening it was sent from (T411).
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushPromises, mount } from '@vue/test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 
 import ApplicationsAll from '@/components/application/ApplicationsAll.vue';
@@ -15,7 +18,11 @@ import { isDecided } from '@/utils/verdicts';
 const ME = 'ana@example.com';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
-const route = vi.hoisted(() => ({ query: {} as Record<string, string> }));
+// Reactive, as the router's own is, so a drawer moved to another vendor is seen.
+const route = await vi.hoisted(async () => {
+  const { reactive } = await import('vue');
+  return reactive({ query: {} as Record<string, string> });
+});
 const fetchMarketApplications = vi.fn();
 
 vi.mock('vue-router', () => ({
@@ -245,5 +252,190 @@ describe('a selection’s verdict', () => {
     expect(wrapper.get('[data-testid="applications-all-drawer-undo"]').text()).toContain(
       'Rejected al@vendor.test.',
     );
+  });
+});
+
+describe('the dialogs that write', () => {
+  let mounted: VueWrapper | null = null;
+  afterEach(() => {
+    mounted?.unmount();
+    mounted = null;
+  });
+
+  /** The view with its dialogs drawn, teleported to `body` as every modal is. */
+  async function allViewWithDialogs(market: Market = MARKET) {
+    mounted = mount(ApplicationsAll, {
+      props: { market },
+      attachTo: document.body,
+      global: {
+        stubs: {
+          VendorDrawer: {
+            template: '<div><slot name="actions" /></div>',
+            methods: { entryFor: () => null, loadNotes: () => undefined },
+          },
+          ExportVendorsDialog: true,
+          ListFreshness: true,
+        },
+      },
+    });
+    await flushPromises();
+    return mounted;
+  }
+
+  const page = () => new DOMWrapper(document.body);
+  const byId = (id: string) => page().find(`[data-testid="${id}"]`);
+
+  /** Every way a person closes a dialog: its close, its backdrop, Cancel and Escape. */
+  async function tryEveryClose(testid: string) {
+    await byId(`${testid}-close-button`).trigger('click');
+    await byId(`${testid}-background`).trigger('click');
+    await byId(`${testid}-cancel-button`).trigger('click');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+  }
+
+  /** The next call of `call` held until the test answers it. */
+  function holdNext(call: typeof api.post) {
+    let answer!: (value: unknown) => void;
+    let refuse!: (reason: unknown) => void;
+    const real = call.getMockImplementation()!;
+    call.mockImplementationOnce(
+      (...args: unknown[]) =>
+        new Promise((resolve, reject) => {
+          answer = () => resolve(real(...(args as Parameters<typeof real>)));
+          refuse = reject;
+        }),
+    );
+    return { answer: () => answer(undefined), refuse: (reason: unknown) => refuse(reason) };
+  }
+
+  const NO = {
+    isAxiosError: true,
+    response: { status: 403, data: { error: 'The server said no.' } },
+  };
+  const verdictPosts = () =>
+    api.post.mock.calls.filter(([url]) => String(url).endsWith('/applications/verdicts'));
+
+  async function askToApprove(ids: string[]) {
+    for (const row of page().findAll('[data-testid="applications-all-row"]')) {
+      if (ids.some((id) => row.text().includes(`${id}@vendor.test`))) {
+        await row.get('[data-testid="applications-all-tick"]').setValue(true);
+      }
+    }
+    await byId('applications-all-selection-approve').trigger('click');
+    await flushPromises();
+  }
+
+  describe('the selection’s verdict', () => {
+    it('holds while it decides, and decides once however often it is pressed', async () => {
+      await allViewWithDialogs();
+      await askToApprove(['jo', 'al']);
+      const held = holdNext(api.post);
+
+      await page().get('[data-testid="applications-all-confirm-window"] form').trigger('submit');
+      await page().get('[data-testid="applications-all-confirm-window"] form').trigger('submit');
+      await flushPromises();
+      await tryEveryClose('applications-all-confirm');
+
+      expect(byId('applications-all-confirm-window').exists()).toBe(true);
+      expect(byId('applications-all-confirm-submit-button').attributes('disabled')).toBeDefined();
+      expect(verdictPosts()).toHaveLength(1);
+
+      held.answer();
+      await flushPromises();
+      expect(byId('applications-all-confirm-window').exists()).toBe(false);
+      expect(byId('applications-all-result').text()).toContain('2 applications approved.');
+    });
+
+    it('keeps a refusal to its opening: the next one starts with none', async () => {
+      await allViewWithDialogs();
+      await askToApprove(['jo']);
+      api.post.mockRejectedValueOnce(NO);
+      await page().get('[data-testid="applications-all-confirm-window"] form').trigger('submit');
+      await flushPromises();
+      expect(byId('applications-all-confirm-error').text()).toBe('The server said no.');
+
+      await byId('applications-all-confirm-cancel-button').trigger('click');
+      await byId('applications-all-selection-approve').trigger('click');
+      await flushPromises();
+
+      expect(byId('applications-all-confirm-window').exists()).toBe(true);
+      expect(byId('applications-all-confirm-error').exists()).toBe(false);
+    });
+
+    it('leaves the confirmation on another market alone when the answer lands there', async () => {
+      const wrapper = await allViewWithDialogs();
+      await askToApprove(['jo']);
+      const held = holdNext(api.post);
+      await page().get('[data-testid="applications-all-confirm-window"] form').trigger('submit');
+      await flushPromises();
+
+      await wrapper.setProps({ market: { ...MARKET, id: 'm2' } as Market });
+      await flushPromises();
+      expect(byId('applications-all-confirm-window').exists()).toBe(false);
+      await askToApprove(['al']);
+      expect(byId('applications-all-confirm-window').exists()).toBe(true);
+
+      held.answer();
+      await flushPromises();
+
+      expect(byId('applications-all-confirm-window').exists()).toBe(true);
+      expect(byId('applications-all-confirm-submit-button').attributes('disabled')).toBeUndefined();
+      expect(byId('applications-all-result').exists()).toBe(false);
+    });
+  });
+
+  describe('Needs a follow-up', () => {
+    const verdictPuts = () => api.put.mock.calls.filter(([url]) => String(url).endsWith('/review'));
+
+    async function askForAFollowUp(vendor: string) {
+      route.query = { vendor: `${vendor}@vendor.test` };
+      await flushPromises();
+      await byId('applications-all-follow-up').trigger('click');
+      await flushPromises();
+    }
+
+    it('holds while it marks, and marks once however often it is pressed', async () => {
+      route.query = { vendor: 'jo@vendor.test' };
+      await allViewWithDialogs();
+      await askForAFollowUp('jo');
+      const held = holdNext(api.put);
+
+      await page().get('[data-testid="follow-up-window"] form').trigger('submit');
+      await page().get('[data-testid="follow-up-window"] form').trigger('submit');
+      await flushPromises();
+      await tryEveryClose('follow-up');
+
+      expect(byId('follow-up-window').exists()).toBe(true);
+      expect(byId('follow-up-submit-button').attributes('disabled')).toBeDefined();
+      expect(verdictPuts()).toHaveLength(1);
+
+      held.answer();
+      await flushPromises();
+      expect(byId('follow-up-window').exists()).toBe(false);
+    });
+
+    it('keeps a refusal for one vendor out of the next vendor’s opening', async () => {
+      route.query = { vendor: 'jo@vendor.test' };
+      await allViewWithDialogs();
+      await askForAFollowUp('jo');
+      const held = holdNext(api.put);
+      await page().get('[data-testid="follow-up-window"] form').trigger('submit');
+      await flushPromises();
+
+      // The drawer goes to another vendor, by a link or the browser's Back: the dialog was theirs.
+      route.query = { vendor: 'al@vendor.test' };
+      await flushPromises();
+      expect(byId('follow-up-window').exists()).toBe(false);
+      held.refuse(NO);
+      await flushPromises();
+
+      await askForAFollowUp('al');
+
+      expect(byId('follow-up-window').exists()).toBe(true);
+      expect(byId('follow-up-error').exists()).toBe(false);
+      expect(byId('follow-up-submit-button').attributes('disabled')).toBeUndefined();
+    });
   });
 });

@@ -12,6 +12,7 @@ describes:
   - back-end/api/organizations.py#_taken
   - back-end/api/organizations.py#_owner_asks
   - front-end/src/components/DeleteOrgDialog.vue
+  - front-end/src/__tests__/deletingAnOrganization.test.ts
   - back-end/history.py#delete_for_organization
 verified: 2026-11-13
 sources:
@@ -22,6 +23,7 @@ sources:
   - E40/F02/S01
   - T277
   - T307
+  - T411
 ---
 
 # When an organization may be deleted
@@ -55,6 +57,7 @@ The organization's owner, alone ([the organization document](../../implementatio
 - **`BLOCKING_PHASES`** in [`back-end/api/organizations.py`](../../../back-end/api/organizations.py) is the partition, by phase.
   **The check lives with the organization API, NOT in `guards.py`**, whose registry is validated against the transition table and is for transitions; deleting is not one ([the guards](../../implementation/modules/guards.md)).
 - `organization_deletion_preview` (`GET /organizations/:id/deletion-preview`) is read-only and the whole content of the confirmation, [`DeleteOrgDialog.vue`](../../../front-end/src/components/DeleteOrgDialog.vue); each market is summarised by `_market_summary`, which asks the [phase record](../../implementation/modules/phase-record.md) whether an archived market ran ([ADR 0012](../../adr/0012-a-market-remembers-every-phase-it-entered.md)).
+  The dialog sends its deletion through `useDialogSubmit` keyed by the organization it is open on (T411): one delete however often "Delete it all" is pressed, nothing closing it until it answers, and the refusal said where the preview's own failure is, a 409's with its blocking markets named; [`deletingAnOrganization.test.ts`](../../../front-end/src/__tests__/deletingAnOrganization.test.ts) pins it, and that an earlier opening's answer leaves the next opening alone.
 - `delete_organization` reads the organization whatever its state, so a deletion cut at any step is finished by the same request sent again ([the tombstone](../../implementation/modules/market-deletion.md#the-tombstone)).
   On a live organization it judges the same preview and raises `OrganizationHasLiveMarkets` naming every blocking market and the phase as its intake path names it (a 409 [client error](../../implementation/conventions/an-exception-never-reaches-a-client.md) whose `body()` is the refusal the dialog reads); then it sets the organization's tombstone, `deleting: {at, by, trail_id}`, by one write held on its being live (`_mark_deleting`), from which moment it reads as absent and takes no write, a new market included.
   On one already deleting it asks the owner's right again (`_owner_asks`) and goes on with its tombstone's trail id.

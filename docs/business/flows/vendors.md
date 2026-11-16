@@ -41,6 +41,7 @@ sources:
   - T217
   - T223
   - T263
+  - T411
   - T421
 ---
 
@@ -211,6 +212,7 @@ The card points here: its "Giving roles" block says what is still missing, and o
 1. "Give roles", beside "Check Discord" at the row's far right, for an Admin or the owner (the same row), is offered once anyone holds a seat.
 2. It confirms first ([`GiveRolesDialog.vue`](../../../front-end/src/components/GiveRolesDialog.vue)), by the role's name and how many vendors hold a seat on any date: "Give Vendor Nov 2026 to 54 assigned vendors?", saying that it never takes a role away.
 3. The run reads the server's members as a check does, gives the role to each assigned vendor matched who does not hold it, and updates every vendor's Discord state; "Give roles" reads "Giving roles…" meanwhile, and neither it nor "Check Discord" is offered while the other runs.
+   The confirmation is held until the run answers, and a second press starts no second run (T411).
    It asks Discord for under a minute: the vendors it had no time for are "Not given yet", and running it again gives them.
 4. Its report ([`DiscordRoleReport.vue`](../../../front-end/src/components/DiscordRoleReport.vue)) stays above the list for everyone who reads the page: "Vendor Nov 2026, last run 5 minutes ago", how many ended in each group ("2 given, 1 already had it, 1 not found, 1 no username"), and "Show who" opens a dialog, titled with that same line, of each group's vendors, a failure's reason, or why the rest are not given yet, said once for the vendors it held back, so a long list never pushes the table down.
    Past 12 vendors the dialog opens on "Find by name or address" and shows 50 at a time, "Show N more" drawing the next, each group's outcome, whole count and reason standing over its first vendor shown, so the organizer of a market of every vendor finds one in it rather than reading down (T223); at 12 or fewer it reads with no field.

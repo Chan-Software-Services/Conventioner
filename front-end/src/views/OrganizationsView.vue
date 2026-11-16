@@ -13,6 +13,7 @@ import SummaryCard from '@/components/SummaryCard.vue';
 import ReadFailed from '@/components/ReadFailed.vue';
 import ManageOrgOverlay from './ManageOrgOverlay.vue';
 import { withoutQueryKey } from '@/utils/routeQuery';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 
 const organizations = ref<Organization[]>([]);
 const loading = ref(true);
@@ -23,7 +24,14 @@ const newOpen = ref(false);
 const manageOpen = ref(false);
 const manageOrg = ref<Organization | null>(null);
 const newOrgName = ref('');
-const newOrgError = ref('');
+/**
+ * New organization's create (T411): one organization however often Create is pressed, the dialog
+ * held until it answers, and a refusal said in the opening it was sent from.
+ */
+const creation = useDialogSubmit({
+  opening: () => newOpen.value,
+  failure: 'The organization was not created.',
+});
 
 /**
  * Read the list, keeping only the newest read. The page opens with one, and creating or managing an
@@ -78,22 +86,24 @@ function factsFor(org: Organization): SummaryFact[] {
 }
 
 async function handleCreateOrg() {
-  if (!newOrgName.value.trim()) return;
-  newOrgError.value = '';
-  try {
-    await api.post('/organizations', { name: newOrgName.value.trim() });
-    newOpen.value = false;
-    newOrgName.value = '';
-    await loadOrganizations();
-  } catch (err) {
-    newOrgError.value = getApiErrorMessage(err, 'The organization was not created.');
-  }
+  const name = newOrgName.value.trim();
+  if (!name) return;
+  await creation.submit(() => api.post('/organizations', { name }), {
+    done: async () => {
+      newOpen.value = false;
+      newOrgName.value = '';
+      await loadOrganizations();
+    },
+    // Made after the dialog had gone: the list still shows it.
+    late: (answer) => {
+      if (answer.ok) void loadOrganizations();
+    },
+  });
 }
 
 function handleNewClose() {
   newOpen.value = false;
   newOrgName.value = '';
-  newOrgError.value = '';
 }
 
 function handleManage(org: Organization) {
@@ -226,7 +236,7 @@ function handleManageChanged() {
       testid="organizations-create"
       confirm-label="Create"
       :confirm-disabled="!newOrgName.trim()"
-      :error="newOrgError"
+      :submission="creation"
       @close="handleNewClose"
       @submit="handleCreateOrg"
     >

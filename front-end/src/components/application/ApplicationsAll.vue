@@ -55,6 +55,8 @@ import { useVendorDetails } from '@/utils/vendorDetails';
 import { useMarketStore } from '@/stores/market';
 import { useVendorDrawer } from '@/utils/vendorDrawer';
 import { useVerdictActions, type VerdictOutcome } from '@/utils/verdictActions';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
+import { Refusal } from '@/utils/useSubmit';
 import { useVerdictUndo, type UndoOutcome } from '@/utils/verdictUndo';
 import VerdictUndoLine from '@/components/application/VerdictUndoLine.vue';
 import { applicationsAllSeed, NO_FILTERS, type ExportFilters } from '@/utils/vendorExport';
@@ -335,10 +337,15 @@ const openedDealtElsewhere = computed(() =>
   opened.value && decidesOpened.value ? dealtElsewhere(opened.value, me.value, props.market) : null,
 );
 
+/** A verdict on the drawer's application is being written, its follow-up's included. */
 const saving = ref(false);
 const verdictMessage = ref('');
 const followUpOpen = ref(false);
-const followUpError = ref('');
+/** The follow-up's write, for the dialog's one opening (T411). */
+const followUp = useDialogSubmit({
+  opening: () => followUpOpen.value,
+  failure: 'The verdict was not saved.',
+});
 /** The drawer holds the vendor's notes; the follow-up opens on them and writes beside them. */
 const drawerPanel = ref<InstanceType<typeof VendorDrawer> | null>(null);
 const noteBefore = computed(() =>
@@ -377,31 +384,44 @@ async function give(status: ApplicationStatus) {
   }
 }
 
+/**
+ * The list and the notes take the answer whichever opening it lands in; the dialog hears it only in
+ * the opening it was sent from, closing on it or saying its refusal (T411).
+ */
 async function markFollowUp(choice: { ownerEmail: string; note?: string }) {
   const app = opened.value;
   if (!app || saving.value) return;
   saving.value = true;
-  followUpError.value = '';
   const before = { ...app };
   try {
-    const outcome = await verdicts.markFollowUp(app, choice, noteBefore.value);
-    rowVerdictWritten(before, outcome, ApplicationStatus.NeedsFollowUp);
-    void drawerPanel.value?.loadNotes();
-    if (outcome.kind === 'failed') {
-      followUpError.value = outcome.message;
-      return;
-    }
-    followUpOpen.value = false;
-    if (outcome.kind === 'changed') verdictMessage.value = outcome.message;
-    else void details.load();
+    await followUp.submit(
+      async () => {
+        const outcome = await verdicts.markFollowUp(app, choice, noteBefore.value);
+        rowVerdictWritten(before, outcome, ApplicationStatus.NeedsFollowUp);
+        void drawerPanel.value?.loadNotes();
+        if (outcome.kind === 'failed') throw new Refusal(outcome.message);
+        return outcome;
+      },
+      {
+        done: (outcome) => {
+          followUpOpen.value = false;
+          if (outcome.kind === 'changed') verdictMessage.value = outcome.message;
+          else void details.load();
+        },
+      },
+    );
   } finally {
     saving.value = false;
   }
 }
 
+// Another application in the drawer: what was said, and a follow-up asked for, were the last one's.
 watch(
   () => drawer.email.value,
-  () => (verdictMessage.value = ''),
+  () => {
+    verdictMessage.value = '';
+    followUpOpen.value = false;
+  },
 );
 
 // --- A verdict on a selection (E34/F04/S02) ---------------------------------------------------
@@ -483,7 +503,13 @@ const VERDICT_WORDS: Partial<Record<ApplicationStatus, { verb: string; done: str
 };
 const asking = ref<ApplicationStatus | null>(null);
 const result = ref<(SelectionResult & { done: string }) | null>(null);
-const selectionError = ref('');
+/** The selection's verdict, for the confirmation's one opening on this market (T411). */
+const selection = useDialogSubmit({
+  opening: () => (asking.value ? `${marketId.value}:${asking.value}` : null),
+  failure: 'Could not decide the selection.',
+});
+// Another market's list: a confirmation asked over the last one's selection is no question here.
+watch(marketId, () => (asking.value = null));
 const plural = (n: number) => `${n} application${n === 1 ? '' : 's'}`;
 const askingTitle = computed(() =>
   asking.value ? `${VERDICT_WORDS[asking.value]?.verb} ${plural(selected.value.size)}?` : '',
@@ -527,23 +553,27 @@ async function undoLast() {
   void details.load();
 }
 
+/**
+ * One verdict however often it is pressed, held until it answers (T411). An answer that lands after
+ * the confirmation was taken away, by another market, closes nothing and says nothing: that list is
+ * read again on its own.
+ */
 async function decideSelection() {
   const status = asking.value;
-  if (!status || !props.market) return;
-  selectionError.value = '';
-  try {
-    const picked = applications.value.filter((a) => selected.value.has(a.id));
-    const answer = await reviewSelection(props.market.id, picked, status);
-    result.value = { ...answer, done: VERDICT_WORDS[status]?.done ?? '' };
-    asking.value = null;
-    clearSelection();
-    await load();
-    offerSelectionUndo(answer.written, answer.undoSeconds ?? 0);
-    void details.load();
-    void marketStore.refresh();
-  } catch (err) {
-    selectionError.value = getApiErrorMessage(err, 'Could not decide the selection.');
-  }
+  const market = props.market;
+  if (!status || !market) return;
+  const picked = applications.value.filter((a) => selected.value.has(a.id));
+  await selection.submit(() => reviewSelection(market.id, picked, status), {
+    done: async (answer) => {
+      result.value = { ...answer, done: VERDICT_WORDS[status]?.done ?? '' };
+      asking.value = null;
+      clearSelection();
+      await load();
+      offerSelectionUndo(answer.written, answer.undoSeconds ?? 0);
+      void details.load();
+      void marketStore.refresh();
+    },
+  });
 }
 </script>
 
@@ -936,7 +966,7 @@ async function decideSelection() {
       testid="applications-all-confirm"
       :confirmLabel="asking ? VERDICT_WORDS[asking]?.verb : ''"
       :destructive="asking === ApplicationStatus.ReviewerRejected"
-      :error="selectionError"
+      :submission="selection"
       @close="asking = null"
       @submit="decideSelection"
     >
@@ -966,7 +996,7 @@ async function decideSelection() {
       :me="me"
       :note="noteBefore"
       :writesNotes="writesNotes"
-      :error="followUpError"
+      :submission="followUp"
       @close="followUpOpen = false"
       @confirm="markFollowUp"
     />

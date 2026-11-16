@@ -187,8 +187,10 @@ describe('the dialog', () => {
 
   it('holds while the request is in flight, so nothing hides its answer', async () => {
     let settle: () => void = () => {};
+    let sent = 0;
     api.defaults.adapter = (config: InternalAxiosRequestConfig) =>
       new Promise((resolve) => {
+        sent += 1;
         settle = () => resolve({ data: {}, status: 200, statusText: '', headers: {}, config });
       });
     openTheDialog();
@@ -196,11 +198,21 @@ describe('the dialog', () => {
 
     confirm().click();
     await flushPromises();
+    // A second press, Enter on the form, sends nothing while the first is out.
+    byTestid('sign-out-everywhere-window')!
+      .querySelector('form')!
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await flushPromises();
 
     expect(confirm().hasAttribute('disabled')).toBe(true);
     expect(byTestid('sign-out-everywhere-cancel-button')!.hasAttribute('disabled')).toBe(true);
     byTestid('sign-out-everywhere-cancel-button')!.click();
+    byTestid('sign-out-everywhere-close-button')!.click();
+    byTestid('sign-out-everywhere-background')!.click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
     expect(wrapper.emitted('close')).toBeUndefined();
+    expect(sent).toBe(1);
 
     settle();
     await flushPromises();

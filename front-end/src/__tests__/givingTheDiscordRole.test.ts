@@ -375,6 +375,25 @@ describe('the Vendors page', () => {
     expect(document.querySelector('[data-testid="give-roles-window"]')).not.toBeNull();
   });
 
+  it('gives once for two presses of Give roles', async () => {
+    const wrapper = await mounted(market());
+    api.post.mockReturnValue(new Promise(() => {}));
+
+    await wrapper.find('[data-testid="vendors-discord-give"]').trigger('click');
+    const form = document.querySelector<HTMLFormElement>('[data-testid="give-roles-window"] form')!;
+    form.requestSubmit();
+    form.requestSubmit();
+
+    await vi.waitFor(() => {
+      expect(
+        document.querySelector<HTMLButtonElement>('[data-testid="give-roles-submit-button"]')
+          ?.disabled,
+      ).toBe(true);
+    });
+    const runs = api.post.mock.calls.filter(([url]) => String(url).endsWith('/discord/role-run'));
+    expect(runs).toHaveLength(1);
+  });
+
   it('says why a run was refused, in the server’s words, and reads the market again', async () => {
     const wrapper = await mounted(market());
     api.post.mockRejectedValue({

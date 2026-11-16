@@ -4,16 +4,43 @@
  * Skip recorded nothing. "Needs follow-up" is a stored status with an owner, the reviewer unless
  * they name someone else with a role on the market - explicit or through its organization (T15) -
  * the queue leaves follow-ups out unless asked, and the reviewed list is only what has a verdict.
+ *
+ * The dialog holds while its parent marks the follow-up, and an answer that lands after the dialog
+ * was closed under it stays out of the next opening (T411).
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
-import { mount } from '@vue/test-utils';
+import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { ApplicationStatus, type Application, type Market } from '@/assets/types/datatypes';
 import { followUps, reviewQueue, reviewed } from '@/utils/reviewQueue';
 import { useVerdictActions } from '@/utils/verdictActions';
 import { PEOPLE_CAP } from '@/utils/personChoice';
 import FollowUpDialog from '@/components/application/FollowUpDialog.vue';
+import ApplicationMonitor from '@/components/application/ApplicationMonitor.vue';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
+
+const fetchMarketApplications = vi.fn();
+const reviewApplication = vi.fn();
+
+vi.mock('@/utils/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/api')>();
+  const answered = () => Promise.resolve({ data: {} });
+  // The next card handed out is the first still open in the list as last read.
+  const post = async (url: string) =>
+    url.endsWith('/review/next')
+      ? { data: { application: (await fetchMarketApplications())[0] ?? null } }
+      : { data: {} };
+  return { ...actual, api: { get: answered, post, put: answered, delete: answered } };
+});
+vi.mock('@/utils/applicantApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/applicantApi')>();
+  return {
+    ...actual,
+    fetchMarketApplications: (id: string) => fetchMarketApplications(id),
+    reviewApplication: (...args: unknown[]) => reviewApplication(...args),
+  };
+});
 
 const app = (id: string, status: ApplicationStatus, submittedAt: string): Application =>
   ({ id, applicantEmail: `${id}@x.test`, status, submittedAt, formData: {} }) as Application;
@@ -51,6 +78,7 @@ describe('marking a follow-up', () => {
         people,
         me,
         writesNotes: true,
+        submission: useDialogSubmit({ opening: () => true, failure: '' }),
       },
       global: { stubs: { teleport: true } },
       attachTo: document.body,
@@ -186,5 +214,107 @@ describe('marking a follow-up', () => {
 
     expect(fieldValue(wrapper)).toBe('robin@org.test');
     wrapper.unmount();
+  });
+});
+
+describe('marking a follow-up on the card', () => {
+  const MARKET = {
+    id: 'm1',
+    applicationForm: { fields: [] },
+    reviewHighlights: [],
+    peopleOnMarket: ['alex@market.test'],
+    actionRefusals: { 'give-verdicts': null, 'change-verdicts': null },
+  } as unknown as Market;
+  let wrapper: VueWrapper | null = null;
+
+  beforeEach(() => {
+    localStorage.setItem('user', JSON.stringify('alex@market.test'));
+    fetchMarketApplications
+      .mockReset()
+      .mockResolvedValue([app('early', ApplicationStatus.Open, '2026-05-02')]);
+    reviewApplication.mockReset();
+  });
+  afterEach(() => {
+    wrapper?.unmount();
+    wrapper = null;
+    localStorage.removeItem('user');
+  });
+
+  const page = () => new DOMWrapper(document.body);
+  const byId = (id: string) => page().find(`[data-testid="${id}"]`);
+
+  async function askForAFollowUp() {
+    wrapper ??= mount(ApplicationMonitor, {
+      props: { market: MARKET, visible: true },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    await byId('app-monitor-follow-up-button').trigger('click');
+    await flushPromises();
+    return wrapper;
+  }
+
+  /** The next verdict's answer, held until the test refuses or answers it. */
+  function holdTheVerdict() {
+    let answer!: () => void;
+    let refuse!: (reason: unknown) => void;
+    reviewApplication.mockImplementationOnce(
+      (_m: string, held: Application, status: string) =>
+        new Promise((resolve, reject) => {
+          answer = () => resolve({ application: { ...held, status }, undoSeconds: 0 });
+          refuse = reject;
+        }),
+    );
+    return { answer: () => answer(), refuse: (reason: unknown) => refuse(reason) };
+  }
+
+  const markIt = () => page().get('[data-testid="follow-up-window"] form').trigger('submit');
+
+  it('holds while it marks, and marks once however often it is pressed', async () => {
+    await askForAFollowUp();
+    const verdict = holdTheVerdict();
+
+    await markIt();
+    await markIt();
+    await flushPromises();
+    await byId('follow-up-close-button').trigger('click');
+    await byId('follow-up-background').trigger('click');
+    await byId('follow-up-cancel-button').trigger('click');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+
+    expect(byId('follow-up-window').exists()).toBe(true);
+    expect(byId('follow-up-submit-button').attributes('disabled')).toBeDefined();
+    expect(reviewApplication).toHaveBeenCalledTimes(1);
+
+    verdict.answer();
+    await flushPromises();
+    expect(byId('follow-up-window').exists()).toBe(false);
+  });
+
+  it('keeps a refusal that lands after the review was left out of the next opening', async () => {
+    const monitor = await askForAFollowUp();
+    const verdict = holdTheVerdict();
+    await markIt();
+    await flushPromises();
+
+    // Leaving the review takes the dialog with the card it lay over.
+    await monitor.setProps({ visible: false });
+    await flushPromises();
+    verdict.refuse({
+      isAxiosError: true,
+      response: { status: 403, data: { error: 'The server said no.' } },
+    });
+    await flushPromises();
+    await monitor.setProps({ visible: true });
+    await flushPromises();
+    expect(byId('follow-up-window').exists()).toBe(false);
+
+    await askForAFollowUp();
+
+    expect(byId('follow-up-window').exists()).toBe(true);
+    expect(byId('follow-up-error').exists()).toBe(false);
+    expect(byId('follow-up-submit-button').attributes('disabled')).toBeUndefined();
   });
 });

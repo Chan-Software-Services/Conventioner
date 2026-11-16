@@ -15,6 +15,7 @@ sources:
   - E38/F08/S02
   - E43/F01/S03
   - T263
+  - T411
 ---
 
 # Adding a vendor who never applied
@@ -51,7 +52,7 @@ The market read serves the table's Add a vendor who never applied answer and the
 ## Where it is kept
 
 - `POST /markets/:id/vendors` is `add_vendor` in [`back-end/api/added_vendors.py`](../../../back-end/api/added_vendors.py): a missing name or address, a missing price answer, one the form would refuse, or an answer to a question adding does not ask is a 400; the wrong phase or a held address is a 409, each a [client error](../../implementation/conventions/an-exception-never-reaches-a-client.md) saying why.
-- The questions asked are `Groups.fields` in [`back-end/pricing.py`](../../../back-end/pricing.py), the form's own of those the market read serves as `priceReads`; the dialog, [`AddVendorDialog.vue`](../../../front-end/src/components/AddVendorDialog.vue), asks them in the form's order with the form's own controls, offers "Add vendor" only once each is answered, and holds its closes while the write is out, so a refusal stays in view ([dialogs](../../implementation/conventions/dialogs.md)).
+- The questions asked are `Groups.fields` in [`back-end/pricing.py`](../../../back-end/pricing.py), the form's own of those the market read serves as `priceReads`; the dialog, [`AddVendorDialog.vue`](../../../front-end/src/components/AddVendorDialog.vue), asks them in the form's order with the form's own controls, offers "Add vendor" only once each is answered, and holds its closes while the write is out through its submission (`useDialogSubmit`, T411), so a refusal stays in view and a second press adds nobody ([dialogs](../../implementation/conventions/dialogs.md)).
 - The phases are `adding_refusal` in [`back-end/api/markets.py`](../../../back-end/api/markets.py), served as `addingVendorsReason`.
 - The run skips any application with `added_by` in `approved_solver_vendors` ([`back-end/assignment/vendor_input.py`](../../../back-end/assignment/vendor_input.py), [the assignment solver](../../implementation/modules/assignment-solver.md)).
 - The stored application, its full name and its price answers as its only answers, and the `added_by`/`added_at` stamp are [the application document](../../implementation/data/application-document.md); the held seat is [placements](../../implementation/modules/placements.md).
