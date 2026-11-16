@@ -6,6 +6,8 @@
  * Preview with no file, whose Import posted an empty `csvContent`. A form read sent by "Add a
  * question for it" answered the same way, opening the amend dialog over Upload.
  * Back now waits while a request is out, and Start over drops every answer still to come.
+ * The steps carry their data (`utils/importWizard`): a change made during the check withdraws it,
+ * and a file the server could not read is not named.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
@@ -167,5 +169,76 @@ describe('Start over while a request is out', () => {
     formRead.resolve({ data: { application_form: { fields: [] }, formRevision: 1 } });
     await flushPromises();
     expect(view.findComponent({ name: 'AmendFormDialog' }).props('open')).toBe(false);
+  });
+});
+
+describe('the steps carry their data', () => {
+  /** The bodies the values check was posted with. */
+  function checkBodies(): Array<{ mapping?: Record<string, unknown> }> {
+    return api.post.mock.calls
+      .filter(([url]) => String(url).endsWith('/import/preview'))
+      .map(([, body]) => body as { mapping?: Record<string, unknown> });
+  }
+
+  it("a column changed during the check offers Preview import again, and the check's answer leaves Map columns as it is", async () => {
+    const served = api.post.getMockImplementation()!;
+    api.post.mockImplementation(async (url: string, body: unknown) =>
+      url.endsWith('/import/inspect')
+        ? {
+            data: {
+              headers: ['Email Address', 'Notes'],
+              sampleValues: [['ana-vendor@example.com'], ['Corner table']],
+              rowCount: 1,
+              targets: [
+                { key: 'applicant_email', label: 'Email', required: true, kind: 'identity' },
+                { key: 'notes', label: 'Notes', required: false, kind: 'custom' },
+              ],
+              groups: [],
+              suggestedMapping: { applicant_email: 0 },
+            },
+          }
+        : served(url, body),
+    );
+    const view = await onMapColumns();
+    await press(view, 'import-preview-button');
+    const preview = view.get<HTMLButtonElement>('[data-testid="import-preview-button"]');
+    expect(preview.element.disabled).toBe(true);
+
+    const select = view.get<HTMLSelectElement>('[data-testid="import-target-select-1"]');
+    select.element.value = 'notes';
+    await select.trigger('change');
+    await flushPromises();
+    expect(preview.element.disabled).toBe(false);
+    expect(preview.text()).toBe('Preview import');
+
+    // The answer was for the mapping before the change: it opens nothing.
+    valuesCheck.resolve({ data: { validRows: 1, newRows: 1 } });
+    await flushPromises();
+    expect(view.find('[data-testid="import-map"]').exists()).toBe(true);
+    expect(view.find('[data-testid="import-preview"]').exists()).toBe(false);
+    expect(select.element.value).toBe('notes');
+
+    // Checked again, the preview is the mapping on screen.
+    await press(view, 'import-preview-button');
+    expect(view.find('[data-testid="import-preview"]').exists()).toBe(true);
+    expect(checkBodies().at(-1)?.mapping).toEqual({ applicant_email: 0, notes: 1 });
+  });
+
+  it('a file the server could not read leaves Upload naming no file', async () => {
+    api.post.mockRejectedValue(new Error('Network Error'));
+    wrapper = mount(CsvImportView, {
+      global: {
+        stubs: { MarketFrame: { template: '<div><slot /></div>' }, AmendFormDialog: true },
+      },
+      attachTo: document.body,
+    });
+    const input = wrapper.get('[data-testid="import-file-input"]');
+    const file = new File([FILE], 'responses.csv', { type: 'text/csv' });
+    Object.defineProperty(input.element, 'files', { value: [file] });
+    await input.trigger('change');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="import-upload"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="import-error"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="import-filename"]').exists()).toBe(false);
   });
 });

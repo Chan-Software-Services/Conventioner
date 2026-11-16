@@ -123,7 +123,8 @@ On Map columns and Preview, "Cancel import", a tab, a link, Back or a jump to an
 A reload or closing the tab is asked by the browser, in its own words ([unsaved work asks before it is dropped](../../implementation/conventions/unsaved-work-asks-before-it-is-dropped.md)).
 Upload and the done step leave without asking, "Back to applications" and "Go to the review" included, and so does a page whose import is being written, since leaving does not stop it.
 The import's own Back stays inside the page and never asks; from Map columns it returns to Upload, without the file (`the-import-asks-before-it-drops-a-mapping.spec.ts`).
-Back waits while a request is out: it is disabled while the file is read, while the values are checked and while the import is written, and a return to Upload drops every answer still to come, so a values check answering late never opens Preview without the file, and Import always posts the file previewed (T419; `the-import-never-previews-without-a-file.spec.ts`).
+Back waits while a request is out: it is disabled while the values are checked, while the questions are read again after a change to the form made from the import, and while the import is written, and a return to Upload drops every answer still to come, so a values check answering late never opens Preview without the file, and Import always posts the file previewed (T419; `the-import-never-previews-without-a-file.spec.ts`).
+A change to a column or a value while the values are checked withdraws the check: "Preview import" is offered again, and the check's answer is dropped, so Preview always shows the mapping on screen.
 
 ### H2b. Answers that match no option
 

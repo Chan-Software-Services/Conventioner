@@ -5,7 +5,7 @@ describes:
   - front-end/src/components/application/AmendFormDialog.vue
   - front-end/src/views/CsvImportView.vue#amendAvailability
   - front-end/src/views/CsvImportView.vue#readAmendForm
-verified: 2026-11-11
+verified: 2026-11-16
 sources:
   - wayfinding/the-order-of-the-work/07
   - wayfinding/the-order-of-the-work/map

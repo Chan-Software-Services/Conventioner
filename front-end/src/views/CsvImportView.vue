@@ -14,7 +14,7 @@
  */
 import { MarketAction, actionRefusal, mayTake } from '@/utils/marketActions';
 import { whoMayTake } from '@/utils/permissionTable';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { marketPath } from '@/utils/market';
 import { useRoute, useRouter } from 'vue-router';
 import { useOpenMarket } from '@/utils/openMarket';
@@ -31,6 +31,34 @@ import ChoiceField from '@/components/ChoiceField.vue';
 import type { PickerGroup, PickerOption } from '@/components/SearchPicker.vue';
 import ValueFixes from '@/components/ValueFixes.vue';
 import { IGNORE_VALUE } from '@/utils/valueFixes';
+import {
+  NEEDS_A_FIELD,
+  START,
+  activeGroups as activeGroupsOf,
+  asksBeforeLeaving,
+  dryRunFrom,
+  importStep,
+  inspectionFrom,
+  keepDecisions,
+  mappingBody,
+  mayCheck,
+  mayConfirm,
+  mayGoBack,
+  resolutionsBody,
+  restoresAMapping,
+  resultFrom,
+  type ColumnGroup,
+  type DecidedValue,
+  type DryRun,
+  type ImportEvent,
+  type ImportFile,
+  type ImportMapping,
+  type ImportTarget,
+  type ImportWizard,
+  type Inspection,
+  type PreviewRow,
+  type UnmatchedValue,
+} from '@/utils/importWizard';
 import { EMPTY_ESSENTIAL_OPTIONS, applicantName } from '@/utils/essentialFields';
 import {
   findsRejectedRow,
@@ -43,7 +71,7 @@ import {
 } from '@/utils/importPreview';
 import { reviewAnswers } from '@/utils/reviewQueue';
 import ImportRowList, { type ImportRow } from '@/components/csvImport/ImportRowList.vue';
-import ImportRefusedRows, { type RefusedRow } from '@/components/csvImport/ImportRefusedRows.vue';
+import ImportRefusedRows from '@/components/csvImport/ImportRefusedRows.vue';
 import ListFrame from '@/components/ListFrame.vue';
 import ReviewerPicker from '@/components/market/ReviewerPicker.vue';
 import {
@@ -76,60 +104,8 @@ const MULTI_VALUE_TARGETS = new Set<string>([
   TABLE_TYPE_RANKING_KEY,
 ]);
 
-type Step = 'upload' | 'map' | 'preview' | 'done';
-
-/**
- * Sentinel for "I want this column and there is no target for it". Not a mapping - it never
- * reaches the server - it is the ledger's way of explaining the dead end rather than leaving the
- * organizer to conclude the import is broken.
- */
-const NEEDS_A_FIELD = '__needs_a_field__';
-
 /** The target "Submitted at", `csv_import.SUBMITTED_AT_TARGET`. */
 const SUBMITTED_AT_KEY = 'submitted_at';
-
-interface ImportTarget {
-  key: string;
-  label: string;
-  required: boolean;
-  kind: 'identity' | 'essential' | 'custom' | 'meta';
-}
-
-/** Several columns that are one question: a Google Forms checkbox or multiple-choice grid. */
-interface ColumnGroup {
-  stem: string;
-  columns: number[];
-  options: string[];
-}
-
-/** A cell value that names nothing this market offers, and how many rows carry it. */
-interface UnmatchedValue {
-  target: string;
-  targetLabel: string;
-  value: string;
-  rows: number;
-  offered: string[];
-}
-
-/** A row of the file as the dry run says it will be stored, and why a rule rejects it, if one does. */
-interface PreviewRow {
-  row: number;
-  email: string;
-  formData: Record<string, unknown> | null;
-  reason?: string;
-}
-
-/** A value a saved decision settles, with that decision: listed so it can be changed. */
-interface DecidedValue extends UnmatchedValue {
-  choice: string | null;
-}
-
-/** An earlier submission, replaced by the same applicant's later row in the file. */
-interface ImportRepeat {
-  row: number;
-  email: string;
-  latestRow: number;
-}
 
 const router = useRouter();
 
@@ -170,20 +146,51 @@ const takingApplications = computed(() => Boolean(market.value) && !phaseRefusal
  * whole responses file again (E38/F04/S01, S03). Said on the page, since the file to bring differs.
  */
 const firstImport = computed(() => marketPhase.value === MarketPhase.Draft);
-/** The market entered Review with this import: the done step says where it now stands. */
-const enteredReview = ref(false);
+
 /**
- * Whether the import just written was the market's first, as it was when it began: the import moves
- * the market into Review, so `firstImport` reads false by the done step, which redid nothing.
+ * Where the import stands, and everything each step stands on (`utils/importWizard`): written only
+ * by `dispatch`, so a step cannot be reached that the wizard's table does not lead to.
  */
-const importedFirst = ref(false);
+const wizard = shallowRef<ImportWizard>(START);
+/** Move the wizard by one event; false when the event changes nothing, so nothing is sent. */
+function dispatch(event: ImportEvent): boolean {
+  const next = importStep(wizard.value, event);
+  if (next === wizard.value) return false;
+  wizard.value = next;
+  return true;
+}
+const step = computed(() => wizard.value.step.kind);
+/** The step's file, inspection and mapping: Map columns, its check, Preview and its import. */
+const onFile = computed(() => {
+  const at = wizard.value.step;
+  if (at.kind === 'mapping' || at.kind === 'values' || at.kind === 'preview') return at;
+  return at.kind === 'importing' ? at.from : null;
+});
+/** The Preview shown: on Preview, and while its import is written. */
+const previewStep = computed(() => {
+  const at = wizard.value.step;
+  if (at.kind === 'preview') return at;
+  return at.kind === 'importing' ? at.from : null;
+});
+/** Map columns, with the values check out or not. */
+const onMapColumns = computed(() => step.value === 'mapping' || step.value === 'values');
+/** Preview, with its import out or not. */
+const onPreview = computed(() => step.value === 'preview' || step.value === 'importing');
+/** What the done step reports. */
+const result = computed(() =>
+  wizard.value.step.kind === 'done' ? wizard.value.step.result : null,
+);
+
+/** The market entered Review with this import: the done step says where it now stands. */
+const enteredReview = computed(() => result.value?.enteredReview ?? false);
 /**
  * The page's heading: what this import is, or on the done step what it was. Redo import is Review's
  * alone, as the rail offers it: past review a market offers none, so its refused page is named as a
- * draft's refused first import is (T315).
+ * draft's refused first import is (T315). The done step reads the import as it was when it began:
+ * the import moves the market into Review, so `firstImport` reads false by then, and it redid nothing.
  */
 const heading = computed(() =>
-  (step.value === 'done' ? !importedFirst.value : marketPhase.value === MarketPhase.Applications)
+  (result.value ? !result.value.importedFirst : marketPhase.value === MarketPhase.Applications)
     ? 'Redo import'
     : 'Import responses',
 );
@@ -207,9 +214,9 @@ watch(
   { immediate: true },
 );
 /** Why the reviewers could not be written; nothing is imported then. */
-const reviewersError = ref('');
-
-const step = ref<Step>('upload');
+const reviewersError = computed(() =>
+  wizard.value.step.kind === 'preview' ? wizard.value.step.reviewersRefusal : '',
+);
 /**
  * The page says it is refused instead of offering a file: then it has no steps to take and nothing
  * to cancel, so it draws neither the stepper nor the actions' footer with Cancel import, and "Back
@@ -241,83 +248,86 @@ function leaveImport() {
   if (market.value?.id) router.push(marketPath(market.value.id, 'applications'));
   else router.push('/markets');
 }
-const busy = ref(false);
 /**
  * A file read and nothing of it written: on Map columns and Preview the mapping and every value
  * settled live in this page alone until the final confirm, so leaving asks first (T271). Upload
  * holds no file and the done step has written it; nor does an import already running ask, since
- * leaving does not stop it.
+ * leaving does not stop it (`asksBeforeLeaving`).
  */
-const holdsAMapping = computed(
-  () => step.value === 'map' || (step.value === 'preview' && !busy.value),
-);
+const holdsAMapping = computed(() => asksBeforeLeaving(wizard.value.step));
 useUnsavedWork({
   unsaved: () => holdsAMapping.value,
   sentence:
     'Nothing from this file is imported yet. Leaving drops the column mapping and every value you settled.',
 });
-const error = ref('');
-const fileName = ref('');
-const csvContent = ref('');
+/** The page's error line: why the step's last request was refused, or that no market is open. */
+const error = computed(() => {
+  if (!marketId.value) return 'No market is open. Open a market first, then import into it.';
+  const at = wizard.value.step;
+  return at.kind === 'upload' || at.kind === 'mapping' || at.kind === 'preview' ? at.refusal : '';
+});
+/** The file's name under the heading: while it is read, and on every step that holds it. */
+const fileName = computed(() => {
+  const at = wizard.value.step;
+  if (at.kind === 'upload') return at.reading?.name ?? '';
+  if (at.kind === 'done') return at.fileName;
+  return onFile.value?.file.name ?? '';
+});
+/** The file is being read: the drop zone says so, and takes no other. */
+const readingFile = computed(
+  () => wizard.value.step.kind === 'upload' && wizard.value.step.reading !== null,
+);
 
-const headers = ref<string[]>([]);
-const sampleValues = ref<string[][]>([]);
-const rowCount = ref(0);
-const targets = ref<ImportTarget[]>([]);
-/** Column index -> target key. The ledger is column-driven, so this is its natural direction. */
-const columnTarget = ref<Record<number, string>>({});
-const groups = ref<ColumnGroup[]>([]);
-/** A previous import's decisions, re-applied to this file. */
-const restoredTargets = ref<Set<string>>(new Set());
-const restoredMissing = ref<Array<{ target: string; missingHeaders: string[] }>>([]);
-const newHeaders = ref<string[]>([]);
-const hasSavedMapping = ref(false);
+const NO_INSPECTION: Inspection = inspectionFrom({}).inspection;
+const NO_MAPPING: ImportMapping = inspectionFrom({}).mapping;
+const NO_VALUES: DryRun = dryRunFrom({});
+/** What the inspect said of the file, and the organizer's decisions on it. */
+const inspection = computed(() => onFile.value?.inspection ?? NO_INSPECTION);
+const mapping = computed(() => onFile.value?.mapping ?? NO_MAPPING);
+/** The values check's last answer for this mapping, if it has one. */
+const dryRun = computed<DryRun>(() => onFile.value?.values ?? NO_VALUES);
+
+const headers = computed(() => inspection.value.headers);
+const sampleValues = computed(() => inspection.value.sampleValues);
+const rowCount = computed(() => inspection.value.rowCount);
+const targets = computed<ImportTarget[]>(() => inspection.value.targets);
+const restoredTargets = computed(() => inspection.value.restoredTargets);
+const restoredMissing = computed(() => inspection.value.restoredMissing);
+const newHeaders = computed(() => inspection.value.newHeaders);
+const hasSavedMapping = computed(() => inspection.value.hasSavedMapping);
+const savedMappingFrom = computed(() => inspection.value.savedMappingFrom);
+const ordersBySubmittedAt = computed(() => inspection.value.ordersBySubmittedAt);
+const commaBearingTargets = computed(() => inspection.value.commaBearingTargets);
+const startedResolutions = computed(() => inspection.value.startedResolutions);
+const columnTarget = computed(() => mapping.value.columnTarget);
+const groupTarget = computed(() => mapping.value.groupTarget);
+const resolutions = computed(() => mapping.value.resolutions);
+
+const unmatched = computed<UnmatchedValue[]>(() => dryRun.value.unmatched);
+const decided = computed<DecidedValue[]>(() => dryRun.value.decided);
+const validRows = computed(() => dryRun.value.validRows);
+const previewFailures = computed(() => dryRun.value.failures);
+const newRows = computed(() => dryRun.value.newRows);
+const updatedRows = computed(() => dryRun.value.updatedRows);
+const unchangedRows = computed(() => dryRun.value.unchangedRows);
+const keptVerdicts = computed(() => dryRun.value.keptVerdicts);
+const absentApplications = computed(() => dryRun.value.absentApplications);
+const absentEmails = computed(() => dryRun.value.absentEmails);
+const returningToReview = computed(() => dryRun.value.returningToReview);
+const returningEmails = computed(() => dryRun.value.returningEmails);
 /**
- * Whose decisions the saved mapping holds: the start of the form, or an earlier import. The first
- * import after a start used to call the start's choices "your last import" (E30/F02/S01).
+ * Rows the file holds more than once for one applicant: each applicant is one application. The
+ * preview says what the dry run found, the done step what the import replaced.
  */
-const savedMappingFrom = ref<'start' | 'import'>('import');
-/** Does this market order vendors by when they applied? Decides the warning below. */
-const ordersBySubmittedAt = ref(false);
-/**
- * Targets whose own option labels contain commas, as the server reports them.
- *
- * A checkbox question exports one column holding the selected labels comma-joined, and throws the
- * separator information away before writing the file. When the labels themselves contain commas,
- * nothing can recover which separator was which - so a single column mapped to one of these
- * produces fragments, and the organizer is owed the reason rather than a list of values that
- * "did not match your market".
- */
-const commaBearingTargets = ref<Set<string>>(new Set());
-/** Group stem -> target key: a grid is mapped once, for all of its columns at a time. */
-const groupTarget = ref<Record<string, string>>({});
-/** Stems the organizer has broken apart, when the detection guessed wrong. */
-const splitStems = ref<Set<string>>(new Set());
+const repeats = computed(() => result.value?.repeats ?? dryRun.value.repeats);
 
-const unmatched = ref<UnmatchedValue[]>([]);
-/** The file's values a decision already settles - restored, saved by the proposal, or made here. */
-const decided = ref<DecidedValue[]>([]);
-/** target -> raw value -> the market's own name for it, or '' meaning "ignore this value". */
-const resolutions = ref<Record<string, Record<string, string>>>({});
-/** The resolutions the saved mapping arrived with, to tell its decisions from the organizer's. */
-const startedResolutions = ref<Record<string, Record<string, string>>>({});
-
-const created = ref(0);
-const updated = ref(0);
+const created = computed(() => result.value?.created ?? 0);
+const updated = computed(() => result.value?.updated ?? 0);
 /** Applications already here whose answers this file does not change: nothing is written. */
-const unchanged = ref(0);
+const unchanged = computed(() => result.value?.unchanged ?? 0);
 /** How many the market's automatic rejections rejected (E33/F03/S02). */
-const rejectedByRules = ref(0);
-const failures = ref<RefusedRow[]>([]);
-/** What the dry run said would import, and what it said would be skipped. */
-const validRows = ref(0);
-const previewFailures = ref<RefusedRow[]>([]);
-/** How the file lands against what is already here. */
-const newRows = ref(0);
-const updatedRows = ref(0);
-const unchangedRows = ref(0);
-/** Updated applications already decided that the import leaves at their verdict. */
-const keptVerdicts = ref(0);
+const rejectedByRules = computed(() => result.value?.rejectedByRules ?? 0);
+const failures = computed(() => result.value?.failures ?? []);
 
 /** How many rows the import will write, as the headline counts them: the confirm button's count. */
 const writingRows = computed(() =>
@@ -356,20 +366,8 @@ const previewMergeLine = computed(() =>
     rejected: previewRejected.value.length,
   }),
 );
-const absentApplications = ref(0);
-const absentEmails = ref<string[]>([]);
-const returningToReview = ref(0);
-const returningEmails = ref<string[]>([]);
-/** Rows the file holds more than once for one applicant: each applicant is one application. */
-const repeats = ref<ImportRepeat[]>([]);
 
-onMounted(() => {
-  if (!marketId.value) {
-    error.value = 'No market is open. Open a market first, then import into it.';
-  }
-});
-
-const activeGroups = computed(() => groups.value.filter((g) => !splitStems.value.has(g.stem)));
+const activeGroups = computed(() => activeGroupsOf(inspection.value, mapping.value));
 const groupedColumns = computed(
   () => new Set(activeGroups.value.flatMap((group) => group.columns)),
 );
@@ -532,7 +530,7 @@ function sourceLabelFor(key: string): string {
  * as skipped a few lines above, and read availability as "no answer" when a tier grid had answered
  * it.
  */
-const previewSamples = ref<PreviewRow[]>([]);
+const previewSamples = computed<PreviewRow[]>(() => dryRun.value.samples);
 
 const sampleApplications = computed(() => previewRows(previewSamples.value));
 
@@ -541,7 +539,7 @@ const sampleApplications = computed(() => previewRows(previewSamples.value));
  * import's end judges them (E38/F03/S02); a row a rule already rejected for the same reason is
  * not among them. Not among the samples either: those check the mapping, these check the rules.
  */
-const previewRejected = ref<PreviewRow[]>([]);
+const previewRejected = computed<PreviewRow[]>(() => dryRun.value.rejected);
 
 const rejectedApplications = computed(() => previewRows(previewRejected.value));
 
@@ -572,10 +570,7 @@ function resolutionFor(target: string, value: string): string {
 }
 
 function setResolution(target: string, value: string, choice: string) {
-  resolutions.value = {
-    ...resolutions.value,
-    [target]: { ...(resolutions.value[target] ?? {}), [value]: choice },
-  };
+  dispatch({ kind: 'resolve', target, value, choice });
 }
 
 const unresolvedCount = computed(
@@ -583,10 +578,7 @@ const unresolvedCount = computed(
 );
 
 function splitGroup(stem: string) {
-  const next = new Set(splitStems.value);
-  next.add(stem);
-  splitStems.value = next;
-  delete groupTarget.value[stem];
+  dispatch({ kind: 'split', stem });
 }
 const unservedRequired = computed(() =>
   requiredTargets.value.filter((t) => !mappedKeys.value.has(t.key)),
@@ -688,13 +680,31 @@ const mapsToCount = computed(() => targets.value.length + 2);
 async function acceptFile(file: File) {
   const read = await readCsvFile(file, IMPORT_FILE_TOO_LARGE);
   if ('error' in read) {
-    error.value = read.error;
+    dispatch({ kind: 'unreadable', sentence: read.error });
     return;
   }
-  error.value = '';
-  fileName.value = file.name;
-  csvContent.value = read.text;
-  await inspect();
+  const chosen: ImportFile = { name: file.name, content: read.text };
+  if (!dispatch({ kind: 'choose', file: chosen })) return;
+  const token = wizard.value.token;
+  let inspected: { inspection: Inspection; mapping: ImportMapping };
+  try {
+    inspected = await inspect(chosen);
+  } catch (e) {
+    dispatch({
+      kind: 'refused',
+      token,
+      sentence: getApiErrorMessage(e, 'That file could not be read.'),
+    });
+    return;
+  }
+  if (!still(token)) return;
+  // A restored mapping carries decisions about this file's values: read them before Map columns
+  // opens, so they are on the page to be seen and changed before anything is previewed (bug 28),
+  // rather than drawn a moment later, pushing the rows down.
+  const values = restoresAMapping(inspected.inspection)
+    ? await valuesOrNothing(chosen, inspected.inspection, inspected.mapping)
+    : null;
+  dispatch({ kind: 'inspected', token, ...inspected, values });
 }
 
 /* ── Fixing the form without leaving the import (E20/F03/S01) ─────────────────────────────────
@@ -725,36 +735,31 @@ const amendAvailability = computed(() =>
 );
 
 /**
- * The page's stays on one market: it moves on when the page goes, and when the router keeps the page
- * for another market's import, as a jump through history does, there and back alike. `marketId` goes
- * on following the address once the page has gone, so it cannot say any of this itself.
+ * Whether the wizard still stands where a request noted it: its token moves on whenever the step
+ * changes, when the page goes and when the router keeps the page for another market's import, so an
+ * answer that finds another token is another step's, and nothing more is sent for it.
  */
-let visit = 0;
-onBeforeUnmount(() => {
-  visit += 1;
-});
-
-/** Noted before a request: asked at its answer, whether that answer is still this page's to show. */
-function leftSinceNow(): () => boolean {
-  const at = visit;
-  return () => visit !== at;
+function still(token: number): boolean {
+  return wizard.value.token === token;
 }
 
 /** Read the form the dialog edits, with its revision; false when it could not be read here. */
 async function readAmendForm(): Promise<boolean> {
-  const left = leftSinceNow();
+  const token = wizard.value.token;
   try {
     const { data } = await api.get(`/markets/${marketId.value}/application-form`);
-    if (left()) return false;
+    if (!still(token)) return false;
     amendForm.value = (data?.application_form ?? null) as ApplicationForm | null;
     amendOptions.value = (data?.essential_options ??
       EMPTY_ESSENTIAL_OPTIONS) as EssentialFormOptions;
     amendRevision.value = data?.formRevision ?? null;
     return true;
   } catch (err) {
-    if (!left()) {
-      error.value = getApiErrorMessage(err, "Could not read this market's application form.");
-    }
+    dispatch({
+      kind: 'refused',
+      token,
+      sentence: getApiErrorMessage(err, "Could not read this market's application form."),
+    });
     return false;
   }
 }
@@ -770,132 +775,70 @@ async function openAmend(options: { fieldLabel?: string; unasked?: string }) {
  *
  * Re-inspecting is what picks up a new custom field as a target and drops a question that was
  * turned off. It rebuilds the mapping from scratch, so the organizer's own decisions are carried
- * across - without this the story trades a four-step round trip for a two-step one.
+ * across (`keepDecisions`) - without this the story trades a four-step round trip for a two-step one.
  */
 async function onAmended() {
   // The form is a write, so the store re-reads the market and every screen showing it follows.
   void refreshMarket();
-  const keptColumns = { ...columnTarget.value };
-  const keptGroups = { ...groupTarget.value };
-  const keptResolutions = { ...resolutions.value };
-  const keptStep = step.value;
-  const left = leftSinceNow();
-
-  await inspect();
-  if (left()) return;
-
-  // By column index and group stem, both of which are properties of the FILE - and the file is
-  // the one thing that did not change.
-  for (const [index, target] of Object.entries(keptColumns)) {
-    if (target) columnTarget.value[Number(index)] = target;
-  }
-  groupTarget.value = { ...groupTarget.value, ...keptGroups };
-  resolutions.value = { ...keptResolutions };
-  step.value = keptStep;
-  // What the values mean follows the decisions just put back, not the ones inspect restored.
-  await readValues(false).catch(() => {});
-}
-
-async function inspect() {
-  const left = leftSinceNow();
-  busy.value = true;
-  error.value = '';
+  if (!dispatch({ kind: 'reread' })) return;
+  const token = wizard.value.token;
+  const file = onFile.value?.file;
+  if (!file) return;
+  let inspected: { inspection: Inspection; mapping: ImportMapping };
   try {
-    const { data } = await api.post(`/markets/${marketId.value}/applications/import/inspect`, {
-      csvContent: csvContent.value,
-    });
-    if (left()) return;
-    headers.value = data.headers ?? [];
-    sampleValues.value = data.sampleValues ?? [];
-    rowCount.value = data.rowCount ?? 0;
-    targets.value = data.targets ?? [];
-    groups.value = data.groups ?? [];
-    splitStems.value = new Set();
-    columnTarget.value = {};
-    unmatched.value = [];
-    decided.value = [];
-    resolutions.value = {};
-    startedResolutions.value = {};
-    // Seed every column with '' - the "Ignore this column" option's value. Left undefined, the
-    // select matches no option, reports selectedIndex -1 and renders completely blank, so an
-    // unmapped column is indistinguishable from one that has not loaded.
-    headers.value.forEach((_header, index) => {
-      columnTarget.value[index] = '';
-    });
-    // And every grid with its "Ignore these columns", for the same reason (bug 43): the columns
-    // were seeded and the grids were not, so a grid's select read blank until it was chosen.
-    groupTarget.value = Object.fromEntries(groups.value.map((group) => [group.stem, '']));
-    for (const [key, index] of Object.entries(data.suggestedMapping ?? {})) {
-      columnTarget.value[Number(index)] = key;
-    }
-
-    // A previous import's decisions win over the auto-detected two: the organizer already said
-    // what these columns mean, and re-asking is the friction this remembers them to avoid.
-    hasSavedMapping.value = data.hasSavedMapping === true;
-    savedMappingFrom.value = data.savedMappingFrom === 'start' ? 'start' : 'import';
-    ordersBySubmittedAt.value = data.ordersBySubmittedAt === true;
-    commaBearingTargets.value = new Set<string>(data.commaBearingTargets ?? []);
-    restoredMissing.value = data.restoredTargetsMissingColumns ?? [];
-    newHeaders.value = data.newHeaders ?? [];
-    restoredTargets.value = new Set(Object.keys(data.restoredMapping ?? {}));
-    const groupByFirstColumn = new Map(
-      (groups.value ?? []).map((group) => [group.columns[0], group]),
-    );
-    for (const [key, indexes] of Object.entries(
-      (data.restoredMapping ?? {}) as Record<string, number[]>,
-    )) {
-      const group = groupByFirstColumn.get(indexes[0]);
-      if (group && group.columns.length === indexes.length) {
-        groupTarget.value[group.stem] = key;
-      } else {
-        columnTarget.value[indexes[0]] = key;
-      }
-    }
-    resolutions.value = Object.fromEntries(
-      Object.entries(
-        (data.restoredResolutions ?? {}) as Record<string, Record<string, string | null>>,
-      ).map(([target, byValue]) => [
-        target,
-        Object.fromEntries(
-          Object.entries(byValue).map(([value, choice]) => [value, choice ?? IGNORE_VALUE]),
-        ),
-      ]),
-    );
-    startedResolutions.value = resolutions.value;
-    step.value = 'map';
-    // A restored mapping carries decisions about this file's values: read them now, so they are on
-    // the page to be seen and changed before anything is previewed (bug 28).
-    if (Object.keys(data.restoredMapping ?? {}).length) await readValues(false);
+    inspected = await inspect(file);
   } catch (e) {
-    if (!left()) error.value = getApiErrorMessage(e, 'That file could not be read.');
-  } finally {
-    busy.value = false;
+    dispatch({
+      kind: 'refused',
+      token,
+      sentence: getApiErrorMessage(e, 'That file could not be read.'),
+    });
+    return;
   }
+  if (!still(token)) return;
+  // What the values mean follows the decisions kept, not the ones inspect restored; the answer
+  // keeps them again over the mapping as it stands then, an edit made meanwhile among them.
+  const kept = keepDecisions(inspected.mapping, mapping.value, inspected.inspection);
+  const values = await valuesOrNothing(file, inspected.inspection, kept);
+  dispatch({ kind: 'reinspected', token, ...inspected, values });
 }
 
-function currentMapping(): Record<string, number | number[]> {
-  const mapping: Record<string, number | number[]> = {};
-  for (const [index, key] of Object.entries(columnTarget.value)) {
-    if (!key || key === NEEDS_A_FIELD) continue;
-    if (!groupedColumns.value.has(Number(index))) mapping[key] = Number(index);
-  }
-  for (const group of activeGroups.value) {
-    const key = groupTarget.value[group.stem];
-    if (key) mapping[key] = group.columns;
-  }
-  return mapping;
+/** What the server reads of the file: its columns, the targets, and the mapping it suggests. */
+async function inspect(file: ImportFile) {
+  const { data } = await api.post(`/markets/${marketId.value}/applications/import/inspect`, {
+    csvContent: file.content,
+  });
+  return inspectionFrom(data);
 }
 
-/** Values the organizer has spoken for, in the shape the back end expects ('' means ignore). */
-function currentResolutions(): Record<string, Record<string, string | null>> {
-  const out: Record<string, Record<string, string | null>> = {};
-  for (const [target, byValue] of Object.entries(resolutions.value)) {
-    out[target] = {};
-    for (const [value, choice] of Object.entries(byValue)) {
-      if (choice !== '') out[target][value] = choice === IGNORE_VALUE ? null : choice;
-    }
+/** The dry run: what the file's values mean under this mapping. Writes nothing. */
+async function readValues(
+  file: ImportFile,
+  read: Inspection,
+  decisions: ImportMapping,
+): Promise<DryRun> {
+  const { data } = await api.post(`/markets/${marketId.value}/applications/import/preview`, {
+    csvContent: file.content,
+    mapping: mappingBody(read, decisions),
+    resolutions: resolutionsBody(decisions),
+  });
+  return dryRunFrom(data);
+}
+
+/**
+ * The dry run beside an inspect, or nothing when it fails: the decisions still apply, and the check
+ * on the way to Preview says what is wrong.
+ */
+async function valuesOrNothing(
+  file: ImportFile,
+  read: Inspection,
+  decisions: ImportMapping,
+): Promise<DryRun | null> {
+  try {
+    return await readValues(file, read, decisions);
+  } catch {
+    return null;
   }
-  return out;
 }
 
 /**
@@ -903,109 +846,71 @@ function currentResolutions(): Record<string, Record<string, string | null>> {
  * values keep the organizer on the mapping step, with each one shown in the row that owns it.
  */
 async function checkValues() {
-  const left = leftSinceNow();
-  busy.value = true;
-  error.value = '';
+  if (!dispatch({ kind: 'check' })) return;
+  const token = wizard.value.token;
+  const at = onFile.value;
+  if (!at) return;
   try {
-    await readValues(true);
+    const values = await readValues(at.file, at.inspection, at.mapping);
+    dispatch({ kind: 'checked', token, values });
   } catch (e) {
-    if (!left()) error.value = getApiErrorMessage(e, 'That file could not be checked.');
-  } finally {
-    busy.value = false;
+    dispatch({
+      kind: 'refused',
+      token,
+      sentence: getApiErrorMessage(e, 'That file could not be checked.'),
+    });
   }
-}
-
-/** The dry run: what the file's values mean, and - with `advance` - on to the preview. */
-async function readValues(advance: boolean) {
-  const left = leftSinceNow();
-  const { data } = await api.post(`/markets/${marketId.value}/applications/import/preview`, {
-    csvContent: csvContent.value,
-    mapping: currentMapping(),
-    resolutions: currentResolutions(),
-  });
-  if (left()) return;
-  unmatched.value = data.unmatched ?? [];
-  decided.value = data.decided ?? [];
-  validRows.value = data.validRows ?? 0;
-  previewFailures.value = data.failures ?? [];
-  newRows.value = data.newRows ?? 0;
-  updatedRows.value = data.updatedRows ?? 0;
-  unchangedRows.value = data.unchangedRows ?? 0;
-  keptVerdicts.value = data.keptVerdicts ?? 0;
-  previewSamples.value = data.samples ?? [];
-  previewRejected.value = data.rejected ?? [];
-  absentApplications.value = data.absentApplications ?? 0;
-  absentEmails.value = data.absentEmails ?? [];
-  returningToReview.value = data.returningToReview ?? 0;
-  returningEmails.value = data.returningEmails ?? [];
-  repeats.value = data.repeats ?? [];
-  if (advance && unmatched.value.length === 0) step.value = 'preview';
 }
 
 /**
  * The confirm: the reviewers first, when the choice differs from the team they start from
- * (`teamToChange`), then the import.
+ * (`teamToChange`), then the import of the file and the mapping the preview was computed for.
  * A refused reviewers write imports nothing. Once written they stay chosen, so an import that fails
  * after them is tried again without writing them twice.
  * A page left during those writes stops at them: the file was this stay's, and whatever is on
  * screen by the answer is not.
  */
 async function confirmImport() {
-  if (offersReviewers.value) {
-    const pressedOn = marketId.value;
-    const left = leftSinceNow();
-    busy.value = true;
-    reviewersError.value = '';
+  const pressedOn = marketId.value;
+  const first = firstImport.value;
+  const offers = offersReviewers.value;
+  if (!dispatch({ kind: 'confirm' })) return;
+  const token = wizard.value.token;
+  const at = previewStep.value;
+  if (!at) return;
+  if (offers) {
     try {
       // A write left by a page history took: nothing imports before its answer, and a refusal shows here.
       await unansweredWrite(pressedOn)?.answer;
-      if (!left() && !sameTeam(reviewers.value, teamToChange(market.value))) {
+      if (still(token) && !sameTeam(reviewers.value, teamToChange(market.value))) {
         await chooseReviewers(pressedOn, reviewers.value);
         await refreshMarket();
       }
     } catch (err) {
-      if (!left()) {
-        reviewersError.value = getApiErrorMessage(err, 'Could not save the reviewers.');
-      }
-      busy.value = false;
+      dispatch({
+        kind: 'reviewersRefused',
+        token,
+        sentence: getApiErrorMessage(err, 'Could not save the reviewers.'),
+      });
       return;
     }
-    if (left()) {
-      busy.value = false;
-      return;
-    }
+    if (!still(token)) return;
   }
-  await runImport();
-}
-
-async function runImport() {
-  const left = leftSinceNow();
-  const first = firstImport.value;
-  busy.value = true;
-  error.value = '';
-  reviewersError.value = '';
   try {
     const { data } = await api.post(`/markets/${marketId.value}/applications/import`, {
-      csvContent: csvContent.value,
-      mapping: currentMapping(),
-      resolutions: currentResolutions(),
+      csvContent: at.file.content,
+      mapping: mappingBody(at.inspection, at.mapping),
+      resolutions: resolutionsBody(at.mapping),
     });
     // Applications now exist, which locks the form: part of the market every screen reads.
     void refreshMarket();
-    if (left()) return;
-    created.value = data.created ?? 0;
-    updated.value = data.updated ?? 0;
-    unchanged.value = data.unchanged ?? 0;
-    rejectedByRules.value = data.rejectedByRules ?? 0;
-    failures.value = data.failures ?? [];
-    repeats.value = data.repeats ?? [];
-    importedFirst.value = first;
-    enteredReview.value = first && data.phase === MarketPhase.Applications;
-    step.value = 'done';
+    dispatch({ kind: 'imported', token, result: resultFrom(data, first) });
   } catch (e) {
-    if (!left()) error.value = getApiErrorMessage(e, 'The import could not be completed.');
-  } finally {
-    busy.value = false;
+    dispatch({
+      kind: 'refused',
+      token,
+      sentence: getApiErrorMessage(e, 'The import could not be completed.'),
+    });
   }
 }
 
@@ -1015,23 +920,15 @@ function samplesFor(index: number): string {
   return values.length ? values.join(' · ') : 'no values in the first rows';
 }
 
-function startOver() {
-  // The file goes, so every answer still out for it is dropped: none may land on Upload.
-  visit += 1;
-  step.value = 'upload';
-  fileName.value = '';
-  csvContent.value = '';
-  headers.value = [];
-  failures.value = [];
-  error.value = '';
-  reviewersError.value = '';
-}
+// Nothing is sent for this stay once the page has gone: every answer still out is dropped.
+onBeforeUnmount(() => {
+  dispatch({ kind: 'reset' });
+});
 // A jump through history from one market's import to another's keeps this page, not its file, nor
 // a dialog holding the first market's form, which it would save over the other's.
 watch(marketId, () => {
-  visit += 1;
   amendOpen.value = false;
-  startOver();
+  dispatch({ kind: 'reset' });
 });
 </script>
 
@@ -1049,8 +946,8 @@ watch(marketId, () => {
         </div>
         <ol v-if="!refused" class="import-steps">
           <li :class="{ current: step === 'upload' }">1 Upload</li>
-          <li :class="{ current: step === 'map' }">2 Map columns</li>
-          <li :class="{ current: step === 'preview' }">3 Preview</li>
+          <li :class="{ current: onMapColumns }">2 Map columns</li>
+          <li :class="{ current: onPreview }">3 Preview</li>
           <li :class="{ current: step === 'done' }">4 Confirm</li>
         </ol>
       </header>
@@ -1098,7 +995,7 @@ watch(marketId, () => {
           accept=".csv,text/csv"
           label="Drop your CSV here, or choose a file"
           hint="Any form tool or spreadsheet that exports CSV will do. Every column comes across; you decide which ones mean something on the next step."
-          :busy="busy"
+          :busy="readingFile"
           testid="import-drop-zone"
           input-testid="import-file-input"
           @file="acceptFile"
@@ -1106,7 +1003,7 @@ watch(marketId, () => {
       </section>
 
       <!-- 2. Map columns -->
-      <section v-if="step === 'map'" class="import-map" data-testid="import-map">
+      <section v-if="onMapColumns" class="import-map" data-testid="import-map">
         <div class="import-ledger">
           <div v-if="hasSavedMapping" class="import-restored" data-testid="import-restored-banner">
             <strong v-if="savedMappingFrom === 'start'">
@@ -1182,7 +1079,9 @@ watch(marketId, () => {
                         :testid="`import-group-select-${row.group.columns[0]}`"
                         hide-label
                         writes
-                        @update:model-value="groupTarget[row.group.stem] = $event"
+                        @update:model-value="
+                          dispatch({ kind: 'mapGroup', stem: row.group.stem, target: $event })
+                        "
                       />
 
                       <!-- Values the market does not recognise, fixed in the row that owns them. -->
@@ -1270,7 +1169,9 @@ watch(marketId, () => {
                       :testid="`import-target-select-${row.index}`"
                       hide-label
                       writes
-                      @update:model-value="columnTarget[row.index] = $event"
+                      @update:model-value="
+                        dispatch({ kind: 'map', column: row.index, target: $event })
+                      "
                     />
 
                     <!--
@@ -1419,7 +1320,7 @@ watch(marketId, () => {
       </section>
 
       <!-- 3. Preview -->
-      <section v-if="step === 'preview'" class="import-panel" data-testid="import-preview">
+      <section v-if="onPreview" class="import-panel" data-testid="import-preview">
         <h2 data-testid="import-preview-counts">{{ previewHeadline }}</h2>
         <p class="import-help" data-testid="import-preview-merge">{{ previewMergeLine }}</p>
 
@@ -1559,7 +1460,7 @@ watch(marketId, () => {
             :candidates="market?.reviewerCandidates ?? []"
             :current="reviewerAddresses(market)"
             :unable="unableReviewers(market)"
-            :disabled="busy"
+            :disabled="step === 'importing'"
           />
           <p
             v-if="reviewersError"
@@ -1624,24 +1525,24 @@ watch(marketId, () => {
           v-if="step !== 'upload' && step !== 'done'"
           class="button-secondary"
           data-testid="import-back-button"
-          :disabled="busy"
-          @click="step === 'map' ? startOver() : (step = step === 'preview' ? 'map' : 'preview')"
+          :disabled="!mayGoBack(wizard.step)"
+          @click="dispatch({ kind: 'back' })"
         >
           Back
         </button>
         <button
-          v-if="step === 'map'"
+          v-if="onMapColumns"
           class="button-primary"
-          :disabled="!canPreview || busy || unresolvedCount > 0"
+          :disabled="!mayCheck(wizard.step) || !canPreview || unresolvedCount > 0"
           data-testid="import-preview-button"
           @click="checkValues"
         >
           {{ unmatched.length ? 'Re-check values' : 'Preview import' }}
         </button>
         <button
-          v-if="step === 'preview'"
+          v-if="onPreview"
           class="button-primary"
-          :disabled="busy || validRows === 0"
+          :disabled="!mayConfirm(wizard.step)"
           data-testid="import-confirm-button"
           @click="confirmImport"
         >
