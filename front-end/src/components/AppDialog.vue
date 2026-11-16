@@ -32,6 +32,10 @@
  * one box over the title and the body. A long one asks for `scroll="body"` (T200): its title, close,
  * error and actions stay in view and only its body scrolls; a `tray` slot holds what the dialog has
  * gathered, pinned above the actions (`dialogs.md`).
+ *
+ * A dialog that writes hands its `submission` (`useDialogSubmit`, T411), and the hold is derived
+ * here, never asked for: while it sends nothing closes the dialog and its confirm is disabled, and
+ * its refusal is said in the error line until a field changes.
  */
 import { computed, nextTick, ref, watch, type FunctionalComponent } from 'vue';
 import EmailAddress from '@/components/EmailAddress.vue';
@@ -40,6 +44,7 @@ import { FOCUSABLE } from '@/utils/focusable';
 import { useEscapeToClose } from '@/utils/useEscapeToClose';
 import { useFocusGoesBack } from '@/utils/useFocusGoesBack';
 import { useModalRoot } from '@/utils/useModalRoot';
+import type { DialogSubmission } from '@/utils/useDialogSubmit';
 
 const props = withDefaults(
   defineProps<{
@@ -59,8 +64,9 @@ const props = withDefaults(
     confirmLabel?: string;
     confirmDisabled?: boolean;
     /**
-     * Nothing closes it while this holds: a save in flight, whose refusal a close would hide. Cancel
-     * and the close control are drawn disabled, and Escape and the scrim do nothing.
+     * Nothing closes it while this holds. Cancel and the close control are drawn disabled, and
+     * Escape and the scrim do nothing. A write holds by its `submission`; this is for a hold that is
+     * no write, a file being drawn or downloaded.
      */
     closeDisabled?: boolean;
     cancelLabel?: string;
@@ -85,6 +91,13 @@ const props = withDefaults(
     anchored?: boolean;
     /** An error about the submission as a whole. Field errors belong beneath their field. */
     error?: string;
+    /**
+     * The dialog's write, or each of its writes for a dialog of several actions. While any one
+     * sends, the dialog holds as under `closeDisabled` and its confirm is disabled; a single form's
+     * one submission that `says: 'dialog'` has its refusal said in the error line, under `error`,
+     * and a change to any field takes it back to editing.
+     */
+    submission?: DialogSubmission | readonly DialogSubmission[];
   }>(),
   { size: 'narrow', cancelLabel: 'Cancel', scroll: 'window' },
 );
@@ -98,6 +111,30 @@ const emit = defineEmits<{ close: []; submit: [] }>();
 function onSubmit(event: Event) {
   event.preventDefault();
   emit('submit');
+}
+
+const submissions = computed<readonly DialogSubmission[]>(() => {
+  const given = props.submission;
+  if (!given) return [];
+  return 'submit' in given ? [given] : given;
+});
+const sending = computed(() => submissions.value.some((submission) => submission.sending.value));
+
+/** Nothing closes it: a hold asked for, or a write out. */
+const held = computed(() => !!props.closeDisabled || sending.value);
+const confirmOff = computed(() => !!props.confirmDisabled || sending.value);
+
+/** The dialog's own error, else its one write's refusal when the shell is to say it. */
+const shownError = computed(() => {
+  if (props.error) return props.error;
+  const [only, ...others] = submissions.value;
+  if (!props.confirmLabel || !only || others.length || only.says !== 'dialog') return '';
+  return only.sentence.value;
+});
+
+/** A field changed: a refusal said goes, and a save that stays open is editing again. */
+function onInput() {
+  for (const submission of submissions.value) submission.edit();
 }
 
 const pinned = computed(() => props.scroll === 'body');
@@ -121,7 +158,7 @@ const whole = computed(() =>
 );
 
 function close() {
-  if (!props.closeDisabled) emit('close');
+  if (!held.value) emit('close');
 }
 
 useEscapeToClose(() => props.open, close);
@@ -217,9 +254,9 @@ watch(
  * another dialog, one opened over this.
  */
 watch(
-  () => [props.closeDisabled, props.confirmDisabled] as const,
-  async ([held, confirmOff], [wasHeld, confirmWasOff]) => {
-    const released = (wasHeld && !held) || (confirmWasOff && !confirmOff);
+  () => [held.value, confirmOff.value] as const,
+  async ([isHeld, isOff], [wasHeld, wasOff]) => {
+    const released = (wasHeld && !isHeld) || (wasOff && !isOff);
     if (!released || !props.open) return;
     await nextTick();
     if (!props.open) return;
@@ -268,7 +305,7 @@ watch(
         aria-label="Close"
         data-dialog-close
         :data-testid="`${testid}-close-button`"
-        :disabled="closeDisabled"
+        :disabled="held"
         @click="close"
       >
         &times;
@@ -287,7 +324,7 @@ watch(
             :is="confirmLabel ? 'form' : 'div'"
             class="dialog-body"
             :class="{ 'dialog-body--pinned': pinned }"
-            v-on="confirmLabel ? { submit: onSubmit } : {}"
+            v-on="confirmLabel ? { submit: onSubmit, input: onInput } : {}"
           >
             <!-- Only the body scrolls, in a box of its own between the pinned parts. -->
             <ScrollBox
@@ -314,8 +351,8 @@ watch(
               </div>
             </template>
 
-            <p v-if="error" class="dialog-error" role="alert" :data-testid="`${testid}-error`">
-              {{ error }}
+            <p v-if="shownError" class="dialog-error" role="alert" :data-testid="`${testid}-error`">
+              {{ shownError }}
             </p>
 
             <footer v-if="confirmLabel || $slots.actions" class="dialog-actions">
@@ -324,7 +361,7 @@ watch(
                   type="button"
                   class="btn btn--secondary"
                   :data-testid="`${testid}-cancel-button`"
-                  :disabled="closeDisabled"
+                  :disabled="held"
                   @click="close"
                 >
                   {{ cancelLabel }}
@@ -333,7 +370,7 @@ watch(
                   type="submit"
                   class="btn"
                   :class="destructive ? 'btn--destructive' : 'btn--primary'"
-                  :disabled="confirmDisabled"
+                  :disabled="confirmOff"
                   :data-testid="`${testid}-submit-button`"
                 >
                   {{ confirmLabel }}

@@ -14,6 +14,7 @@ import { MarketRole } from '@/assets/types/datatypes';
 import AppDialog from '@/components/AppDialog.vue';
 import { OFFLINE_MESSAGE } from '@/utils/api';
 import { getRoleDisplayName } from '@/utils/permissions';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import LibrarySection from '../parts/LibrarySection.vue';
 import LibraryPanel from '../parts/LibraryPanel.vue';
 import TodayAndProposed from '../parts/TodayAndProposed.vue';
@@ -97,11 +98,22 @@ const keptScroll = ref<'window' | 'body'>('body');
 
 const removing = people[5]!;
 
-// A save in flight, which lands only when asked, so the hold can be looked at for as long as it takes.
-const inFlight = ref(false);
+// A save in flight, which lands only when asked, so the hold can be looked at for as long as it
+// takes. It writes as a dialog does, through `useDialogSubmit`, and the shell holds it.
+const inFlight = useDialogSubmit({
+  opening: () => opened.value === 'inFlight',
+  failure: 'The template could not be saved.',
+});
+const { sending: savingInFlight } = inFlight;
+let land: (() => void) | null = null;
+function saveInFlight() {
+  void inFlight.submit(() => new Promise<void>((resolve) => (land = resolve)), {
+    done: () => saved('inFlight', 'Saved'),
+  });
+}
 function letTheSaveLand() {
-  inFlight.value = false;
-  saved('inFlight', 'Saved');
+  land?.();
+  land = null;
 }
 
 const owed = ref('120');
@@ -496,17 +508,16 @@ function addUser() {
     title="Name the template"
     testid="library-in-flight"
     :scroll="keptScroll"
-    :confirm-label="inFlight ? 'Saving…' : 'Save'"
-    :confirm-disabled="inFlight"
-    :close-disabled="inFlight"
+    :confirm-label="savingInFlight ? 'Saving…' : 'Save'"
+    :submission="inFlight"
     @close="closed('inFlight')"
-    @submit="inFlight = true"
+    @submit="saveInFlight"
   >
     <p class="library-text">Save, then let it land when you have looked at the hold.</p>
     <button
       type="button"
       class="btn btn--secondary"
-      :disabled="!inFlight"
+      :disabled="!savingInFlight"
       data-testid="library-in-flight-land"
       @click="letTheSaveLand"
     >
