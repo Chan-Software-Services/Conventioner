@@ -64,6 +64,7 @@ function vendor(n: number): PaymentsVendor {
     owedCents: 3000,
     paidCents,
     balanceState: state,
+    compares: true,
   };
 }
 const VENDORS = Array.from({ length: 120 }, (_, at) => vendor(at + 1));
@@ -77,6 +78,7 @@ const FIGURES = {
 };
 const ANSWER = {
   currency: 'CAD',
+  offersPaymentStates: true,
   totals: FIGURES,
   byTier: [{ tier: 'Gold', ...FIGURES }],
   byDate: [{ date: '2099-08-01', ...FIGURES }],

@@ -201,7 +201,8 @@ def test_running_the_assignment_never_carries_them(market, monkeypatch):
     _assignable(monkeypatch, PlacementsApi)
     monkeypatch.setattr(Lifecycle, "store", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(PlacementsApi.History, "record_assignment_run", lambda *_a, **_k: None)
-    monkeypatch.setattr(PlacementsApi.PaymentsApi, "seated_again", lambda *_args: None)
+    monkeypatch.setattr(PlacementsApi.PaymentsApi, "assignment_written",
+                        lambda *_args, **_kwargs: None)
 
     payload, status = PlacementsApi.run_assignment(MARKET, OWNER)
 

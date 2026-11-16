@@ -17,15 +17,16 @@ describes:
   - back-end/tests/conftest.py#FakeSlugMarketsCollection
   - back-end/db_config.py#uri_targets
   - scripts/real-mongo-test.sh
-verified: 2026-11-13
+verified: 2026-11-16
 sources:
   - T244
   - T274
   - T283
   - T309
-  - T318
   - T311
   - T315
+  - T335
+  - T318
 ---
 
 # The real-MongoDB suite
@@ -162,19 +163,24 @@ Those cases read and write their world through collection calls alone (`find_one
 
 ## One record per vendor's day
 
-An owed record and a check-in are each an upsert by market, vendor and date, and only the boot's unique index on those three keeps the day one record ([payments](../data/payments.md), [attendance and the door](../modules/attendance-and-door.md)).
+A day's first owed record is an insert by its one writer, `owed_day_transition`, and a check-in an upsert by market, vendor and date, and only the boot's unique index on those three keeps the day one record ([payments](../data/payments.md), [attendance and the door](../modules/attendance-and-door.md)).
 Each is raced here, with the index built by `boot_indexes`, in [`real_mongo/test_one_record_per_vendor_day.py`](../../../back-end/tests/real_mongo/test_one_record_per_vendor_day.py); the index's two builds and its refusal over planted records are in the boot-index rows above.
 Each test's name says what it proves.
 
-| Guarantee                                        | Tests                                                                                                                                                                                                                                                                                                                                                                                             |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| One owed record per vendor's day                 | 20 `set_amount_owed` and 20 `keep_freed_line` calls at once on a day with no record, with and without the free's deduction, leave one record: every amount set lands, every free lands or raises `OwedChangedUnderFree` (the route's 409), the record's freed line, when a free landed, is a landed free's, and its amount by hand is an Admin's, or a free's $0 keeping an Admin's as `replaced` |
-| A free that read no record lands on the one made | staged, with and without the deduction: 20 frees each read the day with no record, 20 amounts set by hand then make it, and only then do the frees write; every free's upsert is refused by the index exactly once, and its retry lands on that record, so without the deduction all 20 land and the Admins' amount stands, and with it the $0 standing keeps the Admins' amount as `replaced`    |
-| One check-in per vendor's day                    | 20 `record_attendance` calls at once for one seated vendor's day, on a market in `market_days` whose day has begun (`AttendanceApi.today` moved to it), all answer 200 "Checked in", and leave one record and one "checked in" history entry                                                                                                                                                      |
+| Guarantee                                        | Tests                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One owed record per vendor's day                 | 20 Admin's amounts and 20 frees through the owner at once on a day with no record, with and without the free's deduction, leave one record: every write lands or raises `OwedDayChanged` (the route's 409), the landed writes are one sequence, each reading the record the one before wrote, and once an Admin's amount landed every state after it keeps one, as set, as the freed line's, or as what a free's $0 replaced              |
+| A free that read no record lands on the one made | staged, with and without the deduction: 20 frees each read the day with no record, 20 Admin's amounts then make it, and only then do the frees write; every free's insert is refused by the index exactly once, and its read again lands it on that record or finds the day kept changing, so without the deduction the Admins' amount stands on the freed line, and with it the $0 standing keeps the Admins' amount as what it replaced |
+| One check-in per vendor's day                    | 20 `record_attendance` calls at once for one seated vendor's day, on a market in `market_days` whose day has begun (`AttendanceApi.today` moved to it), all answer 200 "Checked in", and leave one record and one "checked in" history entry                                                                                                                                                                                              |
 
-The server settles most of these races itself.
-MongoDB retries an upsert the unique index refused when its filter is equalities on exactly the index's fields, so a check-in and an amount set by hand, whose filter is the vendor's day, did not see the refusal: on 8.0, none of 600 check-in upserts and none of 600 amount upserts, 20 at once a day, reached the client, so these races do not reach the writers' own retry on `DuplicateKeyError`, which stays for a server that does not retry.
-A free's write also holds the amount by hand it read, a field beyond the index, so its refusal does come back, and `keep_freed_line`'s retry is what lands it; the staged test is what makes every free meet it.
+MongoDB retries an upsert the unique index refused when its filter is equalities on exactly the index's fields, so a check-in, whose filter is the vendor's day, did not see the refusal: on 8.0, none of 600 check-in upserts, 20 at once a day, reached the client, and the check-in's own retry on `DuplicateKeyError` stays for a server that does not retry.
+An owed day's first record is an insert, whose refusal does come back, and the owner's read again is what lands it; the staged test is what makes every free meet it.
+[`real_mongo/test_the_owed_day_state_migration_on_the_server.py`](../../../back-end/tests/real_mongo/test_the_owed_day_state_migration_on_the_server.py) runs the owed day's migration as an operator does, a dry run then two runs, removes a hidden amount and a cleared record on the server with the entry, and refuses its held write on a change to each held field ([payments](../data/payments.md#the-migration)).
+
+## A payment entry holds what it read
+
+An edit or a removal of a payment entry lands only on the entry as its request read it: still standing, with as many lines in its own history as it read ([payments](../data/payments.md#the-amount-paid)).
+[`real_mongo/test_a_payment_entry_holds_what_it_read.py`](../../../back-end/tests/real_mongo/test_a_payment_entry_holds_what_it_read.py) races two edits of one entry, 20 rounds each on an entry of its own, each request's first read waiting on a barrier so both stand on one read, released at once by `race`: exactly one lands and the other is refused, 409, with the edit's sentence and the account showing the winner's edit; the entry's `changes` holds one line, whose `before` is the entry as first recorded, and the history one `payment_edited` entry.
 
 ## An organization's people
 

@@ -14,9 +14,7 @@ describes:
   - back-end/app.py#get_door_code
   - back-end/app.py#make_door_code
   - front-end/src/views/AttendanceStatusView.vue
-  - front-end/src/components/ListFreshness.vue
   - front-end/src/components/DoorCodeScreen.vue
-  - front-end/src/components/DoorRosterPrint.vue
   - front-end/src/utils/doorCode.ts
   - front-end/src/utils/qrDrawing.ts
   - front-end/src/components/vendorPage/VendorCheckIn.vue
@@ -24,7 +22,9 @@ describes:
   - front-end/src/utils/fitsAPhone.ts
   - back-end/app.py#verify_attendance_indexes
   - front-end/e2e/one-record-for-a-vendors-day.spec.ts
-verified: 2026-11-14
+  - front-end/src/components/ListFreshness.vue
+  - front-end/src/components/DoorRosterPrint.vue
+verified: 2026-11-16
 sources:
   - wayfinding/real-market-readiness/map
   - wayfinding/claims-and-room/map

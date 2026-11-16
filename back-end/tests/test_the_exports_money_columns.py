@@ -31,6 +31,7 @@ import pricing as Pricing
 from assignment.csv_output import FORMULA_LEADS
 from client_errors import BadRequestError
 from datatypes import MarketPhase, PaymentEntry
+from test_a_vendors_payments import plant_amount_owed
 from test_price_groups import CLUBS, EXAMPLE_TABLE, FIELDS, STUDENT
 import market_write as MarketWrite
 
@@ -140,7 +141,7 @@ class TestTheMoneyColumns:
             assert paid == Pricing.money_text(account["paidCents"], "CAD")
 
     def test_an_amount_set_by_hand_and_a_refund_count_as_on_the_payment_tab(self, market):
-        Payments.set_amount_owed(MARKET, ANA, SAT, 0, "admin@example.com")
+        plant_amount_owed(MARKET, ANA, SAT, 0, "admin@example.com")
         _pay(CY, 1500, kind=Payments.REFUND)
 
         got = _by_email(_export())
@@ -232,7 +233,7 @@ def _nobody_owes_without_prices(market):
     """The market sets no prices, and Eve's freed line, kept while it had them, is waived, so
     nobody owes anything."""
     market.doc["setupObject"]["pricing"] = None
-    Payments.set_amount_owed(MARKET, EVE, SAT, 0, "admin@example.com")
+    plant_amount_owed(MARKET, EVE, SAT, 0, "admin@example.com")
 
 
 class TestThePaymentFilter:
@@ -251,6 +252,27 @@ class TestThePaymentFilter:
                  == Payments.OWES}
 
         assert set(_by_email(_export({"payment": "owes"}))) == owing == {ANA, EVE}
+
+    @pytest.mark.parametrize("state", ["owes", "paid", "over"])
+    def test_each_state_lists_the_vendors_the_payments_page_serves_in_it(self, market, state):
+        # One reading, the server's: the page's served state and the export's filter agree.
+        served = {vendor["email"] for vendor in PaymentsApi.market_payments(MARKET, EDITOR)["vendors"]
+                  if vendor["balanceState"] == state}
+
+        assert set(_by_email(_export({"payment": state}))) == served
+
+    @pytest.mark.parametrize("arrange", [
+        lambda market: None,
+        _nobody_owes_without_prices,
+        lambda market: (_nobody_owes_without_prices(market), _pay(CY, 4500, Payments.REFUND)),
+    ], ids=["priced", "no prices", "no prices, a refund beyond what was paid"])
+    def test_it_offers_the_states_where_the_payments_page_does(self, market, arrange):
+        arrange(market)
+
+        offered, _ = VendorExport.preview(MARKET, {"filters": {}}, EDITOR)
+
+        page = PaymentsApi.market_payments(MARKET, EDITOR)
+        assert bool(offered["offered"]["paymentStates"]) is page["offersPaymentStates"]
 
     def test_a_payment_reminder_is_one_export(self, market):
         rows = _export({"payment": "owes"}, columns=("name", "email", "stillOwed"))
@@ -285,7 +307,7 @@ class TestThePaymentFilter:
     def test_an_amount_set_by_hand_on_a_market_with_no_prices_offers_the_states(self, market):
         # The reading follows the account (finding 10): Ana set to owe $20 by hand owes it.
         market.doc["setupObject"]["pricing"] = None
-        Payments.set_amount_owed(MARKET, ANA, SAT, 2000, "admin@example.com")
+        plant_amount_owed(MARKET, ANA, SAT, 2000, "admin@example.com")
 
         offered, _ = VendorExport.preview(MARKET, {"filters": {}}, EDITOR)
 
@@ -299,7 +321,7 @@ class TestThePaymentFilter:
         # had prices, still owes $35 of which she paid $10; everyone else owes nothing, so is in no
         # state, whatever they paid.
         market.doc["setupObject"]["pricing"] = None
-        Payments.set_amount_owed(MARKET, ANA, SAT, 2000, "admin@example.com")
+        plant_amount_owed(MARKET, ANA, SAT, 2000, "admin@example.com")
 
         assert set(_by_email(_export({"payment": state}))) == emails
 
@@ -308,7 +330,7 @@ class TestThePaymentFilter:
         # owing nothing there, paid $30 and was refunded $45, so his row reads "Owes $15.00" and he
         # is on the payment reminder beside Ana, owing $20 by hand, and Eve's kept line.
         market.doc["setupObject"]["pricing"] = None
-        Payments.set_amount_owed(MARKET, ANA, SAT, 2000, "admin@example.com")
+        plant_amount_owed(MARKET, ANA, SAT, 2000, "admin@example.com")
         _pay(CY, 4500, Payments.REFUND)
 
         assert set(_by_email(_export({"payment": "owes"}))) == {ANA, CY, EVE}

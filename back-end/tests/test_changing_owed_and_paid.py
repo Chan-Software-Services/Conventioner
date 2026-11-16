@@ -14,7 +14,7 @@ import api.payments as PaymentsApi
 import api.permissions as PermissionsApi
 import api.placements as PlacementsApi
 import history as History
-from client_errors import BadRequestError, ForbiddenError, NotFoundError
+from client_errors import BadRequestError, ConflictError, ForbiddenError, NotFoundError
 from datatypes import MarketPhase, MarketRole
 from test_a_vendors_payments import ANA, EDITOR, MARKET, SAT, SUN, market, stores  # noqa: F401
 
@@ -186,24 +186,24 @@ class TestAnAmountSetAsTheSeatIsFreed:
     """An Admin setting what a vendor owes for a day at the moment an Editor frees that vendor's
     seat that day (T270).
 
-    Both write the day's owed record by an upsert, and two that land at once both match nothing
-    and both insert; the unique index on the vendor's day refuses the second with a duplicate key
-    error. The write that lost runs its upsert again, which lands on the winner's record, so the
-    day is one record holding both: the amount set sticks, and the freed line stays.
+    Both read the day with no record and both insert its first; the unique index on the vendor's
+    day refuses the second with a duplicate key error. The write that lost reads the day again and
+    applies its change to the winner's record, so the day is one record holding both: the amount
+    set sticks, and the freed line stays.
     """
 
     @staticmethod
     def _the_other_lands_first(monkeypatch, stores, other):  # noqa: F811
-        """This request's upsert matches nothing; ``other`` inserts the day's record before this
-        one's insert, which the unique index then refuses."""
-        the_upsert = stores.owed.find_one_and_update
+        """This request read no record; ``other`` inserts the day's record before this one's
+        insert, which the unique index then refuses."""
+        the_insert = stores.owed.insert_one
 
         def raced(*_args, **_kwargs):
-            monkeypatch.setattr(stores.owed, "find_one_and_update", the_upsert)
+            monkeypatch.setattr(stores.owed, "insert_one", the_insert)
             other()
             raise DuplicateKeyError("E11000 duplicate key error")
 
-        monkeypatch.setattr(stores.owed, "find_one_and_update", raced)
+        monkeypatch.setattr(stores.owed, "insert_one", raced)
 
     def test_the_amount_set_lands_on_the_freed_record(self, admin, stores, monkeypatch):  # noqa: F811
         self._the_other_lands_first(
@@ -231,19 +231,22 @@ class TestAnAmountSetAsTheSeatIsFreed:
         sunday = line(SUN)
         assert (sunday["freed"], sunday["owedCents"], sunday["owedSetBy"]) == (True, 1000, ADMIN)
 
-    @pytest.mark.parametrize("write", ["set", "free"])
-    def test_a_second_refusal_is_the_error_it_is(self, admin, stores, monkeypatch,  # noqa: F811
-                                                 write):
+    @pytest.mark.parametrize("write, refusal", [
+        ("set", PaymentsApi.OWED_KEPT_CHANGING), ("free", PaymentsApi.OWED_CHANGED_UNDER_FREE)])
+    def test_an_index_that_keeps_refusing_changes_nothing_and_says_so(
+            self, admin, stores, monkeypatch, write, refusal):  # noqa: F811
         def refused(*_args, **_kwargs):
             raise DuplicateKeyError("E11000 duplicate key error")
 
-        monkeypatch.setattr(stores.owed, "find_one_and_update", refused)
+        monkeypatch.setattr(stores.owed, "insert_one", refused)
 
-        with pytest.raises(DuplicateKeyError):
+        with pytest.raises(ConflictError) as answered:
             if write == "set":
                 PaymentsApi.set_amount_owed(MARKET, ANA, SUN, {"cents": 1000}, ADMIN)
             else:
                 PlacementsApi.remove_placement(MARKET, ANA, SUN, EDITOR)
+        assert answered.value.message == refusal
+        assert stores.owed.documents == []
         assert line(SUN)["freed"] is False
         assert entries(stores, "change-owed") == []
 
@@ -323,9 +326,10 @@ class TestAdjustingTheAmountPaid:
         paid = pay(3500)["payments"][0]
         PaymentsApi.remove_payment(MARKET, paid["id"], ADMIN)
 
-        with pytest.raises(NotFoundError):
+        # Refused as removed, with the account showing it struck (``EntryChangedMeanwhile``).
+        with pytest.raises(PaymentsApi.EntryChangedMeanwhile, match="was already removed"):
             PaymentsApi.remove_payment(MARKET, paid["id"], ADMIN)
-        with pytest.raises(NotFoundError):
+        with pytest.raises(PaymentsApi.EntryChangedMeanwhile, match="was removed while"):
             PaymentsApi.edit_payment(
                 MARKET, paid["id"], {"cents": 1, "method": "cash", "paidOn": "2099-04-01"}, ADMIN)
 
