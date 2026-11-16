@@ -131,8 +131,11 @@ const shadow = computed(() => {
     :data-selected="selected ? '' : undefined"
     :data-carried="carried ? '' : undefined"
     data-testid="layout-table"
-    @focus="emit('focused', id, id)"
+    v-on="oneButton ? { focus: () => emit('focused', id, id) } : {}"
   >
+    <!-- Only a button listens for focus, the table or a seated half: Chromium makes an SVG element
+         with a focus listener a Tab stop of its own, so a shared table, whose halves are the
+         buttons, or a free half, would be one too. -->
     <template v-if="halves">
       <g
         v-for="half in halves"
@@ -146,7 +149,7 @@ const shadow = computed(() => {
         :data-target="halfButton(half) ? `${id}#${half.side}` : undefined"
         :data-seat-key="half.seatKey ?? undefined"
         data-testid="layout-table-half"
-        @focus="emit('focused', id, `${id}#${half.side}`)"
+        v-on="halfButton(half) ? { focus: () => emit('focused', id, `${id}#${half.side}`) } : {}"
       >
         <path
           :d="half.d"

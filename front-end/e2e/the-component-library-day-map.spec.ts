@@ -92,6 +92,18 @@ eachWindow('the day map entry', (size) => {
     await expect(readOutsOf(door).nth(1)).toHaveText(
       `Pressed: ${GOLD_3}, right half, Kelp Candles`,
     );
+
+    // The map is one Tab stop: from a half, Tab and Shift+Tab leave it, never stopping on a shared
+    // table around its halves or on a free half, neither a button (T422 ticket 11's focus sweep).
+    const inTheMap = () =>
+      page.evaluate(
+        () => !!document.activeElement?.closest('[data-testid="library-day-map-door"] svg'),
+      );
+    await page.keyboard.press('Shift+Tab');
+    expect(await inTheMap(), 'Shift+Tab from a half left the map').toBe(false);
+    await map.getByRole('button', { name: `${GOLD_3}, left half, Nettle Knits` }).focus();
+    await page.keyboard.press('Tab');
+    expect(await inTheMap(), 'Tab from a half left the map').toBe(false);
   });
 
   test('switches to Lower Hall, its stage turned', async ({ page }) => {
