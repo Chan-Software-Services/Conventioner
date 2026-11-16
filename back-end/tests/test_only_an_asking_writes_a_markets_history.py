@@ -4,8 +4,9 @@ A change on a market records under the row its request asked: through the ``Aske
 returned (``Actions.Asked.record``), or, for the few records no request asks, through
 ``History.unasked``, which only the functions in ``DOORS`` call, each with its reason. The history's
 writer is private (``History._record``): only the history module and the asking's ``record`` call
-it. This file reads every server module and fails one that writes the history any other way, so an
-entry can never name a row passed by hand beside a check made elsewhere.
+it, and only ``ask`` and ``unasked`` build the two recorders. This file reads every server module
+and fails one that writes the history any other way, so an entry can never name a row passed by
+hand beside a check made elsewhere.
 
 What each write records, and under which row, is ``test_every_write_records.py``'s: it sends each
 write and ties each entry to a row the write asked, or to one of its ``UNASKED``.
@@ -22,6 +23,11 @@ WRITERS = ("history", "api.market_actions")
 #: What of the history module writes an entry past the asking: its private writers and its
 #: collection, and ``record``, the writer's public name before T105-9, so that it cannot come back.
 PRIVATE = ("_record", "_write", "history_collection", "record")
+
+#: The two recorders, each by the one module allowed to build it: an ``Asked`` built anywhere but by
+#: ``ask``, or an ``UnaskedRecorder`` anywhere but by ``unasked``, would record under a row passed by
+#: hand, past the asking and past ``DOORS``.
+BUILDERS: Dict[str, str] = {"Asked": "api.market_actions", "UnaskedRecorder": "history"}
 
 #: The functions allowed to open the door for a record no request asked, by module and name, each
 #: with the constant beside it that says why, which its call passes as ``because``.
@@ -53,13 +59,28 @@ def _sources():
         yield module, ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
 
-def _history_names(tree: ast.AST) -> set:
-    """The names the module binds the history module to, ``import history as History`` and the
-    rest, wherever it imports it."""
+def _names_of(tree: ast.AST, module: str) -> set:
+    """The names the module binds ``module`` to, ``import history as History`` and the rest,
+    wherever it imports it."""
     return {
-        alias.asname or alias.name
+        alias.asname or (alias.name if "." not in alias.name else None)
         for node in ast.walk(tree) if isinstance(node, ast.Import)
-        for alias in node.names if alias.name == "history"
+        for alias in node.names if alias.name == module
+    } - {None}
+
+
+def _history_names(tree: ast.AST) -> set:
+    """The names the module binds the history module to."""
+    return _names_of(tree, "history")
+
+
+def _builders_by_name(tree: ast.AST) -> Dict[str, str]:
+    """Each name the module binds a recorder to by importing it by name, as the recorder's name."""
+    return {
+        alias.asname or alias.name: alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module in BUILDERS.values()
+        for alias in node.names if BUILDERS.get(alias.name) == node.module
     }
 
 
@@ -75,9 +96,25 @@ def _because(call: ast.Call) -> Optional[str]:
 def read(tree: ast.AST, module: str) -> Reading:
     """Where ``module`` writes the history past the asking: any use of a private writer outside the
     two writers, any import of one by name (an alias would hide the rest), and any use of the
-    unasked door but a call from a function of ``DOORS`` giving its reason."""
+    unasked door but a call from a function of ``DOORS`` giving its reason, and any recorder built
+    outside the module that builds it (``BUILDERS``)."""
     history = _history_names(tree)
+    owners = {"history": history, "api.market_actions": _names_of(tree, "api.market_actions")}
+    by_name = _builders_by_name(tree)
     reading = Reading([], [])
+
+    def built(call: ast.Call) -> Optional[str]:
+        """The recorder ``call`` builds, when it builds one outside its own module."""
+        func = call.func
+        if isinstance(func, ast.Name):
+            recorder = by_name.get(func.id)
+        elif (isinstance(func, ast.Attribute) and func.attr in BUILDERS
+              and isinstance(func.value, ast.Name)
+              and func.value.id in owners[BUILDERS[func.attr]]):
+            recorder = func.attr
+        else:
+            recorder = None
+        return recorder if recorder and BUILDERS[recorder] != module else None
 
     def of_the_history(node: ast.AST, names) -> bool:
         return (isinstance(node, ast.Attribute) and node.attr in names
@@ -91,9 +128,11 @@ def read(tree: ast.AST, module: str) -> Reading:
                 continue
             if isinstance(child, ast.ImportFrom) and child.module == "history":
                 for alias in child.names:
-                    if alias.name in PRIVATE + ("unasked", "*"):
+                    if alias.name in PRIVATE + ("unasked", "UnaskedRecorder", "*"):
                         reading.found.append(f"{module}:{child.lineno} imports {alias.name}")
                 continue
+            if isinstance(child, ast.Call) and built(child):
+                reading.found.append(f"{module}:{child.lineno} builds {built(child)} in {where}")
             if isinstance(child, ast.Call) and of_the_history(child.func, ("unasked",)):
                 door, because = f"{module}.{function}", _because(child)
                 if door not in DOORS:
@@ -171,6 +210,15 @@ def test_the_search_finds_each_way_past_the_asking():
         "def opening_a_door(market_id):\n"
         "    History.unasked(market_id, None, Actions.CHECK_IN, because=SOME_REASON)\n"
         "OPEN = History.unasked\n"
+        "import api.market_actions as Actions\n"
+        "def an_asking_by_hand(market_id, user):\n"
+        "    Actions.Asked(Actions.ASSIGN, market_id, user, None).record(detail={})\n"
+        "def a_door_by_hand(market_id):\n"
+        "    History.UnaskedRecorder(market_id, None, Actions.CHECK_IN, 'why').record(detail={})\n"
+        "from api.market_actions import Asked as Let\n"
+        "def an_asking_imported_by_name(market_id, user):\n"
+        "    Let(Actions.ASSIGN, market_id, user, None).record(detail={})\n"
+        "from history import UnaskedRecorder\n"
     ) == [
         "_record in by_hand",
         "_write in under_the_writer",
@@ -180,6 +228,10 @@ def test_the_search_finds_each_way_past_the_asking():
         "_record in Recorder.record",
         "unasked in opening_a_door",
         "unasked in the module",
+        "builds Asked in an_asking_by_hand",
+        "builds UnaskedRecorder in a_door_by_hand",
+        "builds Asked in an_asking_imported_by_name",
+        "imports UnaskedRecorder",
     ]
 
 
@@ -234,6 +286,25 @@ def test_what_is_allowed_is_not_found():
     )
     assert _reading(private, module="api.market_actions") == []
     assert _reading(private, module="history") == []
+
+    built = (
+        "import api.market_actions as Actions\n"
+        "import history as History\n"
+        "def ask(row, user, market):\n"
+        "    return Actions.Asked(row, market.id, user, None)\n"
+        "def unasked(market_id, actor, row, because):\n"
+        "    return History.UnaskedRecorder(market_id, actor, row, because)\n"
+    )
+    assert _reading(built, module="api.market_actions") == [
+        "builds UnaskedRecorder in unasked"]
+    assert _reading(built, module="history") == ["builds Asked in ask"]
+    assert _reading(
+        "import api.market_actions as Actions\n"
+        "from api.market_actions import Asked\n"
+        "import history as History\n"
+        "def write(asked: Actions.Asked, recorder: History.Recorder) -> Actions.Asked:\n"
+        "    return asked\n"
+    ) == []
 
     door = read(ast.parse(
         "import history as History\n"
