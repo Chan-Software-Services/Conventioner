@@ -43,6 +43,7 @@ The rules are in [dialogs](../implementation/conventions/dialogs.md#the-rules).
 ## Consequences
 
 - No dialog keeps a `busy` or an error of its own for its write, and none can forget the hold: a dialog on its submission holds through its write with nothing else asked.
+- Every file that draws `AppDialog` is said to write or not, on the lists of [`everyWritingDialogUsesTheSubmit.test.ts`](../../front-end/src/__tests__/everyWritingDialogUsesTheSubmit.test.ts), which fails a new one until it is, and a writing dialog with no submission.
 - An answer for an earlier opening cannot close, mark or fill the one the person is in, whatever the network does.
 - A request that never answers holds its dialog until a reload, since there is no timer and no retry, as before.
 - Browser history is not a close: Back during a held write still takes the page, and the opening and the unmount rule only keep the late answer out of what comes after.
