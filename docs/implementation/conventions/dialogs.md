@@ -114,7 +114,7 @@ Manage organization's Remove, "Make member" and "Make admin" confirmations and M
 **What the dialog has gathered goes in its `tray` slot**, drawn only when given, between the body and the error and actions: in `scroll="body"` it is a `ScrollBox` of its own, pinned, that keeps its height up to 40% of the window (Daniel's choice 20), the body giving way, and scrolls inside itself past that; in `scroll="window"` it is in the flow after the body.
 **At 640px wide or less, or 640px tall or less, a `scroll="body"` dialog is as tall as the window less the 24px gutter above and below**, whatever its content needs, so its pinned parts never crowd its body to nothing (Daniel's choice 22); the height clause is for a window split short, where 80% would leave the body nothing.
 **The one exception is "Choose what leads the card", by Daniel's choice (T446): it passes `fitsContentOnAPhone`**, so there it is as tall as its content needs, up to the same cap, with its title and Done pinned and its ticks scrolling between them past the cap, since its list is usually short and a window-tall dialog left a band of white above Done.
-No other dialog passes it.
+No other dialog of the product passes it; the library's `dialog` entry shows it on a short list.
 `dvh` sizes it, since a phone's browser bar would otherwise cover its pinned actions.
 An `anchored` dialog keeps its top where it opened, under the same 80% cap; on a phone or in a short window it is as tall as what lies below that top less the gutter.
 **A dialog is long when its body can outgrow a laptop window as a market's data grows**: its window scrolled in a sweep, or its body holds a list that grows with the market.
