@@ -46,17 +46,55 @@ def _empty_plan() -> SetupObject:
     )
 
 
-def _parsed_floorplan(market_id: str, body: Dict[str, Any]) -> FloorplanObject:
+def _not_whole_refusal(
+    e: ValidationError, body: Dict[str, Any], plan: Optional[SetupObject],
+) -> Optional[str]:
+    """For a floorplan refused only for tables' numbers that are no whole number, the numbering
+    sentence of the first such table's section (``layout.numbered_to_its_count``); None for any
+    other refusal, or a table of no section of the plan's."""
+    errors = e.errors()
+    if not errors or plan is None or not all(
+            len(error["loc"]) == 3 and error["loc"][0] == "tables" and error["loc"][2] == "number"
+            for error in errors):
+        return None
+    tables = body["floorplan"].get("tables")
+    table = tables[errors[0]["loc"][1]] if isinstance(tables, list) else None
+    section_id = table.get("sectionId") if isinstance(table, dict) else None
+    for section in plan.sections:
+        if section.id == section_id:
+            return Layout.numbered_to_its_count(section.name, section.count)
+    return None
+
+
+def _follows_the_plan(
+    stored: Optional[SetupObject], floorplan_id: Any, settled: Optional[str],
+) -> bool:
+    """Whether the floorplan of this id follows the plan: the stored one's word, or, for one the
+    market does not hold, whether it would start past draft."""
+    for held in (stored.floorplans if stored else None) or []:
+        if held.id == floorplan_id:
+            return held.follows_plan
+    return settled is not None
+
+
+def _parsed_floorplan(
+    market_id: str, body: Dict[str, Any], follows_plan: bool = False,
+    plan: Optional[SetupObject] = None,
+) -> FloorplanObject:
     """The floorplan the body carries, parsed as every model write parses, unknown keys dropped.
 
     Its own id is required, never the model's default: a save replaces the floorplan of the same
-    id, so it must be the id the client holds.
+    id, so it must be the id the client holds. On a layout that follows the plan (``plan``, the
+    stored one) a table's number that is no whole number is refused with its section's numbering
+    sentence, as one past its count is.
     """
     try:
         floorplan = FloorplanObject.model_validate(convert_keys_to_snake_case(body["floorplan"]))
     except ValidationError as e:
         logger.warning("Refused a floorplan for market %s: %s", market_id, parse_failure_detail(e))
-        raise BadRequestError(field_named_copy("Invalid floorplan", e)) from e
+        numbering = _not_whole_refusal(e, body, plan) if follows_plan else None
+        raise BadRequestError(
+            numbering or field_named_copy("Invalid floorplan", e)) from e
     given_id = body["floorplan"].get("id")
     if not isinstance(given_id, str) or not given_id.strip():
         raise BadRequestError("A floorplan needs its id.")
@@ -114,16 +152,19 @@ def _stored_layout(
     return None
 
 
-def _started(plan: SetupObject, floorplan: FloorplanObject) -> FloorplanObject:
-    """A location's first layout, holding what Section Setup had for each of its sections."""
+def _started(plan: SetupObject, floorplan: FloorplanObject, settled: bool) -> FloorplanObject:
+    """A location's first layout, holding what Section Setup had for each of its sections.
+
+    Started in Draft, its tables are the seats; started past it (``settled``), it follows the plan
+    (T422, D21, ADR 0033): it draws the seats Section Setup settled and never counts them. The
+    server's word, whatever the body says, kept on every later save.
+    """
     counts = [
         StartingCount(section_id=section.id, count=section.count)
         for section in plan.sections
         if section.location is not None and section.location.id == floorplan.location_id
     ]
-    # Started in Draft: its tables are the seats, and it never follows the plan, whatever the body
-    # says; one started after Draft is ticket 03's (T422, D21).
-    return floorplan.model_copy(update={"starting_counts": counts, "follows_plan": False})
+    return floorplan.model_copy(update={"starting_counts": counts, "follows_plan": settled})
 
 
 # ── POST /save-to-market ──────────────────────────────────────────────────────
@@ -150,14 +191,17 @@ def save_floorplan_to_market() -> Tuple[Any, int]:
       3. Parse the floorplan (400 naming the field, or when it carries no id of its own).
       4. Find the layout it replaces, by id: 409 ``STALE_LAYOUT`` when the stored one is of another
          revision, or, for a new id, when ``revision`` is not 0 or the location has a layout
-         already. Past draft (``MarketsApi.setup_lock_reason``) a new layout, or one that changes a
-         seat (a table added, removed, renumbered, of another id, section or type), is refused 409
-         with the setup-settled sentence (``layout.settled_layout_refusal``); where a table stands,
-         the zones, the image, the scale and the sections' colours and labels still change.
-         A layout keeps its location, its starting counts and whether it follows the plan
-         (``followsPlan``, whatever the body sends), and moves its revision by one;
-         a new one records Section Setup's counts for its location's sections, starts at revision
-         1, and gives a market with no table type "Standard 6 ft".
+         already. Past draft (``MarketsApi.setup_lock_reason``) a layout started in Draft that
+         changes a seat (a table added, removed, renumbered, of another id, section or type) is
+         refused 409 with the setup-settled sentence (``layout.settled_layout_refusal``); where a
+         table stands, the zones, the image, the scale and the sections' colours and labels still
+         change. A new layout past draft starts, and follows the plan (T422, ADR 0033): its seats
+         are the plan's, so its tables are added, removed, renumbered and moved between its
+         location's sections in any phase but archived. A layout keeps its location, its starting
+         counts and whether it follows the plan (``followsPlan``, whatever the body sends), and
+         moves its revision by one; a new one records Section Setup's counts for its location's
+         sections, starts at revision 1, follows the plan when it starts past draft, and gives a
+         market with no table type "Standard 6 ft".
       5. Write it through ``MarketsApi.prepared_plan`` with those floorplans, the plan write's own
          judge, its tables of a section not its location's in none and of no number
          (``layout.in_its_sections``), so what is stored is a plan that reads, its sections
@@ -165,8 +209,9 @@ def save_floorplan_to_market() -> Tuple[Any, int]:
          floorplan's bounds (``floorplan_limits``) and its image, which must be one uploaded for
          this market (400 with the sentence for each); then the layout's own rules
          (``layout.layout_refusal``: its location one of the plan's, no two tables of one id, each
-         section's tables numbered 1 to N, every type the market's, every table inside the
-         floorplan; 400 with the sentence). The write goes through ``write_market``, holding the
+         section's tables numbered 1 to N, or once each from 1 to its count on a layout that
+         follows the plan, every type the market's, every table inside the floorplan; 400 with the
+         sentence). The write goes through ``write_market``, holding the
          phase and the plan's revision as read and counting it, as every write of the plan does
          (T274): a layout, a plan or table types saved since step 1 read the market make it 409
          ``STALE_LAYOUT``. An image the layout no longer names is deleted.
@@ -213,9 +258,9 @@ def save_floorplan_to_market() -> Tuple[Any, int]:
     settled = MarketsApi.setup_lock_reason(market)
 
     # ── 3. Parse the floorplan ─────────────────────────────────────────
-    floorplan = _parsed_floorplan(market_id, data)
-
     stored = market.setup_object
+    floorplan = _parsed_floorplan(
+        market_id, data, _follows_the_plan(stored, data["floorplan"].get("id"), settled), stored)
     proposed = stored or _empty_plan()
 
     # ── 4. The layout it replaces, or starts ───────────────────────────
@@ -223,12 +268,9 @@ def save_floorplan_to_market() -> Tuple[Any, int]:
         held = _stored_layout(stored, floorplan, revision)
     except StaleLayout:
         return jsonify({"error": STALE_LAYOUT}), 409
-    # Past draft no layout starts: its tables would be seats Section Setup never had.
-    if held is None and settled:
-        return jsonify({"error": settled}), 409
     table_types = None
     if held is None:
-        floorplan = _started(proposed, floorplan)
+        floorplan = _started(proposed, floorplan, settled is not None)
         if not proposed.table_types:
             table_types = [TableTypeObject(id=str(uuid.uuid4()), **STANDARD_TABLE_TYPE)]
     else:
@@ -240,8 +282,9 @@ def save_floorplan_to_market() -> Tuple[Any, int]:
         floorplan.model_copy(update={"revision": revision + 1}), proposed)
     floorplans = _with_floorplan(stored.floorplans if stored else None, floorplan)
     # Past draft a table may move and turn, and the zones, the image, the scale and the sections'
-    # colours and labels change, but no seat: a table added, removed, renumbered, of another id,
-    # section or type (T257).
+    # colours and labels change, but no seat of a layout started in Draft: a table added, removed,
+    # renumbered, of another id, section or type (T257). A layout that follows the plan starts and
+    # changes its tables, which draw the plan's seats (T422).
     if settled:
         refused = Layout.settled_layout_refusal(
             stored, proposed.model_copy(update={"floorplans": floorplans}), settled)

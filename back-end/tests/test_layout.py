@@ -451,3 +451,122 @@ class TestDescribeChange:
 
         assert self._change(_floorplan([], section_styles=[style]), after) == {
             "labels": ["Gold row"]}
+
+
+# ── A layout that follows the plan (T422 ticket 03, D21, D22) ─────────────────
+
+def _following(tables=(), location=UPPER, **overrides):
+    """A layout started after Draft: it draws the seats Section Setup settled."""
+    return _floorplan(tables, location, follows_plan=True, **overrides)
+
+
+class TestALayoutThatFollowsThePlan:
+    """Its sections keep the counts typed on Section Setup, whatever tables it holds; its tables
+    are numbered once each from 1 to their section's count, fewer than the count saving."""
+
+    def test_its_sections_keep_their_typed_counts(self):
+        plan = _plan([_following([*_gold(3), _table("s-1", SILVER, 2)])], gold_count=13)
+
+        assert _counts(Layout.derive_counts(plan)) == {
+            "Gold row": 13, "Silver aisle": 4, "Blue row": 7}
+
+    def test_another_locations_layout_started_in_draft_still_counts(self):
+        plan = _plan([_following(_gold(2)),
+                      _floorplan([_table("b-1", BLUE, 1)], LOWER, floorplan_id="fp-lower")])
+
+        assert _counts(Layout.derive_counts(plan)) == {
+            "Gold row": 9, "Silver aisle": 4, "Blue row": 1}
+
+    @pytest.mark.parametrize("numbers", [[1, 2, 3], [9], [2, 5, 9], [7, 1], []])
+    def test_numbers_once_each_up_to_the_count_save(self, numbers):
+        floorplan = _following([_table(f"g-{n}", GOLD, n, x=1000.0 * n) for n in numbers])
+
+        assert Layout.layout_refusal(floorplan, _plan([floorplan], gold_count=9)) is None
+
+    @pytest.mark.parametrize("numbers", [[1, 1], [10], [0], [-2], [3, None]],
+                             ids=["repeated", "past the count", "zero", "negative", "none"])
+    def test_any_other_numbering_is_refused_naming_the_section_and_its_count(self, numbers):
+        floorplan = _following([_table(f"g-{i}", GOLD, n, x=1000.0 * (i + 1))
+                                for i, n in enumerate(numbers)])
+
+        assert Layout.layout_refusal(floorplan, _plan([floorplan], gold_count=9)) == (
+            "Gold row's tables are numbered 1 to 9, each number once.")
+
+    def test_a_table_of_no_section_has_no_number(self):
+        floorplan = _following([_table("loose", None, 3)])
+
+        assert Layout.layout_refusal(floorplan, _plan([floorplan])) == Layout.NUMBERING
+
+    def test_the_numbering_is_judged_against_the_typed_count_not_the_tables(self):
+        floorplan = _following([_table("s-4", SILVER, 4)])
+        plan = Layout.derive_counts(_plan([floorplan], silver_count=4))
+
+        assert Layout.layout_refusal(floorplan, plan) is None
+
+    def test_a_layout_started_in_draft_is_still_numbered_1_to_n(self):
+        floorplan = _floorplan([_table("g-2", GOLD, 2)])
+
+        assert Layout.layout_refusal(floorplan, _plan([floorplan])) == Layout.NUMBERING
+
+    def test_its_other_rules_hold(self):
+        floorplan = _following([_table("g-1", GOLD, 1, kind="tt-gone")])
+
+        assert Layout.layout_refusal(floorplan, _plan([floorplan])) == Layout.UNKNOWN_TABLE_TYPE
+
+
+class TestItsSeatsDoNotSettle:
+    """Past Draft its tables are added, removed, renumbered and moved between its location's
+    sections; the set of layouts started in Draft and the table types still settle."""
+
+    def _settled(self, stored, proposed, stored_types=None, proposed_types=None):
+        return Layout.settled_layout_refusal(
+            _plan(stored, table_types=stored_types), _plan(proposed, table_types=proposed_types),
+            SETTLED)
+
+    def test_its_tables_change_freely(self):
+        before = _following(_gold(3))
+        after = _following([_table("g-1", SILVER, 2), _table("g-9", GOLD, 7)])
+
+        assert self._settled([before], [after]) is None
+
+    def test_it_starts_past_draft(self):
+        assert self._settled([], [_following(_gold(2))]) is None
+
+    def test_a_layout_started_in_draft_beside_it_still_settles(self):
+        draft = _floorplan([_table("b-1", BLUE, 1)], LOWER, floorplan_id="fp-lower")
+
+        assert self._settled([draft, _following()], [
+            _floorplan([], LOWER, floorplan_id="fp-lower"), _following()]) == SETTLED
+
+    def test_the_table_types_still_settle(self):
+        six = [{"id": SIX_FOOT, "name": "Standard 6 ft", "width_mm": 1830, "depth_mm": 760}]
+
+        assert self._settled([_following()], [_following()], six,
+                             [{**six[0], "depth_mm": 900}]) == SETTLED
+
+
+class TestAPlanWriteUnderItsNumbers:
+    """A plan write that would leave a section's count below a number one of its tables holds on
+    a layout that follows the plan is refused."""
+
+    def test_a_count_below_a_held_number_is_refused(self):
+        plan = _plan([_following([_table("g-3", GOLD, 3), _table("g-7", GOLD, 7)])],
+                     gold_count=6)
+
+        assert Layout.count_refusal(plan) == (
+            "Gold row's layout holds table 7. Remove it from the layout first.")
+
+    def test_a_count_at_the_highest_number_writes(self):
+        plan = _plan([_following([_table("g-7", GOLD, 7)])], gold_count=7)
+
+        assert Layout.count_refusal(plan) is None
+
+    def test_a_layout_started_in_draft_is_never_refused_so(self):
+        plan = _plan([_floorplan(_gold(3))], gold_count=1)
+
+        assert Layout.count_refusal(plan) is None
+
+    def test_a_table_of_a_section_of_another_location_is_not_counted(self):
+        plan = _plan([_following([_table("b-5", BLUE, 5)])], blue_count=2)
+
+        assert Layout.count_refusal(plan) is None
