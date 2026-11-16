@@ -19,7 +19,7 @@ describes:
   - .github/actions/e2e-stack/action.yml
   - .github/actions/front-end-deps/action.yml
   - front-end/scripts/e2e-repeat.ts
-verified: 2026-11-14
+verified: 2026-11-17
 sources:
   - T47
   - T53
@@ -83,15 +83,16 @@ Within a shard the tests share one database (`workers: 1`); never across shards.
 
 ## A merge queue's trial commit
 
-**Every required check runs on the commit a merge queue builds for `dev`.**
-The `merge_group` trigger (`checks_requested`, for `dev` alone, since `main` moves only through Promote) runs the workflow on the trial commit GitHub builds for a queued pull request on its own `gh-readonly-queue/dev/...` branch, a run separate from the pull request's and the push's, so the queue gets every required check on the commit it would merge.
+**Every required check the Test workflow makes runs on the commit a merge queue builds for `dev`.**
+The `merge_group` trigger (`checks_requested`, for `dev` alone, since `main` moves only through Promote) runs the workflow on the trial commit GitHub builds for a queued pull request on its own `gh-readonly-queue/dev/...` branch, a run separate from the pull request's and the push's, so the queue gets every required check the Test workflow makes on the commit it would merge.
+`dev`'s two other required checks, `CodeQL` and `agent-review`, come from outside this workflow, and nothing in this repository makes either on a trial commit.
 On it `github.base_ref` and `github.event.pull_request` are empty, since they belong to a pull request's event, and each job reads its event as follows:
 
 | Job                                                                   | On a trial commit                                                                                                                                                                                                  |
 | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-build` | every step, as on a push: none has an `if:`                                                                                                                                                                        |
 | `knowledge-graph`                                                     | the scripts' tests and `knowledge_graph.py check`; the drift step, which reads `github.base_ref`, is skipped, as on a push, since it judges a pull request against its base, which the pull request's own run does |
-| `real-data-and-workflows`                                             | zizmor offline and actionlint; the real-data scans, gitleaks and zizmor online, which read `github.base_ref` and the pull request's head, are skipped, as on a push                                                |
+| `real-data-and-workflows`                                             | zizmor offline and actionlint; the real-data scans, gitleaks and zizmor online, each `if: github.event_name == 'pull_request'`, are skipped, as on a push                                                          |
 | `e2e-shard`                                                           | every step, as on a push, but shard 1 saves no cache ([why](#the-e2e-stack-and-its-caches))                                                                                                                        |
 | `e2e`                                                                 | its `if: ${{ !cancelled() }}`, which reads no event                                                                                                                                                                |
 | `e2e-repeat`                                                          | skipped (`if: github.event_name == 'pull_request'`), as on a push; not a required check                                                                                                                            |

@@ -6,8 +6,8 @@ on:
   pull_request:
     branches: [main, dev]
   # A merge queue's trial commit (`gh-readonly-queue/dev/...`): a queued pull request merges only
-  # once every required check has passed on it too. Only `dev` can have a queue: `main` moves only
-  # through Promote.
+  # once every required check this workflow makes has passed on it too. Only `dev` can have a
+  # queue: `main` moves only through Promote.
   merge_group:
     types: [checks_requested]
     branches: [dev]
