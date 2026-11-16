@@ -194,7 +194,7 @@ The claim on the next card is held on the status the queue read as well as on th
 
 ### Waiting for the deal
 
-Every move into open, and a follow-up's hand-on, marks the application for the deal in its own update (`arriving`, the `Arrival` it came by: who, and by which action): an arrival, an undo, a rule's return, a re-import's or an applicant's back to review and a follow-up's hand-on (T277 P1, P2, P3, P5).
+Every move into open, an undo back into a follow-up, and a follow-up's hand-on mark the application for the deal in their own update (`arriving`, the `Arrival` it came by: who, and by which action): an arrival, an undo (into open or back into a follow-up), a rule's return, a re-import's or an applicant's back to review and a follow-up's hand-on (T277 P1, P2, P3, P5).
 A follow-up a person gives, from open or as a change of verdict, keeps whatever mark it had.
 It marks whether or not reviewers are chosen and whoever its reviewer is: who may review is judged only by the deal holding the market ([`back-end/review_team.py`](../../../back-end/review_team.py), [ADR 0020](../../adr/0020-an-application-is-dealt-to-one-reviewer.md)), so a move landing after a change of reviewers read its pool is still marked, and that change deals it as it lets go.
 The deal, for each marked application in arrival order, with the roles read with the turn:
