@@ -23,9 +23,9 @@ from datatypes import MarketPhase, market_name_slug
 SLUG = market_name_slug("Test Market")
 MARKET = "market-123"
 DAY_ONE, DAY_TWO = "2099-08-01", "2099-08-02"
-EAST = {"id": "loc-east", "name": "East Hall"}
-WEST = {"id": "loc-west", "name": "West Hall"}
-ANNEX = {"id": "loc-annex", "name": "Annex"}
+NORTH = {"id": "loc-north", "name": "North Wing"}
+SOUTH = {"id": "loc-south", "name": "South Wing"}
+ANNEX = {"id": "loc-annex", "name": "East Wing"}
 GOLD = {"id": 0, "name": "Gold"}
 SIX_FOOT = {"id": "tt-six", "name": "Standard 6 ft", "widthMm": 1830, "depthMm": 760}
 FORM = {"fields": [
@@ -55,8 +55,8 @@ def _table(table_id, section, number, x=3000.0, rotation=0.0):
 
 
 def _layouts(image_id):
-    east = {
-        "id": "fp-east", "locationId": EAST["id"], "revision": 3, "imageGridfsId": image_id,
+    north = {
+        "id": "fp-north", "locationId": NORTH["id"], "revision": 3, "imageGridfsId": image_id,
         "imageWidth": 800, "imageHeight": 600, "scalePxPerUnit": 800 / 30_000,
         "referenceLineStart": [0, 300], "referenceLineEnd": [800, 300],
         "referenceLineLengthMm": 30_000,
@@ -74,8 +74,8 @@ def _layouts(image_id):
         "startingCounts": [{"sectionId": "sec-a", "count": 4}],
         "followsPlan": False,
     }
-    west = {
-        "id": "fp-west", "locationId": WEST["id"], "revision": 1, "imageGridfsId": None,
+    south = {
+        "id": "fp-south", "locationId": SOUTH["id"], "revision": 1, "imageGridfsId": None,
         "imageWidth": None, "imageHeight": None, "scalePxPerUnit": 800 / 30_000,
         "tables": [_table("t-b1", "sec-b", 1), _table("t-b2", "sec-b", 2, 5000),
                    _table("t-b3", "sec-b", 3, 7000)],
@@ -84,18 +84,18 @@ def _layouts(image_id):
     # Laid out with no scale, so the map does not draw it.
     annex = {"id": "fp-annex", "locationId": ANNEX["id"], "revision": 1,
              "tables": [_table("t-r1", "sec-r", 1)]}
-    return [east, west, annex]
+    return [north, south, annex]
 
 
 def _plan(image_id):
     return {
         "priority": [], "marketDates": [{"date": DAY_TWO}, {"date": DAY_ONE}],
         "tiers": [GOLD],
-        "locations": [copy.deepcopy(EAST), copy.deepcopy(WEST), copy.deepcopy(ANNEX)],
+        "locations": [copy.deepcopy(NORTH), copy.deepcopy(SOUTH), copy.deepcopy(ANNEX)],
         "sections": [
-            {"id": "sec-a", "name": "Aisle A", "count": 4, "location": copy.deepcopy(EAST),
+            {"id": "sec-a", "name": "Aisle A", "count": 4, "location": copy.deepcopy(NORTH),
              "tier": GOLD},
-            {"id": "sec-b", "name": "Aisle B", "count": 3, "location": copy.deepcopy(WEST),
+            {"id": "sec-b", "name": "Aisle B", "count": 3, "location": copy.deepcopy(SOUTH),
              "tier": GOLD},
             {"id": "sec-r", "name": "Annex row", "count": 1, "location": copy.deepcopy(ANNEX),
              "tier": GOLD},
@@ -106,13 +106,13 @@ def _plan(image_id):
     }
 
 
-def _seat(email, date, code, choice="Full Table", section="Aisle A", location="East Hall"):
+def _seat(email, date, code, choice="Full Table", section="Aisle A", location="North Wing"):
     return {"email": email, "date": date, "tableCode": code, "tableChoice": choice,
             "section": section, "tier": "Gold", "location": location, "handPlaced": True}
 
 
 SEATS = [
-    _seat("Dev@Dough.test", DAY_ONE, "Aisle B 2", section="Aisle B", location="West Hall"),
+    _seat("Dev@Dough.test", DAY_ONE, "Aisle B 2", section="Aisle B", location="South Wing"),
     _seat("cleo@loom.test", DAY_ONE, "Aisle A 3", "Half Table (Right)"),
     _seat("ana@ember.test", DAY_ONE, "Aisle A 1"),
     _seat("ben@kiln.test", DAY_ONE, "Aisle A 3", "Half Table (Left)"),
@@ -121,7 +121,7 @@ SEATS = [
     # whose layout is not drawn.
     _seat("ben@kiln.test", DAY_TWO, "Aisle A 9"),
     _seat("cleo@loom.test", "2099-09-09", "Aisle A 1"),
-    _seat("dev@dough.test", DAY_TWO, "Annex row 1", section="Annex row", location="Annex"),
+    _seat("dev@dough.test", DAY_TWO, "Annex row 1", section="Annex row", location="East Wing"),
 ]
 
 
@@ -137,7 +137,7 @@ def _application(email, answers, updates=None):
 @pytest.fixture
 def world(monkeypatch, applications, market_records):
     """A market in its market days, its map on, two locations laid out, four vendors seated."""
-    image_id = GridfsService.upload_image(b"\x89PNG east hall", "east.png", MARKET)
+    image_id = GridfsService.upload_image(b"\x89PNG north wing", "north.png", MARKET)
     doc = stored_market(
         MarketPhase.MARKET_DAYS, intakeMode="csv", applicationForm=copy.deepcopy(FORM),
         setupObject=_plan(image_id), publicMap=copy.deepcopy(ON),
@@ -154,7 +154,7 @@ def world(monkeypatch, applications, market_records):
     for application in (
         _application("ana@ember.test", {"business_name": "  Ember   Ceramics ",
                                         "website": "ember-ceramics.test",
-                                        "instagram": "https://www.instagram.com/ember.ceramics/"}),
+                                        "instagram": "https://www.instagram.com/example.ember/"}),
         _application("ben@kiln.test", {"business_name": "orders@kiln-studio.test",
                                        "website": "javascript:alert(1)",
                                        "instagram": "kiln studio"}),
@@ -181,7 +181,7 @@ def _map(client, slug=SLUG):
     return client.get(f"/public/markets/{slug}/map")
 
 
-def _image(client, location=EAST["id"], slug=SLUG):
+def _image(client, location=NORTH["id"], slug=SLUG):
     return client.get(f"/public/markets/{slug}/map/image/{location}")
 
 
@@ -246,37 +246,37 @@ class TestWhatItAnswers:
     def test_only_the_locations_laid_out_in_the_plans_order(self, client, world):
         locations = _map(client).get_json()["locations"]
 
-        assert [location["name"] for location in locations] == ["East Hall", "West Hall"]
+        assert [location["name"] for location in locations] == ["North Wing", "South Wing"]
         assert locations[0]["sections"] == [{"id": "sec-a", "name": "Aisle A"}]
 
     def test_a_layout_as_drawn_its_tables_in_a_section_alone(self, client, world):
-        east = _map(client).get_json()["locations"][0]["layout"]
+        north = _map(client).get_json()["locations"][0]["layout"]
 
-        assert {key: east[key] for key in ("id", "locationId", "imageWidth", "imageHeight",
+        assert {key: north[key] for key in ("id", "locationId", "imageWidth", "imageHeight",
                                            "scalePxPerUnit", "hasImage")} == {
-            "id": "fp-east", "locationId": EAST["id"], "imageWidth": 800, "imageHeight": 600,
+            "id": "fp-north", "locationId": NORTH["id"], "imageWidth": 800, "imageHeight": 600,
             "scalePxPerUnit": 800 / 30_000, "hasImage": True}
-        assert [table["id"] for table in east["tables"]] == ["t-a1", "t-a2", "t-a3", "t-a4"]
-        assert east["tables"][2] == {"id": "t-a3", "sectionId": "sec-a", "number": 3,
+        assert [table["id"] for table in north["tables"]] == ["t-a1", "t-a2", "t-a3", "t-a4"]
+        assert north["tables"][2] == {"id": "t-a3", "sectionId": "sec-a", "number": 3,
                                      "tableTypeId": "tt-six", "xMm": 7000.0, "yMm": 5000.0,
                                      "rotation": 90.0}
-        assert east["zones"] == [{"id": "z-stage", "label": "Stage", "xMm": 15_000.0,
+        assert north["zones"] == [{"id": "z-stage", "label": "Stage", "xMm": 15_000.0,
                                   "yMm": 10_000.0, "widthMm": 6000.0, "depthMm": 3000.0,
                                   "rotation": 30.0}]
-        assert east["sectionStyles"] == [
+        assert north["sectionStyles"] == [
             {"sectionId": "sec-a", "color": 3, "labelAt": {"xMm": 3000.0, "yMm": 3500.0}}]
 
     def test_a_layout_with_no_image_says_so(self, client, world):
-        west = _map(client).get_json()["locations"][1]["layout"]
+        south = _map(client).get_json()["locations"][1]["layout"]
 
-        assert west["hasImage"] is False
+        assert south["hasImage"] is False
 
     def test_each_seat_on_the_map_in_order_with_its_vendors_answers(self, client, world):
         seats = _map(client).get_json()["seats"]
 
         assert seats == [
             {"date": DAY_ONE, "tableId": "t-a1", "half": "whole", "name": "Ember Ceramics",
-             "website": "https://ember-ceramics.test", "instagram": "ember.ceramics"},
+             "website": "https://ember-ceramics.test", "instagram": "example.ember"},
             {"date": DAY_ONE, "tableId": "t-a3", "half": "left", "name": None, "website": None,
              "instagram": None},
             {"date": DAY_ONE, "tableId": "t-a3", "half": "right", "name": None, "website": None,
@@ -284,7 +284,7 @@ class TestWhatItAnswers:
             {"date": DAY_ONE, "tableId": "t-b2", "half": "whole", "name": "Dev's Doughnuts",
              "website": "https://dough.test/menu", "instagram": None},
             {"date": DAY_TWO, "tableId": "t-a2", "half": "whole", "name": "Ember Ceramics",
-             "website": "https://ember-ceramics.test", "instagram": "ember.ceramics"},
+             "website": "https://ember-ceramics.test", "instagram": "example.ember"},
         ]
 
     def test_the_name_is_the_one_the_organizer_reads(self, client, world):
@@ -293,6 +293,24 @@ class TestWhatItAnswers:
 
         assert "Dev's Doughnuts" in [seat["name"] for seat in seats]
         assert "Dev's Donuts" not in [seat["name"] for seat in seats]
+
+    @pytest.mark.parametrize("main_first", [True, False], ids=["main-first", "waitlist-first"])
+    def test_a_vendor_with_a_waitlist_application_too_is_named_by_the_main_one(
+            self, client, world, applications, main_first):
+        """The unique index is the market, the address and the type, so a vendor may have a main
+        and a waitlist application; the map reads the main one's answers, whichever is read last."""
+        email = "eve@glass.test"
+        main = {**_application(email, {"business_name": "Eve's Glass"}), "id": "app-eve-main"}
+        waitlist = {**_application(email, {}), "id": "app-eve-waitlist",
+                    "application_type": "waitlist"}
+        for application in ((main, waitlist) if main_first else (waitlist, main)):
+            applications.insert_one(application)
+        world.doc["assignmentObject"]["vendorAssignments"].append(
+            _seat(email, DAY_ONE, "Aisle A 4"))
+
+        seats = _map(client).get_json()["seats"]
+
+        assert [seat["name"] for seat in seats if seat["tableId"] == "t-a4"] == ["Eve's Glass"]
 
     def test_a_question_not_chosen_answers_none(self, client, world):
         world.doc["publicMap"] = {**ON, "websiteQuestion": None, "instagramQuestion": None}
@@ -327,6 +345,17 @@ def _off(doc):
 
 def _results_not_out(doc):
     doc.update(phase=MarketPhase.ASSIGNMENT.value, resultsPublished=False)
+
+
+def _a_form_markets_results_not_out(doc):
+    """A form market's vendor page opens before its results do, so the gate's own check of the
+    results is what keeps this one closed (D30): every other case is closed by the vendor page's
+    lookup too."""
+    doc.update(phase=MarketPhase.ASSIGNMENT.value, intakeMode="form", resultsPublished=False,
+               phaseHistory=[
+                   {"phase": phase, "enteredAt": "2099-07-01T00:00:00+00:00",
+                    "by": "owner@example.com"}
+                   for phase in ("draft", "applications", "assignment")])
 
 
 def _archived(doc):
@@ -367,13 +396,15 @@ def _no_layout(doc):
     doc["setupObject"]["floorplans"] = None
 
 
-CLOSED = [_absent, _off, _results_not_out, _archived, _draft, _no_name_question,
+CLOSED = [_absent, _off, _results_not_out, _a_form_markets_results_not_out, _archived, _draft, _no_name_question,
           _name_question_removed_from_the_form, _name_question_no_longer_text,
           _no_table_in_a_section, _no_scale, _no_layout]
 
 
 def _answer(response):
-    return response.status_code, response.get_data(), response.headers.get("Content-Type")
+    """The answer as a caller reads it: its status, its body and every header but its date."""
+    headers = sorted((name, value) for name, value in response.headers.items() if name != "Date")
+    return response.status_code, response.get_data(), headers
 
 
 class TestTheGate:
@@ -416,7 +447,7 @@ class TestTheImage:
         assert response.headers["Content-Type"] == "image/png"
         assert response.headers["Cache-Control"] == "public, max-age=300"
 
-    @pytest.mark.parametrize("location", [WEST["id"], ANNEX["id"], "loc-nowhere", "fp-east"])
+    @pytest.mark.parametrize("location", [SOUTH["id"], ANNEX["id"], "loc-nowhere", "fp-north"])
     def test_a_location_the_map_does_not_draw_or_with_no_image_is_absent(
             self, client, world, location):
         assert _answer(_image(client, location)) == _answer(_map(client, "no-such-market"))
