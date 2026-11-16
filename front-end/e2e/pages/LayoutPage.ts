@@ -102,6 +102,11 @@ export class LayoutPage {
   /** The panel's status line: what Fill an area did, or why an area did not close. */
   readonly status: Locator;
   readonly guides: Locator;
+  /** The selection's frame: one table's hugging it, several's square to the page. */
+  readonly selectionFrame: Locator;
+  /** The four knobs on the frame's corners, and the one on its top-right corner, as the frame
+   *  stood before it was turned. */
+  readonly turnKnobs: Locator;
   readonly turnKnob: Locator;
   readonly hint: Locator;
   readonly selection: Locator;
@@ -109,7 +114,8 @@ export class LayoutPage {
   readonly selectionSection: Locator;
   readonly selectionType: Locator;
   readonly selectionPosition: Locator;
-  readonly selectionCodes: Locator;
+  /** Several selected, counted by section: "2 in Gold row, 1 in no section". */
+  readonly selectionCounts: Locator;
   readonly selectionTurn: Locator;
   readonly selectionRemove: Locator;
   readonly selectionDuplicate: Locator;
@@ -278,14 +284,16 @@ export class LayoutPage {
     this.fillError = page.getByTestId('layout-fill-error');
     this.status = page.getByTestId('layout-status');
     this.guides = this.map.getByTestId('layout-map-guide');
-    this.turnKnob = this.map.getByTestId('layout-turn-knob');
+    this.selectionFrame = this.map.getByTestId('layout-selection-frame');
+    this.turnKnobs = this.map.getByTestId('layout-turn-knob');
+    this.turnKnob = this.turnKnobAt('top-right');
     this.hint = page.getByTestId('layout-hint');
     this.selection = page.getByTestId('layout-panel-selection');
     this.selectionTitle = page.getByTestId('layout-selection-title');
     this.selectionSection = page.getByTestId('layout-selection-section');
     this.selectionType = page.getByTestId('layout-selection-type');
     this.selectionPosition = page.getByTestId('layout-selection-position');
-    this.selectionCodes = page.getByTestId('layout-selection-codes');
+    this.selectionCounts = page.getByTestId('layout-selection-counts');
     this.selectionTurn = page.getByTestId('layout-selection-turn');
     this.selectionRemove = page.getByTestId('layout-selection-remove');
     this.selectionDuplicate = page.getByTestId('layout-selection-duplicate');
@@ -538,6 +546,19 @@ export class LayoutPage {
   /** A no-table zone of the map, by its name ("No-table zone: Stage"). */
   zone(name: string): Locator {
     return this.map.getByRole('img', { name, exact: true });
+  }
+
+  /** The names of the tables pressed, as selected, in the map's order: "Gold row 1, Standard 6
+   *  ft". Read with `expect.poll`, as the card counts several by section and names none. */
+  async pressedNames(): Promise<string[]> {
+    return this.map
+      .locator('[data-testid="layout-table"][aria-pressed="true"]')
+      .evaluateAll((tables) => tables.map((table) => table.getAttribute('aria-label') ?? ''));
+  }
+
+  /** The turn knob on one corner of the selection's frame. */
+  turnKnobAt(corner: 'top-left' | 'top-right' | 'bottom-right' | 'bottom-left'): Locator {
+    return this.map.locator(`[data-corner="${corner}"]`).getByTestId('layout-turn-knob');
   }
 
   /**

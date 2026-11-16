@@ -426,10 +426,12 @@ test.describe('Rows fill a hall', () => {
     // V for Select, whose card, in the tool's place, reads what was placed, selected.
     await page.keyboard.press('v');
     await expect(layout.selectionTitle).toHaveText('10 tables selected');
-    await expect(layout.selectionCodes).toHaveText(
-      'Gold row 3, Gold row 4, Gold row 5, Gold row 6, Gold row 7, Gold row 8, Gold row 9, ' +
-        'Gold row 10, Gold row 11, Gold row 12',
-    );
+    await expect(layout.selectionCounts).toHaveText('10 in Gold row');
+    await expect
+      .poll(() => layout.pressedNames())
+      .toEqual(
+        [3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((number) => `Gold row ${number}, Standard 6 ft`),
+      );
     const row = (await stored(request, seeded.marketId)).slice(2);
     expect(row.map((table) => table.number)).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     const xs = row.map((table) => table.xMm);

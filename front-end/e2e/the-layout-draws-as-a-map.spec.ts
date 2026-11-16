@@ -292,6 +292,63 @@ test.describe('A calibrated layout draws as a map', () => {
     await expect(layout.table('Gold row 11, Standard 6 ft')).toBeFocused();
   });
 
+  test('a focused, selected table wears its focus border on its edge, the outline flush outside it and the frame clear of both, and so does a carried one', async ({
+    authenticatedPage: page,
+  }) => {
+    const layout = new LayoutPage(page);
+    await layout.goto(seeded.marketId, seeded.upper.id);
+    await expect(layout.tables).toHaveCount(20);
+    const name = 'Gold row 1, Standard 6 ft';
+    await layout.tabToTheMap();
+    await expect(layout.table(name)).toBeFocused();
+    await page.keyboard.press('Shift+Enter');
+    await expect(layout.table(name)).toHaveAttribute('aria-pressed', 'true');
+    const { scale } = await layout.onScreen([0, 0]);
+
+    /** Each line's band, in screen pixels outside the table's edge: its inner and outer side. */
+    const bands = () =>
+      layout.table(name).evaluate((table, px) => {
+        const band = (shape: Element | null, line: number) => {
+          if (!shape) return null;
+          const out = ((Number(shape.getAttribute('width')) - 1830) / 2) * px;
+          const width = Number(shape.getAttribute('stroke-width')) || line;
+          return { inner: out - width / 2, outer: out + width / 2 };
+        };
+        const frame = table
+          .closest('svg')!
+          .querySelector('[data-testid="layout-selection-frame"] rect');
+        const frameOut = frame ? ((Number(frame.getAttribute('width')) - 1830) / 2) * px : null;
+        return {
+          edge: band(table.querySelector('[data-testid="layout-table-top"]'), 1.5),
+          focus: band(table.querySelector('[data-focus-border]'), 2),
+          outline: band(table.querySelector('[data-testid="layout-table-selected"]'), 1.5),
+          dashes: table
+            .querySelector('[data-testid="layout-table-selected"]')
+            ?.getAttribute('stroke-dasharray'),
+          frame: frameOut === null ? null : { inner: frameOut - 0.5, outer: frameOut + 0.5 },
+        };
+      }, scale);
+
+    for (const carried of [false, true]) {
+      if (carried) {
+        await page.keyboard.press('Enter');
+        await expect(layout.table(name)).toHaveAttribute('data-carried', '');
+      }
+      const drawn = await bands();
+      const state = carried ? 'carried' : 'selected';
+      // The focus border lies over the edge, their outer sides together.
+      expect(drawn.focus!.outer, state).toBeCloseTo(drawn.edge!.outer, 3);
+      expect(drawn.focus!.inner, state).toBeLessThan(drawn.edge!.inner);
+      // The outline's inner side on the edge's outer side, no floor between, 1.5 px wide.
+      expect(drawn.outline!.inner, state).toBeCloseTo(drawn.edge!.outer, 3);
+      expect(drawn.outline!.outer - drawn.outline!.inner, state).toBeCloseTo(1.5, 3);
+      expect(drawn.dashes ?? null, state).toBe(carried ? '6 4' : null);
+      // The frame stands clear of the outline.
+      expect(drawn.frame!.inner - drawn.outline!.outer, state).toBeGreaterThan(3);
+    }
+    await page.keyboard.press('Escape');
+  });
+
   test('the map fits a phone, the whole hall in it', async ({ authenticatedPage: page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const layout = new LayoutPage(page);

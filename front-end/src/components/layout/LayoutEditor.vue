@@ -1994,12 +1994,13 @@ watch([canUndo, canRedo], async ([undoable, redoable]) => {
 /** How far outside the selected tables' edges their frame is drawn, in screen pixels: clear of
  *  each table's outline. */
 const FRAME_OUT_PX = 6;
-/** The corners of the frame a knob stands on, as signs of its half width and half depth. */
+/** The corners of the frame a knob stands on, each by its name as the frame stands square, and
+ *  as signs of its half width and half depth. */
 const FRAME_CORNERS = [
-  [-1, -1],
-  [1, -1],
-  [1, 1],
-  [-1, 1],
+  ['top-left', -1, -1],
+  ['top-right', 1, -1],
+  ['bottom-right', 1, 1],
+  ['bottom-left', -1, 1],
 ] as const;
 
 /** A frame about the selection: a rectangle about its centre, turned. */
@@ -2353,10 +2354,11 @@ defineExpose({
                 pointer-events="none"
               />
               <g
-                v-for="[sx, sy] in FRAME_CORNERS"
-                :key="`${sx} ${sy}`"
+                v-for="[corner, sx, sy] in FRAME_CORNERS"
+                :key="corner"
                 class="layout-turn-handle"
                 data-turn-handle
+                :data-corner="corner"
                 data-testid="layout-turn-handle"
               >
                 <!-- A thumb's reach round the knob. -->

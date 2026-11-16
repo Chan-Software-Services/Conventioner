@@ -321,14 +321,15 @@ function layoutAt(
         await expect(layout.tableReadTitle).toHaveText('Silver aisle 1');
       }
       if (stage === 'selected') {
-        // Silver aisle's first table, pressed: outlined, the turn handle over it, its card filled.
+        // Silver aisle's first table, pressed: outlined, its frame round it with a turn knob on
+        // each corner, its card filled.
         await layout.clickAt([10_000, 11_000]);
         await expect(layout.selectionTitle).toHaveText('Silver aisle 1');
         await expect(layout.turnKnob).toBeVisible();
       }
       if (stage === 'several') {
-        // Every table selected: the card's count, its first ten codes, its fields reading
-        // "Mixed", and the Align menu beside its buttons.
+        // Every table selected: the card's count, how many in each section, its fields reading
+        // "Mixed", the Align menu beside its buttons, and the frame round them all.
         await layout.clickAt([10_000, 11_000]);
         await page.keyboard.press('Control+a');
         await expect(layout.selectionTitle).toHaveText(
