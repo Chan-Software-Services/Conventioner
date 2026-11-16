@@ -204,7 +204,7 @@ function updateOption(idx: number, value: string) {
       <div class="key-control">
         <input
           :id="`question-${index}-key`"
-          class="field field-input field-input-sm"
+          class="field field-input field-input-sm key-input"
           :value="local.key"
           @input="updateKey(($event.target as HTMLInputElement).value)"
           @blur="keyBlurred()"
@@ -450,7 +450,7 @@ function updateOption(idx: number, value: string) {
 
 /* A kept key reads as it stands, black on the editor's beige, its line still drawn: it can be
    reached and copied, but it is not a field to type in. */
-.field-input[readonly] {
+.key-input[readonly] {
   background-color: var(--mm-beige);
 }
 
