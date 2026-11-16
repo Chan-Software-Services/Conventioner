@@ -6,8 +6,9 @@ describes:
   - back-end/api/markets.py#MarketArchivedError
   - back-end/api/markets.py#_load_market_to_change
   - back-end/api/markets.py#_load_market_and_organization_to_change
+  - back-end/api/markets.py#_market_change
   - back-end/tests/test_an_archive_is_read_only.py
-verified: 2026-11-11
+verified: 2026-11-16
 sources:
   - E26/F06/S01
   - bug/30
@@ -19,6 +20,7 @@ sources:
   - T257
   - T283
   - T315
+  - T352
 ---
 
 # An archived market is read-only
@@ -43,6 +45,7 @@ Its table of who may do what is part of the record too, and its owner no longer 
 ## Where it is kept
 
 - **A market write loads through `_load_market_to_change()`** in [`back-end/api/markets.py`](../../../back-end/api/markets.py), which refuses an archived market with `MarketArchivedError`.
+  The rule is kept in `_market_change()`, which loads a market for a write and asks its row, and which `_load_market_to_change()` and `_load_market_and_organization_to_change()` wrap (T105-9).
   It is a `ForbiddenError` ([an exception never reaches a client](../../implementation/conventions/an-exception-never-reaches-a-client.md)), so it answers a 403 carrying its words wherever it is raised; a refusal that needed a new branch per route would be one forgotten branch from a 500.
   A new write loads through it, never through `_load_market_for`, so it cannot forget the rule.
   A write that asks a second row loads through `_load_market_and_organization_to_change()`, which `_load_market_to_change()` is, with the organization it read beside the market.
