@@ -37,6 +37,7 @@ export const EDITOR_ANSWERS = answersRefusing(
   MarketAction.ChangeOwed,
   MarketAction.AdjustPaid,
   MarketAction.ConnectDiscord,
+  MarketAction.PublishMap,
   MarketAction.ManageEditorsAndViewers,
   MarketAction.ManageAdmins,
   MarketAction.HandOnMarket,

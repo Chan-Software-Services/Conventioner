@@ -12,6 +12,7 @@ describes:
 verified: 2026-11-16
 sources:
   - T209
+  - T422
   - T277
   - T316
   - wayfinding/the-market-frame/map
@@ -69,7 +70,7 @@ A tab is a place to look and never a state: the market's state is its phase, on 
 
 **Every tab stays on the bar for the market's whole life**, Attendance included: `tabsFor()` returns all seven in every phase, and a tab out of its phase says when it matters rather than disappearing.
 Stats, last, has no phase of its own and no note: it reads the market from its first application to its archive, and says "Nobody has applied yet." until someone has.
-Tools, just left of it, has none either: it holds the manual tools an organizer runs whenever they choose, each a card of a `.card-grid` on the page's inset, the [Discord card](discord.md) first ([`ToolsView.vue`](../../../front-end/src/views/ToolsView.vue)).
+Tools, just left of it, has none either: it holds the manual tools an organizer runs whenever they choose, each a card of a `.card-grid` on the page's inset, two cards today: the [Discord card](discord.md), then the [Public map card](public-map.md#the-card) ([`ToolsView.vue`](../../../front-end/src/views/ToolsView.vue)).
 
 [`front-end/src/utils/marketPage.ts`](../../../front-end/src/utils/marketPage.ts) says which tab holds which page (`TAB_PAGES`), which tab a flow stands under (import under Applications, start-from-CSV and a location's layout under Market Setup), and which page a route is (`pageOfRoute`), the one reading of it so the bar and the page row can never disagree.
 `hasAssignment` is the one statement of "an assignment is stored", read by the pages that ask whether there are rows to show: Assignments, Vendors, Payments, the run button on Settings and the Discord card.
