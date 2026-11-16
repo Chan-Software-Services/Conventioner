@@ -429,6 +429,31 @@ class TestTheOwner:
         assert owed.documents == []
         assert (moved.wrote, moved.changed) == (False, False)
 
+    def test_a_cleared_legacy_record_reading_as_the_seat_is_taken_away(self, owed):
+        """The release before cleared a seated-again day's fields and kept the record: it reads
+        as following the seat, which is no record, so the next event on it deletes it."""
+        owed.insert_one(_record(freed=None, set_by_hand=None))
+
+        moved = Payments.owed_day_transition(MARKET, ANA, DAY, OwedEvent.ADMIN_CALCULATED,
+                                             held=SEAT, by=ADMIN)
+
+        assert owed.documents == []
+        assert (moved.wrote, moved.changed) == (True, False)
+
+    def test_a_disagreeing_mirror_is_logged_once_a_write(self, owed, caplog):
+        doc = _stored(Freed(FREED, None))
+        doc["freed"] = None
+        owed.insert_one(doc)
+
+        with caplog.at_level(logging.WARNING):
+            Payments.owed_day_transition(MARKET, ANA, DAY, OwedEvent.ADMIN_SETS, held=SEAT,
+                                         by=ADMIN, cents=800)
+
+        assert len(caplog.records) == 1
+        stored = _the_record(owed)
+        assert Payments.state_of(stored) == SetByHand(
+            HandAmount(800, ADMIN, stored["state"]["amount"]["at"]))
+
     def test_a_legacy_record_is_written_holding_its_missing_revision(self, owed):
         owed.insert_one(_record(set_by_hand=A.to_stored()))
 

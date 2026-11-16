@@ -258,6 +258,14 @@ class FreedSeat:
     by: Optional[str]
     at: Optional[str]
 
+    def to_stored(self) -> Dict[str, Any]:
+        """The ``seat`` and ``freed`` of a freed state's stored ``state``."""
+        return {"seat": _seat_stored(self.seat), "freed": {"by": self.by, "at": self.at}}
+
+    def to_legacy(self) -> Dict[str, Any]:
+        """The ``freed`` field the release before reads: the seat's fields beside who and when."""
+        return {**_seat_stored(self.seat), "by": self.by, "at": self.at}
+
 
 def _seat_from(doc: Mapping[str, Any]) -> Seat:
     return Seat(**{key: doc.get(key) for key in _SEAT_FIELDS})
@@ -298,8 +306,7 @@ class Freed:
     kind = "freed"
 
     def to_stored(self) -> Dict[str, Any]:
-        stored: Dict[str, Any] = {"kind": self.kind, "seat": _seat_stored(self.freed.seat),
-                                  "freed": {"by": self.freed.by, "at": self.freed.at}}
+        stored: Dict[str, Any] = {"kind": self.kind, **self.freed.to_stored()}
         if self.amount is not None:
             stored["amount"] = self.amount.to_stored()
         return stored
@@ -318,8 +325,7 @@ class FreedWaived:
     kind = "freed_waived"
 
     def to_stored(self) -> Dict[str, Any]:
-        stored: Dict[str, Any] = {"kind": self.kind, "seat": _seat_stored(self.freed.seat),
-                                  "freed": {"by": self.freed.by, "at": self.freed.at},
+        stored: Dict[str, Any] = {"kind": self.kind, **self.freed.to_stored(),
                                   "waiver": {"by": self.waiver_by, "at": self.waiver_at}}
         if self.before is not None:
             stored["before"] = self.before.to_stored()
@@ -417,11 +423,8 @@ def next_owed_state(
     standing = state.amount if isinstance(state, SetByHand) else None
 
     if event == OwedEvent.SEATED:
-        if isinstance(state, Freed):
-            return SetByHand(state.amount) if state.amount else FollowsSeat()
-        if isinstance(state, FreedWaived):
-            return SetByHand(state.before) if state.before else FollowsSeat()
-        return state
+        # Seated, the day reads as a held day does.
+        return on_day(state, True)
     if event == OwedEvent.FREED:
         if not held:
             raise OwedEventRefused()
@@ -468,7 +471,7 @@ def legacy_fields(state: OwedState) -> Dict[str, Any]:
     freed: Optional[Dict[str, Any]] = None
     set_by_hand: Optional[Dict[str, Any]] = None
     if isinstance(state, (Freed, FreedWaived)):
-        freed = {**_seat_stored(state.freed.seat), "by": state.freed.by, "at": state.freed.at}
+        freed = state.freed.to_legacy()
     if isinstance(state, SetByHand):
         set_by_hand = state.amount.to_stored()
     elif isinstance(state, Freed) and state.amount is not None:
@@ -514,37 +517,47 @@ def _named(doc: Mapping[str, Any]) -> str:
             f"record {doc.get('_id')}")
 
 
+#: What reading a malformed stored state or legacy field raises.
+_UNREADABLE = (KeyError, TypeError, ValueError, AttributeError)
+
+
+def _read_record(doc: Optional[Mapping[str, Any]]) -> Tuple[OwedState, bool]:
+    """``state_of`` a record, and whether that is its stored ``state``, trusted because its
+    mirror agrees (or there is no record): only then is a result equal to it nothing to write."""
+    if doc is None:
+        return FollowsSeat(), True
+    stored = doc.get("state")
+    if stored is not None:
+        try:
+            state: Optional[OwedState] = owed_state_from_stored(stored)
+        except _UNREADABLE:
+            state = None
+        if state is not None and _legacy_of(doc) == legacy_fields(state):
+            return state, True
+        logger.warning("Owed record %s holds a state its legacy fields disagree with; read from "
+                       "the legacy fields.", _named(doc))
+    try:
+        return derive_from_legacy(doc), False
+    except _UNREADABLE:
+        logger.warning("Owed record %s could not be read; read as following the seat.",
+                       _named(doc))
+        return FollowsSeat(), False
+
+
 def state_of(doc: Optional[Mapping[str, Any]]) -> OwedState:
     """The state of a stored record, or following the seat for none. Never raises.
 
     The stored ``state`` is trusted only while the legacy fields agree with it: a rolled-back
     release writes only them, so a record whose mirror disagrees is read from what that release
-    wrote, logged once, until its next write stores the state again.
+    wrote, with a warning on each read, until its next write stores the state again.
     """
-    if doc is None:
-        return FollowsSeat()
-    stored = doc.get("state")
-    if stored is not None:
-        try:
-            state = owed_state_from_stored(stored)
-        except (KeyError, TypeError, ValueError, AttributeError):
-            state = None
-        if state is not None and _legacy_of(doc) == legacy_fields(state):
-            return state
-        logger.warning("Owed record %s holds a state its legacy fields disagree with; read from "
-                       "the legacy fields.", _named(doc))
-    try:
-        return derive_from_legacy(doc)
-    except (KeyError, TypeError, ValueError, AttributeError):
-        logger.warning("Owed record %s could not be read; read as following the seat.",
-                       _named(doc))
-        return FollowsSeat()
+    return _read_record(doc)[0]
 
 
-def _reading(doc: Optional[Mapping[str, Any]], held: bool) -> OwedState:
-    """The state a stored day reads as (``on_day``), logging an Admin's amount on a day not held:
-    no line shows it, so it reads as following the seat until the migration drops it."""
-    state = state_of(doc)
+def _reading(doc: Optional[Mapping[str, Any]], state: OwedState, held: bool) -> OwedState:
+    """The state the stored day ``doc``, read as ``state``, reads as (``on_day``), logging an
+    Admin's amount on a day not held: no line shows it, so it reads as following the seat until
+    the migration drops it."""
     if doc is not None and not held and isinstance(state, SetByHand):
         logger.warning("Owed record %s holds an amount set by hand on a day not held; read as "
                        "following the seat.", _named(doc))
@@ -587,20 +600,22 @@ class OwedTransition:
                 try:
                     amounts_owed_collection.insert_one(dict(self.record))
                 except DuplicateKeyError:
+                    # A write made the day a record between the read and the insert: it is the
+                    # day's now, as for a record changed since.
                     pass
             return
-        held = {**self.key, "revision": self.revision}
+        still_written = {**self.key, "revision": self.revision}
         if self.record is None:
-            amounts_owed_collection.delete_one(held)
+            amounts_owed_collection.delete_one(still_written)
             return
-        put: Dict[str, Any] = {}
-        kept = {field: self.record[field] for field in _OWNED_FIELDS if field in self.record}
-        if kept:
-            put["$set"] = kept
-        gone = {field: "" for field in _OWNED_FIELDS if field not in self.record}
-        if gone:
-            put["$unset"] = gone
-        amounts_owed_collection.update_one(held, put)
+        restore: Dict[str, Any] = {}
+        as_read = {field: self.record[field] for field in _OWNED_FIELDS if field in self.record}
+        if as_read:
+            restore["$set"] = as_read
+        lacked = {field: "" for field in _OWNED_FIELDS if field not in self.record}
+        if lacked:
+            restore["$unset"] = lacked
+        amounts_owed_collection.update_one(still_written, restore)
 
 
 def owed_day_transition(
@@ -627,11 +642,11 @@ def owed_day_transition(
     key = _owed_key(market_id, vendor_email, date)
     for _ in range(OWED_TRIES):
         doc = amounts_owed_collection.find_one(key)
-        stored = state_of(doc)
-        before = _reading(doc, held is not None)
+        stored, trusted = _read_record(doc)
+        before = _reading(doc, stored, held is not None)
         after = next_owed_state(stored, event, held=held is not None, cents=cents, seat=seat,
                                 by=by, at=_now())
-        if after == stored and (doc is None or _trusted(doc) == stored):
+        if after == stored and trusted:
             return OwedTransition(key, before, after, doc, None, False)
         if doc is None:
             revision = 1
@@ -655,15 +670,6 @@ def owed_day_transition(
         }}).matched_count:
             return OwedTransition(key, before, after, doc, revision, True)
     raise OwedDayChanged()
-
-
-def _trusted(doc: Mapping[str, Any]) -> Optional[OwedState]:
-    """The record's stored ``state`` when its mirror agrees with it, else None."""
-    try:
-        state = owed_state_from_stored(doc.get("state"))
-    except (KeyError, TypeError, ValueError, AttributeError):
-        return None
-    return state if _legacy_of(doc) == legacy_fields(state) else None
 
 
 def amounts_owed_for(market_id: str, vendor_email: str) -> Dict[str, Dict[str, Any]]:
@@ -728,7 +734,8 @@ def lines(
     found = []
     for date in sorted({*seats, *kept}):
         held = seats.get(date)
-        state = _reading(kept.get(date), held is not None)
+        doc = kept.get(date)
+        state = _reading(doc, state_of(doc), held is not None)
         if held is not None:
             found.append(_line(date, held, state.amount if isinstance(state, SetByHand) else None))
         elif isinstance(state, Freed):
