@@ -37,6 +37,7 @@ import {
   findsReplacedRow,
   IMPORT_LIST_FIRST,
   previewHeadline as previewHeadlineText,
+  previewMergeLine as previewMergeLineText,
   rejectedRowsWhy,
   writingRowCount,
 } from '@/utils/importPreview';
@@ -315,6 +316,8 @@ const previewFailures = ref<RefusedRow[]>([]);
 const newRows = ref(0);
 const updatedRows = ref(0);
 const unchangedRows = ref(0);
+/** Updated applications already decided that the import leaves at their verdict. */
+const keptVerdicts = ref(0);
 
 /** How many rows the import will write, as the headline counts them: the confirm button's count. */
 const writingRows = computed(() =>
@@ -339,6 +342,17 @@ const previewHeadline = computed(() =>
     newRows: newRows.value,
     updatedRows: updatedRows.value,
     unchangedRows: unchangedRows.value,
+    keptVerdicts: keptVerdicts.value,
+    rejected: previewRejected.value.length,
+  }),
+);
+/** The line under it, what each row becomes, worded in `previewMergeLine` (utils/importPreview). */
+const previewMergeLine = computed(() =>
+  previewMergeLineText({
+    newRows: newRows.value,
+    updatedRows: updatedRows.value,
+    unchangedRows: unchangedRows.value,
+    keptVerdicts: keptVerdicts.value,
     rejected: previewRejected.value.length,
   }),
 );
@@ -917,6 +931,7 @@ async function readValues(advance: boolean) {
   newRows.value = data.newRows ?? 0;
   updatedRows.value = data.updatedRows ?? 0;
   unchangedRows.value = data.unchangedRows ?? 0;
+  keptVerdicts.value = data.keptVerdicts ?? 0;
   previewSamples.value = data.samples ?? [];
   previewRejected.value = data.rejected ?? [];
   absentApplications.value = data.absentApplications ?? 0;
@@ -1404,17 +1419,7 @@ watch(marketId, () => {
       <!-- 3. Preview -->
       <section v-if="step === 'preview'" class="import-panel" data-testid="import-preview">
         <h2 data-testid="import-preview-counts">{{ previewHeadline }}</h2>
-        <p class="import-help" data-testid="import-preview-merge">
-          <template v-if="updatedRows || unchangedRows"
-            >{{ newRows }} new, {{ updatedRows }} updated<template v-if="unchangedRows"
-              >, {{ unchangedRows }} unchanged</template
-            >. </template
-          >Each imported row becomes an application awaiting your review<template
-            v-if="previewRejected.length"
-            >, except the {{ previewRejected.length }} listed below, which
-            {{ previewRejected.length === 1 ? 'arrives' : 'arrive' }} already rejected</template
-          >. Nothing has been written yet.
-        </p>
+        <p class="import-help" data-testid="import-preview-merge">{{ previewMergeLine }}</p>
 
         <!-- An approval the import would invalidate. Said before it happens, because silently
            un-approving someone the organizer already decided on is not acceptable either way. -->

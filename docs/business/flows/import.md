@@ -3,7 +3,7 @@ layer: business
 kind: flow
 describes:
   - front-end/src/views/CsvImportView.vue
-verified: 2026-11-11
+verified: 2026-11-16
 sources:
   - wayfinding/readable-journey/05
   - wayfinding/v0-1-0/04
@@ -97,7 +97,8 @@ On a first import only Timestamp and Email Address are mapped for you, even wher
    A file that is not a CSV export, such as a binary named `.csv`, stays on Upload with "This file does not look like a CSV export. Download the responses again from Google Forms as .csv.", announced as it appears, and another file can be chosen (E38/F15/S02).
    A file too large to send, past the 4 MB one import carries once its line breaks and quotes are escaped, stays on Upload the same way with "This file is too large to send: one import carries at most 4 MB. Split its rows into smaller files, each with the header row, and import them one after another.", and nothing is sent (T315).
 2. **Map columns:** "N columns in this file" ("1 column in this file" for one), then every column in file order with sample answers, mapped to a question or "Ignore this column"; "Required questions" ticks each one off; "All required questions are mapped."
-3. **Preview** ("Preview import"): "N of M rows will be imported", ending "; K of them will be rejected by your automatic rejections" when a rule rejects any, then "Each imported row becomes an application awaiting your review. Nothing has been written yet.", which, when a rule rejects any, reads "...awaiting your review, except the K listed below, which arrive already rejected. Nothing has been written yet."
+3. **Preview** ("Preview import"): "N of M rows will be imported", ending "; K of them will be rejected by your automatic rejections" when a rule rejects any, then what each row becomes, each clause only when its count is above 0: "A new row becomes an application awaiting your review; the U updated applications already decided keep their verdict; the K listed below arrive already rejected. Nothing has been written yet." ("the 1 updated application already decided keeps its verdict", "the 1 listed below arrives"), and "Nothing has been written yet." alone when no clause is said (`previewMergeLine`; `csv-import.spec.ts`, `automatic-rejections.spec.ts`).
+   An update counts as keeping its verdict when the import leaves the approval or rejection as it stands, never one it sends back to review, one the rules newly reject, or a rule's rejection it returns to review.
    "The first N rows, as they will be imported" checks the mapping: the first rows that import, change what their application holds and no rule rejects, as a list of rows that expand, each headed by the vendor's name over their email and its file row ("Row 2"), the first open.
    A row opens to its answers as the review card lays them out: the market's highlighted answers, then "N more answers" ([review highlights](../rules/review-highlights.md)).
    "Rejected by your automatic rejections", with its count, checks the rules: every row the import's judging will newly reject, in the same format, each marked "Rejected" and opening on "Rejected automatically:" and its reason; its line says who may overturn one, as the market's row "Change a verdict, or overturn an automatic rejection" stands (`rejectedRowsWhy`, "an Admin or the owner" by default, E38/F06/S01).
@@ -173,7 +174,7 @@ An applicant listed more than once is one application, from their latest row, da
 Why a later export updates rather than adds, and why only a changed answer the solver reads sends an approval back: [ADR 0011](../../adr/0011-re-import-upserts-on-market-and-email.md).
 
 1. The mapping is restored by column heading; "N columns are new since then." and lost columns are named to map again.
-2. The preview says "N new, M updated, K unchanged"; how many approved applications "will return to review" because their answers changed; and how many existing applications are not in the file ("They will be left exactly as they are.").
+2. The preview says "N new, M updated, K unchanged"; how many updated applications already decided keep their verdict (step 3 of H2a); how many approved applications "will return to review" because their answers changed; and how many existing applications are not in the file ("They will be left exactly as they are.").
    A file with nothing new reads "Nothing to import: N of M rows are already here, unchanged", and its button "Import nothing new"; otherwise the button counts the rows the headline counts, so an unchanged row is never among them.
    When a rule newly rejects any row, the headline adds "; K will be rejected by your automatic rejections", which says "K of them" except when some rows are unchanged and others are still written, where it drops "of them".
 3. Confirm: "Imported N new applications, updated M."
