@@ -181,6 +181,14 @@ function keepDraft(draft: ApplicationDraft | null): void {
 /** What a check-in or its undo came to: done, or refused with the sentence to show. */
 export type CheckInResult = { ok: true } | { ok: false; message: string; signedOut: boolean };
 
+/**
+ * What asking for a sign-in code, or trying one, came to: done, or refused with the sentence to
+ * say and, for a code tried, where the code stands. The sign-in reads its own answer, never the
+ * store's shared `error`, which another reader may write while the request is out (T277 ticket 08).
+ */
+export type CodeAnswer =
+  { ok: true } | { ok: false; sentence: string; codeState: CodeState | null };
+
 export const useApplicationStore = defineStore('application', () => {
   const kept = storedSession();
   const marketId = ref<string | null>(kept?.marketId ?? null);
@@ -190,8 +198,6 @@ export const useApplicationStore = defineStore('application', () => {
   const application = ref<Application | null>(null);
   const loading = ref(false);
   const error = ref<string | null>(null);
-  /** Where the last refused code stands, beside `error`'s sentence; null until one is refused. */
-  const codeState = ref<CodeState | null>(null);
   /**
    * The vendor page's one state (ADR 0022): the market as the page reads it before sign-in, and,
    * signed in, the form's questions - its own and the essential ones the plan offers - that the
@@ -276,14 +282,13 @@ export const useApplicationStore = defineStore('application', () => {
     };
   }
 
-  async function requestCode(slug: string, email: string): Promise<void> {
+  async function requestCode(slug: string, email: string): Promise<CodeAnswer> {
     loading.value = true;
-    error.value = null;
     try {
       await requestLoginCode(slug, email);
-      codeState.value = null;
+      return { ok: true };
     } catch (err: unknown) {
-      error.value = requestErrorFrom(err);
+      return { ok: false, sentence: requestErrorFrom(err), codeState: null };
     } finally {
       loading.value = false;
     }
@@ -313,25 +318,24 @@ export const useApplicationStore = defineStore('application', () => {
     email: string,
     code: string,
     remember = false,
-  ): Promise<boolean> {
+  ): Promise<CodeAnswer> {
     loading.value = true;
-    error.value = null;
-    codeState.value = null;
     try {
       const result = await verifyLoginCode(slug, email, code, remember);
       // Every successful sign-in carries a token now, applied or not (E26/F07/S01). Without one
       // this reported success and the page went back to "Sign In" with no word (bug 6), so a
       // reply without one is a failure, said as one.
       if (!result.token) {
-        error.value = 'Sign-in did not complete. Please request a new code and try again.';
-        return false;
+        return {
+          ok: false,
+          sentence: 'Sign-in did not complete. Please request a new code and try again.',
+          codeState: null,
+        };
       }
       holdSignIn(slug, { ...result, token: result.token });
-      return true;
+      return { ok: true };
     } catch (err: unknown) {
-      error.value = verifyErrorFrom(err);
-      codeState.value = codeStateFrom(err);
-      return false;
+      return { ok: false, sentence: verifyErrorFrom(err), codeState: codeStateFrom(err) };
     } finally {
       loading.value = false;
     }
@@ -510,7 +514,6 @@ export const useApplicationStore = defineStore('application', () => {
     formFields.value = [];
     essentialOptions.value = EMPTY_ESSENTIAL_OPTIONS;
     error.value = null;
-    codeState.value = null;
     keepSession(null);
   }
 
@@ -540,7 +543,6 @@ export const useApplicationStore = defineStore('application', () => {
     application,
     loading,
     error,
-    codeState,
     page,
     formFields,
     essentialOptions,

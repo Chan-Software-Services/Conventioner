@@ -20,6 +20,7 @@ import { MarketPhase, type Market } from '@/assets/types/datatypes';
 import { MARKET_CHANGED_CODE, VENDOR_IS_HERE_CODE, isVendorHere } from '@/utils/api';
 import { entryParts } from '@/utils/marketHistory';
 import { FULL_TABLE, type PlaceableVendor } from '@/utils/placementChange';
+import { useDialogSubmit, type DialogSubmission } from '@/utils/useDialogSubmit';
 import type { MarketTableRow } from '@/utils/resultFilters';
 import { answersRefusing } from './support/servedAnswers';
 
@@ -158,8 +159,9 @@ describe('the Assignments page, asked first', () => {
     const dialog = wrapper.findComponent(PlacementDialog);
     expect(dialog.exists()).toBe(true);
     expect(dialog.props('question')).toEqual({ sentence: HERE, change: 'free' });
-    expect(dialog.props('errorMessage')).toBe('');
-    expect(dialog.props('busy')).toBe(false);
+    const submission: DialogSubmission = dialog.props('submission');
+    expect(submission.sentence.value).toBe('');
+    expect(submission.sending.value).toBe(false);
     expect(tablesReads()).toBe(1);
     expect(refreshMarket).not.toHaveBeenCalled();
     expect(details.load).not.toHaveBeenCalled();
@@ -252,7 +254,7 @@ describe('the Assignments page, asked first', () => {
 
     const dialog = wrapper.findComponent(PlacementDialog);
     expect(dialog.props('question')).toBeNull();
-    expect(dialog.props('errorMessage')).toBe(changed);
+    expect(dialog.props('submission').sentence.value).toBe(changed);
     expect(tablesReads()).toBe(2);
   });
 
@@ -283,10 +285,14 @@ function applicant(email: string): PlaceableVendor {
   };
 }
 
+const aSubmission = () =>
+  useDialogSubmit({ opening: () => true, failure: 'That change could not be saved.' });
+
 function theDialog(props: Record<string, unknown> = {}) {
   return mount(PlacementDialog, {
     props: {
       open: true,
+      submission: aSubmission(),
       mode: 'occupied',
       date: DATE,
       dateLabel: 'May 1, 2099',
@@ -372,8 +378,11 @@ describe('the seat’s dialog, asking', () => {
     expect(wrapper.emitted('anyway')).toBeUndefined();
   });
 
-  it('holds its button while the change is sent again', () => {
-    const wrapper = theDialog({ question: { sentence: HERE, change: 'free' }, busy: true });
+  it('holds its button while the change is sent again', async () => {
+    const submission = aSubmission();
+    const wrapper = theDialog({ question: { sentence: HERE, change: 'free' }, submission });
+    void submission.submit(() => new Promise(() => {}));
+    await flushPromises();
 
     expect(wrapper.get('[data-testid="placement-dialog-anyway"]').attributes()).toHaveProperty(
       'disabled',

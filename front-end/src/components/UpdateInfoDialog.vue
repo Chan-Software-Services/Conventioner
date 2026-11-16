@@ -11,6 +11,10 @@
  * reads are the row "Update info the assignment or price reads", Admin by default, and show
  * read-only to whoever it refuses; the names and the request are any other answer's. So are the
  * answers a price group reads, among the market's own questions (E43/F01/S03).
+ *
+ * Its write belongs to its opening, the vendor's application it was opened on (T411): nothing closes
+ * it while it saves, and an answer that lands after it was closed (the drawer moved to another
+ * vendor) is handed on as `refreshed`, so the screen reads it without the next opening closing.
  */
 import { computed, ref, watch } from 'vue';
 import type {
@@ -23,7 +27,7 @@ import AppDialog from '@/components/AppDialog.vue';
 import UpdateInfoTheirs from '@/components/UpdateInfoTheirs.vue';
 import ApplicationFormFields from '@/components/application/ApplicationFormFields.vue';
 import EssentialApplicationFields from '@/components/application/EssentialApplicationFields.vue';
-import { getApiErrorMessage } from '@/utils/api';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import { sortedFormFields } from '@/utils/applicationForm';
 import {
   ASSIGNMENT_READS,
@@ -69,7 +73,12 @@ const props = defineProps<{
   /** The questions the price groups read (`priceReads` on the market). */
   priceReads?: readonly string[];
 }>();
-const emit = defineEmits<{ close: []; saved: [application: Application] }>();
+const emit = defineEmits<{
+  close: [];
+  saved: [application: Application];
+  /** An earlier opening's update, saved after it was closed: the application as saved. */
+  refreshed: [application: Application];
+}>();
 
 /** The essential questions, by the key each is answered under; the tier grid answers the dates too. */
 const ESSENTIAL_QUESTIONS = [
@@ -87,8 +96,11 @@ const ESSENTIAL_QUESTIONS = [
 const draft = ref<Record<string, unknown>>({});
 /** The essential questions changed here: a ranking the form fills in on opening is not a change. */
 const touched = ref(new Set<string>());
-const error = ref('');
-const busy = ref(false);
+const submission = useDialogSubmit({
+  opening: () => (props.open && props.application ? props.application.id : null),
+  failure: 'The update could not be saved.',
+});
+const { sending } = submission;
 
 /** The organizer's own questions, in the form's order. */
 const fields = computed<FormField[]>(() =>
@@ -130,7 +142,6 @@ watch(
     if (!open || !application) return;
     draft.value = { ...now.value };
     touched.value = new Set();
-    error.value = '';
   },
   { immediate: true },
 );
@@ -252,16 +263,14 @@ function essentialChanged(key: string): void {
 
 async function save(): Promise<void> {
   const application = props.application;
-  if (busy.value || !application || !Object.keys(sent.value).length) return;
-  busy.value = true;
-  error.value = '';
-  try {
-    emit('saved', await updateVendorInfo(props.marketId, application.id, sent.value));
-  } catch (err: unknown) {
-    error.value = getApiErrorMessage(err, 'The update could not be saved.');
-  } finally {
-    busy.value = false;
-  }
+  const answers = sent.value;
+  if (!application || !Object.keys(answers).length) return;
+  await submission.submit(() => updateVendorInfo(props.marketId, application.id, answers), {
+    done: (saved) => emit('saved', saved),
+    late: (answer) => {
+      if (answer.ok) emit('refreshed', answer.answer);
+    },
+  });
 }
 </script>
 
@@ -272,10 +281,9 @@ async function save(): Promise<void> {
     testid="update-info"
     size="wide"
     scroll="body"
-    :confirm-label="busy ? 'Saving…' : 'Save'"
-    :confirm-disabled="busy || !Object.keys(sent).length"
-    :close-disabled="busy"
-    :error="error"
+    :confirm-label="sending ? 'Saving…' : 'Save'"
+    :confirm-disabled="!Object.keys(sent).length"
+    :submission="submission"
     @close="emit('close')"
     @submit="save"
   >

@@ -36,19 +36,19 @@
  * chart that reads as one line of a whole, over time or across the review, spans the row, and the
  * How full card spans it up to its table's width, the whole column in one.
  */
-import { computed, ref, watch } from 'vue';
+import { computed } from 'vue';
 import { useRoute, useRouter, type LocationQuery } from 'vue-router';
-import { getApiErrorMessage } from '@/utils/api';
 import { applicantStats } from '@/utils/applicantStats';
 import { appliedOverTime } from '@/utils/appliedOverTime';
 import { ANSWER_GROUPS, answerGroup, questionLedgers } from '@/utils/answerCounts';
-import { fetchMarketStats, type MarketStats } from '@/utils/marketStats';
+import { fetchMarketStats } from '@/utils/marketStats';
 import { checkInRows } from '@/utils/checkInRows';
 import { fillGrid } from '@/utils/fillGrid';
 import { moneyCard } from '@/utils/moneyCard';
 import { roomCards } from '@/utils/roomRows';
 import { statsHeadlines } from '@/utils/statsHeadlines';
 import { useOpenMarket } from '@/utils/openMarket';
+import { useServerRead } from '@/utils/useServerRead';
 import BarLedger from '@/components/BarLedger.vue';
 import ColumnChart from '@/components/charts/ColumnChart.vue';
 import FillGrid from '@/components/charts/FillGrid.vue';
@@ -61,32 +61,17 @@ const router = useRouter();
 const marketId = computed(() => String(route.params.marketId ?? ''));
 const { market } = useOpenMarket(marketId);
 
-const figures = ref<MarketStats | null>(null);
-const errorMessage = ref('');
-
-/** Reads the figures of the market on screen; an earlier market's answer, landing late, is dropped. */
-async function load(): Promise<void> {
-  const id = marketId.value;
-  if (!id) return;
-  errorMessage.value = '';
-  try {
-    const read = await fetchMarketStats(id);
-    if (marketId.value === id) figures.value = read;
-  } catch (err: unknown) {
-    if (marketId.value === id) {
-      errorMessage.value = getApiErrorMessage(err, 'The figures could not be counted.');
-    }
-  }
-}
-// A jump through history to another market's Stats keeps this page: the last market's figures go
-// at once, so none of them is drawn under the next market's name while it counts, or if it fails.
-watch(
-  marketId,
-  () => {
-    figures.value = null;
-    void load();
-  },
-  { immediate: true },
+// The figures are one keyed read (T421): a jump through history to another market's Stats keeps
+// this page, and the last market's figures go in the same tick, so none of them is drawn under the
+// next market's name while it counts, or if it fails. Only the newest read of the market open
+// lands, and the failure said is that read's.
+const figuresRead = useServerRead(() => marketId.value || null, fetchMarketStats, {
+  failure: 'The figures could not be counted.',
+});
+const figures = figuresRead.data;
+/** The open market's count failed and nothing of it is held. */
+const errorMessage = computed(() =>
+  figuresRead.phase.value === 'failed' ? figuresRead.sentence.value : '',
 );
 
 const stats = computed(() =>
@@ -156,7 +141,7 @@ const NOBODY: Record<string, string> = {
 </script>
 
 <template>
-  <MarketFrame :market="market" @retry="load">
+  <MarketFrame :market="market" @retry="figuresRead.reread()">
     <div class="stats">
       <!-- A draft, or a phase whose figures are not counted yet: there is nothing to headline. -->
       <ul

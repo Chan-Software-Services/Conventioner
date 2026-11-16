@@ -235,8 +235,10 @@ describe('saving', () => {
     );
     submit();
     await flushPromises();
+    submit();
     await tryEveryClose();
     expect(byId('reviewers-dialog-window')).not.toBeNull();
+    expect(api.put).toHaveBeenCalledTimes(1);
 
     answer();
     await flushPromises();

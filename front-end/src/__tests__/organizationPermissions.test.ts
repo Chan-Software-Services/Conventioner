@@ -17,6 +17,7 @@ import {
 } from '@/assets/types/datatypes';
 import { getFormattedTimestamp } from '@/utils/utils';
 import { parseOrgFromApi } from '@/utils/organizations';
+import { tryEveryClose } from './support/dialogCloses';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), delete: vi.fn(), post: vi.fn() }));
 
@@ -452,4 +453,98 @@ describe("the organizations list's answer", () => {
 
     expect(parsed.defaultPermissionTable).toEqual(SET);
   });
+});
+
+/**
+ * Each of the two confirmations writes through its submission (T411): the shell holds it while its
+ * write is out, so a second press sends nothing and nothing closes it, and a refusal is said in the
+ * opening it was sent from only.
+ */
+describe('the confirmations hold while they write', () => {
+  function held<T = unknown>() {
+    let resolve!: (value: T) => void;
+    let reject!: (err: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  const refused = (sentence: string) =>
+    Object.assign(new Error('refused'), {
+      isAxiosError: true,
+      response: { status: 403, data: { error: sentence } },
+    });
+
+  const windowOf = (testid: string) =>
+    document.querySelector<HTMLElement>(`[data-testid="${testid}-window"]`);
+  const press = (testid: string) => windowOf(testid)!.querySelector('form')!.requestSubmit();
+
+  const CONFIRMATIONS = [
+    {
+      name: "a row's change",
+      testid: 'manage-org-permission-confirm',
+      table: BUILT_IN,
+      write: () => api.put,
+      ask: async () => {
+        await choose(MarketRole.Admin);
+      },
+    },
+    {
+      name: 'the reset',
+      testid: 'manage-org-permissions-reset-confirm',
+      table: SET,
+      write: () => api.delete,
+      ask: async () => {
+        await body().get('[data-testid="manage-org-permissions-reset"]').trigger('click');
+        await flushPromises();
+      },
+    },
+  ];
+
+  it.each(CONFIRMATIONS)(
+    '$name sends once for two presses, and nothing closes it until it lands',
+    async ({ testid, table, write, ask }) => {
+      await openDialog(table, 'owner');
+      await ask();
+      const answer = held();
+      write().mockReturnValue(answer.promise);
+
+      press(testid);
+      press(testid);
+      await flushPromises();
+
+      expect(write()).toHaveBeenCalledTimes(1);
+      expect(
+        document.querySelector(`[data-testid="${testid}-submit-button"]`)!.hasAttribute('disabled'),
+      ).toBe(true);
+      await tryEveryClose(testid);
+      expect(windowOf(testid)).not.toBeNull();
+
+      answer.resolve({ data: { permissionTable: SET } });
+      await flushPromises();
+      expect(windowOf(testid)).toBeNull();
+      expect(body().find(WINDOW).exists()).toBe(true);
+    },
+  );
+
+  it.each(CONFIRMATIONS)(
+    '$name says its refusal in itself, and not when it is asked again',
+    async ({ testid, table, write, ask }) => {
+      await openDialog(table, 'owner');
+      await ask();
+      write().mockRejectedValue(refused('Only the owner changes these.'));
+
+      press(testid);
+      await flushPromises();
+      expect(windowOf(testid)!.textContent).toContain('Only the owner changes these.');
+
+      document.querySelector<HTMLElement>(`[data-testid="${testid}-cancel-button"]`)!.click();
+      await flushPromises();
+      await ask();
+
+      expect(windowOf(testid)!.textContent).not.toContain('Only the owner changes these.');
+    },
+  );
 });

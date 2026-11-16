@@ -134,8 +134,8 @@ describe('a placement refused because the market changed', () => {
     expect(tablesReads()).toBe(2);
     const dialog = wrapper.findComponent(PlacementDialog);
     expect(dialog.exists()).toBe(true);
-    expect(dialog.props('errorMessage')).toBe(SENTENCE);
-    expect(dialog.props('busy')).toBe(false);
+    expect(dialog.props('submission').sentence.value).toBe(SENTENCE);
+    expect(dialog.props('submission').sending.value).toBe(false);
     // The dialog's lists come from the tables read again: Ben, seated meanwhile, is in them.
     expect(dialog.props('seated')).toEqual([expect.objectContaining({ email: BEN })]);
   });
@@ -167,7 +167,7 @@ describe('a placement refused because the seat was taken meanwhile', () => {
 
     expect(tablesReads()).toBe(2);
     expect(refreshMarket).toHaveBeenCalledTimes(1);
-    expect(wrapper.findComponent(PlacementDialog).props('errorMessage')).toBe(taken);
+    expect(wrapper.findComponent(PlacementDialog).props('submission').sentence.value).toBe(taken);
   });
 });
 
@@ -185,7 +185,7 @@ describe('a placement refused for another reason', () => {
     expect(tablesReads()).toBe(1);
     expect(refreshMarket).not.toHaveBeenCalled();
     expect(details.load).not.toHaveBeenCalled();
-    expect(wrapper.findComponent(PlacementDialog).props('errorMessage')).toBe(unknown);
+    expect(wrapper.findComponent(PlacementDialog).props('submission').sentence.value).toBe(unknown);
   });
 });
 
@@ -198,5 +198,104 @@ describe('a placement that lands', () => {
     expect(wrapper.findComponent(PlacementDialog).exists()).toBe(false);
     expect(tablesReads()).toBe(2);
     expect(refreshMarket).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a placement's answer belongs to the seat it was opened on (T411)", () => {
+  /** Two empty tables, and the page open on the first one's dialog. */
+  async function twoSeats() {
+    served = [table(null), { ...table(null), tableCode: 'Main Hall 2' }];
+    const wrapper = mount(ResultView, {
+      global: {
+        stubs: {
+          MarketFrame: { template: '<div><slot /></div>' },
+          ResultSummary: true,
+          ResultFilterBar: true,
+          VendorDrawer: true,
+          PlacementDialog: true,
+          ResultSeat: true,
+        },
+      },
+    });
+    await flushPromises();
+    const open = async (n: number) => {
+      wrapper.findAllComponents(ResultSeat)[n].vm.$emit('open');
+      await flushPromises();
+      return wrapper.findComponent(PlacementDialog);
+    };
+    return { wrapper, open };
+  }
+
+  /** The placement's request, held until the test answers it. */
+  function heldPut() {
+    let answer!: { land: () => void; refuse: (status: number, error: string) => void };
+    api.put.mockImplementation(
+      () =>
+        new Promise((resolve, reject) => {
+          answer = {
+            land: () => resolve({ data: { placement: {} } }),
+            refuse: (status, error) =>
+              reject(
+                Object.assign(new AxiosError('refused'), { response: { status, data: { error } } }),
+              ),
+          };
+        }),
+    );
+    return () => answer;
+  }
+
+  it('holds the dialog while it is sent, and sends one for two presses', async () => {
+    const answer = heldPut();
+    const { open } = await twoSeats();
+    const dialog = await open(0);
+
+    dialog.vm.$emit('place', { email: ANA, seat: 'Full Table' });
+    dialog.vm.$emit('place', { email: ANA, seat: 'Full Table' });
+    await flushPromises();
+
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(dialog.props('submission').sending.value).toBe(true);
+    answer().land();
+    await flushPromises();
+  });
+
+  it("never closes the next seat's dialog, and still reads the tables again, when it lands late", async () => {
+    const answer = heldPut();
+    const { wrapper, open } = await twoSeats();
+    (await open(0)).vm.$emit('place', { email: ANA, seat: 'Full Table' });
+    await flushPromises();
+    wrapper.findComponent(PlacementDialog).vm.$emit('close');
+    await flushPromises();
+    const next = await open(1);
+    expect(next.props('tableCode')).toBe('Main Hall 2');
+
+    answer().land();
+    await flushPromises();
+
+    const dialog = wrapper.findComponent(PlacementDialog);
+    expect(dialog.exists()).toBe(true);
+    expect(dialog.props('tableCode')).toBe('Main Hall 2');
+    expect(dialog.props('submission').sending.value).toBe(false);
+    expect(dialog.props('submission').sentence.value).toBe('');
+    expect(tablesReads()).toBe(2);
+    expect(refreshMarket).toHaveBeenCalledTimes(1);
+  });
+
+  it("says a late refusal nowhere in the next seat's dialog", async () => {
+    const answer = heldPut();
+    const { wrapper, open } = await twoSeats();
+    (await open(0)).vm.$emit('place', { email: ANA, seat: 'Full Table' });
+    await flushPromises();
+    wrapper.findComponent(PlacementDialog).vm.$emit('close');
+    await flushPromises();
+    await open(1);
+
+    answer().refuse(400, 'That seat is not on this market’s plan.');
+    await flushPromises();
+
+    const dialog = wrapper.findComponent(PlacementDialog);
+    expect(dialog.props('tableCode')).toBe('Main Hall 2');
+    expect(dialog.props('submission').sentence.value).toBe('');
+    expect(dialog.props('question')).toBeNull();
   });
 });

@@ -5,7 +5,9 @@
  * the tool sends, the sentence it says of the answer, and `polygonIsSimple`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import type { FloorplanObject, FloorplanTable } from '@/assets/types/datatypes';
+import LayoutEditor from '@/components/layout/LayoutEditor.vue';
 import { polygonIsSimple } from '@/components/layout/layoutGeometry';
 import {
   AREA_CROSSES,
@@ -25,6 +27,7 @@ import {
 } from '@/components/layout/layoutFill';
 import type { SavedLayout } from '@/components/layout/layoutSave';
 import { useLayoutEditor } from '@/components/layout/useLayoutEditor';
+import { tryEveryClose } from './support/dialogCloses';
 
 const SIX_FOOT = { id: 'six-foot', name: 'Standard 6 ft', widthMm: 1830, depthMm: 760 };
 const SQUARE = { id: 'square', name: 'Square 4 ft', widthMm: 1220, depthMm: 1220 };
@@ -524,5 +527,120 @@ describe('the answer', () => {
 
     expect(request.counts).toEqual({ 'six-foot': 0 });
     expect(LAYOUT_IS_FULL).toBe('A layout holds at most 1,000 tables.');
+  });
+});
+
+// ── The editor's write of a fill (T411) ──────────────────────────────────────
+
+describe("Fill an area's write, in the editor", () => {
+  let wrapper: VueWrapper | null = null;
+
+  beforeEach(() => {
+    vi.useRealTimers();
+    document.body.innerHTML = '';
+    // The map's stage has a size, so "Fill what is in view" has a view to fill.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 800,
+      bottom: 600,
+      width: 800,
+      height: 600,
+      toJSON: () => ({}),
+    } as DOMRect);
+  });
+  afterEach(() => {
+    wrapper?.unmount();
+    wrapper = null;
+    vi.restoreAllMocks();
+  });
+
+  const byTestId = (id: string) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+
+  /** The editor on a layout of `tables`, its fill answered by `fill`; the dialog opened on the view. */
+  async function fillTheView(fill: () => Promise<FillAnswer>, tables: FloorplanTable[] = []) {
+    const { editor } = aTool(tables);
+    wrapper = mount(LayoutEditor, {
+      attachTo: document.body,
+      props: { editor, locationName: 'Example Hall', sections: [], tableTypes: TYPES, fill },
+    });
+    await flushPromises();
+    byTestId('layout-tool-fill')!.click();
+    await flushPromises();
+    byTestId('layout-fill-view')!.click();
+    await flushPromises();
+    return wrapper;
+  }
+
+  async function pressFill() {
+    byTestId('layout-fill-submit-button')!.closest('form')!.dispatchEvent(new Event('submit'));
+    await flushPromises();
+  }
+
+  it('holds the dialog while the placement runs, sends one for two presses, and closes on its answer', async () => {
+    let answer!: (placed: FillAnswer) => void;
+    const fill = vi.fn(
+      () =>
+        new Promise<FillAnswer>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const editor = await fillTheView(fill);
+
+    await pressFill();
+    await pressFill();
+
+    expect(fill).toHaveBeenCalledTimes(1);
+    expect(byTestId('layout-fill-submit-button')!.textContent!.trim()).toBe('Placing…');
+    await tryEveryClose('layout-fill');
+    expect(byTestId('layout-fill-window')).not.toBeNull();
+
+    answer({ placed_tables: [placed(3000, 3000)], timed_out: false });
+    await flushPromises();
+
+    expect(byTestId('layout-fill-window')).toBeNull();
+    expect(editor.emitted('status')).toEqual([[saidFilled(1, 30, false, 30)]]);
+  });
+
+  it('keeps a refusal in the dialog until a choice changes, and out of the next opening', async () => {
+    const fill = vi.fn(() =>
+      Promise.reject({
+        isAxiosError: true,
+        response: { status: 400, data: { error: 'No room.' } },
+      }),
+    );
+    await fillTheView(fill);
+
+    await pressFill();
+    expect(byTestId('layout-fill-error')!.textContent).toBe('No room.');
+    expect(byTestId('layout-fill-window')).not.toBeNull();
+
+    const count = byTestId('layout-fill-count') as HTMLInputElement;
+    count.value = '12';
+    count.dispatchEvent(new Event('input', { bubbles: true }));
+    await flushPromises();
+    expect(byTestId('layout-fill-error')).toBeNull();
+
+    await pressFill();
+    expect(byTestId('layout-fill-error')).not.toBeNull();
+    byTestId('layout-fill-cancel-button')!.click();
+    await flushPromises();
+    byTestId('layout-fill-view')!.click();
+    await flushPromises();
+    expect(byTestId('layout-fill-window')).not.toBeNull();
+    expect(byTestId('layout-fill-error')).toBeNull();
+  });
+
+  it('says in the dialog that a full layout takes no more, and asks nothing', async () => {
+    const fill = vi.fn(() => Promise.resolve({ placed_tables: [], timed_out: false }));
+    const full = Array.from({ length: 1000 }, (_, i) => table(`t${i}`, null, null));
+    await fillTheView(fill, full);
+
+    await pressFill();
+
+    expect(fill).not.toHaveBeenCalled();
+    expect(byTestId('layout-fill-error')!.textContent).toBe(LAYOUT_IS_FULL);
   });
 });

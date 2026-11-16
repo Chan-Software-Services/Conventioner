@@ -326,6 +326,11 @@ describe('Manage market asks before it changes a role', () => {
     await flushPromises();
     expect(api.put).toHaveBeenCalledTimes(1);
     expect(byTestId('manage-market-role-change-window')).not.toBeNull();
+    // The shell holds it, by the write's submission: Cancel and the close are drawn disabled.
+    expect(byTestId('manage-market-role-change-cancel-button')!.hasAttribute('disabled')).toBe(
+      true,
+    );
+    expect(byTestId('manage-market-role-change-close-button')!.hasAttribute('disabled')).toBe(true);
 
     answer({ data: {} });
     await flushPromises();
@@ -413,6 +418,33 @@ describe('Manage market asks before it changes a role', () => {
     expect(byTestId('manage-market-role-change-error')).toBeNull();
     expect(byTestId('manage-market-error')).toBeNull();
     expect(document.activeElement).toBe(element);
+    wrapper.unmount();
+  });
+
+  it("keeps a refusal that lands after Manage market was opened on another market off that market's rows", async () => {
+    let refuse!: (err: unknown) => void;
+    api.put.mockReturnValue(new Promise((_resolve, reject) => (refuse = reject)));
+    const other = market([person()], { id: 'market-2', name: 'Lakeside' });
+    const answer = api.get.getMockImplementation()!;
+    api.get.mockImplementation(async (url: string) =>
+      url === '/markets/market-2' ? { data: { market: other } } : answer(url),
+    );
+    const wrapper = await open();
+    await choose(MarketRole.Editor);
+    byTestId('manage-market-role-change-submit-button')!.click();
+    await flushPromises();
+
+    await wrapper.setProps({ market: other });
+    await flushPromises();
+    refuse(refusing(403, 'You cannot make that change.'));
+    await flushPromises();
+
+    expect(byTestId('manage-market-role-change-window')).toBeNull();
+    expect(byTestId('manage-market-user-error')).toBeNull();
+    expect(document.body.textContent).not.toContain('You cannot make that change.');
+    expect(byTestId('manage-market-window')!.querySelector('.market-name')!.textContent).toBe(
+      'Lakeside',
+    );
     wrapper.unmount();
   });
 

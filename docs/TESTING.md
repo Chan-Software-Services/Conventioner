@@ -403,8 +403,8 @@ not read the reset link from an email, and cannot read it from MongoDB, which ke
 hash: after asking for a link it plants one it knows with `plantAccountLink` in
 `front-end/e2e/helpers/accountSecrets.ts`, as the verification specs plant a verification link
 and `plantSignInCode` plants a code (through
-`mongoEval` in `front-end/e2e/helpers/mongo.ts`, which runs `mongosh` in the container named by
-`E2E_MONGO_CONTAINER`, derived from `stack().mongoContainerName`).
+`mongoEval` in `front-end/e2e/helpers/mongo.ts`, which runs each script in the one `mongosh` it
+keeps in the container named by `E2E_MONGO_CONTAINER`, derived from `stack().mongoContainerName`).
 
 ### A fake Discord
 
