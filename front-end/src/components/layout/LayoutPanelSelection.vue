@@ -151,8 +151,9 @@ function setNumber() {
   const held = numbered.value;
   if (!held) return;
   const typed = numberTyped.value.trim();
-  const number = Number(typed);
-  if (typed === '' || !Number.isInteger(number) || number < 1 || number > held.count) {
+  // Digits alone: `Number` would read "0x3", "1e0" and "3.0" as whole numbers too.
+  const number = /^\d+$/.test(typed) ? Number(typed) : NaN;
+  if (!Number.isInteger(number) || number < 1 || number > held.count) {
     numberError.value = `Type a number from 1 to ${held.count}.`;
     return;
   }

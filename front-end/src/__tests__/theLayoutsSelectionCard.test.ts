@@ -240,7 +240,7 @@ describe("the selection card's Number field, on a layout that follows the plan (
     expect(wrapper.find('[data-testid="layout-selection-number-error"]').exists()).toBe(false);
   });
 
-  it.each(['0', '7', '2.5', 'four', ''])(
+  it.each(['0', '7', '2.5', 'four', '', '0x3', '1e0', '3.0', '+3', '-0'])(
     'says what to type for %j, and sets nothing',
     async (typed) => {
       const wrapper = following([TABLES[1]]);
