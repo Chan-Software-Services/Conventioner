@@ -38,6 +38,8 @@ The server counts all of it in one answer (`GET /markets/<id>/payments`, `market
    The list is drawn once the vendors' names are read, saying "Loading vendors…" until then, so it is drawn in its order by name and never re-sorts under the reader; the figures above it do not wait, since none reads a name (T284).
    A failed read of the names leaves it drawn by address.
    The payments and the names are each one keyed read ([`useServerRead`](../../../front-end/src/utils/useServerRead.ts)): moved to another market, the page says "Loading payments…" at once and waits for that market's names, and an answer for the market left never lands on this one (T421).
+   A failed read of the payments says "The payments could not be loaded." in the list's place, unless the failure says more.
+   A failed re-read says it too, and while the next re-read is out the list is drawn again without the sentence.
 4. "Owes", "Paid in full" and "Paid more than owed" each narrow the list to the vendors in that state, with how many there are; "Paid in full" is every vendor who is square and owed something, so a vendor who owes nothing and paid nothing, "Nothing owed", is in none of the three, and is listed only unfiltered; pressed again, a filter is cleared.
    The states are the server's, served with each vendor and never worked out on the page, the ones the export's "Payment" filter reads ([J15](vendors.md#j15-export-the-vendors-to-a-csv)), so the page's "Owes" and an export of "Owes" list the same vendors.
    "Search vendors" finds a vendor by name or address within it, a name being the one they chose or the one on their identification, and "N of M vendors shown" counts what is left.
