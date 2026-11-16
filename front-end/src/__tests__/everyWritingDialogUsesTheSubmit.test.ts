@@ -6,10 +6,10 @@ import { basename, join, relative, resolve as resolvePath } from 'node:path';
  * Every dialog that writes holds through its write by its submission, and a dialog added later
  * cannot quietly skip it (T411).
  *
- * The hold was opt-in: only 8 of the 38 files drawing `AppDialog` passed `closeDisabled`, so a
- * dialog could be closed while its write was out and the answer landed in its next opening. Now
- * `AppDialog` derives the hold from a `useDialogSubmit` handle passed as `submission`, and this
- * test keeps every writing dialog on it.
+ * The hold was opt-in: 14 of the 38 files drawing `AppDialog` passed `closeDisabled`, 12 of them
+ * while writing, so the others could be closed while a write was out and its answer landed in the
+ * next opening. Now `AppDialog` derives the hold from a `useDialogSubmit` handle passed as
+ * `submission`, and this test keeps every writing dialog on it.
  *
  * A dialog's writing cannot be read from its source, so the rule is kept by two lists: every file
  * under `src/` (outside `dev/`) that draws `<AppDialog` is on exactly one of them, and a new file

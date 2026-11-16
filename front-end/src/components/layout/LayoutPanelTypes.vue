@@ -8,8 +8,8 @@
  *
  * Every change is a write of the whole list (`save`), which the page sends once the layout's own
  * pending change has landed. Each dialog's write is its own `useDialogSubmit` (T411), keyed by that
- * dialog's opening, so the shell holds the dialog through the write and its re-read and says its
- * refusal there, and an answer never reaches another dialog or a later opening.
+ * dialog's opening, so the shell holds the dialog through the write, and a change to the list
+ * through its re-read too, and says its refusal there, and an answer never reaches another dialog or a later opening.
  *
  * Past Draft (`settled`) the market's types are settled, as its tables' seats are: "Add a type",
  * "Use saved types" and each type's menu are disabled, and "Save these types", which files a copy
@@ -114,8 +114,8 @@ function closeAll() {
 
 /**
  * Send a dialog's write through its submission: the dialog closes when it lands, with what was
- * done said on the card, and says its refusal when not. The write holds through the page's re-read
- * of the types, so the dialog does too.
+ * done said on the card, and says its refusal when not. A change to the list holds through the
+ * page's re-read of the types, so its dialog does too.
  */
 function held(submission: typeof typeSubmission, write: () => Promise<void>, done: string) {
   void submission.submit(write, {
