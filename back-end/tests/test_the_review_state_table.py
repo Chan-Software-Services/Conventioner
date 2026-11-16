@@ -112,8 +112,9 @@ def approved_by_a_person(world):
 
 
 def approved_added(world):
-    """As adding a vendor stores one (``ReviewState``'s ``add``): adding is the Assignment phase's,
-    and this table's events are the review's, so it is stored as the add writes it."""
+    """As adding a vendor stores one (``ReviewState``'s ``add``), but for its origin, which
+    ``origin_of`` reads off ``added_by``: adding is the Assignment phase's, and this table's events
+    are the review's."""
     adder = MarketPerson(user_id="user-admin", email=ADMIN)
     _doc(world).update(status="reviewer_approved", verdict_by=adder.as_giver().model_dump(),
                        verdict_at="2026-10-21T00:00:00+00:00", added_by=adder.model_dump(),
