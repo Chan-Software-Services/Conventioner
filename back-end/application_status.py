@@ -743,8 +743,8 @@ def deal(app_id: str, reviewer: Optional[MarketPerson], was: Optional[Dict[str, 
 
 def deal_follow_up(app_id: str, reviewer: MarketPerson,
                    owner_was: Optional[Dict[str, Any]]) -> bool:
-    """Hand a follow-up whose owner may no longer review on to the reviewer it is dealt to: its
-    owner and its reviewer both become them, it keeps its status, and it waits for the deal no
+    """Hand a follow-up on to the reviewer it is dealt to, a removed reviewer's or one whose owner
+    may no longer own a follow-up here: its owner and its reviewer both become them, it keeps its status, and it waits for the deal no
     longer. Written only while it still needs a follow-up from ``owner_was``, so one taken on or
     decided meanwhile is left as it is. Only ``review_team.py`` calls it, holding the market."""
     ApplicationsApi.ensure_application_indexes()
@@ -759,9 +759,9 @@ def deal_follow_up(app_id: str, reviewer: MarketPerson,
 
 def settle_waiting(read: Dict[str, Any]) -> bool:
     """End the wait of an application the deal leaves where it is: decided since it was marked,
-    open with an able reviewer, or a follow-up whose owner may review here. Held on its status and
-    its mark as the deal read them, so a move landing in between keeps the mark it wrote for the
-    next round. Only ``review_team.py`` calls it, holding the market."""
+    open with an able reviewer, or a follow-up whose owner may still own one here. Held on its
+    status and its mark as the deal read them, so a move landing in between keeps the mark it wrote
+    for the next round. Only ``review_team.py`` calls it, holding the market."""
     ApplicationsApi.ensure_application_indexes()
     arriving = ApplicationsApi.ARRIVING_FIELD
     return ApplicationsApi.applications_collection.update_one(

@@ -13,7 +13,7 @@ Each case is set up through the routes, as an organizer and an applicant reach t
 """
 from conftest import seen_as_stored
 from test_choosing_reviewers_deals_the_open_applications import (
-    ADMIN, ANA, BEN, CAT, MARKET, _choose, _client, _reviewers,
+    ADMIN, ANA, BEN, CAT, EDITOR, MARKET, _choose, _client, _reviewers,
 )
 from test_csv_import import GOOD_ROW, MAPPING, _csv
 from test_csv_import import _market_doc as _import_market_doc
@@ -297,3 +297,58 @@ class TestAFollowUpWaiting:
             "app-v1": {"reviewer": ANA, "follow_up_owner": CAT}}
         assert entry["detail"]["after"] == {
             "app-v1": {"reviewer": BEN, "follow_up_owner": BEN}}
+
+
+#: The market's "Be chosen as a reviewer" row raised to Editor, so a Viewer may own a follow-up,
+#: as anyone with a role here may, but may not be chosen to review.
+CHOSEN_ROW_AT_EDITOR = {"review-when-chosen": {"role": "editor", "source": "market"}}
+
+
+class TestAFollowUpOwnedByOneWhoMayNotReview:
+    """A follow-up's owner who may still own one here (anyone with a role on the market, whom an
+    organizer may pick) keeps it, whether or not they may be chosen to review, as a change of
+    reviewers leaves such a follow-up with its owner; the deal hands on only an owner who may no
+    longer own one here (``TestAFollowUpWaiting``)."""
+
+    def test_handed_to_them_with_reviewers_chosen_it_stays_theirs(self, world):
+        world.markets.doc["permissions"] = CHOSEN_ROW_AT_EDITOR
+        assert _choose([BEN, EDITOR]).status_code == 200
+        _verdict(ADMIN, "app-v1", status="needs_follow_up")
+
+        response = _client().put(f"/markets/{MARKET}/applications/app-v1/follow-up-owner",
+                                 json={"ownerEmail": CAT})
+
+        assert response.status_code == 200, response.get_json()
+        assert response.get_json()["application"]["followUpOwner"]["email"] == CAT
+        assert _doc(world, "app-v1")["follow_up_owner"]["email"] == CAT
+        assert _waiting(world) == []
+
+    def test_given_before_reviewers_are_chosen_it_stays_theirs_at_the_choice(self, world):
+        world.markets.doc["permissions"] = CHOSEN_ROW_AT_EDITOR
+        _submit(world, NADIA)
+        app_id = _id_of(world, NADIA)
+        assert _waiting(world) == [app_id]
+        response = _client(ADMIN).put(
+            f"/markets/{MARKET}/applications/{app_id}/review",
+            json={"status": "needs_follow_up", "ownerEmail": CAT,
+                  "seen": seen_as_stored(app_id)})
+        assert response.status_code == 200, response.get_json()
+        assert _doc(world, app_id)["follow_up_owner"]["email"] == CAT
+
+        assert _choose([BEN, EDITOR]).status_code == 200
+
+        assert _doc(world, app_id)["follow_up_owner"]["email"] == CAT
+        assert _waiting(world) == []
+
+    def test_a_chosen_reviewer_the_raised_row_made_unable_keeps_theirs(self, world):
+        # Ana, a Viewer, is chosen; the row raised to Editor leaves her chosen but unable.
+        assert _choose([ANA, BEN]).status_code == 200
+        world.markets.doc["permissions"] = CHOSEN_ROW_AT_EDITOR
+        _verdict(ADMIN, "app-v1", status="needs_follow_up")
+
+        response = _client().put(f"/markets/{MARKET}/applications/app-v1/follow-up-owner",
+                                 json={"ownerEmail": ANA})
+
+        assert response.status_code == 200, response.get_json()
+        assert _doc(world, "app-v1")["follow_up_owner"]["email"] == ANA
+        assert _waiting(world) == []

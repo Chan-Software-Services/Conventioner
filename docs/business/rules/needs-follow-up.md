@@ -47,6 +47,7 @@ The server takes as owner only the people that requester is offered.
 Nothing is sent to the owner; the All view's "Mine" filter is how they find their follow-ups.
 
 **A follow-up owned by a reviewer who is removed goes to another reviewer** ([the review is dealt among chosen reviewers](the-review-is-dealt-among-chosen-reviewers.md)): it is dealt with the open applications and handed to the reviewer it goes to, still needing a follow-up, and the history names who held it before; one whose owner was never a reviewer stays with them.
+A follow-up waiting for the deal, handed on or marked as its application arrived, stays with its owner while they hold any role on the market, whether or not they may be chosen to review, so the person an organizer picked keeps it; once its owner holds none, the deal hands it on to the next reviewer in turn (T277).
 
 **It is not undecided to the automatic rejections**: a rule never judges a follow-up, since a person has looked at it and decided it needs more.
 

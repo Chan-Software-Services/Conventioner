@@ -41,6 +41,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 import api.applications as ApplicationsApi
 import api.market_actions as Actions
 import api.organizations as OrgsApi
+import api.permissions as PermissionsApi
 import application_status as ReviewState
 import history as History
 from assignment.utils import convert_keys_to_camel_case, convert_keys_to_snake_case
@@ -139,7 +140,9 @@ def choose(
     the reviewer it is dealt to, as its owner and its reviewer, so someone still reaches out. A
     follow-up owned by a reviewer still chosen, or by someone who never was one, and every decided
     application, are never written here. Once it lets go of the market, it deals what waits for the
-    deal: what was marked while it held it, and what it left where it was (``_settle``).
+    deal: what was marked while it held it, and what it left where it was (``_settle``); a waiting
+    follow-up stays with an owner who may still own one here, whether or not they may be chosen to
+    review, and is handed on only once its owner holds no role on the market.
 
     Each write is conditioned on the application still being as the pool read it (open and dealt
     as it was, or the follow-up still owned by the removed reviewer), so a verdict or a hand-on
@@ -366,9 +369,11 @@ def _deal_arriving(market: Market, organization: Optional[Organization], deal: s
     - one decided since it was marked waits no longer, its verdict kept;
     - an open one whose reviewer is an able chosen reviewer keeps them, the turn unmoved;
     - any other open one is dealt to the able reviewer the turn names, the turn moving on by one;
-    - a follow-up whose owner may be chosen to review here keeps its owner;
-    - any other follow-up is handed on, as its owner and its reviewer, to the able reviewer the
-      turn names, the turn moving on by one;
+    - a follow-up whose owner may still own one here keeps its owner: anyone with a role on the
+      market, who may be picked as a follow-up's owner (``PermissionsApi.people_with_market_role``),
+      whether or not they may be chosen to review, so the person an organizer picked keeps it;
+    - any other follow-up, its owner no longer able to own one here, is handed on, as its owner and
+      its reviewer, to the able reviewer the turn names, the turn moving on by one;
     - with nobody able, an undecided one is left waiting, never let go (T277 P5).
 
     The turn is written once at the end. Records one entry per write they were marked by, under its
@@ -383,6 +388,7 @@ def _deal_arriving(market: Market, organization: Optional[Organization], deal: s
         update={"review_team": team})
     able = eligible(now, organization)
     able_ids = {person.user_id for person in able}
+    may_own = set(PermissionsApi.people_with_market_role(now, organization))
     turn = team.turn
     settled = 0
     dealt: List[_Dealt] = []
@@ -395,7 +401,7 @@ def _deal_arriving(market: Market, organization: Optional[Organization], deal: s
         elif state is ReviewState.State.OPEN:
             keep = bool(was) and was.get("user_id") in able_ids
         else:
-            keep = bool(owner) and Actions.may_be_chosen(owner.get("user_id"), now, organization)
+            keep = bool(owner) and owner.get("user_id") in may_own
         if keep:
             settled += ReviewState.settle_waiting(doc)
             continue
