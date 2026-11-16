@@ -178,13 +178,15 @@ const swatches = computed(() => {
 
 <style scoped>
 /* The switch, the map and the legend stack; the zoom stands over the map's bottom-right corner,
-   sharing its cell, until the box is a phone's width, where it moves under the map. */
+   placed in the map's cell (an absolute grid item takes its area as its box), until the box is a
+   phone's width, where it moves under the map. */
 .day-map {
   container-type: inline-size;
   min-width: 0;
 }
 
 .day-map__grid {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
@@ -212,10 +214,10 @@ const swatches = computed(() => {
 
 /* The zoom stands on the map's bottom-right corner, as the editor's does. */
 .day-map__zoom {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-3);
   grid-area: map;
-  align-self: end;
-  justify-self: end;
-  margin: var(--space-3);
   display: flex;
   align-items: center;
   gap: var(--space-1);
@@ -265,9 +267,9 @@ const swatches = computed(() => {
   }
 
   .day-map__zoom {
+    position: static;
     grid-area: zoom;
     align-self: start;
-    margin: 0;
     padding: 0;
     box-shadow: none;
   }
