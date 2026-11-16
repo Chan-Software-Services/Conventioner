@@ -2225,7 +2225,7 @@ def preview_application_import(market_id: str) -> Response:
         return jsonify({"error": "resolutions must be an object"}), 400
 
     result, status_code = CsvImport.preview_values(
-        market_doc, data['csvContent'], mapping, resolutions,
+        market_doc, data['csvContent'], mapping, resolutions, by=authenticated_email(),
     )
     return jsonify(result), status_code
 

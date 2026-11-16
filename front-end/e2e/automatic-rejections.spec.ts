@@ -161,8 +161,8 @@ test.describe('The rules reject, with a reason (E33/F03/S02)', () => {
     await expect(importPage.previewCounts).toHaveText(
       '3 of 3 rows will be imported; 1 of them will be rejected by your automatic rejections',
     );
-    await expect(importPage.previewMerge).toContainText(
-      'awaiting your review, except the 1 listed below, which arrives already rejected.',
+    await expect(importPage.previewMerge).toHaveText(
+      'A new row becomes an application awaiting your review; the 1 listed below arrives already rejected. Nothing has been written yet.',
     );
     await expect(importPage.rejectedCount).toHaveText('1');
     // Who may overturn one is the market's change row, an Admin or the owner by default (E38/F06/S01).
