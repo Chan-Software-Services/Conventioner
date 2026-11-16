@@ -117,6 +117,11 @@ export class LayoutPage {
   readonly selectionRow: Locator;
   readonly selectionRowCount: Locator;
   readonly selectionRowAdd: Locator;
+  readonly selectionNumber: Locator;
+  readonly selectionNumberError: Locator;
+  readonly sectionCounts: Locator;
+  readonly followsPlan: Locator;
+  readonly setupSettled: Locator;
   readonly selectBox: Locator;
   readonly noSection: Locator;
   readonly selectNoSection: Locator;
@@ -259,6 +264,11 @@ export class LayoutPage {
     this.selectionRow = page.getByTestId('layout-selection-row');
     this.selectionRowCount = page.getByTestId('layout-selection-row-count');
     this.selectionRowAdd = page.getByTestId('layout-selection-row-add');
+    this.selectionNumber = page.getByTestId('layout-selection-number');
+    this.selectionNumberError = page.getByTestId('layout-selection-number-error');
+    this.sectionCounts = page.getByTestId('layout-panel-section-count');
+    this.followsPlan = page.getByTestId('layout-follows-plan');
+    this.setupSettled = page.getByTestId('layout-setup-settled');
     this.selectBox = this.map.getByTestId('layout-select-box');
     this.noSection = page.getByTestId('layout-panel-no-section');
     this.selectNoSection = page.getByTestId('layout-panel-select-no-section');

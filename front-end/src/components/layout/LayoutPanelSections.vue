@@ -9,6 +9,9 @@
  * no section are counted under the list, with "Select them" for the editor, and while a section
  * has fewer tables than Section Setup had typed for it when the layout began, a note says how many
  * are placed. Past Draft (`settled`) a section's numbers are settled, so its row's menu is disabled.
+ *
+ * On a layout that follows the plan (`followsPlan`, T422) each section counts "<placed> of <count>",
+ * its count the plan's, which says what is left to place, so Section Setup's start goes unsaid.
  */
 import { computed, nextTick, ref, useId } from 'vue';
 import type { StartingCount } from '@/assets/types/datatypes';
@@ -27,10 +30,18 @@ const props = withDefaults(
     startingCounts?: readonly StartingCount[];
     /** Whether the reader may change the layout here: colours, numbers, the selection. */
     editable?: boolean;
-    /** Whether the market has left Draft, so no section is renumbered. */
+    /** Whether the layout's seats are settled, so no section is renumbered. */
     settled?: boolean;
+    /** Whether the layout follows the plan, its sections counted against the plan's counts. */
+    followsPlan?: boolean;
   }>(),
-  { unsectioned: 0, startingCounts: () => [], editable: false, settled: false },
+  {
+    unsectioned: 0,
+    startingCounts: () => [],
+    editable: false,
+    settled: false,
+    followsPlan: false,
+  },
 );
 
 const emit = defineEmits<{
@@ -97,6 +108,7 @@ const MENU = [{ id: 'renumber', label: 'Renumber by position (rows across the pa
 /** "Section Setup had Gold row at 13: 9 placed.", for each section still short of its start. */
 const short = computed(() =>
   props.sections.flatMap(({ section, tables }) => {
+    if (props.followsPlan) return [];
     const started = props.startingCounts.find((one) => one.sectionId === section.id)?.count ?? 0;
     return tables.length < started
       ? [
@@ -155,7 +167,11 @@ const short = computed(() =>
           </span>
         </span>
         <span class="sections-count" data-testid="layout-panel-section-count">
-          {{ plural(tables.length, 'table', 'tables') }}
+          {{
+            followsPlan
+              ? `${tables.length} of ${section.count}`
+              : plural(tables.length, 'table', 'tables')
+          }}
         </span>
         <RowMenu
           v-if="editable"

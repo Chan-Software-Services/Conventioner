@@ -19,9 +19,13 @@
  * table last tapped, pressed or focused (`LayoutPanelTable.vue`) heading the panel. A phone, 640px
  * and below, only reads: no upload, no scale, no edit, the map pinched and dragged by hand, the
  * Floorplan card left out and a hint saying how to read it, under the sections. Past Draft the
- * editor stays under the setup-settled sentence, its seats settled: tables still move and turn,
- * and the zones, the image, the scale and the colours still change, while what would add, remove,
- * renumber, re-section or re-type a table is disabled, and a location with no layout starts none.
+ * editor of a layout started in Draft stays under the setup-settled sentence, its seats settled:
+ * tables still move and turn, and the zones, the image, the scale and the colours still change,
+ * while what would add, remove, renumber, re-section or re-type a table is disabled. A location
+ * with no layout past Draft offers the upload all the same, and its layout follows the plan (T422,
+ * ADR 0033): under the follows-the-plan sentence its tables are added, removed, numbered and put
+ * in another section, up to each section's count, which the Sections card counts against, and the
+ * selection's card numbers one table by hand; only the table types stay settled.
  * It is drawn over the floor alone while the image is on its way or could not be had, and the
  * panel lists the location's sections in the colours the map draws them in. The page holds the
  * layout's working copy (`useLayoutEditor.ts`): each save names the revision it read, a save over
@@ -94,7 +98,7 @@ import {
   saveTypes,
   tablesOfEachType,
 } from './layoutTypes';
-import { useLayoutEditor } from './useLayoutEditor';
+import { heldBackSaid, useLayoutEditor } from './useLayoutEditor';
 import { useFloorplanImage } from './useFloorplanImage';
 
 const route = useRoute();
@@ -131,6 +135,15 @@ const editable = computed(() => mayTake(market.value, MarketAction.ChangeSetup))
  * still changes, but no table is added, removed, renumbered or given another section or type, and
  * no layout starts (`the-setup-settles-on-leaving-draft.md`). */
 const settled = computed(() => Boolean(market.value?.setupLockReason));
+/** Whether the layout follows the plan: started after Draft, it draws the seats the plan settled
+ * and numbers them up to each section's count, in any phase (T422, D21). */
+const followsPlan = computed(() => Boolean(floorplan.value?.followsPlan));
+/** Whether the layout's seats are settled: past Draft, on a layout started in Draft. */
+const seatsSettled = computed(() => settled.value && !followsPlan.value);
+/** What the page says under its head past Draft, of a layout that follows the plan. */
+const FOLLOWS_THE_PLAN =
+  "This layout follows the plan: place each section's tables, up to its count. The seats " +
+  'themselves are settled.';
 /** Whether the market is archived, which its rail says, so the page does not say it is settled. */
 const archived = computed(() => market.value?.phase === MarketPhase.Archived);
 
@@ -142,6 +155,12 @@ const stored = computed<FloorplanObject | null>(
 );
 
 // ── The working copy and its saves ───────────────────────────────────────────
+
+/** The plan's sections of this location, with the id a table names its section by. */
+const ownSections = () =>
+  (market.value?.setupObject?.sections ?? []).filter(
+    (section) => section.id && section.location?.id === locationId.value,
+  );
 
 /** The layout as the page shows and changes it: the server's, and what is not saved yet. A change
  * to the layout's own fields (its start, its image, its scale) is written at once; a change to
@@ -155,10 +174,9 @@ const editor = useLayoutEditor({
   may: () => editable.value,
   tableTypes: () => market.value?.setupObject?.tableTypes ?? [],
   // The location's sections, by which a table whose section is gone is put in no section.
-  sectionIds: () =>
-    (market.value?.setupObject?.sections ?? [])
-      .filter((section) => section.id && section.location?.id === locationId.value)
-      .map((section) => section.id as string),
+  sectionIds: () => ownSections().map((section) => section.id as string),
+  // Their counts in the plan, which a layout that follows it numbers its tables up to.
+  counts: () => new Map(ownSections().map((section) => [section.id as string, section.count])),
 });
 const floorplan = editor.layout;
 const saveState = editor.saveState;
@@ -338,11 +356,21 @@ function tablesOf(ids: readonly string[]) {
 function duplicateSelection() {
   const copies = editor.duplicate(editor.selection.value);
   if (!copies.length) {
-    if (editor.selection.value.length) say(LAYOUT_IS_FULL);
+    if (editor.selection.value.length && !tellHeldBack()) say(LAYOUT_IS_FULL);
     return;
   }
   editor.select(copies);
-  say(saidAdded(tablesOf(copies), sections.value));
+  if (!tellHeldBack()) say(saidAdded(tablesOf(copies), sections.value));
+}
+
+/** On a layout that follows the plan, what the last add or change of section held back, on the
+ *  status line and in the live region; null when nothing was. */
+function tellHeldBack(): string | null {
+  const held = heldBackSaid(editor, ownSections());
+  if (!held) return null;
+  showStatus(held);
+  say(held);
+  return held;
 }
 
 /**
@@ -377,7 +405,8 @@ function rowOnFromTheSelection(count: number) {
       rotation: pose.rotation,
     })),
   );
-  say(ids.length ? saidRowAdded(tablesOf(ids), sections.value) : NO_TABLE_FITS);
+  if (!tellHeldBack())
+    say(ids.length ? saidRowAdded(tablesOf(ids), sections.value) : NO_TABLE_FITS);
 }
 
 function turnTheSelection() {
@@ -395,7 +424,15 @@ function sectionSelection(sectionId: string | null) {
   const before = tablesOf(editor.selection.value);
   editor.setSection(editor.selection.value, sectionId);
   const section = market.value?.setupObject?.sections.find((one) => one.id === sectionId);
-  say(saidSectioned(before, section?.name ?? null, sections.value));
+  if (!tellHeldBack()) say(saidSectioned(before, section?.name ?? null, sections.value));
+}
+
+/** The Number field: the one selected table's number, swapped with the table that held it. */
+function numberSelection(number: number) {
+  const [table] = tablesOf(editor.selection.value);
+  if (!table || !editor.setNumber(table.id, number)) return;
+  const section = ownSections().find((one) => one.id === table.sectionId);
+  say(`Numbered ${section?.name ?? 'the table'} ${number}`);
 }
 
 function typeSelection(tableTypeId: string) {
@@ -714,7 +751,10 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
         </div>
       </header>
 
-      <p v-if="settled && !archived" class="note" data-testid="layout-setup-settled">
+      <p v-if="settled && !archived && followsPlan" class="note" data-testid="layout-follows-plan">
+        {{ FOLLOWS_THE_PLAN }}
+      </p>
+      <p v-else-if="settled && !archived" class="note" data-testid="layout-setup-settled">
         {{ market.setupLockReason }}
       </p>
 
@@ -729,7 +769,7 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
         <section class="layout-map-column" :aria-label="`${location.name}'s floorplan`">
           <template v-if="!floorplan?.imageGridfsId">
             <FloorplanUploader
-              v-if="editsHere && !settled"
+              v-if="editsHere"
               :marketId="market.id"
               :busy="saveState === 'saving'"
               @uploaded="onUploaded"
@@ -813,7 +853,7 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
               :tableTypes="tableTypes"
               :imageUrl="imageUrl"
               :showImage="showImage"
-              :settled="settled"
+              :settled="seatsSettled"
               :fill="(request) => placeTables(marketId, request)"
               @announce="say"
               @status="showStatus"
@@ -874,7 +914,7 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
         <aside class="layout-panel" aria-label="Layout details">
           <section v-if="!floorplan?.imageGridfsId" class="layout-card">
             <p class="layout-card-text" data-testid="layout-panel-start">
-              <template v-if="editsHere && !settled">
+              <template v-if="editsHere">
                 Upload the venue's floorplan for {{ location.name }} to start.
               </template>
               <template v-else>{{ location.name }} has no layout yet.</template>
@@ -909,7 +949,9 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
               :tables="selectedTables"
               :sections="sections"
               :tableTypes="tableTypes"
-              :settled="settled"
+              :settled="seatsSettled"
+              :typesSettled="settled"
+              :followsPlan="followsPlan"
               @turn="turnTheSelection"
               @remove="removeSelection"
               @duplicate="duplicateSelection"
@@ -917,6 +959,7 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
               @section="sectionSelection"
               @type="typeSelection"
               @row="rowOnFromTheSelection"
+              @number="numberSelection"
             />
             <LayoutPanelSections
               class="layout-card"
@@ -925,7 +968,8 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
               :unsectioned="unsectioned.length"
               :startingCounts="floorplan?.startingCounts ?? []"
               :editable="editing"
-              :settled="settled"
+              :settled="seatsSettled"
+              :followsPlan="followsPlan"
               @color="(sectionId, color) => editor.setSectionStyle(sectionId, { color })"
               @renumber="editor.renumber($event)"
               @selectUnsectioned="editor.select(unsectioned.map((table) => table.id))"
@@ -974,7 +1018,7 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
                 </button>
               </div>
             </section>
-            <LayoutPanelKeyboard v-if="editing" class="layout-card" :settled="settled" />
+            <LayoutPanelKeyboard v-if="editing" class="layout-card" :settled="seatsSettled" />
             <p v-if="reading && !atADesk" class="layout-phone-hint" data-testid="layout-phone-hint">
               Pinch to zoom, drag to look around, tap a table to read it. The layout is edited at a
               desk.

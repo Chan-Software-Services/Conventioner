@@ -62,7 +62,9 @@
  *
  * Past Draft (`settled`) a table's seat is settled: Add table, Row of tables and Fill an area are
  * disabled, and Delete and Ctrl+D do nothing; Select, No-table zone, undo and the view stay, so
- * tables still move and turn.
+ * tables still move and turn. A layout that follows the plan is never `settled` (T422): its tools
+ * add what fits in each section's count, and what they held back is said on the panel's status
+ * line (`heldBackSaid`).
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useId, watch } from 'vue';
 import type { FloorplanTable, SectionObject, TableTypeObject } from '@/assets/types/datatypes';
@@ -145,7 +147,7 @@ import {
   type KeptStroke,
 } from './layoutRow';
 import { centreOf, selectionBounds, turnSelection } from './layoutSelection';
-import { MAX_ZONES, type LayoutEditor } from './useLayoutEditor';
+import { MAX_ZONES, heldBackSaid, type LayoutEditor } from './useLayoutEditor';
 
 const props = withDefaults(
   defineProps<{
@@ -159,7 +161,8 @@ const props = withDefaults(
     showImage?: boolean;
     /** Ask the placement to fill an area of this market's layout (`layoutFill.ts`). */
     fill?: (request: FillRequest) => Promise<FillAnswer>;
-    /** Whether the market has left Draft, so no table is added or removed here. */
+    /** Whether the layout's seats are settled (past Draft, on a layout started in Draft), so no
+     *  table is added or removed here. */
     settled?: boolean;
   }>(),
   { imageUrl: '', showImage: true, fill: undefined, settled: false },
@@ -178,6 +181,12 @@ const say = (words: string) => emit('announce', words);
 function tell(words: string) {
   emit('status', words);
   say(words);
+}
+/** On a layout that follows the plan, what the last add held back, told; null when nothing was. */
+function tellHeldBack(): string | null {
+  const held = heldBackSaid(props.editor, props.sections);
+  if (held) tell(held);
+  return held;
 }
 
 const layout = computed(() => props.editor.layout.value!);
@@ -688,7 +697,7 @@ function placeRow() {
   }
   const byKeys = keysOnMap.value && Boolean(stage.value?.contains(document.activeElement));
   const added = row.place();
-  say(added.length ? saidRowAdded(added, drawnSections.value) : NO_TABLE_FITS);
+  if (!tellHeldBack()) say(added.length ? saidRowAdded(added, drawnSections.value) : NO_TABLE_FITS);
   if (!byKeys || !added.length) return;
   void focusTable(added[0].id);
   show(added);
@@ -779,7 +788,9 @@ async function runFill(choice: FillChoice) {
     if (layout.value.id !== asked) return;
     const added = fillTool.add(answer);
     fillAsked.value = false;
-    tell(saidFilled(added.length, choice.count, answer.timed_out, request.counts[typeId]));
+    if (!tellHeldBack()) {
+      tell(saidFilled(added.length, choice.count, answer.timed_out, request.counts[typeId]));
+    }
   } catch (err: unknown) {
     fillError.value = getApiErrorMessage(err, FILL_FAILED);
   } finally {
@@ -1173,12 +1184,13 @@ function place(at: PointMm): string | null {
     },
   ]);
   if (!ids.length) {
-    // The one way an add makes nothing: the layout holds as many tables as it may.
-    say(LAYOUT_IS_FULL);
+    // The ways an add makes nothing: the section's tables are all on a layout that follows the
+    // plan, or the layout holds as many tables as it may.
+    if (!tellHeldBack()) say(LAYOUT_IS_FULL);
     return null;
   }
   props.editor.select(ids);
-  say(saidAdded(tablesOf(ids), drawnSections.value));
+  if (!tellHeldBack()) say(saidAdded(tablesOf(ids), drawnSections.value));
   return ids[0];
 }
 
@@ -1277,12 +1289,12 @@ function duplicateByKey() {
   const originals = targets();
   const copies = props.editor.duplicate(originals);
   if (!copies.length) {
-    if (originals.length) say(LAYOUT_IS_FULL);
+    if (originals.length && !tellHeldBack()) say(LAYOUT_IS_FULL);
     return;
   }
   props.editor.select(copies);
   const made = tablesOf(copies);
-  say(saidAdded(made, drawnSections.value));
+  if (!tellHeldBack()) say(saidAdded(made, drawnSections.value));
   if (hadFocus) void focusTable(copies[0]);
   show(made);
 }

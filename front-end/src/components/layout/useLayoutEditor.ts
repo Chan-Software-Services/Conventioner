@@ -19,6 +19,15 @@
  * stale (another tab or person saved this layout in between) sends nothing more until the page
  * reloads the layout, since every later write would be refused the same way.
  *
+ * Its seat commands (add, duplicate, remove, put in a section, renumber, number) work in one of three
+ * ways (T422, D21, D22). Open, on a layout started in Draft while the market is in Draft: the
+ * layout decides its sections' tables, each numbered 1 to N, a removal closing the gap. Following,
+ * on a layout that follows the plan (`followsPlan`, one started after Draft), in any phase: a
+ * table's number is its seat's and stays put, a new table takes its section's lowest free number,
+ * no section holds more tables than its count in the plan (`counts`), and what an add could not
+ * place is said (`heldBack`). Settled, past Draft on a layout started in Draft: no seat changes,
+ * and only where a table stands does.
+ *
  * A gesture (a drag, a turn by the handle) is one change: between `begin` and `end` a command
  * replaces the gesture's last one, drawn at once, and only `end` makes the step and the save.
  *
@@ -107,6 +116,42 @@ const roundedPoint = (point: PointMm): PointMm => ({
   yMm: roundMm(point.yMm),
 });
 
+/**
+ * On a layout that follows the plan, a section an add, a duplicate or a change of section could
+ * not give every table it asked for: its count in the plan, and how many of them were placed.
+ */
+export interface HeldBack {
+  sectionId: string;
+  count: number;
+  placed: number;
+}
+
+/** What the status line says of tables held back: "Gold row has 13 tables in the plan; 4 were
+ *  placed.", or with none placed, "Gold row's 13 tables are all on the layout." */
+export function saidHeldBack(held: HeldBack, sectionName: string): string {
+  if (held.placed === 0) {
+    return held.count === 1
+      ? `${sectionName}'s 1 table is on the layout.`
+      : `${sectionName}'s ${held.count} tables are all on the layout.`;
+  }
+  return (
+    `${sectionName} has ${held.count} ${held.count === 1 ? 'table' : 'tables'} in the plan; ` +
+    `${held.placed} ${held.placed === 1 ? 'was' : 'were'} placed.`
+  );
+}
+
+/** What the editor's last add, duplicate or change of section held back, in words, its section
+ *  named as `sections` name it; null when nothing was held back. */
+export function heldBackSaid(
+  editor: Pick<LayoutEditor, 'heldBack'>,
+  sections: readonly { id?: string | null; name: string }[],
+): string | null {
+  const held = editor.heldBack.value;
+  if (!held) return null;
+  const name = sections.find((section) => section.id === held.sectionId)?.name.trim();
+  return saidHeldBack(held, name || 'Unnamed section');
+}
+
 /** How `write` takes a write that does not land. */
 export interface WriteOptions {
   /** Put the layout back as it was and keep nothing unsaved, as for a replaced image, which the
@@ -125,10 +170,14 @@ export interface LayoutEditorOptions {
   saveOnUnload?: (layout: FloorplanObject, revision: number) => boolean;
   /** Whether this person may write the layout; unsaid, they may. */
   may?: () => boolean;
-  /** Whether the market is a draft. Past it a table's seat is settled: no table is added,
-   *  duplicated, removed, renumbered or given another section or type, and only where a table
-   *  stands changes. Unsaid, it is a draft. */
+  /** Whether the market is a draft. Past it a table's seat is settled on a layout started in
+   *  Draft: no table is added, duplicated, removed, renumbered or given another section, and only
+   *  where a table stands changes; and on every layout no table is given another type, since the
+   *  market's types settle. Unsaid, it is a draft. */
   draft?: () => boolean;
+  /** Each of the location's sections' count in the plan, by section id: on a layout that follows
+   *  the plan, the most tables a section holds, numbered 1 to it. Unsaid, none is bounded. */
+  counts?: () => ReadonlyMap<string, number>;
   /** The market's table types, which size the tables that are lined up, spaced and duplicated. */
   tableTypes?: () => readonly TableTypeObject[];
   /** The ids of the location's sections, in the plan's order. Unsaid, every section a table names
@@ -171,8 +220,17 @@ export interface LayoutEditor {
   turnTables(ids: readonly string[], degrees: number, about?: PointMm): void;
   removeTables(ids: readonly string[]): void;
   /** Put tables in a section, numbered after its own in the order of the numbers they had, or in
-   *  none (null), numberless; the sections they leave close their gaps. */
+   *  none (null), numberless; the sections they leave close their gaps. On a layout that follows
+   *  the plan they take the section's lowest free numbers, as many as its count leaves room for,
+   *  and the sections they leave keep their numbers. */
   setSection(ids: readonly string[], sectionId: string | null): void;
+  /** On a layout that follows the plan, give one table of a section a number, a whole one from 1
+   *  to the section's count; a number another of its section's tables holds swaps the two, as
+   *  one step of undo. False for any other number, a table of no section, or another layout. */
+  setNumber(id: string, number: number): boolean;
+  /** What the last add, duplicate or change of section held back on a layout that follows the
+   *  plan; null when every table it asked for was placed. */
+  heldBack: Readonly<ShallowRef<HeldBack | null>>;
   setType(ids: readonly string[], tableTypeId: string): void;
   /** A copy of each table beside the originals (`duplicateOffset`), numbered on in its section;
    *  the copies' ids. */
@@ -217,6 +275,7 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
 
   const layout = shallowRef<FloorplanObject | null>(null);
   const selection = shallowRef<string[]>([]);
+  const heldBack = shallowRef<HeldBack | null>(null);
   const undone = shallowRef<Step[]>([]);
   const redone = shallowRef<Step[]>([]);
 
@@ -262,6 +321,7 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
                 revision,
                 locationId: answer.floorplan.locationId,
                 startingCounts: answer.floorplan.startingCounts,
+                followsPlan: answer.floorplan.followsPlan,
               };
       }
       options.onSaved?.(answer);
@@ -408,25 +468,80 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
     }
   }
 
-  /** Whether a table's seat may change: its being, its number, its section and its type. */
-  const seatsSettled = () => options.draft?.() === false;
+  /** Whether the layout follows the plan: its numbers are seats, bounded by the plan's counts. */
+  const following = () => layout.value?.followsPlan === true;
+  /** Whether a table's seat may change: its being, its number and its section. */
+  const seatsSettled = () => !following() && options.draft?.() === false;
+  /** Whether a table's type may change: the market's types settle on leaving Draft. */
+  const typesSettled = () => options.draft?.() === false;
+  /** A section's count in the plan; unbounded where none is said. */
+  const countOf = (sectionId: string) => options.counts?.().get(sectionId) ?? Infinity;
+
+  /**
+   * The number a table joining a section takes: on a layout that follows the plan its lowest free
+   * one from 1 to its count, or null with none left; else the one after its highest.
+   */
+  function numberFor(tables: readonly FloorplanTable[], sectionId: string): number | null {
+    if (!following()) return nextNumber(tables, sectionId);
+    const taken = new Set(
+      tables.filter((table) => table.sectionId === sectionId).map((table) => table.number),
+    );
+    const count = countOf(sectionId);
+    for (let number = 1; number <= count; number += 1) {
+      if (!taken.has(number)) return number;
+    }
+    return null;
+  }
+
+  /** The sections' numbers once tables have left them: the gaps closed, unless the layout
+   *  follows the plan, whose numbers are seats and stay put. */
+  const afterLeaving = (tables: FloorplanTable[]) => (following() ? tables : closeGaps(tables));
+
+  /** Keep, for the status line, the first section that held some tables back. */
+  function noteHeldBack(asked: Map<string, number>, placed: Map<string, number>) {
+    if (!following()) {
+      heldBack.value = null;
+      return;
+    }
+    for (const [sectionId, wanted] of asked) {
+      const made = placed.get(sectionId) ?? 0;
+      if (made < wanted) {
+        heldBack.value = { sectionId, count: countOf(sectionId), placed: made };
+        return;
+      }
+    }
+    heldBack.value = null;
+  }
+  const tally = (counted: Map<string, number>, sectionId: string | null) => {
+    if (sectionId !== null) counted.set(sectionId, (counted.get(sectionId) ?? 0) + 1);
+  };
 
   function addTables(added: readonly NewTable[]): string[] {
     const ids: string[] = [];
     if (seatsSettled()) return ids;
+    const asked = new Map<string, number>();
+    const placed = new Map<string, number>();
     change((tables, whole) => {
+      asked.clear();
+      placed.clear();
+      ids.length = 0;
       const hall = hallOf(whole);
       const next = [...tables];
       // As many as the layout has room for, which the server holds it to: one more would be a
       // save refused on every Retry.
       for (const table of added.slice(0, Math.max(0, MAX_LAYOUT_TABLES - tables.length))) {
+        tally(asked, table.sectionId);
+        const number = table.sectionId === null ? null : numberFor(next, table.sectionId);
+        // Past its section's count in the plan, a table is not placed.
+        if (table.sectionId !== null && number === null) continue;
+        tally(placed, table.sectionId);
         const at = clampToHall(table, hall);
         const id = newId();
         ids.push(id);
         next.push({
           id,
           sectionId: table.sectionId,
-          number: table.sectionId === null ? null : nextNumber(next, table.sectionId),
+          number,
           tableTypeId: table.tableTypeId,
           xMm: roundMm(at.xMm),
           yMm: roundMm(at.yMm),
@@ -435,6 +550,7 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
       }
       return ids.length ? pushedOff(next, new Set(ids), whole) : tables;
     });
+    noteHeldBack(asked, placed);
     return ids;
   }
 
@@ -491,7 +607,7 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
     const going = new Set(ids);
     change((tables) => {
       const left = tables.filter((table) => !going.has(table.id));
-      return left.length === tables.length ? tables : closeGaps(left);
+      return left.length === tables.length ? tables : afterLeaving(left);
     });
     keepSelection();
   }
@@ -531,31 +647,78 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
   function setSection(ids: readonly string[], sectionId: string | null) {
     if (seatsSettled()) return;
     const named = new Set(ids);
+    const asked = new Map<string, number>();
+    const placed = new Map<string, number>();
     change((tables) => {
-      const joining = tables.filter(
+      asked.clear();
+      placed.clear();
+      const candidates = tables.filter(
         (table) => named.has(table.id) && table.sectionId !== sectionId,
       );
+      // In the order of the numbers they had, the numberless after them as they are stored; on a
+      // layout that follows the plan, only as many as the section's count leaves room for.
+      const order = [...candidates].sort(byNumber);
+      const numbers = new Map<string, number>();
+      if (sectionId !== null) {
+        let held: FloorplanTable[] = [...tables];
+        for (const table of order) {
+          tally(asked, sectionId);
+          const number = numberFor(held, sectionId);
+          if (number === null) break;
+          tally(placed, sectionId);
+          numbers.set(table.id, number);
+          held = [...held, { ...table, sectionId, number }];
+        }
+      }
+      const joining = sectionId === null ? order : order.filter((table) => numbers.has(table.id));
       if (!joining.length) return tables;
       const going = new Set(joining.map((table) => table.id));
-      // Out of their sections first, so those close their gaps; then into the new one, after its
-      // own, in the order of the numbers they had, the numberless after them as they are stored.
-      const left = closeGaps(
+      // Out of their sections first, so those close their gaps (keeping their numbers on a
+      // layout that follows the plan); then into the new one.
+      const left = afterLeaving(
         tables.map((table) =>
           going.has(table.id) ? { ...table, sectionId: null, number: null } : table,
         ),
       );
       if (sectionId === null) return left;
-      const order = [...joining].sort(byNumber);
-      const from = nextNumber(left, sectionId);
-      const numbers = new Map(order.map((table, index) => [table.id, from + index]));
+      if (!following()) {
+        const from = nextNumber(left, sectionId);
+        joining.forEach((table, index) => numbers.set(table.id, from + index));
+      }
       return left.map((table) =>
         numbers.has(table.id) ? { ...table, sectionId, number: numbers.get(table.id)! } : table,
       );
     });
+    noteHeldBack(asked, placed);
+  }
+
+  function setNumber(id: string, number: number): boolean {
+    if (!following()) return false;
+    const now = layout.value?.tables.find((table) => table.id === id);
+    if (!now || now.sectionId === null || options.sectionIds?.().includes(now.sectionId) === false)
+      return false;
+    const sectionId = now.sectionId;
+    if (!Number.isInteger(number) || number < 1 || number > countOf(sectionId)) return false;
+    change((tables) => {
+      const own = tables.find((table) => table.id === id);
+      if (!own || own.number === number) return tables;
+      // The table that holds the number takes this one's: the two swap, as one change.
+      const holder = tables.find(
+        (table) => table.sectionId === sectionId && table.number === number && table.id !== id,
+      );
+      return tables.map((table) =>
+        table.id === id
+          ? { ...table, number }
+          : table === holder
+            ? { ...table, number: own.number }
+            : table,
+      );
+    });
+    return true;
   }
 
   function setType(ids: readonly string[], tableTypeId: string) {
-    if (seatsSettled()) return;
+    if (seatsSettled() || typesSettled()) return;
     const named = new Set(ids);
     change((tables) => {
       if (!tables.some((table) => named.has(table.id) && table.tableTypeId !== tableTypeId)) {
@@ -573,7 +736,12 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
     const named = new Set(ids);
     const copies: string[] = [];
     if (seatsSettled()) return copies;
+    const asked = new Map<string, number>();
+    const placed = new Map<string, number>();
     change((tables, whole) => {
+      asked.clear();
+      placed.clear();
+      copies.length = 0;
       // In the order of their sections' numbers, as they are stored among equals.
       const originals = tables.filter((table) => named.has(table.id)).sort(byNumber);
       // Whole or not at all: copies past the layout's 1,000 would be refused on every Retry.
@@ -599,18 +767,24 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
       const held = clampMove(originals, by, hall);
       const next = [...tables];
       for (const table of originals) {
+        tally(asked, table.sectionId);
+        const number = table.sectionId === null ? null : numberFor(next, table.sectionId);
+        // Past its section's count in the plan, a copy is not made.
+        if (table.sectionId !== null && number === null) continue;
+        tally(placed, table.sectionId);
         const id = newId();
         copies.push(id);
         next.push({
           ...table,
           id,
-          number: table.sectionId === null ? null : nextNumber(next, table.sectionId),
+          number,
           xMm: roundMm(table.xMm + held.dxMm),
           yMm: roundMm(table.yMm + held.dyMm),
         });
       }
-      return next;
+      return copies.length ? next : tables;
     });
+    noteHeldBack(asked, placed);
     return copies;
   }
 
@@ -877,6 +1051,8 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
     turnTables,
     removeTables,
     setSection,
+    setNumber,
+    heldBack,
     setType,
     duplicate,
     align,

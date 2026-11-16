@@ -269,23 +269,6 @@ describe('a layout past Draft', () => {
     expect(editor.canUndo.value).toBe(false);
     expect(editor.layout.value!.tables.map((t) => t.id)).toEqual(['g-1']);
   });
-
-  it('starts no layout where a location has none', async () => {
-    market = served({
-      phase: 'applications',
-      setupLockReason: SETTLED,
-      setupObject: { ...served().setupObject, floorplans: [] },
-    });
-    const wrapper = await mountPage();
-
-    expect(wrapper.findComponent({ name: 'FloorplanUploader' }).exists()).toBe(false);
-    expect(wrapper.get('[data-testid="layout-no-floorplan"]').text()).toBe(
-      'No floorplan has been uploaded for Upper Hall yet.',
-    );
-    expect(wrapper.get('[data-testid="layout-panel-start"]').text()).toBe(
-      'Upper Hall has no layout yet.',
-    );
-  });
 });
 
 describe('a layout read only', () => {

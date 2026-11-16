@@ -1400,12 +1400,13 @@ export const SCREENS: Screen[] = [
     // Before publishing the door is a note, so the rail is what the state waits on.
     open: at(screen(market, 'attendance'), 'phase-rail-current'),
   })),
-  // A layout past draft, with no floorplan: read, with nothing to upload.
+  // A layout past draft, with no floorplan: its upload at a desk, since a layout started past
+  // draft follows the plan (T422), and read on a phone, which starts no layout.
   {
     name: 'the layout, past draft',
     who: 'organizer',
     sizes: FITS_A_PHONE,
-    open: at(screen('big', 'layout'), 'layout-no-floorplan'),
+    open: at(screen('big', 'layout'), 'layout-setup-settled'),
   },
   // Its upload step is the app's one drop zone (T205). The page fits a phone (T257), where it only
   // reads: a layout is started and its scale set at a desk.
