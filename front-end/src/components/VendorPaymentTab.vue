@@ -199,10 +199,21 @@ async function confirm(): Promise<void> {
   if (!dialog || !on || confirmSpent.value) return;
   const [marketId, email] = on;
   await confirmSubmission.submit(
-    () =>
-      dialog.kind === 'calculated'
-        ? useCalculatedPrice(marketId, email, dialog.line.date)
-        : removePayment(marketId, dialog.entry.id),
+    () => {
+      const write =
+        dialog.kind === 'calculated'
+          ? useCalculatedPrice(marketId, email, dialog.line.date)
+          : removePayment(marketId, dialog.entry.id);
+      // Answered once the tab is gone (the drawer closed), the submission calls nothing more, so
+      // the page that showed it is told; on the tab, `saved` or `late` tells Payments.
+      write.then(
+        () => {
+          if (gone) paymentWritten?.();
+        },
+        () => undefined,
+      );
+      return write;
+    },
     {
       done: (updated) => saved(on, updated),
       refused: (err) => {

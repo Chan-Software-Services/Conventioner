@@ -257,13 +257,16 @@ describe('a payment written from a dialog', () => {
   const written = vi.fn();
 
   /** The tab on Ana inside a page that hears of a write that outlived the tab (Payments). */
-  async function onAnaInAPage(): Promise<VueWrapper> {
+  async function onAnaInAPage(
+    ana: VendorAccount = account(3000),
+    may: { canChangeOwed?: boolean; canAdjustPaid?: boolean } = {},
+  ): Promise<VueWrapper> {
     written.mockReset();
     api.get.mockImplementation((url: string) =>
-      Promise.resolve({ data: url.includes('ana') ? account(3000) : account(1000) }),
+      Promise.resolve({ data: url.includes('ana') ? ana : account(1000) }),
     );
     wrapper = mount(VendorPaymentTab, {
-      props: { marketId: 'm-a', email: 'ana@example.com', canRecord: true },
+      props: { marketId: 'm-a', email: 'ana@example.com', canRecord: true, ...may },
       attachTo: document.body,
       global: { provide: { [PAYMENT_WRITTEN as symbol]: written } },
     });
@@ -359,6 +362,72 @@ describe('a payment written from a dialog', () => {
     expect(api.get.mock.calls.length).toBe(reads);
     expect(w.get('[data-testid="payment-owed"]').text()).toBe('$10.00');
     expect(w.emitted('changed')).toHaveLength(1);
+  });
+
+  it('a removal confirmed on Ana, answering once the tab is gone, tells Payments through the page', async () => {
+    const w = await onAnaInAPage(account(3000, [ENTRY]), { canAdjustPaid: true });
+    await w.get('[data-testid="payment-entry-menu-button"]').trigger('click');
+    await w.get('[data-testid="payment-entry-menu-remove"]').trigger('click');
+    await flushPromises();
+    const removed = held<unknown>();
+    api.delete.mockReturnValueOnce(removed.promise);
+    q<HTMLFormElement>('payment-confirm-window')!.querySelector('form')!.requestSubmit();
+    await flushPromises();
+    expect(api.delete).toHaveBeenCalledWith('/markets/m-a/payment-entries/p1');
+
+    w.unmount();
+    wrapper = null;
+    removed.settle({ data: account(3000) });
+    await flushPromises();
+
+    expect(written).toHaveBeenCalledTimes(1);
+  });
+
+  it('the calculated price used on Ana, answering once the tab is gone, tells Payments through the page', async () => {
+    const line = {
+      date: '2099-05-07',
+      tableCode: 'North Wing 1',
+      tier: 'Gold',
+      tableChoice: 'Full Table',
+      priceCents: 3000,
+      owedCents: 2500,
+      owedSetBy: 'admin@example.com',
+      owedSetAt: '2099-04-01T18:00:00+00:00',
+      freed: false,
+      freedAt: null,
+      freedBy: null,
+    };
+    const w = await onAnaInAPage({ ...account(2500), lines: [line] }, { canChangeOwed: true });
+    await w.get('[data-testid="payment-line-menu-button"]').trigger('click');
+    await w.get('[data-testid="payment-line-menu-calculated"]').trigger('click');
+    await flushPromises();
+    const used = held<unknown>();
+    api.delete.mockReturnValueOnce(used.promise);
+    q<HTMLFormElement>('payment-confirm-window')!.querySelector('form')!.requestSubmit();
+    await flushPromises();
+    expect(api.delete).toHaveBeenCalledWith(
+      '/markets/m-a/payments/ana%40example.com/owed/2099-05-07',
+    );
+
+    w.unmount();
+    wrapper = null;
+    used.settle({ data: account(3000) });
+    await flushPromises();
+
+    expect(written).toHaveBeenCalledTimes(1);
+  });
+
+  it('a confirmation answered on the tab it was made on tells Payments once, through the tab', async () => {
+    const w = await onAnaInAPage(account(3000, [ENTRY]), { canAdjustPaid: true });
+    await w.get('[data-testid="payment-entry-menu-button"]').trigger('click');
+    await w.get('[data-testid="payment-entry-menu-remove"]').trigger('click');
+    await flushPromises();
+    api.delete.mockResolvedValueOnce({ data: account(3000) });
+    q<HTMLFormElement>('payment-confirm-window')!.querySelector('form')!.requestSubmit();
+    await flushPromises();
+
+    expect(w.emitted('changed')).toHaveLength(1);
+    expect(written).not.toHaveBeenCalled();
   });
 
   it('refused after the move tells Payments nothing new', async () => {
