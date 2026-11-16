@@ -248,7 +248,7 @@ class TestNobodyAble:
 
 
 class TestAFollowUpWaiting:
-    """A follow-up marked for the deal: kept by an owner who may still be chosen to review here,
+    """A follow-up marked for the deal: kept by an owner who still holds a role on the market,
     else handed on, as its owner and its reviewer, to the reviewer the turn names."""
 
     def _hand_to_cat(self, world):

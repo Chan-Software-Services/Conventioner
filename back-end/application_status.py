@@ -41,8 +41,8 @@ OWNED_FIELDS = (
 )
 
 #: Statuses nobody has decided yet, as a filter on the stored status reads them: an open
-#: application is stored ``open``, or ``under_review`` from before. The deal's pool and the claim
-#: filter on this list; every other reader asks ``state_of``.
+#: application is stored ``open``, or ``under_review`` from before. The deal's pool, its write and
+#: the claim filter on this list.
 UNDECIDED_STATUSES = (ApplicationStatus.OPEN.value, ApplicationStatus.UNDER_REVIEW.value)
 #: The statuses a reviewer gives, each with who gave it: a verdict, or a follow-up (E34).
 MARKED_STATUSES = (ApplicationStatus.REVIEWER_APPROVED, ApplicationStatus.REVIEWER_REJECTED,
@@ -681,8 +681,8 @@ def rule_returns(read: Dict[str, Any], arrival: Arrival) -> Written:
 
 def hand_on_follow_up(read: Dict[str, Any], owner: MarketPerson, arrival: Arrival) -> Written:
     """Hand a follow-up to someone else (E34/F02/S01), marked for the deal by ``arrival``: the deal
-    keeps the new owner while they may review here, and hands it on otherwise. Written only while
-    it still needs one."""
+    keeps the new owner while they hold any role on the market, and hands it on otherwise. Written
+    only while it still needs one."""
     return _write(read, HandOnFollowUp(owner, arrival))
 
 

@@ -114,7 +114,7 @@ This section states the transition table once; every other node points here rath
 
 ### The states, and how they are stored
 
-An application is in one of six states (`State`), read off the stored fields by `state_of`, one rule every reader asks but the deal's pool and the claim, which filter on the stored status; no state is stored itself, so no stored status changes its spelling:
+An application is in one of six states (`State`), read off the stored fields by `state_of`, the rule the review state's own events read, while the deal's pool and the claim, and readers outside the owner such as Begin assignment's guards, the Stats tab and the export, still filter on the stored status; no state is stored itself, so no stored status changes its spelling:
 
 | State              | Stored as                                                                                                                                                                |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

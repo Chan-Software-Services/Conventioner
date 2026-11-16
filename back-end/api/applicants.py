@@ -445,8 +445,8 @@ def save_applicant_application(
     Validates the form data against the market's application form fields, and the essential
     answers against what the essential questions offer (``essential_fields``). Refuses
     submission unless the market takes applications (``takes_applications``).
-    The applicant owns their answers but never ``status``, though changing them sends an approval
-    or a person's rejection back to open (decision 9.1). The save holds the application as it read
+    The applicant owns their answers but never ``status``, though changing them sends a person's
+    approval or rejection back to open (decision 9.1). The save holds the application as it read
     it, so it never lands under a verdict given since: it reads it again and saves on what is
     stored then, ``ANSWER_TRIES`` times, then answers 409 ``CHANGED_WHILE_SAVED``.
 
@@ -968,8 +968,8 @@ def reassign_follow_up(
     owner: MarketPerson, by: str,
 ) -> Tuple[Dict[str, Any], int]:
     """Hand a follow-up to someone else with a role on the market (E34/F02/S01), ``by`` the
-    signed-in reviewer; then the deal keeps it with its new owner while they may review here, and
-    hands it on to the next reviewer in turn otherwise (E38/F07/S03)."""
+    signed-in reviewer; then the deal keeps it with its new owner while they hold any role on the
+    market, and hands it on to the next reviewer in turn otherwise (E38/F07/S03)."""
     app_doc = ApplicationsApi.find_application_by_id(application_id)
     if not app_doc or app_doc.get("market_id") != market.id:
         return {"error": "Application not found for this market."}, 404
