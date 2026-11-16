@@ -190,7 +190,7 @@ class UnaskedRecorder:
 
     market_id: str
     actor: Optional[str]
-    row: Action
+    row: Union[Action, str]
     because: str
 
     def record(
@@ -201,12 +201,15 @@ class UnaskedRecorder:
                detail=detail)
 
 
-def unasked(market_id: str, actor: Optional[str], row: Action, *, because: str) -> UnaskedRecorder:
+def unasked(
+    market_id: str, actor: Optional[str], row: Union[Action, str], *, because: str,
+) -> UnaskedRecorder:
     """The one door for a change on a market recorded under a row no request asked (T105-9): a
     record its request's asking cannot write (``Actions.Asked.record``), such as a vendor's own
-    check-in, under the door's row with no actor. ``because`` says why nothing asked it; the
-    records no request asks are listed with their reasons in ``tests/test_every_write_records.py``
-    (``UNASKED``)."""
+    check-in, under the door's row with no actor. ``row`` is a row of the table, or as ``record``
+    takes it, a row's id or ``APPLY``: the deal of an arriving application is recorded under what
+    the write it arrived by stored. ``because`` says why nothing asked it; the records no request
+    asks are listed with their reasons in ``tests/test_every_write_records.py`` (``UNASKED``)."""
     return UnaskedRecorder(market_id, actor, row, because)
 
 

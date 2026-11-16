@@ -16,9 +16,11 @@ from market_documents import MARKETS_COLLECTION, market_from_document
 from market_write import MarketChanged
 
 import api.applicants as ApplicantsApi
+import api.market_actions as Actions
 import api.markets as MarketsApi
 import assignment.lifecycle as Lifecycle
 import review_team as ReviewTeam
+from conftest import let_in
 from real_mongo import harness
 
 OWNER = "race-owner@example.com"
@@ -138,7 +140,8 @@ class TestBackToReviewAgainstPublishResults:
 
         def publish():
             try:
-                return ApplicantsApi.publish_results(market_id, OWNER)
+                return ApplicantsApi.publish_results(
+                    market_id, let_in(Actions.PUBLISH_RESULTS, market_id, OWNER))
             finally:
                 written["publish"].set()
 

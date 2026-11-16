@@ -12,12 +12,14 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 import api.discord_connection as DiscordConnection
+import api.market_actions as Actions
 import api.markets as MarketsApi
 import api.organizations as OrgsApi
 import assignment.lifecycle as Lifecycle
 import csv_import as CsvImport
 import csv_start as CsvStart
 import discord_client as Discord
+from conftest import let_in
 import history as History
 from datatypes import MarketPhase, VendorAssignmentResult
 from market_documents import market_from_document
@@ -338,7 +340,8 @@ class TestTheCsvStart:
 
         def another_start():
             landed.append(CsvStart.confirm(
-                _stored(real_db, market), {**body, "csvContent": other}, ORGANIZER, None))
+                _stored(real_db, market), {**body, "csvContent": other},
+                let_in(Actions.IMPORT_APPLICATIONS, market["id"], ORGANIZER), None))
 
         interleave("app._importing_market_document", another_start)
 

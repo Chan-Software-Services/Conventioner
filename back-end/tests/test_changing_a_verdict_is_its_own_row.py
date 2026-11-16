@@ -24,7 +24,8 @@ import api.permissions as PermissionsApi  # noqa: E402
 import api.users as UsersApi  # noqa: E402
 import rejection_rules as Rules  # noqa: E402
 from conftest import (  # noqa: E402
-    a_change_of, client_market, complete_setup, sessions_load_through_get_user, stored_market)
+    a_change_of, client_market, complete_setup, reviewing, sessions_load_through_get_user,
+    stored_market)
 from datatypes import (  # noqa: E402
     ApplicationForm, ApplicationStatus, MarketPhase, MarketRole, RejectionRule, VerdictGiver)
 
@@ -499,7 +500,7 @@ def test_a_selection_skips_one_decided_since_it_was_seen_with_the_change_rows_se
     body, _ = ApplicantsApi.review_selection(
         "market-1", [("approved", ApplicantsApi.seen_from({"status": "open", "verdictAt": None}))],
         REJECTED, by=VerdictGiver(kind="person", user_id="u", email="e@market.test"),
-        change_refused=CHANGE_REFUSED)
+        reviewing=reviewing("market-1", "e@market.test", CHANGE_REFUSED))
 
     assert body == {"written": [], "skipped": [
         {"id": "approved", "email": "approved@example.com", "reason": CHANGE_REFUSED}]}
@@ -512,7 +513,7 @@ def test_the_selection_function_skips_decided_ones_with_the_reason_given(applica
     body, _ = ApplicantsApi.review_selection(
         "market-1", [("approved", ApplicantsApi.seen_from(_seen(applications.documents[0])))],
         REJECTED, by=VerdictGiver(kind="person", user_id="u", email="e@market.test"),
-        change_refused=CHANGE_REFUSED)
+        reviewing=reviewing("market-1", "e@market.test", CHANGE_REFUSED))
 
     assert body == {"written": [], "skipped": [
         {"id": "approved", "email": "approved@example.com", "reason": CHANGE_REFUSED}]}

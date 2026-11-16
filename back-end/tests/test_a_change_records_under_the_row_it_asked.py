@@ -10,11 +10,13 @@ The records no request asked have their own door, ``History.unasked``, tested wi
 """
 import ast
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from conftest import COMPLETE_PLAN, FakeMarketsCollection, client_market, stored_market
 from test_the_history import history  # noqa: F401 - the fixture
+import api.applicants as ApplicantsApi
 import api.attendance as AttendanceApi
 import api.door as DoorApi
 import api.market_actions as Actions
@@ -23,10 +25,13 @@ import api.payments as PaymentsApi
 import api.permissions as PermissionsApi
 import api.placements as PlacementsApi
 import api.vendor_check_in as VendorCheckInApi
+import csv_import as CsvImport
+import csv_start as CsvStart
 import history as History
 import payments as Payments
+import review_team as ReviewTeam
 from client_errors import BadRequestError, ForbiddenError
-from datatypes import AssignmentOptionObject, MarketPhase, MarketRole
+from datatypes import AssignmentOptionObject, MarketPerson, MarketPhase, MarketRole
 
 ASKER = "dana@example.com"
 
@@ -418,5 +423,96 @@ class TestThePlacementWritersRecordThroughTheirCallersAsking:
         with pytest.raises(Actions.RecordedARefusal):
             PLACEMENT_WRITERS[kind](
                 Actions.Asked(Actions.ASSIGN, "market-123", ASKER, "Only an Admin may."))
+
+        assert history.docs == []
+
+
+#: T105-9's third batch: the verdicts, the import, the start and the review team. ``app.py`` is
+#: read as a file, since importing it to read its source would start the whole app.
+APP = SimpleNamespace(
+    __name__="app", __file__=str(Path(ApplicantsApi.__file__).parents[1] / "app.py"))
+THIRD_BATCH = [APP, ApplicantsApi, CsvImport, CsvStart, ReviewTeam]
+
+
+class TestTheVerdictsTheImportTheStartAndTheReviewTeamRecordWhatTheyAsked:
+    @pytest.mark.parametrize("module", THIRD_BATCH, ids=lambda module: module.__name__)
+    def test_none_records_an_entry_by_hand(self, module):
+        assert [line for name, line in _calls_in(module) if name == "History.record"] == []
+
+    @pytest.mark.parametrize("module", THIRD_BATCH, ids=lambda module: module.__name__)
+    def test_none_loads_through_the_old_loaders(self, module):
+        old = {"MarketsApi._load_market_to_change",
+               "MarketsApi._load_market_and_organization_to_change"}
+        assert [line for name, line in _calls_in(module) if name in old] == []
+
+    def test_only_the_records_no_request_asked_open_the_door(self):
+        """The first import's move into Review, the floorplans the start releases, and the deal of
+        an application that arrived by an earlier write, under that write's row and person."""
+        opened = {module.__name__: _calls_by_function(module, "History.unasked")
+                  for module in THIRD_BATCH}
+
+        assert opened == {**{module.__name__: [] for module in THIRD_BATCH},
+                          CsvImport.__name__: ["enter_review"],
+                          CsvStart.__name__: ["confirm"],
+                          ReviewTeam.__name__: ["_deal_arriving"]}
+
+
+def _reviewing(changing_refused=None):
+    return ApplicantsApi.Reviewing(
+        giving=Actions.Asked(Actions.GIVE_VERDICTS, "market-123", ASKER, None),
+        changing=Actions.Asked(Actions.CHANGE_VERDICTS, "market-123", ASKER, changing_refused))
+
+
+class TestAVerdictRecordsUnderTheRowItTook:
+    """A reviewer's write asks two rows, giving a verdict and changing one already given, and its
+    entry is recorded through the one it took: changing, when any application it wrote was
+    decided (E38/F06/S01)."""
+
+    @pytest.mark.parametrize("statuses, row", [
+        (["open"], Actions.GIVE_VERDICTS),
+        (["needs_follow_up"], Actions.GIVE_VERDICTS),
+        (["reviewer_approved"], Actions.CHANGE_VERDICTS),
+        (["open", "reviewer_rejected"], Actions.CHANGE_VERDICTS),
+    ], ids=["open", "follow-up", "decided", "one-decided-among-them"])
+    def test_the_asking_is_the_row_the_write_took(self, statuses, row):
+        before = [{"status": status} for status in statuses]
+
+        assert ApplicantsApi._verdict_asking(_reviewing(), before).row is row
+
+    def test_a_reviewer_refused_the_change_row_still_gives_a_verdict(self):
+        asked = ApplicantsApi._verdict_asking(
+            _reviewing("Only an Admin may."), [{"status": "open"}])
+
+        assert (asked.row, asked.refused) == (Actions.GIVE_VERDICTS, None)
+
+
+class TestTheReviewTeamRecordsThroughWhatItIsGiven:
+    def test_a_change_of_reviewers_records_under_the_asking_its_caller_gave(
+            self, history, monkeypatch):
+        doc = stored_market(MarketPhase.APPLICATIONS)
+        monkeypatch.setattr(ReviewTeam, "markets_collection", FakeMarketsCollection(doc))
+        market = ReviewTeam.market_from_document(doc)
+        monkeypatch.setattr(ReviewTeam.ApplicationsApi, "undecided_in_arrival_order",
+                            lambda *_a, **_k: [])
+        monkeypatch.setattr(ReviewTeam.ApplicationsApi, "any_arriving", lambda *_a: False)
+        monkeypatch.setattr(ReviewTeam, "eligible", lambda *_a: [])
+        asked = Actions.Asked(Actions.CHOOSE_REVIEWERS, market.id, ASKER, None)
+
+        ReviewTeam.choose(market, None, [MarketPerson(user_id="u-ben", email="ben@example.com")],
+                          asked)
+
+        assert [(entry["action"], entry["actor"], entry["kind"]) for entry in history.docs] == [
+            (Actions.CHOOSE_REVIEWERS.id, ASKER, History.REVIEWERS)]
+
+    def test_a_refused_asking_records_no_change_of_reviewers(self, history, monkeypatch):
+        doc = stored_market(MarketPhase.APPLICATIONS)
+        monkeypatch.setattr(ReviewTeam, "markets_collection", FakeMarketsCollection(doc))
+        market = ReviewTeam.market_from_document(doc)
+        monkeypatch.setattr(ReviewTeam.ApplicationsApi, "any_arriving", lambda *_a: False)
+
+        with pytest.raises(Actions.RecordedARefusal):
+            ReviewTeam.choose(
+                market, None, [MarketPerson(user_id="u-ben", email="ben@example.com")],
+                Actions.Asked(Actions.CHOOSE_REVIEWERS, market.id, ASKER, "Only an Admin may."))
 
         assert history.docs == []

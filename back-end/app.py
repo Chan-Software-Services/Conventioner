@@ -1846,33 +1846,46 @@ def get_market_stats(market_id: str) -> Response:
     return jsonify(MarketStats.stats_for_market(context.market)), 200
 
 
+class Reviewer(NamedTuple):
+    """The signed-in reviewer a review write is let in for (``_reviewer_on``): who they are, the
+    market's context, and their Give verdicts asking, which records what the write does."""
+    person: MarketPerson
+    context: MarketsApi.MarketContext
+    giving: Actions.Asked
+
+
 def _reviewer_on(market_id: str):
-    """The signed-in reviewer as a ``MarketPerson`` and the market's context, once they may give
-    verdicts here, or an error response (E34).
+    """The signed-in reviewer, once they may give verdicts here, or an error response (E34):
+    ``(Reviewer, None)`` or ``(None, response)``.
 
     The one gate of every review write - a verdict, a selection's, a follow-up's owner, a claim on a
     card, and an undo of a verdict or a selection's - asked through ``verdict_refusal``, the same
     rules the market read serves as the verdicts row's answer and ``verdictsSettledReason``: the
     table's verdicts row, while the review is open (E36/F01/S01). A verdict and a selection's then
-    ask the change row too, of each application they write (``_change_refused``, E38/F06/S01).
+    ask the change row too, of each application they write (``_reviewing``, E38/F06/S01).
     """
     requesting_user = authenticated_email()
     context = MarketsApi.load_market_context(market_id)
     if context is None or context.market is None:
-        return None, None, (jsonify({"error": "Market not found"}), 404)
-    refusal = MarketsApi.verdict_refusal(requesting_user, context.market, context.organization)
+        return None, (jsonify({"error": "Market not found"}), 404)
+    giving = Actions.ask(
+        Actions.GIVE_VERDICTS, requesting_user, context.market, context.organization)
+    refusal = MarketsApi.verdict_refusal(giving, context.market)
     if refusal:
-        return None, None, (jsonify({"error": refusal}), 403)
+        return None, (jsonify({"error": refusal}), 403)
     user = UsersApi.get_user(requesting_user)
-    return MarketPerson(user_id=user.id if user else None, email=requesting_user), context, None
+    person = MarketPerson(user_id=user.id if user else None, email=requesting_user)
+    return Reviewer(person, context, giving), None
 
 
-def _change_refused(context: MarketsApi.MarketContext) -> Optional[str]:
-    """Why the signed-in reviewer may not change a verdict already given, or None while they may:
-    the table's change row (E38/F06/S01), asked on top of ``_reviewer_on``'s. Asked of each
+def _reviewing(reviewer: Reviewer) -> ApplicantsApi.Reviewing:
+    """The two rows a verdict asks of the signed-in reviewer: giving, which let them in, and the
+    table's change row (E38/F06/S01), asked on top of it, which may refuse them. Asked of each
     application at its write, since only its status says whether the write is a change."""
-    return Actions.refusal(
-        Actions.CHANGE_VERDICTS, authenticated_email(), context.market, context.organization)
+    changing = Actions.ask(
+        Actions.CHANGE_VERDICTS, reviewer.person.email, reviewer.context.market,
+        reviewer.context.organization)
+    return ApplicantsApi.Reviewing(giving=reviewer.giving, changing=changing)
 
 
 def _named_status(name: Any) -> Optional[ApplicationStatus]:
@@ -1888,9 +1901,10 @@ def review_application(market_id: str, application_id: str) -> Response:
     Body: { "status": "reviewer_approved", "seen": { "status": "open", "verdictAt": null },
             "ownerEmail": "..." }  - ``seen`` and ``ownerEmail`` optional.
     """
-    person, context, refused = _reviewer_on(market_id)
+    reviewer, refused = _reviewer_on(market_id)
     if refused:
         return refused
+    person, context = reviewer.person, reviewer.context
     data = json_object(required=True)
     status_raw = data.get('status') or data.get('statusRaw')
     if not status_raw:
@@ -1905,8 +1919,9 @@ def review_application(market_id: str, application_id: str) -> Response:
         owner = MarketsApi.follow_up_owner(
             context.market, context.organization, person, data['ownerEmail'])
     result, status_code = ApplicantsApi.review_application(
-        market_id, application_id, new_status, by=person.as_giver(), owner=owner,
-        seen=ApplicantsApi.seen_from(data.get('seen')), change_refused=_change_refused(context),
+        market_id, application_id, new_status, by=person.as_giver(),
+        reviewing=_reviewing(reviewer), owner=owner,
+        seen=ApplicantsApi.seen_from(data.get('seen')),
     )
     return jsonify(result), status_code
 
@@ -1920,7 +1935,7 @@ def review_selection(market_id: str) -> Response:
             "applications": [{ "id": "...", "seen": { "status": "open", "verdictAt": null } }] }
     Answers { "written": [ids], "skipped": [{ "id", "email", "reason" }] }.
     """
-    person, context, refused = _reviewer_on(market_id)
+    reviewer, refused = _reviewer_on(market_id)
     if refused:
         return refused
     data = json_object(required=False)
@@ -1935,7 +1950,7 @@ def review_selection(market_id: str) -> Response:
     result, status_code = ApplicantsApi.review_selection(
         market_id,
         [(str(item.get('id') or ''), ApplicantsApi.seen_from(item.get('seen'))) for item in ticked],
-        new_status, by=person.as_giver(), change_refused=_change_refused(context))
+        new_status, by=reviewer.person.as_giver(), reviewing=_reviewing(reviewer))
     return jsonify(result), status_code
 
 
@@ -1972,12 +1987,13 @@ def undo_review(market_id: str, application_id: str) -> Response:
     application to what the verdict found it as, never to what a request names.
     Their own, within ``UNDO_WINDOW``, while they may give verdicts: never the change row.
     """
-    person, context, refused = _reviewer_on(market_id)
+    reviewer, refused = _reviewer_on(market_id)
     if refused:
         return refused
     asked = _undo_asked(application_id, json_object(required=True))
     result, status_code = ApplicantsApi.undo_verdict(
-        market_id, asked, by=person.as_giver(), owner_offered=_owner_offered(context, person))
+        market_id, asked, by=reviewer.person.as_giver(),
+        owner_offered=_owner_offered(reviewer.context, reviewer.person), giving=reviewer.giving)
     return jsonify(result), status_code
 
 
@@ -1989,7 +2005,7 @@ def undo_selection(market_id: str) -> Response:
     Body: { "applications": [{ "id", "seen" }] }, each as the single undo's.
     Answers { "written": [ids], "skipped": [{ "id", "email", "reason" }] }.
     """
-    person, context, refused = _reviewer_on(market_id)
+    reviewer, refused = _reviewer_on(market_id)
     if refused:
         return refused
     data = json_object(required=False)
@@ -2001,7 +2017,8 @@ def undo_selection(market_id: str) -> Response:
         item = item if isinstance(item, dict) else {}
         asked.append(_undo_asked(str(item.get('id') or ''), item))
     result, status_code = ApplicantsApi.undo_selection(
-        market_id, asked, by=person.as_giver(), owner_offered=_owner_offered(context, person))
+        market_id, asked, by=reviewer.person.as_giver(),
+        owner_offered=_owner_offered(reviewer.context, reviewer.person), giving=reviewer.giving)
     return jsonify(result), status_code
 
 
@@ -2018,9 +2035,10 @@ def next_for_review(market_id: str) -> Response:
     someone else, or under ``mineOnly`` when their share has nothing left to hand out, with
     ``dealt``, how many applications the deal before it dealt, so a screen reads its list again.
     """
-    person, context, refused = _reviewer_on(market_id)
+    reviewer, refused = _reviewer_on(market_id)
     if refused:
         return refused
+    person, context = reviewer.person, reviewer.context
     data = json_object(required=False)
     # Applications a deal the host ended left waiting are dealt first, so a chosen reviewer's
     # share holds them; each deal is recorded under the write it arrived by.
@@ -2038,9 +2056,10 @@ def next_for_review(market_id: str) -> Response:
 def hold_for_review(market_id: str, application_id: str) -> Response:
     """Keep holding the open card (PUT, every minute while it stays open) or let it go (DELETE, on
     leaving the review) (E34/F03/S02). PUT answers { "held": false } once someone else has it."""
-    person, _context, refused = _reviewer_on(market_id)
+    reviewer, refused = _reviewer_on(market_id)
     if refused:
         return refused
+    person = reviewer.person
     doc = ApplicationsApi.find_application_by_id(application_id)
     if doc is None or doc.get("market_id") != market_id:
         return jsonify({"error": "Application not found for this market."}), 404
@@ -2057,14 +2076,15 @@ def reassign_follow_up(market_id: str, application_id: str) -> Response:
 
     Body: { "ownerEmail": "sam@market.test" }
     """
-    person, context, refused = _reviewer_on(market_id)
+    reviewer, refused = _reviewer_on(market_id)
     if refused:
         return refused
     data = json_object(required=False)
     owner = MarketsApi.follow_up_owner(
-        context.market, context.organization, person, data.get('ownerEmail'))
+        reviewer.context.market, reviewer.context.organization, reviewer.person,
+        data.get('ownerEmail'))
     result, status_code = ApplicantsApi.reassign_follow_up(
-        market_id, application_id, owner, person.email)
+        market_id, application_id, owner, reviewer.giving)
     return jsonify(result), status_code
 
 
@@ -2088,9 +2108,11 @@ def update_vendor_info(market_id: str, application_id: str) -> Response:
 
 
 class ImportingMarket(NamedTuple):
-    """The stored market an import or a start reads, and the organization its check read."""
+    """The stored market an import or a start reads, the organization its check read, and the
+    asker's Import applications asking, which records what the import or the start writes."""
     document: Dict[str, Any]
     organization: Optional[Organization]
+    asked: Actions.Asked
 
 
 def _importing_market_document(market_id: str, requesting_user: str):
@@ -2098,8 +2120,9 @@ def _importing_market_document(market_id: str, requesting_user: str):
     from a CSV - the table's one row for both (E39/F01/S01).
 
     Returns ``(ImportingMarket, error_response, status)``; the document is the raw stored one,
-    because that is what the essential-offering derivation and the shared write path both read, and
-    the organization is the one the check read, for a write that asks another row of it.
+    because that is what the essential-offering derivation and the shared write path both read, the
+    organization is the one the check read, for a write that asks another row of it, and the asking
+    is the row's, which the write records through.
 
     ``requesting_user`` is the session's identity, so it is always present - every caller passes
     ``authenticated_email()`` from behind ``@login_required``.
@@ -2109,10 +2132,10 @@ def _importing_market_document(market_id: str, requesting_user: str):
         return None, {"error": "Market not found"}, 404
     if context.market is None:
         return None, {"error": "Invalid market data"}, 400
-    refused = Actions.refusal(
+    asked = Actions.ask(
         Actions.IMPORT_APPLICATIONS, requesting_user, context.market, context.organization)
-    if refused:
-        return None, {"error": refused}, 403
+    if asked.refused:
+        return None, {"error": asked.refused}, 403
     # Every caller prepares or makes a write, and an archived market takes none (bug 30).
     archived = MarketsApi.archived_refusal(context.market)
     if archived:
@@ -2121,12 +2144,12 @@ def _importing_market_document(market_id: str, requesting_user: str):
     market_doc = MarketsApi.markets_collection.find_one(live({"id": market_id}))
     if not market_doc:
         return None, {"error": "Market not found"}, 404
-    return ImportingMarket(market_doc, context.organization), None, 200
+    return ImportingMarket(market_doc, context.organization, asked), None, 200
 
 
 def _import_context(market_id: str, requesting_user: str):
     """Load the market and ask ``Actions.IMPORT_APPLICATIONS`` and the phase for the import
-    endpoints."""
+    endpoints: ``(ImportingMarket, error_response, status)``, as ``_importing_market_document``."""
     importing, error, status = _importing_market_document(market_id, requesting_user)
     if error:
         return None, error, status
@@ -2137,7 +2160,7 @@ def _import_context(market_id: str, requesting_user: str):
     refusal = CsvImport.import_refusal(market_doc)
     if refusal:
         return None, {"error": refusal, "phase": market_doc.get("phase")}, 409
-    return market_doc, None, 200
+    return importing, None, 200
 
 
 @app.route('/csv-proposal/typesafe', methods=['GET'])
@@ -2180,7 +2203,7 @@ def confirm_csv_proposal(market_id: str) -> Response:
 
     data = json_object(required=True)
     result, status_code = CsvStart.confirm(
-        importing.document, data, authenticated_email(), importing.organization)
+        importing.document, data, importing.asked, importing.organization)
     return jsonify(result), status_code
 
 
@@ -2189,7 +2212,7 @@ def confirm_csv_proposal(market_id: str) -> Response:
 def inspect_application_import(market_id: str) -> Response:
     """Read a CSV's columns and say what they can be mapped to. Writes nothing. Asks
     ``Actions.IMPORT_APPLICATIONS``."""
-    market_doc, error, status_code = _import_context(
+    importing, error, status_code = _import_context(
         market_id, authenticated_email(),
     )
     if error:
@@ -2199,7 +2222,7 @@ def inspect_application_import(market_id: str) -> Response:
     if not isinstance(data.get('csvContent'), str):
         return jsonify({"error": "csvContent is required"}), 400
 
-    result, status_code = CsvImport.inspect(market_doc, data['csvContent'])
+    result, status_code = CsvImport.inspect(importing.document, data['csvContent'])
     return jsonify(result), status_code
 
 
@@ -2208,7 +2231,7 @@ def inspect_application_import(market_id: str) -> Response:
 def preview_application_import(market_id: str) -> Response:
     """Report cell values that name nothing this market offers. Writes nothing. Asks
     ``Actions.IMPORT_APPLICATIONS``."""
-    market_doc, error, status_code = _import_context(
+    importing, error, status_code = _import_context(
         market_id, authenticated_email(),
     )
     if error:
@@ -2225,7 +2248,7 @@ def preview_application_import(market_id: str) -> Response:
         return jsonify({"error": "resolutions must be an object"}), 400
 
     result, status_code = CsvImport.preview_values(
-        market_doc, data['csvContent'], mapping, resolutions, by=authenticated_email(),
+        importing.document, data['csvContent'], mapping, resolutions, by=authenticated_email(),
     )
     return jsonify(result), status_code
 
@@ -2234,7 +2257,7 @@ def preview_application_import(market_id: str) -> Response:
 @login_required
 def import_applications(market_id: str) -> Response:
     """Import the mapped CSV rows as applications awaiting review. Asks ``Actions.IMPORT_APPLICATIONS``."""
-    market_doc, error, status_code = _import_context(
+    importing, error, status_code = _import_context(
         market_id, authenticated_email(),
     )
     if error:
@@ -2252,13 +2275,14 @@ def import_applications(market_id: str) -> Response:
         return jsonify({"error": "resolutions must be an object"}), 400
 
     result, status_code = CsvImport.import_applications(
-        MarketsApi.markets_collection, market_doc, data['csvContent'], mapping, resolutions,
-        by=authenticated_email(),
+        MarketsApi.markets_collection, importing.document, data['csvContent'], mapping,
+        resolutions, by=importing.asked.actor,
     )
     if status_code == 200:
-        # One entry for the import, with its counts, however many rows it wrote: a run is one entry.
-        History.record(market_id, authenticated_email(), Actions.IMPORT_APPLICATIONS,
-                       kind=History.IMPORTED, detail=lambda: CsvImport.import_counts(result))
+        # One entry for the import, with its counts, however many rows it wrote: a run is one entry,
+        # recorded through the asking that let it in.
+        importing.asked.record(
+            kind=History.IMPORTED, detail=lambda: CsvImport.import_counts(result))
         # Then each row it left open is dealt to the next reviewer in turn (E38/F07/S03), after the
         # import's rules have judged and a first import has taken the market into Review.
         context = MarketsApi.load_market_context(market_id)
@@ -2283,15 +2307,15 @@ def publish_market_results(market_id: str) -> Response:
     if context.market is None:
         return jsonify({"error": "Invalid market data"}), 400
 
-    refused = Actions.refusal(
+    asked = Actions.ask(
         Actions.PUBLISH_RESULTS, requesting_user, context.market, context.organization)
-    if refused:
-        return jsonify({"error": refused}), 403
+    if asked.refused:
+        return jsonify({"error": asked.refused}), 403
     refusal = MarketsApi.archived_refusal(context.market)
     if refusal:
         return jsonify({"error": refusal}), 403
 
-    result, status_code = ApplicantsApi.publish_results(market_id, requesting_user)
+    result, status_code = ApplicantsApi.publish_results(market_id, asked)
     return jsonify(result), status_code
 
 
@@ -2314,16 +2338,16 @@ def set_applications_stopped(market_id: str) -> Response:
     if context.market is None:
         return jsonify({"error": "Invalid market data"}), 400
     requesting_user = authenticated_email()
-    refused = Actions.refusal(
+    asked = Actions.ask(
         Actions.STOP_APPLICATIONS, requesting_user, context.market, context.organization)
-    if refused:
-        return jsonify({"error": refused}), 403
+    if asked.refused:
+        return jsonify({"error": asked.refused}), 403
     # An archived market refuses it in the archived rule's words, as every row it no longer takes.
     archived = MarketsApi.archived_refusal(context.market)
     if archived:
         return jsonify({"error": archived}), 403
 
-    result, status_code = ApplicantsApi.set_applications_stopped(market_id, stopped, requesting_user)
+    result, status_code = ApplicantsApi.set_applications_stopped(market_id, stopped, asked)
     return jsonify(convert_keys_to_camel_case(result)), status_code
 
 

@@ -5,8 +5,9 @@ reads as draft, nothing is written on read, and a write from such a market write
 import pytest
 
 import api.applicants as ApplicantsApi
+import api.market_actions as Actions
 import api.markets as MarketsApi
-from conftest import FakeMarketsCollection, stored_market
+from conftest import FakeMarketsCollection, let_in, stored_market
 from datatypes import (
     Application,
     ApplicationStatus,
@@ -107,7 +108,8 @@ def test_a_stop_is_taken_on_a_market_still_stored_under_an_old_name(monkeypatch)
     monkeypatch.setattr(db_config, "get_database", lambda *_a, **_kw: _Db())
     monkeypatch.setattr(MarketWrite, "markets_collection", markets)
 
-    body, status = ApplicantsApi.set_applications_stopped("market-123", True, "owner@example.com")
+    body, status = ApplicantsApi.set_applications_stopped(
+        "market-123", True, let_in(Actions.STOP_APPLICATIONS, "market-123", "owner@example.com"))
 
     # The write holds the phase as it is stored, the old name, so it lands.
     assert status == 200, body

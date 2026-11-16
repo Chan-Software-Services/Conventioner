@@ -354,10 +354,9 @@ def review_closed_reason(market: Market) -> Optional[str]:
     return _REVIEW_CLOSED[why] if why else None
 
 
-def verdict_refusal(
-    user_email: str, market: Market, organization: Optional[Organization],
-) -> Optional[str]:
-    """Why this person cannot give a verdict here, or None while they can (E34).
+def verdict_refusal(giving: Actions.Asked, market: Market) -> Optional[str]:
+    """Why this person cannot give a verdict here, or None while they can (E34), given ``giving``,
+    their asking of the Give verdicts row: a write that is let in records through it.
 
     A verdict - and a follow-up, a claim on a card - is the table's "Give verdicts and follow-ups"
     row (E34/F01/S01, E39/F01/S01), and open while the review is (E36/F01/S01): from assignment on,
@@ -366,9 +365,7 @@ def verdict_refusal(
     The screens read its parts from the market read: the row in ``actionRefusals`` and the review's
     close as ``verdictsSettledReason``.
     """
-    refused = archived_refusal(market) or Actions.refusal(
-        Actions.GIVE_VERDICTS, user_email, market, organization)
-    return refused or review_closed_reason(market)
+    return archived_refusal(market) or giving.refused or review_closed_reason(market)
 
 
 def may_overturn(user_email: str, market: Market) -> bool:
@@ -3223,7 +3220,7 @@ def choose_reviewers(market_id: str, addresses: Any, requesting_user: str) -> Di
     """
     if not isinstance(addresses, list) or not all(isinstance(a, str) for a in addresses):
         raise BadRequestError("reviewers is a list of addresses")
-    market, organization, _asked = _market_change(
+    market, organization, asked = _market_change(
         market_id, requesting_user, Actions.CHOOSE_REVIEWERS)
     closed = review_closed_reason(market)
     if closed:
@@ -3243,7 +3240,7 @@ def choose_reviewers(market_id: str, addresses: Any, requesting_user: str) -> Di
                     "market.")
             person = MarketPerson(user_id=user.id, email=user.email)
         chosen.append(person)
-    team, dealt = ReviewTeam.choose(market, organization, chosen, requesting_user)
+    team, dealt = ReviewTeam.choose(market, organization, chosen, asked)
     return {"reviewTeam": ReviewTeam.served(team, market, organization), "dealt": dealt}
 
 

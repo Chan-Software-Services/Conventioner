@@ -1116,6 +1116,23 @@ def assigning(market_id, actor):
     return Actions.Asked(Actions.ASSIGN, market_id, actor, None)
 
 
+def let_in(row, market_id, actor):
+    """``row``'s asking of ``actor``, let in, for a test of a write past its route's check: its
+    entry is recorded under that row, as the asking the route returned records it."""
+    import api.market_actions as Actions
+    return Actions.Asked(row, market_id, actor, None)
+
+
+def reviewing(market_id, actor, change_refused=None):
+    """The two rows a verdict asks of ``actor`` (``ApplicantsApi.Reviewing``): giving, let in, as
+    the review routes' gate lets them in, and changing, refused with ``change_refused`` when set."""
+    import api.applicants as ApplicantsApi
+    import api.market_actions as Actions
+    return ApplicantsApi.Reviewing(
+        giving=Actions.Asked(Actions.GIVE_VERDICTS, market_id, actor, None),
+        changing=Actions.Asked(Actions.CHANGE_VERDICTS, market_id, actor, change_refused))
+
+
 def at_the_door(market_id, actor=None):
     """The recorder a check-in or its undo records through: the organizer ``actor``'s "Check
     vendors in" asking, let in, as the door's; or with no actor, the vendor's own, through the

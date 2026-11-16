@@ -354,11 +354,12 @@ START_RELEASES_UNASKED = (
 
 
 def confirm(
-    market_doc: Dict[str, Any], body: Dict[str, Any], by: str,
+    market_doc: Dict[str, Any], body: Dict[str, Any], asked: Actions.Asked,
     organization: Optional[Organization],
 ) -> Tuple[Dict[str, Any], int]:
-    """Write everything the ledger holds, or nothing, and say which; ``by`` is who started it, let
-    in by the import's row, and ``organization`` the market's, as that check read it.
+    """Write everything the ledger holds, or nothing, and say which; ``asked`` is the import row's
+    asking that let its starter in, which records the start, and ``organization`` the market's, as
+    that check read it.
 
     What ``confirmed_update`` refuses it raises as a client error, answered as raised: a
     ``ConfirmRefused`` or a locked form 409, a plan or a form the writers refuse 400; and a plan
@@ -368,6 +369,7 @@ def confirm(
     if not isinstance(body.get("csvContent"), str):
         return {"error": "csvContent is required"}, 400
     confirmed = confirmed_update(market_doc, body["csvContent"], body)
+    by = asked.actor
     Actions.ask_assign_if_the_rules_change(confirmed.market, confirmed.plan, by, organization)
 
     # Holding the form as read, which the refusal judged had no questions of its own: a form that
@@ -382,8 +384,7 @@ def confirm(
                  counts=(MarketsApi.FORM_REVISION_KEY,))
     # One entry for the start, with its counts, as an import is one: what it was made from and what
     # it made, not the plan and the form it wrote whole.
-    History.record(market_doc["id"], by, Actions.IMPORT_APPLICATIONS, kind=History.STARTED,
-                   detail=confirmed.counts)
+    asked.record(kind=History.STARTED, detail=confirmed.counts)
     MarketsApi.release_removed_floorplans(
         confirmed.market, confirmed.removed_floorplans,
         History.unasked(market_doc["id"], by, Actions.CHANGE_SETUP, because=START_RELEASES_UNASKED))
