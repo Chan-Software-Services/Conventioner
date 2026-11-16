@@ -600,10 +600,10 @@ OWNED_FIELDS = ("state", "freed", "set_by_hand", "revision")
 @dataclass(frozen=True)
 class OwedTransition:
     """What ``owed_day_transition`` did to one vendor's day: the state the day read as
-    (``before``), the state it left (``after``), the record as read, the revision written (None
-    for a record deleted or nothing written), and whether what the day reads as changed, which
-    alone the history records: a write that only tidies a stopped free's record on a held day
-    leaves the day reading as it did. ``stored`` is the state the record held as read, before
+    (``before``), the state it left (``after``), the record as read, the revision written and the
+    ``_id`` of the record written (both None for a record deleted or nothing written), and whether
+    what the day reads as changed, which alone the history records: a write that only tidies a
+    stopped free's record on a held day leaves the day reading as it did. ``stored`` is the state the record held as read, before
     ``on_day``: an Admin's amount on a day not held reads as following the seat, but it was there.
     """
 
@@ -615,18 +615,20 @@ class OwedTransition:
     revision: Optional[int]
     wrote: bool
     changed: bool
+    record_id: Any = None
 
     def undo(self) -> bool:
         """Put the record back as it was read, for a free whose seat could not be freed or an
         Admin's amount whose day went meanwhile, and only while it still holds the revision
-        written: a write that landed since is the day's now, and False says nothing was put back.
+        written on the record written: a write that landed since is the day's now, a record made
+        since at the same revision included, and False says nothing was put back.
         Only a write that left a record is undone: neither caller's events end in following the
         seat, which deletes it."""
         if not self.wrote:
             return True
         if self.revision is None:
             raise ValueError("only a write that left a record is undone")
-        still_written = {**self.key, "revision": self.revision}
+        still_written = {**self.key, "_id": self.record_id, "revision": self.revision}
         if self.record is None:
             return amounts_owed_collection.delete_one(still_written).deleted_count == 1
         restore: Dict[str, Any] = {}
@@ -682,12 +684,13 @@ def owed_day_transition(
         if doc is None:
             revision = 1
             try:
-                amounts_owed_collection.insert_one(
+                inserted = amounts_owed_collection.insert_one(
                     {**key, "state": after.to_stored(), **legacy_fields(after),
                      "revision": revision})
             except DuplicateKeyError:
                 continue
-            return OwedTransition(key, stored, before, after, doc, revision, True, changed)
+            return OwedTransition(key, stored, before, after, doc, revision, True, changed,
+                                  inserted.inserted_id)
         read = doc.get("revision")
         holding = {**key, "_id": doc["_id"],
                    "revision": read if read is not None else {"$exists": False}}
@@ -699,7 +702,8 @@ def owed_day_transition(
         if amounts_owed_collection.update_one(holding, {"$set": {
                 "state": after.to_stored(), **legacy_fields(after), "revision": revision,
         }}).matched_count:
-            return OwedTransition(key, stored, before, after, doc, revision, True, changed)
+            return OwedTransition(key, stored, before, after, doc, revision, True, changed,
+                                  doc["_id"])
     raise OwedDayChanged()
 
 

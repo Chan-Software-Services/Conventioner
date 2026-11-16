@@ -608,6 +608,21 @@ class TestUndo:
         doc = _the_record(owed)
         assert (doc["state"]["amount"]["cents"], doc["revision"]) == (900, 2)
 
+    def test_it_leaves_a_record_made_since_at_the_revision_it_wrote(self, owed):
+        """A run's tidy deleted the record this Admin's amount made, and another Admin's amount
+        made a new one, at revision 1 too: that record is another write's, and stays."""
+        moved = Payments.owed_day_transition(MARKET, ANA, DAY, OwedEvent.ADMIN_SETS, held=SEAT,
+                                             by=ADMIN, cents=0)
+        Payments.owed_day_transition(MARKET, ANA, DAY, OwedEvent.DROPPED_BY_RUN, held=SEAT,
+                                     by=EDITOR)
+        Payments.owed_day_transition(MARKET, ANA, DAY, OwedEvent.ADMIN_SETS, held=SEAT,
+                                     by=EDITOR, cents=900)
+
+        assert not moved.undo()
+
+        doc = _the_record(owed)
+        assert (doc["state"]["amount"]["cents"], doc["revision"]) == (900, 1)
+
     def test_one_that_wrote_nothing_does_nothing(self, owed):
         owed.insert_one(_stored(Freed(FREED, None)))
         moved = Payments.owed_day_transition(MARKET, ANA, DAY, OwedEvent.ADMIN_CALCULATED,
