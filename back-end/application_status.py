@@ -635,9 +635,18 @@ def _write(read: Dict[str, Any], event: Event, pins: Optional[Dict[str, Any]] = 
         query, moved.update()).matched_count > 0
 
 
+def _a_seen_time(value: Any) -> bool:
+    """Whether a time a reviewer saw is one an application holds: a string, or null."""
+    return value is None or isinstance(value, str)
+
+
 def _as_seen(read: Dict[str, Any], seen: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The answers' time a reviewer saw, to hold a verdict on, or None when what they saw is not
-    what was read since: another status or verdict, which the write must not land over."""
+    what was read since: another status or verdict, which the write must not land over. Its times
+    are read as a string or null only (a request value is a string): any other is nothing they
+    could have seen, so it is None, as a ``seen`` whose status no state names matches nothing."""
+    if not (_a_seen_time(seen.get("verdict_at")) and _a_seen_time(seen.get("updated_at"))):
+        return None
     if (seen.get("status") != read.get("status")
             or (seen.get("verdict_at") or None) != (read.get("verdict_at") or None)):
         return None

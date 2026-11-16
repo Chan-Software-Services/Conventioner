@@ -139,6 +139,8 @@ A sign-in code allows five tries, so "one right try among nine wrong ones" canno
 What it promises, at most one sign-in, at most five tries counted, and exactly five when none signs in, is its test; the other exact counts are the other three's.
 Each race opens its connections first (`harness.warm(collection, n)`, `n` reads at once): on a cold pool each thread opens and authenticates its own, which spreads the threads out until their writes no longer meet, and the first race of a run once passed with the unique index taken away.
 
+[`real_mongo/test_a_verdict_holds_what_was_seen_on_the_server.py`](../../../back-end/tests/real_mongo/test_a_verdict_holds_what_was_seen_on_the_server.py) runs a person's verdict, held on the answers' time the reviewer saw, over an application whose answers changed since: a time of any type but a string or null matches nothing, and the time stored lands.
+
 ## The market side's guarantees
 
 Each guarantee the market side rests on the server for is a write conditional on what its request read, and is run here with its losing branch, on real threads, in [`real_mongo/test_the_market_side_races.py`](../../../back-end/tests/real_mongo/test_the_market_side_races.py).

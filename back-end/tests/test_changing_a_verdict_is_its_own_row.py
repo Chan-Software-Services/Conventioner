@@ -603,3 +603,52 @@ class TestASeenNoStateNames:
         assert client.stored["approved"] == before
         [entry] = market_records.history.documents
         assert entry["subject"] == {"application_ids": ["open", "follow-up"]}
+
+
+#: Values of every JSON type but a string, for a time a reviewer saw.
+NOT_A_TIME = [{"$ne": None}, ["2026-10-01T00:00:00Z"], 20261001, True]
+
+
+class TestASeenTimeIsAStringOrNull:
+    """The times a ``seen`` names, ``verdictAt`` and ``updatedAt``, are read as a string or null
+    only: a value of any other type is nothing a reviewer could have seen, so the verdict held on
+    it matches nothing, as a ``seen`` whose status no state names does."""
+
+    @pytest.mark.parametrize("value", NOT_A_TIME)
+    @pytest.mark.parametrize("field", ["updatedAt", "verdictAt"])
+    def test_a_verdict_naming_one_is_refused_and_nothing_is_written(self, client, field, value):
+        _as(client, "editor@market.test")
+        client.stored["open"]["updated_at"] = "2026-10-05T00:00:00Z"
+        before = dict(client.stored["open"])
+        seen = {"status": OPEN.value, "verdictAt": None, "updatedAt": "2026-10-05T00:00:00Z",
+                field: value}
+
+        response = client.put("/markets/market-1/applications/open/review", json={
+            "status": APPROVED.value, "seen": seen})
+
+        assert response.status_code == 409
+        assert response.get_json()["application"]["status"] == OPEN.value
+        assert client.stored["open"] == before
+
+    @pytest.mark.parametrize("value", NOT_A_TIME)
+    def test_a_selection_writes_the_good_entries_and_skips_that_one_saying_why(
+        self, client, market_records, value,
+    ):
+        _as(client, "admin@market.test")
+        client.stored["open"]["updated_at"] = "2026-10-05T00:00:00Z"
+        before = dict(client.stored["open"])
+
+        response = client.post("/markets/market-1/applications/verdicts", json={
+            "status": REJECTED.value,
+            "applications": [
+                {"id": "follow-up", "seen": _seen(client.stored["follow-up"])},
+                {"id": "open", "seen": {**_seen(client.stored["open"]), "updatedAt": value}},
+            ],
+        })
+
+        assert response.status_code == 200
+        body = response.get_json()
+        assert body["written"] == ["follow-up"]
+        assert body["skipped"] == [{"id": "open", "email": "open@example.com",
+                                    "reason": "Its answers changed since you opened it."}]
+        assert client.stored["open"] == before
