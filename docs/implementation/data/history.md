@@ -61,7 +61,7 @@ It began as the placement history, because a placement that differs from what th
 The placement history kept placements only, on the view that a narrow trail that gets read beats a general one that gets ignored.
 Daniel widened it (T92, Q23: "yes every change is logged"): an organizer investigating a problem or a mistake asks who did what on the market, whatever it was, and one history answers that where several partial records would each answer part of it.
 The decision, and what stays state and what stays apart, is [ADR 0017](../../adr/0017-one-history-for-every-change.md).
-Every write that changes a market, its applications or its vendors records its entry into it (E40/F01/S02), once its change has landed, under the E39 action its check asked, but for five records no request asks, each named with its reason; [what each write records](#what-each-write-records) lists them.
+Every write that changes a market, its applications or its vendors records its entry into it (E40/F01/S02), once its change has landed, under the E39 action its check asked, but for six records no request asks, each named with its reason; [what each write records](#what-each-write-records) lists them.
 
 The glossary concepts: [Assignment](../../business/concepts/assignment.md) and [Placement and pin](../../business/concepts/placement-and-pin.md).
 

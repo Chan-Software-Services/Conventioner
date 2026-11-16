@@ -33,7 +33,7 @@ The few records no request asks (a vendor's own check-in, the first import's mov
 **A market's history entry is written only through the asking of a permission row, or through the one door for a record no request asked** (T105-9, T352).
 
 - A write asks its row with `ask`, and records its change through the `Asked` it returns ([`back-end/api/market_actions.py`](../../back-end/api/market_actions.py)): the entry is under that row, as that person, and recording through a refused `Asked` raises `RecordedARefusal`, a programming error.
-  A write that loads its market loads through `_market_change` in [`back-end/api/markets.py`](../../back-end/api/markets.py), which asks the row and hands the `Asked` back with the market; a helper that records for its caller's check takes the caller's `Asked`, never a market id and an actor.
+  A write that loads its market loads through `_market_change` in [`back-end/api/markets.py`](../../back-end/api/markets.py), which asks the row and hands the `Asked` back with the market; a helper that records for its caller's check takes the caller's `Asked` (or the unasked door's recorder), never a market id and an actor, but for `review_team.deal_arrivals`, which takes the actor and the row by hand and stores them for the deal recorded through the unasked door.
 - A record no request asked goes through `unasked(market_id, actor, row, because=)` in [`back-end/history.py`](../../back-end/history.py), and only the functions listed in the guard below may call it, each passing the reason that sits beside it as a constant.
 - The writer itself, `_record`, is private: only the history module and `Asked.record` call it.
 - [`back-end/tests/test_only_an_asking_writes_a_markets_history.py`](../../back-end/tests/test_only_an_asking_writes_a_markets_history.py) reads every server module and fails one that writes the history any other way, and plants each way to see it found.
@@ -42,7 +42,7 @@ The few records no request asks (a vendor's own check-in, the first import's mov
 
 - The history and the permission table cannot disagree on what a change was let through on: a change of what a write asks changes what it records with it.
 - A write that asks two rows records each entry through its own asking, and a write whose row is computed (a verdict's giving or changing row, a payment's row, a role's row) records through the asking of the row it computed.
-- Adding a record no request asks is a reviewed change to the guard's list, with its reason, and to `UNASKED` in `test_every_write_records.py`, which ties each such record to the request that reaches it.
+- Adding a record no request asks is a reviewed change to the guard's list, with its reason, and to `UNASKED` in `test_every_write_records.py`, which ties each such record a route reaches to a request that reaches it.
 - An applicant's own change stays `record_applicant`'s: no row asks it, and their sign-in is the check.
 - An organization's own history is out of this decision: its writer, `record_for_organization`, still names its verb by hand.
 
