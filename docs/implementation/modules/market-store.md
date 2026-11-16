@@ -42,7 +42,9 @@ The rules it keeps for all code are [one market, from the server](../conventions
   Every write that changes the market is followed by a call to it; it is also the retry after a failed arrival.
 - `clear()` forgets the market entirely; signing out calls it, so one account is never shown another's market.
 - `installMarketChanged()`, exported beside the store and installed once from `main.ts`, calls `refresh()` whenever a write answers that the market changed under it, so every screen follows the market as it now stands ([the market write](market-write.md#on-the-screen)).
-- `market` is the held market, and only while its id is the open id; `status` is `idle`, `loading`, `loaded`, `failed` or `missing`; `stale` is true when the last re-read failed in transit.
+- `market` is the held market, and only while its id is the open id; `status` is the keyed read's phase, one of `empty`, `loading`, `ready`, `refreshing`, `failed`, `refresh_failed` or `missing`, so the store can never read failed and old at once.
+- `rereadFailed` is true in `refresh_failed` and in the `refreshing` that follows it, until a re-read lands; the frame says it once for every market screen ([the market frame](market-frame.md#sharp-edges)).
+- `open(id)` resolves once the read it asked settles (`settled()`); `refresh()` is the read's `reread()`, and `clear()` empties the key, so an answer out when it is called lands nowhere.
 
 Screens do not call the store directly: [`useOpenMarket`](../../../front-end/src/utils/openMarket.ts) takes the route's market id, opens the market on arrival and whenever the id changes, re-reads it when the organizer comes back to the browser tab (`visibilitychange`), and returns `{ market, status, refresh }`.
 Every view routed by market id uses it, and hands the market to [the market frame](market-frame.md).
@@ -188,19 +190,20 @@ Adopt the write's answer inside the write, on the key it is handed: the key is s
 Once the component is gone nothing out lands, and no `landed` or `gone` is called.
 It has no timer and no retry of its own: a read that needs a timeout gives one to axios, and a clock is the screen's.
 
-Attendance reads its roster through it ([attendance and the door](attendance-and-door.md#sharp-edges)).
+The market store itself is one (`landed` sets the pointer below, `gone` forgets it), and Attendance reads its roster through it ([attendance and the door](attendance-and-door.md#sharp-edges)).
 
 ## Sharp edges
 
 **Keyed by the route's id.**
-A market held for one id is never shown while another is open, not even for a frame, and an answer to a fetch that a later fetch has overtaken is dropped (a generation counter).
+The store is built on [the keyed read](#reads-keyed-by-market), its key the open id, so a market held for one id is never shown while another is open, not even for a frame, and an answer to a fetch that a later fetch has overtaken is dropped.
 
 **What it holds is shown while a re-read of the same market is in flight**, so returning to a screen or saving does not blank it.
 Only an arrival with nothing held shows `loading`.
 
 **A missing market and one the organizer cannot reach read identically.**
 A 404 and a 403 both drop what is held and set `missing`; telling them apart would confirm to anyone guessing ids that a market is real.
-Any other failure is `failed` when nothing is held, and a failed re-read keeps the held market and marks it `stale`, so a dropped connection never unmounts a screen's unsaved work.
+Any other failure is `failed` when nothing is held, and a failed re-read keeps the held market and reads `refresh_failed`, so a dropped connection never unmounts a screen's unsaved work.
+Moving to another market empties the read in one step: a failed re-read of one market, then another failing to arrive, reads `failed` alone, where a `stale` flag beside the status once read failed and old at once (T277 probe 15, in `marketStore.test.ts`).
 
 **The pointer to the market last opened is set here and nowhere else.**
 [`front-end/src/utils/lastMarket.ts`](../../../front-end/src/utils/lastMarket.ts) keeps `lastMarketId` in `localStorage`: a pointer for Markets' "Previously opened" line, never a copy.
