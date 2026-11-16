@@ -111,7 +111,7 @@ const ANSWER: PublicMapAnswer = {
       half: 'whole',
       name: 'Acme Ceramics',
       website: 'https://acme.example',
-      instagram: 'acme',
+      instagram: 'example_acme',
     },
     {
       date: '2099-06-05',
