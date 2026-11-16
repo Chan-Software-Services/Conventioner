@@ -61,6 +61,7 @@ sources:
   - T316
   - T315
   - T318
+  - T411
 ---
 
 # The market write
@@ -225,6 +226,7 @@ A seed or spec writes the form through [`e2e/helpers/saveApplicationForm.ts`](..
 
 Manage market keeps a copy of the market of its own, so on that refusal from adding, changing or taking a role, from a change to the permission table (a row, Reset or Copy), or from a rename, it re-reads that copy, and the sentence stands where that action's refusal always has: under the add form, in the removal's confirmation, under the person's row, in the table change's confirmation, under the name ([ending and managing a market](../../business/flows/ending-and-managing-a-market.md)).
 The permission dialog ([`MarketPermissions.vue`](../../../front-end/src/components/MarketPermissions.vue)) asks [`ManageMarketOverlay.vue`](../../../front-end/src/views/ManageMarketOverlay.vue) for the re-read with its `marketChanged` event, and an open confirmation follows the table read again: a row's change takes the row as it now stands, and one with nothing left to change, or a reset with no row left to return, closes, its sentence then on the Permissions dialog's own error line and focus taken back inside that dialog, since Reset, disabled then, or a row gone cannot take it; after a refused rename (`handleRename`) the re-read market may be past draft, so the name field gives way to why the name is fixed.
+Manage market's re-read after a refused add, take, rename or transfer of ownership runs inside that write's submission ([dialogs](../conventions/dialogs.md)), so the dialog holds until its copy is read again, and a re-read for a market Manage market has since left reads nothing (T411).
 
 A list saved on the market a click at a time (`useSavedOnTheMarket` in [`front-end/src/utils/savedOnTheMarket.ts`](../../../front-end/src/utils/savedOnTheMarket.ts), the highlights and the automatic rejections) takes the store's list back on that refusal, not the list from before the click: the re-read may land before the refusal reaches the screen, while the write still counts as in flight and the list's watch skips it.
 
