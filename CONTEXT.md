@@ -201,6 +201,29 @@ The organizer's ordered rules for who gets assigned first when demand exceeds ta
 **Max assignments per vendor**:
 The organizer's ceiling on how many days any one vendor may be assigned, bounded by the market's own date count. A hard limit set by the market, distinct from the vendor's own `max dates` answer; the effective cap is the lower of the two.
 
+### Paying
+
+**Table-day**:
+One vendor's one market date, the unit an amount owed is kept by.
+_Avoid_: Booking, "line" for the stored record
+
+**Amount owed**:
+What a table-day owes: the seat's price by the pricing, unless an Admin set it.
+_Avoid_: Fee, balance
+
+**Set by hand**:
+An amount owed an Admin chose, $0 being a waiver; it stays through a move and a free, and goes when a run drops the day.
+
+**Freed line**:
+A table-day whose table was freed, kept as the seat stood, still owed.
+
+**Waived by the free**:
+A freed line owing $0 because the free ticked "Also remove its ... from what they owe?"; seating the day again takes it back.
+
+**Balance state**:
+How what a vendor paid compares with what they owe: owes, paid in full, paid more than owed, or none; the server's to read.
+See [Payments, and what a vendor owes](docs/implementation/data/payments.md).
+
 ### Accounts
 
 **Sign-in secret**:

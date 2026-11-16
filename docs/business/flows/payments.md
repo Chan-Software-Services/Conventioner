@@ -6,12 +6,13 @@ describes:
   - front-end/src/utils/paymentsPage.ts
   - back-end/api/payments.py#market_payments
   - back-end/payments.py#market_summary
-verified: 2026-11-11
+verified: 2026-11-16
 sources:
   - T92
   - E44/F02/S01
   - T263
   - T284
+  - T335
 ---
 
 # Payments
@@ -36,7 +37,7 @@ The server counts all of it in one answer (`GET /markets/<id>/payments`, `market
    The list is drawn once the vendors' names are read, saying "Loading vendors…" until then, so it is drawn in its order by name and never re-sorts under the reader; the figures above it do not wait, since none reads a name (T284).
    A failed read of the names leaves it drawn by address.
 4. "Owes", "Paid in full" and "Paid more than owed" each narrow the list to the vendors in that state, with how many there are; "Paid in full" is every vendor who is square and owed something, so a vendor who owes nothing and paid nothing, "Nothing owed", is in none of the three, and is listed only unfiltered; pressed again, a filter is cleared.
-   The states are the server's, the ones the export's "Payment" filter reads ([J15](vendors.md#j15-export-the-vendors-to-a-csv)), so the page's "Owes" and an export of "Owes" list the same vendors.
+   The states are the server's, served with each vendor and never worked out on the page, the ones the export's "Payment" filter reads ([J15](vendors.md#j15-export-the-vendors-to-a-csv)), so the page's "Owes" and an export of "Owes" list the same vendors.
    "Search vendors" finds a vendor by name or address within it, a name being the one they chose or the one on their identification, and "N of M vendors shown" counts what is left.
 5. Each column's heading sorts the list by it, pressed again the other way: the vendor A to Z to begin with, an amount largest first; the Difference sorts who owes most first, and paid more than owed last.
 6. The filter, the search and the sort are in the address (`show`, `search`, `sort` and `order`), so a reload or a shared link shows the same list.
@@ -55,18 +56,25 @@ There a table owes nothing but an amount someone set by hand, so the reading fol
 - a vendor owing an amount set by hand reads, tones and filters as on a priced market: "Owes $10.00", or "Paid $15.00 more than owed", a refund to issue;
 - a vendor owing nothing who was refunded beyond what they paid (a $10 payment and a $25 refund) owes the difference back to the market, so reads, tones and filters as owing: "Owes $15.00".
 
-Where nobody owes, the page shows no figures, since nothing is owed to compare what was paid with, and offers no filter, since whoever paid would all be "Paid more than owed" and the refunds filter would be everyone (Daniel, T153 review finding 3), and a filter in the address narrows nothing; the search and the sort stay.
+Where nobody owes, which the server says (`offersPaymentStates`), the page shows no figures, since nothing is owed to compare what was paid with, and offers no filter, since whoever paid would all be "Paid more than owed" and the refunds filter would be everyone (Daniel, T153 review finding 3), and a filter in the address narrows nothing; the search and the sort stay.
 Where someone owes, by an amount set by hand or a refund beyond what they paid, the note says "Pricing is off for this market, so a vendor owes only an amount set by hand on their Payment tab, or a refund beyond what they paid." and the three filters are offered, each listing the vendors in that state.
 "The market's money" is drawn there too, summed by the same rule as the rows (T153 review finding 12): what a vendor owing nothing paid counts toward Paid, in the totals and each tier's and date's share, but never toward Paid more than owed.
 So Paid less Owed need not equal Paid more than owed less Still owed there; where some vendor owing nothing paid, a caption under the figures says "\"Paid\" includes what vendors who owe nothing paid; only a vendor who owes can pay more than owed.", and where every vendor who paid owes, it is not drawn (finding 15).
 The vendor export does the same: its "Payment" filter is offered only where the page's are, the server ignores one sent where nobody owes, and applies it by the same state where someone does ([J15, export the vendors](vendors.md#j15-export-the-vendors-to-a-csv)).
 Before a run, with nobody seated and nothing paid, the page says nothing is assigned yet, as the Vendors page does.
 
+What a vendor owes for a day and what they paid are changed in the drawer ([payments, and what a vendor owes](../../implementation/data/payments.md)), and the page reads each change:
+
+- A run that leaves a vendor without a table on a day whose amount an Admin set drops that amount with the day (Daniel's decision 9.3), so the page never counts an amount no line shows, and the market's history says so, naming the amount and who set it; seated that day again, the vendor owes the new seat's price.
+- Two Admins changing one payment at once land the first change, and the second is refused, saying the payment changed, or was removed, while it was being saved, with the vendor's payments as they now read shown behind the dialog; a removal meeting another change is refused the same way, its confirmation kept open.
+
 Covered by:
 
-- `back-end/tests/test_the_payments_page.py` (the sums, the sharing by tier and by date, a refund beyond what was paid owed back, and who may read it)
+- `back-end/tests/test_a_payment_entry_holds_what_it_read.py` (an edit or a removal meeting another change refused, and two edits at once on a real MongoDB landing one)
+- `back-end/tests/test_an_owed_day_has_one_state.py` (an Admin's $0 dropped with the day a run drops, its history entry, and the day seated again owing the new seat's price)
+- `back-end/tests/test_the_payments_page.py` (the sums, the sharing by tier and by date, a refund beyond what was paid owed back, each vendor's served state as their tab's, `offersPaymentStates`, and who may read it)
 - `exporting-a-payment-reminder.spec.ts` (the page's "Owes" against the export's)
-- `front-end/src/__tests__/paymentsPage.test.ts` (the filters, the sort, the search and when the caption is drawn)
+- `front-end/src/__tests__/paymentsPage.test.ts` (the filters, the sort, the search and when the caption is drawn, each read off the served values)
 - `front-end/src/__tests__/thePaymentsPageAtScale.test.ts` (the cap, what folds back and what holds, and every figure counting all 120)
 - `lists-at-scale.spec.ts` (120 vendors who paid, at 1280 and 390, and, with the names read held, the list waiting for them and row 50 keeping the focus after "Show 50 more")
 - `the-market-on-a-phone.spec.ts` (the page, its tables' headings and cells as a screen reader reads them, and the drawer of a vendor who owes, on a phone and at a desk)

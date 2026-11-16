@@ -15,9 +15,10 @@ describes:
   - back-end/payments.py#ensure_payment_indexes
   - back-end/migrations/check_vendor_day_duplicates.py
   - back-end/migrations/migrate_assignment_state.py
+  - back-end/migrations/migrate_owed_day_state.py
   - back-end/host_limits.py
   - back-end/organizer_sessions.py#ensure_organizer_session_indexes
-verified: 2026-11-14
+verified: 2026-11-16
 sources:
   - E32/F03/S03
   - T15
@@ -34,6 +35,7 @@ sources:
   - T316
   - T315
   - T317
+  - T335
 ---
 
 # Operations
@@ -204,6 +206,10 @@ The release carrying T316 stores each market's assignment state, and Publish res
 Until it runs, that release reads each market's state off its rows by the same rule ([the assignment's lifecycle](implementation/modules/assignment-lifecycle.md)), so nothing refuses to boot, and running it changes nothing a market shows.
 A market that changed between the script's read and its write on three tries is listed as skipped, and running it again sets it.
 A market whose stored assignment does not parse is left alone and listed by id; the app cannot read it either, and the script never changes it.
+The release carrying T335 stores each owed table-day's state ([payments](implementation/data/payments.md#the-owed-days-state)): right after it is deployed, run `MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_owed_day_state.py --dry-run` ([`migrate_owed_day_state.py`](../back-end/migrations/migrate_owed_day_state.py)), which names each record it would change by market id, date and record id, never an address, says what it would set, and counts them, then without `--dry-run`, and again after any roll-forward past a rollback.
+It also drops each amount an Admin set on a day the vendor no longer holds, which no line shows, and records an `owed_dropped` entry in the market's history for each, naming the amount and who set it (Daniel's decision 9.3).
+Until it runs, that release reads each record from the fields the release before wrote, so nothing refuses to boot and nothing a vendor's Payment tab shows changes; but a vendor seated again on such a day loses the hidden amount with no history entry, which is why it runs right after the deploy.
+A record that changed between the script's read and its write on three tries is listed as skipped, and running it again sets it; a record whose fields do not parse is left alone and listed by id.
 
 ### When the back end refuses to boot
 
@@ -270,8 +276,8 @@ When it says "none found", the build failed on something other than duplicates: 
 Two writes of what a vendor owes for one day stored two records, which an amount set at the same moment as a free could before the index existed ([payments](implementation/data/payments.md#one-vendors-day-is-one-owed-record-by-the-database)).
 The refusal names each group as the attendance one does, and `check_vendor_day_duplicates.py` lists the same groups; the `mongosh` line above, run on `db.amounts_owed`, does too.
 Each record may hold a freed line (`freed`) and an amount set by hand (`set_by_hand`), and the day's one record should hold the latest of each.
-Take a `mongodump` first, then in each group keep one record, holding the `freed` with the latest `freed.at` and the `set_by_hand` with the latest `set_by_hand.at` among the group's (`db.amounts_owed.updateOne({_id: ObjectId('<kept id>')}, {$set: {freed: <latest freed>, set_by_hand: <latest set_by_hand>}})`), and delete the others by `_id` (`db.amounts_owed.deleteOne({_id: ObjectId('<id>')})`).
-Then redeploy, or restart the local back end, and read the vendor's Payment tab for that day.
+Take a `mongodump` first, then in each group keep one record, holding the `freed` with the latest `freed.at` and the `set_by_hand` with the latest `set_by_hand.at` among the group's, with its stored `state` taken away so it is read from those two fields (`db.amounts_owed.updateOne({_id: ObjectId('<kept id>')}, {$set: {freed: <latest freed>, set_by_hand: <latest set_by_hand>}, $unset: {state: ''}})`), and delete the others by `_id` (`db.amounts_owed.deleteOne({_id: ObjectId('<id>')})`).
+Then redeploy, or restart the local back end, run `migrate_owed_day_state.py` as under [Starting a database, and migrations](#starting-a-database-and-migrations), which stores the kept record's state again, and read the vendor's Payment tab for that day.
 "None found" reads as for attendance, the index to drop being `db.amounts_owed.dropIndex('amounts_owed_vendor_day_unique')`.
 
 **"The unique index payments_request_key_unique on payments ... could not be built ... Records sharing one request key, by market_id and record id: ..."**.

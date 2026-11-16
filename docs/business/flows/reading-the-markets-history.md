@@ -15,7 +15,7 @@ describes:
   - front-end/e2e/an-address-breaks-only-before-its-at.spec.ts
   - front-end/src/utils/historyReaders/
   - front-end/src/utils/personChoice.ts
-verified: 2026-11-13
+verified: 2026-11-16
 sources:
   - E40/F01/S03
   - E40/F01/S04
@@ -41,6 +41,7 @@ sources:
   - T277
   - T316
   - T315
+  - T335
 ---
 
 # Reading the market's history
@@ -80,6 +81,7 @@ An organizer reads it to investigate a problem or a mistake, which is why it liv
    - A placement made while results are published says so after its day (T316): "e2e@example.com freed B7, leaving Ana Rivera with no table on Nov 19, 2026, after results were published: their vendor page had shown B7", a move naming the table left the same way, and an assignment of an empty seat or a swap ending ", after results were published".
    - A vendor's money reads in the market's currency ([payments](../../implementation/data/payments.md)), each opening to its amount, how it was paid, the day and the note, or the amount owed, in the Payment tab's words:
      - "… seated Ana Rivera again on May 8, 2099, taking back the $0.00 set when the table was freed"
+     - "… allocated tables, leaving Ana Rivera without a table on May 8, 2099, so the $0.00 admin@example.com set for that day was dropped", and the owed day's migration's, naming no one, "Ana Rivera held no table on May 8, 2099, so the $0.00 admin@example.com set for that day was dropped"
      - "e2e@example.com recorded a payment of $50.00 from Ana Rivera"
      - "… set what Ana Rivera owes on May 8, 2099 to $0.00" and "… back to the calculated price"
      - "… recorded a refund of $15.00 to Ana Rivera"

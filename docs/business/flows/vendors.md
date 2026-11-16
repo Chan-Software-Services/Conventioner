@@ -10,7 +10,7 @@ describes:
   - front-end/src/components/DiscordRoleReport.vue
   - front-end/src/components/ExportVendorsForm.vue
   - front-end/src/components/ColumnChecklist.vue
-verified: 2026-11-10
+verified: 2026-11-16
 sources:
   - wayfinding/claims-and-room/04
   - wayfinding/rejection-visibility/02
