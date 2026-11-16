@@ -152,7 +152,8 @@ The read serves none of them, nor the person's `user_role` ([the market's action
 
 ## Reads keyed by market
 
-Every read keyed by the market open, but for the review's own queue and the market's history, which keep their own guards, is one keyed read, [`useServerRead`](../../../front-end/src/utils/useServerRead.ts), so the screens on it never show one market's answer, or its refusal, under another market's name.
+The reads listed below are each one keyed read, [`useServerRead`](../../../front-end/src/utils/useServerRead.ts), so the screens on it never show one market's answer, or its refusal, under another market's name, and a new read keyed by the market goes on it.
+Some reads keyed by the market are still read by hand, outside it: the review's own queue (`ApplicationMonitor.vue`) and the market's history (`MarketHistory.vue`, through `useHistoryPages`), which keep their own guards on an overtaken read, and the assignment statistics on Tables (`ResultSummary.vue`), the permission history (`MarketPermissions.vue`), the Discord roles (`MarketDiscordCard.vue`), the application form (`MarketFormTab.vue`), the door code (`DoorCodeScreen.vue`) and the import's form (`CsvImportView.vue`).
 On the reads below it replaced each one's own data, loading flag and error, read on a watch of the market id and checked by hand; the rule, and the test that holds it, are [one market, from the server](../conventions/one-market-from-the-server.md#the-rules)'s, and the decision is [ADR 0036](../../adr/0036-a-market-keyed-read-is-one-keyed-read.md).
 The reads on it, each keyed by the market id unless it says otherwise:
 

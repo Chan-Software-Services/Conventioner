@@ -22,7 +22,7 @@ The market store could read failed and stale at once, and nothing on screen said
 
 ## Decision
 
-**Every read keyed by the market open is one keyed read, `useServerRead(key, fetcher, options)` in [`front-end/src/utils/useServerRead.ts`](../../front-end/src/utils/useServerRead.ts), whose state is one phase union moved only by a pure table, `readStep(state, event)`; the review's own queue and the market's history keep the guards they have.**
+**A read keyed by the market open is one keyed read, `useServerRead(key, fetcher, options)` in [`front-end/src/utils/useServerRead.ts`](../../front-end/src/utils/useServerRead.ts), whose state is one phase union moved only by a pure table, `readStep(state, event)`: the reads on it, and those still made by hand (the review's own queue and the market's history among them), are listed in [reads keyed by market](../implementation/modules/market-store.md#reads-keyed-by-market), and every new read goes on it.**
 
 - The phases are `empty`, `loading`, `ready`, `refreshing`, `failed` and `refresh_failed`, and `missing` for a read that names it (the market store's 404 and 403); the data, the failure's sentence and when the data was read sit beside the phase, and the screen reads its loading words, its error and its freshness from them, never from flags of its own.
 - **The key moves the state in the same tick**: the key is watched synchronously, and a new key empties the state in one step, so nothing reads the last market's data under the new one, not even for a frame.
