@@ -70,6 +70,7 @@ On the Google Form path the essential questions are the answers each import read
    It saves at once, stays off through later form edits, and the applicant form then asks no ranking (bugs 29 and 45).
    It saves only that choice, with the questions as last saved: a question still being written stays unsaved and unsent, and is saved only by "Save Form", through its checks (T271).
    "Ask this" under "Anything else you need from us?" stops asking for a vendor's request the same way.
+   A question left unasked says so on its card ("This market does not ask applicants for what else a vendor needs."), at the size and in the grey of every other card's description (`theFormTabInSteps.test.ts`).
 5. "Ask this" and "Save Form" save one at a time, the whole form each, every save carrying the revision the one before it answered (T420).
    A tick shows at once, and one made while a save is out, a tick's or Save Form's, waits for its answer and is then sent with every choice ticked since, so two quick ticks are both kept and neither is refused as the market changed by the other.
    While any save of the form is out, "Save Form" is disabled and reads "Saving...", a step without it says "Saving..." where "Saved" shows, and "Saved" shows for 2 seconds once the last save waiting lands.

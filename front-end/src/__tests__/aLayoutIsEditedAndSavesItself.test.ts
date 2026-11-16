@@ -433,7 +433,7 @@ describe('the save queue', () => {
     expect(server.sent.at(-1)!.layout.tables[0].xMm).toBe(5200);
   });
 
-  it('surfaces a stale refusal, keeps the working copy and sends nothing more', async () => {
+  it('surfaces a stale refusal, keeps the working copy, and a change sends nothing more', async () => {
     const { editor, server } = anEditor([table('a', 'gold', 1)]);
     server.revision = 9; // another tab saved
     editor.moveTables(['a'], 100, 0);

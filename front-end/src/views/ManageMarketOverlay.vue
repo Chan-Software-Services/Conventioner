@@ -1,4 +1,14 @@
 <script setup lang="ts">
+/**
+ * Manage market: who has access and their roles, who may do what, the market's history, its name,
+ * its ownership and its deletion.
+ *
+ * Each write belongs to the opening it was sent from (T411): its handle (`useDialogSubmit`) is keyed
+ * by the market Manage market is open on, or by what its confirmation was opened with, and handed to
+ * the dialog that sent it, so the shell holds that dialog while it writes and a second press sends
+ * nothing. An answer that lands after Manage market was closed, or opened on another market, leaves
+ * the dialog the person is in alone, and so does a re-read of the market it had been open on.
+ */
 import { computed, nextTick, ref, watch } from 'vue';
 import {
   type Market,
@@ -10,6 +20,7 @@ import {
 import { api, getApiErrorMessage, getApiErrorStatus, isMarketChanged } from '@/utils/api';
 import { parseMarketFromApi } from '@/utils/market';
 import { useMarketStore } from '@/stores/market';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import AppDialog from '@/components/AppDialog.vue';
 import EmailAddress from '@/components/EmailAddress.vue';
 import HandOnMarketDialog from '@/components/HandOnMarketDialog.vue';
@@ -52,11 +63,8 @@ const renameValue = ref('');
 const showAddUserForm = ref(false);
 const newUserEmail = ref('');
 const newUserRole = ref<MarketRole>(MarketRole.Editor);
-const addUserError = ref('');
 const addUserErrorLine = ref<HTMLElement | null>(null);
-const renameError = ref('');
 const deleteConfirming = ref(false);
-const deleteError = ref('');
 /** Counts the changes this dialog has made, so its History reads them as they land. */
 const changesMade = ref(0);
 /** A refused change to one person's role, said beneath their row. */
@@ -72,8 +80,6 @@ const removing = ref<{
   loses: string;
   keeps: string;
 } | null>(null);
-const removeError = ref('');
-const removeBusy = ref(false);
 const peopleList = ref<HTMLElement | null>(null);
 /** What finds in "Users with access", for as long as the dialog is open: never in the address. */
 const peopleWords = ref('');
@@ -91,53 +97,115 @@ const roleChange = ref<
     } & ReturnType<typeof marketRoleChange>)
   | null
 >(null);
-const roleChangeBusy = ref(false);
 /** Whether "Transfer ownership" is asking whom to, until it lands or is cancelled (T283). */
 const handingOn = ref(false);
-const handOnBusy = ref(false);
-const handOnError = ref('');
+
+/** The market Manage market is open on, or nothing while it is closed: each change is an opening. */
+const openOn = () => (props.manageOpen ? (props.market?.id ?? null) : null);
+/** What a confirmation over Manage market is open on: nothing once Manage market closes. */
+const over =
+  <T,>(asked: () => T) =>
+  () =>
+    props.manageOpen ? asked() : null;
+
+/** Add user's and Rename's writes, each said beside its row; Manage market holds while either sends. */
+const addUser = useDialogSubmit({
+  opening: openOn,
+  failure: 'The person was not added.',
+  says: 'self',
+});
+const rename = useDialogSubmit({
+  opening: openOn,
+  failure: 'The name was not changed.',
+  says: 'self',
+});
+const { sentence: addUserSentence } = addUser;
+const { sentence: renameSentence } = rename;
+/** Each confirmation's write, keyed by what it was opened on. */
+const removal = useDialogSubmit({
+  opening: over(() => removing.value),
+  failure: 'The person was not removed.',
+});
+/** A refused role change is said beneath its row, and the confirmation closes on it. */
+const roleChanging = useDialogSubmit({
+  opening: over(() => roleChange.value),
+  failure: 'The role was not changed.',
+  says: 'self',
+});
+const handOn = useDialogSubmit({
+  opening: over(() => (handingOn.value ? props.market?.id : null)),
+  failure: 'Ownership was not transferred.',
+});
+const deletion = useDialogSubmit({
+  opening: over(() => (deleteConfirming.value ? props.market?.id : null)),
+  failure: 'The market was not deleted.',
+});
+/**
+ * Counts Manage market's openings, so a read of the market it was open on that lands after it was
+ * closed, or opened on another market, writes nothing into the one the person is in. Kept for the
+ * reads no write sends, and so no submission holds: the one as it opens and the one after a
+ * permissions change (`market-changed`). A write's own re-read goes by its submission's
+ * `isCurrent`, keyed by the same opening.
+ */
+let openings = 0;
+
+/** Whether Manage market is still in the opening it is in now. */
+function thisOpening(): () => boolean {
+  const at = openings;
+  return () => at === openings;
+}
 
 watch(
   () => [props.manageOpen, props.market] as const,
   async ([open, market]) => {
+    openings++;
     if (open && market) {
       marketData.value = market;
       renameValue.value = market.name;
       showAddUserForm.value = false;
       deleteConfirming.value = false;
       removing.value = null;
-      removeError.value = '';
       peopleWords.value = '';
       roleChange.value = null;
       handingOn.value = false;
-      handOnError.value = '';
       errorMessage.value = '';
       userError.value = null;
-      addUserError.value = '';
-      renameError.value = '';
-      deleteError.value = '';
       await fetchMarket();
     } else {
+      loading.value = false;
       marketData.value = null;
     }
   },
   { immediate: true },
 );
 
-async function fetchMarket(showLoading = true) {
-  if (!marketData.value) return;
+/**
+ * Reads the market Manage market is open on into its copy. `isCurrent` says whether the opening the
+ * read is for still stands, a write's from its submission: once Manage market has moved on, nothing
+ * is read, and a read that lands after it writes nothing.
+ */
+async function fetchMarket(showLoading = true, isCurrent = thisOpening()) {
+  if (!marketData.value || !isCurrent()) return;
   if (showLoading) loading.value = true;
   errorMessage.value = '';
   try {
     const response = await api.get(`/markets/${encodeURIComponent(marketData.value.id)}`);
+    if (!isCurrent()) return;
     const m = response.data.market;
     marketData.value = parseMarketFromApi(m);
     renameValue.value = marketData.value.name;
   } catch (err) {
+    if (!isCurrent()) return;
     errorMessage.value = getApiErrorMessage(err, 'The market could not be loaded.');
   } finally {
-    if (showLoading) loading.value = false;
+    if (showLoading && isCurrent()) loading.value = false;
   }
+}
+
+/** The open market, re-read when it is this one: a write here may change what it shows. */
+function refreshTheOpenMarket(marketId: string | undefined) {
+  const store = useMarketStore();
+  if (marketId && store.marketId === marketId) void store.refresh();
 }
 
 /**
@@ -215,40 +283,58 @@ const canReadHistory = computed(() => mayTake(marketData.value, MarketAction.Rea
 /** Why this person may not rename the market, the Market Setup row's answer, or null. */
 const renameRefusal = computed(() => actionRefusal(marketData.value, MarketAction.ChangeSetup));
 
+/**
+ * The person is added and who has access read again, both inside the write, so a second press
+ * sends nothing until the list shows them. A refusal is said under the form.
+ */
 async function handleAddUser() {
   const email = newUserEmail.value.trim();
-  if (!marketData.value || !email) return;
-  addUserError.value = '';
-  try {
-    await api.post(`/markets/${encodeURIComponent(marketData.value.id)}/roles`, {
-      user_email: email,
-      role: newUserRole.value,
-    });
-    // The form stays open with an empty field: adding two people in a row is the case E20/F01/S02
-    // is named after, and this dialog is the same shape.
-    newUserEmail.value = '';
-    newUserRole.value = MarketRole.Editor;
-    // A later change ends a refusal's words, as choosing a role or removing someone does, and adding
-    // back the person it named must not bring them back with the row.
-    userError.value = null;
-    changesMade.value++;
-    await fetchMarket(false);
-    // Someone just added takes their place by role and address, which may be past the fold.
-    findPerson(email);
-  } catch (err) {
-    addUserError.value = getApiErrorMessage(err, 'The person was not added.');
-    // The market changed under the add (ADR 0024): who has access is re-read, the sentence kept.
-    if (isMarketChanged(err)) await fetchMarket(false);
-    // It stands under the form, which a short window's body can hold at its very foot.
-    await nextTick();
-    addUserErrorLine.value?.scrollIntoView?.({ block: 'nearest' });
-  }
+  const market = marketData.value;
+  if (!market || !email) return;
+  const role = newUserRole.value;
+  await addUser.submit(
+    async (isCurrent) => {
+      try {
+        await api.post(`/markets/${encodeURIComponent(market.id)}/roles`, {
+          user_email: email,
+          role,
+        });
+      } catch (err) {
+        // The market changed under the add (ADR 0024): who has access is re-read, the sentence kept.
+        if (isMarketChanged(err)) await fetchMarket(false, isCurrent);
+        throw err;
+      }
+      await fetchMarket(false, isCurrent);
+    },
+    {
+      done: () => {
+        // The form stays open with an empty field: adding two people in a row is the case
+        // E20/F01/S02 is named after, and this dialog is the same shape.
+        newUserEmail.value = '';
+        newUserRole.value = MarketRole.Editor;
+        // A later change ends a refusal's words, as choosing a role or removing someone does, and
+        // adding back the person it named must not bring them back with the row.
+        userError.value = null;
+        changesMade.value++;
+        // Someone just added takes their place by role and address, which may be past the fold.
+        findPerson(email);
+      },
+    },
+  );
 }
+
+// A refused add stands under the form, which a short window's body can hold at its very foot.
+watch(
+  addUserSentence,
+  (sentence) => {
+    if (sentence) addUserErrorLine.value?.scrollIntoView?.({ block: 'nearest' });
+  },
+  { flush: 'post' },
+);
 
 /** Remove asks first (E38/F15/S01): it took the role in one click, from a filled red button. */
 function askToRemove(person: PersonWithAccess) {
   if (!marketData.value) return;
-  removeError.value = '';
   removing.value = {
     userId: person.userId,
     ...marketRemoval(person, marketData.value.name, organizationLabel.value),
@@ -257,9 +343,7 @@ function askToRemove(person: PersonWithAccess) {
 
 /** Cancel, Escape and the backdrop change nothing; the shell gives focus back to the row's Remove. */
 function cancelRemove() {
-  if (removeBusy.value) return;
   removing.value = null;
-  removeError.value = '';
 }
 
 /**
@@ -271,32 +355,37 @@ function cancelRemove() {
  */
 async function handleRemoveUser() {
   const target = removing.value;
-  if (!marketData.value || !target || removeBusy.value) return;
-  removeError.value = '';
-  userError.value = null;
-  removeBusy.value = true;
-  try {
-    await api.delete(
-      `/markets/${encodeURIComponent(marketData.value.id)}/roles/${encodeURIComponent(target.userId)}`,
-    );
-  } catch (err) {
-    if (getApiErrorStatus(err) !== 404) {
-      removeError.value = getApiErrorMessage(err, 'The person was not removed.');
-      // The market changed under the removal (ADR 0024): the list behind is re-read, the
-      // confirmation kept open with the sentence.
-      if (isMarketChanged(err)) await fetchMarket(false);
-      removeBusy.value = false;
-      return;
-    }
-  }
-  // Busy until the confirmation closes: during the re-read its Remove would send a second removal.
-  changesMade.value++;
-  await fetchMarket(false);
-  removing.value = null;
-  removeBusy.value = false;
-  // Once the confirmation has closed and the page behind it is no longer inert.
-  await nextTick();
-  peopleList.value?.focus();
+  const market = marketData.value;
+  if (!market || !target) return;
+  await removal.submit(
+    async (isCurrent) => {
+      userError.value = null;
+      try {
+        await api.delete(
+          `/markets/${encodeURIComponent(market.id)}/roles/${encodeURIComponent(target.userId)}`,
+        );
+      } catch (err) {
+        if (getApiErrorStatus(err) !== 404) {
+          // The market changed under the removal (ADR 0024): the list behind is re-read, the
+          // confirmation kept open with the sentence.
+          if (isMarketChanged(err)) await fetchMarket(false, isCurrent);
+          throw err;
+        }
+      }
+      // Held until the confirmation closes: during the re-read its Remove would send a second
+      // removal.
+      await fetchMarket(false, isCurrent);
+    },
+    {
+      done: async () => {
+        changesMade.value++;
+        removing.value = null;
+        // Once the confirmation has closed and the page behind it is no longer inert.
+        await nextTick();
+        peopleList.value?.focus();
+      },
+    },
+  );
 }
 
 /**
@@ -326,7 +415,7 @@ function askToChangeRole(person: PersonWithAccess, select: HTMLSelectElement) {
 
 /** Cancel, Escape and the backdrop change nothing; the shell gives focus back to the select. */
 function cancelRoleChange() {
-  if (!roleChange.value || roleChangeBusy.value) return;
+  if (!roleChange.value) return;
   roleChange.value.select.value = roleChange.value.held;
   roleChange.value = null;
 }
@@ -341,31 +430,43 @@ function cancelRoleChange() {
  */
 async function handleRoleChange() {
   const target = roleChange.value;
-  if (!marketData.value || !target || roleChangeBusy.value) return;
-  roleChangeBusy.value = true;
-  try {
-    await api.put(
-      `/markets/${encodeURIComponent(marketData.value.id)}/roles/${encodeURIComponent(target.userId)}`,
-      { role: target.role },
-    );
-    changesMade.value++;
-  } catch (err) {
-    target.select.value = target.held;
-    userError.value = {
-      userId: target.userId,
-      email: target.email,
-      message: getApiErrorMessage(err, 'The role was not changed.'),
-    };
-  }
-  // Busy until the confirmation closes: during the re-read its confirm would send a second write.
-  await fetchMarket(false);
-  roleChange.value = null;
-  roleChangeBusy.value = false;
-  // Once the confirmation has closed and the page behind it is no longer inert.
-  await nextTick();
-  if (target.select.isConnected) return;
-  peopleList.value?.focus();
-  if (userError.value && !refusalWithNoRow.value) findPerson(target.email);
+  const market = marketData.value;
+  if (!market || !target) return;
+  await roleChanging.submit(
+    async (isCurrent) => {
+      // A refusal closes the confirmation as a change does: what the write answers is its refusal's
+      // sentence, or nothing.
+      let refusal = '';
+      try {
+        await api.put(
+          `/markets/${encodeURIComponent(market.id)}/roles/${encodeURIComponent(target.userId)}`,
+          { role: target.role },
+        );
+      } catch (err) {
+        refusal = getApiErrorMessage(err, 'The role was not changed.');
+      }
+      // Held until the confirmation closes: during the re-read its confirm would send a second
+      // write.
+      await fetchMarket(false, isCurrent);
+      return refusal;
+    },
+    {
+      done: async (refusal) => {
+        if (refusal) {
+          target.select.value = target.held;
+          userError.value = { userId: target.userId, email: target.email, message: refusal };
+        } else {
+          changesMade.value++;
+        }
+        roleChange.value = null;
+        // Once the confirmation has closed and the page behind it is no longer inert.
+        await nextTick();
+        if (target.select.isConnected) return;
+        peopleList.value?.focus();
+        if (userError.value && !refusalWithNoRow.value) findPerson(target.email);
+      },
+    },
+  );
 }
 
 /**
@@ -374,41 +475,48 @@ async function handleRoleChange() {
  */
 const renameAllowed = computed(() => marketData.value?.phase === MarketPhase.Draft);
 
+/**
+ * The name is written and the market read again, both inside the write. A refusal is said in the
+ * server's own words: a clash is about the public web address, not only the exact name.
+ */
 async function handleRename() {
-  if (!marketData.value || renameValue.value.trim() === marketData.value.name) return;
-  renameError.value = '';
-  try {
-    // Its own write, carrying only the name - not the whole market (E21/F03/S04).
-    await api.put(`/markets/${encodeURIComponent(marketData.value.id)}/name`, {
-      name: renameValue.value.trim(),
-    });
-    changesMade.value++;
-    await fetchMarket(false);
-    // The open market may be this one: a rename is a write, so the store re-reads it.
-    const store = useMarketStore();
-    if (store.marketId === marketData.value?.id) void store.refresh();
-  } catch (err) {
-    // The server's own words: a clash is about the public web address, not only the exact name.
-    renameError.value = getApiErrorMessage(err, 'The name was not changed.');
-    // The market changed under the rename (ADR 0024), most likely leaving draft: it is read again,
-    // so the field gives way to why the name is fixed, the sentence kept.
-    if (isMarketChanged(err)) await fetchMarket(false);
-  }
+  const market = marketData.value;
+  const name = renameValue.value.trim();
+  if (!market || name === market.name) return;
+  await rename.submit(
+    async (isCurrent) => {
+      try {
+        // Its own write, carrying only the name - not the whole market (E21/F03/S04).
+        await api.put(`/markets/${encodeURIComponent(market.id)}/name`, { name });
+      } catch (err) {
+        // The market changed under the rename (ADR 0024), most likely leaving draft: it is read
+        // again, so the field gives way to why the name is fixed, the sentence kept.
+        if (isMarketChanged(err)) await fetchMarket(false, isCurrent);
+        throw err;
+      }
+      await fetchMarket(false, isCurrent);
+    },
+    {
+      done: () => {
+        changesMade.value++;
+        // The open market may be this one: a rename is a write, so the store re-reads it.
+        refreshTheOpenMarket(market.id);
+      },
+      // Renamed after Manage market moved on: the open market still takes the new name.
+      late: (answer) => {
+        if (answer.ok) refreshTheOpenMarket(market.id);
+      },
+    },
+  );
 }
 
-/** Said of a transfer of ownership refused without a sentence of its own. */
-const OWNERSHIP_NOT_TRANSFERRED = 'Ownership was not transferred.';
-
 function askToHandOn() {
-  handOnError.value = '';
   handingOn.value = true;
 }
 
 /** Cancel, Escape and the backdrop change nothing; the shell gives focus back to "Transfer ownership". */
 function cancelHandOn() {
-  if (handOnBusy.value) return;
   handingOn.value = false;
-  handOnError.value = '';
 }
 
 /**
@@ -420,27 +528,34 @@ function cancelHandOn() {
  * since the read the choice came from is stale: they then drop out of the choices.
  */
 async function handleHandOn(userId: string) {
-  if (!marketData.value || handOnBusy.value) return;
-  handOnError.value = '';
-  handOnBusy.value = true;
-  try {
-    await api.post(`/markets/${encodeURIComponent(marketData.value.id)}/hand-on`, { userId });
-  } catch (err) {
-    handOnError.value = getApiErrorMessage(err, OWNERSHIP_NOT_TRANSFERRED);
-    if (isMarketChanged(err) || getApiErrorStatus(err) === 400) await fetchMarket(false);
-    handOnBusy.value = false;
-    return;
-  }
-  changesMade.value++;
-  await fetchMarket(false);
-  // The open market may be this one: what this person may do on it changed with their role.
-  const store = useMarketStore();
-  if (store.marketId === marketData.value?.id) void store.refresh();
-  handingOn.value = false;
-  handOnBusy.value = false;
-  // Once the dialog has closed and the page behind it is no longer inert.
-  await nextTick();
-  peopleList.value?.focus();
+  const market = marketData.value;
+  if (!market) return;
+  await handOn.submit(
+    async (isCurrent) => {
+      try {
+        await api.post(`/markets/${encodeURIComponent(market.id)}/hand-on`, { userId });
+      } catch (err) {
+        if (isMarketChanged(err) || getApiErrorStatus(err) === 400)
+          await fetchMarket(false, isCurrent);
+        throw err;
+      }
+      await fetchMarket(false, isCurrent);
+    },
+    {
+      done: async () => {
+        changesMade.value++;
+        // The open market may be this one: what this person may do on it changed with their role.
+        refreshTheOpenMarket(market.id);
+        handingOn.value = false;
+        // Once the dialog has closed and the page behind it is no longer inert.
+        await nextTick();
+        peopleList.value?.focus();
+      },
+      late: (answer) => {
+        if (answer.ok) refreshTheOpenMarket(market.id);
+      },
+    },
+  );
 }
 
 /**
@@ -453,21 +568,20 @@ const publicPages = computed(() => {
   return 'Its vendor page will stop working for anyone who has the link.';
 });
 
+/** One delete however often it is pressed; the confirmation holds until it answers. */
 async function handleDeleteConfirm() {
-  if (!marketData.value) return;
-  deleteError.value = '';
-  try {
-    await api.delete(`/markets/${encodeURIComponent(marketData.value.id)}`);
-    deleteConfirming.value = false;
-    emit('manageClose');
-  } catch (err) {
-    deleteError.value = getApiErrorMessage(err, 'The market was not deleted.');
-  }
+  const market = marketData.value;
+  if (!market) return;
+  await deletion.submit(() => api.delete(`/markets/${encodeURIComponent(market.id)}`), {
+    done: () => {
+      deleteConfirming.value = false;
+      emit('manageClose');
+    },
+  });
 }
 
 function handleDeleteCancel() {
   deleteConfirming.value = false;
-  deleteError.value = '';
 }
 
 /** A change to who may do what answers the table, which this copy of the market then shows. */
@@ -493,7 +607,7 @@ async function openAddUser() {
 async function closeAddUser() {
   showAddUserForm.value = false;
   newUserEmail.value = '';
-  addUserError.value = '';
+  addUser.edit();
   await nextTick();
   addUserButton.value?.focus();
 }
@@ -507,6 +621,7 @@ async function closeAddUser() {
     size="wide"
     scroll="body"
     :error="errorMessage"
+    :submission="[addUser, rename]"
     @close="emit('manageClose')"
   >
     <p v-if="marketData" class="market-name">{{ marketData.name }}</p>
@@ -676,12 +791,12 @@ async function closeAddUser() {
             </button>
           </div>
           <p
-            v-if="addUserError"
+            v-if="addUserSentence"
             ref="addUserErrorLine"
             class="form-error"
             data-testid="manage-market-add-user-error"
           >
-            {{ addUserError }}
+            {{ addUserSentence }}
           </p>
         </form>
       </section>
@@ -751,8 +866,8 @@ async function closeAddUser() {
             Save
           </button>
         </form>
-        <p v-if="renameError" class="form-error" data-testid="manage-market-rename-error">
-          {{ renameError }}
+        <p v-if="renameSentence" class="form-error" data-testid="manage-market-rename-error">
+          {{ renameSentence }}
         </p>
       </section>
 
@@ -798,8 +913,7 @@ async function closeAddUser() {
     testid="manage-market-remove"
     destructive
     confirm-label="Remove"
-    :confirm-disabled="removeBusy"
-    :error="removeError"
+    :submission="removal"
     @close="cancelRemove"
     @submit="handleRemoveUser"
   >
@@ -820,7 +934,7 @@ async function closeAddUser() {
     testid="manage-market-role-change"
     scroll="body"
     confirm-label="Change role"
-    :confirm-disabled="roleChangeBusy"
+    :submission="roleChanging"
     @close="cancelRoleChange"
     @submit="handleRoleChange"
   >
@@ -840,11 +954,10 @@ async function closeAddUser() {
     :market-name="marketData?.name ?? 'this market'"
     :people="accessList"
     :organization-name="organizationLabel"
-    :busy="handOnBusy"
-    :error="handOnError"
+    :submission="handOn"
     @close="cancelHandOn"
     @confirm="handleHandOn"
-    @choose="handOnError = ''"
+    @choose="handOn.edit()"
   />
 
   <!--
@@ -858,7 +971,7 @@ async function closeAddUser() {
     testid="manage-market-delete"
     destructive
     confirm-label="Delete market"
-    :error="deleteError"
+    :submission="deletion"
     @close="handleDeleteCancel"
     @submit="handleDeleteConfirm"
   >

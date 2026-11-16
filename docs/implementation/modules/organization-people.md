@@ -12,11 +12,13 @@ describes:
   - front-end/src/utils/api.ts#isOrganizationChanged
   - front-end/src/__tests__/aChangeThatMetAnotherInAnOrganization.test.ts
   - front-end/src/__tests__/changingAPlaceAsksFirst.test.ts
+  - front-end/src/__tests__/manageOrganizationPeople.test.ts
   - front-end/e2e/an-organizations-people-change-place.spec.ts
 verified: 2026-11-16
 sources:
   - T283
   - T315
+  - T411
 ---
 
 # The organization's people
@@ -83,6 +85,8 @@ Nothing is retried on the server: the person decides again on what is true.
 So two transfers judged on one read land once, a transfer to someone removed meanwhile is the 409, and an "Add member" judged before the owner transferred ownership to that same person is refused, where it used to land the new owner in `members` and leave an organization that did not parse.
 A place change of someone removed meanwhile is that 409 too, since only a removal reads the person gone as done.
 **Manage organization** ([`ManageOrgOverlay.vue`](../../../front-end/src/views/ManageOrgOverlay.vue)) tells the 409 apart by its code (`isOrganizationChanged` in [`api.ts`](../../../front-end/src/utils/api.ts)), shows its sentence where the control's refusal shows, under the add form or in the Remove or place-change confirmation, which stays open, and reads the organization again behind it, the list behind and the History with it.
+**Each write belongs to the opening it was sent from** (T411, [dialogs](../conventions/dialogs.md)): Add admin, Add member and Rename write through `useDialogSubmit` handles opened on the organization Manage organization is open on, said beside their rows, and Remove and the place change through handles opened on what each confirmation asks, each holding its dialog through its write and the re-read after it.
+Each re-read runs inside its write and asks the write's submission whether its opening still stands (`isCurrent`), so a re-read for an opening that has gone is not sent, and one that lands after it writes nothing; a change that lands after its opening has gone still tells the list behind, by `changed`.
 
 **The account's copy is written after the organization's write, best effort**, `$addToSet` on an add and on a transfer's new owner and `$pull` on a removal, and nothing on a place change, since no check reads it ([users and email](../data/users-and-email.md)).
 
@@ -110,7 +114,8 @@ A 404, someone removed meanwhile, is read as done, with focus on the list their 
 [`test_an_organizations_people_stay_one_map.py`](../../../back-end/tests/test_an_organizations_people_stay_one_map.py): the planner's two transfer-cut probes, asserting the organization reads as it was or with its ownership transferred; a cut at each write a transfer makes (the organization's, the account copy's, the history's), from a member and from an admin, on both shapes, leaving one owner; and the property, 50 seeds of 40 changes each (add admin, add member, change place, remove, transfer) by random requesters on random targets among six accounts, a third with a second change landing between the first's read and its write, asserting after each one owner, every value a place, the lists an exact mirror, the document parsing, and, for a change nothing met, the map `next_people` answers, in its order.
 [`test_an_organizations_people_on_the_server.py`](../../../back-end/tests/real_mongo/test_an_organizations_people_on_the_server.py), in [the real-MongoDB suite](../testing/real-mongo-suite.md): the races on a server, on both shapes.
 [`aChangeThatMetAnotherInAnOrganization.test.ts`](../../../front-end/src/__tests__/aChangeThatMetAnotherInAnOrganization.test.ts): the 409's sentence under each add form and in the Remove confirmation, with the re-read behind it, and no re-read for any other refusal.
-[`changingAPlaceAsksFirst.test.ts`](../../../front-end/src/__tests__/changingAPlaceAsksFirst.test.ts): the two buttons for the owner alone, the confirmations' words, Cancel and Escape, the request, the re-read and where focus goes, the 404 read as done, the 409 and any other refusal in the confirmation, and one request however often the confirm is pressed.
+[`changingAPlaceAsksFirst.test.ts`](../../../front-end/src/__tests__/changingAPlaceAsksFirst.test.ts): the two buttons for the owner alone, the confirmations' words, Cancel and Escape, the request, the re-read and where focus goes, the 404 read as done, the 409 and any other refusal in the confirmation, and one request however often the confirm is pressed, the confirmation held by the shell while it writes, and a refusal not in the next change.
+[`manageOrganizationPeople.test.ts`](../../../front-end/src/__tests__/manageOrganizationPeople.test.ts): Add admin, Add member and Rename held and sent once, and their answers and a stale re-read kept out of Manage organization opened on another organization.
 [`an-organizations-people-change-place.spec.ts`](../../../front-end/e2e/an-organizations-people-change-place.spec.ts): the owner makes an admin a member and back on the stack, each asked first, with the buttons' names, the rows, the focus, the History and a reload, at a desk and on a phone.
 
 ## Why

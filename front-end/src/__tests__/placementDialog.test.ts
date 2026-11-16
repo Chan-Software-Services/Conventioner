@@ -6,8 +6,9 @@
  * because that is how a vendor is silently unassigned on market day.
  */
 import { describe, expect, it } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import PlacementDialog from '@/components/PlacementDialog.vue';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import {
   FULL_TABLE,
   HALF_TABLE_LEFT,
@@ -33,10 +34,15 @@ function applicant(email: string, overrides: Partial<PlaceableVendor> = {}): Pla
   };
 }
 
+/** The page's write of a change, which the dialog is handed. */
+const aSubmission = () =>
+  useDialogSubmit({ opening: () => true, failure: 'That change could not be saved.' });
+
 function dialog(props: Record<string, unknown> = {}) {
   return mount(PlacementDialog, {
     props: {
       open: true,
+      submission: aSubmission(),
       mode: 'place',
       date: DATE,
       dateLabel: 'Saturday, August 1, 2026',
@@ -822,5 +828,56 @@ describe('a change after results are published', () => {
   ])('says nothing of it before results, %s', (_name, props) => {
     expect(note(dialog(props)).exists()).toBe(false);
     expect(note(dialog({ ...props, resultsOut: false })).exists()).toBe(false);
+  });
+});
+
+describe('while its change is sent (T411)', () => {
+  const occupied = {
+    mode: 'occupied',
+    seat: FULL_TABLE,
+    occupantEmail: 'nadia@ember.test',
+    vendors: [applicant('nadia@ember.test'), applicant('lee@ember.test')],
+    seated: [NADIA_AT_FRONT_1],
+  };
+
+  it('closes by nothing, and offers no other change, until the answer lands', async () => {
+    const submission = aSubmission();
+    let land!: () => void;
+    const wrapper = dialog({ ...occupied, submission });
+    void submission.submit(() => new Promise<void>((resolve) => (land = resolve)));
+    await flushPromises();
+
+    for (const testid of [
+      'placement-dialog-cancel',
+      'placement-dialog-free',
+      'placement-dialog-view-vendor',
+      'placement-dialog-swap',
+    ]) {
+      expect(wrapper.get(`[data-testid="${testid}"]`).attributes(), testid).toHaveProperty(
+        'disabled',
+      );
+    }
+    await wrapper.get('[data-testid="placement-dialog-close-button"]').trigger('click');
+    await wrapper.get('[data-testid="placement-dialog-background"]').trigger('click');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+    expect(wrapper.emitted('close')).toBeUndefined();
+
+    land();
+    await flushPromises();
+    expect(wrapper.get('[data-testid="placement-dialog-cancel"]').attributes()).not.toHaveProperty(
+      'disabled',
+    );
+  });
+
+  it("says the change's refusal in its error line", async () => {
+    const submission = aSubmission();
+    const wrapper = dialog({ submission });
+    await submission.submit(() => Promise.reject(new Error('refused')), {
+      refused: () => 'Front 1 is taken.',
+    });
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="placement-dialog-error"]').text()).toBe('Front 1 is taken.');
   });
 });

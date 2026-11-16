@@ -134,6 +134,15 @@ watch(
 
 async function infoSaved(saved: Application): Promise<void> {
   updating.value = false;
+  await infoRefreshed(saved);
+}
+
+/**
+ * An update saved after the dialog it was sent from was closed (the drawer moved to another vendor
+ * meanwhile, T411): the screen is told and the answers read again, as on a save, but what is open
+ * now stays open.
+ */
+async function infoRefreshed(saved: Application): Promise<void> {
   emit('infoUpdated', saved);
   // The market read says what the last Discord check now shows of this vendor ("Check again" once
   // their username changed), so it is read again too where a check has run (E46/F01/S05).
@@ -351,6 +360,7 @@ watch(
                 :vendor="discordVendor"
                 :canAnswer="answersDiscord"
                 @confirmed="infoSaved"
+                @refreshed="infoRefreshed"
               />
             </div>
             <div class="detail-section">
@@ -446,6 +456,7 @@ watch(
     :priceReads="market?.priceReads ?? []"
     @close="updating = false"
     @saved="infoSaved"
+    @refreshed="infoRefreshed"
   />
 </template>
 

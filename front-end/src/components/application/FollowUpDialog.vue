@@ -10,11 +10,15 @@
  * adds to it, and never writes over it unseen. The box is offered only to someone the table lets
  * write vendor notes: a chosen Viewer marks the follow-up without it (E38/F07/S03).
  * Nothing is sent to the owner.
+ *
+ * Its parent writes the follow-up, so its parent makes the write's `submission` and hands it down
+ * (T411): the shell holds the dialog while it is out and says its refusal.
  */
 import { computed, ref, watch } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
 import SearchPicker from '@/components/SearchPicker.vue';
 import { PEOPLE_CAP, findsPerson, personOption } from '@/utils/personChoice';
+import type { DialogSubmission } from '@/utils/useDialogSubmit';
 
 const props = defineProps<{
   open: boolean;
@@ -27,7 +31,8 @@ const props = defineProps<{
   note?: string;
   /** Whether this person may write the vendor's notes: the box is offered only then. */
   writesNotes: boolean;
-  error?: string;
+  /** The parent's write of the follow-up, keyed by this dialog's opening. */
+  submission: DialogSubmission;
 }>();
 
 /** What is needed rides along only when the box was offered. */
@@ -59,7 +64,7 @@ watch(
     testid="follow-up"
     confirm-label="Mark for follow-up"
     :confirm-disabled="!owner"
-    :error="error"
+    :submission="submission"
     @close="emit('close')"
     @submit="
       emit(

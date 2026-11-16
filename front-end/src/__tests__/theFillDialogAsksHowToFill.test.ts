@@ -1,14 +1,16 @@
 /**
  * Fill an area's dialog (T257 ticket 09): the section, the type, how many, the rows' direction
  * and the aisle, with "Fill what is in view"; Fill hands the choice on, and while the placement
- * runs the dialog holds, saying "Placing…". With the sentences the keys' corners are said in.
+ * runs the dialog holds by the editor's submission (T411), saying "Placing…". With the sentences
+ * the keys' corners are said in.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import type { SectionObject } from '@/assets/types/datatypes';
 import LayoutFillDialog from '@/components/layout/LayoutFillDialog.vue';
 import { saidCorner, saidCornerTaken } from '@/components/layout/layoutAnnouncements';
 import { FILL_CHOICES_AT_FIRST, fillChoices, type FillArea } from '@/components/layout/layoutFill';
+import { useDialogSubmit, type DialogSubmission } from '@/utils/useDialogSubmit';
 
 const SECTIONS = [
   { id: 'gold', name: 'Gold row', location: null, tier: null, count: 0 },
@@ -21,12 +23,16 @@ const TYPES = [
 const BOX: FillArea = { kind: 'box', box: { left: 0, top: 0, right: 12_000, bottom: 8000 } };
 
 let wrapper: VueWrapper;
+/** The editor's write of the fill, which the dialog is handed. */
+let submission: DialogSubmission;
 
 function open(props: Record<string, unknown> = {}) {
+  submission = useDialogSubmit({ opening: () => true, failure: 'Nothing was placed.' });
   wrapper = mount(LayoutFillDialog, {
     attachTo: document.body,
     props: {
       open: true,
+      submission,
       sections: SECTIONS,
       tableTypes: TYPES,
       area: BOX,
@@ -168,7 +174,9 @@ describe("Fill an area's dialog", () => {
   });
 
   it('while the placement runs, Fill says "Placing…" and nothing closes or changes the dialog', async () => {
-    open({ busy: true });
+    open();
+    void submission.submit(() => new Promise(() => {}));
+    await flushPromises();
 
     const fill = at('layout-fill-submit-button');
     expect(fill.text()).toBe('Placing…');
@@ -178,17 +186,24 @@ describe("Fill an area's dialog", () => {
     expect((at('layout-fill-count').element as HTMLInputElement).disabled).toBe(true);
     await submit();
     await at('layout-fill-background').trigger('click');
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 
     expect(wrapper.emitted('fill')).toBeUndefined();
     expect(wrapper.emitted('close')).toBeUndefined();
   });
 
-  it("writes the server's refusal into the dialog", () => {
-    open({ error: 'An area is drawn with 3 to 50 corners that do not cross.' });
+  it("writes the server's refusal into the dialog, until a choice changes", async () => {
+    open();
+    await submission.submit(() => Promise.reject(new Error('refused')), {
+      refused: () => 'An area is drawn with 3 to 50 corners that do not cross.',
+    });
+    await flushPromises();
 
     expect(at('layout-fill-error').text()).toBe(
       'An area is drawn with 3 to 50 corners that do not cross.',
     );
+    await at('layout-fill-count').setValue('12');
+    expect(wrapper.find('[data-testid="layout-fill-error"]').exists()).toBe(false);
   });
 
   it('keeps what was chosen for the next area', async () => {

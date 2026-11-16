@@ -7,7 +7,9 @@
  * types the market lacks by name, and "Save these types" saves them under a name.
  *
  * Every change is a write of the whole list (`save`), which the page sends once the layout's own
- * pending change has landed; the dialogs hold through it and write its refusal into themselves.
+ * pending change has landed. Each dialog's write is its own `useDialogSubmit` (T411), keyed by that
+ * dialog's opening, so the shell holds the dialog through the write, and a change to the list
+ * through its re-read too, and says its refusal there, and an answer never reaches another dialog or a later opening.
  *
  * Past Draft (`settled`) the market's types are settled, as its tables' seats are: "Add a type",
  * "Use saved types" and each type's menu are disabled, and "Save these types", which files a copy
@@ -17,6 +19,8 @@ import { computed, nextTick, ref, useId } from 'vue';
 import type { TableTypeObject } from '@/assets/types/datatypes';
 import RowMenu from '@/components/RowMenu.vue';
 import { getApiErrorMessage } from '@/utils/api';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
+import { Refusal } from '@/utils/useSubmit';
 import { plural } from '@/utils/utils';
 import LayoutSavedTypesDialog from './LayoutSavedTypesDialog.vue';
 import LayoutSaveTypesDialog from './LayoutSaveTypesDialog.vue';
@@ -55,7 +59,7 @@ const props = withDefaults(
 const titleId = useId();
 const FAILED = 'The table types could not be saved. Try again in a moment.';
 
-/** What a write that did not land says: the layout's own save's sentence, or the server's. */
+/** What a removal that did not land says: the layout's own save's sentence, or the server's. */
 const failure = (err: unknown) =>
   err instanceof LayoutNotSaved ? err.message : getApiErrorMessage(err, FAILED);
 
@@ -69,8 +73,20 @@ const card = ref<HTMLElement | null>(null);
 const editing = ref<TableTypeObject | null | undefined>(undefined);
 const usingSaved = ref(false);
 const savingAs = ref(false);
-const busy = ref(false);
-const dialogError = ref('');
+
+/** Each dialog's write, opened on what that dialog is open on. */
+const typeSubmission = useDialogSubmit({ opening: () => editing.value, failure: FAILED });
+const savedSubmission = useDialogSubmit({ opening: () => usingSaved.value, failure: FAILED });
+const saveAsSubmission = useDialogSubmit({ opening: () => savingAs.value, failure: FAILED });
+/** A removal is out: no row's menu and no dialog opens meanwhile. */
+const removing = ref(false);
+const writing = computed(
+  () =>
+    removing.value ||
+    typeSubmission.sending.value ||
+    savedSubmission.sending.value ||
+    saveAsSubmission.sending.value,
+);
 
 /** The types but the one edited, whose names it may not take. */
 const others = computed(() => props.tableTypes.filter((type) => type.id !== editing.value?.id));
@@ -78,7 +94,6 @@ const full = computed(() => props.tableTypes.length >= MAX_TABLE_TYPES);
 
 function open(dialog: 'add' | 'saved' | 'save', type?: TableTypeObject) {
   said.value = null;
-  dialogError.value = '';
   if (dialog === 'add') editing.value = type ?? null;
   else if (dialog === 'saved') usingSaved.value = true;
   else savingAs.value = true;
@@ -90,19 +105,20 @@ function closeAll() {
   savingAs.value = false;
 }
 
-/** Run a write with the dialog held; closed when it lands, its refusal written in when not. */
-async function held(write: () => Promise<void>, done: string) {
-  busy.value = true;
-  dialogError.value = '';
-  try {
-    await write();
-    closeAll();
-    said.value = { words: done, refused: false };
-  } catch (err: unknown) {
-    dialogError.value = failure(err);
-  } finally {
-    busy.value = false;
-  }
+/**
+ * Send a dialog's write through its submission: the dialog closes when it lands, with what was
+ * done said on the card, and says its refusal when not. A change to the list holds through the
+ * page's re-read of the types, so its dialog does too.
+ */
+function held(submission: typeof typeSubmission, write: () => Promise<void>, done: string) {
+  void submission.submit(write, {
+    done: () => {
+      closeAll();
+      said.value = { words: done, refused: false };
+    },
+    // The layout's own save's sentence; any other refusal is said by the submission.
+    refused: (err) => (err instanceof LayoutNotSaved ? err.message : undefined),
+  });
 }
 
 function submitType(type: TableTypeObject) {
@@ -110,25 +126,31 @@ function submitType(type: TableTypeObject) {
   const next = known
     ? props.tableTypes.map((one) => (one.id === type.id ? type : one))
     : [...props.tableTypes, type];
-  void held(() => props.save(next), known ? `Saved ${type.name}.` : `Added ${type.name}.`);
+  held(
+    typeSubmission,
+    () => props.save(next),
+    known ? `Saved ${type.name}.` : `Added ${type.name}.`,
+  );
 }
 
 function useSaved(saved: SavedTypes) {
   const next = withSavedTypes(props.tableTypes, saved);
   const added = next.length - props.tableTypes.length;
-  if (!added) {
-    dialogError.value = `This market has every type ${saved.name} holds.`;
-    return;
-  }
-  if (next.length > MAX_TABLE_TYPES) {
-    dialogError.value = `A market keeps at most ${MAX_TABLE_TYPES} table types.`;
-    return;
-  }
-  void held(() => props.save(next), `Added ${plural(added, 'type', 'types')} from ${saved.name}.`);
+  held(
+    savedSubmission,
+    async () => {
+      if (!added) throw new Refusal(`This market has every type ${saved.name} holds.`);
+      if (next.length > MAX_TABLE_TYPES) {
+        throw new Refusal(`A market keeps at most ${MAX_TABLE_TYPES} table types.`);
+      }
+      await props.save(next);
+    },
+    `Added ${plural(added, 'type', 'types')} from ${saved.name}.`,
+  );
 }
 
 function saveUnderName(name: string) {
-  void held(() => props.saveAs(name), `Saved these types as ${name}.`);
+  held(saveAsSubmission, () => props.saveAs(name), `Saved these types as ${name}.`);
 }
 
 /** Remove a type no table uses; of one that tables use, say how many and keep it. The focus,
@@ -140,14 +162,14 @@ async function remove(type: TableTypeObject) {
     said.value = { words: typeInUse(count, type.name), refused: true };
     return;
   }
-  busy.value = true;
+  removing.value = true;
   try {
     await props.save(props.tableTypes.filter((one) => one.id !== type.id));
     said.value = { words: `Removed ${type.name}.`, refused: false };
   } catch (err: unknown) {
     said.value = { words: failure(err), refused: true };
   } finally {
-    busy.value = false;
+    removing.value = false;
   }
   // Once the buttons can be pressed again.
   await nextTick();
@@ -201,7 +223,7 @@ function onMenu(type: TableTypeObject, item: string) {
       <button
         type="button"
         class="btn btn--secondary btn--compact"
-        :disabled="busy || full || settled"
+        :disabled="writing || full || settled"
         data-testid="layout-types-add"
         @click="open('add')"
       >
@@ -211,7 +233,7 @@ function onMenu(type: TableTypeObject, item: string) {
         <button
           type="button"
           class="btn btn--secondary btn--compact"
-          :disabled="busy || full || settled"
+          :disabled="writing || full || settled"
           data-testid="layout-types-use-saved"
           @click="open('saved')"
         >
@@ -220,7 +242,7 @@ function onMenu(type: TableTypeObject, item: string) {
         <button
           type="button"
           class="btn btn--secondary btn--compact"
-          :disabled="busy || !tableTypes.length"
+          :disabled="writing || !tableTypes.length"
           data-testid="layout-types-save"
           @click="open('save')"
         >
@@ -233,24 +255,21 @@ function onMenu(type: TableTypeObject, item: string) {
       :open="editing !== undefined"
       :type="editing ?? null"
       :others="others"
-      :busy="busy"
-      :error="dialogError"
+      :submission="typeSubmission"
       @close="closeAll"
       @submit="submitType"
     />
     <LayoutSavedTypesDialog
       :open="usingSaved"
       :list="listSaved"
-      :busy="busy"
-      :error="dialogError"
+      :submission="savedSubmission"
       @close="closeAll"
       @use="useSaved"
     />
     <LayoutSaveTypesDialog
       :open="savingAs"
       :count="tableTypes.length"
-      :busy="busy"
-      :error="dialogError"
+      :submission="saveAsSubmission"
       @close="closeAll"
       @save="saveUnderName"
     />
