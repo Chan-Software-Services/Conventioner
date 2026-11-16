@@ -17,7 +17,7 @@ status: accepted
 
 An organizer runs a market's review with chosen reviewers, each dealt a share of the open applications ([ADR 0020](0020-an-application-is-dealt-to-one-reviewer.md)).
 Where an application has got to in that review is several fields on [the application document](../implementation/data/application-document.md): its status, the verdict's giver, time and reason, the follow-up's owner, what an undo returns it to, who added it, its mark for the deal and the reviewer whose share it is.
-T277 found eight writers of those fields across seven modules, each with its own conditions, and every way an application fell out of every share came from a writer that moved one field and forgot what another writer kept with it.
+T277 found eight writers of those fields, each with its own conditions, and traced every way an application fell out of every share to that: several fields, many writers, and no owner.
 A rule about how an application moves between states could be kept only if every move were written in one place.
 
 ## Decision
