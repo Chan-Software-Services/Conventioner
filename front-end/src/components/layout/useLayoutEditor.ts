@@ -15,9 +15,11 @@
  * a save is refused: a change saves 600 ms after the last one, one write at a time, a change made
  * while a write is out sent when its answer is in, naming the revision that answer gave, and a
  * change still waiting when the page goes is sent on the way out. A write that fails or is refused
- * keeps the working copy and says so, for Retry or the next change to send again; one refused as
- * stale (another tab or person saved this layout in between) sends nothing more until the page
- * reloads the layout, since every later write would be refused the same way.
+ * keeps the working copy and says so, for Retry or the next change to send again; after one refused
+ * as stale (another tab or person saved this layout in between) no change and no closing tab sends
+ * it, since every later write would be refused the same way, though a flush (leaving the page in
+ * the app, a phase move, a write of the layout's own fields) still sends it and is refused again,
+ * until the page reloads the layout.
  *
  * A gesture (a drag, a turn by the handle) is one change: between `begin` and `end` a command
  * replaces the gesture's last one, drawn at once, and only `end` makes the step and the save.
