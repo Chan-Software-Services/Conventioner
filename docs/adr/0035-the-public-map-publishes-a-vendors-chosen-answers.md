@@ -30,7 +30,7 @@ The answers are free text: a business name can be an email address, a website ca
 - **The allowlist is three answers the organizer points at**: a public name, a website and an Instagram handle, each the key of a `text` question of the form, or none.
   Never the email address, the full name, the preferred name, another answer, a note, a payment or a status.
   The read builds its answer key by key in [`back-end/public_map.py`](../../back-end/public_map.py), never from a model's dump, so a field added to a stored model never reaches it.
-- **A vendor with no public name is a taken table with no details**: the read answers their seat with each answer null, and nothing stands in for the name.
+- **A vendor with no public name is a taken table with no details**: the read answers their seat with a null name, and the page shows only that a vendor is at the table, whatever else they answered; nothing stands in for the name.
 - **What is published is cleaned on the server**, in one pure module, [`back-end/public_answers.py`](../../back-end/public_answers.py): a name that reads as an email address anywhere in it is withheld and a name is cut at 80 characters; a website is published only as an `http` or `https` address with a host, at most 200 characters, a bare domain given `https://`; an Instagram answer only as a handle of 1 to 30 letters, digits, dots and underscores.
   Anything else is null, never shown raw.
 - **The map reads the answers as the organizer reads them**: an organizer's update of an answer stands in its place (`effective_answers`), so a misspelt name is fixed in the vendor drawer.
