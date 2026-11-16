@@ -20,7 +20,7 @@ describes:
   - back-end/tests/test_a_deleted_market_takes_its_floorplan_images.py
   - back-end/tests/test_every_read_of_a_target_asks_for_a_live_one.py
   - back-end/tests/real_mongo/test_a_deletion_leaves_a_tombstone.py
-verified: 2026-11-13
+verified: 2026-11-16
 sources:
   - E20/F04/S01
   - bug/47
@@ -70,7 +70,7 @@ So a market being deleted answers 404 to its owner, to its vendors and on its ve
 
 **Nothing writes to one.**
 Every write to a market or an organization document holds it live: `write_market` does for every judged market write and answers a market being deleted as `MarketNotFoundError` ([the market write](market-write.md)); the dealing lease's writes and the essential offering's freeze hold it in their own filters; the organization's rename, its default table and every people write hold it and answer 404 when it matched nothing.
-[`back-end/tests/test_every_read_of_a_target_asks_for_a_live_one.py`](../../../back-end/tests/test_every_read_of_a_target_asks_for_a_live_one.py) walks the back end by AST, as the market write's guard does, and fails any call with a filter on either collection that does not pass it through `live` (written in the call, or as a name the same function assigned from it), unless its site is listed with a permanent reason: the deletions themselves, which read their target whatever its state; the refused write's second read; the unique address and name checks, since a target being deleted still holds its address and its name until it is gone; the reads of `deletion_decided` and `organization_taken`, which ask whether a deletion is decided; a deal letting go of its lease; a deleted account leaving every organization; the boot checks, the seeder, and the migrations.
+[`back-end/tests/test_every_read_of_a_target_asks_for_a_live_one.py`](../../../back-end/tests/test_every_read_of_a_target_asks_for_a_live_one.py) walks the back end by AST, as the market write's guard does, and fails any call with a filter on either collection that does not pass it through `live` (written in the call, or as a name the same function assigned from it), unless its site is listed with a permanent reason: the deletions themselves, which read their target whatever its state; the refused write's second read; a creation taking back its own new market; the unique address check, since a market being deleted still holds its address until it is gone; the reads of `deletion_decided` and `organization_taken`, which ask whether a deletion is decided; a deal letting go of its lease; an account's deletion, which keeps an account that owns a target being deleted, and a deleted account leaving every organization; the boot checks, the seeder, and the migrations.
 A call on a receiver the walk cannot name is not judged: `market_by_slug` in [`back-end/market_documents.py`](../../../back-end/market_documents.py) asks for a live market all the same, and `market_id_at_slug` does not, since it only names a cookie the browser holds, so that it can be cleared.
 
 **A record written beside a market as it is deleted is taken back.**
