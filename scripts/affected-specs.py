@@ -24,8 +24,8 @@ run's shard results (`--map` and `--results` name files instead). A spec is chos
    rule places: not a spec, not imported by one at the head or the base, in no spec's modules and
    no endpoint's files (a stylesheet Vite inlines, a module no endpoint ran, a config no rule
    reads); docs, Markdown, the suites that are not E2E and their configs, the lint and format
-   configs, the scripts that deal, repeat or measure the specs, and the deploy's own `vercel.json`
-   files (`DRIVES_NO_SPEC`) choose nothing.
+   configs, the scripts that deal, repeat or measure the specs, and the back end's deploy config,
+   `back-end/vercel.json` (`DRIVES_NO_SPEC`), choose nothing.
 
 The chosen specs run by score, the shorter first on a tie, until the next would pass the cap
 (`--minutes`, 30 by default) of CI minutes, by the map's run's shard results, then
@@ -75,13 +75,13 @@ RUN_EVERY_SPEC = re.compile(
 
 # The changed files that drive no spec, wherever the map places them: the docs, Markdown, the
 # suites the E2E run does not run and their configs, the lint and format configs, the scripts that
-# deal, repeat or measure the specs (or that nothing runs), and the deploy's own config, none of
-# which the stack or a page reads.
+# deal, repeat or measure the specs (or that nothing runs), and the back end's deploy config, none
+# of which the stack or a page reads.
 DRIVES_NO_SPEC = re.compile(
     r"^(?:docs/|back-end/tests/|front-end/src/__tests__/|scripts/tests/)|\.md$|\.test\.ts$"
     r"|^front-end/src/.*\.(?:test|spec)\.tsx?$"
     r"|^front-end/(?:vitest\.config\.ts|tsconfig\.vitest\.json|eslint\.config\.ts"
-    r"|stylelint\.config\.js|\.prettierrc\.json|\.prettierignore|\.editorconfig|vercel\.json"
+    r"|stylelint\.config\.js|\.prettierrc\.json|\.prettierignore|\.editorconfig"
     r"|scripts/(?:e2e-shard-timings\.json|e2e-shards\.ts|e2e-repeat\.ts|bundle-budget\.ts"
     r"|no-eval\.ts|brand-icons\.ts))$"
     r"|^back-end/(?:pytest\.ini|vercel\.json)$"

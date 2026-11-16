@@ -322,6 +322,8 @@ class TestAFileNoRulePlaces:
             "back-end/utils/new_module.py",
             "back-end/docker-entrypoint.sh",
             "front-end/tsconfig.app.json",
+            # `vite.config.ts` reads its headers, at every config load, the dev server's included.
+            "front-end/vercel.json",
         ],
     )
     def test_it_chooses_every_spec_and_scores_nothing(self, repo, path):
@@ -359,8 +361,7 @@ class TestAFileNoRulePlaces:
             "front-end/scripts/bundle-budget.ts",
             "front-end/scripts/no-eval.ts",
             "front-end/scripts/brand-icons.ts",
-            # The deploy's own config, which the stack does not read.
-            "front-end/vercel.json",
+            # The back end's deploy config, which the stack does not read.
             "back-end/vercel.json",
         ],
     )
