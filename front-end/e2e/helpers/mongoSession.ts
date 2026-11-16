@@ -72,6 +72,7 @@ class Session {
     this.child.stderr.on('data', (text: string) => {
       this.complaints = (this.complaints + text).slice(-2000);
     });
+    this.child.stdin.on('error', (error) => this.end(`mongosh's stdin failed: ${error.message}`));
     this.child.on('error', (error) => this.end(`docker could not be run: ${error.message}`));
     this.child.on('exit', (code, signal) =>
       this.end(`mongosh ended (${signal ?? `exit ${code}`}): ${this.complaints.trim()}`),
@@ -119,7 +120,7 @@ class Session {
   }
 
   private end(why: string): void {
-    this.ended = true;
+    this.stop();
     this.waiting?.({ ok: false, error: why });
   }
 }

@@ -50,9 +50,11 @@ function sessionThread(): Thread {
   worker.unref();
   replies.unref();
   const started: Thread = { worker, signal, replies };
-  worker.on('exit', () => {
+  const drop = () => {
     if (thread === started) thread = null;
-  });
+  };
+  worker.on('error', drop);
+  worker.on('exit', drop);
   thread = started;
   return started;
 }
@@ -64,7 +66,11 @@ function sessionThread(): Thread {
 export async function startMongoSession(): Promise<void> {
   const { worker } = sessionThread();
   const answer = await new Promise<Answer>((resolve) => {
+    const died = (error: unknown) =>
+      resolve({ ok: false, error: `the Mongo session thread died: ${String(error)}` });
     worker.once('message', resolve);
+    worker.once('error', died);
+    worker.once('exit', (code) => died(`exit ${code}`));
     worker.postMessage({ kind: 'start' } satisfies Request);
   });
   if (!answer.ok) throw new Error(`mongoEval: ${answer.error}`);
