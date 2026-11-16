@@ -2,9 +2,9 @@
  * The E2E suite runs its Mongo scripts in one long-lived mongosh session, each loaded as a file,
  * where `mongosh --eval` once started a fresh mongosh for every one. A spec reads what the script
  * printed and the value of its last expression, as `--eval` printed it, so the file must keep that
- * value, keep each script's names to itself, and the session's answers must be told apart. An
- * idle session must wait for its next script without polling, in the very container whose CPU a
- * loaded runner starves.
+ * value, keep each script's `const`s and `let`s to itself, and the session's answers must be told
+ * apart. An idle session must wait for its next script without polling, in the very container whose
+ * CPU a loaded runner starves.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { closeSync, constants, mkdtempSync, openSync, rmSync, writeSync } from 'node:fs';

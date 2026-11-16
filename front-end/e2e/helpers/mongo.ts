@@ -12,8 +12,8 @@ import type { Request, SessionData } from './mongoSession';
 const MONGO_URI = 'mongodb://admin:secret@localhost:27017/conventioner?authSource=admin';
 
 /**
- * How long mongosh may take to start in the container and connect, once a process: a loaded CI
- * runner has taken longer than a script's whole budget for it.
+ * How long mongosh may take to start in the container and connect, each time a session starts: a
+ * loaded CI runner has taken longer than a script's whole budget for it.
  */
 const START_MS = 60_000;
 
@@ -85,13 +85,13 @@ export async function startMongoSession(): Promise<void> {
  *
  * For what no endpoint does: an applicant's submission before there was a submit endpoint, a
  * document shaped as an older build wrote it, a token only an email carries. The one place the
- * suite reaches into Mongo, so the container and the address are said once - they were copied
+ * suite runs mongosh, so the container and the address are said once - they were copied
  * into fifteen files.
  *
  * Every script of a process runs in one mongosh in the stack's Mongo container (`mongoSession.ts`),
  * started again only when a script runs out its time or mongosh ends, where each once started a
  * mongosh of its own: a loaded CI runner took more than a script's 10 seconds to start one, and
- * failed a spec on it. A script keeps its names to itself.
+ * failed a spec on it. A script's `const`s and `let`s are its own.
  * It blocks until the script has run, as the suite's callers expect.
  */
 export function mongoEval(script: string): string {
