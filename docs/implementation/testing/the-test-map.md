@@ -16,7 +16,7 @@ sources:
 **The test map says, for each E2E spec file, which app modules its pages loaded and which back-end endpoints it called, and for each endpoint, which back-end functions it runs.**
 It is made to tell which E2E specs a change reaches, without running all of them, which `scripts/affected-specs.py` does for a builder ([choosing a builder's specs](#choosing-a-builders-specs)).
 CI's `test-map` job writes it on every push to `dev`, as the artifact `test-map` of that run, kept 90 days ([CI and the gate](ci-and-the-gate.md)).
-A pull request's run records nothing and has no `test-map` job.
+A pull request's run records nothing and has no `test-map` job; when a shard's test failed, its `e2e` job reads the newest map, to [name a miss of the selection](#where-a-miss-shows).
 
 ## What it holds
 
@@ -32,7 +32,9 @@ One JSON file, `test-map.json`:
     }
   },
   "endpoints": {
-    "GET /markets/<market_id>": { "back-end/api/markets.py": ["get_market_for_user"] }
+    "GET /markets/<market_id>": {
+      "back-end/api/markets.py": ["get_market_for_user"]
+    }
   }
 }
 ```
@@ -108,7 +110,28 @@ With no map at all (no `gh`, offline with none downloaded, or no push to `dev` h
 The selection is a builder's, never a gate's or a merge's: CI's full run on every pull request runs every spec, so a spec the cap or the map left out still runs before anything merges, and its failure comes back as a red check.
 A spec can fail through the data its setup seeds, where no map of the code a spec runs tells it from the other specs seeding the same way; that is the miss the full run is for.
 
-`scripts/tests/test_affected_specs.py` holds each rule, the order and the cap, the download and the fallback to a small repository, a fixture map and fixture shard reports.
+`scripts/tests/test_affected_specs.py` holds each rule, the order and the cap, the download and the fallback, and [the audit](#where-a-miss-shows), to a small repository, a fixture map and fixture shard reports.
+
+## Where a miss shows
+
+On a pull request, once the shards have run, CI's `e2e` job audits the selection:
+
+```sh
+python3 scripts/affected-specs.py audit --github --base HEAD^1 --head HEAD <each shard's results.json>
+```
+
+It takes the pull request's diff from its merge commit's first parent, as `e2e-repeat` does, and the newest map and its minutes as a builder's run does, and names each spec with a failed test in the shards' reports as one of three:
+
+- **ran**: the selection runs it, so a builder's `--run` would have shown the failure;
+- **left to CI**: the selection chose it, but past the cap;
+- **missed**: the selection did not choose it at all.
+
+A test failed when it failed every attempt, or passed only on a retry, which under `failOnFlakyTests` fails its shard too.
+The job's summary lists the specs under "E2E selection audit", a chosen one with its rank and reasons, or says "no failure to audit" when no test failed.
+Each miss is also a warning annotation on the run, "A miss of the selection", naming the spec and the changed files, so a map that drifted, or a dependency the rules cannot see, shows on the first pull request it costs.
+With no map, the selection is rule 1 alone: a failure outside it is listed as missed, with no annotation, since there is no map to have drifted.
+
+The audit never fails the job: it exits 0 whatever it finds, or when it cannot audit at all, saying why in the summary, and its steps continue on error, so `e2e` passes or fails on its shards alone.
 
 ## Building one by hand
 

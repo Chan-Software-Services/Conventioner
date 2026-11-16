@@ -543,15 +543,20 @@ def selection_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--minutes", type=float, default=CAP_MINUTES, help="the cap, in CI minutes")
 
 
+# The outcomes of a test that fail a shard.
+FAILED = ("unexpected", "flaky")
+
+
 def failed_specs(reports: Sequence[Path]) -> Tuple[Set[str], List[str]]:
     """The spec files with a failed test in Playwright JSON reports, and the reports it could not
-    read. A test failed when its outcome is `unexpected`: a flaky one passed on a retry."""
+    read. A test failed when its outcome is `unexpected`, or `flaky`: it passed only on a retry,
+    which under CI fails its shard (`failOnFlakyTests`)."""
     failed: Set[str] = set()
     unread: List[str] = []
 
     def walk(suite: dict, file: str) -> None:
         for spec in suite.get("specs", []):
-            if any(test.get("status") == "unexpected" for test in spec.get("tests", [])):
+            if any(test.get("status") in FAILED for test in spec.get("tests", [])):
                 failed.add(spec.get("file") or file)
         for inner in suite.get("suites", []):
             walk(inner, inner.get("file") or file)
@@ -635,7 +640,8 @@ def audit(argv: Sequence[str]) -> int:
             print(f"affected-specs audit: {line}")
             summary.append(f"{line[0].upper()}{line[1:]}.")
         else:
-            chosen = Chosen(args, drop_absent=False)
+            # As `--run` ranks them: a spec the map names that the head lacks takes no minutes.
+            chosen = Chosen(args, drop_absent=True)
             found = verdicts(failed, chosen)
             changed = sorted(chosen.changes)
             print(describe_source(chosen.source))
