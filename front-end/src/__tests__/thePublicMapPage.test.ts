@@ -115,7 +115,7 @@ const ANSWER: PublicMapAnswer = {
       half: 'whole',
       name: 'Kiln & Co',
       website: 'https://www.kiln-and-co.example/shop',
-      instagram: 'kilnandco',
+      instagram: 'example_kiln',
     },
     {
       date: TODAY,
@@ -131,7 +131,7 @@ const ANSWER: PublicMapAnswer = {
       half: 'left',
       name: 'Acme Ceramics',
       website: null,
-      instagram: 'acme_ceramics',
+      instagram: 'example_acme',
     },
     { date: TODAY, tableId: 'g3', half: 'whole', name: null, website: null, instagram: null },
     {
@@ -233,9 +233,9 @@ describe('the links a seat is given', () => {
   });
 
   it("are Instagram's profile of the handle, read as @handle", () => {
-    expect(instagramLink('acme_ceramics')).toEqual({
-      href: 'https://www.instagram.com/acme_ceramics/',
-      text: '@acme_ceramics',
+    expect(instagramLink('example_acme')).toEqual({
+      href: 'https://www.instagram.com/example_acme/',
+      text: '@example_acme',
     });
   });
 
@@ -294,7 +294,7 @@ describe("a table's card", () => {
     expect(card?.halves).toEqual([
       {
         side: 'whole',
-        seat: expect.objectContaining({ name: 'Kiln & Co', instagram: 'kilnandco' }),
+        seat: expect.objectContaining({ name: 'Kiln & Co', instagram: 'example_kiln' }),
       },
     ]);
   });
@@ -458,7 +458,7 @@ describe('pressing a table', () => {
     const links = card().findAll('a');
     expect(links.map((a) => [a.text(), a.attributes('href')])).toEqual([
       ['www.kiln-and-co.example', 'https://www.kiln-and-co.example/shop'],
-      ['@kilnandco', 'https://www.instagram.com/kilnandco/'],
+      ['@example_kiln', 'https://www.instagram.com/example_kiln/'],
     ]);
     for (const link of links) {
       expect(link.attributes('target')).toBe('_blank');
@@ -475,7 +475,7 @@ describe('pressing a table', () => {
       const halves = card().findAll('[data-testid="public-map-card-half"]');
       expect(halves.map((h) => h.get('h3').text())).toEqual(['Left half', 'Right half']);
       expect(halves[0].text()).toContain('Acme Ceramics');
-      expect(halves[0].get('a').text()).toBe('@acme_ceramics');
+      expect(halves[0].get('a').text()).toBe('@example_acme');
       expect(halves[1].text()).toContain('Bee Candles');
       expect(halves[1].find('a').exists()).toBe(false);
     }

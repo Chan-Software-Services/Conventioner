@@ -80,7 +80,7 @@ test('an Admin chooses the three questions and turns the map on, and anyone may 
     expect.objectContaining({
       name: 'Ember Ceramics',
       website: 'https://ember-ceramics.test',
-      instagram: 'ember_ceramics',
+      instagram: 'example_ember',
     }),
   );
 

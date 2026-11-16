@@ -22,8 +22,8 @@ export interface SeededMarketDayMap {
   /** Today and tomorrow, as calendar days where the browser is. */
   today: string;
   tomorrow: string;
-  east: typeof EAST_HALL;
-  west: typeof WEST_HALL;
+  north: typeof NORTH_WING;
+  south: typeof SOUTH_WING;
   /** Every vendor seeded, in the order of `DAY_MAP_VENDORS`. */
   vendors: DayMapVendor[];
   /** The vendor checked in today; nobody is, `inAssignment`. */
@@ -32,8 +32,8 @@ export interface SeededMarketDayMap {
   personalMarkers: string[];
 }
 
-export const EAST_HALL = { id: 'loc-east-hall', name: 'East Hall' };
-export const WEST_HALL = { id: 'loc-west-hall', name: 'West Hall' };
+export const NORTH_WING = { id: 'loc-north-wing', name: 'North Wing' };
+export const SOUTH_WING = { id: 'loc-south-wing', name: 'South Wing' };
 export const AISLE_A = { id: 'sec-aisle-a', name: 'Aisle A' };
 export const AISLE_B = { id: 'sec-aisle-b', name: 'Aisle B' };
 
@@ -58,12 +58,12 @@ export interface DayMapVendor {
 const FULL = 'Full Table';
 const LEFT = 'Half Table (Left)';
 const RIGHT = 'Half Table (Right)';
-const east = (code: string, tableChoice = FULL) => ({
+const north = (code: string, tableChoice = FULL) => ({
   tableCode: code,
   tableChoice,
-  location: EAST_HALL.name,
+  location: NORTH_WING.name,
 });
-const west = (code: string) => ({ tableCode: code, tableChoice: FULL, location: WEST_HALL.name });
+const south = (code: string) => ({ tableCode: code, tableChoice: FULL, location: SOUTH_WING.name });
 
 export const DAY_MAP_VENDORS: DayMapVendor[] = [
   {
@@ -73,10 +73,10 @@ export const DAY_MAP_VENDORS: DayMapVendor[] = [
     answers: {
       businessName: 'Ember Ceramics',
       website: 'ember-ceramics.test',
-      instagram: '@ember_ceramics',
+      instagram: '@example_ember',
     },
-    today: east('Aisle A 1'),
-    tomorrow: east('Aisle A 2'),
+    today: north('Aisle A 1'),
+    tomorrow: north('Aisle A 2'),
   },
   {
     email: 'ines@kiln-and-co.test',
@@ -85,24 +85,24 @@ export const DAY_MAP_VENDORS: DayMapVendor[] = [
     answers: {
       businessName: 'Kiln & Co',
       website: 'https://kiln-and-co.test/shop',
-      instagram: 'https://www.instagram.com/kilnandco/',
+      instagram: 'https://www.instagram.com/example_kiln/',
     },
-    today: east('Aisle A 2'),
+    today: north('Aisle A 2'),
   },
   {
     email: 'tamsin@loom-house.test',
     fullName: 'Tamsinfixture Achebe',
     preferredName: 'Tamsinpref',
-    answers: { businessName: 'Loom House', instagram: 'loomhouse' },
-    today: east('Aisle A 3', LEFT),
-    tomorrow: east('Aisle A 1'),
+    answers: { businessName: 'Loom House', instagram: 'example_loom' },
+    today: north('Aisle A 3', LEFT),
+    tomorrow: north('Aisle A 1'),
   },
   {
     email: 'oskar@paper-moth.test',
     fullName: 'Oskarfixture Lindqvist',
     preferredName: 'Oskarpref',
     answers: { businessName: 'Paper Moth Press', website: 'paper-moth.test' },
-    today: east('Aisle A 3', RIGHT),
+    today: north('Aisle A 3', RIGHT),
   },
   {
     // Answered none of the three: a taken table with no details.
@@ -110,7 +110,7 @@ export const DAY_MAP_VENDORS: DayMapVendor[] = [
     fullName: 'Priyafixture Raman',
     preferredName: 'Priyapref',
     answers: {},
-    today: west('Aisle B 1'),
+    today: south('Aisle B 1'),
   },
   {
     // An email address as the business name, which the map withholds.
@@ -120,9 +120,9 @@ export const DAY_MAP_VENDORS: DayMapVendor[] = [
     answers: {
       businessName: 'orders@sweet-thread.test',
       website: 'sweet-thread.test',
-      instagram: '@sweet_thread',
+      instagram: '@example_thread',
     },
-    today: west('Aisle B 2'),
+    today: south('Aisle B 2'),
   },
   {
     email: 'femi@salt-and-sage.test',
@@ -131,9 +131,9 @@ export const DAY_MAP_VENDORS: DayMapVendor[] = [
     answers: {
       businessName: 'Salt & Sage',
       website: 'https://salt-and-sage.test',
-      instagram: 'salt_and_sage',
+      instagram: 'example_sage',
     },
-    today: west('Aisle B 3'),
+    today: south('Aisle B 3'),
   },
 ];
 
@@ -153,8 +153,8 @@ async function ok(response: Awaited<ReturnType<APIRequestContext['get']>>, what:
  * public page and Attendance's map, starts from it.
  *
  * A `form` market in Market Days, today its first date and tomorrow its second, with two locations
- * each laid out in Draft: East Hall, its Aisle A of four tables in a row and a stage turned 30
- * degrees, and West Hall, its Aisle B of three. Seven vendors hold today's seats, two of them
+ * each laid out in Draft: North Wing, its Aisle A of four tables in a row and a stage turned 30
+ * degrees, and South Wing, its Aisle B of three. Seven vendors hold today's seats, two of them
  * sharing Aisle A 3 as its left and right halves, and one checked in at the door; tomorrow two
  * vendors are seated. The form's three short text questions, a business name, a website and an
  * Instagram handle, are answered by most vendors, one answering none and one giving an email
@@ -192,10 +192,10 @@ export async function seedMarketDayMap(
         priority: [],
         marketDates: [{ date: today }, { date: tomorrow }],
         tiers: [gold],
-        locations: [EAST_HALL, WEST_HALL],
+        locations: [NORTH_WING, SOUTH_WING],
         sections: [
-          { ...AISLE_A, location: EAST_HALL, tier: gold, count: 4 },
-          { ...AISLE_B, location: WEST_HALL, tier: gold, count: 3 },
+          { ...AISLE_A, location: NORTH_WING, tier: gold, count: 4 },
+          { ...AISLE_B, location: SOUTH_WING, tier: gold, count: 3 },
         ],
         assignmentOptions: {
           maxAssignmentsPerVendor: null,
@@ -226,17 +226,17 @@ export async function seedMarketDayMap(
     }));
   if (!options.inAssignment) {
     await startLayout(request, baseURL, marketId, {
-      locationId: EAST_HALL.id,
+      locationId: NORTH_WING.id,
       metresAcross: 30,
       tables: row(AISLE_A.id, 4, 6000),
-      tablePrefix: 'east-table',
+      tablePrefix: 'north-table',
       zones: [{ label: 'Stage', box: [17_000, 11_000, 6000, 3000], rotation: 30 }],
     });
     await startLayout(request, baseURL, marketId, {
-      locationId: WEST_HALL.id,
+      locationId: SOUTH_WING.id,
       metresAcross: 30,
       tables: row(AISLE_B.id, 3, 9000),
-      tablePrefix: 'west-table',
+      tablePrefix: 'south-table',
     });
   }
 
@@ -304,8 +304,8 @@ export async function seedMarketDayMap(
     orgId,
     today,
     tomorrow,
-    east: EAST_HALL,
-    west: WEST_HALL,
+    north: NORTH_WING,
+    south: SOUTH_WING,
     vendors: DAY_MAP_VENDORS,
     checkedIn,
     personalMarkers: [

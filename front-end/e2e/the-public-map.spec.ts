@@ -6,8 +6,8 @@ import { seedMarketDayMap, type SeededMarketDayMap } from './helpers/seedMarketD
 
 /**
  * A market's public map (T422 ticket 09), `/<slug>/map`, opened signed out on the seam's seeded
- * market: East Hall's Aisle A of four tables, Aisle A 3 shared by Loom House (left) and Paper Moth
- * Press (right), and West Hall's Aisle B of three, one vendor there with no public name and one
+ * market: North Wing's Aisle A of four tables, Aisle A 3 shared by Loom House (left) and Paper Moth
+ * Press (right), and South Wing's Aisle B of three, one vendor there with no public name and one
  * whose business name was an email address, withheld. Today seven vendors are seated, tomorrow
  * two.
  *
@@ -70,7 +70,7 @@ for (const size of PHONE_AND_DESK) {
       for (const date of [seeded.today, seeded.tomorrow]) {
         await press(map.day(date));
         await expect(map.day(date)).toHaveAttribute('aria-pressed', 'true');
-        for (const hall of [seeded.east.name, seeded.west.name]) {
+        for (const hall of [seeded.north.name, seeded.south.name]) {
           await press(map.location(hall));
           await expect(map.map).toHaveAccessibleName(new RegExp(`^${hall} layout`));
           const count = await map.targets.count();
@@ -88,7 +88,7 @@ for (const size of PHONE_AND_DESK) {
 
       const origin = new URL(page.url()).origin;
       const publicRoute = new RegExp(
-        `^/api/public/markets/${seeded.slug}/map(/image/(${seeded.east.id}|${seeded.west.id}))?$`,
+        `^/api/public/markets/${seeded.slug}/map(/image/(${seeded.north.id}|${seeded.south.id}))?$`,
       );
       const strays = requests.filter((address) => {
         const url = new URL(address);
@@ -97,7 +97,7 @@ for (const size of PHONE_AND_DESK) {
       });
       expect(strays).toEqual([]);
       expect(requests.map((r) => new URL(r).pathname)).toContain(
-        `/api/public/markets/${seeded.slug}/map/image/${seeded.east.id}`,
+        `/api/public/markets/${seeded.slug}/map/image/${seeded.north.id}`,
       );
     });
 
@@ -111,7 +111,7 @@ for (const size of PHONE_AND_DESK) {
 
       await press(map.table('Aisle A 1'));
       await expect(page).toHaveURL(
-        new RegExp(`\\?date=${seeded.today}&location=${seeded.east.id}&table=east-table-1$`),
+        new RegExp(`\\?date=${seeded.today}&location=${seeded.north.id}&table=north-table-1$`),
       );
       await expect(map.card.getByRole('heading', { level: 2 })).toHaveText('Table Aisle A 1');
       await expect(map.card).toContainText('Ember Ceramics');
@@ -119,8 +119,8 @@ for (const size of PHONE_AND_DESK) {
       await expect(website).toHaveText('ember-ceramics.test');
       await expect(website).toHaveAttribute('href', 'https://ember-ceramics.test/');
       const instagram = map.card.getByTestId('public-map-card-instagram');
-      await expect(instagram).toHaveText('@ember_ceramics');
-      await expect(instagram).toHaveAttribute('href', 'https://www.instagram.com/ember_ceramics/');
+      await expect(instagram).toHaveText('@example_ember');
+      await expect(instagram).toHaveAttribute('href', 'https://www.instagram.com/example_ember/');
       for (const link of [website, instagram]) {
         await expect(link).toHaveAttribute('target', '_blank');
         await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
@@ -150,7 +150,7 @@ for (const size of PHONE_AND_DESK) {
         ]);
         await expect(map.cardHalves.nth(0)).toContainText('Loom House');
         await expect(map.cardHalves.nth(0).getByTestId('public-map-card-instagram')).toHaveText(
-          '@loomhouse',
+          '@example_loom',
         );
         await expect(map.cardHalves.nth(1)).toContainText('Paper Moth Press');
         await expect(map.cardHalves.nth(1).getByTestId('public-map-card-website')).toHaveText(
@@ -172,11 +172,11 @@ for (const size of PHONE_AND_DESK) {
       const map = new PublicMapPage(page);
       await map.goto(seeded.slug);
       await expect(map.vendors).toHaveText([
-        /^Ember Ceramics\s*Table Aisle A 1, East Hall$/,
-        /^Kiln & Co\s*Table Aisle A 2, East Hall$/,
-        /^Loom House\s*Table Aisle A 3, East Hall$/,
-        /^Paper Moth Press\s*Table Aisle A 3, East Hall$/,
-        /^Salt & Sage\s*Table Aisle B 3, West Hall$/,
+        /^Ember Ceramics\s*Table Aisle A 1, North Wing$/,
+        /^Kiln & Co\s*Table Aisle A 2, North Wing$/,
+        /^Loom House\s*Table Aisle A 3, North Wing$/,
+        /^Paper Moth Press\s*Table Aisle A 3, North Wing$/,
+        /^Salt & Sage\s*Table Aisle B 3, South Wing$/,
       ]);
       await expect(map.vendorsCount).toHaveText('5 vendors');
 
@@ -190,11 +190,11 @@ for (const size of PHONE_AND_DESK) {
       // Scrolled away from the map first, so bringing it into view is seen.
       await map.vendors.first().scrollIntoViewIfNeeded();
       await press(map.vendors.first());
-      await expect(map.map).toHaveAccessibleName(/^West Hall layout/);
-      await expect(map.location(seeded.west.name)).toHaveAttribute('aria-pressed', 'true');
+      await expect(map.map).toHaveAccessibleName(/^South Wing layout/);
+      await expect(map.location(seeded.south.name)).toHaveAttribute('aria-pressed', 'true');
       await expect(map.card).toContainText('Table Aisle B 3');
       await expect(map.card).toContainText('Salt & Sage');
-      await expect(page).toHaveURL(new RegExp(`location=${seeded.west.id}&table=west-table-3`));
+      await expect(page).toHaveURL(new RegExp(`location=${seeded.south.id}&table=south-table-3`));
       await expect(map.dayMap).toBeInViewport();
     });
 
@@ -213,11 +213,11 @@ for (const size of PHONE_AND_DESK) {
       await expect(map.table('Aisle A 3')).toHaveAccessibleName(/no vendor$/);
       await expect(map.vendors).toHaveCount(2);
 
-      await press(map.location(seeded.west.name));
-      await expect(page).toHaveURL(new RegExp(`location=${seeded.west.id}`));
-      await expect(map.map).toHaveAccessibleName('West Hall layout, 3 tables');
+      await press(map.location(seeded.south.name));
+      await expect(page).toHaveURL(new RegExp(`location=${seeded.south.id}`));
+      await expect(map.map).toHaveAccessibleName('South Wing layout, 3 tables');
       await expect(map.targets).toHaveCount(3);
-      // No one sits in West Hall tomorrow.
+      // No one sits in South Wing tomorrow.
       for (const n of [1, 2, 3])
         await expect(map.table(`Aisle B ${n}`)).toHaveAccessibleName(/no vendor$/);
       // A vendor with no public name, today: taken, and nothing of them shown.
@@ -240,8 +240,8 @@ for (const size of PHONE_AND_DESK) {
       const map = new PublicMapPage(page);
       await map.goto(seeded.slug, {
         date: seeded.tomorrow,
-        location: seeded.east.id,
-        table: 'east-table-1',
+        location: seeded.north.id,
+        table: 'north-table-1',
       });
       await expect(map.day(seeded.tomorrow)).toHaveAttribute('aria-pressed', 'true');
       await expect(map.card.getByRole('heading', { level: 2 })).toHaveText('Table Aisle A 1');
@@ -251,7 +251,7 @@ for (const size of PHONE_AND_DESK) {
 
       await map.goto(seeded.slug, { date: '2001-01-01', location: 'no-such-hall', table: 'x' });
       await expect(map.day(seeded.today)).toHaveAttribute('aria-pressed', 'true');
-      await expect(map.map).toHaveAccessibleName(/^East Hall layout/);
+      await expect(map.map).toHaveAccessibleName(/^North Wing layout/);
       await expect(map.card).toHaveText('Press a table, or find a vendor below.');
       await expect(page.getByRole('alert')).toHaveCount(0);
     });

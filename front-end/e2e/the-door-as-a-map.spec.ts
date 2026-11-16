@@ -8,9 +8,9 @@ import { LoginPage } from './pages/LoginPage';
 
 /**
  * The door as a map (T422 ticket 10): Attendance switches from its list to a map of the open day,
- * on the seam's seeded market. Today East Hall's Aisle A 1 is Ember Ceramics' (checked in), 2 is
+ * on the seam's seeded market. Today North Wing's Aisle A 1 is Ember Ceramics' (checked in), 2 is
  * Kiln & Co's (expected), 3 is shared by Loom House (left) and Paper Moth Press (right), and 4 is
- * free; West Hall's Aisle B holds three more.
+ * free; South Wing's Aisle B holds three more.
  *
  * The map shows each table by whether its vendor is here, a press on a vendor's table opens their
  * drawer as their row does, each half of the shared table its own, and the map follows a check-in
@@ -78,7 +78,7 @@ for (const size of PHONE_AND_DESK) {
         expect(await bottom(door.legend.last())).toBeLessThanOrEqual(height);
       }
 
-      // East Hall, the first location, opens: Ember Ceramics here, Kiln & Co expected, the shared
+      // North Wing, the first location, opens: Ember Ceramics here, Kiln & Co expected, the shared
       // table half here and half expected, and Aisle A 4 with nobody.
       expect(await door.tone('Aisle A 1')).toBe('filled');
       expect(await door.tone('Aisle A 2')).toBe('outlined');
@@ -135,9 +135,9 @@ for (const size of PHONE_AND_DESK) {
       // The map is kept across a reload, and across the other location.
       await page.reload();
       await expect(door.viewMap).toHaveAttribute('aria-pressed', 'true');
-      await press(page.getByTestId('day-map-locations').getByRole('button', { name: 'West Hall' }));
+      await press(page.getByTestId('day-map-locations').getByRole('button', { name: 'South Wing' }));
       await expect(door.mapTable('Aisle B 1')).toBeVisible();
-      await expectFits(page, 'The door as a map, West Hall');
+      await expectFits(page, 'The door as a map, South Wing');
     });
 
     test('the search marks the vendor it finds, and opens nothing', async ({

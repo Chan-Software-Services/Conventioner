@@ -1301,7 +1301,7 @@ export const SCREENS: Screen[] = [
     open: at(screen('big', 'attendance'), 'attendance-row'),
   },
   {
-    // Attendance as a map (T422): today's East Hall drawn by who is here and who is expected, a
+    // Attendance as a map (T422): today's North Wing drawn by who is here and who is expected, a
     // shared table in halves, the legend under it, at the door on a phone as at a desk.
     name: "the attendance's map",
     who: 'organizer',
@@ -1812,7 +1812,7 @@ export const SCREENS: Screen[] = [
     open: at(fixed('/no/such/page'), 'page-not-found'),
   },
   {
-    // A market's public map, signed out (T422): the day buttons, East Hall's map with its location
+    // A market's public map, signed out (T422): the day buttons, North Wing's map with its location
     // switch, zoom and legend, the card waiting for a press, and the day's vendors under "Find a
     // vendor"; at a desk in two columns, on a phone one.
     name: 'the public map',
@@ -1826,7 +1826,7 @@ export const SCREENS: Screen[] = [
     name: 'the public map, a shared table picked',
     who: 'nobody',
     sizes: PUBLIC,
-    open: publicMapAt('east-table-3', 'public-map-card-half'),
+    open: publicMapAt('north-table-3', 'public-map-card-half'),
   },
   {
     // A market's vendor page, signed out (ADR 0022): its name and the email step.
