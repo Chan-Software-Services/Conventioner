@@ -6,13 +6,7 @@
  */
 import ListFrame from '@/components/ListFrame.vue';
 import { findsRefusedRow, IMPORT_LIST_FIRST } from '@/utils/importPreview';
-
-export interface RefusedRow {
-  row: number;
-  /** Empty on a row that names nobody, as a blank row does. */
-  email: string;
-  error: string;
-}
+import type { RefusedRow } from '@/utils/importWizard';
 
 defineProps<{
   rows: RefusedRow[];
