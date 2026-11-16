@@ -110,7 +110,7 @@ Connecting is two requests around Discord's approval screen, which opens in a ne
 2. Discord sends the person back, in that tab, to [`DiscordConnectedView.vue`](../../../front-end/src/views/DiscordConnectedView.vue) with a code and the state, and the page posts both to `POST /markets/:id/discord/connection`, then says "Discord is connected. You can close this tab: the market's Tools tab shows the server.", with a link to the market's Tools; a cancelled approval or a refused state is said there too.
    On success it tells the market's own tab on a `BroadcastChannel` ([`discordConnected.ts`](../../../front-end/src/utils/discordConnected.ts)), and the card re-reads the market and the server's roles without a reload; a browser that misses the message re-reads the market when its tab is shown again (`useOpenMarket`).
    A cancel or a refusal is told the same way, and the card drops its "Discord opened in a new tab" line, as it does when its tab is shown again, so a closed Discord tab leaves no stale line.
-   The server spends the state, refuses one this session never started, one another person started (a second account signed in on the same browser), one for another market or one older than 15 minutes, exchanges the code with Discord, and keeps the server the token answer names.
+   The server spends the state, refuses one this session never started, one another person started, one begun before a sign-in (every sign-in starts a fresh session, so a connection not finished by then is dropped), one for another market or one older than 15 minutes, exchanges the code with Discord, and keeps the server the token answer names.
 
 **The server is read from the code exchange's token answer, never from the redirect's `guild_id`**: Discord calls that one "only a hint" ([OAuth2, Advanced Bot Authorization](https://docs.discord.com/developers/topics/oauth2)), and anyone can type one.
 The user's access token in the same answer is neither kept nor used.
@@ -204,7 +204,7 @@ It confirms first, by the role's name and how many vendors hold a seat on any da
 ## The values, and a deployment without them
 
 **`DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` and `DISCORD_BOT_TOKEN` are optional, and never a boot requirement.**
-They defend nothing the product serves without them, so they are not among the [boot check's](../conventions/security-invariants.md#the-boot-check) eight: any one missing turns Discord off, as `TYPESAFE_API_KEY` turns TypeSafe off.
+They defend nothing the product serves without them, so they are not among the [boot check's](../conventions/security-invariants.md#the-boot-check) requirements: any one missing turns Discord off, as `TYPESAFE_API_KEY` turns TypeSafe off.
 Each is read through `configured_secret` when asked for (`credentials()`), never at import, so a blank or a published placeholder is no value.
 The market read serves `discordSetUp`, and without it the card says "Discord is not set up on this Conventioner." and offers nothing; a route that needs Discord answers that sentence as a 503.
 The redirect registered in the Developer Portal is `FRONTEND_URL` + `/discord/connected` for each deployment: `https://conventioner.io/discord/connected`, and `http://127.0.0.1:5173/discord/connected` for the primary checkout's stack.

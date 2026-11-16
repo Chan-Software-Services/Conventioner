@@ -26,6 +26,7 @@ sources:
   - T311
   - T315
   - T335
+  - T318
 ---
 
 # The real-MongoDB suite
@@ -110,6 +111,7 @@ Documents are compared with `as_stored`, which tells field order and number type
 A new operator is modelled there with its cases in the tables, or its test runs here, on the server.
 
 `FakeApplicationsCollection` also stores a copy of what it is given and hands back copies, adds an `ObjectId` `_id` to an inserted document as the driver does, and refuses a second document with one `_id` with `DuplicateKeyError`; each test of that runs on both sides.
+Its `find_one_and_delete` answers the document it deleted, or None, which `undo_attendance` reads; that is tested on the fake only.
 It has no other unique index and no TTL, so a race on a unique index is tested here, on the server.
 
 The two markets fakes, `FakeMarketsCollection` (one market, `doc`) and `FakeSlugMarketsCollection` (a list, `docs`), apply an `update_one`'s filter with `mongo_matches` and its update with `mongo_update` to the first market matched, and answer the server's counts, `0` on no match.
@@ -169,7 +171,7 @@ Each test's name says what it proves.
 | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | One owed record per vendor's day                 | 20 Admin's amounts and 20 frees through the owner at once on a day with no record, with and without the free's deduction, leave one record: every write lands or raises `OwedDayChanged` (the route's 409), the landed writes are one sequence, each reading the record the one before wrote, and once an Admin's amount landed every state after it keeps one, as set, as the freed line's, or as what a free's $0 replaced              |
 | A free that read no record lands on the one made | staged, with and without the deduction: 20 frees each read the day with no record, 20 Admin's amounts then make it, and only then do the frees write; every free's insert is refused by the index exactly once, and its read again lands it on that record or finds the day kept changing, so without the deduction the Admins' amount stands on the freed line, and with it the $0 standing keeps the Admins' amount as what it replaced |
-| One check-in per vendor's day                    | 20 `record_attendance` calls at once for one seated vendor's day all answer 200 "Checked in", and leave one record and one "checked in" history entry                                                                                                                                                                                                                                                                                     |
+| One check-in per vendor's day                    | 20 `record_attendance` calls at once for one seated vendor's day, on a market in `market_days` whose day has begun (`AttendanceApi.today` moved to it), all answer 200 "Checked in", and leave one record and one "checked in" history entry                                                                                                                                                                                              |
 
 MongoDB retries an upsert the unique index refused when its filter is equalities on exactly the index's fields, so a check-in, whose filter is the vendor's day, did not see the refusal: on 8.0, none of 600 check-in upserts, 20 at once a day, reached the client, and the check-in's own retry on `DuplicateKeyError` stays for a server that does not retry.
 An owed day's first record is an insert, whose refusal does come back, and the owner's read again is what lands it; the staged test is what makes every free meet it.

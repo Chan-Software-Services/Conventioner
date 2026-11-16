@@ -9,13 +9,14 @@ describes:
   - .nvmrc
   - docker-compose.yml
   - front-end/vite.config.ts
-verified: 2026-11-14
+verified: 2026-11-16
 sources:
   - T254
   - T251
   - T263
   - T273
   - T317
+  - T345
 ---
 
 # Technology Stack
@@ -60,7 +61,7 @@ How each part of the code works is in the implementation layer of the [knowledge
 - **MongoDB 8.0 in production, 7 locally and in CI** - NoSQL document database
   - Primary data storage
   - The local stack and CI run `mongo:7` while production runs 8.0, for the reason in [the MongoDB version](implementation/testing/real-mongo-suite.md#the-mongodb-version)
-  - Collections: `users`, `organizations`, `markets`, `applications`, `attendance`, `history`, `vendor_notes`, `deletion_trail`, `applicant_login_challenges`, `vendor_remembered_sign_ins`, `organizer_sessions`, `floorplan_templates`, `schema_migrations`, and the GridFS bucket `floorplan_images` for floorplan uploads
+  - Collections: `APP_COLLECTIONS` in [`back-end/reset_database.py`](../back-end/reset_database.py) lists every collection the application writes and `GRIDFS_BUCKETS` its GridFS buckets, `schema_migrations` kept out of them on purpose; [the data nodes](implementation/data/README.md) describe the stored documents, [lookup indexes](implementation/data/lookup-indexes.md) names the indexes the back end builds as it boots, and [market deletion](implementation/modules/market-deletion.md#sharp-edges) every collection a market's records are deleted from
   - Connection via PyMongo 4.18, to `MONGODB_URI` when it is set (production's Atlas cluster), otherwise to `MONGODB_HOST` and its siblings
   - Database name: `conventioner`
 
@@ -336,7 +337,7 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 - `CORS_ALLOWED_ORIGINS` - Comma-separated browser origins allowed to make credentialed requests (e.g., `https://app.example.com`). **Required**: the app refuses to boot without it, and `*` is refused
 - `SECRET_KEY` - Signs the Flask session cookie. **Required**: there is no fallback, and the app refuses to boot without it. Must be at least 32 characters, and every value this repository has published (the old `TEMP_KEY_CHANGE_IN_PRODUCTION` fallback, the env-template and deploy-guide placeholders) is refused by name - it is readable by anyone who can read the repo. Rotating it ends every session signed with the old key
 - `TRUSTED_PROXY_HOPS` - How many proxies of this deployment's own a request passes through before it reaches Flask (Vercel: `1`; Flask exposed directly: `0`). **Required**: there is no default, because unset is not zero but unknown. It decides whose address organizer signup reports to reCAPTCHA, which scores on it - behind an unnamed ingress that is the ingress's address, for every caller in the world
-- `ALLOW_INSECURE_LOCAL_DEV` - Local-development escape hatch for the eight required variables (default OFF; set `true`/`1`). Never set it on a deployment: a back end that sees a platform variable (`VERCEL`, `VERCEL_ENV`, `VERCEL_REGION`, `AWS_LAMBDA_FUNCTION_NAME`) refuses to boot with it, or with any of the three test flags below, on
+- `ALLOW_INSECURE_LOCAL_DEV` - Local-development escape hatch for the [boot requirements](./RELEASING.md#pre-deploy-required-production-environment) (default OFF; set `true`/`1`). Never set it on a deployment: a back end that sees a platform variable (`VERCEL`, `VERCEL_ENV`, `VERCEL_REGION`, `AWS_LAMBDA_FUNCTION_NAME`) refuses to boot with it, or with any of the three test flags below, on
 - `DISABLE_CAPTCHA` - Test-only flag to skip reCAPTCHA verification (default OFF; set `true`/`1`). Honored only when `ALLOW_INSECURE_LOCAL_DEV` is also set
 - `DISABLE_EMAIL` - Test-only flag to skip sending verification, password reset, and OTP emails via Resend, treating them as sent (default OFF; set `true`/`1`). Honored only when `ALLOW_INSECURE_LOCAL_DEV` is also set
 - `DISCORD_FAKE` - Test-only flag to answer the Discord bot's requests from the fake servers in the database instead of Discord (`back-end/discord_fake.py`; default OFF; set `true`/`1`). Honored only when `ALLOW_INSECURE_LOCAL_DEV` is also set

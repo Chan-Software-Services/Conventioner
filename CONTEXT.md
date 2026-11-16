@@ -224,6 +224,27 @@ A freed line owing $0 because the free ticked "Also remove its ... from what the
 How what a vendor paid compares with what they owe: owes, paid in full, paid more than owed, or none; the server's to read.
 See [Payments, and what a vendor owes](docs/implementation/data/payments.md).
 
+### At the door
+
+**Check-in**:
+The record that a vendor came on one market date: when, who made it (an organizer at Attendance, or the vendor on their vendor page with the **door code**), and the **table code** of the seat they held when it was made.
+One per vendor per date; undoing it deletes it. Made only in Market Days, and never for a date that has not begun anywhere.
+_Avoid_: Attendance for one record (Attendance is the page), arrival
+See [Attendance and the door](docs/implementation/modules/attendance-and-door.md).
+
+**Door code**:
+The market's one live code, shown at the entrance as a QR code and as six characters, that a vendor types or scans to check themselves in: their proof that they are at the door. A new one ends the old one and every poster of it.
+_Avoid_: Check-in code, PIN, password
+
+**Roster**:
+Every vendor the stored assignment places on a market date, and where each stands at the door that day: what Attendance lists, and what the door's counts count.
+_Avoid_: Guest list, attendance list (that was only who came)
+
+**Roster state**:
+Where one vendor stands at the door on one date: **expected** (a seat and no check-in), **here** (a check-in made at the seat they hold), **here at another table** (a check-in made at a table they no longer hold, after a move or a swap), or **here with no table** (a check-in and no seat that day, after a free).
+"Did not come" is how the page words expected once the day is over on the viewer's calendar, or the market is archived.
+_Avoid_: "Checked in" alone for here at another table, which hides where they went
+
 ### Accounts
 
 **Sign-in secret**:

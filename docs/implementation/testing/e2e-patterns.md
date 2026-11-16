@@ -49,6 +49,8 @@ sources:
   - T284
   - T257
   - T315
+  - T337
+  - T318
 ---
 
 # E2E patterns
@@ -108,6 +110,7 @@ The container name comes from `helpers/containerNames.ts` (`E2E_MONGO_CONTAINER`
 
 **A market that opens applications needs a complete plan with dates still to come** (E31/F01/S01), since [the setup settles on leaving draft](../../business/rules/the-setup-settles-on-leaving-draft.md) and leaving draft needs it.
 [`helpers/seeds.ts`](../../../front-end/e2e/helpers/seeds.ts) exports `completePlan()` (a date, a location, a Gold tier with five tables in one section) and `SEED_MARKET_DATE`, a date in 2099 every seeded vendor can attend; a plan whose date differs from the vendors' silently assigns nobody.
+The door takes no check-in on a day that has not begun, so a spec that checks a vendor in at the door seeds on `calendarToday()` ([checking a vendor in](e2e-seeds.md#checking-a-vendor-in)).
 A spec that picks dates on the calendar uses `upcomingSaturday()` ([`helpers/upcoming.ts`](../../../front-end/e2e/helpers/upcoming.ts)), dates a couple of months ahead of whenever it runs, since the calendar steps a month at a time.
 
 **A plan cannot change after draft, so a spec seeds the room it wants**: `seedAssignedMarket({ tables })` for a smaller one.
@@ -150,8 +153,9 @@ Markets' search is drawn only past 12 markets or while the address holds words, 
 **A spec ends an organizer's session on the server**: `mongoEval` unsets the user's `login_id`, so the cookie names a login no account holds and the next request answers 401, as after a password reset; the next sign-in gives the account a new one.
 `context.clearCookies()` ends it only in the browser: the stack keeps its sessions on disk, where it stays until it lapses.
 
-**A call made with a page's cookies goes to `APP_API`, never `BACKEND_URL`** (E38/F14/S01).
-The back end holds a session to the client that signed in, its address and browser (Flask-Login's "strong" session protection, [the cookies](../conventions/security-invariants.md#the-cookies)), and on a stack the page reaches it through the dev server's proxy while the back end's own port is another address, so a `page.request` there is refused as signed out (the page's session stays, [a refused request ends no sign-in](../conventions/security-invariants.md#the-cookies)).
+**A call made with a page's cookies goes to `APP_API`, as the page's own calls do** (E38/F14/S01).
+`APP_API` is the address the app's pages call the API at, through the dev server's proxy, so such a call reaches the back end the way the page's do.
+Until T318 a `page.request` at `BACKEND_URL` was refused as signed out, since the back end held a session to the client's address as well as its browser; it holds it to the browser string alone now ([the cookies](../conventions/security-invariants.md#the-cookies)), so one there is taken too, but no spec relies on that.
 A page of another browser context (`withUser()`'s) is a page too; a request context of its own (the `request` fixture, `playwright.request.newContext()`) is a client of its own, and may call either.
 A request with no cookie at all answers 401; [`a-failure-says-what-to-do.spec.ts`](../../../front-end/e2e/a-failure-says-what-to-do.spec.ts) holds that, from a page of the app's origin that runs none of its code.
 
@@ -193,3 +197,10 @@ After the fix the same run passes 30 of 30 under the same load.
 
 **A held route makes a race certain.** A `page.route` handler that awaits a promise the test releases holds one read while the page goes on, which turns a suspected race into a yes or no, as the second test of [`undoing-a-verdict.spec.ts`](../../../front-end/e2e/undoing-a-verdict.spec.ts) does.
 Never unroute it with a request still held: unrouting lets the held request go on, and the test's later release then throws "Route is already handled".
+
+**A timeout in a long loop of actions may be its count of actions, not the page.** Every Playwright action is at least one round trip to the browser, and each takes longer as the machine's load rises, so a loop of hundreds of them outgrows the 30-second default on a busy machine though the page's own script, layout and style add little to each.
+To tell which it is, read the page's CDP `Performance.getMetrics` (from `page.context().newCDPSession(page)`, after `Performance.enable`) before and after the loop, and time each pass of it.
+Where `ScriptDuration`, `LayoutDuration` and `RecalcStyleDuration` stay small next to the loop's time, and the time per pass stays flat from the first passes to the last, the loop is a fixed count of actions whose cost follows the load, and the fix is a budget sized for it with `test.setTimeout`, as [`choices-at-scale.spec.ts`](../../../front-end/e2e/choices-at-scale.spec.ts)'s "finds a fix by typing among 129" has for its 140 values keyed one by one (T337).
+There `TaskDuration`, the main thread's tasks of every kind, still took about 80% of the loop, so a small `ScriptDuration` alone does not show the main thread idle: read `TaskDuration` and the flat time per pass with it, and attribute the tasks with a trace before calling them the round trips.
+A time per pass that grows along the loop is the page's own, and a budget would only hide it.
+An action the next one already does, such as a `focus()` before a locator's `press`, which focuses the element itself, can go too, but it is no fix by itself: dropping that `focus()` from the same loop saved no time that could be told from the load's noise.

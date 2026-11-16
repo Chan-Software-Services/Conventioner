@@ -45,6 +45,7 @@ sources:
   - T316
   - T315
   - T335
+  - T318
 ---
 
 # The market's history
@@ -83,6 +84,7 @@ An import, the start from a CSV and a run record their counts instead, and a ver
 **The placement kinds are the one exception**: their details keep the shapes they had before the history widened, because the entries moved from `placement_history` have no before to give.
 A `placed` entry written since adds one key, `before`: the seat the vendor left on that date (`table_code`, `table_choice`), null when they had none, so a move reads from one seat to the other; an older `placed` entry has no `before` key at all, which says the seat left is unknown, not that there was none.
 A `placed`, `freed` or `swapped` entry written while results are published adds `after_results: true` (T316), since that vendor's page had already told them where they sit; the routes pass the lifecycle owner's `results_published` of the market they read ([the assignment's lifecycle](../modules/assignment-lifecycle.md)), and the key is absent otherwise, so every older entry, and every one written before results, reads as it always did.
+A `placed`, `freed` or `swapped` entry of a vendor who had checked in that day, made once the organizer was asked ([placements](../modules/placements.md)), adds `while_here: true` (T318); absent otherwise, as `after_results` is.
 
 **A run is one entry**, not none and not one per placement.
 Leaving runs out would make the history lie by omission, since a placement changed between two hand edits would have no explanation; one entry per placement would drown the hand edits, which are the entries anyone reads.
@@ -226,6 +228,7 @@ One block per action, in the order of [the actions table](../modules/market-acti
   - Vendors: as above
   - Subject: the table-day
   - Detail: as above, `placed` with the seat left as `before`, and `after_results: true` on a `placed`, `freed` or `swapped` written while results are published
+  - Detail: `while_here: true` on a `placed`, `freed` or `swapped` of a vendor who had checked in that day
 - `rules`: the assignment rules, which ride in the plan
   - Detail: `priority` or `assignment_options`
 - `owed_taken_back`: a day seated again, by hand or by a run, taking back the $0 a free's deduction set ([payments](payments.md)), by whoever seated them
@@ -377,6 +380,7 @@ No rule is a person, so a rule's verdict is never an entry of its own: the write
 Not recorded, each for its reason in `NOT_A_CHANGE` and `NOT_RECORDED` of [`back-end/tests/test_every_write_records.py`](../../../back-end/tests/test_every_write_records.py): a review claim ([ADR 0014](../../adr/0014-reviewers-claim-and-a-verdict-is-a-conditional-write.md)), which is who holds a card open and not a change; reads and exports; a vendor signing in or out; a market's creation, whose own history starts empty and which [its organization's history](#what-an-organization-records) records; its deletion, which takes the history with it while its organization's history keeps that it went (the [deletion trail](../modules/market-deletion.md) records a market only when its organization is deleted); the floorplan routes that keep nothing, or an upload the market uses only once a layout is saved; and starting Discord's approval screen, which keeps a state in the person's session and nothing on the market.
 Two rows record nothing of their own: "Update info the assignment or price reads", asked beside "Update a vendor's info" by the same write, which records it under that row, and who may be chosen as a reviewer, which changes nothing itself.
 That test sends every write route as the screen sends it and asserts its one entry; it fails on a market write route, or a row of the table, that records nothing without saying why there, and on an entry Mongo could not store.
+Its `TestWhatAnEntryHolds` pins what some entries hold beyond that, among them an import's counts of the automatic rejections it returned and a taken role's `role` before, under the row that takes it.
 
 **Entries are stored structured, never as a sentence**: the wording belongs to the surface showing it, [`front-end/src/utils/marketHistory.ts`](../../../front-end/src/utils/marketHistory.ts), which composes each area's words from its own file under [`historyReaders/`](../../../front-end/src/utils/historyReaders/) ([two features never share a line](../conventions/two-features-never-share-a-line.md#the-historys-words)), a placement's among them, and must be changeable without a migration.
 

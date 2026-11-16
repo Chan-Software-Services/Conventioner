@@ -35,6 +35,8 @@ describes:
   - back-end/app.py#a_legacy_remembered_account
   - back-end/app.py#forget_the_legacy_remember_cookie
   - back-end/organizer_sessions.py
+  - back-end/app.py#browser_identifier
+  - back-end/tests/test_a_changed_network_keeps_the_session.py
 verified: 2026-11-14
 sources:
   - T74
@@ -48,6 +50,8 @@ sources:
   - T273
   - T311
   - T317
+  - T338
+  - T318
 ---
 
 # Security invariants
@@ -58,21 +62,9 @@ The secure state is the one a forgetful operator gets; anything less secure has 
 
 ## The boot check
 
-The back end refuses to boot without eight things, all checked by [`check_public_endpoint_defenses()`](../../../back-end/app.py) and named together in one refusal, so an operator does not meet them one redeploy at a time:
-
-| Variable               | Read by                                                                  | Defends                                                                                                                                                                                                                                       |
-| ---------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SECRET_KEY`           | `utils/secret_key.py`                                                    | the session cookie: without it any organizer's session can be forged                                                                                                                                                                          |
-| `RECAPTCHA_SECRET_KEY` | [`utils/captcha.py`](../../../back-end/utils/captcha.py)                 | `POST /register`, the public signup                                                                                                                                                                                                           |
-| `CORS_ALLOWED_ORIGINS` | [`utils/cors.py`](../../../back-end/utils/cors.py)                       | which pages may read the answers to a request carrying the API's cookies, and which origins a browser's write is taken from ([where a write comes from](#where-a-write-comes-from)); `*` is refused, and so is an entry that is not an origin |
-| `RESEND_API_KEY`       | [`utils/email.py`](../../../back-end/utils/email.py)                     | the mail that carries every verification link, reset link and sign-in code                                                                                                                                                                    |
-| `FRONTEND_URL`         | [`utils/email.py`](../../../back-end/utils/email.py)                     | where every mailed link points: an `https://` origin with no path, or each link points at a laptop                                                                                                                                            |
-| `FROM_EMAIL`           | [`utils/email.py`](../../../back-end/utils/email.py)                     | the sender every mail is from: never Resend's shared `onboarding@resend.dev`, which delivers only to the Resend account's own address                                                                                                         |
-| `SESSION_TYPE`         | [`utils/session_storage.py`](../../../back-end/utils/session_storage.py) | where the session is kept: `null` (the signed cookie, a serverless host) or `filesystem` (a container or VM), with no default                                                                                                                 |
-| `TRUSTED_PROXY_HOPS`   | [`utils/proxy.py`](../../../back-end/utils/proxy.py)                     | the address reCAPTCHA scores a signup on, and the caller the applicant's and the organizer's sign-in limits count                                                                                                                             |
-
-Three fail silently when unset (the captcha passes everybody, a forgeable session, a credentialed policy for every origin); the mail key, the two mail addresses and the session store fail loudly but name nothing; the hop count fails more quietly than any, showing only in a reCAPTCHA score.
-What each one is, and what an unset one would do, is the deployment's checklist in [RELEASING.md](../../RELEASING.md#pre-deploy-required-production-environment); **keep that table in step with the check**, because a deploy doc that is wrong is worse than one that is missing: it will be trusted.
+The back end refuses to boot without its boot requirements, the variables its public surface rests on, all checked by [`check_public_endpoint_defenses()`](../../../back-end/app.py) and named together in one refusal, so an operator does not meet them one redeploy at a time.
+They are listed in one place, the deployment's checklist in [RELEASING.md](../../RELEASING.md#pre-deploy-required-production-environment): each variable, the module that reads it, what it is, and what an unset one would do.
+**Keep that table in step with the check**, because a deploy doc that is wrong is worse than one that is missing: it will be trusted.
 
 **The check is a check.**
 `check_public_endpoint_defenses()` reads configuration and returns what it found; [`configure_public_endpoint_defenses()`](../../../back-end/app.py) is the only thing that touches the app, installing the key, the CORS policy, the request-origin check, the proxy fix and the session store, in that order.
@@ -80,14 +72,14 @@ Keep them apart: flask-cors installs an `after_request` handler per call, so a c
 
 **A boot requirement defends something the product serves.**
 A requirement with nothing behind it teaches operators to work around the check.
-`TRUSTED_PROXY_HOPS` is required because `request.remote_addr` is what organizer signup hands Google as reCAPTCHA's `remoteip` (`api/users.py`), and it became load-bearing the moment `RECAPTCHA_SECRET_KEY` did: before, a deployment with no secret took the bypass and no token reached Google.
+`TRUSTED_PROXY_HOPS` ([`utils/proxy.py`](../../../back-end/utils/proxy.py)) is required because `request.remote_addr` is what organizer signup hands Google as reCAPTCHA's `remoteip` (`api/users.py`), and it became load-bearing the moment `RECAPTCHA_SECRET_KEY` ([`utils/captcha.py`](../../../back-end/utils/captcha.py)) did: before, a deployment with no secret took the bypass and no token reached Google.
 The applicant's and the organizer's sign-in limits count each caller by the same address (`sign_in_limits.caller()`, [a vendor signs in before applying](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)), so a wrong hop count would put every applicant, and every organizer, behind one caller's limit.
 Make a requirement follow its caller, not the module it was first written for.
 The converse holds too: a value that turns on a feature and defends nothing is optional, read through `configured_secret` when asked for, and never a boot requirement: `TYPESAFE_API_KEY`, and the three Discord values, without which the Discord card says Discord is not set up ([the Discord connection](../modules/discord.md)).
 
 ## The one escape hatch
 
-**`ALLOW_INSECURE_LOCAL_DEV` is the only escape hatch for the eight** ([`back-end/utils/deployment.py`](../../../back-end/utils/deployment.py)), and it defaults to off.
+**`ALLOW_INSECURE_LOCAL_DEV` is the only escape hatch for the boot requirements** ([`back-end/utils/deployment.py`](../../../back-end/utils/deployment.py)), and it defaults to off.
 Under it a missing value boots: a random signing key for the process's lifetime, loopback origins, sessions on disk, zero hops, no captcha secret, no mail key, and links to `http://127.0.0.1:5173` from `onboarding@resend.dev`; each is logged as a defense turned off.
 `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` are honoured only under the hatch, so a deployment that inherited any of them from a copied env file is not silently unprotected, nor answered by a fake Discord ([a fake Discord](../../TESTING.md#a-fake-discord)).
 The hatch never excuses a published secret ([ADR 0010](../../adr/0010-no-secret-has-a-fallback.md)).
@@ -120,7 +112,7 @@ Do not "fix" a `null` deployment by handing it to `Session(app)`.
 Two of them once read their key into a module global, and that cost three bugs: a `.env` loaded afterwards was one nobody saw, `monkeypatch.delenv` on those variables was a silent no-op, and every test had to know which module attribute to patch, so a test that "cleared the secret" cleared nothing.
 Do not reintroduce a module-level `os.getenv` for a secret.
 
-**`back-end/.env` is read by [`utils/env_file.py`](../../../back-end/utils/env_file.py), called on `app.py`'s first line**, before the imports below it build their Mongo clients.
+**`back-end/.env` is read by [`utils/env_file.py`](../../../back-end/utils/env_file.py), called before anything else in `app.py`**, before the imports below it build their Mongo clients.
 Nothing loaded that file until the boot check existed, and a developer who followed [STARTUP.md](../../STARTUP.md) met a refusal naming the variable they had just set.
 The real environment wins (`override=False`): the Docker stack bind-mounts `back-end/` into the container, so a stray `.env` must never hand a process an escape hatch or a signing key it did not choose.
 **The test suite reads no `.env` at all**: [`back-end/tests/conftest.py`](../../../back-end/tests/conftest.py) points `utils.env_file.ENV_FILE` at a path that does not exist, because a suite whose result depends on an untracked file is green in CI and red on the laptop of anyone whose `.env` still carries what an old template printed.
@@ -162,9 +154,9 @@ It fails an added line holding an email address outside the fixture domains (`ex
 It also fails a MongoDB Atlas host whose cluster id is not a placeholder, since that id names the production database: only an `example` id (`cluster0.example.mongodb.net`) or the template's `cluster.mongodb.net` passes, and a document writes the host as `<cluster>.<id>.mongodb.net`, the real one kept in the deployment's environment and 1Password.
 No registrable domain is a fixture domain, however unlikely an inbox there seems: `email.com` is free webmail and `ember.ca` is somebody's, so the tests that once used them use `example.com` and `.test` names.
 Where `.scratch/examples/` holds real exports (the checkout's own, or the primary checkout's when run from a worktree), it also fails an exact email, phone number or applicant's name from them, however the line punctuates or cases it.
-A name counts when it stands in a person's-name column of a row that gives an email, has two to five words, and fewer than three applicants gave it: a name three applicants share identifies nobody.
+A name counts when it stands in a person's-name column of a row that gives an email, has two to five words and at least five characters, and fewer than three applicants gave it (a first-name and a last-name column count as one name): a name three applicants share identifies nobody.
 The exports are read into memory at each run: nothing derived from them is written or printed, and a finding names the file and line with at most a masked hint (`j***@g***.com`, `***-***-**19`), never the value.
-The gate and CI have no exports, so there it judges shapes only; the exact values are the hooks' work, on the machine that has them.
+The gate and CI have no exports, so there this rule judges shapes only; the exact values are the hooks' work, on the machine that has them.
 
 **No line copies a real form's questions.**
 Where `.scratch/examples/` holds real exports, the checker also holds each export's header row in memory: every run of eight consecutive words of a header cell, and every link and social handle a header cell holds.
@@ -186,7 +178,7 @@ A generic word of a listed name is not listed alone, so a project id or a time z
 Run it and type the name at it, never on a command line or in a file, so listing a name never publishes it.
 On a commit, a push or a range, only added lines count, and a merge answers only for the lines new to every parent.
 `python3 scripts/real_data_check.py tree [REV]` judges every line of every file a revision's tree holds (`HEAD` by default) with every rule, the exemptions above applied, so a name listed after a file was committed is found wherever it still stands; the gate and CI run it after the commits, and a file staged but not committed is the hooks' to judge.
-A spreadsheet is read for its text whatever git makes of it, since that is what an export is: an `.xlsx`, `.xlsm` or `.ods` for its cells and shared strings, a `.csv` or `.tsv` in UTF-8, UTF-16 or Windows-1252 with its delimiter found from its first record (a comma, or the semicolon a European-locale Excel saves), and each of these inside a `.zip`, which is what Google Forms' "Download responses" saves.
+A spreadsheet is read for its text whatever git makes of it, since that is what an export is: an `.xlsx`, `.xlsm` or `.ods` for its cells and shared strings, a `.csv` or `.tsv` in UTF-8, UTF-16 or Windows-1252 with its delimiter found from its first record (a comma, the semicolon a European-locale Excel saves, a tab or a pipe; a `.tsv` is always split on a tab), and each of these inside a `.zip`, which is what Google Forms' "Download responses" saves.
 The exports are read the same way, a zipped one included.
 A spreadsheet or archive it cannot read (`.xls`, `.xlsb`, `.numbers`, `.et`, `.sxc`, a `.gz`, `.7z`, `.rar`, `.tar` and the like, or a broken workbook or zip) is refused outright, except under `back-end/tests/test_data/` and `back-end/tests/fixtures/`.
 It reads no other binary file, and not `package-lock.json`.
@@ -208,9 +200,13 @@ Loopback counts as a secure context, so `Secure` leaves local development unaffe
 The settings sit together in [`app.py`](../../../back-end/app.py) under one comment; `HttpOnly` is Flask-Login's default for the remember cookie and is asserted rather than set.
 The remember cookie's `__Host-` prefix holds it to the API's host, as the vendor's is below: a browser takes it, and its deletion, only with `Secure`, `Path=/` and no `Domain`, so no `REMEMBER_COOKIE_DOMAIN` is set, and `RefusingLoginManager._clear_cookie` deletes it with the attributes it was set with, since Flask-Login's own deletion sends no `Secure` and a browser would refuse it.
 
-**A sign-in is kept on the server** ([ADR 0029](../../adr/0029-an-organizers-sign-in-is-kept-on-the-server.md)): both cookies carry a random secret, and `organizer_sessions` keeps only its SHA-256, beside the account, its login id and when the sign-in ends, so a copy of the database signs nobody in ([a sign-in is kept on the server](../data/users-and-email.md#a-sign-in-is-kept-on-the-server)).
+**A sign-in is kept on the server** ([ADR 0029](../../adr/0029-an-organizers-sign-in-is-kept-on-the-server.md)): the remember cookie and the session (in its cookie, or on disk behind the cookie's random id) carry a random secret, and `organizer_sessions` keeps only its SHA-256, beside the account, its login id and when the sign-in ends, so a copy of the database signs nobody in ([a sign-in is kept on the server](../data/users-and-email.md#a-sign-in-is-kept-on-the-server)).
 Sign out ends the browser's sign-in there, so a copy of its cookies stops working too; a new sign-in in the browser ends the one it held; Sign out everywhere and a password reset, which each replace the login id, and deleting the account end every one of the account's.
 The browser cannot change what it carries either way: the session is signed into its cookie with `SECRET_KEY`, or kept on the server behind a random id, and the remember cookie is signed with `SECRET_KEY` by Flask-Login's digest.
+
+**Every sign-in starts a fresh session, in both stores**, so no session cookie issued before a sign-in by password or by code carries the new sign-in: `start_a_fresh_session` in [`utils/session_storage.py`](../../../back-end/utils/session_storage.py) empties the session at such a sign-in (`_sign_in`), after the browser's earlier sign-in is ended.
+When a remember cookie signs the browser back in, it empties the session that request sent the same way (`hold_a_restored_session_to_its_browser`, which keeps only what the restore wrote); the sign-in restored is the one the remember cookie names, unchanged.
+In the cookie store the answer's cookie is a new one whatever the browser sent; on disk the stored session is deleted and the new one is saved under a new id, and flask-session never takes an id it has nothing stored under, so the session cookie the browser sent names nothing afterwards.
 
 **How long a sign-in lasts is two named constants in [`organizer_sessions.py`](../../../back-end/organizer_sessions.py), and the server enforces both, not only the browser** (E38/F14/S01, ["Remember me" at sign-in](../../business/flows/accounts.md#a2-sign-in-and-sign-out)).
 `SIGN_IN_LIFETIME`, 12 hours, is a sign-in without "Remember me": it sets the session cookie only, which ends with the browser in either store: Flask's cookie session is never made permanent, and `SESSION_PERMANENT` is off for flask-session's store on disk.
@@ -231,8 +227,10 @@ It ends for good on Sign out, on any resume it cannot pass (both delete the docu
 It names one market, so remembering a vendor at one changes nothing at another.
 The vendor's token still lives in the tab's `sessionStorage` for 30 minutes; the cookie only spares the code, which is why a long-lived token in `localStorage`, readable by any injected script, was rejected.
 
-**A session is held to the client that signed in**: Flask-Login's `session_protection = "strong"` refuses a request whose client, its address and browser, is not the one the session recorded.
+**A session is held to the browser that signed in, not its network** ([ADR 0030](../../adr/0030-an-organizers-session-is-held-to-the-browser.md)): Flask-Login's `session_protection = "strong"` refuses a request whose client is not the one the session recorded, and the app names the client by its browser string alone, `browser_identifier()` in [`app.py`](../../../back-end/app.py), where Flask-Login names it by its address and browser together.
+So a phone that moves from a venue's wifi to its cellular network stays signed in (T318).
 It applies in both stores, and to a session made permanent too, which Flask-Login's own "strong" would only mark not fresh.
+A session stamped with Flask-Login's identifier before T318 is taken from the address and browser it names and stamped anew in the same answer, so the deploy signed nobody out; that carry-over may go once T318's release has been live for 30 days, since a remembered sign-in's session cookie lasts as long as its sign-in.
 A session the remember cookie restores records its client too (`hold_a_restored_session_to_its_browser` in [`app.py`](../../../back-end/app.py)), and so does one the old `remember_token` restores for the release: Flask-Login's restore does not, so until E38/F14/S01 a remembered browser was signed back in for one request and then signed out, its cookie deleted.
 
 **A refused request ends no sign-in** (T177): `RefusingLoginManager` in [`app.py`](../../../back-end/app.py) answers a request from another client as signed out, and leaves the session, the remember cookie and the sign-in's document as they were for the browser that signed in.
@@ -241,8 +239,8 @@ In the store on disk (the stack, CI, a container host) the deletion is on the se
 In the cookie store (production's `SESSION_TYPE=null`, [operations](../../OPERATIONS.md#configuration-and-secrets)) the deletion travels in the answer, so it signed out only a browser that read it.
 The session was permanent until E38/F14/S01, so "strong" only marked it not fresh; after it, E2E sessions in CI ended mid-test with that request's marks: an unchanged cookie answered 401 after an aborted request, with no cookie set.
 That cause is proven on a local stack and inferred for CI from those marks, which a stored session lost another way would leave too; the failures in CI stopped before a probe caught one.
-A copied session cookie is still refused at every request.
-So is a browser whose address changes, a phone moving from a venue's wifi to its cellular network among them, until it is back on the first address or signs in again; Daniel kept "strong" (2026-11-01), and that sign-out is an E47 (account security) follow-up.
+A session cookie copied to another browser is still refused at every request; one copied with its browser string works from any address until its sign-in ends, as a copied remember cookie does, and Sign out everywhere ends it.
+[`test_a_changed_network_keeps_the_session.py`](../../../back-end/tests/test_a_changed_network_keeps_the_session.py) holds the changed network, another browser, a remembered sign-in and the carry-over.
 
 ## Where a write comes from
 
@@ -324,4 +322,4 @@ The other four mails carry only the server's own values: a token, a code and the
 - [`test_the_code_mail_carries_only_words.py`](../../../back-end/tests/test_the_code_mail_carries_only_words.py) asks for a code on a market whose name holds a link and a `Bcc:` line, and finds the name escaped in the HTML and on one line in the subject and text; it proves the send asks `requests` for a 10-second timeout where the library sends, and that a send that times out returns False and logs its kind and the exception's type alone.
 - `test_configured_secret.py` and `test_env_file.py` pin the machinery underneath; [TESTING.md](../../TESTING.md#back-end-tests) lists them.
 - `scripts/tests/test_real_data_check.py` runs the checker, the hooks in a scratch repository with its bare remote, the setup step and CI's command on fake exports only: a `gmail.com` address, a real-shaped phone and an Atlas host fail, a fixture one passes, an exact value of a fake export fails, as do eight words of its header's question in order, a link or a handle from it, in a line, a message, a cell and the tree, while seven words, an answer and the exempt files pass, a workbook or OpenDocument sheet is read and an unreadable spreadsheet refused, the synthetic corpus passes, a refusal sends a fixture to the generator, and no value is printed in full; `tree` fails a planted row in a committed CSV, workbook or zip and a name listed after its file was committed, and passes a clean tree and the exempt files; CI's tree step fails real data already on the base branch; `test_nm_test.py` fails a gate run on a finding in the branch's commits or in the tree, before anything else.
-- What breaks it: a default for any of the eight, a test switch read outside `switch_on()`, a check that installs something, a secret read at import, a template that prints a value, or a hatch that excuses a published key.
+- What breaks it: a default for any boot requirement, a test switch read outside `switch_on()`, a check that installs something, a secret read at import, a template that prints a value, or a hatch that excuses a published key.

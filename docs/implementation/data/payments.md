@@ -35,6 +35,7 @@ sources:
   - T201
   - T315
   - T335
+  - T318
 ---
 
 # Payments, and what a vendor owes
@@ -149,6 +150,7 @@ Q26: "when we remove a table, promp the user to ask if it should also dedudct fr
 Whoever may change the amount owed is asked in the placement dialog, beside "Free this seat", "Also remove its $15.00 from what Alice owes? (Cancelled before the deadline: a refund may be due.)", unticked, naming what the day's line owes, set by hand or calculated, read from the vendor's account as the dialog opens; a line that owes nothing asks nothing.
 Ticked, the free sends `deductOwed: true`, and `remove_placement` asks the row "Change the amount owed" before it frees anything; the owner's one write then keeps the freed line owing $0 before the seat goes, keeping any Admin's amount as `before`.
 The amount paid is untouched, so a vendor who paid reads paid more than owed, a refund to issue.
+A free of a vendor who has checked in that day is asked about first, before the line is kept, so the question writes no line; "Free anyway" sends the same `deductOwed` again with `whileHere: true` (T318, [placements](../modules/placements.md)).
 The "owed set" entry it records once the seat is freed runs from what the line owed as the request read it, while the seat was held, to 0, and reads nothing again.
 Pressing Free again, ticked, on a day the vendor no longer holds finishes a deduction a free from before T270 left undone: on a freed line holding no Admin's amount it sets the free's $0 (`deduct_freed_day`, with its "owed set" entry), and answers `{"removed": 0}`; on any other day it writes nothing.
 Anyone else frees the seat with no such question, and the line stays owed for an Admin to decide.

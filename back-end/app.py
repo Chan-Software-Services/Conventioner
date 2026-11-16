@@ -38,6 +38,7 @@ from api.floorplans_placement import floorplans_placement_bp
 from api.floorplans_templates import floorplans_templates_bp
 from api.floorplans_save import floorplans_save_bp
 
+from hashlib import sha512
 from typing import Any, Dict, List, NamedTuple, Optional
 from flask import Flask, g, request, jsonify, make_response, Response, session
 from flask_login import (
@@ -52,6 +53,7 @@ from flask_login import (
     user_logged_in,
     user_logged_out,
 )
+from flask_login.utils import _create_identifier as flask_logins_identifier
 from flask_bcrypt import Bcrypt
 from datatypes import ApplicationStatus, Market, MarketPerson, MarketPhase, MarketRole, Organization, VerdictGiver
 from assignment.utils import convert_keys_to_camel_case, convert_keys_to_snake_case
@@ -117,6 +119,7 @@ from utils.session_storage import (
     install_session_storage,
     keeps_sessions_on_disk,
     session_backend,
+    start_a_fresh_session,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -310,19 +313,19 @@ def check_public_endpoint_defenses() -> PublicEndpointDefenses:
     ``SESSION_TYPE``; and what decides whose address the captcha is actually scored against, when
     something the deployment owns sits in front of Flask, is ``TRUSTED_PROXY_HOPS``.
 
-    Three of the eight fail *silently* when unset: the captcha passes everybody, a session cookie
-    signed with a key the repository publishes is a session anyone can forge, and a credentialed
-    CORS policy with no origin list hands the organizer API to every website an organizer visits.
-    The mail key, the two mail addresses and the session backend are here for the mirror-image
-    reason - unset, the key fails *every* registration, reset and OTP with a 500 that names nothing,
-    the addresses mail links to a laptop from a sender that delivers to nobody, and the session
-    backend sends a serverless deployment looking for a disk it does not have, failing at import and
-    naming nothing either - and a variable whose absence has to be diagnosed one broken deployment
-    at a time belongs in the same refusal as the ones whose absence is never diagnosed at all. The
-    hop count is the quietest of all: unset behind a proxy, every signup in the world is reported to
-    Google as coming from one address, and a reCAPTCHA score is the only place it ever shows. As with
-    the market-key migration above, an unknown state is never taken for a safe one: it fails at
-    boot, naming the variables, rather than in production, naming nothing.
+    Some fail *silently* when unset: the captcha passes everybody, a session cookie signed with a
+    key the repository publishes is a session anyone can forge, and a credentialed CORS policy with
+    no origin list hands the organizer API to every website an organizer visits. The mail key, the
+    two mail addresses and the session backend are here for the mirror-image reason - unset, the key
+    fails *every* registration, reset and OTP with a 500 that names nothing, the addresses mail
+    links to a laptop from a sender that delivers to nobody, and the session backend sends a
+    serverless deployment looking for a disk it does not have, failing at import and naming nothing
+    either - and a variable whose absence has to be diagnosed one broken deployment at a time
+    belongs in the same refusal as the ones whose absence is never diagnosed at all. The hop count
+    is the quietest of all: unset behind a proxy, every signup in the world is reported to Google as
+    coming from one address, and a reCAPTCHA score is the only place it ever shows. As with the
+    market-key migration above, an unknown state is never taken for a safe one: it fails at boot,
+    naming the variables, rather than in production, naming nothing.
 
     This is a *check*: it reads configuration and nothing else, so asking whether this deployment is
     configured cannot change it. Installing what it found is ``configure_public_endpoint_defenses``.
@@ -490,27 +493,61 @@ app.config["MAX_CONTENT_LENGTH"] = HostLimits.MAX_REQUEST_BODY_BYTES
 bcrypt = Bcrypt(app)
 
 
-class RefusingLoginManager(LoginManager):
-    """Flask-Login's "strong" session protection, refusing a request without ending the sign-in.
+def browser_identifier() -> str:
+    """The client identifier a session is held to: the request's browser string, and nothing of
+    its network address (T318, ADR 0030).
 
-    "strong" holds a session to the client that signed in, its address and browser, and refuses a
-    request from any other. Flask-Login refuses one by deleting a session that is not permanent,
-    and the remember-me cookie with it, and only marks a permanent one not fresh. Sessions were
-    permanent until E38/F14/S01; since then one request the server could not hold to the browser
-    signed it out (T177). In the store on disk the deletion is on the server, so it held even when
-    nobody read the answer: a request a closed connection cut short of its User-Agent, say. In the
-    cookie store the deletion travels in the answer, so it signed out a browser that read it.
-
-    So a request from another client, its session permanent or not, is answered as signed out, and
-    the session and the remember-me cookie stay as they were for the browser that signed in. A
-    copied session cookie is refused as before, at every request; a browser whose address changes
-    is too, until it is back on the first address or signs in again (E47).
+    An organizer at a market's door moves from the venue's wifi to mobile data, so the address that
+    signed in is gone at the next request; the browser string stays. Its prefix names the scheme,
+    so it can never equal Flask-Login's own identifier, the hash of the address and the browser
+    together, which every session signed in before T318 holds. A request without a browser string
+    is held to the empty one.
     """
+    return sha512(f"browser|{request.headers.get('User-Agent', '')}".encode()).hexdigest()
+
+
+class RefusingLoginManager(LoginManager):
+    """Flask-Login's "strong" session protection, held to the browser and refusing a request
+    without ending the sign-in.
+
+    "strong" holds a session to the client that signed in and refuses a request from any other.
+    This app names the client by its browser string alone (`browser_identifier`), where
+    Flask-Login names it by its address and browser together, so a phone that changes network stays
+    signed in (T318, ADR 0030). Flask-Login refuses a request by deleting a session that is not
+    permanent, and the remember-me cookie with it, and only marks a permanent one not fresh.
+    Sessions were permanent until E38/F14/S01; since then one request the server could not hold to
+    the browser signed it out (T177). In the store on disk the deletion is on the server, so it held
+    even when nobody read the answer: a request a closed connection cut short of its User-Agent,
+    say. In the cookie store the deletion travels in the answer, so it signed out a browser that
+    read it.
+
+    So a request from another browser, its session permanent or not, is answered as signed out, and
+    the session and the remember-me cookie stay as they were for the browser that signed in. A
+    copied session cookie sent with another browser string is refused as before, at every request.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        # Every stamp and every comparison of a session's `_id` goes through this one attribute:
+        # `login_user`, `hold_a_restored_session_to_its_browser` and `_session_protection_failed`.
+        self._session_identifier_generator = browser_identifier
 
     def _session_protection_failed(self) -> bool:
         if app.config.get("SESSION_PROTECTION", self.session_protection) != "strong":
             return super()._session_protection_failed()
-        if not session or session.get("_id") == self._session_identifier_generator():
+        if not session:
+            return False
+        held = session.get("_id")
+        if held == self._session_identifier_generator():
+            return False
+        if held == flask_logins_identifier():
+            # A session signed in before T318, from the address and browser that signed it in:
+            # taken, and stamped with the browser's identifier in this answer, so the deploy signs
+            # nobody out. This carry-over may go in any release after T318's has been live for 30
+            # days (`UsersApi.REMEMBERED_SIGN_IN_LIFETIME`), not 12 hours: a remembered sign-in's
+            # session cookie carries the same secret as its remember cookie, so a browser left open
+            # holds a session stamped before T318 until the sign-in ends (ADR 0030).
+            session["_id"] = self._session_identifier_generator()
             return False
         session_protected.send(app)
         return True
@@ -537,13 +574,20 @@ login_manager.session_protection = "strong"
 
 @user_loaded_from_cookie.connect_via(app)
 def hold_a_restored_session_to_its_browser(_app: Flask, user: Any) -> None:
-    """Hold a session the remember-me cookie restored to the browser that restored it.
+    """Hold a session the remember-me cookie restored to the browser that restored it, in a fresh
+    session.
 
     "strong" refuses a session whose client identifier is not the one it holds
     (`RefusingLoginManager`); a sign-in records the identifier (`login_user`), but Flask-Login's
     restore from the cookie does not, so the session it restored was refused at its next request
     and "Remember me" lasted one request (E38/F14/S01). Recorded here, the way `login_user` does.
+
+    The restore is a sign-in, so it starts a fresh session as one does (`start_a_fresh_session`),
+    keeping only what the restore wrote: Flask-Login writes it into the session the browser sent.
     """
+    restored = {key: session[key] for key in ("_user_id", "_fresh") if key in session}
+    start_a_fresh_session()
+    session.update(restored)
     session["_id"] = login_manager._session_identifier_generator()
 
 
@@ -1527,7 +1571,8 @@ def write_placement(market_id: str) -> Response:
     """Place one vendor in one seat on one date. Asks ``Actions.ASSIGN``.
 
     EDITOR by default, the same bar as every other market write: an EDITOR can already rewrite the
-    tiers, sections and table counts the whole assignment is computed from.
+    tiers, sections and table counts the whole assignment is computed from. A move of a vendor who
+    has checked in that day answers 409 ``vendor_is_here`` unless ``whileHere`` is true (T318).
     """
     data = json_object(required=True)
 
@@ -1555,7 +1600,8 @@ def get_history(market_id: str) -> Response:
 @app.route('/markets/<market_id>/placements/swap', methods=['POST'])
 @login_required
 def swap_placements(market_id: str) -> Response:
-    """Trade two vendors' seats on one date, atomically. Asks ``Actions.ASSIGN``."""
+    """Trade two vendors' seats on one date, atomically. Asks ``Actions.ASSIGN``. Either vendor
+    checked in that day answers 409 ``vendor_is_here`` unless ``whileHere`` is true (T318)."""
     data = json_object(required=False)
     emails = data.get("emails")
     if not isinstance(emails, list):
@@ -1566,6 +1612,7 @@ def swap_placements(market_id: str) -> Response:
         str(emails[0]) if len(emails) > 0 else "",
         str(emails[1]) if len(emails) > 1 else "",
         authenticated_email(),
+        while_here=data.get("whileHere") is True,
     )
     return jsonify(result), status_code
 
@@ -1576,7 +1623,8 @@ def remove_placement(market_id: str) -> Response:
     """Free the seat one vendor holds on one date. Asks ``Actions.ASSIGN``.
 
     The counterpart of the PUT above, and the reason no operation displaces an occupant:
-    freeing a seat first is safe, and mirrors what an organizer physically does.
+    freeing a seat first is safe, and mirrors what an organizer physically does. A vendor who has
+    checked in that day answers 409 ``vendor_is_here`` unless ``whileHere`` is true (T318).
     """
     data = json_object(required=False)
     result, status_code = PlacementsApi.remove_placement(
@@ -1585,6 +1633,7 @@ def remove_placement(market_id: str) -> Response:
         str(data.get("date") or ""),
         authenticated_email(),
         deduct_owed=data.get("deductOwed") is True,
+        while_here=data.get("whileHere") is True,
     )
     return jsonify(result), status_code
 
@@ -1648,8 +1697,8 @@ def get_market_tables(market_id: str) -> Response:
 @app.route('/public/markets/<market_slug>/vendor/check-in', methods=['POST'])
 def vendor_check_in(market_slug: str) -> Response:
     """A signed-in vendor checks in for a date with the market's door code (ADR 0022). Bearer
-    token and ``{date, doorCode}``; every try counted against ``check-in:address``, a wrong code
-    against ``check-in:caller``."""
+    token and ``{date, doorCode}``; every try counted against ``check-in:address``, and nothing
+    against the caller, so a venue's shared network never refuses a right code (T318)."""
     return VendorCheckInApi.check_in(market_slug)
 
 
