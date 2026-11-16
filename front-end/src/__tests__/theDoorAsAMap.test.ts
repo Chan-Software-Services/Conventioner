@@ -1,0 +1,474 @@
+/**
+ * The door as a map (T422 ticket 10): Attendance switches from its list to a map of the open day,
+ * each table drawn by whether its vendor is here, expected or absent from the plan, kept fresh as
+ * the list is. A press on a vendor's table opens their drawer as a press on their row does, each
+ * half of a shared table its own vendor; a table with no vendor says so and opens nothing. The
+ * search marks a vendor's table, and the vendors the map cannot draw are counted under it.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { reactive, ref } from 'vue';
+import type { LocationQuery } from 'vue-router';
+
+import AttendanceStatusView, { REREAD_MS } from '@/views/AttendanceStatusView.vue';
+import { MarketPhase, type FloorplanTable, type Market } from '@/assets/types/datatypes';
+import { MarketAction } from '@/utils/marketActions';
+import { calendarToday } from '@/utils/marketGuide';
+import { dayInWords } from '@/utils/publicMap';
+import { answersRefusing, VIEWER_ANSWERS } from './support/servedAnswers';
+
+const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
+
+const route = reactive<{ params: Record<string, string>; query: LocationQuery }>({
+  params: { marketId: 'market-1' },
+  query: {},
+});
+const router = {
+  push: vi.fn(({ query }: { query: LocationQuery }) => {
+    route.query = query;
+    return Promise.resolve();
+  }),
+  replace: vi.fn(({ query }: { query: LocationQuery }) => {
+    route.query = query;
+    return Promise.resolve();
+  }),
+  back: vi.fn(),
+  afterEach: vi.fn(),
+  resolve: vi.fn(),
+  options: { history: { state: {} } },
+};
+
+vi.mock('vue-router', () => ({
+  useRoute: () => route,
+  useRouter: () => router,
+}));
+vi.mock('@/utils/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/api')>();
+  return { ...actual, api };
+});
+vi.mock('@/utils/openMarket', () => ({
+  useOpenMarket: () => ({ market: ref(marketNow), status: ref('loaded'), refresh: vi.fn() }),
+}));
+vi.mock('@/utils/vendorDetails', () => ({
+  useVendorDetails: () => ({ loaded: { value: false }, load: vi.fn() }),
+}));
+
+const TODAY = calendarToday();
+const ARRIVED = '2099-08-01T09:41:00Z';
+const EAST = { id: 'loc-east', name: 'East Hall' };
+const AISLE = { id: 'sec-aisle', name: 'Aisle A' };
+
+const ANA = 'ana@example.com';
+const BEN = 'ben@example.com';
+const CAL = 'cal@example.com';
+const DEE = 'dee@example.com';
+const EVE = 'eve@example.com';
+const FAY = 'fay@example.com';
+
+function table(id: string, number: number, xMm: number): FloorplanTable {
+  return { id, sectionId: AISLE.id, number, tableTypeId: 'type-6ft', xMm, yMm: 3000, rotation: 0 };
+}
+
+/** East Hall laid out, its Aisle A of four tables in a row, 30 m across. */
+const LAID_OUT = {
+  locations: [EAST],
+  sections: [{ ...AISLE, location: EAST, tier: null, count: 4 }],
+  tableTypes: [{ id: 'type-6ft', name: 'Standard 6 ft', widthMm: 1830, depthMm: 760 }],
+  floorplans: [
+    {
+      id: 'fp-east',
+      locationId: EAST.id,
+      revision: 1,
+      imageGridfsId: null,
+      imageWidth: 800,
+      imageHeight: 600,
+      scalePxPerUnit: 800 / 30_000,
+      tables: [
+        table('t1', 1, 4000),
+        table('t2', 2, 6400),
+        table('t3', 3, 8800),
+        table('t4', 4, 11_200),
+      ],
+      zones: [],
+      sectionStyles: [],
+      startingCounts: [],
+    },
+  ],
+};
+
+function market(changes: Partial<Market> = {}, setup: object = LAID_OUT): Market {
+  return {
+    id: 'market-1',
+    name: 'Spring Market',
+    phase: MarketPhase.MarketDays,
+    actionRefusals: answersRefusing(),
+    setupObject: setup,
+    ...changes,
+  } as unknown as Market;
+}
+let marketNow: Market = market();
+
+interface Row {
+  date: string;
+  vendorEmail: string;
+  vendorName: string;
+  tableCode: string | null;
+  tableChoice: string | null;
+  section: string | null;
+  location: string | null;
+  state: 'expected' | 'here' | 'here_elsewhere' | 'here_without_seat';
+  checkedInTableCode: string | null;
+  checkedInAt: string | null;
+  checkedInBy: string | null;
+  checkedInVia: string | null;
+}
+
+function row(email: string, name: string, tableCode: string | null, extra: Partial<Row> = {}) {
+  return {
+    date: TODAY,
+    vendorEmail: email,
+    vendorName: name,
+    tableCode,
+    tableChoice: 'Full Table',
+    section: 'Aisle A',
+    location: EAST.name,
+    state: 'expected',
+    checkedInTableCode: null,
+    checkedInAt: null,
+    checkedInBy: null,
+    checkedInVia: null,
+    ...extra,
+  } as Row;
+}
+const here = (at: string | null): Partial<Row> => ({
+  state: 'here',
+  checkedInTableCode: at,
+  checkedInAt: ARRIVED,
+});
+
+/**
+ * Ana here at Aisle A 1; Ben expected at 2; 3 shared, Cal here on its left half and Dee expected
+ * on its right; 4 free. Eve checked in with no table, and Fay's table is on no layout.
+ */
+function day(changes: Record<string, Partial<Row>> = {}) {
+  const rows = [
+    row(ANA, 'Ana Pottery', 'Aisle A 1', here('Aisle A 1')),
+    row(BEN, 'Ben Prints', 'Aisle A 2'),
+    row(CAL, 'Cal Knits', 'Aisle A 3', { tableChoice: 'Half Table (Left)', ...here('Aisle A 3') }),
+    row(DEE, 'Dee Soaps', 'Aisle A 3', { tableChoice: 'Half Table (Right)' }),
+    row(EVE, 'Eve Jams', null, { ...here('Aisle A 9'), state: 'here_without_seat' }),
+    row(FAY, 'Fay Candles', 'Annex 7', { section: 'Annex', location: 'Annex' }),
+  ].map((one) => ({ ...one, ...changes[one.vendorEmail] }));
+  return { data: { dates: [TODAY], roster: rows } };
+}
+
+const ROSTER_URL = '/markets/market-1/attendance';
+let answer = day();
+
+let visibility: DocumentVisibilityState = 'visible';
+
+async function open(): Promise<VueWrapper> {
+  const measured = Element.prototype.getBoundingClientRect;
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    if (this.getAttribute('data-testid') !== 'layout-map') return measured.call(this);
+    const [, , widthMm, heightMm] = (this.getAttribute('viewBox') ?? '0 0 0 0')
+      .split(' ')
+      .map(Number);
+    return new DOMRect(0, 0, widthMm * 0.04, heightMm * 0.04);
+  });
+  const wrapper = mount(AttendanceStatusView, {
+    attachTo: document.body,
+    global: {
+      stubs: {
+        MarketFrame: { template: '<div><slot /></div>' },
+        VendorDrawer: true,
+        DoorCodeScreen: true,
+        VendorNotes: true,
+        RouterLink: {
+          props: ['to'],
+          template: '<a :href="String(to)" v-bind="$attrs"><slot /></a>',
+        },
+      },
+    },
+  });
+  await flushPromises();
+  return wrapper;
+}
+
+async function openOnMap(): Promise<VueWrapper> {
+  route.query = { view: 'map' };
+  return open();
+}
+
+const testid = (id: string) => `[data-testid="${id}"]`;
+const tableOf = (wrapper: VueWrapper, id: string) => wrapper.get(`[data-table-id="${id}"]`);
+const halfOf = (wrapper: VueWrapper, id: string, side: 'left' | 'right') =>
+  tableOf(wrapper, id).get(`[data-half="${side}"]`);
+/** A whole table's top's fill: its section's colour when filled, white when outlined. */
+const fillOf = (wrapper: VueWrapper, id: string) =>
+  tableOf(wrapper, id).get(testid('layout-table-top')).attributes('fill');
+const halfFill = (wrapper: VueWrapper, id: string, side: 'left' | 'right') =>
+  halfOf(wrapper, id, side).get('path').attributes('fill');
+/** The map's marks: a rectangle round a whole table, a path round a half. */
+const marks = (wrapper: VueWrapper) => wrapper.findAll(testid('layout-map-read'));
+/** What a line says, its words' spacing as a reader hears it. */
+const words = (wrapper: VueWrapper, id: string) =>
+  wrapper.get(testid(id)).text().replace(/\s+/g, ' ');
+
+enableAutoUnmount(afterEach);
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  router.push.mockImplementation(({ query }: { query: LocationQuery }) => {
+    route.query = query;
+    return Promise.resolve();
+  });
+  router.replace.mockImplementation(({ query }: { query: LocationQuery }) => {
+    route.query = query;
+    return Promise.resolve();
+  });
+  router.options.history.state = {};
+  route.query = {};
+  marketNow = market();
+  answer = day();
+  visibility = 'visible';
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => visibility,
+  });
+  localStorage.setItem('user', JSON.stringify({ email: 'org@example.com' }));
+  api.get.mockImplementation((url: string) =>
+    Promise.resolve(url === ROSTER_URL ? answer : { data: {} }),
+  );
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  localStorage.clear();
+});
+
+describe('List and Map', () => {
+  it('stand in the tools row, List pressed and the list shown, with no map', async () => {
+    const wrapper = await open();
+    const tools = wrapper.get('.door-tools');
+    const list = tools.get(testid('attendance-view-list'));
+    const map = tools.get(testid('attendance-view-map'));
+    expect([list.text(), map.text()]).toEqual(['List', 'Map']);
+    expect(list.attributes('aria-pressed')).toBe('true');
+    expect(map.attributes('aria-pressed')).toBe('false');
+    expect(wrapper.findAll(testid('attendance-row')).length).toBeGreaterThan(0);
+    expect(wrapper.find(testid('attendance-map')).exists()).toBe(false);
+  });
+
+  it('Map is view=map in the address, replaced, with the day kept; List takes it away', async () => {
+    route.query = { date: TODAY };
+    const wrapper = await open();
+    await wrapper.get(testid('attendance-view-map')).trigger('click');
+    expect(router.replace).toHaveBeenLastCalledWith({ query: { date: TODAY, view: 'map' } });
+    expect(router.push).not.toHaveBeenCalled();
+    await flushPromises();
+    expect(wrapper.get(testid('attendance-view-map')).attributes('aria-pressed')).toBe('true');
+    expect(wrapper.find(testid('attendance-map')).exists()).toBe(true);
+    expect(wrapper.findAll(testid('attendance-row'))).toHaveLength(0);
+
+    await wrapper.get(testid('attendance-view-list')).trigger('click');
+    expect(router.replace).toHaveBeenLastCalledWith({ query: { date: TODAY } });
+  });
+
+  it('a change of day keeps the map', async () => {
+    const wrapper = await openOnMap();
+    await wrapper.get(testid(`attendance-date-${TODAY}`)).trigger('click');
+    expect(router.replace).toHaveBeenLastCalledWith({ query: { view: 'map', date: TODAY } });
+  });
+
+  it('opens on the map from the address, as a reload does, the Show toggles hidden', async () => {
+    const wrapper = await openOnMap();
+    expect(wrapper.find(testid('attendance-map')).exists()).toBe(true);
+    expect(wrapper.find(testid('attendance-show-all')).exists()).toBe(false);
+    expect(wrapper.find(testid('attendance-search')).exists()).toBe(true);
+    expect(wrapper.get(testid('attendance-summary')).text()).toBe('2 of 5 checked in');
+  });
+});
+
+describe("the open day's seats", () => {
+  it('draws here filled, expected outlined, each half its own, and a table with no vendor free', async () => {
+    const wrapper = await openOnMap();
+    expect(fillOf(wrapper, 't1')).toBe('var(--layout-section-1-fill)');
+    expect(fillOf(wrapper, 't2')).toBe('white');
+    expect(halfFill(wrapper, 't3', 'left')).toBe('var(--layout-section-1-fill)');
+    expect(halfFill(wrapper, 't3', 'right')).toBe('white');
+    expect(fillOf(wrapper, 't4')).toBe('var(--layout-floor)');
+    expect(tableOf(wrapper, 't1').attributes('aria-label')).toBe(
+      'Aisle A 1, Standard 6 ft, Ana Pottery',
+    );
+  });
+
+  it('a vendor here at another table is drawn filled at the seat they hold', async () => {
+    answer = day({ [BEN]: { ...here('Aisle A 4'), state: 'here_elsewhere' } });
+    const wrapper = await openOnMap();
+    expect(fillOf(wrapper, 't2')).toBe('var(--layout-section-1-fill)');
+  });
+
+  it('a vendor with no name is named by their address, as their row is', async () => {
+    answer = day({ [BEN]: { vendorName: '' } });
+    const wrapper = await openOnMap();
+    expect(tableOf(wrapper, 't2').attributes('aria-label')).toBe(
+      `Aisle A 2, Standard 6 ft, ${BEN}`,
+    );
+  });
+
+  it('the legend reads Here, Expected and No vendor', async () => {
+    const wrapper = await openOnMap();
+    expect(wrapper.findAll(testid('day-map-legend-item')).map((item) => item.text())).toEqual([
+      'Here',
+      'Expected',
+      'No vendor',
+    ]);
+  });
+
+  it('on an archived market, where the list says "Did not come", so does the legend', async () => {
+    marketNow = market({ phase: MarketPhase.Archived });
+    const wrapper = await openOnMap();
+    expect(wrapper.findAll(testid('day-map-legend-item')).map((item) => item.text())).toEqual([
+      'Here',
+      'Did not come',
+      'No vendor',
+    ]);
+  });
+
+  it('changes when the re-read brings a check-in, with no reload', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+    const wrapper = await openOnMap();
+    expect(fillOf(wrapper, 't2')).toBe('white');
+    answer = day({ [BEN]: here('Aisle A 2') });
+    vi.advanceTimersByTime(REREAD_MS);
+    await flushPromises();
+    expect(fillOf(wrapper, 't2')).toBe('var(--layout-section-1-fill)');
+  });
+});
+
+describe('a press on the map', () => {
+  it("on a vendor's table opens their drawer on its Application tab, the day and the view kept", async () => {
+    route.query = { view: 'map', date: TODAY };
+    const wrapper = await open();
+    await tableOf(wrapper, 't2').trigger('click');
+    expect(router.push).toHaveBeenCalledWith(
+      expect.objectContaining({ query: { view: 'map', date: TODAY, vendor: BEN } }),
+    );
+    expect(wrapper.find(testid('attendance-map-note')).exists()).toBe(false);
+  });
+
+  it("on each half of a shared table opens that half's vendor", async () => {
+    const wrapper = await openOnMap();
+    await halfOf(wrapper, 't3', 'left').trigger('click');
+    expect(route.query.vendor).toBe(CAL);
+    await halfOf(wrapper, 't3', 'right').trigger('click');
+    expect(route.query.vendor).toBe(DEE);
+  });
+
+  it("marks the open vendor's seat as the picked one", async () => {
+    route.query = { view: 'map', vendor: DEE };
+    const wrapper = await open();
+    expect(marks(wrapper)).toHaveLength(1);
+    expect(marks(wrapper)[0]!.find('path').exists()).toBe(true);
+  });
+
+  it('on a table with no vendor says so under the map and opens nothing', async () => {
+    const wrapper = await openOnMap();
+    await tableOf(wrapper, 't4').trigger('click');
+    expect(wrapper.get(testid('attendance-map-note')).text()).toBe(
+      `Table Aisle A 4: no vendor on ${dayInWords(TODAY)}.`,
+    );
+    expect(router.push).not.toHaveBeenCalled();
+    expect(marks(wrapper)).toHaveLength(1);
+  });
+});
+
+describe('the search on the map', () => {
+  it("marks the matching vendors' seats and opens nothing", async () => {
+    const wrapper = await openOnMap();
+    expect(marks(wrapper)).toHaveLength(0);
+    await wrapper.get(testid('attendance-search')).setValue('Ben');
+    expect(marks(wrapper)).toHaveLength(1);
+    await wrapper.get(testid('attendance-search')).setValue('knits');
+    expect(marks(wrapper)).toHaveLength(1);
+    expect(marks(wrapper)[0]!.find('path').exists()).toBe(true);
+    await wrapper.get(testid('attendance-search')).setValue('Aisle A');
+    expect(marks(wrapper)).toHaveLength(4);
+    expect(router.push).not.toHaveBeenCalled();
+  });
+});
+
+describe('under the map', () => {
+  it('counts who is here with no table and who sits at a table on no layout, each with Show in the list', async () => {
+    const wrapper = await openOnMap();
+    expect(words(wrapper, 'attendance-map-unseated')).toBe('1 here with no table Show in the list');
+    expect(words(wrapper, 'attendance-map-off-layout')).toBe(
+      '1 vendor is at a table not on a layout. Show in the list',
+    );
+    await wrapper
+      .get(`${testid('attendance-map-off-layout')} ${testid('attendance-map-show-list')}`)
+      .trigger('click');
+    expect(router.replace).toHaveBeenLastCalledWith({ query: {} });
+  });
+
+  it('says each count only when it applies, and in the plural for more than one', async () => {
+    answer = day({
+      [EVE]: { state: 'expected', tableCode: 'Annex 8', checkedInAt: null },
+      [ANA]: { tableCode: 'Annex 1' },
+    });
+    const wrapper = await openOnMap();
+    expect(wrapper.find(testid('attendance-map-unseated')).exists()).toBe(false);
+    expect(words(wrapper, 'attendance-map-off-layout')).toBe(
+      '3 vendors are at tables not on a layout. Show in the list',
+    );
+  });
+});
+
+describe('with no location laid out', () => {
+  const NONE = { ...LAID_OUT, floorplans: [] };
+
+  it('says so, with Open the layout for a person who may change the setup', async () => {
+    marketNow = market({}, NONE);
+    const wrapper = await openOnMap();
+    expect(words(wrapper, 'attendance-map-none')).toBe(
+      'No location has a layout yet. Open the layout',
+    );
+    expect(wrapper.get(testid('attendance-map-layout-link')).attributes('href')).toContain(
+      '/markets/market-1/',
+    );
+    expect(wrapper.find(testid('day-map')).exists()).toBe(false);
+  });
+
+  it('with no link for a person who may not', async () => {
+    marketNow = market({ actionRefusals: answersRefusing(MarketAction.ChangeSetup) }, NONE);
+    const wrapper = await openOnMap();
+    expect(words(wrapper, 'attendance-map-none')).toBe('No location has a layout yet.');
+    expect(wrapper.find(testid('attendance-map-layout-link')).exists()).toBe(false);
+  });
+
+  it('a layout with no scale is not laid out', async () => {
+    marketNow = market(
+      {},
+      { ...LAID_OUT, floorplans: [{ ...LAID_OUT.floorplans[0], scalePxPerUnit: null }] },
+    );
+    const wrapper = await openOnMap();
+    expect(wrapper.find(testid('attendance-map-none')).exists()).toBe(true);
+  });
+});
+
+describe('a Viewer', () => {
+  it('reads the map and opens the drawer, and nothing on the map writes', async () => {
+    marketNow = market({ actionRefusals: VIEWER_ANSWERS });
+    const wrapper = await openOnMap();
+    expect(fillOf(wrapper, 't1')).toBe('var(--layout-section-1-fill)');
+    expect(wrapper.find(testid('attendance-check-in')).exists()).toBe(false);
+    await tableOf(wrapper, 't1').trigger('click');
+    await tableOf(wrapper, 't4').trigger('click');
+    expect(route.query.vendor).toBe(ANA);
+    expect(api.post).not.toHaveBeenCalled();
+    expect(api.put).not.toHaveBeenCalled();
+    expect(api.delete).not.toHaveBeenCalled();
+  });
+});
