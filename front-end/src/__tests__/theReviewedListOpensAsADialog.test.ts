@@ -350,11 +350,12 @@ describe('Show N reviewed', () => {
     /** The first rows' page and the next: 100 of 120 shown, the row asked for among them. */
     async function aLongListOpen() {
       list = [application('jane'), application('kim'), ...manyReviewed(120)];
-      await monitor();
+      const wrapper = await monitor();
       await open();
       await byId('app-monitor-decided-list-more').trigger('click');
       await flushPromises();
       expect(allById('app-monitor-decided-row')).toHaveLength(100);
+      return wrapper;
     }
 
     const changeOn = async (id: string) => {
@@ -485,9 +486,44 @@ describe('Show N reviewed', () => {
       expect(byId('app-monitor-decided-error').exists()).toBe(false);
     });
 
-    describe('a change that fails after the dialog was closed', () => {
-      /** A press whose answer is held, then the dialog closed with that answer still out. */
-      async function changeThenClose(id: string) {
+    it('holds while the change is out: no close takes it, and a second press sends nothing', async () => {
+      await aLongListOpen();
+      let answer!: () => void;
+      reviewApplication.mockImplementationOnce(
+        (_m: string, app: Application, status: string) =>
+          new Promise((resolve) => {
+            answer = () =>
+              resolve({
+                application: { ...app, status, verdictAt: '2026-11-01T10:00:00+00:00' },
+                undoSeconds: 0,
+              });
+          }),
+      );
+
+      await changeOn('vendor-080');
+      await changeOn('vendor-080');
+      await flushPromises();
+      await byId('app-monitor-decided-close-button').trigger('click');
+      await byId('app-monitor-decided-background').trigger('click');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      await flushPromises();
+
+      expect(dialog().exists()).toBe(true);
+      expect(byId('app-monitor-decided-close-button').attributes('disabled')).toBeDefined();
+      expect(reviewApplication).toHaveBeenCalledTimes(1);
+
+      answer();
+      await flushPromises();
+      expect(byId('app-monitor-decided-close-button').attributes('disabled')).toBeUndefined();
+    });
+
+    describe('a change answered after the dialog was closed under it', () => {
+      /**
+       * A press whose answer is held, then the review left and come back to with that answer still
+       * out: the one close the dialog does not hold, since the view it lies over is gone.
+       */
+      async function changeThenLeave(wrapper: VueWrapper, id: string) {
         let refuse!: (reason: unknown) => void;
         reviewApplication.mockImplementationOnce(
           () =>
@@ -497,7 +533,9 @@ describe('Show N reviewed', () => {
         );
         await changeOn(id);
         await flushPromises();
-        await byId('app-monitor-decided-close-button').trigger('click');
+        await wrapper.setProps({ visible: false });
+        await flushPromises();
+        await wrapper.setProps({ visible: true });
         await flushPromises();
         expect(dialog().exists()).toBe(false);
         return refuse;
@@ -509,9 +547,8 @@ describe('Show N reviewed', () => {
       };
 
       it('is said on the card, naming the application, and not in the next opening', async () => {
-        await aLongListOpen();
-        const up = email();
-        const refuse = await changeThenClose('vendor-080');
+        const wrapper = await aLongListOpen();
+        const refuse = await changeThenLeave(wrapper, 'vendor-080');
 
         refuse(NO_MAY_NOT);
         await flushPromises();
@@ -519,17 +556,15 @@ describe('Show N reviewed', () => {
         expect(byId('app-monitor-error').text()).toBe(
           'vendor-080@example.com was not changed: The server said no.',
         );
-        expect(email()).toBe(up);
-        expect(focused()).toBe(button().element);
 
         await open();
         expect(byId('app-monitor-decided-error').exists()).toBe(false);
       });
 
       it('says who changed it since, on the row and on the card', async () => {
-        await aLongListOpen();
+        const wrapper = await aLongListOpen();
         const seen = list.find((app) => app.id === 'vendor-080')!;
-        const refuse = await changeThenClose('vendor-080');
+        const refuse = await changeThenLeave(wrapper, 'vendor-080');
 
         refuse({
           isAxiosError: true,
@@ -555,40 +590,11 @@ describe('Show N reviewed', () => {
         );
       });
 
-      it('keeps a refused card its own words, and adds the failure beside them', async () => {
-        list = [application('jane'), application('kim'), reviewedAt(1)];
-        await monitor();
-        reviewApplication.mockRejectedValueOnce({
-          isAxiosError: true,
-          response: {
-            status: 409,
-            data: {
-              error: 'kai@example.com approved this application since you opened it.',
-              application: {
-                ...application('jane', ApplicationStatus.ReviewerApproved),
-                verdictAt: '2026-10-31T10:00:00+00:00',
-              },
-            },
-          },
-        });
-        await press('r');
-        await open();
-        const refuse = await changeThenClose('vendor-001');
-
-        refuse(NO_MAY_NOT);
-        await flushPromises();
-
-        const said = byId('app-monitor-changed').text();
-        expect(said).toContain('kai@example.com approved this application');
-        expect(said).toContain('vendor-001@example.com was not changed: The server said no.');
-        expect(email()).toBe('jane@example.com');
-      });
-
       it('draws each address on either line to break only where an address may', async () => {
         list = [application('jane'), application('kim'), reviewedAt(1)];
-        await monitor();
+        const wrapper = await monitor();
         await open();
-        const refuse = await changeThenClose('vendor-001');
+        const refuse = await changeThenLeave(wrapper, 'vendor-001');
 
         refuse(NO_MAY_NOT);
         await flushPromises();
@@ -619,9 +625,9 @@ describe('Show N reviewed', () => {
         expect(byId('app-monitor-changed').element.children).toHaveLength(1);
       });
 
-      it('is said in the dialog when it was opened again before the answer', async () => {
-        await aLongListOpen();
-        const refuse = await changeThenClose('vendor-080');
+      it('is kept out of the dialog opened again before the answer, and said on the card', async () => {
+        const wrapper = await aLongListOpen();
+        const refuse = await changeThenLeave(wrapper, 'vendor-080');
         await open();
         const closeButton = byId('app-monitor-decided-close-button').element as HTMLElement;
         closeButton.focus();
@@ -629,8 +635,11 @@ describe('Show N reviewed', () => {
         refuse(NO_MAY_NOT);
         await flushPromises();
 
-        expect(byId('app-monitor-decided-error').text()).toContain('The server said no.');
-        expect(byId('app-monitor-error').exists()).toBe(false);
+        expect(byId('app-monitor-decided-error').exists()).toBe(false);
+        expect(dialog().exists()).toBe(true);
+        expect(byId('app-monitor-error').text()).toBe(
+          'vendor-080@example.com was not changed: The server said no.',
+        );
         expect(focused()).toBe(closeButton);
       });
     });

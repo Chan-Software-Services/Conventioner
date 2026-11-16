@@ -24,6 +24,7 @@ sources:
   - T204
   - T270
   - T263
+  - T411
 ---
 
 # The review is dealt among chosen reviewers
@@ -95,6 +96,7 @@ One by one hands a chosen reviewer their own share first, and once it is done sa
 - The market read serves every reader the reviewers, each with whether they may still review here, and serves whom the reader may choose only to someone who may choose, while the review is open ([one market, from the server](../../implementation/conventions/one-market-from-the-server.md)).
 - A choice and the deal it made are entries of [the market's history](../../implementation/data/history.md), worded on Manage market's History and, for one vendor, in their drawer ([reading the market's history](../flows/reading-the-markets-history.md)).
 - The Reviewers panel on the Applications tab ([`ReviewersPanel.vue`](../../../front-end/src/components/market/ReviewersPanel.vue)) says the reviewers in one line ([`NameList.vue`](../../../front-end/src/components/NameList.vue), each reviewer drawn by [`ReviewerName.vue`](../../../front-end/src/components/market/ReviewerName.vue)), whose "and N more" opens the whole list, and changes them, through one picker, a `SearchPicker` of several choices, its people from [`front-end/src/utils/personChoice.ts`](../../../front-end/src/utils/personChoice.ts) ([`ReviewerPicker.vue`](../../../front-end/src/components/market/ReviewerPicker.vue)), and the words [`front-end/src/utils/reviewTeam.ts`](../../../front-end/src/utils/reviewTeam.ts) holds ([reviewing applications](../flows/review.md#dividing-the-review)).
+  Its Change dialog holds by its submission through the save and the market's re-read (T411).
   Whose share each application is, and the warning on deciding another's, are worded by [`front-end/src/utils/reviewers.ts`](../../../front-end/src/utils/reviewers.ts) for the All view's rows, its drawer and One by one's card, and the same file decides what the All view's "Assigned to" filter offers and opens on, and which of One by one's queue is the reader's share, by one test of whose share an application is (`inShareOf`) ([reviewing applications](../flows/review.md#dividing-the-review)).
   `POST /markets/:id/review/next` hands a chosen reviewer their share first, and with `mineOnly` nothing else (`claim_next_for_review` and `_in_share_of` in [`back-end/api/applications.py`](../../../back-end/api/applications.py)).
   The same picker is offered as an own-form market opens applications, in the phase rail's dialog ([the phase rail](../../implementation/modules/phase-rail.md), [taking applications](../flows/taking-applications.md#h1-open-applications)), and on a Google Form market's first import, in its preview step ([`CsvImportView.vue`](../../../front-end/src/views/CsvImportView.vue), [the import](../flows/import.md#h2a-first-import-everything-maps)).

@@ -64,7 +64,13 @@ import {
 } from '@/utils/reviewers';
 import { useMarketStore } from '@/stores/market';
 import ListFreshness from '@/components/ListFreshness.vue';
-import { useVerdictActions, type VerdictOutcome } from '@/utils/verdictActions';
+import {
+  VerdictNotWritten,
+  useVerdictActions,
+  verdictRefusal,
+  type VerdictOutcome,
+} from '@/utils/verdictActions';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import { useVerdictUndo } from '@/utils/verdictUndo';
 import VerdictUndoLine from '@/components/application/VerdictUndoLine.vue';
 import { applicantName } from '@/utils/essentialFields';
@@ -123,8 +129,17 @@ const givers = computed(
 const showingReviewed = ref(false);
 /** The dialog's find field: forgotten on closing, set to an address by a link naming one. */
 const reviewedWords = ref('');
-/** A change of verdict that was not written, said in the dialog: the card behind is out of sight. */
-const reviewedError = ref('');
+/**
+ * A change of verdict, for the dialog's one opening (T411): one that was not written is said in the
+ * dialog, since the card behind is out of sight; one answered after the dialog was closed under it
+ * is said beside the card.
+ */
+const reviewedChange = useDialogSubmit({
+  opening: () => showingReviewed.value,
+  failure: 'The verdict was not saved.',
+  says: 'self',
+});
+const { sentence: reviewedError } = reviewedChange;
 const reviewedButton = ref<HTMLButtonElement>();
 const reviewedDialog = ref<InstanceType<typeof AppDialog>>();
 const REVIEWED_NOUN = { one: 'application', many: 'applications' };
@@ -166,7 +181,6 @@ function stopShowingReviewed() {
   if (!showingReviewed.value) return;
   showingReviewed.value = false;
   reviewedWords.value = '';
-  reviewedError.value = '';
   void nextTick(() => {
     if (document.activeElement === document.body) reviewedButton.value?.focus();
   });
@@ -647,20 +661,30 @@ async function changeVerdict(app: Application, status: ApplicationStatus, event:
   row?.focus({ preventScroll: true });
   saving.value = true;
   deciding = app.id;
-  reviewedError.value = '';
   const before = { ...app };
   try {
-    const outcome = await verdicts.give(app, status);
-    offerUndo(before, outcome, status);
-    if (outcome.kind !== 'written') {
-      // Closed with the answer still out: said where the reviewer now is, and which one, since the
-      // card up is another application and its "this application" would read as that one.
-      if (showingReviewed.value) reviewedError.value = outcome.message;
-      else sayBesideTheCard(`${app.applicantEmail} was not changed: ${outcome.message}`);
-    } else if (app.id === refusedOn.value) {
-      errorMessage.value = '';
-      await settle(app, outcome);
-    }
+    await reviewedChange.submit(
+      async () => {
+        const outcome = await verdicts.give(app, status);
+        offerUndo(before, outcome, status);
+        if (outcome.kind !== 'written') throw new VerdictNotWritten(outcome.message);
+        if (app.id === refusedOn.value) {
+          errorMessage.value = '';
+          await settle(app, outcome);
+        }
+      },
+      {
+        refused: verdictRefusal,
+        // Closed under it, by leaving the review or another market: said where the reviewer now is,
+        // and which one, since the card up is another application and its "this application" would
+        // read as that one.
+        late: (answer) => {
+          if (answer.ok) return;
+          const words = verdictRefusal(answer.error) ?? 'The verdict was not saved.';
+          sayBesideTheCard(`${app.applicantEmail} was not changed: ${words}`);
+        },
+      },
+    );
   } finally {
     deciding = null;
     saving.value = false;
@@ -765,34 +789,49 @@ function next() {
  * in the vendor's notes - which the dialog opens on, so nothing there is written over.
  */
 const followUpOpen = ref(false);
-const followUpError = ref('');
+/** The follow-up's write, for the dialog's one opening (T411). */
+const followUp = useDialogSubmit({
+  opening: () => followUpOpen.value,
+  failure: 'The verdict was not saved.',
+});
 
 /** A dialog is open over the card: its own controls have the keyboard, and no key reaches the card. */
 const dialogOverCard = computed(
   () => followUpOpen.value || choosingHighlights.value || showingReviewed.value,
 );
 
+/**
+ * The list takes the answer whichever opening it lands in; the dialog and the card hear it only in
+ * the opening it was sent from. Closed under it, by leaving the review or another market, the
+ * review reads its list again on its way back (T411).
+ */
 async function markFollowUp(choice: { ownerEmail: string; note?: string }) {
   const app = current.value;
   if (!app || saving.value) return;
-  followUpError.value = '';
   saving.value = true;
   deciding = app.id;
   const before = { ...app };
   try {
-    const outcome = await verdicts.markFollowUp(
-      app,
-      choice,
-      entryFor(app.applicantEmail)?.note ?? '',
+    await followUp.submit(
+      async () => {
+        const outcome = await verdicts.markFollowUp(
+          app,
+          choice,
+          entryFor(app.applicantEmail)?.note ?? '',
+        );
+        void loadNotes();
+        if (outcome.kind === 'failed') throw new VerdictNotWritten(outcome.message);
+        return outcome;
+      },
+      {
+        done: async (outcome) => {
+          followUpOpen.value = false;
+          offerUndo(before, outcome, ApplicationStatus.NeedsFollowUp);
+          await settle(app, outcome);
+        },
+        refused: verdictRefusal,
+      },
     );
-    void loadNotes();
-    if (outcome.kind === 'failed') {
-      followUpError.value = outcome.message;
-      return;
-    }
-    followUpOpen.value = false;
-    offerUndo(before, outcome, ApplicationStatus.NeedsFollowUp);
-    await settle(app, outcome);
   } finally {
     deciding = null;
     saving.value = false;
@@ -872,6 +911,8 @@ watch(
 // come back with the view and hold the keys from a card it no longer lies over.
 watch([() => props.visible, () => props.market?.id, marksHighlights], stopChoosingHighlights);
 watch([() => props.visible, () => props.market?.id], stopShowingReviewed);
+// So is a follow-up being asked for: its card is the last view's.
+watch([() => props.visible, () => props.market?.id], () => (followUpOpen.value = false));
 
 // A tick still being written when Done was pressed has no dialog left to say it failed in.
 watch(highlightsError, (words) => {
@@ -1223,7 +1264,7 @@ function submittedOn(app: Application): string {
         :me="me"
         :note="current ? (entryFor(current.applicantEmail)?.note ?? '') : ''"
         :writesNotes="writesNotes"
-        :error="followUpError"
+        :submission="followUp"
         @close="followUpOpen = false"
         @confirm="markFollowUp"
       />
@@ -1278,6 +1319,7 @@ function submittedOn(app: Application): string {
       scroll="body"
       anchored
       :error="reviewedError"
+      :submission="reviewedChange"
       @close="stopShowingReviewed"
     >
       <p
