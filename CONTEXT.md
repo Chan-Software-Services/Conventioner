@@ -107,7 +107,7 @@ See [The review is dealt among chosen reviewers](docs/business/rules/the-review-
 The applications dealt to one reviewer, and the follow-ups they own wherever those were dealt. An application stays in the share it was dealt to after it is decided, as the record of whose it was. One that comes back to open or to a follow-up (a verdict undone, a rule's rejection returned, an applicant's edit or a re-import sending a verdict back to review) stays in that share only while its reviewer, or its follow-up's owner, may still review; otherwise it is dealt again.
 
 **Deal**:
-Handing the open applications out among the reviewers, round robin in the order they arrived. Any change of reviewers deals the open applications again; a decided application stays where it is, and so does a follow-up, unless its owner is a reviewer the change removed. Every application that comes into open or a follow-up waits for the next deal, which keeps it with its reviewer or follow-up owner while they may review, deals it to the next reviewer in turn otherwise, and hands a follow-up on as its owner too.
+Handing the open applications out among the reviewers, round robin in the order they arrived. Any change of reviewers deals the open applications again; a decided application stays where it is, and so does a follow-up, unless its owner is a reviewer the change removed. Every application that comes into open, or whose follow-up is handed on, waits for the next deal, which keeps it with its reviewer or follow-up owner while they may review, deals it to the next reviewer in turn otherwise, and hands a follow-up on as its owner too.
 _Avoid_: Assign (means giving a vendor a table)
 
 **Waiting**:

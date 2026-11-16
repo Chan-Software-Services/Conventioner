@@ -4,12 +4,12 @@ An application could fall out of every reviewer's share and nobody noticed: a ve
 rule's rejection returned to open, or an approval a re-import sent back to review came back open
 with no reviewer, or with a reviewer who had been removed, and no deal ever dealt it again (T277
 P1, P2, P3); one that arrived while nobody chosen could review was let go undealt, and stayed so
-once a reviewer's role came back (P5). Every move into open or follow-up now marks the
-application for the deal in its own write, and the deal, holding the market, keeps an able
-reviewer, deals the rest to the next in turn, and with nobody able leaves the mark for the next
-deal, which a reviewer's next card starts.
+once a reviewer's role came back (P5). Every move into open, and a follow-up's hand-on, now
+marks the application for the deal in its own write, and the deal, holding the market, keeps an
+able reviewer, deals the rest to the next in turn, and with nobody able leaves the mark for the
+next deal, which a reviewer's next card starts.
 
-Each case is driven through the routes, as an organizer and an applicant reach it.
+Each case is set up through the routes, as an organizer and an applicant reach them.
 """
 from conftest import seen_as_stored
 from test_choosing_reviewers_deals_the_open_applications import (

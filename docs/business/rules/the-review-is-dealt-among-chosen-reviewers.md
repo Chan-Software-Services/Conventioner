@@ -43,7 +43,7 @@ It never counts what each reviewer has left open: being quick earns nobody more 
 Seven open applications among three reviewers deal three, two and two, the extra one to the first in address order.
 
 **Each application that arrives open is dealt to the next reviewer in turn**: an applicant's submission, every import ([the CSV import](../../implementation/modules/csv-import.md)), and an application the [automatic rejections](automatic-rejections.md) return to open when the rules are saved, the form is saved or a vendor's info is updated.
-**Every application that comes back into open or a follow-up waits for the deal too** (T277): a verdict undone by its giver, an approval a re-import sends back to review, and a follow-up handed on, as well as a rule's rejection returned to open.
+**Every application that comes back into open, and every follow-up handed on, waits for the deal too** (T277): a verdict undone by its giver, an approval a re-import sends back to review, and a follow-up handed on, as well as a rule's rejection returned to open.
 Each is marked in the same write that moves it, whether or not reviewers are chosen, and the deal keeps it with its reviewer, or a follow-up with its owner, while they may still review here; otherwise it deals it to the next reviewer in turn, and hands a follow-up on to them as its owner and its reviewer.
 So a verdict undone after the reviewers were chosen, or after its reviewer was removed, is dealt as an arrival is, and no open application is left in nobody's share while someone may review.
 Which change moves an application where is [the application document's review state](../../implementation/data/application-document.md#the-review-state).

@@ -8,8 +8,8 @@ event lands another write between the event's read and its own, and the event wr
 over it. The pure ``move`` is checked over the same grid, so a preview reads the table the writes
 do. The table itself is stated once, in ``docs/implementation/data/application-document.md``.
 
-Every move into open or follow-up marks the application for the deal by the write it came by
-(``arriving``), and every cell asserts the mark it leaves. Changed answers are one event whoever
+Every move into open, and a follow-up's hand-on, marks the application for the deal by the write
+it came by (``arriving``), and every cell asserts the mark it leaves. Changed answers are one event whoever
 changes them (decision 9.1): the applicant's save, an import row and an organizer's update each
 have a column, and the "(none)" row is the applicant's first save and an import's new row.
 
@@ -792,8 +792,8 @@ class TestThePureMove:
 # --- Every stored status reads as a state ---------------------------------------------------------
 
 #: The state each stored status reads as, with nobody added by hand and no rule's giver: the
-#: never-written statuses as the migration writes them (decision 9.6), the offers' as the approval
-#: they carried and ``cancelled`` as a person's rejection.
+#: offers' statuses as the approval they carried and ``cancelled`` as a person's rejection
+#: (decision 9.6).
 STORED_AS: Dict[ApplicationStatus, State] = {
     ApplicationStatus.OPEN: State.OPEN,
     ApplicationStatus.UNDER_REVIEW: State.OPEN,

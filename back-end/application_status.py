@@ -40,8 +40,9 @@ OWNED_FIELDS = (
     "added_by", "added_at", "origin", "arriving", "reviewer",
 )
 
-#: Statuses nobody has decided yet, as the owner's own filters read them: an open application is
-#: stored ``open``, or ``under_review`` from before. Every reader asks ``state_of`` instead.
+#: Statuses nobody has decided yet, as a filter on the stored status reads them: an open
+#: application is stored ``open``, or ``under_review`` from before. The deal's pool and the claim
+#: filter on this list; every other reader asks ``state_of``.
 UNDECIDED_STATUSES = (ApplicationStatus.OPEN.value, ApplicationStatus.UNDER_REVIEW.value)
 #: The statuses a reviewer gives, each with who gave it: a verdict, or a follow-up (E34).
 MARKED_STATUSES = (ApplicationStatus.REVIEWER_APPROVED, ApplicationStatus.REVIEWER_REJECTED,
@@ -199,8 +200,9 @@ def undoable_by(doc: Dict[str, Any], user_id: Optional[str],
 class Arrival:
     """The write that moved an application into open or follow-up: who made it and by which action.
 
-    Every such move marks the application for the deal in its own update, storing this as
-    ``arriving``, whether or not reviewers are chosen and whoever its reviewer is. The deal, holding
+    Every such move but a person's own follow-up marks the application for the deal in its own
+    update, storing this as ``arriving``, whether or not reviewers are chosen and whoever its
+    reviewer is. The deal, holding
     the market, then keeps an able reviewer or deals it to the next one in turn
     (``review_team.py``), and records the deal under this write. Marking every move, and judging who
     is able only in the deal that holds the market, is what closes the race between a change of
@@ -494,12 +496,13 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
     """Where ``event`` takes this application, as read, or the table's refusal of it.
 
     Pure: it reads nothing and writes nothing, so the table-driven test, a preview and the event's
-    write all read the same answer. Every move holds the status and the verdict's time as read; a
+    write all read the same answer. Every move but a hand-on (held on its still needing a
+    follow-up) and an organizer's update holds the status and the verdict's time as read; a
     verdict, a rule's and a person's, holds the answers' time (``updated_at``) too, so neither a
     verdict nor answers changed in between are written over (E33/F03/S02, E34/F03/S01, T270).
-    Every move into open or follow-up (an undo, a rule's return, a hand-on, answers changed under a
-    person's verdict) marks the application for the deal by the event's ``arrival``; every verdict
-    ends the wait. Changed answers hold only the status and the verdict's time, and an organizer's
+    An undo, a rule's return, a hand-on and answers changed under a person's verdict mark the
+    application for the deal by the event's ``arrival``; a person's follow-up keeps whatever mark
+    it had; every verdict ends the wait. Changed answers hold only the status and the verdict's time, and an organizer's
     nothing (``_answers_move``).
     """
     state = state_of(doc)
