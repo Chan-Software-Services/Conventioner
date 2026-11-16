@@ -22,7 +22,7 @@ The market store could read failed and stale at once, and nothing on screen said
 
 ## Decision
 
-**Every read keyed by the market open is one keyed read, `useServerRead(key, fetcher, options)` in [`front-end/src/utils/useServerRead.ts`](../../front-end/src/utils/useServerRead.ts), whose state is one phase union moved only by a pure table, `readStep(state, event)`.**
+**Every read keyed by the market open is one keyed read, `useServerRead(key, fetcher, options)` in [`front-end/src/utils/useServerRead.ts`](../../front-end/src/utils/useServerRead.ts), whose state is one phase union moved only by a pure table, `readStep(state, event)`; the review's own queue and the market's history keep the guards they have.**
 
 - The phases are `empty`, `loading`, `ready`, `refreshing`, `failed` and `refresh_failed`, and `missing` for a read that names it (the market store's 404 and 403); the data, the failure's sentence and when the data was read sit beside the phase, and the screen reads its loading words, its error and its freshness from them, never from flags of its own.
 - **The key moves the state in the same tick**: the key is watched synchronously, and a new key empties the state in one step, so nothing reads the last market's data under the new one, not even for a frame.
@@ -30,7 +30,7 @@ The market store could read failed and stale at once, and nothing on screen said
 - **A write held through `holdWhile` keeps every read asked before or during it from landing**, since the server may have served that read before the write and its answer would put back what the write changed; the write's release asks again, and `holdWhile` answers `left`, saying nothing, when the key moved before the write answered.
 - A write's own answer is taken in through `adopt`, only for the key it was made on.
 - The composable has no timer and no retry of its own: a timeout is the fetcher's, a clock the screen's.
-- Nothing reads on a watch of a market id by hand: [`everyMarketReadIsKeyed.test.ts`](../../front-end/src/__tests__/everyMarketReadIsKeyed.test.ts) fails on one outside the files it lists, each with why its watches are no read.
+- No new read goes on a watch of a market id: [`everyMarketReadIsKeyed.test.ts`](../../front-end/src/__tests__/everyMarketReadIsKeyed.test.ts) fails on one outside the files it lists, each with why its watches are allowed (a reset of what is shown, or a read with its own guard: the review's queue and the history).
 
 The table row by row, the interface and every screen on it: [reads keyed by market](../implementation/modules/market-store.md#reads-keyed-by-market); the rule: [one market, from the server](../implementation/conventions/one-market-from-the-server.md#the-rules).
 
@@ -40,7 +40,7 @@ The table row by row, the interface and every screen on it: [reads keyed by mark
 - A change to what an event does in a phase is one row of one table, and a test per row (`aReadBelongsToItsKey.test.ts`) sees it.
 - A failed re-read keeps the data as last read and says so, where several screens emptied themselves; the frame says a failed re-read of the market once, for every market screen.
 - A screen that needs to forget what it showed on a move (a fold, a refusal) watches its read's `key`, a reset and never a read.
-- The vendor page's store holds one signed-in vendor rather than a market read, so it keeps no keyed read: its sign-in is one `session`, and an epoch moved by sign-out alone keeps a late answer from landing.
+- The vendor page's store holds one signed-in vendor rather than a market read, so it keeps no keyed read: its sign-in is one `session`, and an epoch moved only when the sign-in ends (`clearSession`, on a sign-out or an ended sign-in) keeps a late answer from landing.
 
 ## Considered and rejected
 

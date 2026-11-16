@@ -152,8 +152,8 @@ The read serves none of them, nor the person's `user_role` ([the market's action
 
 ## Reads keyed by market
 
-Every read keyed by the market open is one keyed read, [`useServerRead`](../../../front-end/src/utils/useServerRead.ts), so no screen shows one market's answer, or its refusal, under another market's name.
-It replaced each screen's own data, loading flag and error, read on a watch of the market id and checked by hand; the rule, and the test that holds it, are [one market, from the server](../conventions/one-market-from-the-server.md#the-rules)'s, and the decision is [ADR 0036](../../adr/0036-a-market-keyed-read-is-one-keyed-read.md).
+Every read keyed by the market open, but for the review's own queue and the market's history, which keep their own guards, is one keyed read, [`useServerRead`](../../../front-end/src/utils/useServerRead.ts), so the screens on it never show one market's answer, or its refusal, under another market's name.
+On the reads below it replaced each one's own data, loading flag and error, read on a watch of the market id and checked by hand; the rule, and the test that holds it, are [one market, from the server](../conventions/one-market-from-the-server.md#the-rules)'s, and the decision is [ADR 0036](../../adr/0036-a-market-keyed-read-is-one-keyed-read.md).
 The reads on it, each keyed by the market id unless it says otherwise:
 
 - The market store itself (`landed` sets the pointer below, `gone` forgets it).

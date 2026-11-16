@@ -1,13 +1,13 @@
 /**
- * Every market-keyed read goes through `useServerRead`; nothing reads on a watch of a market id by
- * hand (T421, ADR 0033).
+ * No new read goes on a watch of a market id rather than through `useServerRead` (T421, ADR
+ * 0036).
  *
  * Each screen used to hold its own data, loading flag and error, read on `watch(marketId, load)`,
  * and check the answer by hand: nine guards under eight names, or none. Where one was missing, a
  * late answer for the market just left landed under the next one's name (Payments, the drawer,
  * Manage market, the door). `useServerRead` drops an answer for an old key in one place, so the
  * rule is held from the source: a `watch(` whose source names a market id stands only in a file
- * listed below, no more times than listed, each with why it is not a read by hand.
+ * listed below, no more times than listed, each with why it is allowed.
  *
  * A listed file with fewer such watches than listed passes, so a task that removes one fails
  * nothing; a new one, in any file, fails here by name.
