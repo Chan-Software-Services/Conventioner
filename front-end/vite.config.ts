@@ -110,8 +110,8 @@ function deployedHeaders(): Record<string, string> {
 /**
  * vuedraggable's own ES source, which it publishes beside its builds. Its builds are webpack UMD
  * bundles carrying core-js, whose global lookup runs `Function('return this')()`: a string
- * evaluated as script, which the Content-Security-Policy refuses (and reported on every page with a
- * drag list). The source is the same component without that, importing SortableJS's ES build.
+ * evaluated as script, which the Content-Security-Policy refuses, so the call would break every page
+ * with a drag list. The source is the same component without that, importing SortableJS's ES build.
  */
 export const VUEDRAGGABLE_SOURCE = {
   find: /^vuedraggable$/,
