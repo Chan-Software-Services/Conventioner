@@ -324,15 +324,23 @@ describe('the form tab sends one whole-form save at a time', () => {
 
     await tick(wrapper, 'a');
     await tick(wrapper, 'b');
-    // Applications open in another tab, and the store re-reads the market.
+    // Applications open in another tab, and the store re-reads the market; the tab's read of the
+    // locked form answers after the save out does.
     serve(form([SHOP]), LOCK);
-    formApi.mockResolvedValue(formRead(form([SHOP], ['a']), 5));
+    let answerRead: () => void = () => {};
+    formApi.mockReturnValue(
+      new Promise((resolve) => (answerRead = () => resolve(formRead(form([SHOP], ['a']), 5)))),
+    );
     await useMarketStore().refresh();
     await flushPromises();
     await puts.answer();
 
     expect(api.put).toHaveBeenCalledTimes(1);
     expect(sent()[0].unaskedEssentials).toEqual(['a']);
+    // The waiting tick is off the screen at once, not only once the form is read again.
+    expect(unaskedShown(wrapper)).toEqual(['a']);
+    answerRead();
+    await flushPromises();
     expect(unaskedShown(wrapper)).toEqual(['a']);
   });
 
