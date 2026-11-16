@@ -48,6 +48,7 @@ sources:
   - T315
   - T318
   - T352
+  - T335
 ---
 
 # The market's history
@@ -247,6 +248,10 @@ One block per action, in the order of [the actions table](../modules/market-acti
   - Vendors: the vendor
   - Subject: `date`, `currency`
   - Detail: `owed_cents`: the $0 taken back, then what the day owes now
+- `owed_dropped`: a run that left a vendor without a table on a day whose amount an Admin set, which goes with the day ([payments](payments.md#the-owed-days-state)), by whoever allocated tables; a seating that finds such an amount on a day it seats afresh records it by whoever seated the vendor, and the owed day's migration with no actor, for such an amount found already hidden
+  - Vendors: the vendor
+  - Subject: `date`, `currency`, `set_by`, the Admin who set the amount, `held_no_table: true` on a seating's and `by_migration: true` on the migration's, each read as the day found holding no table, naming no one as dropping it
+  - Detail: `owed_cents`: the amount dropped, then none
 
 **`record-payment`**
 
@@ -398,6 +403,7 @@ Its `TestWhatAnEntryHolds` pins what some entries hold beyond that, among them a
 **Writing an entry never fails the change it records.**
 Every write records after its change has landed, a market's deletion once its records are gone (the placement writes in `api/placements.py`, [placements](../modules/placements.md), after the seat is taken), and `_record` logs and swallows its own failure: telling an organizer their change did not land when it did is worse than a missing entry.
 So a write refused because the market changed under it ([the market write](../modules/market-write.md)) stored nothing and records nothing.
+An entry is at the time `_record` writes it, except where its caller gives `at`, the time the change landed: only an Admin's amount owed that a run's tidy dropped before the request recorded it, which is at the time its owner wrote it, so the set reads before the drop ([payments](payments.md#the-one-writer)).
 A subject or a detail that reads or computes anything is given to the recorder as a builder, a callable it runs inside the same guard as the insert, since one that raised before it got there would answer the change with a 500 just the same.
 The failure is logged by the error's type, the kind and the market's id only, never its message: a driver's message can quote the document it refused, and an entry holds answers and addresses.
 
@@ -410,7 +416,7 @@ That was weighed and accepted for the placements when the trail was decided, and
 
 **The whole history is read a page at a time**: `GET /markets/:id/history` (`get_history` in [`back-end/api/markets.py`](../../../back-end/api/markets.py)) serves `entries_page`, the newest `PAGE_SIZE` (25, since the box the list stands in, not the page, keeps the section short) entries and `next`, a cursor naming the last one (`<at>|<id>`), which `?before=` hands back for the page after it.
 Entries are ordered by `at`, then `id`, both descending, so a page boundary between two entries of one instant neither loses nor repeats either, and the [lookup index](lookup-indexes.md) on (`market_id`, `at`, `id`) is that order read backwards: the first page of a market with thousands of entries is one query that walks a page of index keys and stops (`TestThousandsOfEntries` in [`back-end/tests/test_reading_the_history.py`](../../../back-end/tests/test_reading_the_history.py) seeds 5,000).
-It narrows by `?actor=`, `?group=` (a group of the table's rows, its actions' ids; an applicant's own `apply` is an Applications change, a free's $0 taken back (`assign`, `owed_taken_back`) is a Payments change too, beside the `change-owed` it undoes (`_HISTORY_GROUP_ALSO_READS`), and the Reading group is never one), `?vendor=`, `?since=` and `?until=` (ISO instants of when the change was made, the first kept and the second not), and `?day=` (a market day, `YYYY-MM-DD`: the entries whose `subject.date` is that day and the entries about no one day, a run and the rules, which have none); a filter it cannot read answers 400, a `day` that is not a calendar day in that spelling with "The history's dates could not be read."
+It narrows by `?actor=`, `?group=` (a group of the table's rows, its actions' ids; an applicant's own `apply` is an Applications change, a free's $0 taken back (`assign`, `owed_taken_back`) and an Admin's amount dropped with a day (`assign`, `owed_dropped`) are Payments changes too, beside the `change-owed` each undoes (`_HISTORY_GROUP_ALSO_READS`), and the Reading group is never one), `?vendor=`, `?since=` and `?until=` (ISO instants of when the change was made, the first kept and the second not), and `?day=` (a market day, `YYYY-MM-DD`: the entries whose `subject.date` is that day and the entries about no one day, a run and the rules, which have none); a filter it cannot read answers 400, a `day` that is not a calendar day in that spelling with "The history's dates could not be read."
 A filter on anything but the market and the time is applied as Mongo walks the index, so a narrow filter on a long history reads further than one page, and `day` has no index of its own for that reason, as `actor` and `group` have none; it asks Mongo for one entry past the page, to know whether another follows, and answers no more than `PAGE_SIZE`.
 The first page also answers what the filters may offer: `actors`, everyone who changed something as an organizer, the unmoved placements' organizers too (an applicant's own change is found by the vendor it names, and a check-in from the public page names nobody), and `groups`, the table's groups with their rows' ids and labels, but for who may be chosen as a reviewer (`review-when-chosen`, `history_groups`), a row nothing is recorded under; `delete-market` and `update-assignment-or-price-info`, which no market entry is recorded under either, are still offered.
 Only an entry's own fields are recased to camelCase; its `subject` and `detail` are served as stored, since their keys are data (a question's key, an application's id).

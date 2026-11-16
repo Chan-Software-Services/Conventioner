@@ -131,6 +131,12 @@ describe('ESLint', () => {
       .map((message) => message.message);
   }
 
+  // The first lint loads the project's configuration and its plugins, which under a whole run's
+  // load took longer than one test's 5 seconds; loaded here, each case below only lints.
+  beforeAll(async () => {
+    await refusals('src/components/Fine.ts', 'export {};\n');
+  }, 60_000);
+
   it.each([
     ['src/components/Leak.ts', "import { fixture } from '../dev/library/fixture';"],
     ['src/components/application/Leak.ts', "import { fixture } from '../../dev/library/fixture';"],

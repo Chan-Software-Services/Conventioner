@@ -7,7 +7,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import VendorPaymentTab from '@/components/VendorPaymentTab.vue';
 import type { VendorAccount } from '@/utils/payments';
 
-const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
+const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), delete: vi.fn() }));
 vi.mock('@/utils/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/utils/api')>();
   return { ...actual, api };
@@ -56,6 +56,8 @@ const ACCOUNT: VendorAccount = {
   ],
   owedCents: 7000,
   paidCents: 3500,
+  balanceState: 'owes',
+  compares: true,
 };
 
 async function tab(
@@ -76,6 +78,7 @@ describe('the Payment tab', () => {
   beforeEach(() => {
     api.get.mockReset();
     api.post.mockReset();
+    api.delete.mockReset();
   });
 
   it('reads one vendor’s account', async () => {
@@ -90,6 +93,28 @@ describe('the Payment tab', () => {
     expect(wrapper.get('[data-testid="payment-owed"]').text()).toBe('$70.00');
     expect(wrapper.get('[data-testid="payment-paid"]').text()).toBe('$35.00');
     expect(wrapper.get('[data-testid="payment-balance"]').text()).toBe('Owes $35.00');
+  });
+
+  it('tones and marks the chip by the state the server serves, not by its own reading', async () => {
+    // Owing $70.00 with $35.00 paid, but served as paid in full: the tab keeps no copy of the rule.
+    const wrapper = await tab(true, { ...ACCOUNT, balanceState: 'paid' });
+
+    const chip = wrapper.get('[data-testid="payment-balance"]');
+    expect(chip.attributes('data-state')).toBe('paid');
+    expect(chip.classes()).toContain('chip--positive');
+    expect(chip.text()).toBe('Paid in full');
+  });
+
+  it.each([
+    ['owes', 'chip--attention'],
+    ['over', 'chip--informational'],
+    [null, 'chip--neutral'],
+  ] as const)('marks a chip served %s', async (balanceState, chip) => {
+    const wrapper = await tab(true, { ...ACCOUNT, balanceState });
+
+    const balance = wrapper.get('[data-testid="payment-balance"]');
+    expect(balance.attributes('data-state')).toBe(balanceState ?? 'none');
+    expect(balance.classes()).toContain(chip);
   });
 
   it('keeps a freed table’s line, still owed, saying it was freed and when', async () => {
@@ -124,7 +149,7 @@ describe('the Payment tab', () => {
 
   it('records a payment and reads the account it answers', async () => {
     const wrapper = await tab(true);
-    api.post.mockResolvedValue({ data: { ...ACCOUNT, paidCents: 7000 } });
+    api.post.mockResolvedValue({ data: { ...ACCOUNT, paidCents: 7000, balanceState: 'paid' } });
 
     await wrapper.get('[data-testid="payment-record"]').trigger('click');
     await flushPromises();
@@ -156,6 +181,8 @@ describe('the Payment tab', () => {
       payments: [],
       owedCents: 0,
       paidCents: 0,
+      balanceState: null,
+      compares: true,
     });
 
     expect(wrapper.text()).toContain('No table yet, so nothing is owed.');
@@ -260,5 +287,94 @@ describe('the Payment tab', () => {
     );
     expect(entry.get('[data-testid="payment-entry-amount"]').element.tagName).toBe('S');
     expect(entry.find('[data-testid="payment-entry-menu-button"]').exists()).toBe(false);
+  });
+
+  it('keeps a removal refused as changed meanwhile open, with the account as it stands behind it', async () => {
+    const changed =
+      'This payment changed while it was being removed, so it was not removed. It now reads as shown behind this: close this and remove it again if it should still go.';
+    const asItStands: VendorAccount = {
+      ...ACCOUNT,
+      payments: [
+        {
+          ...ACCOUNT.payments[0],
+          cents: 2000,
+          editedBy: 'other-admin@example.com',
+          editedAt: '2099-04-02T12:00:00+00:00',
+        },
+      ],
+      paidCents: 2000,
+    };
+    const wrapper = await tab(true, ACCOUNT, { canAdjustPaid: true });
+    api.delete.mockRejectedValueOnce(
+      Object.assign(new Error('Request failed with status code 409'), {
+        isAxiosError: true,
+        response: { status: 409, data: { error: changed, account: asItStands } },
+      }),
+    );
+
+    await wrapper.get('[data-testid="payment-entry-menu-button"]').trigger('click');
+    await wrapper.get('[data-testid="payment-entry-menu-remove"]').trigger('click');
+    await flushPromises();
+    document
+      .querySelector<HTMLFormElement>('[data-testid="payment-confirm-window"] form')!
+      .requestSubmit();
+    await flushPromises();
+
+    expect(api.delete).toHaveBeenCalledWith('/markets/market-1/payment-entries/p1');
+    expect(document.querySelector('[data-testid="payment-confirm-window"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="payment-confirm-error"]')?.textContent).toBe(
+      changed,
+    );
+    expect(wrapper.get('[data-testid="payment-paid"]').text()).toBe('$20.00');
+    expect(wrapper.get('[data-testid="payment-entry-amount"]').text()).toBe('$20.00');
+    expect(wrapper.emitted('changed')).toHaveLength(1);
+
+    // It still reads the $35.00 it was opened on, so it removes nothing more until opened again.
+    const remove = () =>
+      document.querySelector<HTMLButtonElement>('[data-testid="payment-confirm-submit-button"]')!;
+    expect(remove().disabled).toBe(true);
+    document
+      .querySelector<HTMLFormElement>('[data-testid="payment-confirm-window"] form')!
+      .requestSubmit();
+    await flushPromises();
+    expect(api.delete).toHaveBeenCalledTimes(1);
+
+    document
+      .querySelector<HTMLButtonElement>('[data-testid="payment-confirm-cancel-button"]')!
+      .click();
+    await flushPromises();
+    await wrapper.get('[data-testid="payment-entry-menu-button"]').trigger('click');
+    await wrapper.get('[data-testid="payment-entry-menu-remove"]').trigger('click');
+    await flushPromises();
+    expect(document.querySelector('[data-testid="payment-confirm-body"]')?.textContent).toContain(
+      '$20.00',
+    );
+    expect(remove().disabled).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('keeps a removal refused with no account open, and the account as it was', async () => {
+    const wrapper = await tab(true, ACCOUNT, { canAdjustPaid: true });
+    api.delete.mockRejectedValueOnce(
+      Object.assign(new Error('Request failed with status code 404'), {
+        isAxiosError: true,
+        response: { status: 404, data: { error: 'This market has no such payment standing.' } },
+      }),
+    );
+
+    await wrapper.get('[data-testid="payment-entry-menu-button"]').trigger('click');
+    await wrapper.get('[data-testid="payment-entry-menu-remove"]').trigger('click');
+    await flushPromises();
+    document
+      .querySelector<HTMLFormElement>('[data-testid="payment-confirm-window"] form')!
+      .requestSubmit();
+    await flushPromises();
+
+    expect(document.querySelector('[data-testid="payment-confirm-error"]')?.textContent).toBe(
+      'This market has no such payment standing.',
+    );
+    expect(wrapper.get('[data-testid="payment-paid"]').text()).toBe('$35.00');
+    expect(wrapper.emitted('changed')).toBeUndefined();
+    wrapper.unmount();
   });
 });

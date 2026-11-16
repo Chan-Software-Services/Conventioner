@@ -22,6 +22,8 @@ const ANSWER: VendorAccount = {
   payments: [],
   owedCents: 0,
   paidCents: 0,
+  balanceState: null,
+  compares: true,
 };
 
 const PAYMENT: Payment = {

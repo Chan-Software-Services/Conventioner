@@ -1675,9 +1675,11 @@ _HISTORY_GROUPS_LEFT_OUT = frozenset({"Reading"})
 #: choice is Choose reviewers' and a chosen reviewer's verdicts are Give verdicts' (E38/F07/S03).
 _HISTORY_ROWS_LEFT_OUT = frozenset({Actions.REVIEW_WHEN_CHOSEN})
 #: Entries recorded under another group's row that a group reads too, as (action, kind): a free's
-#: $0 taken back as the day is seated again is recorded under Assign, the row the seating asked,
-#: and it undoes a change to what is owed, so Payments reads it beside that change (E44/F01/S02).
-_HISTORY_GROUP_ALSO_READS = {"Payments": ((Actions.ASSIGN.id, History.OWED_TAKEN_BACK),)}
+#: $0 taken back as the day is seated again, and an Admin's amount dropped with a day a run drops,
+#: are recorded under Assign, the row the seating or the run asked, and each undoes a change to
+#: what is owed, so Payments reads it beside that change (E44/F01/S02, T335).
+_HISTORY_GROUP_ALSO_READS = {"Payments": ((Actions.ASSIGN.id, History.OWED_TAKEN_BACK),
+                                          (Actions.ASSIGN.id, History.OWED_DROPPED))}
 
 
 def history_groups() -> List[Dict[str, Any]]:

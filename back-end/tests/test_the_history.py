@@ -71,6 +71,25 @@ class TestAnEntry:
         assert entry["subject"] == {}
         assert entry["detail"] == {}
 
+    def test_it_is_at_the_time_it_is_recorded(self, history, monkeypatch):
+        monkeypatch.setattr(History, "_now", lambda: "2099-04-02T10:00:00+00:00")
+
+        History.record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail={})
+
+        [entry] = history.docs
+        assert entry["at"] == "2099-04-02T10:00:00+00:00"
+
+    def test_one_given_when_its_change_landed_is_at_that_time(self, history, monkeypatch):
+        """An Admin's amount owed recorded after a write that dropped it (T335) is at the time the
+        amount was set, so it reads before the drop's entry."""
+        monkeypatch.setattr(History, "_now", lambda: "2099-04-02T10:00:00+00:00")
+
+        History.record("m1", "dana@example.com", Actions.CHANGE_OWED, detail={},
+                       at="2099-04-02T09:59:59+00:00")
+
+        [entry] = history.docs
+        assert entry["at"] == "2099-04-02T09:59:59+00:00"
+
     def test_a_write_that_cannot_be_saved_is_swallowed(self, monkeypatch):
         """The change has landed by the time it is recorded; saying it failed would be a lie."""
         class Broken:

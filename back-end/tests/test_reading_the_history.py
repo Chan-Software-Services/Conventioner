@@ -529,6 +529,22 @@ class TestTheEndpoint:
                   for group in payments["groups"]}
         assert groups["Payments"] == ["record-payment", "change-owed", "adjust-paid"]
 
+    def test_payments_reads_an_amount_a_run_dropped_beside_the_change_it_undoes(
+            self, market, history, monkeypatch):
+        """T335: an Admin's amount dropped with a day a run drops is filed under Assign, the row
+        the run asked, so it reads under Assignment, and under Payments beside the amount."""
+        _as(monkeypatch, MarketRole.VIEWER)
+        entry(history, 1, action="change-owed", kind="owed_set")
+        entry(history, 2, action="assign", kind="assigned")
+        entry(history, 3, action="assign", kind="owed_dropped")
+
+        payments, _status = MarketsApi.get_history(MARKET, "viewer@x.test", {"group": "Payments"})
+        assignment, _status = MarketsApi.get_history(
+            MARKET, "viewer@x.test", {"group": "Assignment"})
+
+        assert ids(payments["entries"]) == ["e-00003", "e-00001"]
+        assert ids(assignment["entries"]) == ["e-00003", "e-00002"]
+
     @pytest.mark.parametrize("args", [
         {"group": "Not a group"},
         {"group": "Reading"},

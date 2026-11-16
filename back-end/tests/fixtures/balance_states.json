@@ -1,0 +1,142 @@
+[
+  {
+    "name": "priced, owing",
+    "currency": "CAD",
+    "owedCents": 7000,
+    "paidCents": 4300,
+    "compares": true,
+    "balanceState": "owes",
+    "text": "Owes $27.00",
+    "chip": "chip--attention"
+  },
+  {
+    "name": "priced, owing to the cent",
+    "currency": "CAD",
+    "owedCents": 3001,
+    "paidCents": 1500,
+    "compares": true,
+    "balanceState": "owes",
+    "text": "Owes $15.01",
+    "chip": "chip--attention"
+  },
+  {
+    "name": "priced, paid in full",
+    "currency": "CAD",
+    "owedCents": 7000,
+    "paidCents": 7000,
+    "compares": true,
+    "balanceState": "paid",
+    "text": "Paid in full",
+    "chip": "chip--positive"
+  },
+  {
+    "name": "priced, paid more than owed",
+    "currency": "CAD",
+    "owedCents": 3500,
+    "paidCents": 5000,
+    "compares": true,
+    "balanceState": "over",
+    "text": "Paid $15.00 more than owed",
+    "chip": "chip--informational"
+  },
+  {
+    "name": "priced, nothing owed and nothing paid",
+    "currency": "CAD",
+    "owedCents": 0,
+    "paidCents": 0,
+    "compares": true,
+    "balanceState": null,
+    "text": "Nothing owed",
+    "chip": "chip--neutral"
+  },
+  {
+    "name": "priced, owing nothing and paid something",
+    "currency": "CAD",
+    "owedCents": 0,
+    "paidCents": 1000,
+    "compares": true,
+    "balanceState": "over",
+    "text": "Paid $10.00 more than owed",
+    "chip": "chip--informational"
+  },
+  {
+    "name": "priced, owing nothing and refunded beyond what was paid",
+    "currency": "CAD",
+    "owedCents": 0,
+    "paidCents": -1500,
+    "compares": true,
+    "balanceState": "owes",
+    "text": "Owes $15.00",
+    "chip": "chip--attention"
+  },
+  {
+    "name": "no prices, owing nothing and paid something",
+    "currency": null,
+    "owedCents": 0,
+    "paidCents": 3500,
+    "compares": false,
+    "balanceState": null,
+    "text": "Paid $35.00",
+    "chip": "chip--neutral"
+  },
+  {
+    "name": "no prices, nothing owed and nothing paid",
+    "currency": null,
+    "owedCents": 0,
+    "paidCents": 0,
+    "compares": false,
+    "balanceState": null,
+    "text": "Nothing owed",
+    "chip": "chip--neutral"
+  },
+  {
+    "name": "no prices, owing an amount set by hand",
+    "currency": null,
+    "owedCents": 2000,
+    "paidCents": 1000,
+    "compares": true,
+    "balanceState": "owes",
+    "text": "Owes $10.00",
+    "chip": "chip--attention"
+  },
+  {
+    "name": "no prices, paid in full an amount set by hand",
+    "currency": null,
+    "owedCents": 2000,
+    "paidCents": 2000,
+    "compares": true,
+    "balanceState": "paid",
+    "text": "Paid in full",
+    "chip": "chip--positive"
+  },
+  {
+    "name": "no prices, paid more than an amount set by hand",
+    "currency": null,
+    "owedCents": 2000,
+    "paidCents": 3500,
+    "compares": true,
+    "balanceState": "over",
+    "text": "Paid $15.00 more than owed",
+    "chip": "chip--informational"
+  },
+  {
+    "name": "no prices, refunded beyond what was paid",
+    "currency": null,
+    "owedCents": 0,
+    "paidCents": -1500,
+    "compares": true,
+    "balanceState": "owes",
+    "text": "Owes $15.00",
+    "chip": "chip--attention"
+  },
+  {
+    "name": "another currency, paid more than owed",
+    "currency": "EUR",
+    "owedCents": 3500,
+    "paidCents": 5000,
+    "compares": true,
+    "balanceState": "over",
+    "text": "Paid €15.00 more than owed",
+    "chip": "chip--informational"
+  }
+]

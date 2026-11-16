@@ -21,8 +21,8 @@ import { getApiErrorMessage } from '@/utils/api';
 import { getFormattedTimestamp } from '@/utils/utils';
 import { dateLabel } from '@/utils/vendorDetails';
 import {
+  accountAsItStands,
   balanceChip,
-  balanceState,
   balanceText,
   entryChange,
   entryText,
@@ -83,9 +83,13 @@ type Open =
 const open = ref<Open | null>(null);
 const confirmBusy = ref(false);
 const confirmError = ref('');
+/** A confirmation refused with the account as it stands behind it: what it asks no longer reads
+ * as stored, so it confirms nothing more until it is opened again, as its refusal says. */
+const confirmSpent = ref(false);
 
 function show(dialog: Open): void {
   confirmError.value = '';
+  confirmSpent.value = false;
   open.value = dialog;
 }
 
@@ -95,8 +99,9 @@ function saved(updated: VendorAccount): void {
   emit('changed');
 }
 
-/** A press refused as already recorded answered the account as it stands: shown behind the dialog,
- * which stays open with its refusal, since the entry recorded by the first press moved it. */
+/** A refusal that answered the account as it stands (a press already recorded, or an edit or a
+ * removal of an entry changed meanwhile): shown behind the dialog, which stays open with its
+ * refusal, since another write moved it. */
 function refreshed(updated: VendorAccount): void {
   account.value = updated;
   emit('changed');
@@ -138,7 +143,7 @@ const confirmText = computed(() => {
 
 async function confirm(): Promise<void> {
   const dialog = confirming.value;
-  if (!dialog || confirmBusy.value) return;
+  if (!dialog || confirmBusy.value || confirmSpent.value) return;
   confirmBusy.value = true;
   confirmError.value = '';
   try {
@@ -148,6 +153,11 @@ async function confirm(): Promise<void> {
         : await removePayment(props.marketId, dialog.entry.id),
     );
   } catch (err: unknown) {
+    const standing = accountAsItStands(err);
+    if (standing) {
+      refreshed(standing);
+      confirmSpent.value = true;
+    }
     confirmError.value = getApiErrorMessage(err, 'That change could not be saved.');
   } finally {
     confirmBusy.value = false;
@@ -174,7 +184,8 @@ function onEntryMenu(entry: Payment, id: string): void {
   show(id === 'remove' ? { kind: 'remove', entry } : { kind: 'edit', entry });
 }
 
-const state = computed(() => (account.value ? balanceState(account.value) : 'settled'));
+/** The served state, for the chip's `data-state`: `none` where the server reads no balance state. */
+const state = computed(() => account.value?.balanceState ?? 'none');
 
 /** What a line owes, as it reads: its amount, or that the market gives the seat no price. */
 function owedText(cents: number | null): string {
@@ -208,7 +219,7 @@ defineExpose({ reload: load });
         </dl>
         <span
           class="chip"
-          :class="balanceChip(account)"
+          :class="balanceChip(account.balanceState)"
           :data-state="state"
           data-testid="payment-balance"
         >
@@ -379,7 +390,7 @@ defineExpose({ reload: load });
         :title="confirmText?.title ?? ''"
         testid="payment-confirm"
         :confirm-label="confirmBusy ? 'Saving…' : confirmText?.confirm"
-        :confirm-disabled="confirmBusy"
+        :confirm-disabled="confirmBusy || confirmSpent"
         :destructive="confirming?.kind === 'remove'"
         :error="confirmError"
         @close="open = null"
