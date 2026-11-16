@@ -75,9 +75,14 @@ const { tableRows, vendorNames, legalNames, isLoading } = details;
 /** The open vendor and tab, in the address. */
 const drawer = useVendorDrawer();
 
-const loadError = computed(() =>
-  signedOut.value ? 'You must be signed in.' : details.loadError.value,
-);
+/**
+ * Why the vendors are not as the server has them. Hidden while a read is out, as the drawer hides
+ * its own, so a failed re-read is never said over "Loading vendors…" in place of the rows it kept.
+ */
+const loadError = computed(() => {
+  if (signedOut.value) return 'You must be signed in.';
+  return isLoading.value ? '' : details.loadError.value;
+});
 
 /** The frame's Try again: a sign-in found since reads the market, else the vendors are read again. */
 function readAgain(): void {
@@ -690,6 +695,11 @@ const assignedVendorCount = computed(() => tableVendors.value.filter((v) => v.is
   margin: 0;
   color: var(--mm-red);
   font-size: var(--text-sm);
+}
+
+/* Why the vendors are not as the server has them: two even lines on a phone, never one word alone. */
+.vendors-body > .error-text {
+  text-wrap: balance;
 }
 
 .loading-state {

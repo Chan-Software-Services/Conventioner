@@ -338,6 +338,42 @@ describe('Vendors never shows another market', () => {
     expect(w.text()).not.toContain('You must be signed in.');
     expect(listed(w).join(' ')).toContain('Ana at A');
   });
+
+  it('says a failed re-read beside the vendors it kept, never over "Loading vendors…"', async () => {
+    const STALE = 'Could not update. The vendors are as they were last read.';
+    fetchMarketApplications.mockResolvedValueOnce([applicationOf(ANA, 'Ana at A')]);
+    const w = mount(VendorsView, {
+      attachTo: document.body,
+      shallow: true,
+      global: {
+        stubs: {
+          MarketFrame: RETRYING_FRAME,
+          ListFrame: false,
+          ScrollBox: false,
+          Unwrapped: false,
+          EmailAddress: false,
+          VendorIdentity: false,
+        },
+      },
+    });
+    await flushPromises();
+    fetchMarketApplications.mockRejectedValueOnce(new Error('offline'));
+    await w.get('[data-testid="frame-retry"]').trigger('click');
+    await flushPromises();
+    expect(listed(w).join(' ')).toContain('Ana at A');
+    expect(w.text()).toContain(STALE);
+
+    const again = held<Application[]>();
+    fetchMarketApplications.mockReturnValueOnce(again.promise);
+    await w.get('[data-testid="frame-retry"]').trigger('click');
+    expect(w.text()).toContain('Loading vendors…');
+    expect(w.text()).not.toContain(STALE);
+
+    again.settle([applicationOf(ANA, 'Ana at A')]);
+    await flushPromises();
+    expect(listed(w).join(' ')).toContain('Ana at A');
+    expect(w.text()).not.toContain(STALE);
+  });
 });
 
 describe("the door never shows another market's notes", () => {

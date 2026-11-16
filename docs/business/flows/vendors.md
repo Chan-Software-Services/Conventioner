@@ -75,8 +75,8 @@ At 320 the longer "Checking Discord…" or "Giving roles…" takes the second bu
 When the server cannot say where vendors sit, the page shows its reason above the list and says nothing of who is placed: "N vendors", the whole list counted before a run or after, each row its verdict and no date count, and no "Unassigned only" or filter by where they sit, one in the address ignored and Export opening on neither; the names and the search by name still hold, from the applications (T123).
 
 The page reads the market's vendors on arriving at each market, one keyed read ([`useServerRead`](../../../front-end/src/utils/useServerRead.ts), [reads keyed by market](../../implementation/modules/market-store.md#reads-keyed-by-market)): moved to another market, it says "Loading vendors…" at once, never the last market's rows, and an answer or a refusal for the market left never lands on this one (T421).
-A first read that fails says "The vendors could not be loaded.".
-A re-read that fails keeps the vendors as last read and says "Could not update. The vendors are as they were last read.", until a read lands.
+A first read that fails says why, or "The vendors could not be loaded." when the server gives no reason.
+A re-read that fails keeps the vendors as last read and says "Could not update. The vendors are as they were last read.", until a read lands; while the next is out "Loading vendors…" takes the rows' place and the sentence is not shown.
 
 Before a run the page lists the vendors and says nothing is assigned yet.
 Covered by:
