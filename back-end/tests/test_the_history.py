@@ -74,7 +74,7 @@ class TestAnEntry:
     def test_it_is_at_the_time_it_is_recorded(self, history, monkeypatch):
         monkeypatch.setattr(History, "_now", lambda: "2099-04-02T10:00:00+00:00")
 
-        History.record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail={})
+        History._record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail={})
 
         [entry] = history.docs
         assert entry["at"] == "2099-04-02T10:00:00+00:00"
@@ -84,8 +84,8 @@ class TestAnEntry:
         amount was set, so it reads before the drop's entry."""
         monkeypatch.setattr(History, "_now", lambda: "2099-04-02T10:00:00+00:00")
 
-        History.record("m1", "dana@example.com", Actions.CHANGE_OWED, detail={},
-                       at="2099-04-02T09:59:59+00:00")
+        History._record("m1", "dana@example.com", Actions.CHANGE_OWED, detail={},
+                        at="2099-04-02T09:59:59+00:00")
 
         [entry] = history.docs
         assert entry["at"] == "2099-04-02T09:59:59+00:00"
@@ -116,6 +116,12 @@ class TestAnEntry:
         assert history.docs == []
 
 
+class TestWhereItWrites:
+    def test_it_writes_into_the_database_holding_its_collection_and_no_other(self, history):
+        assert History.records_in({History.HISTORY_COLLECTION: history})
+        assert not History.records_in({History.HISTORY_COLLECTION: object()})
+
+
 class TestARecordNoRequestAsked:
     """The one door for an entry under a row no request asked (T105-9): it writes as ``_record``
     does, and says why nothing asked it."""
@@ -143,6 +149,16 @@ class TestARecordNoRequestAsked:
         assert entry["vendors"] == ["ana@example.com"]
         assert entry["subject"] == {"date": "2026-11-18"}
         assert entry["detail"] == {"at": "door"}
+
+    def test_an_entry_given_when_its_change_landed_is_at_that_time(
+            self, history, unasked, monkeypatch):
+        monkeypatch.setattr(History, "_now", lambda: "2099-04-02T10:00:00+00:00")
+
+        unasked.record(detail={}, at="2099-04-02T09:59:59+00:00")
+        unasked.record(detail={})
+
+        assert [entry["at"] for entry in history.docs] == [
+            "2099-04-02T09:59:59+00:00", "2099-04-02T10:00:00+00:00"]
 
     def test_a_write_that_changed_nothing_records_nothing(self, history, unasked):
         unasked.record(detail=lambda: None)

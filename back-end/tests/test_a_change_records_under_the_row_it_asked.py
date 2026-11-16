@@ -114,6 +114,20 @@ class TestRecordingWhatWasAsked:
         assert entry["subject"] == {"table": "A1"}
         assert entry["detail"] == {"freed": True}
 
+    def test_an_entry_given_when_its_change_landed_is_at_that_time(
+            self, holding, history, monkeypatch):
+        """As the history's writer takes it: an Admin's amount owed recorded after a write that
+        dropped it is at the time the amount was set (T335)."""
+        monkeypatch.setattr(History, "_now", lambda: "2099-04-02T10:00:00+00:00")
+        holding(MarketRole.ADMIN)
+        asked = Actions.ask(Actions.CHANGE_OWED, ASKER, client_market(), None)
+
+        asked.record(detail={}, at="2099-04-02T09:59:59+00:00")
+        asked.record(detail={})
+
+        assert [entry["at"] for entry in history.docs] == [
+            "2099-04-02T09:59:59+00:00", "2099-04-02T10:00:00+00:00"]
+
     def test_a_record_that_cannot_be_saved_is_swallowed(self, holding, monkeypatch):
         """The change has landed by the time it is recorded, as the history's writer holds."""
 

@@ -348,11 +348,11 @@ class Asked:
 
     def record(
         self, *, kind: Optional[str] = None, vendors: Iterable[str] = (),
-        subject: Any = None, detail: Any,
+        subject: Any = None, detail: Any, at: Optional[str] = None,
     ) -> None:
         """Write the change's entry under the row asked, through the history's private writer
         (``History._record``): never raises for the entry, with the subject and the detail built
-        under its guard."""
+        under its guard, and at ``at`` as ``_record`` takes it."""
         if self.refused is not None:
             raise RecordedARefusal(
                 f"A change on market {self.market_id} was recorded under {self.row.id!r}, which "
@@ -360,7 +360,7 @@ class Asked:
         # Here, not at the top: the history imports this module for its rows.
         import history as History
         History._record(self.market_id, self.actor, self.row, kind=kind, vendors=vendors,
-                        subject=subject, detail=detail)
+                        subject=subject, detail=detail, at=at)
 
 
 def ask(

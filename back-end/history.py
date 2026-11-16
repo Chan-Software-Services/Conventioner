@@ -214,10 +214,10 @@ class UnaskedRecorder:
 
     def record(
         self, *, kind: Optional[str] = None, vendors: Iterable[str] = (), subject: Part = None,
-        detail: Part,
+        detail: Part, at: Optional[str] = None,
     ) -> None:
         _record(self.market_id, self.actor, self.row, kind=kind, vendors=vendors, subject=subject,
-                detail=detail)
+                detail=detail, at=at)
 
 
 def unasked(
@@ -237,6 +237,12 @@ def unasked(
 #: What a helper that records for its caller's check takes (T105-9): the caller's asking, or the
 #: unasked door's recorder. Both record under their row as their actor, and hold the two.
 Recorder = Union[Asked, UnaskedRecorder]
+
+
+def records_in(database: Any) -> bool:
+    """Whether the history writes its entries into ``database``: for a script handed a database,
+    which records through the history, to refuse one the history does not write."""
+    return database[HISTORY_COLLECTION] == history_collection
 
 
 def record_applicant(

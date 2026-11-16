@@ -58,6 +58,12 @@ from utils.email_address import normalized_email  # noqa: E402
 #: How many times a record that changed between its read and its write is read and judged again.
 TRIES = 3
 
+#: Why the migration's dropped amounts are recorded under the Assignment row with no request
+#: asking it (``History.unasked``).
+MIGRATION_DROPS_UNASKED = (
+    "an operator's migration, run from a shell and never a request: it drops the amount a run "
+    "would have dropped with its day, and records it as a run records the drop, with no actor")
+
 
 class Unreadable(Exception):
     """A record whose legacy fields do not parse; the app reads it as following the seat."""
@@ -119,9 +125,9 @@ def migrate(db=None, dry_run: bool = False) -> int:
         db = get_database()
     markets = db[MARKETS_COLLECTION]
     owed = db[AMOUNTS_OWED_COLLECTION]
-    if db[History.HISTORY_COLLECTION] != History.history_collection:
+    if not History.records_in(db):
         raise RuntimeError(
-            "migrate_owed_day_state records in the history history.record writes: pass the "
+            "migrate_owed_day_state records in the history the history module writes: pass the "
             "configured database, or none")
 
     changed = 0
@@ -198,9 +204,8 @@ def record_dropped(market_doc: Mapping[str, Any], doc: Mapping[str, Any],
                    amount: Payments.HandAmount) -> None:
     """The ``owed_dropped`` entry a run records for an amount it drops, as the migration's."""
     market = market_from_document(dict(market_doc))
-    History.record(
-        market.id, None, Actions.ASSIGN, kind=History.OWED_DROPPED,
-        vendors=[doc.get(Payments.VENDOR_EMAIL_FIELD)],
+    History.unasked(market.id, None, Actions.ASSIGN, because=MIGRATION_DROPS_UNASKED).record(
+        kind=History.OWED_DROPPED, vendors=[doc.get(Payments.VENDOR_EMAIL_FIELD)],
         subject={"date": doc.get("date"), **Pricing.pricing_subject(market.setup_object),
                  "set_by": amount.by, "by_migration": True},
         detail=History.changes({"owed_cents": amount.cents}, {"owed_cents": None}))

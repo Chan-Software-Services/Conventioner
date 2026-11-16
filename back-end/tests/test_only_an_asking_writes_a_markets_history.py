@@ -32,6 +32,7 @@ DOORS: Dict[str, str] = {
     "api.vendor_check_in.check_in": "VENDORS_OWN_CHECK_IN_UNASKED",
     "api.vendor_check_in.undo_check_in": "VENDORS_OWN_CHECK_IN_UNASKED",
     "seed_test_markets.seed_test_market": "SEEDER_MOVES_UNASKED",
+    "migrations.migrate_owed_day_state.record_dropped": "MIGRATION_DROPS_UNASKED",
 }
 
 

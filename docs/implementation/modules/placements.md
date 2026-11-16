@@ -91,7 +91,7 @@ Its routes are in [`back-end/app.py`](../../../back-end/app.py).
 
 So no stop after the seat leaves it free and its full amount owed, no seat write that landed before its error loses the day's line, and no seat write refused, or failed with the seat read as still held, leaves a freed record behind; one that failed with the seat unread leaves its line, read over by the held seat until the next write of the day forgets it.
 
-**Every write of the assignment tells each owed day it moved, after its store** (`PaymentsApi.assignment_written(market_id, *, seated, held_before, dropped, by)`).
+**Every write of the assignment tells each owed day it moved, after its store** (`PaymentsApi.assignment_written(asked, *, seated, held_before, dropped)`, `asked` the write's Assign asking, whose person the owner's writes name).
 It hands the rows it seats as `seated`, the rows of the assignment it read that it moved as `held_before`, and the days it dropped as `dropped`:
 
 - a placement seats its vendor's day, with the seat the vendor left that day as held before, and drops none;
@@ -103,7 +103,7 @@ Each seated day takes the `seated` event: a freed record on a day held before is
 Each dropped day takes `dropped_by_run`, and an amount an Admin set for it goes with it, recorded as `owed_dropped` under the run's row by whoever allocated tables (Daniel's choice, T335, [payments](../data/payments.md#the-owed-days-state)); so is an Admin's amount a day seated afresh finds there, which no line showed, marked `held_no_table`.
 
 **All four ask the table's Assignment row** ([the market's actions](market-actions.md)), whose default is EDITOR, the bar every other market write sets, and deliberately not stricter: an EDITOR already owns the tiers, sections and table counts the whole assignment is computed from, so withholding "move one vendor between two seats" protects nothing.
-Each loads its market through `_market_change`, so an archived market is refused, and records through the Assign asking it returned: the history's placement writers and `seated_again` are handed it, and a free's deduction is recorded through the free's own asking of "Change the amount owed".
+Each loads its market through `_market_change`, so an archived market is refused, and records through the Assign asking it returned: the history's placement writers and `assignment_written` are handed it, and a free's deduction is recorded through the free's own asking of "Change the amount owed".
 A placement that names no seat the plan has is a `PlacementError` (400); a seat someone else holds is a `SeatTakenError` (409), naming the occupant, the seat and the day as the screens say it (`_said_day`, "May 1, 2099"), and offering another seat or the swap; a run outside its phase is an `AssignPhaseError` (409); a free, a move or a swap of a vendor who has checked in that day is a `VendorIsHere` (409), below; a change that would land over another, or on a market that changed since the change read it, is a `MarketChanged` (409), below.
 After a 409 from a change, the Assignments page (`runPlacementChange` in [`ResultView.vue`](../../../front-end/src/views/ResultView.vue)) keeps the dialog open on the refusal and reads the tables again, so a seat taken meanwhile leaves the dialog's choices ([J19](../../business/flows/placing-by-hand.md#j19-move-a-vendor-to-an-empty-seat)); a `VendorIsHere` it asks about instead, and reads nothing again.
 Each is a [client error](../conventions/an-exception-never-reaches-a-client.md) carrying that status.

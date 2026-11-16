@@ -1106,9 +1106,17 @@ SEEDERS_MOVES = Unasked(
     ("seed_test_markets.seed_test_market",), Actions.MOVE_PHASE,
     "an operator's seed, run from a shell and never a request: it reads the owner's phase row "
     "with Actions.may, which lets nobody in, and no route reaches it, so no write here sends it")
+MIGRATIONS_DROPS = Unasked(
+    "the owed-day migration's dropped amounts", "migrations.migrate_owed_day_state.record_dropped",
+    (), Actions.ASSIGN,
+    "an operator's migration, run from a shell and never a request: it records an amount nobody "
+    "could see as a run's drop, with no actor, and no route reaches it, so no write here sends it")
 
 #: The records no request asks, each kept as it is, and why.
-UNASKED = (FIRST_IMPORTS_MOVE, STARTS_RELEASE, VENDORS_OWN_CHECK_IN, ARRIVALS_DEAL, SEEDERS_MOVES)
+UNASKED = (FIRST_IMPORTS_MOVE, STARTS_RELEASE, VENDORS_OWN_CHECK_IN, ARRIVALS_DEAL, SEEDERS_MOVES,
+           MIGRATIONS_DROPS)
+#: The records here no route reaches, which only an operator's script makes.
+NO_ROUTE_REACHES = (SEEDERS_MOVES, MIGRATIONS_DROPS)
 
 
 def _named(qualified: str) -> Callable:
@@ -1189,7 +1197,7 @@ def test_an_unasked_record_is_the_one_it_is_allowed_as(send, unasked, client, wo
 
 def test_every_unasked_record_a_route_reaches_is_sent_here():
     assert {param.values[1].name for param in REACHING_THE_UNASKED} == {
-        unasked.name for unasked in UNASKED if unasked is not SEEDERS_MOVES}
+        unasked.name for unasked in UNASKED if unasked not in NO_ROUTE_REACHES}
 
 
 @pytest.mark.parametrize("unasked", UNASKED, ids=lambda unasked: unasked.name)
