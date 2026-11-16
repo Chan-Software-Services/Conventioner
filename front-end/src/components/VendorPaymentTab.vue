@@ -130,12 +130,20 @@ function sending(write: Promise<VendorAccount>): void {
     () => {
       if (gone) paymentWritten?.();
       else if (moves !== sentAt) {
-        if (sentOn && accountName.value === sentOn.join('\n')) void accountRead.reread();
+        readAgainIfBack(sentOn, sentAt);
         emit('changed');
       }
     },
     () => undefined,
   );
+}
+
+/**
+ * A write sent on `on` succeeded after the tab moved away and came back to `on`: the read made on
+ * coming back may have been served before the write was stored, so the account is read again.
+ */
+function readAgainIfBack(on: AccountKey | null, sentAt: number): void {
+  if (on && moves !== sentAt && accountName.value === on.join('\n')) void accountRead.reread();
 }
 
 /** A write's answer, taken into the account it was made on: nothing on another vendor's tab. */
@@ -196,6 +204,7 @@ const confirmText = computed(() => {
 async function confirm(): Promise<void> {
   const dialog = confirming.value;
   const on = openOn.value;
+  const sentAt = moves;
   if (!dialog || !on || confirmSpent.value) return;
   const [marketId, email] = on;
   await confirmSubmission.submit(
@@ -224,10 +233,11 @@ async function confirm(): Promise<void> {
         }
       },
       // An earlier confirmation's answer: the account it was made on takes it, and what is open
-      // now stays.
+      // now stays. Answered after a move away and back, it is read again too.
       late: (answer) => {
         const standing = answer.ok ? answer.answer : accountAsItStands(answer.error);
         if (standing) refreshed(on, standing);
+        if (answer.ok) readAgainIfBack(on, sentAt);
       },
     },
   );

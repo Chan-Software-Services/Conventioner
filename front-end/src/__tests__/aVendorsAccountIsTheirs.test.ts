@@ -364,6 +364,92 @@ describe('a payment written from a dialog', () => {
     expect(w.emitted('changed')).toHaveLength(1);
   });
 
+  /** Move the drawer to Ben, then back to Ana, whose read on coming back answers with `before`. */
+  async function awayAndBackPastHerReread(w: VueWrapper, before: VendorAccount) {
+    await w.setProps({ email: 'ben@example.com' });
+    await flushPromises();
+    const reread = held<unknown>();
+    api.get.mockImplementation(() => reread.promise);
+    await w.setProps({ email: 'ana@example.com' });
+    await nextTick();
+    reread.settle({ data: before });
+    await flushPromises();
+  }
+
+  const anasReads = () =>
+    api.get.mock.calls.filter(([url]) => url === '/markets/m-a/payments/ana%40example.com');
+
+  it("a removal answering after a move away and back to Ana, past her re-read, reads Ana's account again", async () => {
+    const before = { ...account(3000, [ENTRY]), paidCents: 1000 };
+    const w = await onAnaInAPage(before, { canAdjustPaid: true });
+    await w.get('[data-testid="payment-entry-menu-button"]').trigger('click');
+    await w.get('[data-testid="payment-entry-menu-remove"]').trigger('click');
+    await flushPromises();
+    const removed = held<unknown>();
+    api.delete.mockReturnValueOnce(removed.promise);
+    q<HTMLFormElement>('payment-confirm-window')!.querySelector('form')!.requestSubmit();
+    await flushPromises();
+
+    await awayAndBackPastHerReread(w, before);
+    expect(w.get('[data-testid="payment-paid"]').text()).toBe('$10.00');
+
+    const afterTheRemoval = {
+      ...account(3000, [
+        { ...ENTRY, removedBy: 'admin@example.com', removedAt: '2099-04-02T18:00:00+00:00' },
+      ]),
+      paidCents: 0,
+    };
+    api.get.mockImplementation(() => Promise.resolve({ data: afterTheRemoval }));
+    removed.settle({ data: afterTheRemoval });
+    await flushPromises();
+
+    expect(anasReads()).toHaveLength(3);
+    expect(w.get('[data-testid="payment-paid"]').text()).toBe('$0.00');
+    expect(w.emitted('changed')).toHaveLength(1);
+    expect(written).not.toHaveBeenCalled();
+  });
+
+  it("the calculated price answering after a move away and back to Ana, past her re-read, reads Ana's account again", async () => {
+    const line = {
+      date: '2099-05-07',
+      tableCode: 'North Wing 1',
+      tier: 'Gold',
+      tableChoice: 'Full Table',
+      priceCents: 3000,
+      owedCents: 2500,
+      owedSetBy: 'admin@example.com',
+      owedSetAt: '2099-04-01T18:00:00+00:00',
+      freed: false,
+      freedAt: null,
+      freedBy: null,
+    };
+    const before = { ...account(2500), lines: [line] };
+    const w = await onAnaInAPage(before, { canChangeOwed: true });
+    await w.get('[data-testid="payment-line-menu-button"]').trigger('click');
+    await w.get('[data-testid="payment-line-menu-calculated"]').trigger('click');
+    await flushPromises();
+    const used = held<unknown>();
+    api.delete.mockReturnValueOnce(used.promise);
+    q<HTMLFormElement>('payment-confirm-window')!.querySelector('form')!.requestSubmit();
+    await flushPromises();
+
+    await awayAndBackPastHerReread(w, before);
+    expect(w.get('[data-testid="payment-owed"]').text()).toBe('$25.00');
+
+    const atTheCalculatedPrice = {
+      ...account(3000),
+      lines: [{ ...line, owedCents: 3000, owedSetBy: null, owedSetAt: null }],
+    };
+    api.get.mockImplementation(() => Promise.resolve({ data: atTheCalculatedPrice }));
+    used.settle({ data: atTheCalculatedPrice });
+    await flushPromises();
+
+    expect(anasReads()).toHaveLength(3);
+    expect(w.get('[data-testid="payment-owed"]').text()).toBe('$30.00');
+    expect(w.emitted('changed')).toHaveLength(1);
+    expect(written).not.toHaveBeenCalled();
+  });
+
   it('a removal confirmed on Ana, answering once the tab is gone, tells Payments through the page', async () => {
     const w = await onAnaInAPage(account(3000, [ENTRY]), { canAdjustPaid: true });
     await w.get('[data-testid="payment-entry-menu-button"]').trigger('click');
