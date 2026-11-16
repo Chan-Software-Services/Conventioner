@@ -82,9 +82,10 @@ class TestTheGiverIsStored:
             seen=seen_as_read("app-1"))
 
         # Answers that changed send an approval back to review (the import, E32/F02/S02).
-        ReviewState.update_application_form_data(
-            "app-1", {}, "2026-10-01T00:00:00Z", "2026-10-02T00:00:00Z", back_to_review=True,
-            arrival=ReviewState.Arrival("alex@market.test", "import-applications"))
+        assert ReviewState.answers_changed(
+            dict(stored[0]), ReviewState.Source.IMPORT,
+            {"form_data": {"changed": True}, "updated_at": "2026-10-02T00:00:00Z"},
+            ReviewState.Arrival("alex@market.test", "import-applications"))
 
         assert "verdict_by" not in stored[0] and "verdict_at" not in stored[0]
 

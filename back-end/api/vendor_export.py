@@ -38,6 +38,7 @@ import api.discord_connection as DiscordApi
 import api.market_actions as Actions
 import api.markets as MarketsApi
 import api.payments as PaymentsApi
+import application_status as ReviewState
 import essential_fields as EssentialFields
 import payments as Payments
 import pricing as Pricing
@@ -82,7 +83,7 @@ _STATUS_OF = {
 
 def status_of(application: Application) -> Optional[str]:
     """Which of ``STATUSES`` an application is, or None for a status the review no longer gives."""
-    if application.added_by:
+    if ReviewState.is_added(application.model_dump()):
         return "added"
     return _STATUS_OF.get(application.status)
 

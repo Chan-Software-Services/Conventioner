@@ -65,6 +65,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, FrozenSet, Iterable, List, Mapping, Optional, Tuple
 
 import api.applications as ApplicationsApi
+import application_status as ReviewState
 import essential_fields as EF
 from datatypes import (
     Application,
@@ -201,9 +202,11 @@ def approved_solver_vendors(
         application_type=ApplicationType.MAIN.value,
     )
     # A vendor added by hand is seated by hand and never placed by the run (E36/F03/S01): their
-    # answers may be missing, and a missing answer refuses the run for everyone.
+    # answers may be missing, and a missing answer refuses the run for everyone. One whose answers
+    # arrived since, by an import or their own save, is an applicant like any other (T277 P7).
     return solver_vendors_from_applications(
-        [Application(**document) for document in documents if not document.get("added_by")],
+        [Application(**document) for document in documents
+         if not ReviewState.is_added(document)],
         options,
         lenient,
     )

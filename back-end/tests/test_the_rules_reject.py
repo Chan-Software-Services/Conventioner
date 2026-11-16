@@ -350,25 +350,48 @@ class TestThePreviewSaysWhoTheyWillReject:
         assert body["rejected"] == []
         assert [s["row"] for s in body["samples"]] == [2, 3, 4]
 
-    @pytest.mark.parametrize("status", [ApplicationStatus.REVIEWER_APPROVED,
-                                        ApplicationStatus.REVIEWER_REJECTED,
-                                        ApplicationStatus.NEEDS_FOLLOW_UP])
-    def test_an_update_to_an_application_a_person_decided_is_not_listed(
-        self, applications, status,
+    @pytest.mark.parametrize("status,extra", [
+        (ApplicationStatus.NEEDS_FOLLOW_UP, {}),
+        (ApplicationStatus.REVIEWER_APPROVED, {"added_by": {"email": "alex@market.test"},
+                                               "origin": "added"}),
+    ], ids=["follow-up", "added"])
+    def test_an_update_the_import_leaves_with_a_person_is_not_listed(
+        self, applications, status, extra,
     ):
+        """A follow-up stays one, and an added vendor stays approved, whatever their answers now
+        say: neither is the rules' to judge."""
         import csv_import as CsvImport
         from test_csv_import import GOOD_ROW, MAPPING, _csv
         markets = self._markets([])
         CsvImport.import_applications(markets, markets.doc, _csv(GOOD_ROW), MAPPING)
-        applications.documents[0].update(status=status.value, verdict_by=ALEX.model_dump())
+        applications.documents[0].update(status=status.value, verdict_by=ALEX.model_dump(),
+                                         **extra)
         markets.doc["rejectionRules"] = self.HALF
-        # A new business name changes nothing the solver reads, so a verdict stands.
         renamed = GOOD_ROW.replace("Ember Ceramics", "Ember Ceramics Studio")
 
         body = self._preview(markets, renamed)
 
         assert body["rejected"] == []
         assert [s["row"] for s in body["samples"]] == [2]
+
+    @pytest.mark.parametrize("status", [ApplicationStatus.REVIEWER_APPROVED,
+                                        ApplicationStatus.REVIEWER_REJECTED])
+    def test_a_persons_verdict_on_changed_answers_is_judged_again(self, applications, status):
+        """Changed answers send a person's verdict back to open (decision 9.1), so the rules judge
+        it as the import lands, and the preview lists what they will reject."""
+        import csv_import as CsvImport
+        from test_csv_import import GOOD_ROW, MAPPING, _csv
+        markets = self._markets([])
+        CsvImport.import_applications(markets, markets.doc, _csv(GOOD_ROW), MAPPING)
+        applications.documents[0].update(status=status.value, verdict_by=ALEX.model_dump())
+        markets.doc["rejectionRules"] = self.HALF
+        renamed = GOOD_ROW.replace("Ember Ceramics", "Ember Ceramics Studio")
+
+        body = self._preview(markets, renamed)
+        imported, _ = CsvImport.import_applications(markets, markets.doc, _csv(renamed), MAPPING)
+
+        assert [r["email"] for r in body["rejected"]] == ["nadia@ember.test"]
+        assert (imported["returnedToReview"], imported["rejectedByRules"]) == (1, 1)
 
     def test_an_approval_the_import_returns_to_review_is_judged_again(self, applications):
         """The import sends an approval whose solver answers changed back to undecided, and then

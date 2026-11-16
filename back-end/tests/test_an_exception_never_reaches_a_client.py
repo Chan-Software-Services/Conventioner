@@ -862,10 +862,10 @@ class TestTheAssignmentAndPlacementRoutes:
         assert response.status_code == 404
         assert response.get_json() == {"error": "Market not found"}
 
-    def test_a_vendor_who_already_applied_is_not_added_twice(self, client, monkeypatch):
-        monkeypatch.setattr(
-            ApplicationsApi, "find_application_by_email", lambda _market, _address: object(),
-        )
+    def test_a_vendor_who_already_applied_is_not_added_twice(self, client, applications):
+        applications.insert_one({"id": "app-ana", "market_id": "market-123",
+                                 "applicant_email": "ana@example.com", "application_type": "main",
+                                 "form_data": {}, "status": "open"})
 
         response = client.post(
             "/markets/market-123/vendors", json={"name": "Ana", "email": "ana@example.com"},
@@ -1079,7 +1079,7 @@ class TestTheApplicantReviewImportAndDoorRoutes:
         self, applications, monkeypatch,
     ):
         from pymongo.errors import DuplicateKeyError, PyMongoError
-        from datatypes import Application, ApplicationStatus, ApplicationType
+        from datatypes import ApplicationOrigin
 
         monkeypatch.setattr(
             applications, "find_one_and_update", fail_with(DuplicateKeyError("E11000")),
@@ -1087,11 +1087,8 @@ class TestTheApplicantReviewImportAndDoorRoutes:
         monkeypatch.setattr(applications, "find_one", lambda *_a, **_kw: None)
 
         with pytest.raises(PyMongoError) as raised:
-            ReviewState.find_or_create_application(Application(
-                market_id="market-123", applicant_email="vendor@example.com",
-                application_type=ApplicationType.MAIN, form_data={},
-                status=ApplicationStatus.OPEN,
-            ))
+            ReviewState.arrive("market-123", "vendor@example.com", ApplicationOrigin.APPLIED,
+                               None, ReviewState.Arrival("vendor@example.com", "apply"))
 
         assert "market-123" in str(raised.value)
         assert "example.com" not in str(raised.value)

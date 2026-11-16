@@ -402,10 +402,11 @@ def _return(world, how):
     elif how == "rule":
         written = ReviewState.rule_returns(read, ReviewState.Arrival(ADMIN, "change-form"))
     else:
-        written = ReviewState.update_application_form_data(
-            "app-r", {"changed": True}, read["submitted_at"], datetime.now(timezone.utc).isoformat(),
-            held=read, back_to_review=True,
-            arrival=ReviewState.Arrival(ADMIN, "import-applications"))
+        written = ReviewState.answers_changed(
+            read, ReviewState.Source.IMPORT,
+            {"form_data": {"changed": True},
+             "updated_at": datetime.now(timezone.utc).isoformat()},
+            ReviewState.Arrival(ADMIN, "import-applications"))
     assert written
     ReviewTeam.deal_arrivals(MarketsApi.market_from_document(_market(world)))
 

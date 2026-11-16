@@ -24,7 +24,9 @@ from datetime import datetime
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from client_errors import parse_failure_detail
-from application_write import record_application_answers, validate_application_answers
+from application_write import (
+    ANSWER_TRIES, ANSWERS_MOVED, record_application_answers, validate_application_answers,
+)
 import table_share as TableShare
 from market_write import write_market
 from market_documents import (
@@ -39,6 +41,7 @@ from market_documents import (
 )
 from datatypes import (
     Application,
+    ApplicationOrigin,
     ApplicationStatus,
     IntakeMode,
     Market,
@@ -170,6 +173,9 @@ def _application_response_organizer(
         # Who recorded a vendor who never applied, and when (E36/F03/S01).
         "addedBy": app.added_by.as_wire() if app.added_by else None,
         "addedAt": app.added_at,
+        # How it came to the market, apart from its verdict: whether they applied is read here,
+        # never off ``addedBy``, since an added vendor imported since is an applicant (T277 P7).
+        "origin": ReviewState.origin_of(app.model_dump()).value,
     }
 
 
@@ -426,6 +432,11 @@ def _gone_under_the_save(
     return None
 
 
+#: The applicant's save met their application moved under it ``ANSWER_TRIES`` times running: a
+#: verdict, most likely, which they never read of, so the sentence names none.
+CHANGED_WHILE_SAVED = "Your application changed while it was saved. Save again."
+
+
 def save_applicant_application(
     market_slug: str, token_payload: Dict[str, Any], form_data: Dict[str, Any],
 ) -> Tuple[Dict[str, Any], int]:
@@ -434,7 +445,10 @@ def save_applicant_application(
     Validates the form data against the market's application form fields, and the essential
     answers against what the essential questions offer (``essential_fields``). Refuses
     submission unless the market takes applications (``takes_applications``).
-    The applicant owns their answers but never ``status``.
+    The applicant owns their answers but never ``status``, though changing them sends an approval
+    or a person's rejection back to open (decision 9.1). The save holds the application as it read
+    it, so it never lands under a verdict given since: it reads it again and saves on what is
+    stored then, ``ANSWER_TRIES`` times, then answers 409 ``CHANGED_WHILE_SAVED``.
 
     The first successful save freezes the essential offering onto the market's stored form
     (``freeze_and_effective_essential_options``), atomically and before the answers are
@@ -487,18 +501,27 @@ def save_applicant_application(
         refusal = validate_application_answers(market_doc, form_data)
         if refusal:
             return {"error": refusal}, 422
-    # The applicant's own save is its arrival, marked for the deal as it is created.
+    # The applicant's own save is its arrival, marked for the deal as it is created, and the write
+    # a verdict it sends back to open is dealt by.
     arrival = ReviewState.Arrival(email, History.APPLY)
-    app_doc = existing or ReviewState.find_or_create_application(Application(
-        market_id=market_id,
-        applicant_email=email,
-        form_data={},
-        status=ApplicationStatus.OPEN,
-    ), arrival).model_dump()
+    app_doc = existing or ReviewState.arrive(
+        market_id, email, ApplicationOrigin.APPLIED, None, arrival).model_dump()
 
     # Validation, the offering freeze, the write and the status all live in one place, so an
     # imported application and a form-submitted one cannot drift apart.
-    error, app = record_application_answers(db["markets"], market_doc, app_doc, form_data)
+    for _try in range(ANSWER_TRIES):
+        error, app, returned = record_application_answers(
+            db["markets"], market_doc, app_doc, form_data,
+            source=ReviewState.Source.APPLICANT, arrival=arrival)
+        if error != ANSWERS_MOVED:
+            break
+        # A verdict landed since the read: saved again on the application as it is now.
+        app_doc = ApplicationsApi.find_application_by_id(app_doc.get("id", ""))
+        if app_doc is None:
+            return _gone_under_the_save(db["markets"], market_id) or (
+                {"error": CHANGED_WHILE_SAVED}, 409)
+    else:
+        return {"error": CHANGED_WHILE_SAVED}, 409
     if error:
         # Only reachable for a new application if the offering froze differently between the
         # check and the write; the application made for these answers must not outlive them.
@@ -520,7 +543,8 @@ def save_applicant_application(
     saved = app
     History.record_applicant(
         market_id, email, History.EDITED if existing else History.SUBMITTED, app.id,
-        lambda: _with_rules(History.changes(answered, saved.form_data or {}), verdicts))
+        lambda: _with_rules(History.changes(answered, saved.form_data or {}), verdicts,
+                            returned))
     # Then dealt to the next reviewer in turn, if reviewers are chosen and it is still open
     # (E38/F07/S03), recorded as the applicant's own arrival; anything else waiting is recorded
     # under the write that marked it, never theirs.
@@ -700,14 +724,16 @@ def _verdict_row(before: List[Dict[str, Any]]) -> "Actions.Action":
 
 
 def _with_rules(
-    answers: Optional[Dict[str, Any]], verdicts: RejectionRules.Judged,
+    answers: Optional[Dict[str, Any]], verdicts: RejectionRules.Judged, returned: bool,
 ) -> Optional[Dict[str, Any]]:
-    """An applicant's changed answers, and whether the rules rejected or returned the application
-    as they landed; answers saved unchanged record nothing."""
+    """An applicant's changed answers, whether the rules rejected or returned the application as
+    they landed, and ``returned_to_review`` when the change sent a verdict back to open (decision
+    9.1); answers saved unchanged record nothing."""
     if not answers:
         return None
     return {**answers, "rejected_by_rules": bool(verdicts.rejected),
-            "returned_by_rules": bool(verdicts.returned)}
+            "returned_by_rules": bool(verdicts.returned),
+            **({"returned_to_review": True} if returned else {})}
 
 
 def _dealt_to(doc: Dict[str, Any]) -> Dict[str, Any]:

@@ -9,8 +9,9 @@ over it. The pure ``move`` is checked over the same grid, so a preview reads the
 do. The table itself is stated once, in ``docs/implementation/data/application-document.md``.
 
 Every move into open or follow-up marks the application for the deal by the write it came by
-(``arriving``), and every cell asserts the mark it leaves. The changed-answers and arrival rows are
-T277 ticket 04's.
+(``arriving``), and every cell asserts the mark it leaves. Changed answers are one event whoever
+changes them (decision 9.1): the applicant's save, an import row and an organizer's update each
+have a column, and the "(none)" row is the applicant's first save and an import's new row.
 
 The Editor gives verdicts but may not change one; the Admin and the owner may. ``app-v1`` answers
 that it is not a student and did not tick the no-shows box, so rule A (affiliation) and rule B (no
@@ -25,8 +26,10 @@ from test_choosing_reviewers_deals_the_open_applications import (  # noqa: F401 
     ADMIN, EDITOR, MARKET, OWNER, _client, world,
 )
 
+import api.applicants as ApplicantsApi
 import api.applications as ApplicationsApi
 import application_status as ReviewState
+import db_config
 import history as History
 import market_write as MarketWrite
 from datatypes import ApplicationStatus, MarketPerson, VerdictGiver
@@ -38,7 +41,17 @@ FIELDS = [
     {"key": "affiliation", "label": "Are you a student?", "type": "select",
      "options": ["Yes, a student", OUTSIDER]},
     {"key": "no_shows", "label": "I understand that no-shows", "type": "checkbox"},
+    {"key": "shop", "label": "Shop", "type": "text"},
 ]
+VENDOR = "v1@vendor.test"
+#: ``app-v1``'s answers as a changed-answers event writes them: a new shop, whatever writes it, and
+#: the same answers the rules read, so a rule's rejection still meets them.
+CHANGED = {"affiliation": OUTSIDER, "no_shows": False, "shop": "Kiln",
+           "essential_full_name": "V One"}
+#: The same, as a row of an import, mapped by column.
+ROW_HEADERS = "Email,Name,Student,No shows,Shop"
+ROW_MAPPING = {"applicant_email": 0, "essential_full_name": 1, "affiliation": 2, "no_shows": 3,
+               "shop": 4}
 RULE_A = {"key": "affiliation", "answers": [OUTSIDER]}
 REASON_A = f"Answered “{OUTSIDER}” to “Are you a student?”"
 RULE_B = {"key": "no_shows", "answers": ["not ticked"]}
@@ -56,9 +69,12 @@ IN_BETWEEN = f"{ADMIN} approved this application since you opened it."
 @pytest.fixture
 def market(world, monkeypatch):
     """The world's market with a form the rules can judge, and ``app-v1`` answering it; the rules'
-    own write lands on it too."""
-    monkeypatch.setattr(MarketWrite, "markets_collection",
-                        world.market(applicationForm={"fields": FIELDS}))
+    own write lands on it too, and so does an applicant's save, signed in as ``app-v1``'s."""
+    markets = world.market(applicationForm={"fields": FIELDS}, intakeMode="form")
+    monkeypatch.setattr(MarketWrite, "markets_collection", markets)
+    monkeypatch.setattr(db_config, "get_database", lambda *_a, **_k: {"markets": markets})
+    monkeypatch.setattr(ApplicantsApi, "authenticate_request",
+                        lambda _header: {"market_id": MARKET, "email": VENDOR})
     _doc(world)["form_data"] = {"affiliation": OUTSIDER, "no_shows": False}
     return world
 
@@ -158,9 +174,33 @@ def hand_on(world):
                                json={"ownerEmail": ADMIN})
 
 
+def applicant_saves(world):
+    """``app-v1``'s applicant saves a new shop on their page."""
+    from app import app
+
+    return app.test_client().put("/public/markets/test-market/applicant/application",
+                                 json={"formData": CHANGED})
+
+
+def an_import_row(world, vendor=VENDOR):
+    """The Admin imports a file whose row for ``app-v1`` has a new shop: the market's vendors are
+    imported from here on."""
+    world.markets.doc["intakeMode"] = "csv"
+    row = f'{vendor},{CHANGED["essential_full_name"]},"{OUTSIDER}",,{CHANGED["shop"]}'
+    return _client(ADMIN).post(f"/markets/{MARKET}/applications/import", json={
+        "csvContent": f"{ROW_HEADERS}\n{row}", "mapping": ROW_MAPPING})
+
+
+def an_organizer_updates(world):
+    """The Admin updates ``app-v1``'s shop, kept beside what the vendor wrote."""
+    return _client(ADMIN).put(f"/markets/{MARKET}/applications/{APP}/answers",
+                              json={"answers": {"shop": CHANGED["shop"]}})
+
+
 EVENTS: Dict[str, Callable] = {
     "give": give, "change": change, "undo": undo, "rule_rejects": rule_rejects,
-    "rule_returns": rule_returns, "hand_on": hand_on,
+    "rule_returns": rule_returns, "hand_on": hand_on, "applicant_saves": applicant_saves,
+    "an_import_row": an_import_row, "an_organizer_updates": an_organizer_updates,
 }
 
 
@@ -174,6 +214,9 @@ _CHANGED = (History.VERDICT, "change-verdicts")
 _UNDONE = (History.VERDICT_UNDONE, "give-verdicts")
 _RULES = (History.REJECTION_RULES, "change-form")
 _HANDED = (History.FOLLOW_UP_OWNER, "give-verdicts")
+_EDITED = (History.EDITED, History.APPLY)
+_IMPORTED = (History.IMPORTED, "import-applications")
+_UPDATED = (None, "update-vendor-info")
 
 
 def _refused(state: State, code: int, error: Optional[str]) -> Cell:
@@ -220,6 +263,19 @@ TABLE: Dict[Tuple[State, str], Cell] = {
     **{(state, "hand_on"): _refused(state, 409, NOT_A_FOLLOW_UP) for state in (
         State.OPEN, State.APPROVED_BY_A_PERSON, State.APPROVED_ADDED, State.REJECTED_BY_A_PERSON,
         State.REJECTED_BY_A_RULE)},
+    # answers changed by the applicant or an import (decision 9.1): a person's verdict back to
+    # open; an added vendor approved, an applicant now; a rule's rejection the rules judge again,
+    # which still meets it; open and follow-up stay.
+    **{(state, event): (200, None, after, entry)
+       for event, entry in (("applicant_saves", _EDITED), ("an_import_row", _IMPORTED))
+       for state, after in (
+           (State.OPEN, State.OPEN), (State.FOLLOW_UP, State.FOLLOW_UP),
+           (State.APPROVED_BY_A_PERSON, State.OPEN),
+           (State.APPROVED_ADDED, State.APPROVED_BY_A_PERSON),
+           (State.REJECTED_BY_A_PERSON, State.OPEN),
+           (State.REJECTED_BY_A_RULE, State.REJECTED_BY_A_RULE))},
+    # answers changed by an organizer: every verdict kept, since they made both.
+    **{(state, "an_organizer_updates"): (200, None, state, _UPDATED) for state in State},
 }
 
 
@@ -230,6 +286,10 @@ MARKED: Dict[Tuple[State, str], Dict[str, str]] = {
         State.FOLLOW_UP, State.APPROVED_BY_A_PERSON, State.REJECTED_BY_A_PERSON)},
     (State.REJECTED_BY_A_RULE, "rule_returns"): {"actor": OWNER, "action": "change-form"},
     (State.FOLLOW_UP, "hand_on"): {"actor": EDITOR, "action": "give-verdicts"},
+    **{(state, "applicant_saves"): {"actor": VENDOR, "action": History.APPLY}
+       for state in (State.APPROVED_BY_A_PERSON, State.REJECTED_BY_A_PERSON)},
+    **{(state, "an_import_row"): {"actor": ADMIN, "action": "import-applications"}
+       for state in (State.APPROVED_BY_A_PERSON, State.REJECTED_BY_A_PERSON)},
 }
 
 
@@ -262,6 +322,38 @@ def test_each_cell(market, state, event):
         assert entries == []
     else:
         assert [(e["kind"], e["action"]) for e in entries] == [entry]
+    if event == "applicant_saves":
+        # Their entry says when their save sent a verdict back (decision 9.1).
+        assert entries[0]["detail"].get("returned_to_review", False) is (
+            (state, event) in MARKED)
+
+
+#: The "(none)" row: an application arrives, by the applicant's first save or an import's new row,
+#: open, with its origin and marked for the deal by its write; an organizer has none to update.
+NEW_VENDOR = "v9@vendor.test"
+ARRIVES: Dict[str, Tuple[str, Dict[str, str]]] = {
+    "applicant_saves": ("applied", {"actor": NEW_VENDOR, "action": History.APPLY}),
+    "an_import_row": ("imported", {"actor": ADMIN, "action": "import-applications"}),
+}
+
+
+@pytest.mark.parametrize("event", [*ARRIVES, "an_organizer_updates"])
+def test_the_none_row(market, monkeypatch, event):
+    monkeypatch.setattr(ApplicantsApi, "authenticate_request",
+                        lambda _header: {"market_id": MARKET, "email": NEW_VENDOR})
+    if event == "an_organizer_updates":
+        response = _client(ADMIN).put(f"/markets/{MARKET}/applications/app-none/answers",
+                                      json={"answers": {"shop": "Kiln"}})
+        assert response.status_code == 404
+        return
+    _ok(applicant_saves(market) if event == "applicant_saves"
+        else an_import_row(market, NEW_VENDOR))
+
+    [doc] = [d for d in market.applications.documents if d["applicant_email"] == NEW_VENDOR]
+    origin, mark = ARRIVES[event]
+    assert (ReviewState.state_of(doc), doc["origin"]) == (State.OPEN, origin)
+    assert doc[ApplicationsApi.ARRIVING_FIELD] == mark
+    assert doc["form_data"]["shop"] == "Kiln"
 
 
 class TestWhatACellWrites:
@@ -472,6 +564,24 @@ def test_a_stale_read_writes_nothing_over_what_landed(monkeypatch, market, event
     assert doc["verdict_at"] == "2026-10-22T00:00:00+00:00"
 
 
+@pytest.mark.parametrize("event", ["applicant_saves", "an_import_row"])
+def test_a_stale_read_of_changed_answers_lands_on_what_is_stored(monkeypatch, market, event):
+    """Changed answers are read again, not refused: the save lands on the approval that landed in
+    between, and sends it back to open with the answers nobody judged."""
+    landed = _the_admin_approves_before_the_next_held_write(monkeypatch, market)
+
+    body = _ok(EVENTS[event](market))
+
+    assert landed == [True]
+    doc = _doc(market)
+    assert (ReviewState.state_of(doc), doc["form_data"]["shop"]) == (State.OPEN, "Kiln")
+    if event == "an_import_row":
+        assert (body["updated"], body["returnedToReview"]) == (1, 1)
+    else:
+        [entry] = [e for e in market.history.documents if e["kind"] == History.EDITED]
+        assert entry["detail"]["returned_to_review"] is True
+
+
 # --- The pure move, over the same grid ------------------------------------------------------------
 
 EDITOR_GIVER = VerdictGiver(kind="person", user_id="user-editor", email=EDITOR)
@@ -521,9 +631,19 @@ MOVES: Dict[str, Callable[[State], ReviewState.Event]] = {
     "rule_returns": lambda state: ReviewState.RuleReturns(ARRIVAL),
     "hand_on": lambda state: ReviewState.HandOnFollowUp(
         MarketPerson(user_id="u", email=ADMIN), ARRIVAL),
+    # Answers changed from what each state's application stores, which names no shop.
+    "answers_applicant": lambda state: ReviewState.AnswersChanged(
+        ReviewState.Source.APPLICANT, {"shop": "Kiln"}, ARRIVAL),
+    "answers_import": lambda state: ReviewState.AnswersChanged(
+        ReviewState.Source.IMPORT, {"shop": "Kiln"}, ARRIVAL),
+    "answers_organizer": lambda state: ReviewState.AnswersChanged(ReviewState.Source.ORGANIZER),
 }
 #: The pure events whose every move is into open or follow-up, so marks for the deal.
 MARKING = ("undo", "rule_returns", "hand_on")
+#: The changed answers' moves that send a person's verdict back to open, marked (decision 9.1).
+RETURNING = {(state, f"answers_{source}") for state in (State.APPROVED_BY_A_PERSON,
+                                                         State.REJECTED_BY_A_PERSON)
+             for source in ("applicant", "import")}
 
 _DECIDED = (State.APPROVED_BY_A_PERSON, State.APPROVED_ADDED, State.REJECTED_BY_A_PERSON,
             State.REJECTED_BY_A_RULE)
@@ -555,6 +675,15 @@ MOVED: Dict[Tuple[State, str], Optional[State]] = {
     **{(state, "hand_on"): None for state in (
         State.OPEN, State.APPROVED_BY_A_PERSON, State.APPROVED_ADDED, State.REJECTED_BY_A_PERSON,
         State.REJECTED_BY_A_RULE)},
+    **{(state, f"answers_{source}"): after
+       for source in ("applicant", "import")
+       for state, after in (
+           (State.OPEN, State.OPEN), (State.FOLLOW_UP, State.FOLLOW_UP),
+           (State.APPROVED_BY_A_PERSON, State.OPEN),
+           (State.APPROVED_ADDED, State.APPROVED_BY_A_PERSON),
+           (State.REJECTED_BY_A_PERSON, State.OPEN),
+           (State.REJECTED_BY_A_RULE, State.REJECTED_BY_A_RULE))},
+    **{(state, "answers_organizer"): state for state in State},
 }
 
 
@@ -578,12 +707,13 @@ def test_each_pure_move(state, event):
         assert moved.to is expected
         assert ReviewState.state_of({**{k: v for k, v in doc.items() if k not in moved.unset},
                                      **moved.set}) is expected
-        if event in MARKING:
+        if event in MARKING or (state, event) in RETURNING:
             assert moved.set[ApplicationsApi.ARRIVING_FIELD] == ARRIVAL.stored()
         else:
             assert ApplicationsApi.ARRIVING_FIELD not in moved.set
-        # A verdict ends the wait; a follow-up given keeps whatever wait it had.
-        if not expected.undecided:
+        # A verdict ends the wait; a follow-up given keeps whatever wait it had. Changed answers
+        # give no verdict, so end none.
+        if not expected.undecided and not event.startswith("answers_"):
             assert ApplicationsApi.ARRIVING_FIELD in moved.unset
 
 
@@ -618,6 +748,40 @@ class TestThePureMove:
 
         assert isinstance(ReviewState.move(doc, ReviewState.Undo("user-editor", ARRIVAL)),
                           ReviewState.Refused)
+
+    def test_changed_answers_hold_the_status_and_the_verdicts_time_alone(self):
+        doc = _stored(State.APPROVED_BY_A_PERSON)
+
+        moved = ReviewState.move(doc, MOVES["answers_applicant"](State.APPROVED_BY_A_PERSON))
+
+        assert moved.pins == {"status": "reviewer_approved", "verdict_at": doc["verdict_at"]}
+
+    def test_an_organizers_update_holds_nothing_and_moves_nothing(self):
+        for state in State:
+            moved = ReviewState.move(_stored(state), MOVES["answers_organizer"](state))
+
+            assert (moved.set, moved.unset, moved.pins) == ({}, (), {})
+
+    @pytest.mark.parametrize("source,origin", [("applicant", "applied"), ("import", "imported")])
+    def test_an_added_vendors_origin_moves_by_the_source(self, source, origin):
+        moved = ReviewState.move(_stored(State.APPROVED_ADDED),
+                                 MOVES[f"answers_{source}"](State.APPROVED_ADDED))
+
+        assert moved.set == {"origin": origin}
+
+    def test_answers_restated_move_nothing(self):
+        doc = {**_stored(State.APPROVED_BY_A_PERSON), "form_data": {"shop": "Kiln"}}
+
+        moved = ReviewState.move(doc, MOVES["answers_import"](State.APPROVED_BY_A_PERSON))
+
+        assert (moved.to, moved.set, moved.unset) == (State.APPROVED_BY_A_PERSON, {}, ())
+
+    def test_an_application_stored_with_no_status_is_given_open(self):
+        doc = {**_stored(State.OPEN), "status": ""}
+
+        moved = ReviewState.move(doc, MOVES["answers_applicant"](State.OPEN))
+
+        assert moved.set == {"status": "open"}
 
     def test_an_undo_by_someone_else_is_refused(self):
         assert isinstance(ReviewState.move(_stored(State.APPROVED_BY_A_PERSON),

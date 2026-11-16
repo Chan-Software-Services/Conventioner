@@ -28,7 +28,8 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 
 import api.applications as ApplicationsApi
 from datatypes import (
-    AnswerUpdate, Application, ApplicationStatus, IntakeMode, MarketPerson, VerdictGiver,
+    Application, ApplicationOrigin, ApplicationStatus, ApplicationType, IntakeMode, MarketPerson,
+    VerdictGiver,
 )
 
 #: The fields only this module writes: an application's review state. Each move between states
@@ -72,10 +73,6 @@ class State(str, Enum):
         return self in (State.OPEN, State.FOLLOW_UP)
 
 
-#: How an application came to the market, read by ``origin_of``: applied on its page, imported
-#: from a file, or added by hand. Its own axis, apart from the verdict.
-APPLIED, IMPORTED, ADDED = "applied", "imported", "added"
-_ORIGINS = (APPLIED, IMPORTED, ADDED)
 
 #: The statuses the old offers flow carried an approval on to (``NoApprovedApplicationsGuard``:
 #: "the solver must have resolved every approved application to either assigned or unassigned").
@@ -87,17 +84,26 @@ _CARRIED_APPROVALS = (
 )
 
 
-def origin_of(doc: Dict[str, Any], intake: Optional[IntakeMode] = None) -> str:
-    """How this application came to the market: its stored ``origin``; else ``added`` when someone
-    added it by hand (``added_by``); else ``imported`` on a market whose vendors are imported, and
+def origin_of(doc: Dict[str, Any], intake: Optional[IntakeMode] = None) -> ApplicationOrigin:
+    """How this application came to the market, its own axis apart from the verdict: its stored
+    ``origin``; else, for one stored before the origin was kept, ``added`` when someone added it
+    by hand (``added_by``), else ``imported`` on a market whose vendors are imported and
     ``applied`` on one whose vendors apply, or with no ``intake`` given, since then only "added or
     not" is asked."""
-    stored = doc.get("origin")
-    if stored in _ORIGINS:
-        return stored
+    try:
+        return ApplicationOrigin(doc.get("origin"))
+    except ValueError:
+        pass
     if doc.get("added_by"):
-        return ADDED
-    return IMPORTED if intake is IntakeMode.CSV else APPLIED
+        return ApplicationOrigin.ADDED
+    return ApplicationOrigin.IMPORTED if intake is IntakeMode.CSV else ApplicationOrigin.APPLIED
+
+
+def is_added(doc: Dict[str, Any]) -> bool:
+    """Whether this application is a vendor added by hand whose answers never arrived since: seated
+    by hand and never read by the run (E36/F03/S01). Once an import or their own save brings their
+    answers, they are an applicant like any other (T277 P7)."""
+    return origin_of(doc) is ApplicationOrigin.ADDED
 
 
 def state_of(doc: Dict[str, Any]) -> State:
@@ -117,7 +123,7 @@ def state_of(doc: Dict[str, Any]) -> State:
     if status == ApplicationStatus.NEEDS_FOLLOW_UP.value:
         return State.FOLLOW_UP
     if status == ApplicationStatus.REVIEWER_APPROVED.value or status in _CARRIED_APPROVALS:
-        return State.APPROVED_ADDED if origin_of(doc) == ADDED else State.APPROVED_BY_A_PERSON
+        return State.APPROVED_ADDED if is_added(doc) else State.APPROVED_BY_A_PERSON
     if status == ApplicationStatus.REVIEWER_REJECTED.value:
         by_rule = (doc.get("verdict_by") or {}).get("kind") == "rule"
         return State.REJECTED_BY_A_RULE if by_rule else State.REJECTED_BY_A_PERSON
@@ -210,8 +216,9 @@ class Arrival:
 
 # --- An application arrives, or is added ----------------------------------------------------------
 
-def find_or_create_application(app: Application, arrival: Optional[Arrival] = None) -> Application:
-    """Store this application, unless one already exists for the applicant it belongs to.
+def _upsert(app: Application, body: Dict[str, Any]) -> Tuple[Application, bool]:
+    """Store ``app``, written as ``body``, unless one already exists for the applicant it belongs
+    to: the one application that exists, and whether this call made it.
 
     A single conditional upsert, so that a request which loses the race to another one for the same
     address does not leave a second document behind: the identity fields are the filter, the rest of
@@ -223,9 +230,6 @@ def find_or_create_application(app: Application, arrival: Optional[Arrival] = No
     nothing -- the winner's insert lands between this one's read and its own write -- so it is caught
     and the winner's document is returned. Either way the caller gets the one application that
     exists, which is what it asked for.
-
-    ``arrival`` is the write an open application arrives by: it is created marked for the deal
-    (``Arrival``). An added vendor arrives approved, with none.
     """
     ApplicationsApi.ensure_application_indexes()
     identity = ApplicationsApi.applicant_filter(
@@ -233,25 +237,27 @@ def find_or_create_application(app: Application, arrival: Optional[Arrival] = No
     )
     # The identity fields come from the filter, which is where an upsert takes them from; repeating
     # them in the insert body would only be a second chance to disagree with it.
-    body = {key: value for key, value in app.model_dump().items() if key not in identity}
-    if arrival is not None:
-        body[ApplicationsApi.ARRIVING_FIELD] = arrival.stored()
+    body = {key: value for key, value in body.items() if key not in identity}
 
     for _attempt in range(2):
         try:
-            stored = ApplicationsApi.applications_collection.find_one_and_update(
+            # The document as it was: none when this upsert inserted it.
+            was = ApplicationsApi.applications_collection.find_one_and_update(
                 identity,
                 {"$setOnInsert": body},
                 upsert=True,
-                return_document=ReturnDocument.AFTER,
+                return_document=ReturnDocument.BEFORE,
             )
-            if stored:
-                return Application(**stored)
+            if was:
+                return Application(**was), False
+            made = ApplicationsApi.applications_collection.find_one(identity)
+            if made:
+                return Application(**made), True
         except DuplicateKeyError:
             pass
         existing = ApplicationsApi.applications_collection.find_one(identity)
         if existing:
-            return Application(**existing)
+            return Application(**existing), False
 
     # Named by its market and never its address: this escapes to the 500 log, which holds none.
     raise PyMongoError(
@@ -260,67 +266,35 @@ def find_or_create_application(app: Application, arrival: Optional[Arrival] = No
     )
 
 
-# --- The answers ----------------------------------------------------------------------------------
-
-def update_application_form_data(
-    app_id: str, form_data: Dict[str, Any], submitted_at: str, updated_at: str,
-    *, held: Optional[Dict[str, Any]] = None, back_to_review: bool = False,
-    arrival: Optional[Arrival] = None,
-) -> bool:
-    """Write form answers and timestamps for an application. Returns whether it matched.
-
-    ``held`` is the application as the caller read it: the write lands only while its status and
-    its verdict's time are still those (null and absent alike), so answers are never stored under a
-    verdict given after the caller decided what to write (a re-import, T270).
-
-    ``back_to_review`` returns it to open in the same update, clearing what every move to open
-    clears (``RuleReturns``'s move): the verdict's giver, time and reason, the follow-up's owner,
-    the claim and ``undo_to``, and marks it for the deal by ``arrival``, the import's write. One
-    update, so no stop between the answers and the status can leave a vendor approved on answers
-    nobody saw, nor open in nobody's share.
-    """
-    if back_to_review and arrival is None:
-        raise ValueError("A return to open is marked for the deal by the write it came by.")
-    ApplicationsApi.ensure_application_indexes()
-    query: Dict[str, Any] = {"id": app_id}
-    if held is not None:
-        query["status"] = held.get("status")
-        query["verdict_at"] = held.get("verdict_at") or {"$in": [None]}
-    update: Dict[str, Any] = {"$set": {
-        "form_data": form_data,
-        "submitted_at": submitted_at,
-        "updated_at": updated_at,
-    }}
-    if back_to_review:
-        update["$set"]["status"] = ApplicationStatus.OPEN.value
-        update["$set"][ApplicationsApi.ARRIVING_FIELD] = arrival.stored()
-        update["$unset"] = {"verdict_by": "", "verdict_at": "", "verdict_reason": "",
-                            "follow_up_owner": "", "undo_to": "", **ApplicationsApi.CLAIM_UNSET}
-    result = ApplicationsApi.applications_collection.update_one(query, update)
-    return result.matched_count > 0
+def arrive(market_id: str, email: str, origin: ApplicationOrigin, submitted_at: Optional[str],
+           arrival: Arrival, *, application_type: ApplicationType = ApplicationType.MAIN,
+           ) -> Application:
+    """An application arrives: the "(none)" row of the table. Stored open with no answers yet, its
+    ``origin`` (``applied`` by the applicant's first save, ``imported`` by an import row) and marked
+    for the deal by ``arrival``, the write it came by; the answers follow by ``answers_changed``.
+    Answers the application already stored for this applicant, the winner's on a lost race."""
+    app = Application(
+        market_id=market_id, applicant_email=email, form_data={}, status=ApplicationStatus.OPEN,
+        origin=origin, submitted_at=submitted_at, application_type=application_type,
+    )
+    body = {**app.model_dump(), ApplicationsApi.ARRIVING_FIELD: arrival.stored()}
+    return _upsert(app, body)[0]
 
 
-def write_answer_updates(
-    app_id: str, updates: Dict[str, AnswerUpdate], cleared: Iterable[str],
-) -> bool:
-    """Store these updates of an application's answers, and take the ``cleared`` ones away, each by
-    its own question's path, so two organizers updating different answers at once both land.
-
-    Either moves ``updated_at``, the answers' version, in the same update: what every reader reads
-    as the answers changed, so a verdict on a card opened before is refused (T270). With nothing to
-    store or take away it writes nothing."""
-    ApplicationsApi.ensure_application_indexes()
-    field = ApplicationsApi.ANSWER_UPDATES_FIELD
-    stored = {f"{field}.{key}": value.model_dump() for key, value in updates.items()}
-    gone = {f"{field}.{key}": "" for key in cleared}
-    if not stored and not gone:
-        return True
-    version = datetime.now(timezone.utc).isoformat()
-    update: Dict[str, Any] = {"$set": {**stored, "updated_at": version}}
-    if gone:
-        update["$unset"] = gone
-    return ApplicationsApi.applications_collection.update_one(
-        {"id": app_id}, update).matched_count > 0
+def add(market_id: str, email: str, form_data: Dict[str, Any],
+        adder: MarketPerson) -> Optional[Application]:
+    """A vendor who never applied is added by hand (E36/F03/S01): from "(none)" alone, to
+    ``approved(added)``, approved by ``adder`` as they add them, origin ``added``. None when the
+    market already holds an application for the address, which the caller refuses: adding never
+    writes over one."""
+    now = datetime.now(timezone.utc).isoformat()
+    app = Application(
+        market_id=market_id, applicant_email=email, form_data=form_data,
+        status=ApplicationStatus.REVIEWER_APPROVED, verdict_by=adder.as_giver(), verdict_at=now,
+        added_by=adder, added_at=now, origin=ApplicationOrigin.ADDED,
+    )
+    stored, made = _upsert(app, app.model_dump())
+    return stored if made else None
 
 
 # --- The transition table, and the events that move along it --------------------------------------
@@ -381,7 +355,36 @@ class HandOnFollowUp:
     arrival: Arrival
 
 
-Event = Union[GiveVerdict, ChangeVerdict, Undo, RuleRejects, RuleReturns, HandOnFollowUp]
+class Source(str, Enum):
+    """Who changed an application's answers: the applicant's own save, a row of an import, or an
+    organizer's update beside the vendor's answer (E41/F01/S01)."""
+
+    APPLICANT = "applicant"
+    IMPORT = "import"
+    ORGANIZER = "organizer"
+
+
+#: What an added vendor becomes once their answers arrive by each source (T277 P7).
+_ORIGIN_BY_SOURCE = {Source.APPLICANT: ApplicationOrigin.APPLIED,
+                     Source.IMPORT: ApplicationOrigin.IMPORTED}
+
+
+@dataclass(frozen=True)
+class AnswersChanged:
+    """An application's answers are written, by ``source`` (Daniel's decision 9.1, T277).
+
+    ``form_data`` is the vendor's answers as the write will store them, for the applicant and an
+    import, so the move can tell answers that changed from a save that restates them; an
+    organizer's update is written beside them and passes none. ``arrival`` is the write, for the
+    deal, should the move send a verdict back to open."""
+
+    source: Source
+    form_data: Optional[Dict[str, Any]] = None
+    arrival: Optional[Arrival] = None
+
+
+Event = Union[GiveVerdict, ChangeVerdict, Undo, RuleRejects, RuleReturns, HandOnFollowUp,
+              AnswersChanged]
 
 #: The transition table, as data: the states each event moves an application from. A state an
 #: event does not list is refused. Where an event moves to, and the narrower refusals inside a
@@ -397,6 +400,8 @@ TABLE: Dict[type, Tuple[State, ...]] = {
     RuleRejects: (State.OPEN, State.REJECTED_BY_A_RULE),
     RuleReturns: (State.REJECTED_BY_A_RULE,),
     HandOnFollowUp: (State.FOLLOW_UP,),
+    # Answers change in every state; what that does to the verdict is ``move``'s (decision 9.1).
+    AnswersChanged: tuple(State),
 }
 
 #: Why an added vendor's approval may only change to a rejection: nobody applied, so there is no
@@ -436,6 +441,17 @@ class Move:
 
     def query(self, app_id: str) -> Dict[str, Any]:
         return {"id": app_id, **self.pins}
+
+    def applied(self, doc: Dict[str, Any]) -> Dict[str, Any]:
+        """The application as this move leaves it, for a preview that writes nothing."""
+        left = {key: value for key, value in doc.items() if key not in self.unset}
+        return {**left, **self.set}
+
+
+def returned_to_review(read: Dict[str, Any], moved: "Move") -> bool:
+    """Whether this move, from the application as read, sends its verdict back to open: what an
+    applicant's history entry and an import's count say (decision 9.1)."""
+    return is_decided(read) and moved.to is State.OPEN
 
 
 #: What a write is answered with: whether it landed, or the table's refusal, which is falsy too.
@@ -481,8 +497,10 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
     write all read the same answer. Every move holds the status and the verdict's time as read; a
     verdict, a rule's and a person's, holds the answers' time (``updated_at``) too, so neither a
     verdict nor answers changed in between are written over (E33/F03/S02, E34/F03/S01, T270).
-    Every move into open or follow-up (an undo, a rule's return, a hand-on) marks the application
-    for the deal by the event's ``arrival``; every verdict ends the wait.
+    Every move into open or follow-up (an undo, a rule's return, a hand-on, answers changed under a
+    person's verdict) marks the application for the deal by the event's ``arrival``; every verdict
+    ends the wait. Changed answers hold only the status and the verdict's time, and an organizer's
+    nothing (``_answers_move``).
     """
     state = state_of(doc)
     if state not in TABLE[type(event)]:
@@ -505,6 +523,9 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
         else:
             unset.append("undo_to")
         return Move(to=state_of({**doc, **sets}), set=sets, unset=tuple(unset), pins=pins)
+
+    if isinstance(event, AnswersChanged):
+        return _answers_move(doc, state, event, held)
 
     if isinstance(event, Undo):
         undo_to = doc.get("undo_to")
@@ -552,6 +573,40 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
         unset=(),
         pins={"status": ApplicationStatus.NEEDS_FOLLOW_UP.value},
     )
+
+
+def _answers_move(doc: Dict[str, Any], state: State, event: AnswersChanged,
+                  held: Dict[str, Any]) -> Move:
+    """What changed answers do to the verdict (decision 9.1), the answers' own fields aside.
+
+    An organizer's update keeps every verdict, since they made both, and holds nothing, so two
+    organizers updating different answers at once both land. A change by the applicant or an
+    import, held on the status and the verdict's time as read: a person's approval or rejection
+    goes back to open, marked for the deal, since nobody judged the answers as they read now; an
+    added vendor stays approved and becomes an applicant (its origin moves, T277 P7); a rule's
+    rejection stays, for the caller's rules to judge again; open and follow-up stay. A save that
+    restates the answers moves nothing. One stored with no status is given the ``open`` it reads
+    as.
+    """
+    if event.source is Source.ORGANIZER:
+        return Move(to=state, set={}, unset=(), pins={})
+    sets: Dict[str, Any] = {}
+    if doc.get("status") in (None, ""):
+        sets["status"] = ApplicationStatus.OPEN.value
+    changed = event.form_data != (doc.get("form_data") or {})
+    if changed and state in (State.APPROVED_BY_A_PERSON, State.REJECTED_BY_A_PERSON):
+        if event.arrival is None:
+            raise ValueError("A return to open is marked for the deal by the write it came by.")
+        return Move(
+            to=State.OPEN,
+            set={"status": ApplicationStatus.OPEN.value,
+                 ApplicationsApi.ARRIVING_FIELD: event.arrival.stored()},
+            unset=(*_VERDICT, "follow_up_owner", "undo_to", *_CLAIM),
+            pins=held,
+        )
+    if changed and state is State.APPROVED_ADDED:
+        sets["origin"] = _ORIGIN_BY_SOURCE[event.source].value
+    return Move(to=state_of({**doc, **sets}), set=sets, unset=(), pins=held)
 
 
 def _write(read: Dict[str, Any], event: Event, pins: Optional[Dict[str, Any]] = None) -> Written:
@@ -627,14 +682,35 @@ def hand_on_follow_up(read: Dict[str, Any], owner: MarketPerson, arrival: Arriva
     return _write(read, HandOnFollowUp(owner, arrival))
 
 
-def store_open(app_id: str) -> bool:
-    """Give an application stored with no status the stored ``open`` it reads as, once its answers
-    are written. Held on its still having none."""
+def answers_changed(read: Dict[str, Any], source: Source, answers: Dict[str, Any],
+                    arrival: Optional[Arrival] = None,
+                    cleared: Iterable[str] = ()) -> Optional[Move]:
+    """Write an application's answers, by ``source``, and what that does to its verdict
+    (``AnswersChanged``, decision 9.1), in one update: no stop between the answers and the state
+    can leave a vendor approved on answers nobody read, nor open in nobody's share.
+
+    ``answers`` is the part of the update the caller built, which names no owned field: the
+    vendor's ``form_data``, ``submitted_at`` and ``updated_at`` for the applicant and an import;
+    the dotted ``answer_updates`` paths and ``updated_at`` for an organizer, with the paths it
+    takes away in ``cleared``. ``arrival`` is the write, marking a verdict sent back to open for
+    the deal. The move written, or None when the application changed since ``read`` and the held
+    write matched nothing: the caller reads it again.
+    """
+    cleared = list(cleared)
+    owned = [key for key in [*answers, *cleared] if key.split(".")[0] in OWNED_FIELDS]
+    if owned:
+        raise ValueError(f"The answers' write names fields the review state owns: {owned}.")
+    moved = move(read, AnswersChanged(source, answers.get("form_data"), arrival))
+    if not isinstance(moved, Move):  # every state takes changed answers (``TABLE``)
+        raise ValueError(f"No state refuses changed answers, yet {state_of(read)} did.")
+    update = moved.update()
+    update["$set"] = {**answers, **update.get("$set", {})}
+    gone = {key: "" for key in cleared}
+    if gone:
+        update["$unset"] = {**gone, **update.get("$unset", {})}
     ApplicationsApi.ensure_application_indexes()
-    return ApplicationsApi.applications_collection.update_one(
-        {"id": app_id, "status": {"$in": [None, ""]}},
-        {"$set": {"status": ApplicationStatus.OPEN.value}},
-    ).matched_count > 0
+    written = ApplicationsApi.applications_collection.update_one(moved.query(read["id"]), update)
+    return moved if written.matched_count > 0 else None
 
 
 # --- Whose share it is (E38/F07/S02, ADR 0020): written only for ``review_team.py`` ---------------

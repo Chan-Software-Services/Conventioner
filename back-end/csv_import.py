@@ -34,11 +34,11 @@ import application_status as ReviewState
 import rejection_rules as RejectionRules
 import essential_fields as EssentialFields
 from application_write import (
-    ANSWERS_MOVED, answer_errors, record_application_answers, validated_form_data,
+    ANSWER_TRIES, ANSWERS_MOVED, answer_errors, record_application_answers, validated_form_data,
 )
 from datatypes import (
     SUBMITTED_AT_RULE_TARGET,
-    Application,
+    ApplicationOrigin,
     ApplicationStatus,
     ImportMapping,
     MappingAuthor,
@@ -1514,8 +1514,9 @@ def _as_the_import_leaves_them(
     says are kept never disagree.
 
     Judged as ``RejectionRules.judge`` judges at the import's end: each application as the write
-    would leave it - new and undecided, or as it stands, or undecided again where the import sends
-    an approval back to review - and only where a rule may judge it, so an application a person
+    would leave it - new and undecided, or as the review state's move for the row leaves it
+    (``_row_move``: a person's verdict on changed answers back to open, the rest as they stand) -
+    and only where a rule may judge it, so an application a person
     decided keeps its verdict; its answers as stored, an organizer's update read in its place. A
     rule's rejection no rule meets any longer returns to review unless the results are published or
     ``by`` may not overturn it.
@@ -1529,9 +1530,11 @@ def _as_the_import_leaves_them(
         if stored is None:
             continue
         existing = existing_by_email.get(email)
-        after = {**(existing or {}), "form_data": stored}
-        if existing is None or _would_return_to_review(market_doc, existing, data):
-            after["status"] = ApplicationStatus.OPEN.value
+        if existing is None:
+            after = {"status": ApplicationStatus.OPEN.value, "form_data": stored}
+        else:
+            # What the write's own event does to the verdict, read by the same pure move.
+            after = {**_row_move(existing, stored).applied(existing), "form_data": stored}
         met = None
         newly_rejected = False
         if ReviewState.is_judgeable(after):
@@ -1601,28 +1604,38 @@ def _answers_as_stored(
     return {**custom, **essential}
 
 
-def _would_return_to_review(
+#: The import, for a preview's reading of a row's move: a preview writes nothing, so the mark the
+#: move would set is never stored.
+_PREVIEWED = ReviewState.Arrival(None, Actions.IMPORT_APPLICATIONS.id)
+
+
+def _row_move(existing: Dict[str, Any], stored: Dict[str, Any]) -> ReviewState.Move:
+    """What writing a row's answers, as they would be stored, does to an application already here:
+    the review state's own move for an import (decision 9.1), the one the write then writes. A
+    preview reads it; so does the count of the applications it sends back to open."""
+    moved = ReviewState.move(existing, ReviewState.AnswersChanged(
+        ReviewState.Source.IMPORT, stored, _PREVIEWED))
+    if not isinstance(moved, ReviewState.Move):  # no state refuses changed answers
+        raise ValueError("The review state refused a row's changed answers.")
+    return moved
+
+
+def _sends_back(
     market_doc: Dict[str, Any], existing: Optional[Dict[str, Any]], form_data: Dict[str, Any],
 ) -> bool:
-    """Would importing this row invalidate a review that has already happened?
+    """Would importing this row send a verdict already given back to open?
 
-    Only for an application already APPROVED: nothing else has a verdict to invalidate. The
-    comparison is against NORMALISED answers on both sides, so a re-export that merely reformats a
-    value is not a change - treating it as one would un-approve a market's worth of vendors for
-    nothing.
+    Whether the answers changed is the import's question, asked of the NORMALISED answers on both
+    sides, so a re-export that merely reformats a value is not a change; what a change does is the
+    review state's (``_row_move``): a person's approval or rejection goes back to open, an added
+    vendor stays approved, and a rule's rejection is left for the rules.
     """
-    if not existing:
+    if not existing or _unchanged(market_doc, existing, form_data):
         return False
-    if existing.get("status") != ApplicationStatus.REVIEWER_APPROVED.value:
+    stored = _answers_as_stored(market_doc, form_data)
+    if stored is None:
         return False
-
-    options = EssentialFields.effective_essential_options(market_doc)
-    error, incoming = EssentialFields.validated_essential_answers(
-        form_data, options, limit_required=False,
-    )
-    if error:
-        return False
-    return EssentialFields.solver_relevant_change(existing.get("form_data") or {}, incoming)
+    return ReviewState.returned_to_review(existing, _row_move(existing, stored))
 
 
 def _unchanged(
@@ -1674,7 +1687,7 @@ def _merge_shape(
             if not email or line in skipped_lines:
                 continue
             existing = existing_by_email.get(email)
-            if _would_return_to_review(market_doc, existing, data):
+            if _sends_back(market_doc, existing, data):
                 returning.append(email)
             if existing and _unchanged(market_doc, existing, data):
                 unchanged.add(email)
@@ -1706,8 +1719,9 @@ def import_counts(result: Dict[str, Any]) -> Dict[str, int]:
     }
 
 
-# A row whose application moves under it this many times running is left out (T270).
-ROW_TRIES = 3
+# A row whose application moves under it this many times running is left out (T270), as an
+# applicant's own save is refused after as many.
+ROW_TRIES = ANSWER_TRIES
 CHANGED_WHILE_IMPORTED = (
     "This application changed while the file was imported, so its row was left out. "
     "Import the file again to bring it in."
@@ -1716,7 +1730,7 @@ CHANGED_WHILE_IMPORTED = (
 
 class _RowOutcome(NamedTuple):
     """What writing one row did: left it unchanged, created or updated it (and whether that sent
-    an approval back to review), or failed it with a sentence for the organizer."""
+    a verdict back to open), or failed it with a sentence for the organizer."""
     unchanged: bool = False
     created: bool = False
     returned: bool = False
@@ -1729,10 +1743,11 @@ def _write_row(
 ) -> _RowOutcome:
     """Write one row's answers, held to the application as it was read (T270).
 
-    The answers and any "back to review" are one update, held to the status and the verdict's time
-    this read: a verdict given between the read and the write makes it match nothing, and the row
-    is decided again on what is stored then, at most ``ROW_TRIES`` times in all. A row that creates
-    an application, or sends one back to review, marks it for the deal by ``arrival``, the import.
+    The answers and what they do to the verdict are one update (``answers_changed``), held to the
+    status and the verdict's time this read: a verdict given between the read and the write makes
+    it match nothing, and the row is decided again on what is stored then, at most ``ROW_TRIES``
+    times in all. A row that creates an application, or sends a verdict back to open, marks it for
+    the deal by ``arrival``, the import.
     """
     existing = ApplicationsApi.find_application_by_email(market_id, email)
     created_here = False
@@ -1740,26 +1755,15 @@ def _write_row(
         if existing and _unchanged(market_doc, existing, form_data):
             # Nothing to write, and nothing to call an update.
             return _RowOutcome(unchanged=True)
-        # Decided BEFORE the write, while the stored answers are still the ones the organizer
-        # approved: afterwards there is nothing left to compare against.
-        stale_review = _would_return_to_review(market_doc, existing, form_data)
-        app_doc = existing or ReviewState.find_or_create_application(Application(
-            market_id=market_id,
-            applicant_email=email,
-            form_data={},
-            status=ApplicationStatus.OPEN,
-            submitted_at=submitted_at or None,
-        ), arrival).model_dump()
+        app_doc = existing or ReviewState.arrive(
+            market_id, email, ApplicationOrigin.IMPORTED, submitted_at or None, arrival,
+        ).model_dump()
         created_now = existing is None
         created_here = created_here or created_now
 
-        held = app_doc
-        if submitted_at and not app_doc.get("submitted_at"):
-            app_doc = {**app_doc, "submitted_at": submitted_at}
-
-        row_error, _ = record_application_answers(
-            markets_collection, market_doc, app_doc, form_data, imported=True,
-            held=held, back_to_review=stale_review, arrival=arrival,
+        row_error, _, returned = record_application_answers(
+            markets_collection, market_doc, app_doc, form_data,
+            source=ReviewState.Source.IMPORT, arrival=arrival, submitted_at=submitted_at or None,
         )
         if row_error == ANSWERS_MOVED:
             existing = ApplicationsApi.find_application_by_email(market_id, email)
@@ -1770,7 +1774,7 @@ def _write_row(
             if created_now:
                 ApplicationsApi.delete_application(app_doc.get("id", ""))
             return _RowOutcome(error=row_error)
-        return _RowOutcome(created=created_here, returned=stale_review)
+        return _RowOutcome(created=created_here, returned=returned)
     return _RowOutcome(error=CHANGED_WHILE_IMPORTED)
 
 
@@ -1907,7 +1911,7 @@ def import_applications(
             email for line, email, *_rest in applicants if line not in refused
         })
 
-    # The rules judge what this import wrote - after any approval it sent back to review - and
+    # The rules judge what this import wrote - after any verdict it sent back to open - and
     # anything else still undecided (E33/F03/S02), returning a rule's rejection to open only for an
     # importer who may overturn one (E38/F06/S01).
     judged_market = market_from_document(market_doc)

@@ -109,7 +109,7 @@ def update_vendor_info(
         else:
             updates[key] = AnswerUpdate(value=value, by=updater, at=now, over=theirs.get(key))
 
-    ReviewState.write_answer_updates(application_id, updates, cleared)
+    _write_updates(doc, updates, cleared)
     stored = ApplicationsApi.find_application_by_id(application_id) or doc
     after = ApplicationsApi.effective_answers(stored)
     # The rules judge what the organizer now reads, as they judge an applicant's own save, while
@@ -138,6 +138,26 @@ def update_vendor_info(
     if verdicts.rejected or verdicts.returned or dealt:
         stored = ApplicationsApi.find_application_by_id(application_id) or stored
     return {"application": ApplicantsApi.organizer_view(stored)}, 200
+
+
+def _write_updates(
+    doc: Dict[str, Any], updates: Dict[str, AnswerUpdate], cleared: List[str],
+) -> None:
+    """Store these updates of a vendor's answers, and take the ``cleared`` ones away, each by its
+    own question's path, so two organizers updating different answers at once both land.
+
+    Either moves ``updated_at``, the answers' version, in the same update: what every reader reads
+    as the answers changed, so a verdict on a card opened before is refused (T270). Written as the
+    review state's event for an organizer's update, which keeps every verdict, since the organizer
+    made both (decision 9.1). With nothing to store or take away it writes nothing."""
+    field = ApplicationsApi.ANSWER_UPDATES_FIELD
+    stored = {f"{field}.{key}": value.model_dump() for key, value in updates.items()}
+    gone = [f"{field}.{key}" for key in cleared]
+    if not stored and not gone:
+        return
+    ReviewState.answers_changed(
+        doc, ReviewState.Source.ORGANIZER,
+        {**stored, "updated_at": datetime.now(timezone.utc).isoformat()}, cleared=gone)
 
 
 def assert_may_update_what_the_assignment_or_prices_read(

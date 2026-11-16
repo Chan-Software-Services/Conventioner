@@ -430,7 +430,7 @@ class TestAWriteRacingTheDeletion:
         market = market_in(MarketPhase.ASSIGNMENT,
                            phaseHistory=_history(MarketPhase.DRAFT, MarketPhase.APPLICATIONS,
                                                  MarketPhase.ASSIGNMENT))
-        interleave("application_status.find_or_create_application",
+        interleave("application_status.add",
                    lambda: MarketsApi.delete_market(market["id"], OWNER))
 
         response = client.post(f"/markets/{market['id']}/vendors",

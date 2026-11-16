@@ -12,8 +12,10 @@ intention, all of them easy to leave out of a second implementation:
      offering can have its question moved under it by a later market-plan edit.
   2. Answers are normalised through the shared validators into their stored shapes - dates as ISO
      strings in plan order, max dates as an int, rankings best-first, accepted sets in plan order.
-  3. An application with no status yet becomes ``open``, which is what puts it in front of a
-     reviewer.
+  3. The answers are written with what they do to the verdict, by the review state's own event
+     (``application_status.answers_changed``, decision 9.1), held on the application as read: an
+     applicant's or an import's change sends a person's verdict back to open, and an application
+     with no status yet becomes ``open``, which is what puts it in front of a reviewer.
 
 So this module owns the sequence, and every caller gets all three. It deliberately takes plain
 documents rather than a request or a session: the CSV importer has neither.
@@ -21,7 +23,7 @@ documents rather than a request or a session: the CSV importer has neither.
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 import api.applications as ApplicationsApi
 import application_status as ReviewState
@@ -59,6 +61,17 @@ def _asks_nothing(market_doc: Dict[str, Any], fields: List[Dict[str, Any]]) -> b
 NO_FORM_ERROR = "This market does not have an application form configured."
 # A held write that matched nothing: a verdict moved since the caller read the application.
 ANSWERS_MOVED = "This application's status changed since it was read."
+#: How many times a save is written on the application read again, when each try finds it moved
+#: since it was read: an import row (``csv_import.ROW_TRIES``) and the applicant's save alike.
+ANSWER_TRIES = 3
+
+
+class Recorded(NamedTuple):
+    """What recording answers did: the refusal, with nothing written; else the application as
+    stored, and whether the answers sent a verdict back to open (decision 9.1)."""
+    error: Optional[str]
+    application: Optional[Application]
+    returned: bool = False
 
 
 def validate_application_answers(
@@ -89,41 +102,42 @@ def validate_application_answers(
 def record_application_answers(
     markets_collection: Any,
     market_doc: Dict[str, Any],
-    app_doc: Dict[str, Any],
+    read: Dict[str, Any],
     form_data: Dict[str, Any],
     *,
-    imported: bool = False,
-    held: Optional[Dict[str, Any]] = None,
-    back_to_review: bool = False,
-    arrival: Optional[ReviewState.Arrival] = None,
-) -> Tuple[Optional[str], Optional[Application]]:
+    source: ReviewState.Source,
+    arrival: ReviewState.Arrival,
+    submitted_at: Optional[str] = None,
+) -> Recorded:
     """Validate, freeze, persist and status an applicant's answers. The whole sequence, once.
 
-    ``market_doc`` is the raw stored (camelCase) market; ``app_doc`` the raw stored application.
-    Returns ``(error_message, application)``: when the message is not None nothing was written and
-    the caller must refuse the save.
+    ``market_doc`` is the raw stored (camelCase) market; ``read`` the raw stored application, as
+    the caller read it. Returns ``Recorded``: when its ``error`` is not None nothing was written
+    and the caller must refuse the save.
 
-    ``imported`` is a row from a form this product did not write, which may never have asked how
-    many dates the applicant wants; its absence then means no personal limit (bug 24).
+    ``source`` is the applicant's own save or an import row. A row from a form this product did not
+    write may never have asked how many dates the applicant wants; its absence then means no
+    personal limit (bug 24).
 
     The freeze happens BEFORE the answers are persisted so no answer is ever recorded against an
     unfrozen offering, and a concurrent first save that froze a different offering is handled by
     re-validating against whichever one actually governs.
 
-    ``held``, ``back_to_review`` and ``arrival`` are ``update_application_form_data``'s: the write
-    lands only while the application's status and verdict's time are still those ``held`` has, and
-    with ``back_to_review`` it returns the application to open in the same update, marked for the
-    deal by ``arrival``. When the held write
-    matches nothing the answer is ``ANSWERS_MOVED`` with no application, and nothing was written.
-    An applicant's own save passes neither.
+    The answers are written by ``ReviewState.answers_changed``, held to the status and the
+    verdict's time ``read`` has, so they never land under a verdict given after the caller read
+    the application: when the held write matches nothing the error is ``ANSWERS_MOVED`` and
+    nothing was written, for the caller to read it again. A verdict the answers send back to open
+    is marked for the deal by ``arrival``. ``submitted_at`` is the row's own time, kept only where
+    the application has none.
     """
+    imported = source is ReviewState.Source.IMPORT
     application_form = market_doc_field(market_doc, "application_form")
     fields = (application_form or {}).get("fields") or []
     if _asks_nothing(market_doc, fields):
-        return NO_FORM_ERROR, None
+        return Recorded(NO_FORM_ERROR, None)
     error, stored_form_data = validated_form_data(form_data, fields)
     if error:
-        return error, None
+        return Recorded(error, None)
 
     # The essential answers are merged last so no custom answer can ever shadow one.
     essential_options = EssentialFields.effective_essential_options(market_doc)
@@ -131,7 +145,7 @@ def record_application_answers(
         form_data, essential_options, limit_required=not imported,
     )
     if essential_error:
-        return essential_error, None
+        return Recorded(essential_error, None)
 
     market_id = market_doc.get("id", "")
     frozen_options = EssentialFields.freeze_and_effective_essential_options(
@@ -142,24 +156,22 @@ def record_application_answers(
             form_data, frozen_options, limit_required=not imported,
         )
         if essential_error:
-            return essential_error, None
+            return Recorded(essential_error, None)
     stored_form_data.update(essential_answers)
 
     now = datetime.now(timezone.utc).isoformat()
-    submitted_at = app_doc.get("submitted_at") or now
-    app_id = app_doc.get("id", "")
+    answers = {
+        "form_data": stored_form_data,
+        "submitted_at": read.get("submitted_at") or submitted_at or now,
+        "updated_at": now,
+    }
+    moved = ReviewState.answers_changed(read, source, answers, arrival)
+    if moved is None:
+        return Recorded(ANSWERS_MOVED, None)
 
-    written = ReviewState.update_application_form_data(
-        app_id, stored_form_data, submitted_at, now, held=held, back_to_review=back_to_review,
-        arrival=arrival,
-    )
-    if held is not None and not written:
-        return ANSWERS_MOVED, None
-    if not app_doc.get("status"):
-        ReviewState.store_open(app_id)
-
-    updated_doc = ApplicationsApi.find_application_by_id(app_id)
-    return None, Application(**(updated_doc or app_doc))
+    stored = ApplicationsApi.find_application_by_id(read.get("id", ""))
+    return Recorded(None, Application(**(stored or {**moved.applied(read), **answers})),
+                    ReviewState.returned_to_review(read, moved))
 
 
 def validated_form_data(

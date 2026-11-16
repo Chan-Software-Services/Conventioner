@@ -63,11 +63,11 @@ def ensure_application_indexes() -> None:
     accident through a double-click or a retried request.
 
     So uniqueness is the database's, and creation is written against it -- see
-    ``application_status.find_or_create_application``.
+    ``application_status``'s ``arrive`` and ``add``.
 
     A build that fails raises, and the caller fails with it. This index is not a decoration on a
     guarantee the code keeps anyway: it *is* the guarantee, the whole of it, and a process that
-    cannot build it is a process where ``find_or_create_application`` is a read-then-insert with
+    cannot build it is a process where ``arrive`` or ``add`` is a read-then-insert with
     nothing behind it. Logging that and serving anyway is the one thing this product does not do
     with a defense it cannot confirm - the market-key migration and the public-endpoint
     configuration both fail closed, and for the same reason: an unknown state is not a safe one.

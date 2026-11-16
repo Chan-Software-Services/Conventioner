@@ -73,6 +73,19 @@ def _app_doc(**overrides):
     return doc
 
 
+APPLICANT = ReviewState.Arrival("vendor@example.com", "apply")
+
+
+def _record(markets, market_doc, read, answers, imported=False):
+    """Record ``answers`` as the applicant's own save, or an import row's, and answer what the
+    save refused and the application it stored."""
+    recorded = record_application_answers(
+        markets, market_doc, read, answers,
+        source=ReviewState.Source.IMPORT if imported else ReviewState.Source.APPLICANT,
+        arrival=APPLICANT)
+    return recorded.error, recorded.application
+
+
 @pytest.fixture
 def markets():
     return FakeMarketsCollection(_market_doc())
@@ -83,7 +96,7 @@ class TestRecordApplicationAnswers:
         """The property the CSV importer depends on: plain documents in, application out."""
         applications.insert_one(_app_doc())
 
-        error, app = record_application_answers(
+        error, app = _record(
             markets, markets.doc, _app_doc(), ANSWERS,
         )
 
@@ -95,7 +108,7 @@ class TestRecordApplicationAnswers:
         """Not merely persisted: dates and accepted tiers come back in plan order."""
         applications.insert_one(_app_doc())
 
-        _, app = record_application_answers(markets, markets.doc, _app_doc(), ANSWERS)
+        _, app = _record(markets, markets.doc, _app_doc(), ANSWERS)
 
         assert app.form_data["essential_available_dates"] == DATES
         assert app.form_data["essential_tier_preference"] == {
@@ -111,7 +124,7 @@ class TestRecordApplicationAnswers:
         applications.insert_one(_app_doc())
         answers = {**ANSWERS, "essential_table_share_email": "Share with Buddy@Example.com!"}
 
-        _, app = record_application_answers(
+        _, app = _record(
             markets, markets.doc, _app_doc(), answers, imported=imported,
         )
 
@@ -122,31 +135,60 @@ class TestRecordApplicationAnswers:
         """What puts an imported row in front of a reviewer."""
         applications.insert_one(_app_doc())
 
-        record_application_answers(markets, markets.doc, _app_doc(), ANSWERS)
+        _record(markets, markets.doc, _app_doc(), ANSWERS)
 
         assert applications.find_one({"id": "app-1"})["status"] == ApplicationStatus.OPEN.value
 
-    def test_an_existing_status_is_left_alone(self, markets, applications):
-        applications.insert_one(_app_doc(status=ApplicationStatus.REVIEWER_APPROVED.value))
+    @pytest.mark.parametrize("imported", [False, True], ids=["applicant", "import"])
+    def test_changed_answers_send_a_persons_approval_back_to_open(
+        self, markets, applications, imported,
+    ):
+        """Decision 9.1: answers nobody judged carry no verdict, whoever changed them."""
+        approved = _app_doc(status=ApplicationStatus.REVIEWER_APPROVED.value,
+                            verdict_by={"kind": "person", "email": "alex@market.test"},
+                            verdict_at="2026-07-01T10:00:00+00:00")
+        applications.insert_one(approved)
 
-        record_application_answers(
-            markets, markets.doc,
-            _app_doc(status=ApplicationStatus.REVIEWER_APPROVED.value), ANSWERS,
-        )
+        recorded = record_application_answers(
+            markets, markets.doc, approved, ANSWERS,
+            source=ReviewState.Source.IMPORT if imported else ReviewState.Source.APPLICANT,
+            arrival=APPLICANT)
 
+        assert recorded.error is None and recorded.returned is True
         stored = applications.find_one({"id": "app-1"})
-        assert stored["status"] == ApplicationStatus.REVIEWER_APPROVED.value
+        assert stored["status"] == ApplicationStatus.OPEN.value
+        assert "verdict_by" not in stored and "verdict_at" not in stored
+        assert stored["arriving"] == APPLICANT.stored()
+        assert stored["form_data"]["business_name"] == "Vermilion Ceramics"
 
-    def test_a_held_write_on_a_verdict_given_since_writes_nothing(self, markets, applications):
-        """T270: the re-import holds its write to the application as it read it."""
+    def test_answers_restated_keep_the_verdict(self, markets, applications):
+        applications.insert_one(_app_doc())
+        _record(markets, markets.doc, _app_doc(), ANSWERS)
+        stored = applications.find_one({"id": "app-1"})
+        applications.update_one({"id": "app-1"}, {"$set": {
+            "status": ApplicationStatus.REVIEWER_APPROVED.value,
+            "verdict_at": "2026-07-01T10:00:00+00:00"}})
+
+        recorded = record_application_answers(
+            markets, markets.doc, applications.find_one({"id": "app-1"}), ANSWERS,
+            source=ReviewState.Source.APPLICANT, arrival=APPLICANT)
+
+        assert recorded.error is None and recorded.returned is False
+        assert applications.find_one({"id": "app-1"})["status"] == (
+            ApplicationStatus.REVIEWER_APPROVED.value)
+        assert stored["form_data"] == applications.find_one({"id": "app-1"})["form_data"]
+
+    @pytest.mark.parametrize("imported", [False, True], ids=["applicant", "import"])
+    def test_a_held_write_on_a_verdict_given_since_writes_nothing(
+        self, markets, applications, imported,
+    ):
+        """T270: every save holds its write to the application as it read it."""
         applications.insert_one(_app_doc(status=ApplicationStatus.REVIEWER_APPROVED.value,
                                          verdict_at="2026-07-01T10:00:00+00:00"))
 
-        error, app = record_application_answers(
+        error, app = _record(
             markets, markets.doc, _app_doc(status=ApplicationStatus.OPEN.value), ANSWERS,
-            imported=True, held=_app_doc(status=ApplicationStatus.OPEN.value),
-            back_to_review=True,
-            arrival=ReviewState.Arrival("admin@market.test", "import-applications"),
+            imported=imported,
         )
 
         assert (error, app) == (ANSWERS_MOVED, None)
@@ -158,7 +200,7 @@ class TestRecordApplicationAnswers:
         """The ordering that stops a later plan edit moving a question under a recorded answer."""
         applications.insert_one(_app_doc())
 
-        record_application_answers(markets, markets.doc, _app_doc(), ANSWERS)
+        _record(markets, markets.doc, _app_doc(), ANSWERS)
 
         frozen = markets.last_update["$set"]["applicationForm.essentialOptions"]
         assert frozen["dates"] == DATES
@@ -168,7 +210,7 @@ class TestRecordApplicationAnswers:
         applications.insert_one(_app_doc())
         bad = {**ANSWERS, "essential_tier_preference": {"2026-08-01": ["Platinum"]}}
 
-        error, app = record_application_answers(markets, markets.doc, _app_doc(), bad)
+        error, app = _record(markets, markets.doc, _app_doc(), bad)
 
         assert error is not None and "does not offer" in error
         assert app is None
@@ -178,7 +220,7 @@ class TestRecordApplicationAnswers:
         applications.insert_one(_app_doc())
         bad = {key: value for key, value in ANSWERS.items() if key != "business_name"}
 
-        error, app = record_application_answers(markets, markets.doc, _app_doc(), bad)
+        error, app = _record(markets, markets.doc, _app_doc(), bad)
 
         assert error is not None and "'Business Name' is required" in error
         assert app is None
@@ -189,8 +231,8 @@ class TestRecordApplicationAnswers:
         applications.insert_one(_app_doc())
         no_limit = {k: v for k, v in ANSWERS.items() if k != "essential_max_dates"}
 
-        error, app = record_application_answers(markets, markets.doc, _app_doc(), no_limit)
-        imported, stored = record_application_answers(
+        error, app = _record(markets, markets.doc, _app_doc(), no_limit)
+        imported, stored = _record(
             markets, markets.doc, _app_doc(), no_limit, imported=True,
         )
 
@@ -214,7 +256,7 @@ class TestRecordApplicationAnswers:
         )
         markets = FakeMarketsCollection(doc)
 
-        error, _ = record_application_answers(markets, doc, _app_doc(), ANSWERS)
+        error, _ = _record(markets, doc, _app_doc(), ANSWERS)
 
         assert error is not None and "does not offer" in error
 
@@ -241,7 +283,7 @@ class TestAMarketThatAsksOnlyTheEssentialQuestions:
         doc = self._essential_only_market()
         markets = FakeMarketsCollection(doc)
 
-        error, app = record_application_answers(markets, doc, _app_doc(), ANSWERS)
+        error, app = _record(markets, doc, _app_doc(), ANSWERS)
 
         assert error is None
         assert app is not None
@@ -260,7 +302,7 @@ class TestAMarketThatAsksOnlyTheEssentialQuestions:
         doc = stored_market(setupObject=SETUP_CAMEL)
         markets = FakeMarketsCollection(doc)
 
-        error, app = record_application_answers(markets, doc, _app_doc(), ANSWERS)
+        error, app = _record(markets, doc, _app_doc(), ANSWERS)
 
         assert error is None
         assert app is not None
@@ -278,7 +320,7 @@ class TestAMarketThatAsksOnlyTheEssentialQuestions:
         )
         markets = FakeMarketsCollection(doc)
 
-        error, app = record_application_answers(markets, doc, _app_doc(), {})
+        error, app = _record(markets, doc, _app_doc(), {})
 
         assert error is not None
         assert "does not have an application form configured" in error
@@ -289,7 +331,7 @@ class TestAMarketThatAsksOnlyTheEssentialQuestions:
         applications.insert_one(_app_doc())
         missing = {key: value for key, value in ANSWERS.items() if key != "business_name"}
 
-        error, app = record_application_answers(markets, markets.doc, _app_doc(), missing)
+        error, app = _record(markets, markets.doc, _app_doc(), missing)
 
         assert error is not None and "required" in error
         assert app is None

@@ -1908,7 +1908,7 @@ def _placeable(vendor: SolverVendor, outside: Optional[Application]) -> Dict[str
         # And whether they need a table, said apart (E38/F08/S02): a vendor added by hand is out
         # of the run and unassigned like anyone until seated.
         "needsATable": needs_a_table(outside),
-        "addedByHand": bool(outside is not None and outside.added_by),
+        "addedByHand": bool(outside is not None and ReviewState.is_added(outside.model_dump())),
         "email": vendor.email,
         "tableChoice": vendor.table_choice,
         "availableDates": sorted(vendor.available_dates),
