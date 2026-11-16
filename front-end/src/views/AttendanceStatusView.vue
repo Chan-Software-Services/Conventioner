@@ -907,6 +907,21 @@ const drawer = useVendorDrawer();
   .door {
     padding: var(--space-4);
   }
+
+  /* On a phone the tools never share the dates' line: they start their own lines at the left, as
+     the dates do, List and Map first, rather than at the right with a gap before them. */
+  .door-tools {
+    justify-content: flex-start;
+    margin-inline-start: 0;
+  }
+
+  .door-papers {
+    margin-inline-start: 0;
+  }
+
+  .door-freshness :deep(.freshness-error) {
+    text-align: start;
+  }
 }
 
 /* A row too narrow for the desk's four columns, a phone's or a tablet's: the vendor on top, where
