@@ -121,7 +121,7 @@ No checkout in them keeps git credentials (`persist-credentials: false`).
 
 ### How a promotion proves itself
 
-Every check the Promote workflow makes before it moves `main` lives in [`scripts/promote_check.py`](../scripts/promote_check.py), which reads GitHub and writes nothing, so it can be run anywhere without promoting: `GITHUB_TOKEN="$(gh auth token)" GITHUB_REPOSITORY=chanjdaniel/Conventioner python3 scripts/promote_check.py --commit <sha>`.
+Every check the Promote workflow makes before it moves `main` lives in [`scripts/promote_check.py`](../scripts/promote_check.py), which reads GitHub and writes nothing, so it can be run anywhere without promoting: `GITHUB_TOKEN="$(gh auth token)" GITHUB_REPOSITORY=Chan-Software-Services/Conventioner python3 scripts/promote_check.py --commit <sha>`.
 It reads the Test runs through [`scripts/github_runs.py`](../scripts/github_runs.py), the same code Deploy's Test check uses, so "the newest run decides" means one thing in both.
 [`scripts/tests/test_promote_check.py`](../scripts/tests/test_promote_check.py) runs it against a stub server, pins the workflow's steps, and runs the workflow's own shell with a fake `gh`.
 
