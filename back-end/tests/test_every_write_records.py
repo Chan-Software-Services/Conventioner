@@ -1068,8 +1068,9 @@ def asking(monkeypatch, world) -> Asking:
 class Unasked:
     """An entry written under a row its request never asked: by the function ``by``, called on a
     request through one of ``under`` (anywhere, when empty), under ``action``, or under whatever
-    action the write it stands for stored, when None. Its reason is its door's: the constant the
-    guard's ``DOORS`` names beside the function that opens it, with what this file adds."""
+    action the write it stands for stored, when None. Its reason is kept once, in the constant the
+    guard's ``DOORS`` names beside the function that opens its door: this file keeps only what it
+    adds."""
 
     name: str
     by: str
@@ -1082,14 +1083,6 @@ class Unasked:
     def doors(self) -> Tuple[str, ...]:
         """The guard's doors among its functions, each a function that opens the unasked door."""
         return tuple(door for door in (self.by, *self.under) if door in DOORS)
-
-    @property
-    def because(self) -> str:
-        """Why nothing asked it: its doors' reasons, read from their modules, then ``adds``."""
-        reasons = dict.fromkeys(
-            getattr(importlib.import_module(door.rsplit(".", 1)[0]), DOORS[door])
-            for door in self.doors)
-        return "; ".join([*reasons, *([self.adds] if self.adds else [])])
 
     def holds(self, entry: Dict[str, Any], callers: FrozenSet[str]) -> bool:
         return (self.by in callers and (not self.under or not callers.isdisjoint(self.under))
@@ -1240,15 +1233,6 @@ def test_every_unasked_record_is_made_through_a_door_allowed_its_reason():
 
     assert [name for name, doors in named.items() if not doors] == []
     assert set().union(*named.values()) == set(DOORS)
-
-
-@pytest.mark.parametrize("unasked", UNASKED, ids=lambda unasked: unasked.name)
-def test_an_unasked_records_reason_is_its_doors(unasked):
-    """Kept once, beside the function that opens the door: this file reads it from there."""
-    for door in unasked.doors:
-        module, constant = door.rsplit(".", 1)[0], DOORS[door]
-        reason = getattr(importlib.import_module(module), constant)
-        assert reason.strip() and unasked.because.startswith(reason), door
 
 
 class TestWhatAnEntryHolds:
