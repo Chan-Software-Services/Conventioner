@@ -114,6 +114,41 @@ class TestAWriteMeetingAnotherIsRefused:
         assert answered.get_json()["account"]["paidCents"] == 2500
 
 
+class TestAnEntryRemovedBeforeTheRequestIsRefusedAsRemoved:
+    """The commoner timing: the other Admin removed the entry before this request read it, while the
+    dialog still showed it standing. The request is told it was removed, with the account showing
+    it struck, as when the removal lands between the request's read and its write."""
+
+    @pytest.mark.parametrize("kind", [Payments.PAYMENT, Payments.REFUND])
+    @pytest.mark.parametrize("send, sentence", [
+        (lambda client, entry_id: client.put(entry_path(entry_id), json=EDITED),
+         EDIT_OF_A_REMOVED),
+        (lambda client, entry_id: client.delete(entry_path(entry_id)), REMOVAL_OF_A_REMOVED),
+    ], ids=["an edit", "a removal"])
+    def test_it_answers_409_saying_it_was_removed_with_the_account(
+            self, client, stores, kind, send, sentence):  # noqa: F811
+        entry = recorded(kind)
+        remove(entry["id"], OTHER_ADMIN)
+        before = len(adjustments(stores))
+
+        answered = send(client, entry["id"])
+
+        assert answered.status_code == 409, answered.get_json()
+        body = answered.get_json()
+        assert body["error"] == sentence.format(kind=kind)
+        assert body["account"] == PaymentsApi.vendor_account(MARKET, ANA, ADMIN)
+        [shown] = body["account"]["payments"]
+        assert shown["removedBy"] == OTHER_ADMIN
+        assert len(adjustments(stores)) == before
+        [stored] = stores.payments.documents
+        assert [change["by"] for change in stored["changes"]] == [OTHER_ADMIN]
+
+    def test_an_id_the_market_never_had_is_still_404(self, client, stores):  # noqa: F811
+        answered = client.put(entry_path("no-such-entry"), json=EDITED)
+
+        assert (answered.status_code, answered.get_json()["error"]) == (404, PaymentsApi.NO_ENTRY)
+
+
 class TestAWriteMeetingNothingLands:
     def test_each_landed_write_keeps_one_line_of_what_it_read(self, admin, stores):  # noqa: F811
         entry = recorded(Payments.PAYMENT)

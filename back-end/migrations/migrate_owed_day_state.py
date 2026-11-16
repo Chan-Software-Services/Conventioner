@@ -16,7 +16,7 @@ assignment, and for each record:
   seating the day makes it;
 - that holds an Admin's amount on a day the vendor holds no table, a line nobody sees, deletes it
   and records one ``owed_dropped`` entry with no actor, ``by_migration`` in its subject, naming
-  the amount and who set it (Daniel's decision 9.3), whether or not its state was stored;
+  the amount and who set it (Daniel's choice, T335), whether or not its state was stored;
 - otherwise deletes a record that follows the seat, and stores any other state with its mirror
   and its ``revision`` counted up (1 on a record no release counted).
 
@@ -58,15 +58,15 @@ from utils.email_address import normalized_email  # noqa: E402
 #: How many times a record that changed between its read and its write is read and judged again.
 TRIES = 3
 
-#: The fields of a record a write holds as read.
-HELD_FIELDS = ("state", "freed", "set_by_hand", "revision")
-
-#: What a malformed record raises when read.
-UNREADABLE = (KeyError, TypeError, ValueError, AttributeError)
 
 
 class Unreadable(Exception):
     """A record whose legacy fields do not parse; the app reads it as following the seat."""
+
+
+class ChangedOnEveryTry(Exception):
+    """A record that changed between its read and its write on each of ``TRIES`` tries: left for
+    the next run."""
 
 
 @dataclass(frozen=True)
@@ -92,11 +92,11 @@ def judged(doc: Mapping[str, Any], held: bool) -> Optional[Judgment]:
     Whether its stored state is trusted is ``payments``' own rule, so the migration and the read
     never differ on it.
     """
-    stored, trusted = Payments._read_record(doc)
+    stored, trusted = Payments.read_record(doc)
     if not trusted:
         try:
             stored = Payments.derive_from_legacy(doc)
-        except UNREADABLE as error:
+        except Payments.UNREADABLE as error:
             raise Unreadable(type(error).__name__) from error
     if not held and isinstance(stored, SetByHand):
         return Judgment(FollowsSeat(), stored.amount)
@@ -138,9 +138,10 @@ def migrate(db=None, dry_run: bool = False) -> int:
                 unreadable.append(str(doc["_id"]))
                 print(f"  - {named}: left, it cannot be read ({error})")
                 continue
-            if judgment is False:
+            except ChangedOnEveryTry:
                 skipped.append(str(doc["_id"]))
-            elif judgment is not None:
+                continue
+            if judgment is not None:
                 changed += 1
                 print(f"  - {named}: {judgment.described()}")
 
@@ -155,10 +156,13 @@ def migrate(db=None, dry_run: bool = False) -> int:
     return changed
 
 
-def set_one(markets, owed, market_id: str, doc: Mapping[str, Any], dry_run: bool):
-    """Judge one record and write what it needs: the judgment written, None when it needs nothing
-    (or it, or its market, is gone), or False when it changed between the read and the write on
-    every try. The assignment is read after the record, so the day's held-ness is as fresh as it."""
+def set_one(
+    markets, owed, market_id: str, doc: Mapping[str, Any], dry_run: bool,
+) -> Optional[Judgment]:
+    """Judge one record and write what it needs: the judgment written, or None when it needs
+    nothing (or it, or its market, is gone); ``ChangedOnEveryTry`` when it changed between the read
+    and the write on every try. The assignment is read after the record, so the day's held-ness is
+    as fresh as it."""
     for _ in range(TRIES):
         market_doc = markets.find_one(live({"id": market_id}))
         if market_doc is None:
@@ -174,13 +178,14 @@ def set_one(markets, owed, market_id: str, doc: Mapping[str, Any], dry_run: bool
         doc = owed.find_one({"_id": doc["_id"]})
         if doc is None:
             return None
-    return False
+    raise ChangedOnEveryTry()
 
 
 def written(owed, doc: Mapping[str, Any], judgment: Judgment) -> bool:
-    """Write the judgment holding the record as read; whether it landed."""
+    """Write the judgment holding the record as read, every field its owner writes
+    (``OWNED_FIELDS``); whether it landed."""
     holding: Dict[str, Any] = {"_id": doc["_id"]}
-    for field in HELD_FIELDS:
+    for field in Payments.OWNED_FIELDS:
         holding[field] = doc[field] if field in doc else {"$exists": False}
     if isinstance(judgment.state, FollowsSeat):
         return bool(owed.delete_one(holding).deleted_count)

@@ -32,7 +32,7 @@ Each writer wrote the fields it cared about, so a combination nobody designed, a
 
 - The states are four: the day **follows the seat**, which is no record at all, so `amounts_owed` keeps only what the seat cannot say; an Admin **set** an amount; its table was **freed**, its line kept as the seat stood, with an Admin's amount if one stands; or it was **freed and waived** by the free's deduction, owing $0 and keeping the Admin's amount it replaced.
 - One pure table, `next_owed_state`, says what each event (seated, freed, freed with the deduction, dropped by a run, an Admin's amount set, the calculated price used) makes of each state, and refuses the cells that would write the hidden state.
-- A run that drops a day drops an Admin's amount with it, recorded in the market's history as `owed_dropped`, naming the amount and who set it (Daniel's decision 9.3).
+- A run that drops a day drops an Admin's amount with it, recorded in the market's history as `owed_dropped`, naming the amount and who set it (Daniel's choice, T335).
 - The owner reads the record, applies the table, and writes holding what it read: an insert the unique index guards for a day's first record, otherwise a write filtered on the record's `revision`, which every write counts up; after three misses it writes nothing and says so.
 - The lines are a projection of the state and the held seat (`lines`), and on a held day a freed state reads as the seat (`on_day`), so a free that stopped between its record and its seat is harmless without a transaction.
 - **The fields the release before reads, `freed` and `set_by_hand`, are kept as a mirror for one release**, written from the state by every write, and the read trusts the stored state only while they agree with it (`state_of`).

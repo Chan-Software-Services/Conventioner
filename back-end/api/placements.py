@@ -341,7 +341,7 @@ def run_assignment(market_id: str, requesting_user: str) -> Tuple[Dict[str, Any]
     )
     # Every day the run seats forgets its freed line, and every day held before it and not after
     # is dropped: it forgets any freed record a stopped free left on it while it was held, and
-    # an amount an Admin set for it goes with it (T335, Daniel's decision 9.3).
+    # an amount an Admin set for it goes with it (Daniel's choice, T335).
     seated_after = {(normalized_email(row.email), row.date)
                     for row in assignment.vendor_assignments}
     PaymentsApi.assignment_written(

@@ -23,7 +23,9 @@ import api.applications as ApplicationsApi
 import api.market_actions as Actions
 import api.markets as MarketsApi
 from assignment.utils import convert_keys_to_snake_case
-from client_errors import BadRequestError, ConflictError, NotFoundError, field_named_copy
+from client_errors import (
+    BadRequestError, ConflictError, NotFoundError, field_named_copy, traceback_without_messages,
+)
 from datatypes import Market, PaymentEntry, VendorAssignmentResult
 import history as History
 import payments as Payments
@@ -277,13 +279,19 @@ def _change_entry(
     market_id: str, payment_id: str, requesting_user: str, body: Any = None,
 ) -> Dict[str, Any]:
     """Edit the entry with ``body``, or remove it with none, holding the entry as this request read
-    it: one changed or removed before the write is refused with ``EntryChangedMeanwhile``."""
+    it: one removed before this request read it, or changed or removed between that read and the
+    write, is refused with ``EntryChangedMeanwhile``, and an id the market has no entry by with
+    ``NO_ENTRY``."""
     market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.ADJUST_PAID)
     before = Payments.payment(market_id, str(payment_id or ""))
-    if before is None or before.get("removed_at"):
+    if before is None:
         raise NotFoundError(NO_ENTRY)
     entry_kind = before.get("kind") or Payments.PAYMENT
     address = before.get("vendor_email") or ""
+    asked = "remove" if body is None else "edit"
+    if before.get("removed_at"):
+        # Removed before this request read it: the dialog was opened on the entry still standing.
+        raise EntryChangedMeanwhile(asked, True, entry_kind, _account(market, address))
     try:
         if body is None:
             Payments.remove_payment(market_id, before, requesting_user)
@@ -293,8 +301,8 @@ def _change_entry(
             recorded_after = Payments.edit_payment(market_id, before, entry, requesting_user)
             kind = History.PAYMENT_EDITED
     except Payments.EntryChanged as changed:
-        raise EntryChangedMeanwhile("remove" if body is None else "edit", changed.removed,
-                                    entry_kind, _account(market, address)) from None
+        raise EntryChangedMeanwhile(asked, changed.removed, entry_kind,
+                                    _account(market, address)) from None
     History.record(
         market_id, requesting_user, Actions.ADJUST_PAID, kind=kind,
         vendors=[before.get("vendor_email")],
@@ -352,6 +360,18 @@ def _held(market: Market, address: str, date: str) -> Optional[Payments.Seat]:
     return seats_by_vendor(market).get(address, {}).get(date)
 
 
+def _holds_now(market_id: str, address: str, date: str) -> bool:
+    """Whether the stored assignment, read again now, seats ``address`` on ``date``, by the rows
+    the lines read (``seats_by_vendor``); True for a market gone, whose records go with it."""
+    doc = MarketsApi.markets_collection.find_one(live({"id": market_id}))
+    if doc is None:
+        return True
+    return any(row.date == date and address in {normalized_email(email)
+                                                 for email in row.assignment if email}
+               for row in MarketsApi.derive_market_table_rows(
+                   MarketsApi.market_from_document(doc)))
+
+
 def _change_owed(
     market: Market, requesting_user: str, address: str, date: str, event: Payments.OwedEvent,
     kind: str, cents: Optional[int] = None,
@@ -371,6 +391,14 @@ def _change_owed(
         raise NotFoundError(NO_LINE) from None
     except Payments.OwedDayChanged:
         raise ConflictError(OWED_KEPT_CHANGING) from None
+    if (moved.wrote and isinstance(moved.after, Payments.SetByHand)
+            and not _holds_now(market.id, address, date)):
+        # A write of the assignment that left the vendor without the day landed between this
+        # request's read of the market and the owner's write: the amount would stand on a day
+        # with no line, which nobody sees. It goes back as it was read, and the request is
+        # refused as one for a day with no line.
+        moved.undo()
+        raise NotFoundError(NO_LINE)
     account = _account(market, address)
     if moved.changed:
         _record_owed(market, requesting_user, address, date, kind, before,
@@ -483,11 +511,13 @@ def assignment_written(
     back on a day not in ``held_before``, which alone read as freed, it is recorded under the row
     the seating asked (``Actions.ASSIGN``), as the amount it took back and what the day owes now,
     read off the market as it stands. A dropped day forgets what it held, and an amount an Admin
-    set for it goes with it (Daniel's decision 9.3), recorded under the same row as the amount and
-    who set it (``owed_dropped``).
+    set for it goes with it (Daniel's choice, T335), recorded under the same row as the amount and
+    who set it (``owed_dropped``). So is one a day seated afresh finds there, which no line showed
+    (a release before this one's, or a tidy that missed), marked ``held_no_table``.
 
     The assignment's write has landed, so a day whose record kept changing never fails it: it is
-    logged, and the day reads through ``on_day`` until its next write.
+    logged as a failure a route goes on past is, and the day reads through ``on_day`` until its
+    next write.
     """
     held = {_day(row): Payments.Seat(row.table_code, row.tier, row.table_choice, None)
             for row in held_before}
@@ -516,8 +546,13 @@ def assignment_written(
             moved = Payments.owed_day_transition(market_id, address, date, event,
                                                  held=held.get((address, date)), by=by)
         except (Payments.OwedDayChanged, Payments.OwedEventRefused) as missed:
-            logger.warning("The owed day of market_id %s, date %s was not tidied after a write "
-                           "of the assignment (%s).", market_id, date, type(missed).__name__)
+            logger.error("The owed day of market %s, date %s was not tidied after a write of the "
+                         "assignment\n%s", market_id, date, traceback_without_messages(missed))
+            continue
+        if (event == Payments.OwedEvent.SEATED and (address, date) not in held and moved.wrote
+                and isinstance(moved.stored, Payments.SetByHand)):
+            _record_dropped(market_id, market_now, address, date, moved.stored.amount, by,
+                            held_no_table=True)
             continue
         if not moved.changed:
             continue
@@ -530,11 +565,12 @@ def assignment_written(
 
 def _record_dropped(
     market_id: str, market_now: Callable[[], Market], address: str, date: str,
-    amount: Payments.HandAmount, by: str,
+    amount: Payments.HandAmount, by: str, held_no_table: bool = False,
 ) -> None:
+    flag = {"held_no_table": True} if held_no_table else {}
     History.record(
         market_id, by, Actions.ASSIGN, kind=History.OWED_DROPPED, vendors=[address],
-        subject=lambda: {"date": date, **_currency(market_now()), "set_by": amount.by},
+        subject=lambda: {"date": date, **_currency(market_now()), "set_by": amount.by, **flag},
         detail=History.changes({"owed_cents": amount.cents}, {"owed_cents": None}))
 
 

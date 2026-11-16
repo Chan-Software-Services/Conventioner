@@ -615,3 +615,17 @@ class TestUndo:
         moved.undo()
 
         assert _the_record(owed)["revision"] == 1
+
+    def test_one_that_deleted_the_record_is_not_undone(self, owed):
+        """Neither caller undoes a write that ends in following the seat, so one that did is a
+        caller's mistake, said out loud rather than putting back a record a write may have made
+        since."""
+        owed.insert_one(_stored(SetByHand(A)))
+        moved = Payments.owed_day_transition(MARKET, ANA, DAY, OwedEvent.ADMIN_CALCULATED,
+                                             held=SEAT, by=ADMIN)
+        assert (moved.wrote, moved.revision) == (True, None)
+
+        with pytest.raises(ValueError):
+            moved.undo()
+
+        assert owed.documents == []

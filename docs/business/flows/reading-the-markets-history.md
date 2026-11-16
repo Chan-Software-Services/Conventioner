@@ -83,7 +83,7 @@ An organizer reads it to investigate a problem or a mistake, which is why it liv
    - A free, a move or a swap of a vendor who had checked in, made once asked, says so after its day (T318): "e2e@example.com freed B7, leaving Ana Rivera with no table on Nov 19, 2026, while they were checked in", before any ", after results were published".
    - A vendor's money reads in the market's currency ([payments](../../implementation/data/payments.md)), each opening to its amount, how it was paid, the day and the note, or the amount owed, in the Payment tab's words:
      - "… seated Ana Rivera again on May 8, 2099, taking back the $0.00 set when the table was freed"
-     - "… allocated tables, leaving Ana Rivera without a table on May 8, 2099, so the $0.00 admin@example.com set for that day was dropped", and the owed day's migration's, naming no one, "Ana Rivera held no table on May 8, 2099, so the $0.00 admin@example.com set for that day was dropped"
+     - "… allocated tables, leaving Ana Rivera without a table on May 8, 2099, so the $0.00 admin@example.com set for that day was dropped", and the owed day's migration's or a seating's that found such an amount, naming no one as dropping it, "Ana Rivera held no table on May 8, 2099, so the $0.00 admin@example.com set for that day was dropped"
      - "e2e@example.com recorded a payment of $50.00 from Ana Rivera"
      - "… set what Ana Rivera owes on May 8, 2099 to $0.00" and "… back to the calculated price"
      - "… recorded a refund of $15.00 to Ana Rivera"

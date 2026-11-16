@@ -86,8 +86,9 @@ The rows for following the seat and set are a held day's, and the rows for the t
 - **An Admin's amount set on a freed line stays a freed line** owing that amount, kept with its seat, so the line still says where it came from.
 - **An Admin's change keeps a stored freed seat even on a held day**: `admin_sets` and `admin_calculated` do not read a freed record through `on_day` (below) first, since the Admin's request read the seat held, and a free in flight has written its record before its seat goes.
   Kept with the seat, the amount reads as set while the seat is held and as the freed line's once it goes, so either way the free ends, the day is right.
-- **A run that drops a day drops an Admin's amount with it** (Daniel's decision 9.3): `set(a)` with `dropped_by_run` leaves no record, and the market's history records `owed_dropped`, naming the amount and who set it, under the run's row `assign`, by whoever allocated tables ("… allocated tables, leaving Alice Example without a table on May 8, 2099, so the $0.00 admin@example.com set for that day was dropped").
+- **A run that drops a day drops an Admin's amount with it** (Daniel's choice, T335): `set(a)` with `dropped_by_run` leaves no record, and the market's history records `owed_dropped`, naming the amount and who set it, under the run's row `assign`, by whoever allocated tables ("… allocated tables, leaving Alice Example without a table on May 8, 2099, so the $0.00 admin@example.com set for that day was dropped").
   Seated on that day again later, the vendor owes the new seat's price.
+- **An Admin's amount never stays hidden on a day not held**: a seating that finds one on a day seated afresh (a release before T335 left it, or a drop that did not land) drops it the same way, recording `owed_dropped` by whoever seated the vendor, marked `held_no_table` in its subject, with the migration's sentence, since nobody dropped it ("Alice Example held no table on May 8, 2099, so the $0.00 admin@example.com set for that day was dropped").
 - **A free's $0 taken back is recorded** only for a day not held in the assignment the write read, which is a day that really read as freed: `owed_taken_back`, under the seating's own row `assign`, by whoever placed the vendor or ran the assignment ("… seated Alice Example again on May 8, 2099, taking back the $0.00 set when the table was freed"), from the $0 to what the day owes now, the Admin's amount where the $0 replaced one.
 - Manage market's "Kind of change" lists `owed_dropped` and `owed_taken_back` under Assignment, and under Payments beside the changes to what is owed they undo ([the market's history](history.md#reading-it)).
 
@@ -97,7 +98,7 @@ The rows for following the seat and set are a held day's, and the rows for the t
   A record whose fields cannot be read at all logs the same way and reads as following the seat.
 - **`on_day(state, held)` is the state a day reads as, and a held seat always wins** (T270): on a held day a freed state reads as seating the day makes it, `set` to the Admin's amount it holds (`amount`, or a waiver's `before`), else following the seat.
   A freed record on a held day is a free that stopped before its seat went, or a seating that stopped before it tidied the day, so a table the vendor holds never reads as given away, and the day's next seating, drop or free tidies the record.
-  On a day not held, `set` (an amount a release before T335 left on a day a run dropped, or one whose drop did not land) reads as following the seat, with a warning by market id, date and record id; the migration drops it ([the migration](#the-migration)).
+  On a day not held, `set` (an amount a release before T335 left on a day a run dropped, or one whose drop did not land) reads as following the seat, with a warning by market id, date and record id; the migration, or the day's next seating, drops it ([the migration](#the-migration)).
 - **The lines are a projection** (`lines(seats, kept)`) of each day's state as it reads and the seat held on it, reading nothing else of the record: a held day reads its seat and price, or the Admin's amount with `owedSetBy` and `owedSetAt`; a freed day reads the seat as it was freed, `freed` true with `freedBy` and `freedAt`, owing the Admin's amount or the seat's price, or the free's $0 with `owedByFree` true and the free as who set it; a day neither held nor freed has no line.
 
 The tab tells the amounts apart: a free's $0 reads "Removed when the table was freed, by …", an amount set by hand "Set by …", with the calculated price struck beside it and when it was set.
@@ -120,17 +121,19 @@ It reads the record, applies `next_owed_state` to the state the day reads as, an
 - with a record read, it updates the state, its mirror and the `revision` counted up, or deletes the record for following the seat, filtered on its `_id` and the `revision` read (`$exists: false` on a record no release counted); a miss reads the day again;
 - after `OWED_TRIES` (3) reads it raises `OwedDayChanged`, having written nothing, and a refused cell raises `OwedEventRefused`, having written nothing too.
 
-It answers an `OwedTransition`: the state the day read as (`before`), the state it stored (`after`), the record as read, the revision written, and `changed`, whether what the day reads as changed, which alone the history records on, so a write that only tidies a stopped free's record on a held day records nothing.
-Its `undo()` puts the record's own fields back as they were read, or takes away a record it made, only while the record still holds the revision written, and puts back a record it deleted only while no record has been made since: a write that landed since is the day's.
+It answers an `OwedTransition`: the state the record stored as read (`stored`), the state the day read as (`before`), the state it stored (`after`), the record as read, the revision written, and `changed`, whether what the day reads as changed, which alone the history records on, so a write that only tidies a stopped free's record on a held day records nothing.
+Its `undo()` puts the record's own fields back as they were read, or takes away a record it made, only while the record still holds the revision written: a write that landed since is the day's.
+Neither caller's events end in following the seat, so it refuses to undo a write that deleted the record (`ValueError`).
 
 Its callers are in [`back-end/api/payments.py`](../../../back-end/api/payments.py):
 
 - `set_amount_owed` and `use_calculated_price` (both through `_change_owed`) refuse a day with no line, 404 `NO_LINE`, then send `admin_sets` or `admin_calculated` with the seat held (`seats_by_vendor`).
-  A refused cell, the line gone meanwhile, answers 404 too, and a day that kept changing 409, "What this vendor owes for that day kept changing as it was saved, so nothing was changed. Try again." (`OWED_KEPT_CHANGING`); a change that left the day reading as it did answers the account with no history entry.
+  A refused cell, the line gone meanwhile, answers 404 too, and so does an Admin's amount written as a write of the assignment that left the vendor without the day landed: once the owner has written a `set`, the stored assignment is read again (`_holds_now`), and a day no longer held is put back as it was read (`undo()`), so the amount never stands on a day with no line.
+  A day that kept changing answers 409, "What this vendor owes for that day kept changing as it was saved, so nothing was changed. Try again." (`OWED_KEPT_CHANGING`); a change that left the day reading as it did answers the account with no history entry.
 - `keep_freed_line` sends `freed` or `freed_with_deduction` with the seat held, for a free ([below](#freeing-a-table-never-changes-either-amount-by-itself)), and `deduct_freed_day` sends `freed_with_deduction` with nothing held, for Free pressed again.
 - `assignment_written(market_id, *, seated, held_before, dropped, by)` runs after every write of the assignment ([placements](../modules/placements.md) says which days each write hands it): each seated day takes `seated` and each dropped day `dropped_by_run`, recording `owed_taken_back` and `owed_dropped` as the table says.
   It reads only the market's records that may move, in one read (`records_that_may_move`: every record holding a freed line, and any on a date seated afresh or dropped), so a run never reads the market's records one by one.
-  An `OwedDayChanged` or a refused cell there never fails the assignment's write, which has landed: it logs a warning naming the market id and the date, and the day reads through `on_day` until its next write.
+  An `OwedDayChanged` or a refused cell there never fails the assignment's write, which has landed: it is logged as a failure a route goes on past is ([an exception never reaches a client](../conventions/an-exception-never-reaches-a-client.md)), an error naming the market id and the date with its frames, and the day reads through `on_day` until its next write.
 
 ### Freeing a table never changes either amount by itself
 
@@ -157,15 +160,15 @@ Anyone else frees the seat with no such question, and the line stays owed for an
 
 ### The migration
 
-[`back-end/migrations/migrate_owed_day_state.py`](../../../back-end/migrations/migrate_owed_day_state.py), `[--dry-run]`, gives every record of every live market (`tombstone.live`) the state the read gives it, judged by the same rule (`_read_record`), against the days the market's stored assignment holds:
+[`back-end/migrations/migrate_owed_day_state.py`](../../../back-end/migrations/migrate_owed_day_state.py), `[--dry-run]`, gives every record of every live market (`tombstone.live`) the state the read gives it, judged by the same rule (`read_record`), against the days the market's stored assignment holds:
 
 - a record whose `state` is absent or disagrees with its legacy fields is stored as `on_day` of `derive_from_legacy`, and one that follows the seat is deleted;
 - an Admin's amount on a day not held, its state stored or not, is deleted with an `owed_dropped` entry recorded with no actor and `by_migration` in its subject ("Alice Example held no table on May 8, 2099, so the $0.00 admin@example.com set for that day was dropped");
 - a trusted state is otherwise left, a freed one on a held day included, since a free writes its record before its seat goes and may be in flight.
 
-Each write holds the record as read (its `_id`, `state`, legacy fields and `revision`) and counts `revision` up from the one read; a record that changed meanwhile is read again with the assignment, up to three tries, then listed as skipped, and a record that cannot be read is left and listed.
+Each write holds the record as read (its `_id` and the fields its owner writes, `OWNED_FIELDS`: `state`, the legacy fields and `revision`) and counts `revision` up from the one read; a record that changed meanwhile is read again with the assignment, up to three tries, then listed as skipped, and a record that cannot be read is left and listed.
 It prints each record it changes by market id, date and record id with what it sets, never a name or an address, and a count ("would set" on a dry run), and is safe to run again.
-It runs right after the deploy, `--dry-run` first, and again after any roll-forward past a rollback ([operations](../../OPERATIONS.md#starting-a-database-and-migrations)): until it runs, a vendor seated again on a day holding such a hidden amount loses it with no history entry.
+It runs right after the deploy, `--dry-run` first, and again after any roll-forward past a rollback ([operations](../../OPERATIONS.md#starting-a-database-and-migrations)): until it runs, such a hidden amount is dropped only when its day is next seated.
 
 ## The amount paid
 
@@ -187,8 +190,8 @@ A miss reads the entry again and raises `EntryChanged`, saying whether it was ch
 - a removal of an entry removed meanwhile: "This payment was already removed."
 
 Each says "This refund …" for a refund.
-An entry already removed, or not there, when the request first reads it is not found, 404.
-The edit dialog keeps its refusal shown and hands the account on (`refreshed`), and `VendorPaymentTab`'s removal confirmation stays open on its refusal with the account shown behind it; `accountAsItStands` in `payments.ts` reads the account off any 409 that carries one.
+An entry already removed when the request first reads it, as the dialog still showing it standing meets one another Admin removed before, is refused the same way, 409 with the removed sentence and the account showing it struck; an id the market has no entry by is not found, 404 (`NO_ENTRY`).
+The edit dialog keeps its refusal shown and hands the account on (`refreshed`), and `VendorPaymentTab`'s removal confirmation stays open on its refusal with the account shown behind it, its Remove disabled until it is opened again, since it still reads the entry it was opened on; `accountAsItStands` in `payments.ts` reads the account off any 409 that carries one.
 
 ## The stored shape
 

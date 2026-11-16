@@ -105,7 +105,8 @@ DISCORD_MATCH_DECLINED = "discord_match_declined"
 RULES = "rules"
 OWED_TAKEN_BACK = "owed_taken_back"
 #: A run left a vendor without a table on a day whose amount an Admin set, so the amount went with
-#: the day (T335, Daniel's decision 9.3).
+#: the day (Daniel's choice, T335); also an amount a seating, or the owed day's migration, found
+#: already hidden on a day not held.
 OWED_DROPPED = "owed_dropped"
 
 # Payments

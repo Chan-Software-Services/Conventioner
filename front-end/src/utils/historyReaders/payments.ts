@@ -162,8 +162,9 @@ export const readers: HistoryReaders = {
       const dropped =
         `, so the ${entryMoney(entry, before.owed_cents)}${setBy ? ` ${setBy}` : ''} ` +
         'set for that day was dropped';
-      // The migration's, which no one asked: the day it found held no table.
-      if (entry.subject.by_migration) {
+      // The day was found holding no table: by the migration, which no one asked, or by a
+      // seating that met an amount no line had shown (`held_no_table`), which no one dropped.
+      if (entry.subject.by_migration || entry.subject.held_no_table) {
         return [vendor, text(` held no table${onDay(entry.subject.date)}${dropped}`)];
       }
       return [

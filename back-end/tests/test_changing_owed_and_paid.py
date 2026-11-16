@@ -326,9 +326,10 @@ class TestAdjustingTheAmountPaid:
         paid = pay(3500)["payments"][0]
         PaymentsApi.remove_payment(MARKET, paid["id"], ADMIN)
 
-        with pytest.raises(NotFoundError):
+        # Refused as removed, with the account showing it struck (``EntryChangedMeanwhile``).
+        with pytest.raises(PaymentsApi.EntryChangedMeanwhile, match="was already removed"):
             PaymentsApi.remove_payment(MARKET, paid["id"], ADMIN)
-        with pytest.raises(NotFoundError):
+        with pytest.raises(PaymentsApi.EntryChangedMeanwhile, match="was removed while"):
             PaymentsApi.edit_payment(
                 MARKET, paid["id"], {"cents": 1, "method": "cash", "paidOn": "2099-04-01"}, ADMIN)
 

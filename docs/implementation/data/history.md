@@ -235,9 +235,9 @@ One block per action, in the order of [the actions table](../modules/market-acti
   - Vendors: the vendor
   - Subject: `date`, `currency`
   - Detail: `owed_cents`: the $0 taken back, then what the day owes now
-- `owed_dropped`: a run that left a vendor without a table on a day whose amount an Admin set, which goes with the day ([payments](payments.md#the-owed-days-state)), by whoever allocated tables; the owed day's migration records it with no actor for such an amount it found already hidden
+- `owed_dropped`: a run that left a vendor without a table on a day whose amount an Admin set, which goes with the day ([payments](payments.md#the-owed-days-state)), by whoever allocated tables; a seating that finds such an amount on a day it seats afresh records it by whoever seated the vendor, and the owed day's migration with no actor, for such an amount found already hidden
   - Vendors: the vendor
-  - Subject: `date`, `currency`, `set_by`, the Admin who set the amount, and `by_migration: true` on the migration's
+  - Subject: `date`, `currency`, `set_by`, the Admin who set the amount, `held_no_table: true` on a seating's and `by_migration: true` on the migration's, each read as the day found holding no table, naming no one as dropping it
   - Detail: `owed_cents`: the amount dropped, then none
 
 **`record-payment`**

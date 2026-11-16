@@ -543,19 +543,20 @@ def _named(doc: Mapping[str, Any]) -> str:
 
 
 #: What reading a malformed stored state or legacy field raises.
-_UNREADABLE = (KeyError, TypeError, ValueError, AttributeError)
+UNREADABLE = (KeyError, TypeError, ValueError, AttributeError)
 
 
-def _read_record(doc: Optional[Mapping[str, Any]]) -> Tuple[OwedState, bool]:
+def read_record(doc: Optional[Mapping[str, Any]]) -> Tuple[OwedState, bool]:
     """``state_of`` a record, and whether that is its stored ``state``, trusted because its
-    mirror agrees (or there is no record): only then is a result equal to it nothing to write."""
+    mirror agrees (or there is no record): only then is a result equal to it nothing to write.
+    The one rule the owner and the migration both judge a record by."""
     if doc is None:
         return FollowsSeat(), True
     stored = doc.get("state")
     if stored is not None:
         try:
             state: Optional[OwedState] = owed_state_from_stored(stored)
-        except _UNREADABLE:
+        except UNREADABLE:
             state = None
         if state is not None and _legacy_of(doc) == legacy_fields(state):
             return state, True
@@ -563,7 +564,7 @@ def _read_record(doc: Optional[Mapping[str, Any]]) -> Tuple[OwedState, bool]:
                        "the legacy fields.", _named(doc))
     try:
         return derive_from_legacy(doc), False
-    except _UNREADABLE:
+    except UNREADABLE:
         logger.warning("Owed record %s could not be read; read as following the seat.",
                        _named(doc))
         return FollowsSeat(), False
@@ -576,7 +577,7 @@ def state_of(doc: Optional[Mapping[str, Any]]) -> OwedState:
     release writes only them, so a record whose mirror disagrees is read from what that release
     wrote, with a warning on each read, until its next write stores the state again.
     """
-    return _read_record(doc)[0]
+    return read_record(doc)[0]
 
 
 def _reading(doc: Optional[Mapping[str, Any]], state: OwedState, held: bool) -> OwedState:
@@ -593,7 +594,7 @@ def _reading(doc: Optional[Mapping[str, Any]], state: OwedState, held: bool) -> 
 OWED_TRIES = 3
 
 #: The fields of a record its owner writes, and an ``undo`` puts back.
-_OWNED_FIELDS = ("state", "freed", "set_by_hand", "revision")
+OWNED_FIELDS = ("state", "freed", "set_by_hand", "revision")
 
 
 @dataclass(frozen=True)
@@ -602,9 +603,12 @@ class OwedTransition:
     (``before``), the state it left (``after``), the record as read, the revision written (None
     for a record deleted or nothing written), and whether what the day reads as changed, which
     alone the history records: a write that only tidies a stopped free's record on a held day
-    leaves the day reading as it did."""
+    leaves the day reading as it did. ``stored`` is the state the record held as read, before
+    ``on_day``: an Admin's amount on a day not held reads as following the seat, but it was there.
+    """
 
     key: Dict[str, str]
+    stored: OwedState
     before: OwedState
     after: OwedState
     record: Optional[Dict[str, Any]]
@@ -613,29 +617,23 @@ class OwedTransition:
     changed: bool
 
     def undo(self) -> None:
-        """Put the record back as it was read, for a free whose seat could not be freed, and only
-        while it still holds the revision written: a write that landed since is the day's now."""
+        """Put the record back as it was read, for a free whose seat could not be freed or an
+        Admin's amount whose day went meanwhile, and only while it still holds the revision
+        written: a write that landed since is the day's now. Only a write that left a record is
+        undone: neither caller's events end in following the seat, which deletes it."""
         if not self.wrote:
             return
         if self.revision is None:
-            # Deleted: back only while no write has made the day a record since.
-            if self.record is not None and amounts_owed_collection.find_one(self.key) is None:
-                try:
-                    amounts_owed_collection.insert_one(dict(self.record))
-                except DuplicateKeyError:
-                    # A write made the day a record between the read and the insert: it is the
-                    # day's now, as for a record changed since.
-                    pass
-            return
+            raise ValueError("only a write that left a record is undone")
         still_written = {**self.key, "revision": self.revision}
         if self.record is None:
             amounts_owed_collection.delete_one(still_written)
             return
         restore: Dict[str, Any] = {}
-        as_read = {field: self.record[field] for field in _OWNED_FIELDS if field in self.record}
+        as_read = {field: self.record[field] for field in OWNED_FIELDS if field in self.record}
         if as_read:
             restore["$set"] = as_read
-        lacked = {field: "" for field in _OWNED_FIELDS if field not in self.record}
+        lacked = {field: "" for field in OWNED_FIELDS if field not in self.record}
         if lacked:
             restore["$unset"] = lacked
         amounts_owed_collection.update_one(still_written, restore)
@@ -674,13 +672,13 @@ def owed_day_transition(
     key = _owed_key(market_id, vendor_email, date)
     for _ in range(OWED_TRIES):
         doc = amounts_owed_collection.find_one(key)
-        stored, trusted = _read_record(doc)
+        stored, trusted = read_record(doc)
         before = _reading(doc, stored, held is not None)
         after = next_owed_state(stored, event, held=held is not None, cents=cents, seat=seat,
                                 by=by, at=_now())
         changed = before != on_day(after, _held_after(event, held is not None))
         if after == stored and trusted:
-            return OwedTransition(key, before, after, doc, None, False, changed)
+            return OwedTransition(key, stored, before, after, doc, None, False, changed)
         if doc is None:
             revision = 1
             try:
@@ -689,19 +687,19 @@ def owed_day_transition(
                      "revision": revision})
             except DuplicateKeyError:
                 continue
-            return OwedTransition(key, before, after, doc, revision, True, changed)
+            return OwedTransition(key, stored, before, after, doc, revision, True, changed)
         read = doc.get("revision")
         holding = {**key, "_id": doc["_id"],
                    "revision": read if read is not None else {"$exists": False}}
         if isinstance(after, FollowsSeat):
             if amounts_owed_collection.delete_one(holding).deleted_count:
-                return OwedTransition(key, before, after, doc, None, True, changed)
+                return OwedTransition(key, stored, before, after, doc, None, True, changed)
             continue
         revision = (read or 0) + 1
         if amounts_owed_collection.update_one(holding, {"$set": {
                 "state": after.to_stored(), **legacy_fields(after), "revision": revision,
         }}).matched_count:
-            return OwedTransition(key, before, after, doc, revision, True, changed)
+            return OwedTransition(key, stored, before, after, doc, revision, True, changed)
     raise OwedDayChanged()
 
 
@@ -887,8 +885,8 @@ def market_summary(
     accounts: Mapping[str, Mapping[str, Any]], tier_order: List[str],
 ) -> Dict[str, Any]:
     """The Payments page from every vendor's account: each vendor with a line or a payment, by
-    address, with their ``balance_state`` (what the page's lists and the export's payment filter
-    both read) and whether their account ``compares``, and the market's figures, also by tier and
+    address, with the ``balanceState`` (what the page's lists and the export's payment filter
+    both read) and ``compares`` their account serves, and the market's figures, also by tier and
     by date.
 
     A payment is a vendor's, never a day's, so what a vendor paid is shared across their table-days
@@ -913,9 +911,9 @@ def market_summary(
         held = accounts[email]
         if not held["lines"] and not held["payments"]:
             continue
-        compared = compares(held)
+        compared = held["compares"]
         vendors.append({"email": email, "owedCents": held["owedCents"],
-                        "paidCents": held["paidCents"], "balanceState": balance_state(held),
+                        "paidCents": held["paidCents"], "balanceState": held["balanceState"],
                         "compares": compared})
         add(totals, held["owedCents"], held["paidCents"], compared)
         owed = [line["owedCents"] or 0 for line in held["lines"]]

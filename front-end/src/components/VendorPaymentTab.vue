@@ -83,9 +83,13 @@ type Open =
 const open = ref<Open | null>(null);
 const confirmBusy = ref(false);
 const confirmError = ref('');
+/** A confirmation refused with the account as it stands behind it: what it asks no longer reads
+ * as stored, so it confirms nothing more until it is opened again, as its refusal says. */
+const confirmSpent = ref(false);
 
 function show(dialog: Open): void {
   confirmError.value = '';
+  confirmSpent.value = false;
   open.value = dialog;
 }
 
@@ -139,7 +143,7 @@ const confirmText = computed(() => {
 
 async function confirm(): Promise<void> {
   const dialog = confirming.value;
-  if (!dialog || confirmBusy.value) return;
+  if (!dialog || confirmBusy.value || confirmSpent.value) return;
   confirmBusy.value = true;
   confirmError.value = '';
   try {
@@ -150,7 +154,10 @@ async function confirm(): Promise<void> {
     );
   } catch (err: unknown) {
     const standing = accountAsItStands(err);
-    if (standing) refreshed(standing);
+    if (standing) {
+      refreshed(standing);
+      confirmSpent.value = true;
+    }
     confirmError.value = getApiErrorMessage(err, 'That change could not be saved.');
   } finally {
     confirmBusy.value = false;
@@ -383,7 +390,7 @@ defineExpose({ reload: load });
         :title="confirmText?.title ?? ''"
         testid="payment-confirm"
         :confirm-label="confirmBusy ? 'Saving…' : confirmText?.confirm"
-        :confirm-disabled="confirmBusy"
+        :confirm-disabled="confirmBusy || confirmSpent"
         :destructive="confirming?.kind === 'remove'"
         :error="confirmError"
         @close="open = null"

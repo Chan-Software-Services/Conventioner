@@ -4,7 +4,7 @@ An Admin set what Ana owes for Sunday to $0, a waiver, while she held a Gold tab
 that then left her without a Sunday table kept the $0 with no line to show it, so nobody could
 see it or take it back ("That vendor holds no table that day"), and once she was seated on Sunday
 again, at another table, the day owed $0 with the old Admin's name on it: a waiver given for a
-seat she no longer held. The amount goes with the day the run drops (Daniel's decision 9.3), and
+seat she no longer held. The amount goes with the day the run drops (Daniel's choice, T335), and
 the market's history records one entry naming the amount and who set it.
 
 Sent through the routes, as the screen sends them.
@@ -118,3 +118,85 @@ class TestARunDropsTheAmountSetForADayItDrops:
 
         assert stores.owed.documents == []
         assert dropped_entries(stores) == []
+
+
+class TestAnAmountNeverStaysHiddenOnADayNotHeld:
+    """An Admin's amount on a day not held is a line nobody sees; the owner never leaves one."""
+
+    def test_an_amount_set_as_a_run_drops_the_day_is_refused(
+            self, client, stores, market, monkeypatch):  # noqa: F811
+        """The run lands its seats and its tidy of the owed days between the Admin's request's read
+        of the market and its write of Sunday's amount: the amount would stand on a day no longer
+        held, so the request is refused as one for a day with no line, and nothing is kept."""
+        import api.placements as PlacementsApi
+        import payments as Payments
+
+        a_run_that_seats(monkeypatch, market, SATURDAY_ELSEWHERE)
+        owner = Payments.owed_day_transition
+
+        def a_run_lands_first(*args, **kwargs):
+            if args[3] == Payments.OwedEvent.ADMIN_SETS:
+                PlacementsApi.run_assignment(MARKET, ADMIN)
+            return owner(*args, **kwargs)
+
+        monkeypatch.setattr(Payments, "owed_day_transition", a_run_lands_first)
+
+        waived = client.put(SUNDAY_OWED, json={"cents": 0})
+
+        assert (waived.status_code, waived.get_json()["error"]) == (404, NO_LINE)
+        assert [doc for doc in stores.owed.documents if doc["date"] == SUN] == []
+        assert [entry["kind"] for entry in stores.history.documents
+                if entry["kind"].startswith("owed_")] == []
+
+    def test_seating_a_day_holding_a_hidden_amount_records_its_drop(
+            self, client, stores, market, monkeypatch):  # noqa: F811
+        """A record left holding an Admin's $0 on a day Ana holds no table (a release before this
+        one, or a tidy that missed): seating her that day again drops it, and says so."""
+        import payments as Payments
+
+        a_run_that_seats(monkeypatch, market, SATURDAY_ELSEWHERE)
+        assert client.post(f"/markets/{MARKET}/assignment").status_code == 200
+        hidden = Payments.SetByHand(Payments.HandAmount(0, ADMIN, "2099-04-01T00:00:00+00:00"))
+        stores.owed.insert_one({
+            "market_id": MARKET, "vendor_email": ANA, "date": SUN,
+            "state": hidden.to_stored(), **Payments.legacy_fields(hidden), "revision": 1})
+
+        seated = client.put(f"/markets/{MARKET}/placements", json={
+            "email": ANA, "date": SUN, "tableCode": "Landing 1", "tableChoice": "Full Table"})
+
+        assert seated.status_code == 200
+        assert [doc for doc in stores.owed.documents if doc["date"] == SUN] == []
+        [entry] = dropped_entries(stores)
+        assert (entry["action"], entry["actor"], entry["vendors"]) == ("assign", ADMIN, [ANA])
+        assert entry["subject"] == {"date": SUN, "currency": "CAD", "set_by": ADMIN,
+                                    "held_no_table": True}
+        assert entry["detail"] == {"before": {"owed_cents": 0}, "after": {"owed_cents": None}}
+
+
+class TestATidyThatMissesNeverFailsTheWrite:
+    def test_it_is_logged_as_a_failure_a_route_goes_on_past(
+            self, client, stores, market, monkeypatch, caplog):  # noqa: F811
+        """The run's seats have landed, so a day whose record kept changing is logged once, as an
+        error naming the market and the date, by its frames and never the vendor's address."""
+        import logging
+
+        import payments as Payments
+
+        client.put(SUNDAY_OWED, json={"cents": 0})
+        a_run_that_seats(monkeypatch, market, SATURDAY_ELSEWHERE)
+
+        def kept_changing(*args, **kwargs):
+            raise Payments.OwedDayChanged()
+
+        monkeypatch.setattr(Payments, "owed_day_transition", kept_changing)
+
+        with caplog.at_level(logging.ERROR, logger="api.payments"):
+            ran = client.post(f"/markets/{MARKET}/assignment")
+
+        assert ran.status_code == 200
+        [logged] = [record for record in caplog.records if record.name == "api.payments"]
+        assert logged.levelno == logging.ERROR
+        assert f"market {MARKET}, date {SUN}" in logged.getMessage()
+        assert "OwedDayChanged" in logged.getMessage()
+        assert ANA not in logged.getMessage()
+        assert logged.exc_info is None

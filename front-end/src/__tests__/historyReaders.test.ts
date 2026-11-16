@@ -273,6 +273,19 @@ describe('an amount owed the assignment changed', () => {
     );
   });
 
+  it('says the day a seating found held no table, naming no one as dropping it', () => {
+    const bySeating = anEntry(
+      'owed_dropped',
+      { date: '2099-05-08', ...CAD, set_by: 'admin@ember.test', held_no_table: true },
+      DROPPED,
+    );
+    expect(said(bySeating)).toBe(
+      '[Ana Rivera] held no table on May 8, 2099, so the $0.00 admin@ember.test set for that ' +
+        'day was dropped',
+    );
+    expect(entryChanges(bySeating)).toEqual(entryChanges(byTheMigration));
+  });
+
   it('leaves the day to the list where the day leads it', () => {
     expect(said(byTheRun, true)).toBe(
       'dana@ember.test allocated tables, leaving [Ana Rivera] without a table, so the $0.00 ' +

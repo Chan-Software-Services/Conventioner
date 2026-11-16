@@ -5,7 +5,7 @@ the seat is no record) beside the ``freed`` and ``set_by_hand`` the release befo
 stored before has only those, and one a rolled-back release wrote may store a state they disagree
 with. The migration derives the state from them, reads it as the day stands in the stored
 assignment (a held seat wins over a freed record, T270), stores it, and drops an Admin's amount on a
-day the vendor holds no table, recording the market's history entry (Daniel's decision 9.3).
+day the vendor holds no table, recording the market's history entry (Daniel's choice, T335).
 """
 import copy
 
@@ -211,7 +211,7 @@ HIDDEN = [
 @pytest.mark.parametrize("fields, cents, set_by", HIDDEN)
 def test_an_admins_amount_on_a_day_not_held_is_dropped_with_its_entry(
         database, fields, cents, set_by):
-    """Decision 9.3: no line shows it, so it goes, and the market's history says so, with no actor,
+    """Daniel's choice (T335): no line shows it, so it goes, and the market's history says so, with no actor,
     as the migration's."""
     db = database()
     record_id = plant(SUN, **fields)

@@ -100,7 +100,7 @@ It hands the rows it seats as `seated`, the rows of the assignment it read that 
 - a free never calls it: it writes its own day first (above).
 
 Each seated day takes the `seated` event: a freed record on a day held before is one a stopped free left, tidied with no history entry, and only a day not held before, which really read as freed, records "owed taken back".
-Each dropped day takes `dropped_by_run`, and an amount an Admin set for it goes with it, recorded as `owed_dropped` under the run's row by whoever allocated tables (Daniel's decision 9.3, [payments](../data/payments.md#the-owed-days-state)).
+Each dropped day takes `dropped_by_run`, and an amount an Admin set for it goes with it, recorded as `owed_dropped` under the run's row by whoever allocated tables (Daniel's choice, T335, [payments](../data/payments.md#the-owed-days-state)); so is an Admin's amount a day seated afresh finds there, which no line showed, marked `held_no_table`.
 
 **All four ask the table's Assignment row** ([the market's actions](market-actions.md)), whose default is EDITOR, the bar every other market write sets, and deliberately not stricter: an EDITOR already owns the tiers, sections and table counts the whole assignment is computed from, so withholding "move one vendor between two seats" protects nothing.
 Each loads its market through `_load_market_to_change`, so an archived market is refused.

@@ -328,6 +328,28 @@ describe('the Payment tab', () => {
     expect(wrapper.get('[data-testid="payment-paid"]').text()).toBe('$20.00');
     expect(wrapper.get('[data-testid="payment-entry-amount"]').text()).toBe('$20.00');
     expect(wrapper.emitted('changed')).toHaveLength(1);
+
+    // It still reads the $35.00 it was opened on, so it removes nothing more until opened again.
+    const remove = () =>
+      document.querySelector<HTMLButtonElement>('[data-testid="payment-confirm-submit-button"]')!;
+    expect(remove().disabled).toBe(true);
+    document
+      .querySelector<HTMLFormElement>('[data-testid="payment-confirm-window"] form')!
+      .requestSubmit();
+    await flushPromises();
+    expect(api.delete).toHaveBeenCalledTimes(1);
+
+    document
+      .querySelector<HTMLButtonElement>('[data-testid="payment-confirm-cancel-button"]')!
+      .click();
+    await flushPromises();
+    await wrapper.get('[data-testid="payment-entry-menu-button"]').trigger('click');
+    await wrapper.get('[data-testid="payment-entry-menu-remove"]').trigger('click');
+    await flushPromises();
+    expect(document.querySelector('[data-testid="payment-confirm-body"]')?.textContent).toContain(
+      '$20.00',
+    );
+    expect(remove().disabled).toBe(false);
     wrapper.unmount();
   });
 

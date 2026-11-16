@@ -121,6 +121,7 @@ sources:
   - T311
   - T315
   - T318
+  - T335
 ---
 
 # An exception never reaches a client
@@ -244,8 +245,9 @@ A mail that carries a sign-in or an account link is logged by what it is, never 
 A failed send logs the exception's type and never its text, and the provider's status code when the failure is a `ResendError`, but never its response body, since each can carry the address back.
 
 **A failure a route goes on past is logged as a 500 is.**
-Two routes catch an exception and answer as though it had not happened, and each logs it once with `logger.error`, the market and `traceback_without_messages(error)`, with no `exc_info`, whose formatter would print the message under the frames.
+Three places catch an exception and answer as though it had not happened, and each logs it once with `logger.error`, the market and `traceback_without_messages(error)`, with no `exc_info`, whose formatter would print the message under the frames.
 An applicant's code send that raises (`request_login_code` in [`back-end/api/applicant_auth.py`](../../../back-end/api/applicant_auth.py)) is named by the market's slug and answered as a sent one, and the offers sweep that fails once a move from offers to market days is written (`take_move` in [`back-end/api/markets.py`](../../../back-end/api/markets.py)) is named by the market's id and the move still answers 200.
+An owed day the tidy after a write of the assignment could not move (`assignment_written` in [`back-end/api/payments.py`](../../../back-end/api/payments.py), its record kept changing or the event refused) is named by the market's id and the date, never the vendor's address, and the write, which has landed, still answers as it did ([payments](../data/payments.md#the-one-writer)).
 reCAPTCHA's verification (`verify_recaptcha` in [`back-end/utils/captcha.py`](../../../back-end/utils/captcha.py)) prints nothing and logs its three failures: no secret it can use, outside the escape hatch, as an error naming `RECAPTCHA_SECRET_KEY`, a failed verification as a warning with Google's `success` and `score` and nothing the caller sent, and an exception as an error by its type's name alone.
 Two lines keep a message on purpose: `healthz`'s `logger.exception`, since the database driver's message is how an operator reads an outage and holds no request's value, and the CSV import's parse warning, since the `csv` module's messages name a limit or a character class, never a cell.
 

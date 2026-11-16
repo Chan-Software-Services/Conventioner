@@ -65,7 +65,7 @@ Before a run, with nobody seated and nothing paid, the page says nothing is assi
 
 What a vendor owes for a day and what they paid are changed in the drawer ([payments, and what a vendor owes](../../implementation/data/payments.md)), and the page reads each change:
 
-- A run that leaves a vendor without a table on a day whose amount an Admin set drops that amount with the day (Daniel's decision 9.3), so the page never counts an amount no line shows, and the market's history says so, naming the amount and who set it; seated that day again, the vendor owes the new seat's price.
+- A run that leaves a vendor without a table on a day whose amount an Admin set drops that amount with the day (Daniel's choice, T335), so the page never counts an amount no line shows, and the market's history says so, naming the amount and who set it; seated that day again, the vendor owes the new seat's price.
 - Two Admins changing one payment at once land the first change, and the second is refused, saying the payment changed, or was removed, while it was being saved, with the vendor's payments as they now read shown behind the dialog; a removal meeting another change is refused the same way, its confirmation kept open.
 
 Covered by:
