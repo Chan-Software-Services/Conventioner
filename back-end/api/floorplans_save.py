@@ -197,8 +197,7 @@ def save_floorplan_to_market() -> Tuple[Any, int]:
     market = context.market
 
     # ── 2. Permission check ────────────────────────────────────────────
-    user_email = authenticated_email()
-    asked = Actions.ask(Actions.CHANGE_SETUP, user_email, market, context.organization)
+    asked = Actions.ask(Actions.CHANGE_SETUP, authenticated_email(), market, context.organization)
     if asked.refused:
         return jsonify({"error": asked.refused}), 403
     # It writes the plan, and an archived market's plan is part of its record (bug 30).
@@ -266,8 +265,8 @@ def save_floorplan_to_market() -> Tuple[Any, int]:
         delete_image(held.image_gridfs_id)
     location = next(
         (place.name for place in plan.locations if place.id == floorplan.location_id), None)
-    History.record(
-        market_id, user_email, Actions.CHANGE_SETUP, kind=History.FLOORPLAN,
+    asked.record(
+        kind=History.FLOORPLAN,
         subject={"floorplan_id": floorplan.id, "location": location},
         detail=lambda: Layout.describe_change(held, floorplan, plan) or None,
     )

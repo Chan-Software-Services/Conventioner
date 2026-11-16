@@ -158,8 +158,8 @@ def save_table_types(market_id: str, body: Dict[str, Any], requesting_user: str)
     if not isinstance(sent, list) or not all(isinstance(one, dict) for one in sent):
         raise BadRequestError(NOT_A_LIST)
 
-    market: Market = MarketsApi._load_market_to_change(
-        market_id, requesting_user, Actions.CHANGE_SETUP)
+    change = MarketsApi._market_change(market_id, requesting_user, Actions.CHANGE_SETUP)
+    market: Market = change.market
     # The types size the seats, which settle on leaving draft (E31/F01/S02).
     settled = MarketsApi.setup_lock_reason(market)
     if settled:
@@ -191,8 +191,8 @@ def save_table_types(market_id: str, body: Dict[str, Any], requesting_user: str)
 
     before = _in_words(stored.table_types if stored else [])
     after = _in_words(prepared.plan.table_types)
-    History.record(
-        market_id, requesting_user, Actions.CHANGE_SETUP, kind=History.TABLE_TYPES,
+    change.asked.record(
+        kind=History.TABLE_TYPES,
         detail=lambda: History.changes({"table_types": before}, {"table_types": after}),
     )
     return copy.deepcopy(written_plan["tableTypes"])

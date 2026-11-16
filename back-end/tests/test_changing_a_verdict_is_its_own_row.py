@@ -471,7 +471,7 @@ class TestAWriteThatJudgesAgain:
             import api.vendor_info as VendorInfoApi
             from datatypes import MarketPerson
 
-            monkeypatch.setattr(MarketsApi, "_load_market_to_change", lambda *_a: market)
+            monkeypatch.setattr(MarketsApi, "_market_change", a_change_of(market))
             VendorInfoApi.update_vendor_info(
                 "market-1", "ruled-out", {"no_shows": True},
                 MarketPerson(user_id="user-someone", email="someone@market.test"))

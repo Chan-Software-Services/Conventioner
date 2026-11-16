@@ -205,7 +205,7 @@ class TestDecliningAPossibleMatch:
         offered = {"applicationId": "app-1", "state": "not_found", "answer": "wren",
                    "possibleMatches": [{"username": "wren.okafor"}]}
         market = _connected_market(market_in, vendorStates=[offered])
-        interleave("api.markets._load_market_to_change", _move(market, MarketPhase.ARCHIVED))
+        interleave("api.markets._market_change", _move(market, MarketPhase.ARCHIVED))
 
         response = client.post(
             f"/markets/{market['id']}/discord/possible-matches/app-1/declined",
@@ -225,7 +225,7 @@ class TestTheDiscordCard:
         client = signed_in(ORGANIZER)
         market = _connected_market(market_in)
         theirs = "https://discord.gg/theirs"
-        interleave("api.markets._load_market_to_change", lambda: DiscordConnection.save(
+        interleave("api.markets._market_change", lambda: DiscordConnection.save(
             market["id"], {"inviteLink": theirs}, ORGANIZER))
 
         response = client.put(f"/markets/{market['id']}/discord",
@@ -240,7 +240,7 @@ class TestTheDiscordCard:
             self, discord, signed_in, market_in, interleave, real_db, market_records):
         client = signed_in(ORGANIZER)
         market = _connected_market(market_in)
-        interleave("api.markets._load_market_to_change", lambda: DiscordConnection.save(
+        interleave("api.markets._market_change", lambda: DiscordConnection.save(
             market["id"], {"roleId": OTHER_ROLE.id}, ORGANIZER))
 
         response = client.put(f"/markets/{market['id']}/discord",
@@ -260,7 +260,7 @@ class TestTheDiscordCard:
         market = market_in(MarketPhase.APPLICATIONS, intakeMode="form", applicationForm={
             "fields": [DISCORD_QUESTION], "essentialOptions": None}, discord=None)
         state = _started(client, market)
-        interleave("api.markets._load_market_to_change", lambda: _connect(
+        interleave("api.markets._market_change", lambda: _connect(
             other_tab, market, _started(other_tab, market), guild=OTHER_GUILD))
 
         response = _connect(client, market, state)

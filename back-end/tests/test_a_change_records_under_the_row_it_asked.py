@@ -516,3 +516,51 @@ class TestTheReviewTeamRecordsThroughWhatItIsGiven:
                 Actions.Asked(Actions.CHOOSE_REVIEWERS, market.id, ASKER, "Only an Admin may."))
 
         assert history.docs == []
+
+
+BACK_END = Path(ApplicantsApi.__file__).parents[1]
+
+
+def _as_a_file(relative: str) -> SimpleNamespace:
+    """A module read as its file alone: importing the floorplans' or the Discord card's modules
+    to read their source would pull in their routes' dependencies."""
+    return SimpleNamespace(__name__=relative[:-3].replace("/", "."), __file__=str(BACK_END / relative))
+
+
+#: T105-9's fourth batch: the Discord connection, vendor info, added vendors, layouts and the
+#: floorplans, which record through the asking their own check returned.
+FOURTH_BATCH = [_as_a_file(path) for path in (
+    "api/discord_connection.py", "api/vendor_info.py", "api/added_vendors.py", "api/layouts.py",
+    "api/floorplans.py", "api/floorplans_save.py", "api/floorplans_access.py",
+)]
+
+OLD_LOADERS = ("_load_market_to_change", "_load_market_and_organization_to_change")
+
+
+class TestTheRemainingModulesRecordWhatTheyAsked:
+    @pytest.mark.parametrize("module", FOURTH_BATCH, ids=lambda module: module.__name__)
+    def test_none_records_an_entry_by_hand(self, module):
+        assert [line for name, line in _calls_in(module) if name == "History.record"] == []
+
+    @pytest.mark.parametrize("module", FOURTH_BATCH, ids=lambda module: module.__name__)
+    def test_none_loads_through_the_old_loaders(self, module):
+        assert [line for name, line in _calls_in(module) if name.endswith(OLD_LOADERS)] == []
+
+    @pytest.mark.parametrize("module", FOURTH_BATCH, ids=lambda module: module.__name__)
+    def test_none_opens_the_door_for_a_record_nothing_asked(self, module):
+        assert [line for name, line in _calls_in(module) if name == "History.unasked"] == []
+
+    def test_no_production_module_records_by_hand_or_loads_through_the_old_loaders(self):
+        """Every batch moved: only the history module's own writer and the asking's record call
+        ``History.record``, and the old loaders are left with no caller but their tests."""
+        writers = {BACK_END / "history.py", BACK_END / "api" / "market_actions.py"}
+        left = [
+            f"{path.relative_to(BACK_END)}:{line} {name}"
+            for path in sorted(BACK_END.rglob("*.py"))
+            if not {"tests", "__pycache__", "flask_session"} & set(path.relative_to(BACK_END).parts)
+            and path not in writers
+            for name, line in _calls_in(SimpleNamespace(__file__=str(path)))
+            if name == "History.record" or name.endswith(OLD_LOADERS)
+        ]
+
+        assert left == []

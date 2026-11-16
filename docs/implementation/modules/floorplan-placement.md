@@ -316,7 +316,9 @@ The service is handed the parsed models' snake-cased dumps, so the aisle values 
 
 Every floorplan action asks its row of the table ([the market's actions](market-actions.md)) on the floorplan's market, the way saving a floorplan to a market always did.
 The roles are [what each role may do](../../business/rules/what-each-role-may-do.md) says, and a route that changes the floorplan keeps [an archived market is read-only](../../business/rules/an-archived-market-is-read-only.md).
-[`back-end/api/floorplans_access.py`](../../../back-end/api/floorplans_access.py) is the one place a floorplan route decides it: `market_refusal(market_id, action, edits=...)` asks on a market the request names, `image_refusal(gridfs_id, action, edits=...)` asks on the market an image was uploaded for, and each answers None or the refusal the route returns.
+[`back-end/api/floorplans_access.py`](../../../back-end/api/floorplans_access.py) is the one place a floorplan route decides it: `market_asking(market_id, action, edits=...)` asks on a market the request names, `image_asking(gridfs_id, action, edits=...)` asks on the market an image was uploaded for, and each answers the asking of its row (`Asked`) and no refusal when the caller may go on, else no asking and the refusal the route returns.
+A route that records its change records through that asking, as the image's delete does, so its entry is under the row its check let it through on ([the market's actions](market-actions.md#the-interface)); a route that records nothing asks with `market_refusal` or `image_refusal`, which answer the refusal alone.
+Saving a floorplan to a market asks Market Setup with `ask` itself, and records the layout's entry and hands the floorplans the plan releases through that asking.
 They answer in save's order: no market named 400, unknown market 404, unreadable market data 400, a person the row refuses 403 with its sentence, and, for a route that changes the floorplan (`edits`), an archived market 403.
 A route checks access right after it has read the id it is checked by, before the rest of its body or its image read.
 

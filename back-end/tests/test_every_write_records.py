@@ -306,8 +306,7 @@ def _save_table_types(client, world):
 
 def _delete_floorplan_image(client, world):
     world.market(MarketPhase.DRAFT, setupObject=COMPLETE_PLAN)
-    for module in (FloorplansAccess, FloorplansApi):
-        world.patch(module, "get_image_market_id", lambda _id: MARKET)
+    world.patch(FloorplansAccess, "get_image_market_id", lambda _id: MARKET)
     world.patch(FloorplansApi, "delete_image", lambda _id: True)
     return client.delete("/floorplans/img-1")
 

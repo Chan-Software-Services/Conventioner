@@ -4,6 +4,7 @@ A floorplan image belongs to the market it was uploaded for: the upload names th
 editor of it on a market that can still change, and the stored image remembers the market in its
 GridFS metadata, so every later action on the image can be checked against that market.
 """
+import dataclasses
 import io
 import json
 import sys
@@ -20,17 +21,20 @@ from conftest import (
     skip_without_real_dependencies,
     stored_market,
 )
+from test_the_history import history  # noqa: F401 - the fixture
 
 skip_without_real_dependencies()
 
 import app as app_module
 import api.floorplans as FloorplansApi
+import api.floorplans_access as FloorplansAccess
 import floorplan_limits as Limits
 import utils.pdf_converter as PdfConverter
 import api.floorplans_placement as FloorplansPlacementApi
 import api.market_actions as Actions
 import api.markets as MarketsApi
 import api.users as UsersApi
+import history as History
 import services.gridfs_service as GridfsService
 import services.placement_service as Placement
 from datatypes import MarketPhase
@@ -535,6 +539,75 @@ class TestTheRoutesThatTakeAnImage:
 
         assert response.status_code == 401
         assert list(images.files) == [ObjectId(hall)]
+
+
+class TestTheCheckHandsItsAskingToTheWrite:
+    """A floorplan route's check is the asking of its row (T105-9): let in, it answers the asking,
+    and the route records its change through that, never under a row it names by hand."""
+
+    @pytest.fixture
+    def asking_as(self, monkeypatch):
+        monkeypatch.setattr(UsersApi, "get_user", _account)
+
+        def as_(email):
+            monkeypatch.setattr(FloorplansAccess, "authenticated_email", lambda: email)
+        return as_
+
+    def test_a_let_in_check_answers_its_asking(self, market, asking_as):
+        asking_as("editor@example.com")
+
+        asked, refusal = FloorplansAccess.market_asking(MARKET_ID, Actions.CHANGE_SETUP, edits=True)
+
+        assert refusal is None
+        assert (asked.row, asked.market_id, asked.actor, asked.refused) == (
+            Actions.CHANGE_SETUP, MARKET_ID, "editor@example.com", None)
+
+    def test_a_refused_check_answers_its_refusal_and_no_asking(self, market, asking_as):
+        asking_as("viewer@example.com")
+
+        assert FloorplansAccess.market_asking(MARKET_ID, Actions.CHANGE_SETUP, edits=True) == (
+            None, ({"error": Actions.refusal_sentence(Actions.CHANGE_SETUP)}, 403))
+
+    def test_an_archived_market_answers_no_asking_to_a_route_that_edits(self, market, asking_as):
+        market.doc = stored_market(MarketPhase.ARCHIVED, roles=dict(ROLES))
+        asking_as("owner@example.com")
+
+        assert FloorplansAccess.market_asking(MARKET_ID, Actions.CHANGE_SETUP, edits=True) == (
+            None, ({"error": MarketsApi.ARCHIVED_REFUSAL}, 403))
+
+    def test_an_image_is_asked_on_the_market_it_was_uploaded_for(self, market, hall, asking_as):
+        asking_as("owner@example.com")
+
+        asked, refusal = FloorplansAccess.image_asking(hall, Actions.CHANGE_SETUP, edits=True)
+
+        assert refusal is None
+        assert (asked.row, asked.market_id, asked.actor) == (
+            Actions.CHANGE_SETUP, MARKET_ID, "owner@example.com")
+
+    def test_deleting_the_image_records_under_the_asking_as_its_person(
+            self, sign_in, market, hall, history):
+        assert _delete(sign_in("editor@example.com"), hall).status_code == 200
+
+        [entry] = history.docs
+        assert (entry["market_id"], entry["actor"], entry["action"], entry["kind"]) == (
+            MARKET_ID, "editor@example.com", Actions.CHANGE_SETUP.id,
+            History.FLOORPLAN_IMAGE_DELETED)
+
+    def test_deleting_the_image_names_no_row_by_hand(
+            self, sign_in, market, hall, history, monkeypatch):
+        """The row is the check's: handed another row's asking, the delete records under it."""
+        check = FloorplansApi.image_asking
+
+        def asked_another_row(*args, **kwargs):
+            asked, refusal = check(*args, **kwargs)
+            return dataclasses.replace(asked, row=Actions.CHANGE_OWED), refusal
+
+        monkeypatch.setattr(FloorplansApi, "image_asking", asked_another_row)
+
+        assert _delete(sign_in("editor@example.com"), hall).status_code == 200
+
+        [entry] = history.docs
+        assert entry["action"] == Actions.CHANGE_OWED.id
 
 
 def _read(client, gridfs_id):
