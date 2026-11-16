@@ -129,6 +129,7 @@ An application is in one of six states (`State`), read off the stored fields by 
 The statuses of the old offers flow read as what it reached them from (decision 9.6 of T277's report): `unassigned`, `assigned`, `assignment_sent`, `vendor_accepted` and `vendor_refused` as the approval they carried, and `cancelled` as a person's rejection, as the table-share notice already counts it with the rejected as not taking part.
 A status no member names is refused, as reading the application would refuse it, and the table-driven test walks every member, so a status added later fails until it is placed.
 `is_undecided` (open or follow-up), `is_decided` (the other four) and `is_judgeable` (open, or a rule's rejection) are read off the state, never off a list of statuses.
+What a reviewer saw is read by `saw_decided`, which never refuses: a `seen` whose status no member names is nothing they could have seen, so the verdict held on it matches nothing and is answered as changed since they opened it.
 
 **Where an application came from is its own axis, apart from its verdict**: `origin` (`ApplicationOrigin`) is `applied` (the applicant's first save), `imported` (an import row's create) or `added` (adding a vendor), stored by `arrive` and `add` and moved by changed answers (below).
 `origin_of` reads it, and for one stored before the origin was kept, `added` when `added_by` is set, else `imported` on a market whose vendors are imported and `applied` on one whose vendors apply (with no intake given, `applied`, since only "added or not" changes behaviour).

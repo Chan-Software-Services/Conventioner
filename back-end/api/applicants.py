@@ -686,7 +686,7 @@ def review_application(
     app_doc = ApplicationsApi.find_application_by_id(application_id)
     if not app_doc or app_doc.get("market_id") != market_id:
         return {"error": "Application not found for this market."}, 404
-    giving = ReviewState.is_undecided(seen)
+    giving = not ReviewState.saw_decided(seen)
     if not giving and change_refused:
         return {"error": change_refused}, 403
 
@@ -795,12 +795,12 @@ def review_selection(
                             "reason": f"Already {_STATUS_WORD[new_status.value]}."})
             continue
         # Decided as they saw it, or by now: either way not theirs to change, so the row says why.
-        if change_refused and (ReviewState.is_decided(seen) or ReviewState.is_decided(doc)):
+        if change_refused and (ReviewState.saw_decided(seen) or ReviewState.is_decided(doc)):
             skipped.append({"id": app_id, "email": doc.get("applicant_email"),
                             "reason": change_refused})
             continue
-        event = (ReviewState.give_verdict if ReviewState.is_undecided(seen)
-                 else ReviewState.change_verdict)
+        event = (ReviewState.change_verdict if ReviewState.saw_decided(seen)
+                 else ReviewState.give_verdict)
         done = event(doc, seen, new_status, by)
         if done:
             written.append(app_id)

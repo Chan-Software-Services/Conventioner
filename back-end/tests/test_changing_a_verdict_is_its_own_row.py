@@ -561,3 +561,45 @@ class TestAnImport:
 
         assert ruled_out["status"] == OPEN.value
         assert body["returnedByRules"] == 1
+
+
+class TestASeenNoStateNames:
+    """A ``seen`` whose status no state names is nothing a reviewer could have seen: the write held
+    on it matches nothing, as any stale ``seen`` does, and never fails the request."""
+
+    @pytest.mark.parametrize("who", ["editor@market.test", "admin@market.test"])
+    def test_a_verdict_on_it_is_refused_as_changed_since_and_nothing_is_written(self, client, who):
+        _as(client, who)
+        before = dict(client.stored["open"])
+
+        response = client.put("/markets/market-1/applications/open/review", json={
+            "status": APPROVED.value, "seen": {"status": "bogus", "verdictAt": None}})
+
+        assert response.status_code == 409
+        assert response.get_json()["application"]["status"] == OPEN.value
+        assert client.stored["open"] == before
+
+    def test_a_selection_writes_the_good_entries_and_skips_that_one_saying_why(
+        self, client, market_records,
+    ):
+        _as(client, "admin@market.test")
+        before = dict(client.stored["approved"])
+
+        response = client.post("/markets/market-1/applications/verdicts", json={
+            "status": REJECTED.value,
+            "applications": [
+                {"id": "open", "seen": _seen(client.stored["open"])},
+                {"id": "follow-up", "seen": _seen(client.stored["follow-up"])},
+                {"id": "approved", "seen": {"status": "bogus", "verdictAt": None}},
+            ],
+        })
+
+        assert response.status_code == 200
+        body = response.get_json()
+        assert body["written"] == ["open", "follow-up"]
+        assert body["skipped"] == [{
+            "id": "approved", "email": "approved@example.com",
+            "reason": "kai@market.test approved this application since you opened it."}]
+        assert client.stored["approved"] == before
+        [entry] = market_records.history.documents
+        assert entry["subject"] == {"application_ids": ["open", "follow-up"]}

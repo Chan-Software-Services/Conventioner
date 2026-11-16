@@ -134,15 +134,25 @@ def state_of(doc: Dict[str, Any]) -> State:
 
 
 def is_undecided(doc: Dict[str, Any]) -> bool:
-    """Whether an application, as stored or as a reviewer saw it, awaits a verdict: open, or a
-    follow-up."""
+    """Whether an application, as stored, awaits a verdict: open, or a follow-up."""
     return state_of(doc).undecided
 
 
 def is_decided(doc: Dict[str, Any]) -> bool:
-    """Whether an application, as stored or as a reviewer saw it, carries a verdict: a reviewer's
-    write over it changes a verdict (E38/F06/S01)."""
+    """Whether an application, as stored, carries a verdict: a reviewer's write over it changes a
+    verdict (E38/F06/S01). What a reviewer saw is read by ``saw_decided``."""
     return not is_undecided(doc)
+
+
+#: Every status a state names, as ``state_of`` reads it.
+_STATED_STATUSES = (None, "", *(status.value for status in ApplicationStatus))
+
+
+def saw_decided(seen: Dict[str, Any]) -> bool:
+    """Whether a reviewer saw an application carrying a verdict, so their write over it changes
+    one (E38/F06/S01). A status no state names is nothing they could have seen: it reads as not
+    decided, and the write held on it matches nothing, as no application is stored so."""
+    return seen.get("status") in _STATED_STATUSES and is_decided(seen)
 
 
 def is_judgeable(application: Dict[str, Any]) -> bool:
