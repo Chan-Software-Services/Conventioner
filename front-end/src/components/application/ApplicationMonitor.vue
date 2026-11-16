@@ -64,13 +64,9 @@ import {
 } from '@/utils/reviewers';
 import { useMarketStore } from '@/stores/market';
 import ListFreshness from '@/components/ListFreshness.vue';
-import {
-  VerdictNotWritten,
-  useVerdictActions,
-  verdictRefusal,
-  type VerdictOutcome,
-} from '@/utils/verdictActions';
+import { useVerdictActions, type VerdictOutcome } from '@/utils/verdictActions';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
+import { Refusal, refusalSentence } from '@/utils/useSubmit';
 import { useVerdictUndo } from '@/utils/verdictUndo';
 import VerdictUndoLine from '@/components/application/VerdictUndoLine.vue';
 import { applicantName } from '@/utils/essentialFields';
@@ -667,20 +663,19 @@ async function changeVerdict(app: Application, status: ApplicationStatus, event:
       async () => {
         const outcome = await verdicts.give(app, status);
         offerUndo(before, outcome, status);
-        if (outcome.kind !== 'written') throw new VerdictNotWritten(outcome.message);
+        if (outcome.kind !== 'written') throw new Refusal(outcome.message);
         if (app.id === refusedOn.value) {
           errorMessage.value = '';
           await settle(app, outcome);
         }
       },
       {
-        refused: verdictRefusal,
         // Closed under it, by leaving the review or another market: said where the reviewer now is,
         // and which one, since the card up is another application and its "this application" would
         // read as that one.
         late: (answer) => {
           if (answer.ok) return;
-          const words = verdictRefusal(answer.error) ?? 'The verdict was not saved.';
+          const words = refusalSentence(answer.error) ?? 'The verdict was not saved.';
           sayBesideTheCard(`${app.applicantEmail} was not changed: ${words}`);
         },
       },
@@ -820,7 +815,7 @@ async function markFollowUp(choice: { ownerEmail: string; note?: string }) {
           entryFor(app.applicantEmail)?.note ?? '',
         );
         void loadNotes();
-        if (outcome.kind === 'failed') throw new VerdictNotWritten(outcome.message);
+        if (outcome.kind === 'failed') throw new Refusal(outcome.message);
         return outcome;
       },
       {
@@ -829,7 +824,6 @@ async function markFollowUp(choice: { ownerEmail: string; note?: string }) {
           offerUndo(before, outcome, ApplicationStatus.NeedsFollowUp);
           await settle(app, outcome);
         },
-        refused: verdictRefusal,
       },
     );
   } finally {

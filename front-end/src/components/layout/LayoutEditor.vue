@@ -67,6 +67,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useId, watch } from 'vue';
 import type { FloorplanTable, SectionObject, TableTypeObject } from '@/assets/types/datatypes';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
+import { Refusal } from '@/utils/useSubmit';
 import LayoutFillDialog from './LayoutFillDialog.vue';
 import LayoutFillPreview from './LayoutFillPreview.vue';
 import LayoutMap, { type MapView } from './LayoutMap.vue';
@@ -720,9 +721,6 @@ const fillInView = ref(false);
 /** The fill's write, opened on each asking of the dialog (T411). */
 const filling = useDialogSubmit({ opening: () => fillAsked.value, failure: FILL_FAILED });
 
-/** A fill refused before anything is asked of the placement: said in the dialog as a refusal. */
-class FillNotAsked extends Error {}
-
 /** The part of the hall the map shows, as an area. */
 function viewArea(): FillArea | null {
   const shown = view.value;
@@ -773,7 +771,7 @@ function runFill(choice: FillChoice) {
   const asked = layout.value.id;
   void filling.submit(
     async () => {
-      if (!request.counts[typeId]) throw new FillNotAsked(LAYOUT_IS_FULL);
+      if (!request.counts[typeId]) throw new Refusal(LAYOUT_IS_FULL);
       return ask(request);
     },
     {
@@ -784,7 +782,6 @@ function runFill(choice: FillChoice) {
         fillAsked.value = false;
         tell(saidFilled(added.length, choice.count, answer.timed_out, request.counts[typeId]));
       },
-      refused: (err) => (err instanceof FillNotAsked ? err.message : undefined),
     },
   );
 }

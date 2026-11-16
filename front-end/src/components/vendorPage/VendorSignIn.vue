@@ -22,7 +22,7 @@ import { computed, nextTick, onUnmounted, ref } from 'vue';
 import CodeInput from '@/components/CodeInput.vue';
 import { useApplicationStore, type CodeAnswer } from '@/stores/application';
 import type { CodeState } from '@/utils/applicantApi';
-import { useSubmit } from '@/utils/useSubmit';
+import { Refusal, useSubmit } from '@/utils/useSubmit';
 import { getShortDate } from '@/utils/utils';
 
 const props = defineProps<{ marketSlug: string }>();
@@ -45,12 +45,13 @@ const sent = ref(false);
 const arrivedWith = computed(() => (sent.value ? null : store.error));
 const displayedError = computed(() => validationError.value || refusal.value || arrivedWith.value);
 
-/** A refused request's answer, thrown so the submit says its sentence. */
-class Refused extends Error {
-  readonly answer: Extract<CodeAnswer, { ok: false }>;
-  constructor(answer: Extract<CodeAnswer, { ok: false }>) {
+/**
+ * A refused request's answer, thrown so the submit says its sentence; it carries where the code
+ * stands too, for Sign in to act on.
+ */
+class CodeRefused extends Refusal {
+  constructor(readonly answer: Extract<CodeAnswer, { ok: false }>) {
     super(answer.sentence);
-    this.answer = answer;
   }
 }
 
@@ -59,7 +60,7 @@ async function sendFromHere(request: () => Promise<CodeAnswer>): Promise<void> {
   validationError.value = null;
   sent.value = true;
   const answer = await request();
-  if (!answer.ok) throw new Refused(answer);
+  if (!answer.ok) throw new CodeRefused(answer);
 }
 
 const codeInput = ref<InstanceType<typeof CodeInput> | null>(null);
@@ -115,7 +116,6 @@ async function requestCode() {
       await nextTick();
       codeInput.value?.focus();
     },
-    refused: (err) => (err instanceof Refused ? err.answer.sentence : undefined),
   });
 }
 
@@ -134,13 +134,12 @@ async function verifyCode() {
       ),
     {
       refused: (err) => {
-        if (!(err instanceof Refused)) return;
+        if (!(err instanceof CodeRefused)) return;
         codeState.value = err.answer.codeState;
         if (codeState.value === 'retry') {
           code.value = '';
           void nextTick(() => codeInput.value?.focus());
         }
-        return err.answer.sentence;
       },
     },
   );

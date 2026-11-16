@@ -11,7 +11,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, h, ref } from 'vue';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { AxiosError, type InternalAxiosRequestConfig } from 'axios';
-import { submitStep, useSubmit, type SubmitPhase, type SubmitState } from '@/utils/useSubmit';
+import {
+  Refusal,
+  submitStep,
+  useSubmit,
+  type SubmitPhase,
+  type SubmitState,
+} from '@/utils/useSubmit';
 
 const editing: SubmitPhase = { kind: 'editing' };
 const sending: SubmitPhase = { kind: 'sending' };
@@ -214,6 +220,25 @@ describe('useSubmit', () => {
     await flushPromises();
 
     expect(text('sentence')).toBe('It did not go through.');
+  });
+
+  it("says a `Refusal`'s own sentence when the handler gives none", async () => {
+    wrapper = mount(tinyForm(() => Promise.reject(new Refusal('This market has every type.'))));
+
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(text('phase')).toBe('refused');
+    expect(text('sentence')).toBe('This market has every type.');
+  });
+
+  it("says the handler's sentence over a `Refusal`'s own", async () => {
+    wrapper = mount(tinyForm(() => Promise.reject(new Refusal('Its own.')), 'The handler’s.'));
+
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(text('sentence')).toBe('The handler’s.');
   });
 
   it('drops an answer that lands after the scope moved on, and hands it to `late`', async () => {

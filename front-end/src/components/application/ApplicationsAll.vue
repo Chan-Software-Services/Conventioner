@@ -54,13 +54,9 @@ import {
 import { useVendorDetails } from '@/utils/vendorDetails';
 import { useMarketStore } from '@/stores/market';
 import { useVendorDrawer } from '@/utils/vendorDrawer';
-import {
-  VerdictNotWritten,
-  useVerdictActions,
-  verdictRefusal,
-  type VerdictOutcome,
-} from '@/utils/verdictActions';
+import { useVerdictActions, type VerdictOutcome } from '@/utils/verdictActions';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
+import { Refusal } from '@/utils/useSubmit';
 import { useVerdictUndo, type UndoOutcome } from '@/utils/verdictUndo';
 import VerdictUndoLine from '@/components/application/VerdictUndoLine.vue';
 import { applicationsAllSeed, NO_FILTERS, type ExportFilters } from '@/utils/vendorExport';
@@ -403,7 +399,7 @@ async function markFollowUp(choice: { ownerEmail: string; note?: string }) {
         const outcome = await verdicts.markFollowUp(app, choice, noteBefore.value);
         rowVerdictWritten(before, outcome, ApplicationStatus.NeedsFollowUp);
         void drawerPanel.value?.loadNotes();
-        if (outcome.kind === 'failed') throw new VerdictNotWritten(outcome.message);
+        if (outcome.kind === 'failed') throw new Refusal(outcome.message);
         return outcome;
       },
       {
@@ -412,7 +408,6 @@ async function markFollowUp(choice: { ownerEmail: string; note?: string }) {
           if (outcome.kind === 'changed') verdictMessage.value = outcome.message;
           else void details.load();
         },
-        refused: verdictRefusal,
       },
     );
   } finally {

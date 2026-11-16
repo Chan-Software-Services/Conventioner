@@ -106,18 +106,3 @@ export function useVerdictActions(
 
   return { me, people, writesNotes, adopt, give, markFollowUp };
 }
-
-/**
- * A verdict or a follow-up that was not written, thrown from a dialog's `send` so that its
- * submission is refused with the outcome's own sentence (T411): `refused: verdictRefusal`.
- */
-export class VerdictNotWritten extends Error {
-  constructor(readonly sentence: string) {
-    super(sentence);
-  }
-}
-
-/** A refusal's sentence when it is a verdict's, else nothing, for the dialog's own failure. */
-export function verdictRefusal(error: unknown): string | undefined {
-  return error instanceof VerdictNotWritten ? error.sentence : undefined;
-}

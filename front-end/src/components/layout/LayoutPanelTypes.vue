@@ -20,6 +20,7 @@ import type { TableTypeObject } from '@/assets/types/datatypes';
 import RowMenu from '@/components/RowMenu.vue';
 import { getApiErrorMessage } from '@/utils/api';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
+import { Refusal } from '@/utils/useSubmit';
 import { plural } from '@/utils/utils';
 import LayoutSavedTypesDialog from './LayoutSavedTypesDialog.vue';
 import LayoutSaveTypesDialog from './LayoutSaveTypesDialog.vue';
@@ -58,17 +59,9 @@ const props = withDefaults(
 const titleId = useId();
 const FAILED = 'The table types could not be saved. Try again in a moment.';
 
-/**
- * A refusal the card makes before anything is sent, as of a saved set that adds nothing: said in
- * the dialog as a refused write is.
- */
-class NothingToSend extends Error {}
-
-/** What a write that did not land says: the card's own sentence, the layout's own save's, or the server's. */
+/** What a removal that did not land says: the layout's own save's sentence, or the server's. */
 const failure = (err: unknown) =>
-  err instanceof LayoutNotSaved || err instanceof NothingToSend
-    ? err.message
-    : getApiErrorMessage(err, FAILED);
+  err instanceof LayoutNotSaved ? err.message : getApiErrorMessage(err, FAILED);
 
 const countOf = (type: TableTypeObject) => props.counts.get(type.id) ?? 0;
 
@@ -123,7 +116,8 @@ function held(submission: typeof typeSubmission, write: () => Promise<void>, don
       closeAll();
       said.value = { words: done, refused: false };
     },
-    refused: failure,
+    // The layout's own save's sentence; any other refusal is said by the submission.
+    refused: (err) => (err instanceof LayoutNotSaved ? err.message : undefined),
   });
 }
 
@@ -145,9 +139,9 @@ function useSaved(saved: SavedTypes) {
   held(
     savedSubmission,
     async () => {
-      if (!added) throw new NothingToSend(`This market has every type ${saved.name} holds.`);
+      if (!added) throw new Refusal(`This market has every type ${saved.name} holds.`);
       if (next.length > MAX_TABLE_TYPES) {
-        throw new NothingToSend(`A market keeps at most ${MAX_TABLE_TYPES} table types.`);
+        throw new Refusal(`A market keeps at most ${MAX_TABLE_TYPES} table types.`);
       }
       await props.save(next);
     },

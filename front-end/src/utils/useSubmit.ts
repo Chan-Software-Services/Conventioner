@@ -57,6 +57,23 @@ export function submitStep(state: SubmitState, event: SubmitEvent): SubmitState 
   }
 }
 
+/**
+ * A refusal a form's `send` makes itself, carrying the sentence to say: a write that answered but
+ * was not done (a verdict someone else changed first), or one refused before anything is sent (a
+ * saved set that adds nothing). Thrown from `send`, it is said as the server's refusal is, by its
+ * own sentence, with no handler to read it.
+ */
+export class Refusal extends Error {
+  constructor(readonly sentence: string) {
+    super(sentence);
+  }
+}
+
+/** A refusal's own sentence: a `Refusal`'s, else nothing. */
+export function refusalSentence(error: unknown): string | undefined {
+  return error instanceof Refusal ? error.sentence : undefined;
+}
+
 /** An answer that landed after its opening had gone: what it was, for the form to hand on. */
 export type LateAnswer<T> = { ok: true; answer: T } | { ok: false; error: unknown };
 
@@ -65,7 +82,8 @@ export interface SubmitHandlers<T> {
   done?: (answer: T) => void | Promise<void>;
   /**
    * A refusal of the opening it was sent in: its side effects, and the sentence to say. Nothing
-   * returned, or no handler, says the server's sentence, else the form's `failure`.
+   * returned, or no handler, says a `Refusal`'s own sentence, else the server's, else the form's
+   * `failure`.
    */
   refused?: (error: unknown) => string | void;
   /** An answer or refusal that landed after the form moved to another opening. */
@@ -136,7 +154,10 @@ export function useSubmit(options: SubmitOptions = {}) {
       step({
         kind: 'refused',
         opening,
-        sentence: typeof said === 'string' ? said : getApiErrorMessage(error, failure),
+        sentence:
+          typeof said === 'string'
+            ? said
+            : (refusalSentence(error) ?? getApiErrorMessage(error, failure)),
       });
       return;
     }

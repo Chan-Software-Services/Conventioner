@@ -25,9 +25,10 @@ export interface DialogSubmitOptions {
  * while it sends, and the shell says its refusal, so no dialog has to remember the hold.
  *
  * `submit(send, { done, refused, late })` is `useSubmit`'s: a second press while one is out sends
- * nothing; `done` and `refused` hear only the opening the write was sent in, and `late` hears an
- * earlier one's answer, for the dialog to hand on by its parent's refresh path, never by the event
- * that closes; once the dialog is gone nothing is called.
+ * nothing; a `send` that refuses on its own throws a `Refusal`, whose sentence is said with no
+ * `refused` handler; `done` and `refused` hear only the opening the write was sent in, and `late`
+ * hears an earlier one's answer, for the dialog to hand on by its parent's refresh path, never by
+ * the event that closes; once the dialog is gone nothing is called.
  */
 export function useDialogSubmit(options: DialogSubmitOptions) {
   return {
