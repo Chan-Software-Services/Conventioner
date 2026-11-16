@@ -80,8 +80,9 @@ export async function startMongoSession(): Promise<void> {
  * into fifteen files.
  *
  * Every script of a process runs in one mongosh in the stack's Mongo container (`mongoSession.ts`),
- * started once, where each once started a mongosh of its own: a loaded CI runner took more than a
- * script's 10 seconds to start one, and failed a spec on it. A script keeps its names to itself.
+ * started again only when a script runs out its time or mongosh ends, where each once started a
+ * mongosh of its own: a loaded CI runner took more than a script's 10 seconds to start one, and
+ * failed a spec on it. A script keeps its names to itself.
  * It blocks until the script has run, as the suite's callers expect.
  */
 export function mongoEval(script: string): string {

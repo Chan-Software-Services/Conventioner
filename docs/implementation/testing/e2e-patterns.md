@@ -103,7 +103,7 @@ The Applications page opens on the review's All view, so a spec that walks the o
 Specs no longer plant a market in `localStorage`; nothing about a market is stored in the browser.
 
 **A spec shells into Mongo through `mongoEval`** ([`helpers/mongo.ts`](../../../front-end/e2e/helpers/mongo.ts)), never its own `docker exec`: the container, the address and the flags were once copied into fifteen files.
-Each process of the suite runs all its scripts in one mongosh in the stack's Mongo container, held by a worker thread ([`helpers/mongoSession.ts`](../../../front-end/e2e/helpers/mongoSession.ts)), and `mongoEval` blocks until its script has run.
+Each process of the suite runs its scripts in one mongosh in the stack's Mongo container, held by a worker thread ([`helpers/mongoSession.ts`](../../../front-end/e2e/helpers/mongoSession.ts)) and started again only when a script runs out its time or mongosh ends, and `mongoEval` blocks until its script has run.
 Each script once had a `docker exec` and a fresh mongosh of its own, and on a loaded CI runner one such start took longer than the script's 10 seconds, failing a spec whose retry then passed.
 A script is in mongosh's own dialect, loaded as a file ([`helpers/mongoScript.ts`](../../../front-end/e2e/helpers/mongoScript.ts)), and answers what `mongosh --eval` printed: what it printed, and the value of its last statement when that is an expression.
 Its `const`s are its own, so two scripts may each declare a `market`.
