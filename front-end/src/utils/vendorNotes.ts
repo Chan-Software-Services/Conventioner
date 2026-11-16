@@ -48,7 +48,7 @@ export function useVendorNotes(marketId: Ref<string>) {
   );
 
   // Notes are beside the page's work, never its subject: a page that cannot read them still does
-  // its job, without them, and says nothing of it.
+  // its job, without them or with those it read last, and says nothing of it.
   const notes = computed<Record<string, VendorNoteEntry>>(() => read.data.value ?? {});
 
   /** Read them again, after a write: resolves when this read lands, fails or is overtaken. */

@@ -152,8 +152,8 @@ The read serves none of them, nor the person's `user_role` ([the market's action
 
 ## Reads keyed by market
 
-A screen's own read of the server for the market open (its roster, its list, its figures) goes through one keyed read, [`useServerRead`](../../../front-end/src/utils/useServerRead.ts), so the screen never shows one market's answer, or its refusal, under another market's name.
-It replaced each screen's own data, loading flag and error, read on a watch of the market id and checked by hand.
+The roster at the door, the Vendors list, Payments, the vendor drawer's details, the vendor notes and Stats' figures each read the market open through one keyed read, [`useServerRead`](../../../front-end/src/utils/useServerRead.ts), so those screens never show one market's answer, or its refusal, under another market's name.
+On those screens it replaced each one's own data, loading flag and error, read on a watch of the market id and checked by hand.
 
 `useServerRead(key, fetcher, options)` takes a getter of the key (the market id, null with none), the read, and `{ failure, refreshFailure?, missing?, lazy?, landed?, gone? }`.
 It returns `key`, `phase`, `data`, `sentence` and `readAt`, all read-only, and four calls:

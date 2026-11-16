@@ -84,7 +84,7 @@ Until the market is in hand the bar holds its place and [`MarketArrival`](../../
 A screen's content is rendered only once its market is in hand, and `@retry` lets a screen refetch its own data beside the market.
 
 **A failed re-read of the market is said once, by the frame.**
-While [the market store](market-store.md#interface)'s `rereadFailed` holds (a re-read failed in transit and none has landed since, the next one's `refreshing` included), the card says "Could not update the market. It is shown as it was last read." with Try again, right under the pinned block and above the tab note or the read-only note, on every market screen (T421).
+While [the market store](market-store.md#interface)'s `rereadFailed` holds (a re-read failed, other than a 404 or 403, and none has landed since, the next one's `refreshing` included), the card says "Could not update the market. It is shown as it was last read." with Try again, right under the pinned block and above the tab note or the read-only note, on every market screen (T421).
 It is `--mm-red` at `--text-sm` with `role="alert"`, Try again a `btn btn--secondary btn--compact` after the sentence where it fits and under it where it does not; testids `market-reread-failed` and `market-reread-retry`.
 It is inset as the read-only note is, the phone's `--space-4` only on a screen that fits a phone, and not pinned, so on a phone it scrolls with the page.
 Try again is the arrival's `retry`: it re-reads the market and emits `retry` to the screen.
