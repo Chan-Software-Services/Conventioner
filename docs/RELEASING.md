@@ -34,7 +34,7 @@ This project uses a **dev → main promotion flow**:
 
 - **`dev`** is the default/integration branch.
   All feature branches and bugfix PRs target `dev`.
-  CI (`.github/workflows/test.yml`) runs on every push and PR to `dev`.
+  CI (`.github/workflows/test.yml`) runs its checks before code reaches `dev` ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)).
 - **`main`** is the deploy-only branch.
   It is deployed only by hand, through the Deploy workflow, and is reached **only** by promoting `dev` → `main` as a deliberate, versioned release.
   Never commit or open PRs directly against `main` (the release-please Release PR and a `hotfix/` PR are the exceptions, [below](#hotfixes)).
