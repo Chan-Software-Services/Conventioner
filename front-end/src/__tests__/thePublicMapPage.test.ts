@@ -31,12 +31,17 @@ vi.mock('@/utils/publicMap', async (importOriginal) => ({
 
 /** The page's address: its slug and its query, which `replace` changes as the router would. */
 const routing = vi.hoisted(() => ({
-  route: null as unknown as { params: Record<string, string>; query: Record<string, string> },
+  route: null as unknown as {
+    name: string;
+    params: Record<string, string>;
+    query: Record<string, string>;
+  },
   replace: vi.fn(),
 }));
 vi.mock('vue-router', async () => {
   const { reactive } = await import('vue');
   routing.route = reactive({
+    name: 'public-map',
     params: { marketSlug: 'harbour-night-market' },
     query: {} as Record<string, string>,
     hash: '',
@@ -327,6 +332,8 @@ const scrolled = vi.fn();
 
 beforeEach(() => {
   routing.route.query = {};
+  routing.route.name = 'public-map';
+  routing.route.params = { marketSlug: 'harbour-night-market' };
   routing.replace.mockClear();
   fetchPublicMap.mockReset();
   fetchPublicMapImage.mockReset();
@@ -444,6 +451,37 @@ describe('the page', () => {
     await open();
     expect(card().text()).toBe('Press a table, or find a vendor below.');
   });
+
+  it("reads another market's map when the address moves to it, the page kept", async () => {
+    const page = await open();
+    fetchPublicMap.mockResolvedValue({
+      map: { ...ANSWER, marketName: 'River Craft Fair' },
+      notFound: false,
+      failed: false,
+    });
+    fetchPublicMapImage.mockClear();
+    vi.mocked(URL.createObjectURL).mockReturnValue('blob:river-image');
+
+    routing.route.params = { marketSlug: 'river-craft-fair' };
+    await flushPromises();
+
+    expect(fetchPublicMap).toHaveBeenLastCalledWith('river-craft-fair');
+    expect(page.get('[data-testid="public-map-heading"]').text()).toBe('River Craft Fair');
+    expect(fetchPublicMapImage).toHaveBeenCalledWith('river-craft-fair', 'loc-upper');
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:map-image');
+    expect(page.get('[data-testid="layout-map-image"]').attributes('href')).toBe(
+      'blob:river-image',
+    );
+  });
+
+  it('reads nothing more once the address leaves the page', async () => {
+    await open();
+    fetchPublicMap.mockClear();
+    routing.route.name = 'vendor-page';
+    routing.route.params = { marketSlug: 'harbour-night-market-2' };
+    await flushPromises();
+    expect(fetchPublicMap).not.toHaveBeenCalled();
+  });
 });
 
 describe('pressing a table', () => {
@@ -479,6 +517,22 @@ describe('pressing a table', () => {
       expect(halves[1].text()).toContain('Bee Candles');
       expect(halves[1].find('a').exists()).toBe(false);
     }
+  });
+
+  it('says a half with nobody is free on the day, in words, beside the half that is taken', async () => {
+    await open({
+      map: {
+        ...ANSWER,
+        seats: ANSWER.seats.filter((s) => !(s.tableId === 'g2' && s.half === 'right')),
+      },
+      notFound: false,
+      failed: false,
+    });
+    await pressTable('g2', 'left');
+    const halves = card().findAll('[data-testid="public-map-card-half"]');
+    expect(halves.map((h) => h.get('h3').text())).toEqual(['Left half', 'Right half']);
+    expect(halves[0].text()).toContain('Acme Ceramics');
+    expect(halves[1].text()).toBe('Right halfThis half is free on Fri 5 Jun.');
   });
 
   it('says a vendor with no public name is there, and nothing of them', async () => {

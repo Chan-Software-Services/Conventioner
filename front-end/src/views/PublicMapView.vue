@@ -56,6 +56,9 @@ const router = useRouter();
 
 const marketSlug = computed(() => String(route.params.marketSlug ?? ''));
 
+/** The page has left: nothing read after it is kept. */
+let gone = false;
+
 type State = 'loading' | 'not-found' | 'failed' | 'ready';
 const state = ref<State>('loading');
 const map = ref<PublicMapAnswer | null>(null);
@@ -75,11 +78,16 @@ watch(map, (now) => {
   document.title = now ? `${now.marketName} map` : titleBefore;
 });
 
+/** Each read is numbered, so one answering after the address moved to another market is dropped. */
+let reads = 0;
+
 async function load() {
+  const read = ++reads;
   state.value = 'loading';
-  const read = await fetchPublicMap(marketSlug.value);
-  map.value = read.map;
-  state.value = read.notFound ? 'not-found' : read.failed ? 'failed' : 'ready';
+  const answer = await fetchPublicMap(marketSlug.value);
+  if (read !== reads || gone) return;
+  map.value = answer.map;
+  state.value = answer.notFound ? 'not-found' : answer.failed ? 'failed' : 'ready';
 }
 void load();
 
@@ -121,7 +129,6 @@ function pick(tableId: string) {
 // ── The floorplan images, one object URL per location, read as each location opens ──
 const imageUrls = reactive<Record<string, string>>({});
 const asked = new Set<string>();
-let gone = false;
 
 watch(
   () => [map.value, place.value.locationId] as const,
@@ -129,9 +136,10 @@ watch(
     const location = answer?.locations.find((l) => l.id === locationId);
     if (!location?.layout.hasImage || asked.has(locationId)) return;
     asked.add(locationId);
+    const slug = marketSlug.value;
     try {
-      const blob = await fetchPublicMapImage(marketSlug.value, locationId);
-      if (gone) return;
+      const blob = await fetchPublicMapImage(slug, locationId);
+      if (gone || slug !== marketSlug.value) return;
       imageUrls[locationId] = URL.createObjectURL(blob);
     } catch {
       // Drawn on the floor's colour alone: the tables still say where everyone is.
@@ -141,11 +149,27 @@ watch(
   { immediate: true },
 );
 
+/** Forget one market's images, as the page leaves it. */
+function forgetImages() {
+  for (const url of Object.values(imageUrls)) URL.revokeObjectURL(url);
+  for (const id of Object.keys(imageUrls)) delete imageUrls[id];
+  asked.clear();
+}
+
+// The app's one RouterView is unkeyed, so an in-app move to another market's map keeps this page:
+// it reads that market's map afresh, its images with it. A move off the page reads nothing.
+watch(marketSlug, (now, before) => {
+  if (now === before || route.name !== 'public-map') return;
+  forgetImages();
+  map.value = null;
+  void load();
+});
+
 onUnmounted(() => {
   gone = true;
   vendorPageAnswered(answeredFor, false);
   document.title = titleBefore;
-  for (const url of Object.values(imageUrls)) URL.revokeObjectURL(url);
+  forgetImages();
 });
 
 const locations = computed(() =>
