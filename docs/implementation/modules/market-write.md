@@ -61,6 +61,7 @@ sources:
   - T316
   - T315
   - T318
+  - T411
 ---
 
 # The market write
@@ -211,7 +212,7 @@ A migration that reaches the markets collection by a name the walk does not read
 `onMarketChanged(handler)` is a response interceptor beside `onSessionEnded`: the request still fails, so the screen's own catch runs and shows the server's sentence through `getApiErrorMessage`.
 `installMarketChanged()` in [`front-end/src/stores/market.ts`](../../../front-end/src/stores/market.ts), installed from `main.ts` beside the session's interceptor, re-reads the open market through the store's `refresh`, so every screen reading [the market store](market-store.md) follows.
 
-The Tables page reads the market from the store, but its grid and an open vendor's details are reads of their own, so on that refusal from a placement it reads those again, as after a success, and the sentence stands in the seat dialog's error line (`runPlacementChange` in [`front-end/src/views/ResultView.vue`](../../../front-end/src/views/ResultView.vue)).
+The Tables page reads the market from the store, but its grid and an open vendor's details are reads of their own, so on that refusal from a placement it reads those again, as after a success, inside the seat dialog's submission, so the dialog holds until they are read, and the sentence stands in its error line (`runPlacementChange` in [`front-end/src/views/ResultView.vue`](../../../front-end/src/views/ResultView.vue), T411).
 Beside it, `isVendorHere(err)` is the placements' other coded 409, `vendor_is_here`, a free, a move or a swap of a vendor who has checked in that day: nothing changed, so the page reads nothing again and the dialog asks with the sentence ([placements](placements.md)).
 
 The form tab ([F2](../../business/flows/form-tab.md#f2-custom-questions)) keeps the `formRevision` its form read answered, sends it with Save and with the unasked-essentials toggle, and takes the one each save answers.
@@ -225,6 +226,7 @@ A seed or spec writes the form through [`e2e/helpers/saveApplicationForm.ts`](..
 
 Manage market keeps a copy of the market of its own, so on that refusal from adding, changing or taking a role, from a change to the permission table (a row, Reset or Copy), or from a rename, it re-reads that copy, and the sentence stands where that action's refusal always has: under the add form, in the removal's confirmation, under the person's row, in the table change's confirmation, under the name ([ending and managing a market](../../business/flows/ending-and-managing-a-market.md)).
 The permission dialog ([`MarketPermissions.vue`](../../../front-end/src/components/MarketPermissions.vue)) asks [`ManageMarketOverlay.vue`](../../../front-end/src/views/ManageMarketOverlay.vue) for the re-read with its `marketChanged` event, and an open confirmation follows the table read again: a row's change takes the row as it now stands, and one with nothing left to change, or a reset with no row left to return, closes, its sentence then on the Permissions dialog's own error line and focus taken back inside that dialog, since Reset, disabled then, or a row gone cannot take it; after a refused rename (`handleRename`) the re-read market may be past draft, so the name field gives way to why the name is fixed.
+Manage market's re-read after a refused add, take, rename or transfer of ownership runs inside that write's submission ([dialogs](../conventions/dialogs.md)), so the dialog holds until its copy is read again, and a re-read for a market Manage market has since left, asked of that submission's `isCurrent`, reads nothing (T411); the reads no write sends, the one as Manage market opens and the one `marketChanged` asks for, go by Manage market's own count of its openings.
 
 A list saved on the market a click at a time (`useSavedOnTheMarket` in [`front-end/src/utils/savedOnTheMarket.ts`](../../../front-end/src/utils/savedOnTheMarket.ts), the highlights and the automatic rejections) is the [autosave](plan-autosave.md)'s no-pause case: one write out at a time, a click made while one is out sent when it answers with the list as it then stands, and the market re-read once the last of them lands; a re-read landing while a click is unsaved is skipped.
 A write that does not land drops the clicks behind it and puts back what the server last answered, never the click before, with the reason, since the screen has no Retry.

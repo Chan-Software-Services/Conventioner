@@ -20,6 +20,7 @@ import {
 import { MarketAction } from '@/utils/marketActions';
 import { installIntersectionObserver } from './support/intersection';
 import { answersRefusing } from './support/servedAnswers';
+import { tryEveryClose } from './support/dialogCloses';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), delete: vi.fn(), post: vi.fn() }));
 
@@ -547,4 +548,110 @@ describe("copying the organization's defaults again", () => {
     expect(body().find('[data-testid="manage-market-permissions-copy"]').exists()).toBe(false);
     expect(body().find('[data-testid="manage-market-permissions-reset"]').exists()).toBe(true);
   });
+});
+
+/**
+ * Each of the three confirmations writes through its submission (T411): the shell holds it while
+ * its write is out, so a second press sends nothing and nothing closes it, and a refusal is said in
+ * the opening it was sent from only.
+ */
+describe('the confirmations hold while they write', () => {
+  function held<T = unknown>() {
+    let resolve!: (value: T) => void;
+    let reject!: (err: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  const refused = (sentence: string) =>
+    Object.assign(new Error('refused'), {
+      isAxiosError: true,
+      response: { status: 403, data: { error: sentence } },
+    });
+
+  const windowOf = (testid: string) =>
+    document.querySelector<HTMLElement>(`[data-testid="${testid}-window"]`);
+  const pressTwice = (testid: string) => {
+    windowOf(testid)!.querySelector('form')!.requestSubmit();
+    windowOf(testid)!.querySelector('form')!.requestSubmit();
+  };
+
+  const CONFIRMATIONS = [
+    {
+      name: "a row's change",
+      testid: 'manage-market-permission-confirm',
+      table: BUILT_IN,
+      write: () => api.put,
+      ask: async (page: DOMWrapper<HTMLElement>) => {
+        await chooseOnFirstRow(page, MarketRole.Viewer);
+      },
+    },
+    {
+      name: 'the reset',
+      testid: 'manage-market-permissions-reset-confirm',
+      table: HELD,
+      write: () => api.delete,
+      ask: async (page: DOMWrapper<HTMLElement>) => {
+        await page.get('[data-testid="manage-market-permissions-reset"]').trigger('click');
+        await flushPromises();
+      },
+    },
+    {
+      name: "the copy of the organization's defaults",
+      testid: 'manage-market-permissions-copy-confirm',
+      table: HELD,
+      write: () => api.post,
+      ask: async (page: DOMWrapper<HTMLElement>) => {
+        await page.get('[data-testid="manage-market-permissions-copy"]').trigger('click');
+        await flushPromises();
+      },
+    },
+  ];
+
+  it.each(CONFIRMATIONS)(
+    '$name sends once for two presses, and nothing closes it until it lands',
+    async ({ testid, table, write, ask }) => {
+      const page = await openDialog(table);
+      await ask(page);
+      const answer = held();
+      write().mockReturnValue(answer.promise);
+
+      pressTwice(testid);
+      await flushPromises();
+
+      expect(write()).toHaveBeenCalledTimes(1);
+      expect(
+        document.querySelector(`[data-testid="${testid}-submit-button"]`)!.hasAttribute('disabled'),
+      ).toBe(true);
+      await tryEveryClose(testid);
+      expect(windowOf(testid)).not.toBeNull();
+
+      answer.resolve({ data: { permissionTable: BUILT_IN } });
+      await flushPromises();
+      expect(windowOf(testid)).toBeNull();
+      expect(page.find(WINDOW).exists()).toBe(true);
+    },
+  );
+
+  it.each(CONFIRMATIONS)(
+    '$name says its refusal in itself, and not when it is asked again',
+    async ({ testid, table, write, ask }) => {
+      const page = await openDialog(table);
+      await ask(page);
+      write().mockRejectedValue(refused('Only the owner changes these.'));
+
+      windowOf(testid)!.querySelector('form')!.requestSubmit();
+      await flushPromises();
+      expect(windowOf(testid)!.textContent).toContain('Only the owner changes these.');
+
+      document.querySelector<HTMLElement>(`[data-testid="${testid}-cancel-button"]`)!.click();
+      await flushPromises();
+      await ask(page);
+
+      expect(windowOf(testid)!.textContent).not.toContain('Only the owner changes these.');
+    },
+  );
 });

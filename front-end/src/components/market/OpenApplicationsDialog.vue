@@ -7,7 +7,7 @@
  * Confirming writes the reviewers only when the choice differs from the team they start from
  * (`teamToChange`), and says so to the rail, which then moves the phase as it always has. A write that fails keeps the dialog open
  * with its error, and the rail does not move. No close takes it during the write, since the move
- * follows the answer (`close-disabled`), and "Change" below steps aside with them.
+ * follows the answer (its `submission`, T411), and "Change" below steps aside with them.
  *
  * Below the picker it names the review setup the organizer is about to open (T206): what a reviewer
  * reads first and the automatic rejections, as the market serves them. The rail opens this only
@@ -18,11 +18,11 @@ import { computed, ref, watch } from 'vue';
 import type { Market } from '@/assets/types/datatypes';
 import AppDialog from '@/components/AppDialog.vue';
 import ReviewerPicker from '@/components/market/ReviewerPicker.vue';
-import { getApiErrorMessage } from '@/utils/api';
 import { resolutionPath } from '@/utils/market';
 import { MarketAction, mayTake } from '@/utils/marketActions';
 import { rejectingRules } from '@/utils/rejectionRules';
 import { leadingLabels } from '@/utils/reviewHighlights';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import {
   chooseReviewers,
   reviewerAddresses,
@@ -71,8 +71,11 @@ const changeTo = computed(() =>
     ? resolutionPath(props.market.id, 'form?step=review')
     : null,
 );
-const saving = ref(false);
-const error = ref('');
+const submission = useDialogSubmit({
+  opening: () => props.open,
+  failure: 'Could not save the reviewers.',
+});
+const { sending: saving } = submission;
 
 /* Each opening starts from the team as it stands: none, or whoever was chosen in draft before. */
 watch(
@@ -80,28 +83,24 @@ watch(
   (open) => {
     if (!open) return;
     ticked.value = teamToChange(props.market);
-    error.value = '';
   },
   { immediate: true },
 );
 
 async function confirm() {
-  if (!props.market || saving.value || props.moving) return;
-  saving.value = true;
-  error.value = '';
-  let wrote = false;
-  try {
-    // A write left by a dialog history took: nothing moves before its answer, and a refusal shows here.
-    await unansweredWrite(props.market.id)?.answer;
-    wrote = !sameTeam(ticked.value, teamToChange(props.market));
-    if (wrote) await chooseReviewers(props.market.id, ticked.value);
-  } catch (err) {
-    error.value = getApiErrorMessage(err, 'Could not save the reviewers.');
-    return;
-  } finally {
-    saving.value = false;
-  }
-  emit('chosen', wrote);
+  const market = props.market;
+  if (!market || props.moving) return;
+  await submission.submit(
+    async () => {
+      // A write left by a dialog history took: nothing moves before its answer, and a refusal
+      // shows here.
+      await unansweredWrite(market.id)?.answer;
+      const wrote = !sameTeam(ticked.value, teamToChange(market));
+      if (wrote) await chooseReviewers(market.id, ticked.value);
+      return wrote;
+    },
+    { done: (wrote) => emit('chosen', wrote) },
+  );
 }
 </script>
 
@@ -112,9 +111,8 @@ async function confirm() {
     testid="open-applications"
     scroll="body"
     :confirm-label="saving ? 'Saving…' : 'Open applications'"
-    :confirm-disabled="saving || moving"
-    :close-disabled="saving"
-    :error="error"
+    :confirm-disabled="moving"
+    :submission="submission"
     anchored
     @close="emit('close')"
     @submit="confirm"

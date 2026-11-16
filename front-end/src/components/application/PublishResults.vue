@@ -9,11 +9,11 @@
 import { computed, ref, watch } from 'vue';
 import { MarketPhase, type Market } from '@/assets/types/datatypes';
 import { publishResults } from '@/utils/applicantApi';
-import { getApiErrorMessage } from '@/utils/api';
 import { MarketAction, actionRefusal, mayTake } from '@/utils/marketActions';
 import { outcomeHeadline } from '@/utils/applicantOutcome';
 import { useMarketStore } from '@/stores/market';
 import { useCopyAddress } from '@/utils/useCopyAddress';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import AppDialog from '@/components/AppDialog.vue';
 
 const props = defineProps<{ market: Market | null }>();
@@ -67,23 +67,26 @@ watch(
   { immediate: true },
 );
 const confirming = ref(false);
-const loading = ref(false);
-const error = ref('');
+/**
+ * Publishing, for the confirmation's one opening on this market (T411): nothing closes it while it
+ * publishes, so a refusal is said in it, and a new opening starts with none.
+ */
+const submission = useDialogSubmit({
+  opening: () => (confirming.value ? props.market?.id : null),
+  failure: 'The results were not published.',
+});
+const { sending: publishing } = submission;
 
 async function publish() {
-  if (!props.market || loading.value) return;
-  loading.value = true;
-  error.value = '';
-  try {
-    await publishResults(props.market.id);
-    published.value = true;
-    confirming.value = false;
-    void useMarketStore().refresh();
-  } catch (err) {
-    error.value = getApiErrorMessage(err, 'The results were not published.');
-  } finally {
-    loading.value = false;
-  }
+  const market = props.market;
+  if (!market) return;
+  await submission.submit(() => publishResults(market.id), {
+    done: () => {
+      published.value = true;
+      confirming.value = false;
+      void useMarketStore().refresh();
+    },
+  });
 }
 </script>
 
@@ -92,11 +95,11 @@ async function publish() {
     <button
       v-if="!published"
       class="publish-button"
-      :disabled="loading || Boolean(publishReason)"
+      :disabled="publishing || Boolean(publishReason)"
       data-testid="applications-publish-button"
       @click="confirming = true"
     >
-      {{ loading ? 'Publishing…' : 'Publish results' }}
+      {{ publishing ? 'Publishing…' : 'Publish results' }}
     </button>
     <span
       v-if="!published && publishReason"
@@ -111,16 +114,14 @@ async function publish() {
     <span v-if="published" class="chip chip--positive" data-testid="applications-published-badge">
       Results published
     </span>
-    <p v-if="error && !confirming" class="publish-error">{{ error }}</p>
 
     <!-- What publishing tells whom, before it does (E36/F04/S01): it cannot be undone. -->
     <AppDialog
       :open="confirming"
       title="Publish results"
       testid="publish-results"
-      :confirm-label="loading ? 'Publishing…' : 'Publish results'"
-      :confirm-disabled="loading"
-      :error="error"
+      :confirm-label="publishing ? 'Publishing…' : 'Publish results'"
+      :submission="submission"
       @close="confirming = false"
       @submit="publish"
     >
@@ -196,13 +197,6 @@ async function publish() {
   font-size: var(--text-xs);
   color: var(--mm-text-muted);
   max-width: 60ch;
-}
-
-.publish-error {
-  flex-basis: 100%;
-  margin: 0;
-  color: var(--mm-red);
-  font-size: var(--text-sm);
 }
 
 .publish-outcomes {

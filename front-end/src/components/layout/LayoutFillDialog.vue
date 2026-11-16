@@ -6,13 +6,14 @@
  * the map shows instead of a drawn area, the way in for someone who draws none. Its choices but
  * the section and the type are `layoutFill.ts`'s `fillChoices`, kept for the next area.
  *
- * It asks nothing of the server itself: Fill hands the choice to the editor, which holds the
- * dialog open and its controls still while the placement runs (`busy`), and writes a refusal
- * into it (`error`).
+ * It asks nothing of the server itself: Fill hands the choice to the editor, whose `submission`
+ * (T411) holds the dialog open and its controls still while the placement runs, and has the shell
+ * say a refusal in it.
  */
 import { computed } from 'vue';
 import type { SectionObject, TableTypeObject } from '@/assets/types/datatypes';
 import AppDialog from '@/components/AppDialog.vue';
+import type { DialogSubmission } from '@/utils/useDialogSubmit';
 import {
   MAX_FILL_TABLES,
   areaSaid,
@@ -30,10 +31,8 @@ const props = defineProps<{
   tableTypes: readonly TableTypeObject[];
   /** The area drawn; null when the dialog was opened to fill what is in view. */
   area: FillArea | null;
-  /** The placement is running. */
-  busy?: boolean;
-  /** Why the last try placed nothing: the server's sentence. */
-  error?: string;
+  /** The editor's write of the fill, which holds the dialog while the placement runs. */
+  submission: DialogSubmission;
 }>();
 
 const emit = defineEmits<{ close: []; fill: [choice: FillChoice] }>();
@@ -43,6 +42,9 @@ const sectionId = defineModel<string>('sectionId', { required: true });
 const tableTypeId = defineModel<string>('tableTypeId', { required: true });
 /** Whether what the map shows is filled, in place of the area drawn. */
 const inView = defineModel<boolean>('inView', { required: true });
+
+/** The placement is running. */
+const sending = computed(() => props.submission.sending.value);
 
 const count = computed(() => countOf(fillChoices.count));
 const countError = computed(() =>
@@ -57,7 +59,7 @@ const areaText = computed(() =>
 );
 
 function fill() {
-  if (props.busy || countError.value || aisleMm.value === null) return;
+  if (sending.value || countError.value || aisleMm.value === null) return;
   emit('fill', {
     count: fillChoices.howMany === 'fit' ? null : count.value,
     direction: fillChoices.direction,
@@ -71,10 +73,9 @@ function fill() {
     :open="open"
     title="Fill an area"
     testid="layout-fill"
-    :confirm-label="busy ? 'Placing…' : 'Fill'"
-    :confirm-disabled="busy || !!countError || !!aisleError"
-    :close-disabled="busy"
-    :error="error"
+    :confirm-label="sending ? 'Placing…' : 'Fill'"
+    :confirm-disabled="!!countError || !!aisleError"
+    :submission="submission"
     @close="emit('close')"
     @submit="fill"
   >
@@ -85,7 +86,7 @@ function fill() {
         <select
           v-model="sectionId"
           class="field field--select"
-          :disabled="busy"
+          :disabled="sending"
           data-testid="layout-fill-section"
         >
           <option v-for="section in sections" :key="section.id" :value="section.id">
@@ -99,7 +100,7 @@ function fill() {
         <select
           v-model="tableTypeId"
           class="field field--select"
-          :disabled="busy"
+          :disabled="sending"
           data-testid="layout-fill-type"
         >
           <option v-for="type in tableTypes" :key="type.id" :value="type.id">
@@ -107,7 +108,7 @@ function fill() {
           </option>
         </select>
       </label>
-      <fieldset class="fill-field" :disabled="busy">
+      <fieldset class="fill-field" :disabled="sending">
         <legend class="field-label">How many</legend>
         <div class="fill-how-many">
           <label class="fill-choice">
@@ -127,7 +128,7 @@ function fill() {
             inputmode="numeric"
             autocomplete="off"
             aria-label="Number of tables"
-            :disabled="busy || fillChoices.howMany !== 'count'"
+            :disabled="sending || fillChoices.howMany !== 'count'"
             :aria-invalid="!!countError"
             :aria-describedby="countError ? 'layout-fill-count-error' : undefined"
             data-testid="layout-fill-count"
@@ -158,7 +159,7 @@ function fill() {
           <select
             v-model="fillChoices.direction"
             class="field field--select"
-            :disabled="busy"
+            :disabled="sending"
             data-testid="layout-fill-direction"
           >
             <option value="across">Rows across</option>
@@ -173,7 +174,7 @@ function fill() {
             type="text"
             inputmode="decimal"
             autocomplete="off"
-            :disabled="busy"
+            :disabled="sending"
             :aria-invalid="!!aisleError"
             :aria-describedby="aisleError ? 'layout-fill-aisle-error' : undefined"
             data-testid="layout-fill-aisle"
@@ -192,7 +193,7 @@ function fill() {
         <input
           v-model="inView"
           type="checkbox"
-          :disabled="busy || !area"
+          :disabled="sending || !area"
           data-testid="layout-fill-in-view"
         />
         <span>Fill what is in view</span>

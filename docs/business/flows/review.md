@@ -59,6 +59,7 @@ sources:
   - T262
   - T263
   - T270
+  - T411
 ---
 
 # Reviewing applications
@@ -110,6 +111,7 @@ The queue is triage: one application at a time, carrying every answer it holds, 
    Above them, on an open application or a follow-up dealt to another reviewer and not in the reader's share, so never on a follow-up the reader owns ([a follow-up is in its owner's share too](../rules/the-review-is-dealt-among-chosen-reviewers.md#why)), someone who may decide it reads "This application is dealt to <email>. If you decide it, its history will say you decided it for them."
 4. "Needs follow-up" opens "Needs a follow-up": "<email>'s application waits until someone reaches out.", "Who will follow up" (found by typing part of an address, anyone with a role on the market, the organization's owner, admins and members included, or, to a reviewer from outside the organization, only the people the market's roles name; the reviewer unless they choose another; nothing is sent to them) and, to someone who may write vendor notes, "Their notes: what is needed (optional)"; "Mark for follow-up".
    A chosen Viewer, who writes no notes, marks the follow-up without that box.
+   Nothing closes it while it marks, and a refusal is said in it; leaving the review, or the All view's drawer going to another vendor, closes it, and an answer landing after says nothing in the next opening (T411, [dialogs](../../implementation/conventions/dialogs.md)).
    A follow-up waits out of the queue, and "Include the N follow-ups" brings them back; on its card "Followed up by" hands it to someone else.
 5. When the queue is empty: "All N reviewed", "Nothing left to review." (or "Nothing else to review; N need a follow-up.").
 6. When a chosen reviewer's share is empty and others' are not: "Your share is done.", "N applications are left outside your share. You can help with them; each one's history will say you decided it." ("1 application is left outside your share. You can help with it; its history will say you decided it.") and "Help with the others", which goes on through the rest of the queue, "1 of N open", its word following what the rest holds as in step 1, each card dealt to another reviewer carrying the warning; an application dealt to them meanwhile is still handed to them first.
@@ -171,8 +173,9 @@ From Assignment on the list only reads.
 A verdict changed in the dialog leaves it open, with the rows shown as they were and focus on that row's new button, the row keeping its place so the reviewer keeps theirs.
 The order holds while the dialog is open: a changed row goes to the head of the list, as the newest verdict, at the next opening, and a row a re-read brings while it is open goes first.
 What the server refuses is said in the dialog, and the card and the Undo line behind stay as they are.
-Closed with the answer still out, the refusal is said on the card's error line instead, naming the application ("jane@example.com was not changed: ..."), beside what the card already says, and the next opening starts clean.
-An address on that line, or in the refusal on the card that names who changed it and beside it what they decided, breaks the same way.
+Nothing closes the dialog while a change is out (T411), and the next opening starts clean.
+Leaving the review or the market with the answer still out takes the card and the dialog away with it, so that answer is said nowhere, and the review reads its list again on coming back.
+An address in the refusal on the card that names who changed it, and beside it what they decided, breaks the same way.
 A change that is written takes the undo on offer away ([undoing a verdict just given](#undoing-a-verdict-just-given)), and lets go a refused card only when it is that card's own application; any other card stays as it is.
 While the dialog is open A, R, S, N and Z do nothing, it closes when the view stops being visible or another market opens, and closing gives focus back to "Show N reviewed" with the same application up.
 A link naming a reviewed application, as a refused assignment's does, opens the dialog with the words set to its address and its row marked, however far down the list it lies; closing clears the words.
@@ -206,6 +209,7 @@ Covered by:
    For someone who may not change a verdict it leaves the rows already approved or rejected too, in a clause of their own: "N applications not selected: another reviewer has K open, and M already have a verdict, which only an Admin or the owner may change.", naming whoever the market's table lets change one (`notSelectedLine` in [`front-end/src/utils/reviewQueue.ts`](../../../front-end/src/utils/reviewQueue.ts)).
    A row another reviewer has open cannot be ticked, nor, by someone who may not change a verdict, one already approved or rejected, whose reason the list says once above its rows; a filter or words that hide a ticked row untick it, as does a fold back past it, and so does a re-read that shows it decided meanwhile.
    A follow-up given to a selection is owned by the reviewer who gave it.
+   Nothing closes the confirmation while it decides, and a second press decides nothing more; a refusal is said in it and gone at the next opening, and another market's list closes it (T411).
    When any ticked row is an open application or a follow-up dealt to another reviewer and not in the reader's share ([a follow-up is in its owner's share too](../rules/the-review-is-dealt-among-chosen-reviewers.md#why)), the confirmation adds "K of them are dealt to other reviewers; their history will say you decided them." (or "1 of them is dealt to another reviewer; its history will say you decided it.").
 5. The answer: "N applications approved; K skipped:" and each skipped one with why ("<email> has it open.", "Already approved.", who changed it, or the change row's sentence for one already decided).
 6. "Export", at the filter row's end, opens the vendor export on the filter, Mine and the words, never on "Assigned to" ([J15](vendors.md#j15-export-the-vendors-to-a-csv)), in every phase the view shows: "Open" as Open, a verdict as its status, "Approved" with Added by hand too, since the All view lists a vendor added by hand as approved, and Mine as the follow-ups the one exporting owns.

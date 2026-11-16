@@ -9,6 +9,7 @@ describes:
   - back-end/app.py#preview_application_import
   - back-end/app.py#import_applications
   - front-end/src/utils/csvFile.ts
+  - front-end/src/utils/importWizard.ts
   - front-end/src/components/ValueFixes.vue
   - front-end/src/components/csvImport/ImportRefusedRows.vue
   - front-end/src/views/CsvImportView.vue#mapsTo
@@ -41,6 +42,7 @@ sources:
   - T274
   - T271
   - T315
+  - T419
 ---
 
 # The CSV import
@@ -129,10 +131,19 @@ Every value still waiting is drawn; those already decided stop at 6 and "Show al
 
 **Nothing is written until the final confirm, so leaving before it asks** (T271).
 The mapping and every value settled live in the view alone, and a link, Back or a reload dropped them with no word.
-`holdsAMapping` is true on Map columns, and on Preview while no import is running, and the view hands it to [`useUnsavedWork`](../conventions/unsaved-work-asks-before-it-is-dropped.md) with its sentence, so a move off the page opens the one leave question and a reload the browser's.
+`holdsAMapping` is true on Map columns, during its values check, and on Preview while no import is running (`asksBeforeLeaving`), and the view hands it to [`useUnsavedWork`](../conventions/unsaved-work-asks-before-it-is-dropped.md) with its sentence, so a move off the page opens the one leave question and a reload the browser's.
 "Cancel import" leaves by `router.push`, so it asks through the same guard; a jump to another market's import is a new path of the same route, so it asks too, before the view's `watch(marketId)` starts that market at Upload.
-Upload holds no file and the done step has written it, so neither asks; nor does an import running (`busy` on Preview), which leaving does not stop.
-The import's own Back stays in the page and never asks, though from Map columns it drops the file (`startOver`).
+Upload holds no file and the done step has written it, so neither asks; nor does an import running (the `importing` step), which leaving does not stop.
+The import's own Back stays in the page and never asks, though from Map columns it drops the file.
+
+**The import's steps carry their data** (T419).
+The page's step was one string beside about fifty refs, with one `busy` flag for four of its six requests, so an answer could land on a step it was not sent from: Back pressed under the values check started over, and the check's late answer opened Preview with no file, whose Import posted an empty one (T277 probe 6).
+[`front-end/src/utils/importWizard.ts`](../../../front-end/src/utils/importWizard.ts) holds the wizard: `upload`, `mapping`, `values` (Map columns with the check out), `preview`, `importing` and `done`, each step holding exactly what it stands on, the file, the inspect's answer, the organizer's mapping and the values check's answer, so Preview cannot exist without the file and the mapping it was computed for, and Import posts those.
+`importStep` is the one function that moves it, a pure reducer whose transition table is the module's and its test's; the view holds the requests and one `shallowRef` that only its `dispatch` writes.
+The wizard's token moves on whenever the step changes kind, and at a new file, a re-read and a reset (the page gone, or another market's import): every request notes the token after the event that sent it, its answer carries it back, and an answer with another token is dropped.
+The amend dialog's form read (`readAmendForm`) is sent only where the values check may be (`mayCheck`: Map columns with nothing out), its two buttons disabled elsewhere, since its refusal is the step's own `refused` and would otherwise end the check or the re-read still out; it notes the token too, and opens the dialog only when it is unchanged.
+An edit is never refused on Map columns, since Vue does not set a native select back when a refused change leaves its bound value unchanged, so a change made while the values check is out withdraws the check instead: the check can be sent again, and the first check's answer is dropped.
+Back is disabled while the values check, a re-read or the import is out (`mayGoBack`), and the amend dialog's form read, which is never sent beside them, is dropped by its token once Back or the check moves the token on; a restored mapping's values are read before Map columns opens, so the step opens with them in place; and a re-read after a form change keeps the organizer's decisions over the fresh mapping (`keepDecisions`), a grid split apart staying split.
 
 **A list of a file's rows stops at 20, and is read whole by asking.**
 The preview's refused rows and the done step's are [`ImportRefusedRows.vue`](../../../front-end/src/components/csvImport/ImportRefusedRows.vue), the preview's replaced and rejected rows the view's own, each a [`ListFrame`](../../design-system.md#the-primitive-layer) with `showAll` and `IMPORT_LIST_FIRST`, so a bad file does not push the confirm 361 rows down.
@@ -173,7 +184,21 @@ A first import's reviewers are chosen on its preview step, whose confirm, when t
 - [Priority and tie-breaks](../../business/rules/priority-and-tie-breaks.md): a row must carry its own `submitted_at` for first come, first served to decide anything.
 - [A re-import upserts on the market and the address](../../adr/0011-re-import-upserts-on-market-and-email.md).
 
-`back-end/tests/test_csv_import.py`, `back-end/tests/test_a_re_imports_back_to_review_lands_with_the_answers.py`, `front-end/src/__tests__/aFileThatIsNotCsv.test.ts`, `front-end/src/__tests__/aResponsesFileTooLargeToSend.test.ts`, `front-end/src/__tests__/theImportAsksBeforeItDropsAMapping.test.ts`, `front-end/e2e/csv-import.spec.ts`, `front-end/e2e/the-import-lines-up.spec.ts` and `front-end/e2e/the-import-asks-before-it-drops-a-mapping.spec.ts` pin it; the synthetic exports it is held to are [the Google Form corpus](../../../back-end/tests/test_data/README.md).
+These pin it, sorted by path:
+
+- `back-end/tests/test_a_re_imports_back_to_review_lands_with_the_answers.py`
+- `back-end/tests/test_csv_import.py`
+- `front-end/e2e/csv-import.spec.ts`
+- `front-end/e2e/the-import-asks-before-it-drops-a-mapping.spec.ts`
+- `front-end/e2e/the-import-lines-up.spec.ts`
+- `front-end/e2e/the-import-never-previews-without-a-file.spec.ts`
+- `front-end/src/__tests__/aFileThatIsNotCsv.test.ts`
+- `front-end/src/__tests__/aResponsesFileTooLargeToSend.test.ts`
+- `front-end/src/__tests__/theImportAsksBeforeItDropsAMapping.test.ts`
+- `front-end/src/__tests__/theImportNeverPreviewsWithoutAFile.test.ts`
+- `front-end/src/__tests__/theImportsStepsCarryTheirData.test.ts`
+
+The synthetic exports it is held to are [the Google Form corpus](../../../back-end/tests/test_data/README.md).
 
 What the organizer does on the import, step by step, is [importing a Google Form's responses](../../business/flows/import.md).
 

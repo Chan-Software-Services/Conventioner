@@ -10,6 +10,8 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { ref } from 'vue';
 
+import UpdateInfoDialog from '@/components/UpdateInfoDialog.vue';
+import VendorDiscordOffer from '@/components/VendorDiscordOffer.vue';
 import VendorDrawer from '@/components/VendorDrawer.vue';
 import {
   ApplicationStatus,
@@ -145,5 +147,25 @@ describe('who may answer a possible Discord match in the drawer', () => {
     expect(drawer.find(testid('vendors-detail-discord-confirm')).exists()).toBe(true);
     expect(drawer.find(testid('vendors-detail-discord-decline')).exists()).toBe(true);
     expect(admin[MarketAction.UpdateAssignmentOrPriceInfo]).toBeNull();
+  });
+});
+
+describe('an update that lands after its dialog has gone (T411)', () => {
+  it.each([
+    ['the Discord confirmation', VendorDiscordOffer],
+    ['Update info', UpdateInfoDialog],
+  ])("from %s, is the screen's, and leaves Update info open", async (_from, dialog) => {
+    const drawer = await openDrawer(market(EDITOR_ANSWERS));
+    await drawer.get(testid('vendors-detail-update-info')).trigger('click');
+    await flushPromises();
+    const reads = api.get.mock.calls.length;
+
+    const saved = { ...APPLICATION, formData: { [QUESTION]: 'fern_studio_42' } };
+    drawer.findComponent(dialog).vm.$emit('refreshed', saved);
+    await flushPromises();
+
+    expect(drawer.emitted('infoUpdated')).toEqual([[saved]]);
+    expect(api.get.mock.calls.length).toBeGreaterThan(reads);
+    expect(document.querySelector(testid('update-info-window'))).not.toBeNull();
   });
 });

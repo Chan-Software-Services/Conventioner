@@ -18,11 +18,17 @@ const fetchMarketApplications = vi.fn();
 const reviewSelection = vi.fn();
 const route = reactive({ query: {} as Record<string, string> });
 const replace = vi.hoisted(() => vi.fn());
+// A verdict re-reads where each vendor sits; held unanswered, so it reaches no server.
+const api = vi.hoisted(() => ({ get: vi.fn(() => new Promise(() => {})) }));
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn(), replace }),
   useRoute: () => route,
 }));
+vi.mock('@/utils/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/api')>();
+  return { ...actual, api };
+});
 vi.mock('@/utils/applicantApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/utils/applicantApi')>();
   return {
