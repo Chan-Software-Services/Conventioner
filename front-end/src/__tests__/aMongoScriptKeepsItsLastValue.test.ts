@@ -6,7 +6,10 @@
  * idle session must wait for its next script without polling, in the very container whose CPU a
  * loaded runner starves.
  */
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { closeSync, constants, mkdtempSync, openSync, rmSync, writeSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { asLoadedFile, readAnswer, sessionLoop } from '../../e2e/helpers/mongoScript';
@@ -105,24 +108,31 @@ function runTheLoop(nonce: string, pauseMs: number) {
     globalThis.load = (file) => nodeVm.runInThisContext(nodeFs.readFileSync(file, 'utf8'));
     process.on('exit', () => nodeFs.writeSync(2, JSON.stringify({ stdinFlags, sleeps })));
   `;
-  // Through `cat`, so the loop's stdin is a pipe, as `docker exec -i` gives mongosh, where Node
-  // would give a child a socket.
-  const child = spawn('sh', [
-    '-c',
-    'cat | "$0" -e "$1"',
-    process.execPath,
-    standIns + sessionLoop(nonce),
-  ]);
+  // A FIFO, so the loop's stdin is a pipe, as `docker exec -i` gives mongosh, where Node would give
+  // a child a socket. Its read end is opened first, without waiting, so the open for writing finds
+  // a reader; the child holds the read end, and sees the end of its stdin when the write end closes.
+  const folder = mkdtempSync(join(tmpdir(), 'session-loop-'));
+  const fifo = join(folder, 'stdin');
+  execFileSync('mkfifo', [fifo]);
+  const readEnd = openSync(fifo, constants.O_RDONLY | constants.O_NONBLOCK);
+  const writeEnd = openSync(fifo, constants.O_WRONLY);
+  const child = spawn(process.execPath, ['-e', standIns + sessionLoop(nonce)], {
+    stdio: [readEnd, 'pipe', 'pipe'],
+  });
+  closeSync(readEnd);
   let printed = '';
   let said = '';
-  child.stdout.on('data', (text: Buffer) => (printed += text.toString()));
-  child.stderr.on('data', (text: Buffer) => (said += text.toString()));
+  child.stdout!.on('data', (text: Buffer) => (printed += text.toString()));
+  child.stderr!.on('data', (text: Buffer) => (said += text.toString()));
   setTimeout(() => {
-    child.stdin.write(`${JSON.stringify({ file: asLoadedFile('40 + 2') })}\n`);
-    child.stdin.end();
+    writeSync(writeEnd, `${JSON.stringify({ file: asLoadedFile('40 + 2') })}\n`);
+    closeSync(writeEnd);
   }, pauseMs);
   return new Promise<{ code: number | null; printed: string; said: string }>((resolve) =>
-    child.on('close', (code) => resolve({ code, printed, said })),
+    child.on('close', (code) => {
+      rmSync(folder, { recursive: true, force: true });
+      resolve({ code, printed, said });
+    }),
   );
 }
 
