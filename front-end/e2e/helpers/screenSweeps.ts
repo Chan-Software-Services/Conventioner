@@ -182,8 +182,8 @@ async function measureTheRest(
   upTo = Infinity,
 ): Promise<void> {
   // The walk measured each screen it passed; a screen it never reached (a failure moves the run to
-  // a new worker, and these maps start empty there) is measured now, and so is the anchor, which
-  // the other group walks.
+  // a new worker, and these maps start empty there) is measured now, and so is the anchor when the
+  // other group walks it.
   await signIn(page, 'organizer', seed);
   for (const s of screens.filter((x) => x.who === 'organizer')) {
     for (const size of s.sizes.filter((x) => x.width <= upTo)) {
