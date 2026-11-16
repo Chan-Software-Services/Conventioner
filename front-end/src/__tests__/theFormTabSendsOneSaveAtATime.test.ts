@@ -191,8 +191,9 @@ describe('the form tab sends one whole-form save at a time', () => {
     const wrapper = await mountOnFormTab();
 
     await tick(wrapper, 'a');
-    // The box stays as ticked while its save is out.
+    // The box stays as ticked while its save is out, and the step says it is saving.
     expect(unaskedShown(wrapper)).toEqual(['a']);
+    expect(wrapper.get('[data-testid="form-builder-saving"]').text()).toBe('Saving...');
     await tick(wrapper, 'b');
     expect(unaskedShown(wrapper)).toEqual(['a', 'b']);
     expect(puts.out()).toBe(1);

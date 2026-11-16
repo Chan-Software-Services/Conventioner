@@ -701,6 +701,15 @@ watch(formLocked, (locked, wasLocked) => {
             >
               {{ formErrorMessage }}
             </span>
+            <!-- Save Form says it on its own steps; a tick's save out says it here, or the row
+                 stood empty under its rule. -->
+            <span
+              v-else-if="formSaveStatus === 'saving' && !savesHere"
+              class="save-status hint"
+              data-testid="form-builder-saving"
+            >
+              Saving...
+            </span>
             <span
               v-else-if="savesHere && formValidationError"
               class="save-status error"
