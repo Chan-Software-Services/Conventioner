@@ -288,3 +288,71 @@ describe('the list', () => {
     expect(rowsShown(wrapper)[0]).toContain('bo@vendor.test');
   });
 });
+
+describe('what a verdict on A offers', () => {
+  it('is withdrawn on the move to B: no Undo of A’s verdict on B, and none sent to B', async () => {
+    route.query = { vendor: 'jo@vendor.test' };
+    stored.m2 = [application('jo', 'm2')];
+    const wrapper = await allView();
+    await wrapper.get('[data-testid="applications-all-reject"]').trigger('click');
+    await flushPromises();
+    // The drawer closed: the undo is offered over the list.
+    route.query = {};
+    await flushPromises();
+    expect(wrapper.find('[data-testid="applications-all-undo"]').exists()).toBe(true);
+
+    await wrapper.setProps({ market: market('m2') });
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="applications-all-undo"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="applications-all-drawer-undo"]').exists()).toBe(false);
+    expect(api.post).not.toHaveBeenCalledWith(
+      expect.stringContaining('/markets/m2/'),
+      expect.anything(),
+    );
+  });
+
+  it('is withdrawn on the move to B: no done line of A’s selection on B', async () => {
+    api.post.mockImplementation(async (url: string, body: { applications: { id: string }[] }) =>
+      url.endsWith('/applications/verdicts')
+        ? {
+            data: { written: body.applications.map((app) => app.id), skipped: [], undoSeconds: 30 },
+          }
+        : { data: {} },
+    );
+    mounted = mount(ApplicationsAll, {
+      props: { market: market('m1') },
+      global: {
+        stubs: {
+          VendorDrawer: {
+            template: '<div><slot name="actions" /></div>',
+            methods: { entryFor: () => null, loadNotes: () => undefined },
+          },
+          AppDialog: {
+            props: ['open'],
+            emits: ['submit'],
+            template:
+              '<div v-if="open"><button data-testid="confirm" @click="$emit(\'submit\')" /></div>',
+          },
+          ExportVendorsDialog: true,
+          FollowUpDialog: true,
+        },
+      },
+    });
+    await flushPromises();
+    const wrapper = mounted;
+    for (const row of wrapper.findAll('[data-testid="applications-all-row"]')) {
+      await row.get('[data-testid="applications-all-tick"]').setValue(true);
+    }
+    await wrapper.get('[data-testid="applications-all-selection-approve"]').trigger('click');
+    await wrapper.get('[data-testid="confirm"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="applications-all-result"]').exists()).toBe(true);
+
+    await wrapper.setProps({ market: market('m2') });
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="applications-all-result"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="applications-all-result-undo"]').exists()).toBe(false);
+  });
+});

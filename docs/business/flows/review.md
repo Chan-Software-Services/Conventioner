@@ -221,7 +221,7 @@ The rows on screen are the pages drawn so far, so a row past the cap is neither 
 The list is read again every 30 seconds while the tab is in view, which moves its "Updated" time too, and not while a verdict is being written; every verdict given from it, and every Refresh whose read of the list lands, re-reads the market, so the rail's count moves.
 A re-read that fails, the half minute's as well as Refresh's, keeps the list and says "Could not refresh. The list is as it was last read." beside Refresh until a read lands.
 The list is one keyed read ([`useServerRead`](../../../front-end/src/utils/useServerRead.ts)): moved to another market, it says "Loading applications…" at once, never the last market's rows, and an answer or a refusal for the market left never lands on this one.
-Each verdict, follow-up, selection's verdict and undo holds the list while it is written, so a re-read asked before it never shows the application as it was, and each ends in one re-read of the list; one answering after a move to another market says and offers nothing there (`aVerdictIsNeverUndoneByAnOlderRead.test.ts`, T421).
+Each verdict, follow-up, selection's verdict and undo holds the list while it is written, so a re-read asked before it never shows the application as it was, and each ends in one re-read of the list; one answering after a move to another market says and offers nothing there, and a move withdraws the Undo and the selection's done line the last market's verdict offered (`aVerdictIsNeverUndoneByAnOlderRead.test.ts`, T421).
 
 ## Dividing the review
 

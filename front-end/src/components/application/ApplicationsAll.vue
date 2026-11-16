@@ -514,9 +514,16 @@ const selection = useDialogSubmit({
   opening: () => (asking.value ? `${marketId.value}:${asking.value}` : null),
   failure: 'Could not decide the selection.',
 });
-// Another market's list: a confirmation asked over the last one's selection is no question here.
-// A reset of what the page shows on a change of the list's key, never a read.
-watch(listRead.key, () => (asking.value = null));
+// Another market's list: a confirmation asked over the last one's selection is no question here,
+// and the last one's done line and the undo it offered are nothing of this one (an undo pressed
+// here would be sent to this market). A reset of what the page shows on a change of the list's
+// key, never a read.
+watch(listRead.key, () => {
+  asking.value = null;
+  result.value = null;
+  undo.withdraw();
+  undoFrom.value = null;
+});
 const plural = (n: number) => `${n} application${n === 1 ? '' : 's'}`;
 const askingTitle = computed(() =>
   asking.value ? `${VERDICT_WORDS[asking.value]?.verb} ${plural(selected.value.size)}?` : '',
