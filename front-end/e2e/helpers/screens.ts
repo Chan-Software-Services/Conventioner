@@ -294,6 +294,16 @@ function layoutAt(
 ) {
   return async (page: Page, seed: TheScreensSeed) => {
     const layout = new LayoutPage(page);
+    // Each stage starts from the editor's own choices: a page that walks several (the layout
+    // sweep's `measureTheRest`) would otherwise keep the shortcuts a stage before showed, over the
+    // table the next one clicks (`layoutViewChoices.ts`).
+    if (page.url().startsWith('http')) {
+      await page.evaluate(() => {
+        for (const key of Object.keys(localStorage)) {
+          if (key.startsWith('conventioner.layout.')) localStorage.removeItem(key);
+        }
+      });
+    }
     if (stage === 'upload') {
       await layout.goto(seed.draft.marketId);
       await expect(layout.uploadDropzone).toBeVisible();
