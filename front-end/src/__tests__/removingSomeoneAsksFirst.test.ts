@@ -418,6 +418,55 @@ describe('Manage organization asks before it removes', () => {
     wrapper.unmount();
   });
 
+  it('holds by the shell while it removes: every close refused, one removal for two presses', async () => {
+    const wrapper = mountDialog();
+    await flushPromises();
+    byTestId('manage-org-remove-member-button')!.click();
+    await flushPromises();
+    let answer!: (value: unknown) => void;
+    api.delete.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+
+    const confirm = () =>
+      byTestId('manage-org-remove-window')!.querySelector('form')!.requestSubmit();
+    confirm();
+    confirm();
+    await flushPromises();
+
+    expect(api.delete).toHaveBeenCalledTimes(1);
+    expect(byTestId('manage-org-remove-cancel-button')!.hasAttribute('disabled')).toBe(true);
+    await tryEveryClose('manage-org-remove');
+    expect(byTestId('manage-org-remove-window')).not.toBeNull();
+
+    served = { ...served, members: [], memberPeople: [] };
+    answer({ data: {} });
+    await flushPromises();
+    expect(byTestId('manage-org-remove-window')).toBeNull();
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('manage-org-members');
+    wrapper.unmount();
+  });
+
+  it('keeps a refusal out of the next Remove it opens', async () => {
+    api.delete.mockRejectedValue(refusing(400, 'Only an owner removes an admin.'));
+    const wrapper = mountDialog();
+    await flushPromises();
+    byTestId('manage-org-remove-member-button')!.click();
+    await flushPromises();
+    byTestId('manage-org-remove-submit-button')!.click();
+    await flushPromises();
+    expect(byTestId('manage-org-remove-error')?.textContent?.trim()).toBe(
+      'Only an owner removes an admin.',
+    );
+
+    byTestId('manage-org-remove-cancel-button')!.click();
+    await flushPromises();
+    byTestId('manage-org-remove-member-button')!.click();
+    await flushPromises();
+
+    expect(byTestId('manage-org-remove-error')).toBeNull();
+    expect(byTestId('manage-org-remove-submit-button')!.hasAttribute('disabled')).toBe(false);
+    wrapper.unmount();
+  });
+
   it('wears the quieter destructive style on each row, and still opens on no Remove', async () => {
     const wrapper = mountDialog();
     await flushPromises();
