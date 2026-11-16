@@ -2287,8 +2287,7 @@ def import_applications(market_id: str) -> Response:
         # import's rules have judged and a first import has taken the market into Review.
         context = MarketsApi.load_market_context(market_id)
         if context is not None and context.market is not None:
-            ReviewTeam.deal_arrivals(
-                context.market, authenticated_email(), Actions.IMPORT_APPLICATIONS)
+            ReviewTeam.deal_arrivals(context.market, importing.asked)
         # After the import's last write: a deletion that began after the import read the market
         # has swept, or will sweep, every row written, or this takes them back as a 404.
         MarketDeletion.kept_only_while_live(MarketsApi.markets_collection, market_id)

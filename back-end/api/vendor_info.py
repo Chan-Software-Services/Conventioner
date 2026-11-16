@@ -133,7 +133,7 @@ def update_vendor_info(
             kept, kept_over, matched, verdicts),
     )
     # One the rules returned to open is an arrival, dealt to the next reviewer (E38/F07/S03).
-    dealt = ReviewTeam.deal_arrivals(market, updater.email, Actions.UPDATE_VENDOR_INFO) \
+    dealt = ReviewTeam.deal_arrivals(market, change.asked) \
         if verdicts.returned else 0
     if verdicts.rejected or verdicts.returned or dealt:
         stored = ApplicationsApi.find_application_by_id(application_id) or stored

@@ -94,9 +94,8 @@ def _held_by(world, deal, until):
 def _arrive(world, name, day):
     """An application arrives open and is dealt, as an applicant's save deals it."""
     world.applications.insert_one(_application(name, day))
-    ReviewTeam.deal_arrivals(
-        MarketsApi.market_from_document(_market(world)), f"{name}@vendor.test", History.APPLY,
-        only=f"app-{name}")
+    ReviewTeam.deal_an_applicants_own(
+        MarketsApi.market_from_document(_market(world)), f"{name}@vendor.test", f"app-{name}")
 
 
 @contextmanager

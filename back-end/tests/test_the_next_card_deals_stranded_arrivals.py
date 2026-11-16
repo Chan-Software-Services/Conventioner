@@ -34,9 +34,8 @@ def _lease(world, *, seconds):
 def _arrive(world, name, day):
     """An application arrives open, as an applicant's save deals it."""
     world.applications.documents.append(_application(name, day))
-    ReviewTeam.deal_arrivals(
-        MarketsApi.market_from_document(world.markets.doc), f"{name}@vendor.test", History.APPLY,
-        only=f"app-{name}")
+    ReviewTeam.deal_an_applicants_own(
+        MarketsApi.market_from_document(world.markets.doc), f"{name}@vendor.test", f"app-{name}")
 
 
 @pytest.fixture

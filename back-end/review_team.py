@@ -31,7 +31,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 import api.applications as ApplicationsApi
 import api.market_actions as Actions
@@ -272,30 +272,39 @@ def _address(person: Optional[Dict[str, Any]]) -> Optional[str]:
     return (person or {}).get("email") or None
 
 
-def deal_arrivals(
-    market: Market, actor: Optional[str], action: Union[Actions.Action, str],
-    only: Optional[str] = None,
-) -> int:
+def deal_arrivals(market: Market, asked: Actions.Asked) -> int:
     """Deal every open application that has no reviewer to the next reviewer in turn, in the
-    order they arrived (E38/F07/S03), and record the deal under ``action`` and ``actor``. ``only``
-    narrows it to one application: an applicant's save deals theirs and no one else's, so the
-    record never names a vendor as dealing another's. Answers how many it dealt.
+    order they arrived (E38/F07/S03), and record the deal under the row and the person of
+    ``asked``, the asking the write that left them open was let through on. Answers how many it
+    dealt; a refused asking raises ``RecordedARefusal`` and marks nothing, as recording through it
+    does.
 
-    Called after every write that can leave an application open and undealt - an applicant's save,
-    an import, and the writes whose automatic rejections can return one to open - once that
-    write's rules have judged, so an application a rule rejected on arrival is not dealt. With no
-    reviewers chosen it reads and writes nothing.
+    Called after every write that can leave an application open and undealt - an import, and the
+    writes whose automatic rejections can return one to open - once that write's rules have
+    judged, so an application a rule rejected on arrival is not dealt; an applicant's own save
+    deals theirs through ``deal_an_applicants_own``. With no reviewers chosen it reads and writes
+    nothing.
 
     Each application is marked as arriving, by this write, and then dealt by whichever deal next
     holds the market: this one, or the one holding it now, once it lets go (``_settle``).
     """
+    if asked.refused is not None:
+        raise Actions.RecordedARefusal(
+            f"Arrivals on market {asked.market_id} were dealt under {asked.row.id!r}, which their "
+            "person was refused.")
     if not team_of(market).reviewers:
         return 0
-    action_id = action if isinstance(action, str) else action.id
-    if only is not None:
-        ApplicationsApi.mark_arriving(only, actor, action_id)
-    else:
-        ApplicationsApi.mark_all_arriving(market.id, actor, action_id)
+    ApplicationsApi.mark_all_arriving(market.id, asked.actor, asked.row.id)
+    return _settle(market, _organization(market))
+
+
+def deal_an_applicants_own(market: Market, applicant: str, application_id: str) -> int:
+    """``deal_arrivals`` for an applicant's own save, which no row asks (their sign-in is the
+    check): it deals their application and no one else's, recorded as theirs under ``APPLY``, so
+    the record never names a vendor as dealing another's. Answers how many it dealt."""
+    if not team_of(market).reviewers:
+        return 0
+    ApplicationsApi.mark_arriving(application_id, applicant, History.APPLY)
     return _settle(market, _organization(market))
 
 

@@ -3281,7 +3281,7 @@ def save_rejection_rules(
                    ), verdicts))
     # What the rules returned to open is an arrival, dealt to the next reviewer (E38/F07/S03).
     if verdicts.returned:
-        ReviewTeam.deal_arrivals(judged, requesting_user, Actions.CHANGE_FORM)
+        ReviewTeam.deal_arrivals(judged, change.asked)
     return {"rejectionRules": prepared, "noAutomaticRejections": no_automatic_rejections}
 
 
@@ -3321,7 +3321,7 @@ def save_application_form(market_id: str, application_form_data: dict, requestin
         kind=History.FORM,
         detail=lambda: _with_counts(form_changes(market, written.form), written.verdicts))
     if written.verdicts.returned:
-        ReviewTeam.deal_arrivals(market, requesting_user, Actions.CHANGE_FORM)
+        ReviewTeam.deal_arrivals(market, change.asked)
     return {"application_form": written.form, "formRevision": written.revision}
 
 

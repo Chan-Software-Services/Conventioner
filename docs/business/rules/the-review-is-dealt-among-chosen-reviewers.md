@@ -6,6 +6,7 @@ describes:
   - back-end/api/markets.py#choose_reviewers
   - back-end/api/markets.py#reviewer_candidate_ids
   - back-end/review_team.py#deal_arrivals
+  - back-end/review_team.py#deal_an_applicants_own
   - front-end/src/components/market/ReviewersPanel.vue
   - front-end/src/components/market/ReviewerPicker.vue
   - front-end/src/utils/personChoice.ts
@@ -45,7 +46,7 @@ Seven open applications among three reviewers deal three, two and two, the extra
 **Each application that arrives open is dealt to the next reviewer in turn**: an applicant's submission, every import ([the CSV import](../../implementation/modules/csv-import.md)), and an application the [automatic rejections](automatic-rejections.md) return to open when the rules are saved, the form is saved or a vendor's info is updated.
 An application a rule rejects as it arrives is decided, so it is not dealt until the rules return it to open.
 The turn carries on from the last deal, so after seven applications among three reviewers the eighth goes to the second reviewer; however a change of reviewers and arrivals interleave, each is dealt in turn and no reviewer is skipped, since every deal holds the market while it reads and writes the turn.
-An applicant's own save deals their application and nobody else's, so the history never names a vendor as dealing another's.
+An applicant's own save deals their application and nobody else's (`deal_an_applicants_own`), so the history never names a vendor as dealing another's; every other write deals all it left open, under the row it was let through on (`deal_arrivals`, given that write's asking).
 **A reviewer's next card deals what a stopped deal left waiting** (T270): an application that arrived while another deal held the market waits for that deal to deal it as it lets go, and a deal the host ended never lets go, so every card One by one asks for, whoever asks, first deals each application so left, and a chosen reviewer on their share alone is handed the last arrivals before a quiet spell.
 Each is recorded as dealt by the write it arrived by, never by the reviewer who asked; while a live deal holds the market, the card is handed out at once and that deal deals them; the All view's list deals nothing, since a read changes nothing.
 The card's answer says how many the deal dealt, and when it dealt any, One by one reads its list again once the card is up, so an application dealt beside the card reads as dealt, and a share holding two counts both.
