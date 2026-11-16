@@ -10,7 +10,7 @@ describes:
   - back-end/api/markets.py#leave_out_every_answer
   - back-end/tests/test_csv_proposal.py
   - front-end/src/utils/exampleColumns.ts
-verified: 2026-11-14
+verified: 2026-11-16
 sources:
   - wayfinding/the-form-started-from-a-csv/03
   - wayfinding/the-form-started-from-a-csv/05
@@ -73,9 +73,15 @@ The proposal asks only the import's row, since it writes nothing.
 **The file is sent twice and stored never; what the start keeps of it is filtered.**
 Confirm reads it again rather than trusting the browser's copy of the columns, and re-runs the rules on it; the organizer's choices for each ledger row are the only thing the request adds, and the browser sends one for every row, so what TypeSafe settled reaches confirm as the organizer's choice, never by asking again.
 
+**An option is ticked by default only when it is neither rare nor names someone** (`_options`, T352).
+Each proposed option carries `rare`, true when fewer than `SHARED_BY` applicants chose it or, for a multi-select, under `OPTION_SHARE` of the answers, and `namesSomeone`, which `_names_someone` decides, the start's own filter for what it keeps, never the rules' `_identifying`; `keep` is true only when neither is.
+An option that names someone is unticked however many chose it, since the start publishes the options left ticked as the question's options on the market's form, for every later applicant to read.
+The options kept by default are listed first, then the rest, each most chosen first, and a question of the organizer's own holding one that names someone is checked "Has an option that names someone" (`CHECK_NAMES_SOMEONE`), beside "Has options few applicants chose" (`CHECK_RARE_OPTIONS`).
+The organizer may still tick it; confirm publishes it then as their choice, while `kept_readings` leaves it out of what the market keeps of the file whatever was ticked.
+
 **The start keeps what the file said of each question of the organizer's own and each left-out column** (`exampleColumns`, E38/F02/S01), so the Questions tab can fill a question's options, or add a question from a left-out column, after the file is gone ([building the application form](../../business/flows/form-tab.md#f2-custom-questions), [`exampleColumns.ts`](../../../front-end/src/utils/exampleColumns.ts)).
 For each ledger row the organizer confirmed as a question of their own or left out, and that had answers, it keeps the headings, the key its question has or would have, the label and help text, the type written or read, whether it became a question, and both readings of its answers as choices (`kept_readings`): whole answers for Select, the options inside them for Multi-Select.
-A reading keeps only the options the Review step keeps by default, those at least 3 applicants chose (`SHARED_BY`, and for a multi-select at least `OPTION_SHARE` of the answers), less any that names someone (`_names_someone`); values only, most chosen first.
+A reading keeps only the options the Review step keeps by default, those at least 3 applicants chose (`SHARED_BY`, and for a multi-select at least `OPTION_SHARE` of the answers) that name nobody (`_names_someone`); values only, most chosen first.
 `_names_someone` finds an address, also spelled out ("info AT example DOT com", "info[at]example[dot]com"); a link with or without its scheme ("linktr.ee/makers"); a handle wherever its `@` sits ("IG:@makers", "@ makers"); every phone number the measured filter finds, and one of 7 digits, unless its digits are only clock times, years and dates of a day, a month and a year ("9.30 - 4.30", "2023 - 2024", "15.11.2025"), or a range of numbers around a dash, two of 3 to 5 digits and 9 at most together, the lower first, each end within one of round ("500-1000", "501-1000", "100-1499"); and a street address (ordinal streets and the usual abbreviations), a unit, suite or apartment number, or a post office box.
 In these readings, what no pattern sees only `SHARED_BY` guards, such as a bare name, a shop's name, a handle without its `@` or with a full-width `＠`, a domain with its dot spelled, bracketed or a comma ("example dot com", "makers[.]ca", "example,com"), an address with no top-level domain ("makers@gmail", "makers@"), a domain in another script, a postal code, a unit by letter or a room ("Unit B", "Room 101"), a street with no street word ("42 Broadway"), a box with no "PO" ("Box 45"), a number spelled in words, a phone number grouped oddly ("555 01 99"), and a round local number that reads as a range ("200-3000"); `test_csv_proposal.py` pins what it catches and what it leaves.
 [ADR 0018](../../adr/0018-what-of-an-applicants-answers-the-market-may-keep.md) records the decision; that is safe to keep for the reason it was safe to read: an answer 3 applicants share names none of them, which is the uniqueness rule [ADR 0007](../../adr/0007-what-may-be-sent-to-hosted-typesafe.md) measured, and the headings are the organizer's own words, which the import mapping already keeps.

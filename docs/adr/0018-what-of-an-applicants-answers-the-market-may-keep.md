@@ -6,7 +6,7 @@ describes:
   - back-end/csv_proposal.py#kept_readings
   - back-end/csv_proposal.py#_names_someone
   - back-end/datatypes.py#ExampleColumn
-verified: 2026-11-04
+verified: 2026-11-16
 sources:
   - E38/F02
   - E38/F02/S01
