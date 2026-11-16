@@ -311,6 +311,60 @@ class TestRuleFourEverySpec:
         assert {row["score"] for row in rows.values()} == {1}
 
 
+class TestAFileNoRulePlaces:
+    """A changed file the map and the imports cannot place may drive any spec: a stylesheet Vite
+    inlines, a back-end module no endpoint ran, a file no rule reads."""
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "front-end/src/assets/base.css",
+            "back-end/utils/new_module.py",
+            "back-end/docker-entrypoint.sh",
+            "front-end/tsconfig.app.json",
+        ],
+    )
+    def test_it_chooses_every_spec_and_scores_nothing(self, repo, path):
+        write(repo, {path: "changed\n"})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"a.spec.ts", "b.spec.ts", "c.spec.ts"}
+        assert {row["score"] for row in rows.values()} == {0}
+        assert rows["a.spec.ts"]["why"] == [f"{path} is not in the map"]
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "docs/x.md",
+            "front-end/README.md",
+            "back-end/tests/test_door.py",
+            "front-end/src/__tests__/Door.test.ts",
+            "front-end/src/utils/door.test.ts",
+            "scripts/tests/test_x.py",
+        ],
+    )
+    def test_docs_and_the_suites_that_are_not_e2e_choose_nothing(self, repo, path):
+        write(repo, {path: "changed\n"})
+        assert chosen(choose(repo)) == {}
+
+    def test_a_file_the_map_places_chooses_only_its_specs(self, repo):
+        # door.py is in the map, so a comment in it chooses nothing, never every spec.
+        write(repo, {"back-end/api/door.py": DOOR_PY.replace("\n\ndef check_in", "\n# the door\n\n\ndef check_in")})
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        assert set(chosen(choose(repo))) == {"a.spec.ts"}
+
+    def test_a_helper_the_change_deletes_is_placed_by_the_base_imports(self, repo):
+        write(repo, {
+            "front-end/e2e/helpers/seat.ts": "export const seat = 1;\n",
+            "front-end/e2e/helpers/seeds.ts": None,
+        })  # fmt: skip
+        assert set(chosen(choose(repo))) == {"a.spec.ts"}
+
+    def test_with_no_map_the_rule_is_not_applied(self, repo, tmp_path):
+        env = TestWhereTheMapComesFrom().fake_gh(tmp_path, "import sys\nsys.exit(1)\n")
+        write(repo, {"front-end/src/assets/base.css": "changed\n"})
+        assert chosen(choose(repo, env=env, fixture_map=False)) == {}
+
+
 class TestTheOrderAndTheCap:
     def test_specs_run_by_score_then_the_shorter_first(self, repo, tmp_path):
         # App.vue gives each spec 1/3; Door.vue gives a.spec 1 more. b and c tie: c is shorter.

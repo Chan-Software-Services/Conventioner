@@ -87,7 +87,7 @@ The diff is from the merge-base with `origin/dev` to the worktree, uncommitted a
 The map is the newest `test-map` artifact of a push to `dev`, which it downloads once a run, beside that run's shard reports, to `.stack-logs/test-map/<run id>/`, removing the ones it downloaded before; offline, it reads the one it has.
 `--map`, `--results`, `--base` and `--head` (with `--list`) name a map, shard reports and commits instead, as for replaying a merged pull request.
 
-A spec is chosen by four rules:
+A spec is chosen by five rules:
 
 1. **The change edits it, or a file it imports**, transitively: a helper two levels down counts, and so does a `front-end/src/` file a spec imports itself.
 2. **Its pages loaded a changed file under `front-end/src/`.**
@@ -96,9 +96,13 @@ A spec is chosen by four rules:
    A change outside every function, such as an import or a constant, or in a function the map does not list, counts for every function of its file, choosing every spec that reaches the file.
    The back end's own tests reach no spec.
 4. **Every spec, for a file the whole suite stands on**: `e2e/fixtures.ts`, `e2e/global-setup.ts`, `playwright.config.ts`, `package-lock.json`, `vite.config.ts` and `index.html` in `front-end/`, a compose file, a Dockerfile, a back-end lock or `scripts/seed_fixture.sh`.
+5. **Every spec, for a file under `front-end/` or `back-end/` that no rule places**: not a spec, not imported by one at the head or the base, in no spec's modules and no endpoint's files.
+   Such a file can drive any spec: a stylesheet `main.css` pulls in by `@import`, which Vite inlines so no page requests it, a back-end module no endpoint ran in the suite, such as `utils/cors.py`, or a file no rule reads, such as `back-end/docker-entrypoint.sh` or `front-end/tsconfig.app.json`.
+   Its reason is "`<path>` is not in the map".
+   The docs, any Markdown, `back-end/tests/`, `front-end/src/__tests__/`, a `*.test.ts` and `scripts/tests/` drive no spec and choose nothing.
 
 The chosen specs are ordered by score: each changed thing a spec reaches adds 1 divided by how many specs reach it, so a module every spec loads (`App.vue`) or an endpoint every spec's setup calls adds almost nothing, while one that three specs reach decides the order.
-A changed spec, and each changed file a spec imports, adds 1; a change counted for a whole back-end file, and rule 4, add nothing, though they still choose.
+A changed spec, and each changed file a spec imports, adds 1; a change counted for a whole back-end file, rule 4 and rule 5 add nothing, though they still choose.
 Specs of one score run the shorter first.
 
 They run in that order until the next would pass the cap, 30 CI minutes (`--minutes`), by the minutes each spec took in the map's run's shard reports, then in `front-end/scripts/e2e-shard-timings.json`, then the median of those.

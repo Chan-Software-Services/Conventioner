@@ -19,7 +19,11 @@ run's shard results (`--map` and `--results` name files instead). A spec is chos
    hunk's lines on either side, so a deleted function by its old name (scores 1 / the specs that
    reach it); a change outside any function, or in one the map does not know, counts for every
    function of its file, choosing the specs that reach the file and scoring nothing;
-4. every spec, when the change edits a file the whole suite stands on (`RUN_EVERY_SPEC`).
+4. every spec, when the change edits a file the whole suite stands on (`RUN_EVERY_SPEC`);
+5. every spec, scoring nothing, when the change edits a file under `front-end/` or `back-end/` no
+   rule places: not a spec, not imported by one at the head or the base, in no spec's modules and
+   no endpoint's files (a stylesheet Vite inlines, a module no endpoint ran, a config no rule
+   reads); docs, Markdown and the suites that are not E2E (`DRIVES_NO_SPEC`) choose nothing.
 
 The chosen specs run by score, the shorter first on a tie, until the next would pass the cap
 (`--minutes`, 30 by default) of CI minutes, by the map's run's shard results, then
@@ -65,6 +69,12 @@ RUN_EVERY_SPEC = re.compile(
     r"|package-lock\.json|vite\.config\.ts|index\.html)"
     r"|docker-compose[^/]*\.ya?ml|(?:.*/)?Dockerfile[^/]*|back-end/requirements[^/]*\.txt"
     r"|scripts/seed_fixture\.sh)$"
+)
+
+# The changed files that drive no spec, wherever the map places them: the docs, Markdown, and the
+# suites the E2E run does not run.
+DRIVES_NO_SPEC = re.compile(
+    r"^(?:docs/|back-end/tests/|front-end/src/__tests__/|scripts/tests/)|\.md$|\.test\.ts$"
 )
 
 # `import ... from '<x>'`, `export ... from '<x>'`, `import '<x>'` and `import('<x>')`.
@@ -242,12 +252,15 @@ def select(
     deleted = {short(p) for p in changes if p.startswith(E2E) and short(p) not in at_head}
 
     # Rule 1: a changed spec, and every spec importing a changed file.
+    imported_at_head: Set[str] = set()
     for spec in sorted(at_head):
         path = E2E + spec
         if path in changes:
             selection.add(spec, 1, "changed spec")
             selection.changed.add(spec)
-        for imported in sorted(import_closure(path, head)):
+        closure = import_closure(path, head)
+        imported_at_head |= closure
+        for imported in sorted(closure):
             if imported in changes:
                 selection.add(spec, 1, f"imports {short(imported)}")
     if test_map is None:
@@ -263,8 +276,27 @@ def select(
         for endpoint in reached["endpoints"]:
             by_endpoint[endpoint].add(spec)
     endpoints: Dict[str, Dict[str, List[str]]] = test_map["endpoints"]
+    in_endpoints = {path for files in endpoints.values() for path in files}
+    # A file is placed when a rule can read it, whatever this change reaches through it: a spec,
+    # a file a spec imports at the head or the base (so a deleted helper too), a module a spec's
+    # pages loaded, a back-end file an endpoint ran, or a file every spec stands on.
+    placed = set(imported_at_head) | set(by_module) | in_endpoints
+    for spec in {short(p) for p in base.files(E2E) if p.endswith(".spec.ts")}:
+        placed.add(E2E + spec)
+        placed |= import_closure(E2E + spec, base)
+    placed |= {E2E + spec for spec in at_head | set(test_map["specs"])}
 
     for path, lines in sorted(changes.items()):
+        # Rule 5: a file no rule places may drive any spec.
+        if (
+            path.startswith(("front-end/", "back-end/"))
+            and not DRIVES_NO_SPEC.search(path)
+            and not RUN_EVERY_SPEC.match(path)
+            and path not in placed
+        ):
+            for spec in sorted(universe):
+                selection.add(spec, 0, f"{path} is not in the map")
+            continue
         # Rule 4: every spec.
         if RUN_EVERY_SPEC.match(path):
             for spec in sorted(universe):
