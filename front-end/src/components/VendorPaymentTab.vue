@@ -118,15 +118,21 @@ const paymentWritten = inject(PAYMENT_WRITTEN, null);
  * A dialog's write, as it is sent. Answered on the account it was made on, the dialog says so
  * itself (`saved`, `refreshed`). Answered once the tab moved to another vendor or market, the
  * dialog is gone with the account it was keyed by: the answer is taken into nothing here, and
- * Payments is told to read its totals again. Answered once the tab itself is gone, the page that
- * showed it is told instead. A refused or failed write tells nothing more than the dialog did.
+ * Payments is told to read its totals again. When the tab has come back to that account meanwhile,
+ * its read on coming back may have been served before the write, so the account is read again.
+ * Answered once the tab itself is gone, the page that showed it is told instead. A refused or
+ * failed write tells nothing more than the dialog did.
  */
 function sending(write: Promise<VendorAccount>): void {
   const sentAt = moves;
+  const sentOn = openOn.value;
   write.then(
     () => {
       if (gone) paymentWritten?.();
-      else if (moves !== sentAt) emit('changed');
+      else if (moves !== sentAt) {
+        if (sentOn && accountName.value === sentOn.join('\n')) void accountRead.reread();
+        emit('changed');
+      }
     },
     () => undefined,
   );

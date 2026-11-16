@@ -313,6 +313,51 @@ describe('a payment written from a dialog', () => {
     expect(written).toHaveBeenCalledTimes(1);
   });
 
+  it("answering after a move away and back to Ana, past her re-read, reads Ana's account again", async () => {
+    const w = await onAnaInAPage();
+    const recorded = await recordOnAna(w);
+    await w.setProps({ email: 'ben@example.com' });
+    await flushPromises();
+
+    // Back on Ana while the payment is still out: her re-read answers first, read before the
+    // payment was stored.
+    const reread = held<unknown>();
+    api.get.mockImplementation(() => reread.promise);
+    await w.setProps({ email: 'ana@example.com' });
+    await nextTick();
+    reread.settle({ data: account(3000) });
+    await flushPromises();
+    expect(w.get('[data-testid="payment-paid"]').text()).toBe('$0.00');
+
+    const afterThePayment = { ...account(3000), paidCents: 3500 };
+    api.get.mockImplementation(() => Promise.resolve({ data: afterThePayment }));
+    recorded.settle({ data: afterThePayment });
+    await flushPromises();
+
+    const anasReads = api.get.mock.calls.filter(
+      ([url]) => url === '/markets/m-a/payments/ana%40example.com',
+    );
+    expect(anasReads).toHaveLength(3);
+    expect(w.get('[data-testid="payment-paid"]').text()).toBe('$35.00');
+    expect(w.emitted('changed')).toHaveLength(1);
+    expect(written).not.toHaveBeenCalled();
+  });
+
+  it('answering after a move to Ben reads nothing more for Ben', async () => {
+    const w = await onAnaInAPage();
+    const recorded = await recordOnAna(w);
+    await w.setProps({ email: 'ben@example.com' });
+    await flushPromises();
+    const reads = api.get.mock.calls.length;
+
+    recorded.settle({ data: { ...account(3000), paidCents: 3500 } });
+    await flushPromises();
+
+    expect(api.get.mock.calls.length).toBe(reads);
+    expect(w.get('[data-testid="payment-owed"]').text()).toBe('$10.00');
+    expect(w.emitted('changed')).toHaveLength(1);
+  });
+
   it('refused after the move tells Payments nothing new', async () => {
     const w = await onAnaInAPage();
     const recorded = await recordOnAna(w);
