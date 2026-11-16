@@ -14,6 +14,24 @@ export type VerdictOutcome =
   | { kind: 'failed'; message: string };
 
 /**
+ * Where a verdict's answer goes: the review's own list, or an adopter that takes it for the market it
+ * was given on, as the All view's keyed read does (T421), so an answer landing after a move to
+ * another market changes nothing there.
+ */
+export type VerdictList = Ref<Application[]> | ((marketId: string, app: Application) => void);
+
+/**
+ * The list with an application the server answered with merged over its row, or added: a single
+ * application's answer carries none of what only the list derives - a table-share notice is read
+ * against every other application (E27/F01/S03). A new list; the one given is left as it was.
+ */
+export function mergeApplication(list: Application[], app: Application): Application[] {
+  const index = list.findIndex((a) => a.id === app.id);
+  if (index === -1) return [...list, app];
+  return list.map((a, i) => (i === index ? { ...a, ...app } : a));
+}
+
+/**
  * Giving verdicts, as both review views do it (E34): the one-by-one card and the All view's drawer.
  *
  * Each verdict is written only on what the reviewer saw (F03/S01) - a refusal comes back as the
@@ -21,10 +39,7 @@ export type VerdictOutcome =
  * market, so the rail's count moves (E21/F02/S02). A follow-up is marked with its owner and, when the
  * reviewer wrote one, what is needed, kept in the vendor's notes (F02/S01).
  */
-export function useVerdictActions(
-  market: Ref<Market | null | undefined>,
-  applications: Ref<Application[]>,
-) {
+export function useVerdictActions(market: Ref<Market | null | undefined>, list: VerdictList) {
   const marketStore = useMarketStore();
 
   /** The reviewer's own address, for "(you)" and for Mine. */
@@ -39,14 +54,17 @@ export function useVerdictActions(
   const writesNotes = computed(() => mayTake(market.value, MarketAction.WriteVendorNotes));
 
   /**
-   * Take an application the server answered with, merged over what the list holds: a single
-   * application's answer carries none of what only the list derives - a table-share notice is
-   * read against every other application (E27/F01/S03).
+   * Take an application the server answered with, merged over what the list holds (as
+   * `mergeApplication` merges it), for the market it was answered on: by default the one open.
    */
-  function adopt(app: Application) {
-    const index = applications.value.findIndex((a) => a.id === app.id);
-    if (index !== -1) applications.value[index] = { ...applications.value[index], ...app };
-    else applications.value.push(app);
+  function adopt(app: Application, marketId: string | undefined = market.value?.id) {
+    if (typeof list === 'function') {
+      if (marketId) list(marketId, app);
+      return;
+    }
+    const index = list.value.findIndex((a) => a.id === app.id);
+    if (index !== -1) list.value[index] = { ...list.value[index], ...app };
+    else list.value.push(app);
   }
 
   async function give(
@@ -63,13 +81,13 @@ export function useVerdictActions(
         status,
         ownerEmail,
       );
-      adopt(written);
+      adopt(written, marketId);
       void marketStore.refresh();
       return { kind: 'written', application: written, undoSeconds };
     } catch (err) {
       const changed = changedSinceSeen(err);
       if (changed) {
-        adopt(changed.application);
+        adopt(changed.application, marketId);
         // The refusal is news too: someone else decided it, which the rail's count must hear of.
         void marketStore.refresh();
         return { kind: 'changed', application: changed.application, message: changed.message };
