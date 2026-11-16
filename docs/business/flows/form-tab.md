@@ -72,7 +72,7 @@ On the Google Form path the essential questions are the answers each import read
    "Ask this" under "Anything else you need from us?" stops asking for a vendor's request the same way.
 5. "Ask this" and "Save Form" save one at a time, the whole form each, every save carrying the revision the one before it answered (T420).
    A tick shows at once, and one made while a save is out, a tick's or Save Form's, waits for its answer and is then sent with every choice ticked since, so two quick ticks are both kept and neither is refused as the market changed by the other.
-   While any save of the form is out, "Save Form" is disabled and reads "Saving...", a step without it says "Saving..." where "Saved" shows, and "Saved" shows for 2 seconds after each save lands.
+   While any save of the form is out, "Save Form" is disabled and reads "Saving...", a step without it says "Saving..." where "Saved" shows, and "Saved" shows for 2 seconds once the last save waiting lands.
    A tick that does not land, refused or failed on the way, puts the boxes back as the server holds them and says why where a save's error shows, "The form was not saved." when the answer gives no sentence, and a waiting tick goes with it, since the tab has no Retry.
    The questions not yet saved stay, unless the market changed or the form locked, which reads the form again as for "Save Form".
    A tick waiting when the form locks is dropped, and one waiting as the organizer leaves the tab is sent on the way out.

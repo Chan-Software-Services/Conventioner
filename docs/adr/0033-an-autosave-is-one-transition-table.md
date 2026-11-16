@@ -28,7 +28,7 @@ Any change could bring either state back, since nothing said which combinations 
 - The hold is a flag beside the phase, not a phase: the Pricing card's hold outlives a failure, a refusal and a dropped edit.
 - The events are the edit, the pause's end, a save's three answers, the person losing the right to write, the hold on and off, a flush, the screen taking the server's copy, and "Plan saved" ending.
 - `transition` answers the next state and whether to start a save, and answers the same state object, with no send, for every pair not in the table, so a pair nobody designed changes nothing.
-- The status, its sentence and `unsaved` are read from the phase (`statusOf`, `messageOf`, `unsavedIn`), never stored beside it, so "Saving…" with nothing out, or a refused line beside an unsaved edit, is no phase at all.
+- The status, its sentence and `unsaved` are read from the phase (`statusOf`, `messageOf`, `unsavedIn`), never stored beside it, so "Saving…" with nothing out, or a refused line beside an edit made after the refusal, is no phase at all.
 - The composable around the table owns only the timers and the save out's promise, and feeds events; who may write is asked where it was, and answers by the `lost` event.
 - A screen saved a click at a time is the same table with no pause (`delay: 0`), and a screen with no Retry takes its copy back on a failure as on a refusal (`takesBackOnFailure`).
 
