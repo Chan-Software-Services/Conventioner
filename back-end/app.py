@@ -1848,7 +1848,8 @@ def get_market_stats(market_id: str) -> Response:
 
 class Reviewer(NamedTuple):
     """The signed-in reviewer a review write is let in for (``_reviewer_on``): who they are, the
-    market's context, and their Give verdicts asking, which records what the write does."""
+    market's context, and their Give verdicts asking, which records the writes that take that
+    row."""
     person: MarketPerson
     context: MarketsApi.MarketContext
     giving: Actions.Asked

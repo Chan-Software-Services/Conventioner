@@ -4,8 +4,9 @@ the history's writer (T105-9, ADR 0032).
 A change on a market records under the row its request asked: through the ``Asked`` its check
 returned (``Actions.Asked.record``), or, for the few records no request asks, through
 ``History.unasked``, which only the functions in ``DOORS`` call, each with its reason. The history's
-writer is private (``History._record``): only the history module and the asking's ``record`` call
-it, and only ``ask`` and ``unasked`` build the two recorders. This file reads every server module
+writer is private (``History._record``): among the server modules, only the history module and
+the asking's ``record`` call it, and only ``api.market_actions`` (through ``ask``) and ``history``
+(through ``unasked``) build the two recorders. This file reads every server module
 and fails one that uses the history's private writers or its collection through the history
 module, opens the unasked door outside ``DOORS``, or builds a recorder by hand, so an entry can
 never name a row passed by hand beside a check made elsewhere.
