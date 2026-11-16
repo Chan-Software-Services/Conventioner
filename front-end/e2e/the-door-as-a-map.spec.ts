@@ -65,6 +65,18 @@ for (const size of PHONE_AND_DESK) {
       await expect(page.getByTestId('attendance-show-all')).toHaveCount(0);
       await expect(door.rows).toHaveCount(0);
       await expect(door.legend).toHaveText(['Here', 'Expected', 'No vendor']);
+      if (!size.phone) {
+        // At a desk the whole map, its zoom and its legend stand in the window as the page opens,
+        // as the layout page's does (T422 ticket 11).
+        const bottom = async (locator: typeof door.legend) => {
+          const box = (await locator.boundingBox())!;
+          return box.y + box.height;
+        };
+        const height = page.viewportSize()!.height;
+        expect(await page.evaluate(() => window.scrollY)).toBe(0);
+        expect(await bottom(page.getByTestId('day-map-zoom'))).toBeLessThanOrEqual(height);
+        expect(await bottom(door.legend.last())).toBeLessThanOrEqual(height);
+      }
 
       // East Hall, the first location, opens: Ember Ceramics here, Kiln & Co expected, the shared
       // table half here and half expected, and Aisle A 4 with nobody.
