@@ -20,6 +20,7 @@ import ManageOrgOverlay from '@/views/ManageOrgOverlay.vue';
 import { type Organization, type OrganizationRoleType } from '@/assets/types/datatypes';
 import { ORGANIZATION_CHANGED_CODE } from '@/utils/api';
 import { organizationPlaceChange, type OrganizationPlace } from '@/utils/organizations';
+import { tryEveryClose } from './support/dialogCloses';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 
@@ -400,6 +401,49 @@ describe('Manage organization changes a place from its row', () => {
     expect(api.put).toHaveBeenCalledTimes(1);
     answer({ data: { message: 'Place changed' } });
     await flushPromises();
+    wrapper.unmount();
+  });
+
+  it('holds by the shell while it changes: every close refused until it lands', async () => {
+    let answer: (value: unknown) => void = () => {};
+    api.put.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    const wrapper = mountDialog();
+    await flushPromises();
+
+    await ask(byTestId('manage-org-make-admin-button')!);
+    byTestId('manage-org-place-change-window')!.querySelector('form')!.requestSubmit();
+    await flushPromises();
+
+    expect(byTestId('manage-org-place-change-cancel-button')!.hasAttribute('disabled')).toBe(true);
+    expect(byTestId('manage-org-place-change-close-button')!.hasAttribute('disabled')).toBe(true);
+    await tryEveryClose('manage-org-place-change');
+    expect(byTestId('manage-org-place-change-window')).not.toBeNull();
+
+    served = org(MEMBER_MADE_AN_ADMIN);
+    answer({ data: { message: 'Place changed' } });
+    await flushPromises();
+    expect(byTestId('manage-org-place-change-window')).toBeNull();
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('manage-org-admins');
+    wrapper.unmount();
+  });
+
+  it('keeps a refusal out of the next change it asks', async () => {
+    api.put.mockRejectedValue(failure(403, { error: 'Only the owner changes a place.' }));
+    const wrapper = mountDialog();
+    await flushPromises();
+
+    await ask(byTestId('manage-org-make-admin-button')!);
+    byTestId('manage-org-place-change-submit-button')!.click();
+    await flushPromises();
+    expect(byTestId('manage-org-place-change-error')?.textContent?.trim()).toBe(
+      'Only the owner changes a place.',
+    );
+    byTestId('manage-org-place-change-cancel-button')!.click();
+    await flushPromises();
+    await ask(byTestId('manage-org-make-member-button')!);
+
+    expect(byTestId('manage-org-place-change-error')).toBeNull();
+    expect(byTestId('manage-org-place-change-submit-button')!.hasAttribute('disabled')).toBe(false);
     wrapper.unmount();
   });
 });

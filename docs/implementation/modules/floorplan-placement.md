@@ -69,6 +69,7 @@ sources:
   - T257
   - T282
   - T315
+  - T411
 ---
 
 # A location's layout
@@ -216,7 +217,8 @@ It draws the working copy through [the drawing](#the-drawing) in `edit` mode and
   The strip's "Fill what is in view" opens the dialog with nothing drawn, that tick on and held, which is the tool's way in for someone who draws nothing.
   A count that is no whole number from 1 to 500, the most one fill places, is said under its field and disables Fill.
   So is an aisle that is no number of centimetres from 0 to 1,000, the placement's own bound ("Type the aisle's width in centimetres, 0 to 1,000."), never read as no aisle.
-  Fill asks the placement (`POST /floorplans/place-tables`, [below](#interface)) for the area with the hall as the room, the no-table zones, every table that stands by its four corners as it is turned, one table type and its count, never more than 500 or than the layout's 1,000 less what it holds; while it runs the button reads "Placing…" and nothing closes the dialog, and a refusal is written into the dialog, which stays open.
+  Fill asks the placement (`POST /floorplans/place-tables`, [below](#interface)) for the area with the hall as the room, the no-table zones, every table that stands by its four corners as it is turned, one table type and its count, never more than 500 or than the layout's 1,000 less what it holds.
+  The editor sends it through the dialog's submission (`useDialogSubmit`, [dialogs](../conventions/dialogs.md), T411), opened on each asking: while it runs the button reads "Placing…" and nothing closes the dialog, a second press asks nothing, and a refusal is said in the dialog, which stays open, until a choice changes; a layout that already holds 1,000 tables is refused there in the same line ("A layout holds at most 1,000 tables."), with nothing asked.
   The answer is added as one change, so one Undo takes it whole: ordinary tables of the section and type chosen, numbered on from the section's own in reading order (`readingOrder`), selected.
   What it did is said on the panel's status line, a card heading the panel, and in the live region: "Placed 30.", "Placed 24 of 30; the rest did not fit.", with `timed_out` "Placed 24 of 30 - Fill an area ran out of time before the rest.", or "No table fits in that area."; where every table asked of the placement stands and a cap stopped it, "Placed 10 of 30. A layout holds at most 1,000 tables." or, of as many as fit, "Placed 500, the most one fill places. Fill again for more."; the line stands until a table is next added or removed, or a corner is next laid.
   Given up in the dialog, a drawn shape is its corners again, to be moved, and a box is gone.
@@ -275,7 +277,7 @@ It draws the working copy through [the drawing](#the-drawing) in `edit` mode and
   "Save these types" ([`LayoutSaveTypesDialog.vue`](../../../front-end/src/components/layout/LayoutSaveTypesDialog.vue)) names a template of the types, filed under the market's organization when the person is in it, else theirs alone; "Use saved types" ([`LayoutSavedTypesDialog.vue`](../../../front-end/src/components/layout/LayoutSavedTypesDialog.vue), wide, its list scrolling in its body) lists the person's own templates and, when they are in the market's organization (`inOrganization`), its templates, each once, the own kept when the organization's cannot be listed, and adds the chosen one's types the market has none of by name, each a new id (`withSavedTypes`); a beta template's height is read as the depth.
   Both ask [the template routes](#who-may-use-the-floorplan-routes), which know the caller from the session; nothing reads the stored user.
   Every change is one write of the whole list, `PUT /markets/:id/table-types` ([below](#who-may-use-the-floorplan-routes)), sent once the layout's own pending change has landed, so the server judges the tables as the page shows them; then the market is read again, and the map draws each table at its type's new size.
-  The dialogs hold through the write and write its refusal into themselves.
+  Each of the three dialogs writes through a submission of its own (`useDialogSubmit`, [dialogs](../conventions/dialogs.md), T411), which the card makes, opened on what that dialog is open on: the dialog holds through the write, and the type dialog and Use saved types through the market's re-read after it, a second press sends nothing, and its refusal is said in the dialog until a field changes, never in another dialog or a later opening; a saved set that adds nothing, or would take the market past 50 types, is refused there with nothing sent.
 - **The No-table zones card** ([`LayoutPanelZones.vue`](../../../front-end/src/components/layout/LayoutPanelZones.vue)): each zone's name in a field ("Name of zone 1"), saved as one step when the field is left or Enter pressed, its size under it, and Remove, the focus going to the next zone's field.
   With none it says how one is drawn.
 - **The panel's cards while editing**, in order: the status line when it has words, the selection, the sections, the table types, the no-table zones, the floorplan and the keys.
