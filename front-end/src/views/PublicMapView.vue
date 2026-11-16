@@ -456,6 +456,20 @@ function openVendor(vendor: ListedVendor) {
   text-underline-offset: 2px;
 }
 
+/* Each link stands alone on its line, so on a phone it is a thumb's target, its name level with
+   its middle, as an answer that is only an address is (`AnswerValue.vue`). */
+@media (width <= 640px) {
+  .public-map__links {
+    align-items: center;
+  }
+
+  .public-map__link {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target-min);
+  }
+}
+
 /* A vendor of the list: their name over their table, the whole row the button. */
 .public-map__vendor {
   display: flex;
