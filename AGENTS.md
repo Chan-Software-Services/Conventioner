@@ -46,15 +46,15 @@ Conventioner runs a vendor market from applications to the door, in production a
   The primary checkout's plain `docker compose up -d` needs `DISABLE_EMAIL=true` ([why](docs/TESTING.md#bypassing-captcha-and-email-in-tests)) and `DISCORD_FAKE=true` ([a fake Discord](docs/TESTING.md#a-fake-discord)).
   Every stack listens on `127.0.0.1` only, so dial it there, never at `localhost` ([why](docs/TESTING.md#testing-gotchas)).
   A worktree's stack and ports come from its [treehouse slot](scripts/README-treehouse.md).
-- **Run E2E**: `./scripts/seed_fixture.sh` then `cd front-end && npm run test:e2e`, on a running stack: the seed never starts one.
+- **The whole E2E suite**: `./scripts/seed_fixture.sh` then `cd front-end && npm run test:e2e`, on a running stack: the seed never starts one.
   The seed empties the stack's database, so it refuses unless it is told the stack: the slot it sits in, the exported `th-compose.sh ports`, or `--primary` in the primary checkout ([why](docs/TESTING.md#quick-start-seed-fixture)).
-- Back end: `cd back-end && python -m pytest tests/ -v`, with both `requirements.txt` and `requirements-dev.txt` installed.
+- The whole back-end suite: `cd back-end && python -m pytest tests/ -v`, with both `requirements.txt` and `requirements-dev.txt` installed.
   Its real-MongoDB suite, which skips there: `scripts/real-mongo-test.sh`, which starts a MongoDB of its own and removes it; never start one for it by hand with `docker run` ([why](docs/TESTING.md#the-real-mongodb-suite)).
-  Front-end unit tests: `cd front-end && npm run test:unit`.
+  The whole front-end unit suite: `cd front-end && npm run test:unit`.
+- **Before delivering, run only the tests your change reaches** ([what a builder runs](docs/TESTING.md#what-a-builder-runs)): the whole suites above are CI's, which runs them on every pushed head, or a person's.
 - **Run `npm run format` in `front-end/` before committing**: CI's `format:check` fails unformatted front-end code and `docs/`.
 - `scripts/nm-test.sh --skip-e2e` runs every suite but Playwright; without the flag it adds Playwright, on an isolated stack of its own.
   The no-mistakes gate runs only its real-data checks (`--real-data-only`), and leaves the suites to CI, where alone Playwright runs before a merge ([CI and the gate](docs/implementation/testing/ci-and-the-gate.md#the-no-mistakes-gate)).
-- **Before delivering, run only the tests your change reaches**, never a whole suite, which CI runs on every pushed head: [what a builder runs](docs/TESTING.md#what-a-builder-runs).
 - [Setting up a machine](docs/STARTUP.md); [every suite and its gotchas](docs/TESTING.md).
 
 ## Knowledge graph
