@@ -461,10 +461,11 @@ function openVendor(vendor: ListedVendor) {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: var(--space-hairline);
   width: 100%;
   min-height: var(--target-min);
-  padding: var(--space-2) var(--space-3);
+  /* The card's own inset, so a vendor's name stands on the card's text above it. */
+  padding: var(--space-2) var(--space-4);
   border: 1px solid transparent;
   border-radius: var(--radius-control);
   background: none;
