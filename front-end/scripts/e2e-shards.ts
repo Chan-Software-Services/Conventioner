@@ -18,7 +18,7 @@
  * ordinary one until the timings are refreshed. Refresh them from a CI run's Playwright reports, the
  * `e2e-results-shard-*` artifacts every shard uploads:
  *
- *   gh run download <run id> -R chanjdaniel/Conventioner -p 'e2e-results-shard-*' -D <dir>
+ *   gh run download <run id> -R Chan-Software-Services/Conventioner -p 'e2e-results-shard-*' -D <dir>
  *   node scripts/e2e-shards.ts refresh <dir>
  *
  * and commit the rewritten `scripts/e2e-shard-timings.json`. The refresh refuses when a spec file the
