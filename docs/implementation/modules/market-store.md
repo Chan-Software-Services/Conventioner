@@ -6,6 +6,7 @@ describes:
   - front-end/src/utils/openMarket.ts
   - front-end/src/utils/lastMarket.ts
   - front-end/src/utils/marketActions.ts
+  - front-end/src/utils/useServerRead.ts
 verified: 2026-11-11
 sources:
   - E38/F04/S02
@@ -24,6 +25,7 @@ sources:
   - T217
   - T263
   - T274
+  - T421
 ---
 
 # The market store
@@ -145,6 +147,48 @@ A new control is one line under its screen, and a new screen is a block beside t
 The frame alone says why a person may change nothing, from `readOnlyReason` ([the market frame](market-frame.md)).
 No screen reads the role-shaped reasons the screens read before: every screen that read one is listed above.
 The read serves none of them, nor the person's `user_role` ([the market's actions](market-actions.md#what-the-screens-read)), and the `Market` type names none of them, nor the role, so the type checker refuses a screen that reads one.
+
+## Reads keyed by market
+
+A screen's own read of the server for the market open (its roster, its list, its figures) goes through one keyed read, [`useServerRead`](../../../front-end/src/utils/useServerRead.ts), so the screen never shows one market's answer, or its refusal, under another market's name.
+It replaced each screen's own data, loading flag and error, read on a watch of the market id and checked by hand.
+
+`useServerRead(key, fetcher, options)` takes a getter of the key (the market id, null with none), the read, and `{ failure, refreshFailure?, missing?, lazy?, landed?, gone? }`.
+It returns `key`, `phase`, `data`, `sentence` and `readAt`, all read-only, and four calls:
+
+- `reread()` asks again (Refresh, Try again, a clock), and resolves when that read lands, fails or is dropped.
+- `settled()` resolves when the newest read out settles, at once with none out.
+- `holdWhile(write)` makes a write on the key open, handing it the key; it answers `ok` with the write's answer or `failed` with its error, and `left` when the key moved before the write answered (or the component is gone), so a write on another market is never said, and it never throws.
+- `adopt(key, change)` takes a write's own answer into the data, for the key it was made on only.
+
+`phase` is one of `empty` (no key, or a lazy read not asked), `loading` (nothing held), `ready`, `refreshing` (a re-read out, the data held), `failed` (the first read failed), `refresh_failed` (a re-read failed; the data kept as last read) and `missing` (only with `options.missing`: gone, or not this person's).
+`sentence` is the failure said, `getApiErrorMessage(error, failure)`, or `refreshFailure` for a re-read when given; it stays while the next re-read from `refresh_failed` is out, so a line saying the data is old does not blink on every clock tick.
+
+The moves are one pure table, `readStep(state, event)`, beside the composable, one test per row in `aReadBelongsToItsKey.test.ts`:
+
+| From                        | Event                         | To                                                                                   |
+| --------------------------- | ----------------------------- | ------------------------------------------------------------------------------------ |
+| any                         | the same key                  | unchanged                                                                            |
+| any                         | another key, or none          | `loading`, or `empty` with none or when lazy; nothing held, every read out overtaken |
+| `empty` with a key, `ready` | ask                           | `loading`, `refreshing`                                                              |
+| `failed`, `missing`         | ask                           | `loading`                                                                            |
+| `refresh_failed`            | ask                           | `refreshing`, the sentence kept                                                      |
+| `loading`, `refreshing`     | ask                           | the same phase; the read out is overtaken                                            |
+| `loading`, `refreshing`     | the newest answer             | `ready`, with the data and its time                                                  |
+| `loading`, `refreshing`     | the newest failure            | `failed`, `refresh_failed` with the data kept, or `missing` with nothing held        |
+| any                         | an answer not the newest      | unchanged                                                                            |
+| a key held                  | a write held                  | while any write is held, no answer lands and no ask is sent; the last release asks   |
+| `ready`, `refresh_failed`   | an adopt of this key          | the data changed, its time kept                                                      |
+| `refreshing`                | an adopt of this key          | the data changed; with no write held, the read out is overtaken and asked again      |
+| any                         | a release or adopt of another | unchanged                                                                            |
+
+The key is watched synchronously, so the state moves in the same tick as the key: nothing reads the last market's data under the new one, not even for a frame.
+A read held while a write is out may have been served before the write, so it never lands; the write's release reads again.
+Adopt the write's answer inside the write, on the key it is handed: the key is still held there, so the read the release asks is the only one, where an adopt after the release overtakes that read and asks once more.
+Once the component is gone nothing out lands, and no `landed` or `gone` is called.
+It has no timer and no retry of its own: a read that needs a timeout gives one to axios, and a clock is the screen's.
+
+Attendance reads its roster through it ([attendance and the door](attendance-and-door.md#sharp-edges)).
 
 ## Sharp edges
 
