@@ -364,23 +364,27 @@ describe('a payment written from a dialog', () => {
     expect(w.emitted('changed')).toHaveLength(1);
   });
 
-  /** Move the drawer to Ben, then back to Ana, whose read on coming back answers with `before`. */
-  async function awayAndBackPastHerReread(w: VueWrapper, before: VendorAccount) {
-    await w.setProps({ email: 'ben@example.com' });
-    await flushPromises();
-    const reread = held<unknown>();
-    api.get.mockImplementation(() => reread.promise);
-    await w.setProps({ email: 'ana@example.com' });
-    await nextTick();
-    reread.settle({ data: before });
-    await flushPromises();
-  }
-
   const anasReads = () =>
     api.get.mock.calls.filter(([url]) => url === '/markets/m-a/payments/ana%40example.com');
 
-  it("a removal answering after a move away and back to Ana, past her re-read, reads Ana's account again", async () => {
+  /** A confirmation pressed on Ana with its DELETE held: the account before and after it, and
+   * the figure it moves. */
+  interface Confirmed {
+    before: VendorAccount;
+    after: VendorAccount;
+    figure: string;
+    shown: { before: string; after: string };
+    settle: (value: unknown) => void;
+  }
+
+  async function removalPressedOnAna(): Promise<Confirmed> {
     const before = { ...account(3000, [ENTRY]), paidCents: 1000 };
+    const after = {
+      ...account(3000, [
+        { ...ENTRY, removedBy: 'admin@example.com', removedAt: '2099-04-02T18:00:00+00:00' },
+      ]),
+      paidCents: 0,
+    };
     const w = await onAnaInAPage(before, { canAdjustPaid: true });
     await w.get('[data-testid="payment-entry-menu-button"]').trigger('click');
     await w.get('[data-testid="payment-entry-menu-remove"]').trigger('click');
@@ -389,27 +393,16 @@ describe('a payment written from a dialog', () => {
     api.delete.mockReturnValueOnce(removed.promise);
     q<HTMLFormElement>('payment-confirm-window')!.querySelector('form')!.requestSubmit();
     await flushPromises();
-
-    await awayAndBackPastHerReread(w, before);
-    expect(w.get('[data-testid="payment-paid"]').text()).toBe('$10.00');
-
-    const afterTheRemoval = {
-      ...account(3000, [
-        { ...ENTRY, removedBy: 'admin@example.com', removedAt: '2099-04-02T18:00:00+00:00' },
-      ]),
-      paidCents: 0,
+    return {
+      before,
+      after,
+      figure: 'payment-paid',
+      shown: { before: '$10.00', after: '$0.00' },
+      settle: removed.settle,
     };
-    api.get.mockImplementation(() => Promise.resolve({ data: afterTheRemoval }));
-    removed.settle({ data: afterTheRemoval });
-    await flushPromises();
+  }
 
-    expect(anasReads()).toHaveLength(3);
-    expect(w.get('[data-testid="payment-paid"]').text()).toBe('$0.00');
-    expect(w.emitted('changed')).toHaveLength(1);
-    expect(written).not.toHaveBeenCalled();
-  });
-
-  it("the calculated price answering after a move away and back to Ana, past her re-read, reads Ana's account again", async () => {
+  async function calculatedPricePressedOnAna(): Promise<Confirmed> {
     const line = {
       date: '2099-05-07',
       tableCode: 'North Wing 1',
@@ -424,6 +417,10 @@ describe('a payment written from a dialog', () => {
       freedBy: null,
     };
     const before = { ...account(2500), lines: [line] };
+    const after = {
+      ...account(3000),
+      lines: [{ ...line, owedCents: 3000, owedSetBy: null, owedSetAt: null }],
+    };
     const w = await onAnaInAPage(before, { canChangeOwed: true });
     await w.get('[data-testid="payment-line-menu-button"]').trigger('click');
     await w.get('[data-testid="payment-line-menu-calculated"]').trigger('click');
@@ -432,23 +429,66 @@ describe('a payment written from a dialog', () => {
     api.delete.mockReturnValueOnce(used.promise);
     q<HTMLFormElement>('payment-confirm-window')!.querySelector('form')!.requestSubmit();
     await flushPromises();
-
-    await awayAndBackPastHerReread(w, before);
-    expect(w.get('[data-testid="payment-owed"]').text()).toBe('$25.00');
-
-    const atTheCalculatedPrice = {
-      ...account(3000),
-      lines: [{ ...line, owedCents: 3000, owedSetBy: null, owedSetAt: null }],
+    return {
+      before,
+      after,
+      figure: 'payment-owed',
+      shown: { before: '$25.00', after: '$30.00' },
+      settle: used.settle,
     };
-    api.get.mockImplementation(() => Promise.resolve({ data: atTheCalculatedPrice }));
-    used.settle({ data: atTheCalculatedPrice });
-    await flushPromises();
+  }
 
-    expect(anasReads()).toHaveLength(3);
-    expect(w.get('[data-testid="payment-owed"]').text()).toBe('$30.00');
-    expect(w.emitted('changed')).toHaveLength(1);
-    expect(written).not.toHaveBeenCalled();
-  });
+  /** Move the drawer to Ben, then back to Ana, her read on coming back held. */
+  async function awayAndBackToAna(w: VueWrapper) {
+    await w.setProps({ email: 'ben@example.com' });
+    await flushPromises();
+    const reread = held<unknown>();
+    api.get.mockImplementation(() => reread.promise);
+    await w.setProps({ email: 'ana@example.com' });
+    await nextTick();
+    return reread;
+  }
+
+  for (const [what, pressed] of [
+    ['a removal', removalPressedOnAna],
+    ['the calculated price', calculatedPricePressedOnAna],
+  ] as const) {
+    it(`${what} answering after a move away and back to Ana, past her re-read, reads Ana's account again`, async () => {
+      const confirmed = await pressed();
+      const w = wrapper!;
+      const reread = await awayAndBackToAna(w);
+      reread.settle({ data: confirmed.before });
+      await flushPromises();
+      expect(w.get(`[data-testid="${confirmed.figure}"]`).text()).toBe(confirmed.shown.before);
+
+      api.get.mockImplementation(() => Promise.resolve({ data: confirmed.after }));
+      confirmed.settle({ data: confirmed.after });
+      await flushPromises();
+
+      expect(anasReads()).toHaveLength(3);
+      expect(w.get(`[data-testid="${confirmed.figure}"]`).text()).toBe(confirmed.shown.after);
+      expect(w.emitted('changed')).toHaveLength(1);
+      expect(written).not.toHaveBeenCalled();
+    });
+
+    it(`${what} answering after a move away and back to Ana while her re-read is out, never shows that older re-read`, async () => {
+      const confirmed = await pressed();
+      const w = wrapper!;
+      const reread = await awayAndBackToAna(w);
+
+      api.get.mockImplementation(() => Promise.resolve({ data: confirmed.after }));
+      confirmed.settle({ data: confirmed.after });
+      await flushPromises();
+      // Her read on coming back, served before the write was stored, answers last.
+      reread.settle({ data: confirmed.before });
+      await flushPromises();
+
+      expect(w.get(`[data-testid="${confirmed.figure}"]`).text()).toBe(confirmed.shown.after);
+      expect(anasReads()).toHaveLength(3);
+      expect(w.emitted('changed')).toHaveLength(1);
+      expect(written).not.toHaveBeenCalled();
+    });
+  }
 
   it('a removal confirmed on Ana, answering once the tab is gone, tells Payments through the page', async () => {
     const w = await onAnaInAPage(account(3000, [ENTRY]), { canAdjustPaid: true });
