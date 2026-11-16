@@ -77,6 +77,14 @@ test.describe('The import never previews without a file', () => {
     await expect.poll(() => held.length).toBe(1);
     await expect(importPage.map).toBeVisible();
     await expect(importPage.backButton).toBeDisabled();
+    // It looks it: the one disabled state, as "Preview import" beside it wears while the check is out.
+    await expect(importPage.previewButton).toBeDisabled();
+    const look = async (button: typeof importPage.backButton) =>
+      await button.evaluate((el) => {
+        const style = getComputedStyle(el);
+        return [style.backgroundColor, style.color, style.borderColor, style.cursor];
+      });
+    expect(await look(importPage.backButton)).toEqual(await look(importPage.previewButton));
 
     await held[0]!.continue();
     await page.unroute(check);

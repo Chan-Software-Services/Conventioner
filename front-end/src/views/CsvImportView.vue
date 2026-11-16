@@ -2047,7 +2047,8 @@ watch(marketId, () => {
   color: white;
 }
 
-.button-primary:disabled {
+.button-primary:disabled,
+.button-secondary:disabled {
   /* The primitives' one disabled state (`.btn:disabled`): readable, never dimmed by opacity. */
   background: var(--mm-beige);
   color: var(--mm-text-muted-on-beige);
