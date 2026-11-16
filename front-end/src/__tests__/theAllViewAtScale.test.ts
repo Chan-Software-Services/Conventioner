@@ -38,7 +38,7 @@ vi.mock('@/utils/api', async (importOriginal) => {
   return { ...actual, api: { get: () => Promise.resolve({ data: {} }) } };
 });
 
-// Each test draws the real list, 50 to 100 rows of it, about half a second's work on an idle core;
+// Each test draws the real list, up to 100 rows of it, about half a second's work on an idle core;
 // the default 5 s failed one on a busy machine (ten workers on two cores). Forty times the work
 // fails only a test that hangs.
 vi.setConfig({ testTimeout: 20_000 });

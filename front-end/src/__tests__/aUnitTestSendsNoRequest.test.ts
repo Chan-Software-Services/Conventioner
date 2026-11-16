@@ -1,7 +1,7 @@
 /**
  * A unit test makes no network call: the setup refuses every request a test sends, and fails the
- * test that sent it. Each test here sends one on purpose and takes it back, so the setup's check
- * after the test has nothing left to fail.
+ * test that sent it. The first two tests here send requests on purpose and take them back, so the
+ * setup's check after each has nothing left to fail; the third checks that nothing is left to take.
  */
 import { describe, expect, it } from 'vitest';
 
