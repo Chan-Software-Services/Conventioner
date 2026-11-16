@@ -3,7 +3,7 @@ layer: business
 kind: flow
 describes:
   - front-end/src/components/market/MarketFormTab.vue
-verified: 2026-11-11
+verified: 2026-11-16
 sources:
   - brain-dump/2026-10-19#5
   - brain-dump/2026-10-19#6
@@ -30,6 +30,7 @@ sources:
   - T274
   - T271
   - T315
+  - T420
 ---
 
 # Building the application form
@@ -69,6 +70,12 @@ On the Google Form path the essential questions are the answers each import read
    It saves at once, stays off through later form edits, and the applicant form then asks no ranking (bugs 29 and 45).
    It saves only that choice, with the questions as last saved: a question still being written stays unsaved and unsent, and is saved only by "Save Form", through its checks (T271).
    "Ask this" under "Anything else you need from us?" stops asking for a vendor's request the same way.
+5. "Ask this" and "Save Form" save one at a time, the whole form each, every save carrying the revision the one before it answered (T420).
+   A tick shows at once, and one made while a save is out, a tick's or Save Form's, waits for its answer and is then sent with every choice ticked since, so two quick ticks are both kept and neither is refused as the market changed by the other.
+   While any save of the form is out, "Save Form" is disabled and reads "Saving...", a step without it says "Saving..." where "Saved" shows, and "Saved" shows for 2 seconds once the last save waiting lands.
+   A tick that does not land, refused or failed on the way, puts the boxes back as the server holds them and says why where a save's error shows, "The form was not saved." when the answer gives no sentence, and a waiting tick goes with it, since the tab has no Retry.
+   The questions not yet saved stay, unless the market changed or the form locked, which reads the form again as for "Save Form".
+   A tick waiting when the form locks is dropped, and one waiting as the organizer leaves the tab is sent on the way out.
 
 What the questions offer follows the plan until the first applicant answers, and is frozen from then on ([essential fields](../../implementation/modules/essential-fields.md)).
 Covered by:
@@ -76,6 +83,8 @@ Covered by:
 - `ask-this-stays-off.spec.ts`
 - `essential-fields.spec.ts`
 - `section-preference.spec.ts`
+- `the-form-tab-sends-one-save-at-a-time.spec.ts`
+- `theFormTabSendsOneSaveAtATime.test.ts`
 - `vendor-notes.spec.ts`
 
 ## F2. Custom questions
@@ -87,7 +96,7 @@ Covered by:
 3. "Save Form"; expect "Saved".
 
 When someone else saved the form since this tab read it, another person or the same organizer in another tab, "Save Form" stores nothing and says [the market write's one sentence](../../implementation/modules/market-write.md#what-it-answers) where "Saved" would show, and the tab shows the questions as they were saved, so neither save replaces the other's questions ([the form's revision](../../implementation/modules/market-write.md#the-forms-revision)).
-"Ask this" is refused the same way.
+"Ask this" is refused the same way, and the form is read again as for "Save Form".
 Covered by:
 
 - `aFormSaveThatMetAChangedMarket.test.ts`
