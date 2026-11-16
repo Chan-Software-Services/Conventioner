@@ -127,8 +127,8 @@ const showingReviewed = ref(false);
 const reviewedWords = ref('');
 /**
  * A change of verdict, for the dialog's one opening (T411): one that was not written is said in the
- * dialog, since the card behind is out of sight; one answered after the dialog was closed under it
- * is said beside the card.
+ * dialog, since the card behind is out of sight; one answered after the dialog was closed under it,
+ * which only an unmount does today, would be said beside the card (`late`, below).
  */
 const reviewedChange = useDialogSubmit({
   opening: () => showingReviewed.value,
@@ -670,9 +670,11 @@ async function changeVerdict(app: Application, status: ApplicationStatus, event:
         }
       },
       {
-        // Closed under it, by leaving the review or another market: said where the reviewer now is,
-        // and which one, since the card up is another application and its "this application" would
-        // read as that one.
+        // Reached only if this monitor outlives the dialog's close, which no route does today:
+        // MarketFrame drops its slot on a market change, and MarketApplicationsTab is drawn only
+        // while its tab is active, so leaving unmounts this and nothing is called. Kept as the
+        // defensive path: said beside the card, and which one, since the card up is another
+        // application and its "this application" would read as that one.
         late: (answer) => {
           if (answer.ok) return;
           const words = refusalSentence(answer.error) ?? 'The verdict was not saved.';

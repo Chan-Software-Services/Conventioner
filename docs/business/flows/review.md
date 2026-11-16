@@ -173,8 +173,9 @@ From Assignment on the list only reads.
 A verdict changed in the dialog leaves it open, with the rows shown as they were and focus on that row's new button, the row keeping its place so the reviewer keeps theirs.
 The order holds while the dialog is open: a changed row goes to the head of the list, as the newest verdict, at the next opening, and a row a re-read brings while it is open goes first.
 What the server refuses is said in the dialog, and the card and the Undo line behind stay as they are.
-Nothing closes the dialog while a change is out (T411); left with the answer still out, by leaving the review or another market, the refusal is said on the card's error line instead, naming the application ("jane@example.com was not changed: ..."), and the next opening starts clean.
-An address on that line, or in the refusal on the card that names who changed it and beside it what they decided, breaks the same way.
+Nothing closes the dialog while a change is out (T411), and the next opening starts clean.
+Leaving the review or the market with the answer still out takes the card and the dialog away with it, so that answer is said nowhere, and the review reads its list again on coming back.
+An address in the refusal on the card that names who changed it, and beside it what they decided, breaks the same way.
 A change that is written takes the undo on offer away ([undoing a verdict just given](#undoing-a-verdict-just-given)), and lets go a refused card only when it is that card's own application; any other card stays as it is.
 While the dialog is open A, R, S, N and Z do nothing, it closes when the view stops being visible or another market opens, and closing gives focus back to "Show N reviewed" with the same application up.
 A link naming a reviewed application, as a refused assignment's does, opens the dialog with the words set to its address and its row marked, however far down the list it lies; closing clears the words.
