@@ -3,6 +3,9 @@
   "include": ["e2e/**/*.ts"],
   "compilerOptions": {
     "noEmit": true,
+    // Node runs the Mongo session's thread (e2e/helpers/mongoSession.ts) by stripping its types,
+    // which resolves only an import that names its file whole, `.ts` included.
+    "allowImportingTsExtensions": true,
     "incremental": true,
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.e2e.tsbuildinfo",
     "module": "ESNext",
