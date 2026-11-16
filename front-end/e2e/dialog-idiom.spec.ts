@@ -1,3 +1,4 @@
+import type { Locator } from '@playwright/test';
 import {
   test,
   expect,
@@ -7,11 +8,18 @@ import {
   BACKEND_URL,
   APP_API,
 } from './fixtures';
-import { ensureTestOrg, ensureTestOrgs, loginViaApi, seedLayout } from './helpers/seeds';
+import {
+  ensureTestOrg,
+  ensureTestOrgs,
+  loginViaApi,
+  seedLayout,
+  seedPublishedMarketWithAssignments,
+} from './helpers/seeds';
 import { LayoutPage } from './pages/LayoutPage';
 import { OrganizationsPage } from './pages/OrganizationsPage';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { MarketsPage } from './pages/MarketsPage';
+import { VendorsPage } from './pages/VendorsPage';
 
 /**
  * What a dialog is in this product (E20/F01/S01), proved on the create-market dialog.
@@ -724,4 +732,228 @@ test.describe("A layout's table type dialogs are the dialog idiom", () => {
     await expect(layout.savedTypesDialog).toBeHidden();
     await expect(layout.typesUseSaved).toBeFocused();
   });
+});
+
+/**
+ * Every dialog's close stands on its title's line (T422, the QC walk's item 11): its middle on the
+ * middle of the title's first line, and its glyph as far in from the window's right edge as the
+ * title is from its left. The walk found the Layout settings dialog's × 16.5px above the title's
+ * line and its glyph 20px from the right against the title's 24px from the left, and every dialog
+ * on `AppDialog` with it.
+ *
+ * What is measured: the title's first line box (the heading's content top plus half its line
+ * height), the close's box, and the glyph's own rectangle, a `Range` over the close's text, so the
+ * button's padding and its 44px phone target are not taken for the glyph.
+ */
+test.describe("Every dialog's close stands on its title's line", () => {
+  type Head = {
+    /** The middle of the title's first line, and of the close's box, from the window's top. */
+    titleMiddle: number;
+    closeMiddle: number;
+    /** The title's letters from the window's left edge, and the glyph's from its right edge. */
+    titleInset: number;
+    glyphInset: number;
+    /** How many lines the title takes, its widest line's right edge, and the close's left edge. */
+    titleLines: number;
+    titleRight: number;
+    closeLeft: number;
+  };
+
+  /** Measures `frame`'s head: `title` is its heading and `close` its close, found inside it. */
+  async function measureHead(frame: Locator, title: string, close: string): Promise<Head> {
+    return frame.evaluate(
+      (win, [titleSelector, closeSelector]) => {
+        const box = win.getBoundingClientRect();
+        const heading = win.querySelector<HTMLElement>(titleSelector!)!;
+        const button = win.querySelector<HTMLElement>(closeSelector!)!;
+        const style = getComputedStyle(heading);
+        const top = heading.getBoundingClientRect().top + parseFloat(style.paddingTop);
+        const words = document.createRange();
+        words.selectNodeContents(heading);
+        const lines = [...words.getClientRects()].filter((rect) => rect.width > 0);
+        const glyph = document.createRange();
+        glyph.selectNodeContents(button);
+        const drawn = [...glyph.getClientRects()].filter((rect) => rect.width > 0);
+        const closeBox = button.getBoundingClientRect();
+        return {
+          titleMiddle: top + parseFloat(style.lineHeight) / 2 - box.top,
+          closeMiddle: closeBox.top + closeBox.height / 2 - box.top,
+          titleInset: Math.min(...lines.map((rect) => rect.left)) - box.left,
+          glyphInset: box.right - Math.max(...drawn.map((rect) => rect.right)),
+          titleLines: new Set(lines.map((rect) => Math.round(rect.top))).size,
+          titleRight: Math.max(...lines.map((rect) => rect.right)),
+          closeLeft: closeBox.left,
+        };
+      },
+      [title, close],
+    );
+  }
+
+  /** The close's middle within half a pixel of the title's first line's. */
+  function expectTheMiddles(head: Head, what: string) {
+    expect(
+      Math.abs(head.closeMiddle - head.titleMiddle),
+      `${what}: the close's middle (${head.closeMiddle}) on the title's first line's (${head.titleMiddle})`,
+    ).toBeLessThanOrEqual(0.5);
+  }
+
+  /** The middles, and the glyph's inset within half a pixel of the title's. */
+  function expectOnTheLine(head: Head, what: string) {
+    expectTheMiddles(head, what);
+    expect(
+      Math.abs(head.glyphInset - head.titleInset),
+      `${what}: the glyph ${head.glyphInset}px in from the right, the title ${head.titleInset}px from the left`,
+    ).toBeLessThanOrEqual(0.5);
+  }
+
+  /**
+   * No title of the app is this long, so its words are swapped in the browser: what is measured is
+   * how a title that wraps is laid out beside the close, on its first line and clear of it.
+   */
+  async function expectAWrappedTitleClear(
+    frame: Locator,
+    title: string,
+    close: string,
+    what: string,
+  ) {
+    await frame
+      .locator(title)
+      .evaluate(
+        (heading) =>
+          (heading.textContent =
+            'A title long enough to wrap, and to wrap again on a phone, beside the close'),
+      );
+    const wrapped = await measureHead(frame, title, close);
+    expect(wrapped.titleLines, `${what}: the long title wraps`).toBeGreaterThan(1);
+    expectTheMiddles(wrapped, `${what}, wrapped`);
+    expect(
+      wrapped.titleRight,
+      `${what}: the title's lines end (${wrapped.titleRight}) short of the close (${wrapped.closeLeft})`,
+    ).toBeLessThan(wrapped.closeLeft);
+  }
+
+  const DIALOG_TITLE = '.dialog-title';
+  const DIALOG_CLOSE = '[data-dialog-close]';
+
+  test('in a dialog that scrolls whole and one that scrolls its body, at a desk', async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const seeded = await seedLayout(request, BACKEND_URL, TEST_USER.email, TEST_USER.password, {
+      metresAcross: 30,
+    });
+    const layout = new LayoutPage(page);
+    await layout.goto(seeded.marketId, seeded.upper.id);
+    await expect(layout.typesCard).toBeVisible();
+
+    // Add a table type: the title and the body scroll together.
+    await layout.typesAdd.click();
+    await expect(layout.typeDialog).toBeVisible();
+    expect(await layout.typeDialog.getByTestId('layout-type-scroll').count()).toBe(1);
+    expectOnTheLine(
+      await measureHead(layout.typeDialog, DIALOG_TITLE, DIALOG_CLOSE),
+      'Add a table type',
+    );
+    await expectAWrappedTitleClear(
+      layout.typeDialog,
+      DIALOG_TITLE,
+      DIALOG_CLOSE,
+      'Add a table type',
+    );
+    await page.keyboard.press('Escape');
+    await expect(layout.typeDialog).toBeHidden();
+
+    // Use saved types: only the body scrolls, under a pinned title.
+    await layout.typesUseSaved.click();
+    await expect(layout.savedTypesDialog).toBeVisible();
+    expect(await layout.savedTypesDialog.getByTestId('layout-saved-types-body').count()).toBe(1);
+    expectOnTheLine(
+      await measureHead(layout.savedTypesDialog, DIALOG_TITLE, DIALOG_CLOSE),
+      'Use saved types',
+    );
+    await expectAWrappedTitleClear(
+      layout.savedTypesDialog,
+      DIALOG_TITLE,
+      DIALOG_CLOSE,
+      'Use saved types',
+    );
+  });
+
+  /*
+   * On a phone `--target-min` makes the close 44px wide and its glyph stands centred in it, a few
+   * px further in than the title's inset, as the prototype Daniel approved has it; what holds there
+   * is the middle and the clearance.
+   */
+  test('on a phone, where the close is 44px, in either scroll, with a title that wraps', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    // Create market: the title and the body scroll together.
+    await page.goto('/markets');
+    await page.getByTestId('markets-create-button').click();
+    const create = page.getByTestId('new-market-window');
+    await expect(create).toBeVisible();
+    expect(await create.getByTestId('new-market-scroll').count()).toBe(1);
+    const short = await measureHead(create, DIALOG_TITLE, DIALOG_CLOSE);
+    expect(short.titleLines, 'Create market: its title takes one line').toBe(1);
+    expectTheMiddles(short, 'Create market');
+    await expectAWrappedTitleClear(create, DIALOG_TITLE, DIALOG_CLOSE, 'Create market');
+    await page.keyboard.press('Escape');
+    await expect(create).toBeHidden();
+
+    // Manage organization: only the body scrolls.
+    const orgs = new OrganizationsPage(page);
+    await orgs.goto();
+    await orgs.waitForLoaded();
+    await page.getByTestId('organizations-manage-button').first().click();
+    await orgs.waitForManageOverlay();
+    expect(await orgs.manageWindow.getByTestId('manage-org-body').count()).toBe(1);
+    expectTheMiddles(
+      await measureHead(orgs.manageWindow, DIALOG_TITLE, DIALOG_CLOSE),
+      'Manage organization',
+    );
+    await expectAWrappedTitleClear(
+      orgs.manageWindow,
+      DIALOG_TITLE,
+      DIALOG_CLOSE,
+      'Manage organization',
+    );
+  });
+
+  /*
+   * The vendor drawer is not on `AppDialog`, and holds the same rule: its close on the name's first
+   * line, under the "Vendor details" eyebrow, and its glyph as far in as the name, at a desk.
+   */
+  for (const size of [
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    test(`the vendor drawer's close stands on its title's line too, at ${size.width}`, async ({
+      authenticatedPage: page,
+      request,
+    }) => {
+      await page.setViewportSize(size);
+      const seed = await seedPublishedMarketWithAssignments(
+        request,
+        BACKEND_URL,
+        TEST_USER.email,
+        TEST_USER.password,
+      );
+      const vendors = new VendorsPage(page);
+      await vendors.goto(seed.marketId);
+      const row = vendors.vendorListItems.first();
+      await expect(row).toBeVisible({ timeout: 10000 });
+      await row.click();
+      await expect(page.getByTestId('vendors-detail-close')).toBeVisible();
+      const panel = page.getByTestId('vendors-detail-panel');
+      const title = '#vendor-drawer-title';
+      const close = '[data-testid="vendors-detail-close"]';
+      const head = await measureHead(panel, title, close);
+      if (size.width > 640) expectOnTheLine(head, 'The vendor drawer');
+      else expectTheMiddles(head, 'The vendor drawer');
+      await expectAWrappedTitleClear(panel, title, close, 'The vendor drawer');
+    });
+  }
 });

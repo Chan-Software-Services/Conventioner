@@ -8,6 +8,8 @@
  * corners, a phone's height) is the library's E2E, `the-component-library-dialog.spec.ts`.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join, resolve as resolvePath } from 'node:path';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { defineComponent, h, ref, type PropType } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
@@ -723,5 +725,55 @@ describe('a dialog that opens on a picker of several choices (T200)', () => {
 
     expect(document.activeElement).toBe(byTestId('reviewer-picker-input'));
     wrapper.unmount();
+  });
+});
+
+/**
+ * The close stands on the title's first line (T422, D18), by an offset made of tokens: the window's
+ * inset and half the title's line, `--text-lg` times `--leading`, so a change of either moves the
+ * close with the line. The QC walk's 16px was half that line written by hand. Where the browser
+ * lays it out, within half a pixel, is `dialog-idiom.spec.ts`'s.
+ */
+describe("the close's place is the title's line, in tokens (T422)", () => {
+  const SRC = resolvePath(process.cwd(), 'src');
+  const read = (path: string) => readFileSync(join(SRC, path), 'utf8');
+
+  /** The declarations of the first rule whose selector is exactly `selector`. */
+  function rule(css: string, selector: string): Record<string, string> {
+    const at = css.search(new RegExp(`(^|\\n)${selector.replace(/[.#]/g, '\\$&')} \\{`));
+    expect(at, `${selector} has a rule`).toBeGreaterThanOrEqual(0);
+    const body = css.slice(css.indexOf('{', at) + 1, css.indexOf('}', at));
+    return Object.fromEntries(
+      body
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .split(';')
+        .map((declaration) => declaration.split(':').map((part) => part.trim()))
+        .filter(([property, value]) => property && value)
+        .map(([property, ...value]) => [property!, value.join(':')]),
+    );
+  }
+
+  it('the body and the title take their line height from `--leading`', () => {
+    expect(rule(read('assets/base.css'), 'body')['line-height']).toBe('var(--leading)');
+    expect(rule(read('components/AppDialog.vue'), '.dialog-title')['line-height']).toBe(
+      'var(--leading)',
+    );
+  });
+
+  it("the close's top is the window's inset and half the title's line, with no pixel written", () => {
+    const close = rule(read('components/AppDialog.vue'), '.dialog-close');
+    expect(close.top).toBe('calc(var(--space-6) + var(--text-lg) * var(--leading) / 2)');
+    expect(close.transform).toBe('translateY(-50%)');
+  });
+
+  it("the vendor drawer's close is placed on its name's line by the same tokens", () => {
+    const drawer = read('components/VendorDrawer.vue');
+    expect(rule(drawer, '.detail-eyebrow')['line-height']).toBe('var(--leading)');
+    expect(rule(drawer, '.detail-title')['line-height']).toBe('var(--leading)');
+    const close = rule(drawer, '.detail-close');
+    expect(close.top).toBe(
+      'calc(var(--text-xs) * var(--leading) + var(--space-1) + var(--text-lg) * var(--leading) / 2)',
+    );
+    expect(close.transform).toBe('translateY(-50%)');
   });
 });
