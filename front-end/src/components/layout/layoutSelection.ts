@@ -1,7 +1,7 @@
 /**
- * The selected tables of a layout as one thing (T257): the box they stand in, whose corners hold
- * the turn knobs and about whose centre a turn of several goes, so a knob, the R key and "Turn 90°"
- * all turn the same way.
+ * The selected tables of a layout as one thing (T257): the box they stand in, on whose corners the
+ * knobs of several stand and about whose centre a turn of several goes, so a knob, the R key and
+ * "Turn 90°" all turn the same way.
  */
 import type { FloorplanObject, TableTypeObject } from '@/assets/types/datatypes';
 import { STANDARD_TABLE, tableBounds, unionOf, type Bounds, type PointMm } from './layoutGeometry';

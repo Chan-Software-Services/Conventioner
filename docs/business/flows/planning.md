@@ -156,7 +156,7 @@ Opening one saves the plan's pending edits first, then goes to `/markets/<id>/la
    - "Remove" takes the selection away with no question, since Undo brings it back; in Draft the section's later tables close the gap, so removing "Gold row 2" of 4 leaves 1 to 3.
    - Undo and Redo, by their buttons or Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y, take back and bring back each change, across saves.
    - The wheel or two fingers move the view, Ctrl and the wheel or a pinch zoom it, and Space and a drag pan.
-   - By keyboard the map is one Tab stop: the arrow keys move between its tables, Enter or Space picks one up, the arrow keys move it 10 cm (1 m with Shift), R turns it, Enter drops it and Escape puts it back; Add table, Row of tables and Fill an area each have a form for the keys, and the "Keyboard shortcuts" panel, shown by the toolbar's keyboard button or `?`, lists them beside the page.
+   - By keyboard the map is one Tab stop: the arrow keys move between its tables, Enter or Space picks one up, the arrow keys move it 10 cm (1 m with Shift), R turns it, Enter drops it and Escape puts it back; Add table, Row of tables and Fill an area each have a form for the keys, and the "Keyboard shortcuts" panel, shown by the toolbar's keyboard button or `?`, lists them, beside the page where the window has room, else over the map's corner.
 4. **Sections on the layout:** the panel lists "Sections in Upper Hall", each with its colour, tier and count.
    - A section's swatch opens eight colours to choose from, and its name on the map is dragged to where it should stand.
    - Its row's menu has "Renumber by position (rows across the page)", which numbers its tables in rows from the top, each from the left.

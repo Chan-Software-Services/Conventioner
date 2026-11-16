@@ -234,8 +234,8 @@ class EveryTierHasTablesGuard:
 
     A market with no section of tables whose layouts hold tables is told its tables need a section
     (T422): the fix is the layout of the plan's first section on a layout holding tables, else
-    Section Setup, where their location's sections are added; only a market with no table anywhere
-    is told it has none.
+    Section Setup, where their location's sections are added; only a market with no table on a
+    layout started in Draft is told it has none.
 
     A layout that follows the plan is no laid-out location here: it takes its sections'
     counts from Section Setup, so on a market back in Draft its tiers are sent there (T422, D46).

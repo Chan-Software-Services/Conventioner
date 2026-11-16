@@ -11,7 +11,7 @@ describes:
   - back-end/datatypes.py#AnswerUpdate
   - back-end/migrations/create_applications_collection.py
   - back-end/migrations/migrate_submitted_at_to_iso.py
-verified: 2026-11-10
+verified: 2026-11-17
 sources:
   - wayfinding/v0-1-0/map
   - wayfinding/real-market-readiness/01
