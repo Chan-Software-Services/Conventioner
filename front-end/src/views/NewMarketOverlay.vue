@@ -15,6 +15,9 @@
  * a radius with no border and no background under a comment saying "a field is a border" that was
  * never written), Enter did nothing on the first screen of the product, and the error was placed at
  * `top: 35px; left: 50%` - a coordinate measured against one arrangement of the dialog.
+ *
+ * Its write belongs to its opening (T411): the shell holds it while it creates, so a second press
+ * makes no second market, and each opening starts with no refusal of the last.
  */
 import ElementOrgSelect from '@/components/elements/ElementOrgSelect.vue';
 import { marketPath } from '@/utils/market';
@@ -22,7 +25,8 @@ import AppDialog from '@/components/AppDialog.vue';
 import { computed, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { IntakeMode, type Market } from '@/assets/types/datatypes.ts';
-import { api, getApiErrorMessage } from '@/utils/api';
+import { api } from '@/utils/api';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 
 /** The create body: the fields this dialog asks for, of those the server reads. */
 type NewMarket = Pick<Market, 'name' | 'creationDate' | 'organizationId' | 'intakeMode'>;
@@ -38,8 +42,18 @@ const emit = defineEmits<{
 const router = useRouter();
 const marketName = ref('');
 const selectedOrgId = ref('');
-const errorMessage = ref('');
-const creating = ref(false);
+/**
+ * Every refusal is about the name, so it is said beneath the name, in the server's own words. This
+ * used to rewrite anything mentioning "market already" into "A market with this name already
+ * exists" - which is false for the refusal that matters most: "Cafe Market" beside "Café Market" is
+ * a different name on the SAME public address, and the server says exactly that (E21/F03/S03).
+ */
+const submission = useDialogSubmit({
+  opening: () => props.newOpen,
+  failure: 'The market was not created.',
+  says: 'self',
+});
+const { sentence } = submission;
 
 /**
  * How vendors will apply, asked with nothing chosen (E31/F03/S01).
@@ -63,49 +77,37 @@ const PATHS: Array<{ value: IntakeMode; label: string; help: string }> = [
   },
 ];
 
-watch(selectedOrgId, () => {
-  errorMessage.value = '';
-});
+// Choosing another organization is a change too: the refusal it answered goes.
+watch(selectedOrgId, () => submission.edit());
 
 /**
  * Enter is inert while this is true, because the confirm button is `type="submit"` and disabled -
- * no key handler is involved. The same guard the button wears is the one Enter meets.
+ * no key handler is involved. The same guard the button wears is the one Enter meets, and the
+ * shell adds its own while the market is being created.
  */
 const cannotCreate = computed(
-  () => creating.value || !selectedOrgId.value || !marketName.value.trim() || !path.value,
+  () => !selectedOrgId.value || !marketName.value.trim() || !path.value,
 );
 
 const handleSubmit = async () => {
   if (cannotCreate.value) return;
-  errorMessage.value = '';
-  creating.value = true;
-
-  try {
-    // What a person chooses here, and nothing else: the server starts every other field of a new
-    // market itself, and drops any key outside its `MARKET_CREATE_FIELDS`. No roles: whoever
-    // creates a market owns it, and the server says so (bug 46).
-    const newMarket: NewMarket = {
-      name: marketName.value,
-      creationDate: new Date().toISOString(),
-      organizationId: selectedOrgId.value,
-      intakeMode: path.value as IntakeMode,
-    };
-
-    const createResponse = await api.post('/markets', newMarket);
-    const marketId = createResponse.data.market_id;
-
+  // What a person chooses here, and nothing else: the server starts every other field of a new
+  // market itself, and drops any key outside its `MARKET_CREATE_FIELDS`. No roles: whoever
+  // creates a market owns it, and the server says so (bug 46).
+  const newMarket: NewMarket = {
+    name: marketName.value,
+    creationDate: new Date().toISOString(),
+    organizationId: selectedOrgId.value,
+    intakeMode: path.value as IntakeMode,
+  };
+  await submission.submit(() => api.post('/markets', newMarket), {
     // A new market is a draft, and a draft is planned first - or, on a Google Form, read from its
     // responses first.
-    router.push(marketPath(marketId, path.value === IntakeMode.Csv ? 'start-from-csv' : 'setup'));
-  } catch (error) {
-    // A refusal in the server's own words. This used to rewrite anything mentioning "market
-    // already" into "A market with this name already exists" - which is false for the refusal that
-    // matters most: "Cafe Market" beside "Café Market" is a different name on the SAME public
-    // address, and the server says exactly that (E21/F03/S03).
-    errorMessage.value = getApiErrorMessage(error, 'The market was not created.');
-  } finally {
-    creating.value = false;
-  }
+    done: (created) => {
+      const page = newMarket.intakeMode === IntakeMode.Csv ? 'start-from-csv' : 'setup';
+      void router.push(marketPath(created.data.market_id, page));
+    },
+  });
 };
 </script>
 
@@ -116,6 +118,7 @@ const handleSubmit = async () => {
     testid="new-market"
     confirm-label="Create market"
     :confirm-disabled="cannotCreate"
+    :submission="submission"
     @close="emit('newClose')"
     @submit="handleSubmit"
   >
@@ -136,15 +139,14 @@ const handleSubmit = async () => {
         maxlength="100"
         placeholder="Winter Market 2026"
         data-testid="new-market-name-input"
-        @input="errorMessage = ''"
       />
       <!--
         In flow, beneath the control it is about. Every error this dialog can raise is about the
         name: submission is gated on an organization being picked, so "organization is required"
         is unreachable, and what is left is the server refusing the name.
       -->
-      <p v-if="errorMessage" class="error-message" data-testid="new-market-error">
-        {{ errorMessage }}
+      <p v-if="sentence" class="error-message" data-testid="new-market-error">
+        {{ sentence }}
       </p>
     </div>
 

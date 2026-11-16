@@ -6,8 +6,9 @@
  * Destructive, since the Owner cannot take it back themselves: once it lands, only the new Owner can
  * transfer it back. The choices are everyone with access but the Owner, the person looking, each with
  * the role that counts beside the address; the words saying what changes show once a choice is
- * made, and the button waits for one. Nothing closes the dialog while the request is in flight, so
- * its refusal is read here, under the choice it refused. A choice the people no longer offer, as
+ * made, and the button waits for one. The overlay writes on `confirm`, through the `submission` it
+ * hands here (T411), so the shell closes nothing while the request is in flight and says its
+ * refusal here, under the choice it refused. A choice the people no longer offer, as
  * when a re-read finds the person gone, is let go, so the field never shows someone it would not
  * transfer it to; a choice the person makes is told (`choose`), so the refusal of the last one goes.
  */
@@ -16,6 +17,7 @@ import type { PersonWithAccess } from '@/assets/types/datatypes';
 import AppDialog from '@/components/AppDialog.vue';
 import EmailAddress from '@/components/EmailAddress.vue';
 import SearchPicker from '@/components/SearchPicker.vue';
+import type { DialogSubmission } from '@/utils/useDialogSubmit';
 import { PEOPLE_CAP, findsPerson, isTheReader } from '@/utils/personChoice';
 import { roleWords } from '@/utils/peopleWithAccess';
 
@@ -29,13 +31,15 @@ const props = defineProps<{
   people: PersonWithAccess[];
   /** The organization a role comes through, by name, as Users with access says it. */
   organizationName: string;
-  busy?: boolean;
-  error?: string;
+  /** The overlay's write of the transfer, which holds the dialog while it sends. */
+  submission: DialogSubmission;
 }>();
 
 const emit = defineEmits<{ close: []; confirm: [userId: string]; choose: [] }>();
 
 const chosen = ref('');
+/** The transfer is out: the picker waits with the rest of the dialog. */
+const sending = computed(() => props.submission.sending.value);
 
 const choices = computed(() => props.people.filter((person) => !isTheReader(person.email)));
 
@@ -73,9 +77,8 @@ watch(
     testid="hand-on-market"
     destructive
     confirm-label="Transfer ownership"
-    :confirm-disabled="!newOwner || busy"
-    :close-disabled="busy"
-    :error="error"
+    :confirm-disabled="!newOwner"
+    :submission="submission"
     @close="emit('close')"
     @submit="newOwner && emit('confirm', newOwner.userId)"
   >
@@ -85,7 +88,7 @@ watch(
       :groups="groups"
       :finds="findsPerson"
       :cap="PEOPLE_CAP"
-      :disabled="busy"
+      :disabled="sending"
       label="New owner"
       placeholder="Type an address…"
       testid="hand-on-market-picker"

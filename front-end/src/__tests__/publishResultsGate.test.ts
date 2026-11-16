@@ -7,7 +7,7 @@
  * vendors apply on its page.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import PublishResults from '@/components/application/PublishResults.vue';
 import { IntakeMode, MarketPhase, type Market } from '@/assets/types/datatypes';
 import { MarketAction } from '@/utils/marketActions';
@@ -98,6 +98,58 @@ describe('a form-intake market (E36/F04/S01)', () => {
 
     await wrapper.find('[data-testid="publish-results-submit-button"]').trigger('submit');
     expect(publishResults).toHaveBeenCalledWith('m1');
+  });
+});
+
+describe('publishing, confirmed (T411)', () => {
+  const byId = (wrapper: Awaited<ReturnType<typeof mounted>>, id: string) =>
+    wrapper.find(`[data-testid="${id}"]`);
+  const press = (wrapper: Awaited<ReturnType<typeof mounted>>) =>
+    wrapper.get('[data-testid="publish-results-window"] form').trigger('submit');
+
+  it('holds while it publishes, and publishes once however often pressed', async () => {
+    publishResults.mockReset();
+    const published = Promise.withResolvers<unknown>();
+    publishResults.mockReturnValue(published.promise);
+    const wrapper = await mounted(marketTaking(IntakeMode.Form));
+    await wrapper.find(button).trigger('click');
+
+    await press(wrapper);
+    await press(wrapper);
+    await byId(wrapper, 'publish-results-cancel-button').trigger('click');
+    await byId(wrapper, 'publish-results-close-button').trigger('click');
+    await byId(wrapper, 'publish-results-background').trigger('click');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+
+    expect(byId(wrapper, 'publish-results-window').exists()).toBe(true);
+    expect(byId(wrapper, 'publish-results-submit-button').text()).toBe('Publishing…');
+    expect(byId(wrapper, 'publish-results-submit-button').attributes('disabled')).toBeDefined();
+    expect(publishResults).toHaveBeenCalledTimes(1);
+
+    published.resolve(undefined);
+    await flushPromises();
+    expect(byId(wrapper, 'publish-results-window').exists()).toBe(false);
+    expect(byId(wrapper, 'applications-published-badge').exists()).toBe(true);
+  });
+
+  it('says a refusal in the dialog, and a new opening starts with none', async () => {
+    publishResults.mockReset().mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 409, data: { error: 'Results wait for a current run.' } },
+    });
+    const wrapper = await mounted(marketTaking(IntakeMode.Form));
+    await wrapper.find(button).trigger('click');
+    await press(wrapper);
+    await flushPromises();
+    expect(byId(wrapper, 'publish-results-error').text()).toBe('Results wait for a current run.');
+
+    await byId(wrapper, 'publish-results-cancel-button').trigger('click');
+    expect(wrapper.text()).not.toContain('Results wait for a current run.');
+    await wrapper.find(button).trigger('click');
+
+    expect(byId(wrapper, 'publish-results-window').exists()).toBe(true);
+    expect(byId(wrapper, 'publish-results-error').exists()).toBe(false);
   });
 });
 

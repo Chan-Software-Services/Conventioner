@@ -15,6 +15,7 @@ sources:
   - E43/F01/S03
   - T270
   - T263
+  - T411
 ---
 
 # An update is kept beside the vendor's answer
@@ -45,6 +46,7 @@ The names and the request are [essential questions](../concepts/essential-questi
 ## How it works
 
 - "Update info" in [the vendor drawer](../flows/vendor-drawer.md) opens a dialog of the market's own questions, each in its question's control, and below them the essential questions as the form asks them, with Save and Cancel ([`UpdateInfoDialog.vue`](../../../front-end/src/components/UpdateInfoDialog.vue)); Cancel and Escape change nothing.
+- Save is held while it saves and sends once for two presses, and its write belongs to the vendor's application it was opened on ([dialogs](../../implementation/conventions/dialogs.md#the-rules), T411): one that lands after the drawer moved to another vendor is handed on as `refreshed`, which the drawer tells the screen without closing the next vendor's dialog.
 - Each answer that differs from what the vendor wrote shows "They wrote: ..." beside it, with "Use their answer", which puts their answer back; saved, that takes the update away ([`UpdateInfoTheirs.vue`](../../../front-end/src/components/UpdateInfoTheirs.vue)).
   The day grid is one question, the dates and the tiers on each together, and the table-share question is answered in words, the address read out of them as the form reads it.
   On a market with no tiers the day grid is the dates alone; the stored empty tier map follows them, so ticking another day adds it without unticking the first.

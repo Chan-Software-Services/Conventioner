@@ -21,6 +21,7 @@ import {
   withSavedTypes,
   type SavedTypes,
 } from '@/components/layout/layoutTypes';
+import { tryEveryClose } from './support/dialogCloses';
 
 const SIX_FOOT: TableTypeObject = {
   id: 'tt-six',
@@ -188,7 +189,7 @@ async function choose(wrapper: VueWrapper, type: TableTypeObject, item: 'edit' |
 async function type(wrapper: VueWrapper, testid: string, value: string) {
   const field = byTestId<HTMLInputElement>(testid)!;
   field.value = value;
-  field.dispatchEvent(new Event('input'));
+  field.dispatchEvent(new Event('input', { bubbles: true }));
   await wrapper.vm.$nextTick();
 }
 
@@ -384,5 +385,116 @@ describe('the Table types card', () => {
     expect(byTestId('layout-saved-types-error')!.textContent).toContain(
       'This market has every type Same holds.',
     );
+  });
+});
+
+// ── Each dialog's write (T411) ───────────────────────────────────────────────
+
+/** A write held open until the test lets it land. */
+function heldWrite() {
+  let land!: () => void;
+  const write = vi.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        land = resolve;
+      }),
+  );
+  return { write, land: () => land() };
+}
+
+const SAVED_SET: SavedTypes = {
+  id: 'tpl-1',
+  name: 'Riverside Hall',
+  tableTypes: [{ name: 'Round 5 ft', widthMm: 1520, depthMm: 1520 }],
+};
+
+describe("each table type dialog's write", () => {
+  const dialogs = [
+    {
+      name: 'Add a table type',
+      prefix: 'layout-type',
+      opener: 'layout-types-add',
+      sending: 'Saving…',
+      prop: 'save' as const,
+      fillIn: async (wrapper: VueWrapper) => {
+        await type(wrapper, 'layout-type-name', 'Round 5 ft');
+        await type(wrapper, 'layout-type-width', '152');
+        await type(wrapper, 'layout-type-depth', '152');
+      },
+    },
+    {
+      name: 'Use saved types',
+      prefix: 'layout-saved-types',
+      opener: 'layout-types-use-saved',
+      sending: 'Adding…',
+      prop: 'save' as const,
+      fillIn: async () => {},
+    },
+    {
+      name: 'Save these types',
+      prefix: 'layout-save-types',
+      opener: 'layout-types-save',
+      sending: 'Saving…',
+      prop: 'saveAs' as const,
+      fillIn: async (wrapper: VueWrapper) => {
+        await type(wrapper, 'layout-save-types-name', 'Riverside Hall');
+      },
+    },
+  ];
+
+  it.each(dialogs)(
+    '$name holds through its write, sends once for two presses, and closes when it lands',
+    async ({ prefix, opener, sending, prop, fillIn }) => {
+      const { write, land } = heldWrite();
+      const wrapper = card({ [prop]: write, listSaved: vi.fn().mockResolvedValue([SAVED_SET]) });
+      byTestId(opener)!.click();
+      await flushPromises();
+      await fillIn(wrapper);
+
+      await submit(prefix);
+      await submit(prefix);
+
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(byTestId(`${prefix}-submit-button`)!.textContent!.trim()).toBe(sending);
+      expect(byTestId<HTMLButtonElement>(`${prefix}-submit-button`)!.disabled).toBe(true);
+      expect(byTestId<HTMLButtonElement>(`${prefix}-cancel-button`)!.disabled).toBe(true);
+      await tryEveryClose(prefix);
+      expect(byTestId(`${prefix}-window`)).not.toBeNull();
+      expect(byTestId<HTMLButtonElement>('layout-types-add')!.disabled).toBe(true);
+
+      land();
+      await flushPromises();
+
+      expect(byTestId(`${prefix}-window`)).toBeNull();
+      expect(byTestId('layout-types-said')!.getAttribute('role')).toBe('status');
+    },
+  );
+
+  it('keeps a refusal to its own opening, and lets it go when a field changes', async () => {
+    const saveAs = vi.fn().mockRejectedValue(new LayoutNotSaved('Could not save the layout.'));
+    const wrapper = card({ saveAs, listSaved: vi.fn().mockResolvedValue([SAVED_SET]) });
+    byTestId('layout-types-save')!.click();
+    await flushPromises();
+    await type(wrapper, 'layout-save-types-name', 'Riverside Hall');
+    await submit('layout-save-types');
+    expect(byTestId('layout-save-types-error')!.textContent).toContain(
+      'Could not save the layout.',
+    );
+
+    await type(wrapper, 'layout-save-types-name', 'Riverside Hall 2');
+    expect(byTestId('layout-save-types-error')).toBeNull();
+
+    await submit('layout-save-types');
+    expect(byTestId('layout-save-types-error')).not.toBeNull();
+    byTestId('layout-save-types-cancel-button')!.click();
+    await flushPromises();
+    byTestId('layout-types-use-saved')!.click();
+    await flushPromises();
+    expect(byTestId('layout-saved-types-error')).toBeNull();
+    byTestId('layout-saved-types-cancel-button')!.click();
+    await flushPromises();
+    byTestId('layout-types-save')!.click();
+    await flushPromises();
+    expect(byTestId('layout-save-types-error')).toBeNull();
   });
 });

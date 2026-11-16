@@ -246,6 +246,76 @@ describe('the full-screen door code', () => {
     expect(byTestId('door-code-value')?.textContent?.trim()).toBe('K7M 4QP');
   });
 
+  it('holds the confirmation while the new code is made, and makes one however often pressed', async () => {
+    readDoorCode.mockResolvedValue(CODE('K7M4QP'));
+    const made = Promise.withResolvers<unknown>();
+    makeDoorCode.mockReturnValue(made.promise);
+    await opened();
+    byTestId('door-code-new')!.click();
+    await flushPromises();
+
+    byTestId('door-code-new-confirm-submit-button')!.click();
+    await flushPromises();
+    byTestId('door-code-new-confirm-window')!
+      .querySelector('form')!
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    byTestId('door-code-new-confirm-cancel-button')!.click();
+    byTestId('door-code-new-confirm-close-button')!.click();
+    byTestId('door-code-new-confirm-background')!.click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+
+    expect(byTestId('door-code-new-confirm-window')).not.toBeNull();
+    expect(byTestId('door-code-new-confirm-submit-button')!.hasAttribute('disabled')).toBe(true);
+    expect(wrapper!.emitted('close')).toBeUndefined();
+    expect(makeDoorCode).toHaveBeenCalledTimes(1);
+
+    made.resolve(CODE('Z9X8W7'));
+    await flushPromises();
+    expect(byTestId('door-code-new-confirm-window')).toBeNull();
+    expect(byTestId('door-code-value')?.textContent?.trim()).toBe('Z9X 8W7');
+  });
+
+  it('asks afresh at the next opening, with no failure said and nothing held', async () => {
+    readDoorCode.mockResolvedValue(CODE('K7M4QP'));
+    makeDoorCode.mockRejectedValue(new Error('down'));
+    await opened();
+    byTestId('door-code-new')!.click();
+    await flushPromises();
+    byTestId('door-code-new-confirm-submit-button')!.click();
+    await flushPromises();
+    expect(byTestId('door-code-new-confirm-error')).not.toBeNull();
+
+    byTestId('door-code-new-confirm-cancel-button')!.click();
+    await flushPromises();
+    expect(document.querySelector('.door-code-error')).toBeNull();
+    byTestId('door-code-new')!.click();
+    await flushPromises();
+
+    expect(byTestId('door-code-new-confirm-error')).toBeNull();
+    expect(byTestId('door-code-new-confirm-submit-button')!.hasAttribute('disabled')).toBe(false);
+  });
+
+  it('leaves the next screen alone when a new code lands after the last one closed', async () => {
+    readDoorCode.mockResolvedValue(CODE('K7M4QP'));
+    const made = Promise.withResolvers<unknown>();
+    makeDoorCode.mockReturnValue(made.promise);
+    await opened();
+    byTestId('door-code-new')!.click();
+    await flushPromises();
+    byTestId('door-code-new-confirm-submit-button')!.click();
+    await flushPromises();
+
+    // The market's page closes the screen under it, and it is opened again.
+    wrapper!.unmount();
+    await opened();
+    made.resolve(CODE('Z9X8W7'));
+    await flushPromises();
+
+    expect(byTestId('door-code-value')?.textContent?.trim()).toBe('K7M 4QP');
+    expect(byTestId('door-code-new-confirm-window')).toBeNull();
+  });
+
   it('prints the poster', async () => {
     readDoorCode.mockResolvedValue(CODE('K7M4QP'));
     const print = vi.fn();

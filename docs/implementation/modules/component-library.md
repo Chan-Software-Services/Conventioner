@@ -24,6 +24,7 @@ sources:
   - T257
   - T201
   - T318
+  - T411
 ---
 
 # The component library
@@ -70,6 +71,7 @@ An entry's own parts sit beside these in `parts/`, such as `PagedApplicationRows
 The `combobox` entry draws [`ChoiceField`](../../../front-end/src/components/ChoiceField.vue) too: the real `ValueFixes` at 12 answers, a select, and at 13, a field, C1's long list of values through `ChoiceField`, which keeps no typed words, its "Ignore this value" one of `leads`, C2, "Maps to" as the import builds it, with two targets taken, and C12, "Add an answer", a choice that adds, and C13, the role on the Discord card, a choice that may go back to none.
 The `list-frame` entry draws [`PagedList`](../../../front-end/src/components/PagedList.vue) beside `ListFrame`: a box of its own, a page that fails once until "Try again" brings it, and a body-scroll dialog whose body is the box, each with a `ReadOut` of how many it has read.
 Each pages the fixture's 359 applications 25 at a time through `pagedRead`, a short timer in the entry in place of a request, so a page is seen to land with no endpoint and no store.
+The `dialog` entry's save in flight writes as a dialog does, through [`useDialogSubmit`](../../../front-end/src/utils/useDialogSubmit.ts) over a send that its "Let the save land" resolves, so the hold it shows is the shell's, for as long as it is looked at.
 The `charts` entry draws the Stats tab's charts on the fixture, in the tab's order (T201): its 359 applications over time as a `ColumnChart`, a column for each of the 22 days from an opening two days before the first response to a close three days after the last, and a column a week over an intake opened eight weeks earlier, each with its sentence read out under it; the review's statuses as a `SplitBar`, and again with Needs follow-up at zero, told but not linked; the room as a `MeterBar` a row, the four dates' tables asked against their 59 tables, the three tiers' table-days (Bronze with no table), and the dates' tables alone, as before anyone applies; how full as a `FillGrid`, the fixture's seats with every table of both sections taken on the four dates, the same seats partway placed so a cell stands at each step, and over nine days, which scrolls in its box on a phone; and the question of 228 answers as `BarLedger` passes it on the tab, folded past 8, in a card of at most 40rem, about a lone card's width on the tab at a desk, where each answer is one line, in a card narrower than 32rem, where each stacks, and on a question of five answers, with no button.
 
 The `components` entry draws each reusable component that exists today, the real one as its screens mount it; [`ListFreshness`](../../../front-end/src/components/ListFreshness.vue), which says when a list was last read beside Refresh, is drawn never read, just read, read five minutes before, refreshing and failed, with a `ReadOut` of the reads asked for (T318).

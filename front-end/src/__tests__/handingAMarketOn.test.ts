@@ -22,6 +22,7 @@ import {
 } from '@/assets/types/datatypes';
 import { MarketAction } from '@/utils/marketActions';
 import { ADMIN_ANSWERS, answersRefusing } from './support/servedAnswers';
+import { tryEveryClose } from './support/dialogCloses';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 
@@ -410,6 +411,47 @@ describe('handing a market on', () => {
     await openTheDialog();
     expect(field().value).toBe('');
     expect(submit().disabled).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('holds by the shell while it transfers: every close refused, one request for two presses', async () => {
+    const wrapper = await open();
+    await openTheDialog();
+    await choose('admin@example.com');
+    let answer: (value: unknown) => void = () => {};
+    api.post.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+
+    const confirm = () => byTestId('hand-on-market-window')!.querySelector('form')!.requestSubmit();
+    confirm();
+    confirm();
+    await flushPromises();
+    await tryEveryClose('hand-on-market');
+
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(byTestId('hand-on-market-window')).not.toBeNull();
+    expect((byTestId('hand-on-market-picker-input') as HTMLInputElement).disabled).toBe(true);
+
+    served = HANDED_ON;
+    answer({ data: { market: HANDED_ON } });
+    await flushPromises();
+    expect(byTestId('hand-on-market-window')).toBeNull();
+    wrapper.unmount();
+  });
+
+  it('keeps a refusal out of the next time it is opened', async () => {
+    const wrapper = await open();
+    await openTheDialog();
+    await choose('admin@example.com');
+    api.post.mockRejectedValue(refusing(403, { error: ONLY_THE_OWNER }));
+    submit().click();
+    await flushPromises();
+    expect(byTestId('hand-on-market-window')!.textContent).toContain(ONLY_THE_OWNER);
+
+    byTestId('hand-on-market-cancel-button')!.click();
+    await flushPromises();
+    await openTheDialog();
+
+    expect(byTestId('hand-on-market-window')!.textContent).not.toContain(ONLY_THE_OWNER);
     wrapper.unmount();
   });
 });

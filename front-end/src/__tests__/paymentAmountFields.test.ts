@@ -329,4 +329,88 @@ describe('Change the amount owed', () => {
     await focus(amount);
     expect(amount.value).toBe('3x');
   });
+
+  it('is held while it saves, and sends one change for two presses', async () => {
+    let answer!: (value: { data: VendorAccount }) => void;
+    api.put.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const wrapper = await owedDialog();
+    await type(field('change-owed-amount'), '0');
+    const form = document.querySelector<HTMLFormElement>(
+      '[data-testid="change-owed-window"] form',
+    )!;
+
+    form.requestSubmit();
+    form.requestSubmit();
+    await flushPromises();
+
+    expect(api.put).toHaveBeenCalledTimes(1);
+    const button = (name: string) =>
+      document.querySelector<HTMLButtonElement>(`[data-testid="change-owed-${name}-button"]`)!;
+    expect(button('submit').disabled).toBe(true);
+    expect(button('submit').textContent?.trim()).toBe('Saving…');
+    expect(button('cancel').disabled).toBe(true);
+    button('cancel').click();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+    expect(wrapper.emitted('close')).toBeUndefined();
+
+    answer({ data: ANSWER });
+    await flushPromises();
+    expect(wrapper.emitted('saved')).toEqual([[ANSWER]]);
+  });
+
+  it("keeps an earlier opening's answer out of the next, handing its account on behind it", async () => {
+    let answer!: (value: { data: VendorAccount }) => void;
+    api.put.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const wrapper = await owedDialog();
+    await type(field('change-owed-amount'), '0');
+    document
+      .querySelector<HTMLFormElement>('[data-testid="change-owed-window"] form')!
+      .requestSubmit();
+    await flushPromises();
+
+    // The tab closes it and opens it again while the first change is out.
+    await wrapper.setProps({ open: false });
+    await wrapper.setProps({ open: true });
+    await flushPromises();
+    await type(field('change-owed-amount'), '20');
+    const submit = document.querySelector<HTMLButtonElement>(
+      '[data-testid="change-owed-submit-button"]',
+    )!;
+    expect(submit.disabled).toBe(false);
+    expect(submit.textContent?.trim()).toBe('Set amount owed');
+
+    answer({ data: ANSWER });
+    await flushPromises();
+
+    expect(wrapper.emitted('saved')).toBeUndefined();
+    expect(wrapper.emitted('refreshed')).toEqual([[ANSWER]]);
+    expect(field('change-owed-amount').value).toBe('20');
+    expect(document.querySelector('[data-testid="change-owed-error"]')).toBeNull();
+  });
+
+  it("says nothing of an earlier opening's refusal in the next", async () => {
+    let refuse!: (err: unknown) => void;
+    api.put.mockReturnValueOnce(new Promise((_resolve, reject) => (refuse = reject)));
+    const wrapper = await owedDialog();
+    await type(field('change-owed-amount'), '0');
+    document
+      .querySelector<HTMLFormElement>('[data-testid="change-owed-window"] form')!
+      .requestSubmit();
+    await flushPromises();
+    await wrapper.setProps({ open: false });
+    await wrapper.setProps({ open: true });
+    await flushPromises();
+
+    refuse(
+      Object.assign(new Error('Request failed with status code 400'), {
+        isAxiosError: true,
+        response: { status: 400, data: { error: 'That day has no table.' } },
+      }),
+    );
+    await flushPromises();
+
+    expect(document.querySelector('[data-testid="change-owed-error"]')).toBeNull();
+    expect(wrapper.emitted('refreshed')).toBeUndefined();
+  });
 });
