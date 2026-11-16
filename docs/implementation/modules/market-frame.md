@@ -119,7 +119,7 @@ The card is at least the height of the window under the app bar, so a short page
 
 **A page says only its own lock; the frame says the person's.**
 The plan says why its setup settled (`setupLockReason`), the form's steps why the form locked, and the Settings page why its rules settled; each disables a control on the table's answer for the action it takes (`mayTake`, [the market store](market-store.md#where-a-screens-permission-comes-from)), but none repeats `readOnlyReason`, or a Viewer reads the same sentence twice on one page.
-A location's layout offers nothing to upload or calibrate on either reason and says only the setup's.
+A location's layout offers nothing to upload or calibrate on the person's lock and says only the setup's; past Draft, on the setup's lock alone, it offers the upload, since a layout started then follows the plan ([ADR 0034](../../adr/0034-a-layout-started-after-draft-follows-the-plan.md)).
 
 **Every market screen is `--workspace-max` wide, and the frame sets it.**
 A screen in the frame sets no width of its own, or moving between a market's screens makes the frame jump.

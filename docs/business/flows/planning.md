@@ -100,7 +100,8 @@ Removing a location that has a layout ([E6](#e6-a-locations-layout)) asks first,
 
 **Status:** Works (walked live).
 "+" adds a row of name, Location, Tier and Count; "Total tables" sums the counts; tables are named after their section ("North Row 1" to "North Row 4").
-A section of a location that has a layout ([E6](#e6-a-locations-layout)) has no Count to type: the cell reads the number of tables the layout places in it, "13" with "from the layout" under it, and "Total tables" sums those with the typed ones.
+A section of a location whose layout was started in Draft ([E6](#e6-a-locations-layout)) has no Count to type: the cell reads the number of tables the layout places in it, "13" with "from the layout" under it, and "Total tables" sums those with the typed ones.
+A layout started after Draft follows the plan, so its location's sections keep their typed Count ([ADR 0034](../../adr/0034-a-layout-started-after-draft-follows-the-plan.md)).
 A section may have no tier; a plan without tiers assigns, and its form asks no tier preference (bug 23; re-walked live as P1).
 Covered by:
 
@@ -139,8 +140,8 @@ Opening one saves the plan's pending edits first, then goes to `/markets/<id>/la
 2. **Set the scale:** "Drag across something whose length you know, like a wall or a door.", by pointer or with the arrow keys and Enter; type its length in m, cm, mm, ft or in, and "Set the scale".
    The head row then reads "30.0 m across" (before, "Not calibrated"), and "Recalibrate" draws the line again.
 
-3. **Place the tables:** at a desk the map is an editor, with a toolbar over it: Select, Add table, Row of tables, Fill an area, No-table zone, Undo, Redo, Zoom out, Zoom in, Fit.
-   - "Add table" then a click on the floor places a table of the Section and Table type chosen under the toolbar, "Gold row 1", then "Gold row 2", at its true size; the tool stays on.
+3. **Place the tables:** at a desk the map is an editor, with a toolbar over it: Select, Add table, Row of tables, Fill an area, No-table zone, the keyboard button, Undo and Redo; Zoom out, Zoom in and Fit stand on the map's bottom-right corner, after the Floorplan menu.
+   - "Add table" then a click on the floor places a table of the Section and Table type chosen on the tool's card in the panel, "Gold row 1", then "Gold row 2", at its true size; the tool stays on.
    - "Row of tables" lines a drawn line with tables beside it or centred on it, the count following the line as it is drawn, with the Gap between them (none at first): a drag is a straight row, or a curve drawn by hand, smoothed into a few points that can be dragged before Enter places it; clicks lay the line's points, a sharp turn making a corner, and a click on the first point closes it into a shape, its tables spread evenly round it; Rows and Aisle lay rows side by side in the same gesture.
    - "Fill an area" packs a box dragged, or a shape of clicked corners, with rows of tables of one section and type, a count or as many as fit, round the no-table zones and the tables already placed, and says how many fitted ("Placed 24 of 30; the rest did not fit.").
    - "No-table zone" marks a box of the hall, a stage or a pillar, named in the panel; a table put down on one is pushed off it, and rows and fills keep clear of it.
@@ -151,18 +152,18 @@ Opening one saves the plan's pending edits first, then goes to `/markets/<id>/la
      Tables put in another section are numbered after its own, so 3 of Gold row's 9 put in Silver aisle (of 18) become Silver aisle 19 to 21, and Gold row closes to 1 to 6.
    - "Duplicate" puts a copy of each selected table beside it, numbered on, and the Align menu lines several up by an edge or a centre, or spaces them evenly across or down.
    - A drag moves the selection; near another table's edge or centre it snaps, with a guide line, and Alt places it freely; a table's centre never leaves the floorplan.
-   - The handle above a selected table (beside it, where a neighbour stands above) turns it in 15° steps (Alt: freely), and R or "Turn 90°" by a quarter; its number turns with it.
+   - "Turn 90°" turns the selection a quarter, as R does; a table's number turns with it.
    - "Remove" takes the selection away with no question, since Undo brings it back; in Draft the section's later tables close the gap, so removing "Gold row 2" of 4 leaves 1 to 3.
    - Undo and Redo, by their buttons or Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y, take back and bring back each change, across saves.
    - The wheel or two fingers move the view, Ctrl and the wheel or a pinch zoom it, and Space and a drag pan.
-   - By keyboard the map is one Tab stop: the arrow keys move between its tables, Enter or Space picks one up, the arrow keys move it 10 cm (1 m with Shift), R turns it, Enter drops it and Escape puts it back; Add table, Row of tables and Fill an area each have a form for the keys, and the panel's "Keyboard" card lists them.
+   - By keyboard the map is one Tab stop: the arrow keys move between its tables, Enter or Space picks one up, the arrow keys move it 10 cm (1 m with Shift), R turns it, Enter drops it and Escape puts it back; Add table, Row of tables and Fill an area each have a form for the keys, and the "Keyboard shortcuts" panel, shown by the toolbar's keyboard button or `?`, lists them beside the page.
 4. **Sections on the layout:** the panel lists "Sections in Upper Hall", each with its colour, tier and count.
    - A section's swatch opens eight colours to choose from, and its name on the map is dragged to where it should stand.
    - Its row's menu has "Renumber by position (rows across the page)", which numbers its tables in rows from the top, each from the left.
    - A section removed on Section Setup leaves its tables on the layout, grey and numberless: "3 tables are in no section", with "Select them", to put them in a section from the card or remove them.
      Until then the market stays a draft: "Upper Hall's layout has 3 tables in no section. Put them in a section or remove them.", with "Open the layout" on the rail.
    - While a section has fewer tables than Section Setup had typed for it when the layout began, the panel says so: "Section Setup had Gold row at 13: 9 placed."
-5. **Table types, zones and the floorplan:** the panel's "Table types" card lists the market's types, each its size and how many tables are of it, with "Add a type", Edit, Remove (refused while tables are of it, with how many), "Use saved types" and "Save these types"; "No-table zones" names each zone; and "Floorplan" hides or shows the image under the tables, with "Replace the image" and "Recalibrate", the tables keeping their places in metres.
+5. **Table types, zones and the floorplan:** Layout settings, opened from the head, lists the market's types, each its size and how many tables are of it, with "Add a type", Edit, Remove (refused while tables are of it, with how many), "Use saved types" and "Save these types", and holds "Replace the image" and "Recalibrate", the tables keeping their places in metres; "No-table zones" names each zone; and the map's Floorplan menu shows or hides the image under the tables, with a tick each for drawing it in greyscale and faded.
 
 The layout is edited at a desk: at a phone's width it is read.
 It saves itself a moment after each change, the head row saying "Saving…" then "Saved"; a save that did not land says why with Retry and keeps what is on screen, a move to another page then asks "Leave without saving?" first, and a reload or a closed tab with a change still waiting is asked by the browser first.

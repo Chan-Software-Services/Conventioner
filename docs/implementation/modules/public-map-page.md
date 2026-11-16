@@ -24,6 +24,7 @@ As a public page it fits a phone, and as a vendor-facing one the bar shows the l
 A 404 from the read, which the server answers alike for a slug naming no market and for a market whose map is not open, shows the app's "Page not found", and the page tells the bar its slug answered absent (`vendorPageAnswered`), as the vendor page does, so an organizer keeps the full bar there.
 A read that never answered says "The map could not be loaded." with "Try again"; the bar stands apart meanwhile.
 The browser's title is "<Market name> map" while the page is open, and is given back as it goes.
+The app's one `RouterView` is unkeyed, so a move in the app from one market's map to another's keeps the page: it reads the new market's map afresh, a read that answers after the address moved on is dropped, and a move off the page reads nothing.
 
 **The day, the open location and the picked table live in the query**, `date`, `location` and `table`, each written with `router.replace`, so a link or a QR code opens one table on one day, and Back leaves the page (D31).
 `mapPlace` reads them: the date asked for when it is a market date, else today, else the next, else the last (`openingDate`, as Attendance chooses its day); the location asked for, else the asked table's own, else the first; and the table only when it is on the open location.
@@ -38,7 +39,7 @@ The day map draws the location switch, the drawing in `read` with the day's seat
 At 1,000px and wider the map takes the left of a two-column frame no wider than `--workspace-max`, sticky under the app bar beside a long list, and the card and the list a 22rem column on the right; narrower, they stack in that order, on the page's 16px gutter.
 
 **The floorplan image is read through the API client as bytes** (`fetchPublicMapImage`) and drawn from an object URL, since the API is another origin in production and the Content-Security-Policy draws images only from the app and from blobs ([security invariants](../conventions/security-invariants.md#security-headers)).
-It is read as each location opens, once, and every URL is revoked as the page goes; a failed read draws the hall on the floor's colour alone.
+It is read as each location opens, once while it is read well, and every URL is revoked as the page goes or moves to another market's map; a failed read draws the hall on the floor's colour alone and is read again the next time its location opens.
 
 **The card** (`tableCard`) heads "Table <code>"; a seat with a name reads the name, then "Website", a link whose text is the address's host, and "Instagram", a link "@handle" to `https://www.instagram.com/<handle>/`, each left out when null; a seat with no name reads "A vendor is at this table. Their details are not listed." (D27), whatever else they answered; a free table "This table is free on <day>."; a shared table lists "Left half" then "Right half", whichever half was pressed, a half with nobody "This half is free on <day>."; and before a pick "Press a table, or find a vendor below.".
 

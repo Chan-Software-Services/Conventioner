@@ -350,7 +350,8 @@ One elevation shadow, extracted from the newer screens, where it is already used
 
 ```css
 --shadow-card:
-  0 0 0 1px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.07), 0 6px 14px rgba(0, 0, 0, 0.08);
+  0 0 0 1px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.07),
+  0 6px 14px rgba(0, 0, 0, 0.08);
 ```
 
 **A card that informs is flat**, where the cards worked in are lifted: on the [layout's page](implementation/modules/floorplan-placement.md#the-editor) the Sections card stands on `--mm-beige` with a 1px `--mm-border` edge and no shadow, so the white, lifted card of the selection or the tool under it reads as the one in hand (T422, the QC walk of 2026-11-16); its quiet lines take `--mm-text-muted-on-beige`, since `--mm-text-muted` is 4.23:1 there.
@@ -824,13 +825,13 @@ The list holds these states, one a line, each beside the state it is most like, 
 - `/markets` and the Assignments page with their dialogs at 390
 - Vendors and Payments with their dialogs and drawers at 390, Payments priced and unpriced
 - the vendor drawer at the door on each of its tabs at 390
+- Attendance as a map, a shared table in halves, at the door's three sizes (T422)
 - an Editor's Update info with its essential questions locked
 - settled rules
+- the Public map card turned on, its address shown (T422)
 - a location's layout past draft, at its upload step and calibrating
 - a location's layout past Draft in its editor, a table selected, what would change a seat disabled
 - a location's layout drawn as its map, with 20 tables
-- Attendance as a map, a shared table in halves, at the door's three sizes (T422)
-- the Public map card turned on, its address shown (T422)
 - the signed-out pages
 - the public map signed out, before a pick and with a shared table picked, at a desk and on a phone (T422)
 

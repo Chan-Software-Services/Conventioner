@@ -67,17 +67,18 @@ The panel is headed "Cannot proceed:" unless its caller gives a heading: the imp
 **Every remedy names the action it takes.**
 A guard that sets a `resolution_link` sets the `resolution_action` its remedy takes, so [the phase rail](phase-rail.md) and its panel offer the remedy only to whoever the table's answer for that row lets take it ([what each role may do](../../business/rules/what-each-role-may-do.md)):
 
-| Remedy                                                                                                                      | Page                   | Action                |
-| --------------------------------------------------------------------------------------------------------------------------- | ---------------------- | --------------------- |
-| Pick market dates, Change the dates, Add a location, Add tables, Add sections, Give every tier tables, Fix the price groups | `setup`                | `change-setup`        |
-| Open the layout                                                                                                             | `layout/<location id>` | `change-setup`        |
-| Allocate tables (`AssignmentComputedGuard`, `AssignmentNotBeforeReviewGuard`, `NoApprovedApplicationsGuard`)                | `settings`             | `assign`              |
-| Assign tables (`AssignmentComputedGuard`, nobody seated where a run is refused)                                             | `assignments`          | `assign`              |
-| Publish results                                                                                                             | `applications`         | `publish-results`     |
-| Finish deciding                                                                                                             | `applications`         | `give-verdicts`       |
-| Import responses                                                                                                            | `import`               | `import-applications` |
-| Decide what reviewers read first                                                                                            | `form?step=review`     | `change-form`         |
-| Decide the automatic rejections                                                                                             | `form?step=review`     | `change-form`         |
+| Remedy                                                                                                        | Page                   | Action                |
+| ------------------------------------------------------------------------------------------------------------- | ---------------------- | --------------------- |
+| Pick market dates, Change the dates, Add a location, Add tables, Give every tier tables, Fix the price groups | `setup`                | `change-setup`        |
+| Add sections                                                                                                  | `setup`                | `change-setup`        |
+| Open the layout                                                                                               | `layout/<location id>` | `change-setup`        |
+| Allocate tables (`AssignmentComputedGuard`, `AssignmentNotBeforeReviewGuard`, `NoApprovedApplicationsGuard`)  | `settings`             | `assign`              |
+| Assign tables (`AssignmentComputedGuard`, nobody seated where a run is refused)                               | `assignments`          | `assign`              |
+| Publish results                                                                                               | `applications`         | `publish-results`     |
+| Finish deciding                                                                                               | `applications`         | `give-verdicts`       |
+| Import responses                                                                                              | `import`               | `import-applications` |
+| Decide what reviewers read first                                                                              | `form?step=review`     | `change-form`         |
+| Decide the automatic rejections                                                                               | `form?step=review`     | `change-form`         |
 
 "Open the layout" is the one link that names which of a market's pages of a kind it leads to: the layout of the location whose tables are in no section (`LayoutTablesHaveSectionsGuard`), or of the location holding a section of a tier without tables (`EveryTierHasTablesGuard`), never the market's bare `layout`, which redirects to its first location's.
 A laid-out location's sections count its layout's tables, and Market Setup shows their counts read-only, so when the plan's first tier without tables has a section there, `EveryTierHasTablesGuard` says that tier alone, naming its first such section and its location, and leads to that layout (T315); otherwise its Market Setup line, "Give every tier tables", names only the tiers with no section in a laid-out location, the others said once those are fixed; and a market with no tables at all whose sections lie in one is sent to the first such section's layout too.

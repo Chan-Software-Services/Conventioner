@@ -125,7 +125,7 @@ One day the market runs. A **calendar day**, never an instant: a stored `YYYY-MM
 
 **Section**:
 A named block of tables within the venue, carrying a tier, a location, and a count. Tables are generated from sections. A vendor ranks sections as a preference, and may be assigned outside their top choice.
-Where its location has a **layout**, its count is the number of the layout's tables in it, never typed.
+Where its location has a **layout** started in Draft, its count is the number of the layout's tables in it, never typed; a **layout that follows the plan** leaves the typed count as it is.
 _Avoid_: Area, zone, block
 
 **Tier**:
