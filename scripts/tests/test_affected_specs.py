@@ -194,6 +194,19 @@ class TestRuleOneChangedSpecsAndHelpers:
         write(repo, {"front-end/e2e/d.spec.ts": "import { test } from './fixtures';\n"})
         assert set(chosen(choose(repo))) == {"b.spec.ts", "d.spec.ts"}
 
+    def test_at_a_commit_an_import_names_the_file_beside_a_directory_of_its_name(self, repo):
+        # `e2e/fixtures/` holds data files beside `e2e/fixtures.ts`; read from a commit, as CI's
+        # audit reads with `--head`, `./fixtures` is the file, never the directory.
+        write(repo, {"front-end/e2e/fixtures/data.json": "{}\n"})
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "a directory named as the fixtures")
+        git(repo, "update-ref", "refs/remotes/origin/dev", "HEAD")
+        write(repo, {"front-end/e2e/fixtures.ts": "export const test = 2;\n"})
+        git(repo, "commit", "-qam", "the fixtures change")
+        rows = chosen(choose(repo, "--head", "HEAD"))
+        assert set(rows) == {"a.spec.ts", "b.spec.ts", "c.spec.ts"}
+        assert "imports fixtures.ts" in rows["b.spec.ts"]["why"]
+
     def test_committed_changes_count_from_the_merge_base(self, repo):
         write(repo, {"front-end/e2e/b.spec.ts": "// edit\n"})
         git(repo, "commit", "-qam", "edit b")

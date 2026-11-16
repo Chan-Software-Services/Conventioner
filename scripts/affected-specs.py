@@ -113,8 +113,10 @@ class Tree:
                 file = self.root / path
                 self._cache[path] = file.read_text(errors="replace") if file.is_file() else None
             else:
+                # `cat-file blob` reads a file alone: `git show` of a directory prints its listing
+                # and succeeds, so `./fixtures` would name `e2e/fixtures/` over `fixtures.ts`.
                 done = subprocess.run(
-                    ["git", "-C", str(self.root), "show", f"{self.rev}:{path}"],
+                    ["git", "-C", str(self.root), "cat-file", "blob", f"{self.rev}:{path}"],
                     capture_output=True,
                     check=False,
                 )
