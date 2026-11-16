@@ -92,11 +92,18 @@ export interface SubmitOptions {
  */
 export function useSubmit(options: SubmitOptions = {}) {
   const failure = options.failure ?? SERVER_FAULT_MESSAGE;
-  const state = shallowRef<SubmitState>({ phase: EDITING, opening: 0 });
+  /**
+   * The state as it stands, read by everything here but the screen: a read of `state` in a callback
+   * would be tracked by whatever effect is running then (a parent's render unmounting the form runs
+   * the dispose below), and the write after it would trigger that effect again, without end.
+   */
+  let now: SubmitState = { phase: EDITING, opening: 0 };
+  const state = shallowRef<SubmitState>(now);
   let gone = false;
 
   function step(event: SubmitEvent) {
-    state.value = submitStep(state.value, event);
+    now = submitStep(now, event);
+    state.value = now;
   }
 
   if (options.scope) watch(options.scope, () => step({ kind: 'open' }), { flush: 'sync' });
@@ -112,16 +119,16 @@ export function useSubmit(options: SubmitOptions = {}) {
   const sentence = computed(() => (phase.value.kind === 'refused' ? phase.value.sentence : ''));
 
   async function submit<T>(send: () => Promise<T>, handlers: SubmitHandlers<T> = {}) {
-    const before = state.value;
+    const before = now;
     step({ kind: 'submit' });
-    if (state.value === before) return;
-    const opening = state.value.opening;
+    if (now === before) return;
+    const opening = now.opening;
     let answer: T;
     try {
       answer = await send();
     } catch (error: unknown) {
       if (gone) return;
-      if (state.value.opening !== opening) {
+      if (now.opening !== opening) {
         handlers.late?.({ ok: false, error });
         return;
       }
@@ -134,7 +141,7 @@ export function useSubmit(options: SubmitOptions = {}) {
       return;
     }
     if (gone) return;
-    if (state.value.opening !== opening) {
+    if (now.opening !== opening) {
       handlers.late?.({ ok: true, answer });
       return;
     }

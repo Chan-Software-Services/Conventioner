@@ -15,6 +15,7 @@ import { MarketAction } from '@/utils/marketActions';
 import { useVerdictActions } from '@/utils/verdictActions';
 import { useMarketStore } from '@/stores/market';
 import FollowUpDialog from '@/components/application/FollowUpDialog.vue';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 
 const reviewApplication = vi.fn();
 const saveVendorNote = vi.fn();
@@ -48,6 +49,7 @@ function mountDialog(writesNotes: boolean) {
       me: 'ana@example.com',
       note: 'Asked about power',
       writesNotes,
+      submission: useDialogSubmit({ opening: () => true, failure: '' }),
     },
     global: { stubs: { teleport: true } },
   });
