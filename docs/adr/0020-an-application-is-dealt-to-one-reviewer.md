@@ -5,6 +5,7 @@ describes:
   - back-end/review_team.py
   - back-end/datatypes.py#ReviewTeam
   - back-end/application_status.py#deal
+  - back-end/application_status.py#settle_waiting
 verified: 2026-11-17
 sources:
   - E38/F07
@@ -44,13 +45,16 @@ A deal never counts what each reviewer has left open.
 The invariant: the turn always counts the applications dealt since the reviewers last changed, so the next arrival goes to the reviewer after the last one dealt, an application arriving is dealt once, and no reviewer is skipped, whatever order a change of reviewers and arrivals land in.
 It holds by construction rather than by conditions on each write, which four rounds of review each found one more order to break (the turn taken before the application was won, a change landing after the turn, an emptied team, a turn taken inside a change).
 A deal holds the market by a short lease on the team (`reviewTeam.dealing`, 30 seconds, so one that stopped half way lets the next in): a change of reviewers from writing its team to writing its turn, and a deal of arrivals from reading the turn to writing it, so the turn is only ever read and written by the deal holding the market.
-An arrival never waits: it marks its application as arriving (`arriving` on the application, with the write it arrived by), and if it can hold the market it deals every application so marked; if another deal holds it, that deal deals them when it lets go, since an arrival marks before it tries to hold and every deal looks for marked applications after letting go: for as long as any wait, however long a burst runs, and after a deal that failed as well, before its error goes on.
+An arrival never waits: its application is marked as waiting for the deal (`arriving` on the application, with the write it arrived by), and if it can hold the market it deals every application so marked; if another deal holds it, that deal deals them when it lets go, since an application is marked before its write tries to hold and every deal looks for marked applications after letting go: for as long as any wait and its last round dealt or left one, however long a burst runs, and after a deal that failed as well, before its error goes on.
+**Every move into open or a follow-up is marked, not only an arrival** (T277): an undo, a rule's return, a re-import's back to review and a follow-up's hand-on mark their application in the same update that moves it, whether or not reviewers are chosen and whoever its reviewer is.
+The deal holding the market judges who may review: it keeps an able reviewer, or a follow-up's owner who may be chosen, deals the rest to the next in turn, and with nobody able leaves the mark for the next deal, which a reviewer's next card starts.
+So a verdict undone after a change of reviewers, or after its reviewer was removed, is dealt as an arrival is, and no open application sits in nobody's share while an able reviewer exists.
 A change of reviewers waits for the market a few seconds, and is refused in words if another deal holds it longer.
-`tests/test_every_order_of_a_deal.py` proves it by enumeration rather than by picking orders: an arrival landed before every step of a change, to a new team and to none, a change landed before every step of an arrival, and an arrival before every step of another.
+`tests/test_every_order_of_a_deal.py` proves it by enumeration rather than by picking orders: an arrival landed before every step of a change, to a new team and to none, a change landed before every step of an arrival, an arrival before every step of another, and an undo, a rule's return and a re-import before every step of a change that removes their reviewer, and that change before every step of each; every order checks that no open application sits outside every share while an able reviewer exists.
 The same cases run over a real MongoDB server in `tests/real_mongo/test_every_order_of_a_deal_on_the_server.py`, where the lease's hold is also raced by ten deals at once ([the real-MongoDB suite](../implementation/testing/real-mongo-suite.md#the-market-sides-guarantees)).
-Three writes in [`back-end/application_status.py`](../../back-end/application_status.py), the one writer of the review state ([ADR 0034](0034-an-applications-review-state-has-one-owner.md)), set an application's reviewer, each called only from here while its deal holds the market and conditioned on the application as that deal read it.
-A change of reviewers writes an open application with `deal`, only while it is still open and dealt as it was read, so a verdict landing mid-deal is never touched, and hands a removed reviewer's follow-up on with `deal_follow_up`, only while that reviewer still owns it.
-An arrival is written with `deal_arrival`, only while it is still open, undealt and marked; one decided meanwhile is let go with its verdict alone.
+Three writes in [`back-end/application_status.py`](../../back-end/application_status.py), the one writer of the review state ([ADR 0034](0034-an-applications-review-state-has-one-owner.md)), deal an application, each called only from here while its deal holds the market and conditioned on the application as that deal read it.
+`deal` writes an open application's reviewer, only while it is still open and dealt as it was read, so a verdict landing mid-deal is never touched; `deal_follow_up` hands a follow-up on, as its owner and its reviewer, only while its owner is still the one read; both end its wait.
+`settle_waiting` ends the wait of one the deal leaves where it is (decided meanwhile, or with an able reviewer or owner), only while its status and its mark are still as read.
 A decided application stays where it is, and so does a follow-up, unless its owner is a reviewer the change removed: then it is dealt with the open applications and handed, still a follow-up, to the reviewer it goes to. An unchanged set writes and records nothing; no reviewers returns every open application to first come, first served.
 
 **Choosing is a row of the market's table**, "Choose reviewers" (default Admin, [ADR 0019](0019-a-markets-permissions-are-a-table.md)), open while the review is (draft through the stage) and refused on an archived market.
@@ -68,7 +72,7 @@ One application's story is the history narrowed to its vendor, in the vendor dra
 
 ## Consequences
 
-- Every write that can leave an application open and undealt must ask `review_team.py` to deal it, or it stays out of every share.
+- Every write that moves an application into open or a follow-up marks it in the same update ([the review state](../implementation/data/application-document.md#waiting-for-the-deal)) and then asks `review_team.py` to deal; a request ended between the two leaves the mark, which the next deal takes.
 - A chosen reviewer who loses their role on the market, or whose role the table no longer lets be chosen, is skipped by every deal and served as not `able` until an Admin removes them: removing someone is always a person's act, recorded, never a side effect of a role taken away.
 - Being chosen is read off the market's team by address at every check, so removing a reviewer takes their verdicts away at once, with no role to take back.
 - A verdict on someone else's share is not refused: dividing the review is a soft filter, and the warning is the screen's.
@@ -83,4 +87,6 @@ One application's story is the history narrowed to its vendor, in the vendor dra
 - **A hard lock on another's share**: helping someone who is behind must stay easy (Daniel: "this is not a hard filter").
 - **Being chosen as a new role**: a role is market-wide and outlives the review; being chosen is per review and is lost when removed.
 - **Reusing the untyped `review_config`**: it said nothing about its shape, and nothing wrote it.
+- **Judging at the move who may review, and marking only what no able reviewer holds**: a move landing after a change of reviewers read its pool would judge against the team the change was replacing, and stay in the removed reviewer's share; marking every move and judging in the deal that holds the market closes that order.
+- **Letting an arrival go undealt while nobody chosen may review**: it stayed in nobody's share once someone could review again (T277 P5); it waits marked instead.
 - **Conditions on each write, without holding the market**: a lease on each arriving application, a turn given back when its write failed, a change letting go of what arrivals held; each round of review found one more order of a change against an arrival that skipped a reviewer or dealt an application twice, since the turn and the applications are separate documents with no transaction across them.

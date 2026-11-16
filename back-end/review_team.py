@@ -209,7 +209,8 @@ def _choose_holding(
     able = eligible(market.model_copy(update={"review_team": team}), organization)
     pool = ApplicationsApi.undecided_in_arrival_order(market.id, follow_ups_of=removed)
     if chosen and not able:
-        # Nobody chosen may review here: nothing is dealt until someone who can is chosen.
+        # Nobody chosen may review here: nothing is dealt, and what waits for the deal keeps
+        # waiting until someone chosen may review again.
         _finish(market.id, deal, 0)
         return Chosen(team, 0)
 

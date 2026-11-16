@@ -52,7 +52,7 @@ describes:
   - back-end/assignment/lifecycle.py#store
   - back-end/assignment/lifecycle.py#publish
   - back-end/migrations/migrate_assignment_state.py
-verified: 2026-11-13
+verified: 2026-11-17
 sources:
   - T244
   - T274

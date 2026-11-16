@@ -5,8 +5,9 @@ mistake could not put it right, since changing a verdict is an Admin's (E38/F06/
 whatever their role - an Editor, a chosen Viewer - takes their own verdict back within
 ``UNDO_WINDOW``, while they may still give verdicts and the review is open. The undo is giving,
 taken back: it asks the giving row, never the change row. It returns the application to what it was
-before the verdict, open or needs follow-up with its owner, still dealt to whom it was dealt, and
-only while nobody has written over the verdict since. After the window, or for someone else's
+before the verdict, open or needs follow-up with its owner, still dealt to whom it was dealt while
+they may review (``test_every_return_to_open_waits_for_the_deal.py`` deals it otherwise), and only
+while nobody has written over the verdict since. After the window, or for someone else's
 verdict, it is refused, and changing the verdict stays an Admin's.
 """
 from datetime import datetime, timedelta, timezone

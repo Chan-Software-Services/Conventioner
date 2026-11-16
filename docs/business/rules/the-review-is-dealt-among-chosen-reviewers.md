@@ -43,10 +43,14 @@ It never counts what each reviewer has left open: being quick earns nobody more 
 Seven open applications among three reviewers deal three, two and two, the extra one to the first in address order.
 
 **Each application that arrives open is dealt to the next reviewer in turn**: an applicant's submission, every import ([the CSV import](../../implementation/modules/csv-import.md)), and an application the [automatic rejections](automatic-rejections.md) return to open when the rules are saved, the form is saved or a vendor's info is updated.
+**Every application that comes back into open or a follow-up waits for the deal too** (T277): a verdict undone by its giver, an approval a re-import sends back to review, and a follow-up handed on, as well as a rule's rejection returned to open.
+Each is marked in the same write that moves it, whether or not reviewers are chosen, and the deal keeps it with its reviewer, or a follow-up with its owner, while they may still review here; otherwise it deals it to the next reviewer in turn, and hands a follow-up on to them as its owner and its reviewer.
+So a verdict undone after the reviewers were chosen, or after its reviewer was removed, is dealt as an arrival is, and no open application is left in nobody's share while someone may review.
+Which change moves an application where is [the application document's review state](../../implementation/data/application-document.md#the-review-state).
 An application a rule rejects as it arrives is decided, so it is not dealt until the rules return it to open.
 The turn carries on from the last deal, so after seven applications among three reviewers the eighth goes to the second reviewer; however a change of reviewers and arrivals interleave, each is dealt in turn and no reviewer is skipped, since every deal holds the market while it reads and writes the turn.
-An applicant's own save deals their application and nobody else's, so the history never names a vendor as dealing another's.
-**A reviewer's next card deals what a stopped deal left waiting** (T270): an application that arrived while another deal held the market waits for that deal to deal it as it lets go, and a deal the host ended never lets go, so every card One by one asks for, whoever asks, first deals each application so left, and a chosen reviewer on their share alone is handed the last arrivals before a quiet spell.
+Each deal is recorded under the write that moved the application, never the one dealing, so the history never names a vendor as dealing another's.
+**A reviewer's next card deals what waits** (T270): an application that arrived while another deal held the market waits for that deal to deal it as it lets go, a deal the host ended never lets go, and a request the host ended between its move and its deal never dealt, so every card One by one asks for, whoever asks, first deals each application so left, and a chosen reviewer on their share alone is handed the last arrivals before a quiet spell.
 Each is recorded as dealt by the write it arrived by, never by the reviewer who asked; while a live deal holds the market, the card is handed out at once and that deal deals them; the All view's list deals nothing, since a read changes nothing.
 The card's answer says how many the deal dealt, and when it dealt any, One by one reads its list again once the card is up, so an application dealt beside the card reads as dealt, and a share holding two counts both.
 
@@ -61,7 +65,7 @@ A change that finds another deal holding the market at its first or last write, 
 
 **A chosen reviewer who no longer holds a role on the market can no longer review here**: their role taken in Manage market, or their place in the organization gone, or their role one the table's row "Be chosen as a reviewer, and then give verdicts and follow-ups" no longer reaches.
 Every deal skips them, the panel marks them "Can no longer review here" and never folds them out of sight, naming them first in its one line and saying how many more of them are folded, the dialog that changes the reviewers marks them on their chips, as Open applications and the first import do (`unableReviewers`), and their share stays theirs until an Admin removes them, which deals it again as any removal does; nothing removes them silently.
-With nobody able, nothing is dealt.
+With nobody able, nothing is dealt, and what came into open meanwhile waits: the next deal once someone may review again, a reviewer's next card at the latest, deals it (T277).
 
 **Being dealt an application is never a lock**: the hold of [ADR 0014](../../adr/0014-reviewers-claim-and-a-verdict-is-a-conditional-write.md) is who is looking at a card now, the reviewer is whose share it is, and a deal never moves a hold.
 
