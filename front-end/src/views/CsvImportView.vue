@@ -248,12 +248,7 @@ function leaveImport() {
   if (market.value?.id) router.push(marketPath(market.value.id, 'applications'));
   else router.push('/markets');
 }
-/**
- * A file read and nothing of it written: on Map columns and Preview the mapping and every value
- * settled live in this page alone until the final confirm, so leaving asks first (T271). Upload
- * holds no file and the done step has written it; nor does an import already running ask, since
- * leaving does not stop it (`asksBeforeLeaving`).
- */
+/** Whether leaving asks first (T271): the wizard's `asksBeforeLeaving` says which steps. */
 const holdsAMapping = computed(() => asksBeforeLeaving(wizard.value.step));
 useUnsavedWork({
   unsaved: () => holdsAMapping.value,
