@@ -307,7 +307,7 @@ def test_an_allocation_that_breaks_the_solvers_rules_is_never_stored(collection,
     monkeypatch.setattr(
         History, "record_assignment_run", lambda *args, **kwargs: called.append("history"))
     monkeypatch.setattr(
-        PaymentsApi, "seated_again", lambda *args, **kwargs: called.append("payments"))
+        PaymentsApi, "assignment_written", lambda *args, **kwargs: called.append("payments"))
 
     with pytest.raises(BrokenAllocationError) as refused:
         PlacementsApi.run_assignment("market-123", "user-1")
@@ -870,16 +870,16 @@ class TestTwoChangesAtOnce:
         refused, as the free that landed left them."""
         import payments as Payments
 
-        kept_by_both = Payments.keep_freed_line
+        kept_by_both = Payments.owed_day_transition
 
         def the_other_free_first(*args, **kwargs):
-            monkeypatch.setattr(Payments, "keep_freed_line", kept_by_both)
+            monkeypatch.setattr(Payments, "owed_day_transition", kept_by_both)
             PlacementsApi.remove_placement(
                 "market-123", "ana@example.com", "2026-08-01", "user-2",
                 deduct_owed=deducted_by == "the other")
             return kept_by_both(*args, **kwargs)
 
-        monkeypatch.setattr(Payments, "keep_freed_line", the_other_free_first)
+        monkeypatch.setattr(Payments, "owed_day_transition", the_other_free_first)
 
         with pytest.raises(ConflictError):
             PlacementsApi.remove_placement("market-123", "ana@example.com", "2026-08-01", "user-1",

@@ -1321,11 +1321,16 @@ def preview_values(
     csv_content: str,
     mapping: Dict[str, Any],
     resolutions: Optional[Dict[str, Dict[str, Optional[str]]]] = None,
+    *,
+    by: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], int]:
     """Which cell values do not name anything this market offers, and how often each appears.
 
     Writes nothing. One entry per DISTINCT value, because that is the unit the organizer decides
     on - the same "Gold Tier" in two hundred rows is one decision, not two hundred.
+
+    ``by`` is the person previewing, as the import's own ``by``: whether a rule's rejection no rule
+    meets any longer returns to review is theirs to overturn (E38/F06/S01). None may not overturn.
     """
     error, headers, rows = parse_csv(csv_content)
     if error:
@@ -1447,7 +1452,9 @@ def preview_values(
     result["validRows"] = len(applicants) - len(failures)
     refused = {failure["row"] for failure in failures}
     existing = _existing_by_email(market_doc.get("id", ""))
-    result["rejected"], met_rows = _rule_rejections(market_doc, applicants, refused, existing)
+    left = _as_the_import_leaves_them(market_doc, applicants, refused, existing, by)
+    result["rejected"], met_rows = _rule_rejections(left)
+    result["keptVerdicts"] = _kept_verdicts(market_doc, left)
     # The first rows that WILL import, as they will be stored: the file's own first rows included a
     # skipped one, and read availability from a column a tier grid had answered instead (bug 40).
     # A row a rule rejects is listed with its reason instead, so the two lists check different
@@ -1466,28 +1473,55 @@ def preview_values(
     return result, 200
 
 
-def _rule_rejections(
+class _Left(NamedTuple):
+    """One written row's application as the import would leave it, its rules judged (E38/F03/S02).
+
+    ``before`` is the application as it stands, None for a new row; ``after`` is it once the row is
+    written and the rules have judged it; ``met`` the rule and reason that meet it, None where no
+    rule may judge it or none meets it; ``newly_rejected`` whether the rules' judging rejects it, as
+    ``RejectionRules.judge`` counts a rejection - not one already rejected by that rule for that
+    reason, which it skips.
+    """
+    line: int
+    email: str
+    data: Dict[str, Any]
+    stored: Dict[str, Any]
+    before: Optional[Dict[str, Any]]
+    after: Dict[str, Any]
+    met: Optional[Tuple[str, str]]
+    newly_rejected: bool
+
+
+def _overturns(by: Optional[str], market: Any) -> bool:
+    """Whether a write by ``by`` returns a rule's rejection no rule meets any longer to review: only
+    for a person the market's change row allows (E38/F06/S01), never for nobody."""
+    import api.markets as MarketsApi
+
+    return by is not None and MarketsApi.may_overturn(by, market)
+
+
+def _as_the_import_leaves_them(
     market_doc: Dict[str, Any],
     applicants: Sequence[_Row],
     refused: Set[int],
     existing_by_email: Dict[str, Dict[str, Any]],
-) -> Tuple[List[Dict[str, Any]], Set[int]]:
-    """The rows of the file the automatic rejections will newly reject once they are imported, with
-    the rule and the reason, and every row a rule meets (E38/F03/S02). Writes nothing.
+    by: Optional[str],
+) -> List[_Left]:
+    """Every row the import would write, its application as the import would leave it. Writes
+    nothing. The one reading of it, so the rows the preview lists as rejected and the verdicts it
+    says are kept never disagree.
 
     Judged as ``RejectionRules.judge`` judges at the import's end: each application as the write
     would leave it - new and undecided, or as it stands, or undecided again where the import sends
-    an approval back to review - and only where a rule may judge it, so a row updating an
-    application a person decided is not listed; its answers as stored, an organizer's update read
-    in its place.
-
-    A row a rule meets is returned in the second set even when it is not newly rejected: one
-    already rejected by that same rule with that same reason is what ``judge`` skips, so the import
-    rejects nothing new for it - but it is still not a sample of a row that imports to review.
+    an approval back to review - and only where a rule may judge it, so an application a person
+    decided keeps its verdict; its answers as stored, an organizer's update read in its place. A
+    rule's rejection no rule meets any longer returns to review unless the results are published or
+    ``by`` may not overturn it.
     """
-    book = RejectionRules.Rulebook(market_from_document(market_doc))
-    rejected = []
-    met_rows: Set[int] = set()
+    market = market_from_document(market_doc)
+    book = RejectionRules.Rulebook(market)
+    overturns: Optional[bool] = None
+    left = []
     for line, email, _submitted, data, _ignored in applicants:
         stored = None if line in refused else _answers_as_stored(market_doc, data)
         if stored is None:
@@ -1496,21 +1530,54 @@ def _rule_rejections(
         after = {**(existing or {}), "form_data": stored}
         if existing is None or _would_return_to_review(market_doc, existing, data):
             after["status"] = ApplicationStatus.OPEN.value
-        if not ApplicationsApi.is_judgeable(after):
-            continue
-        met = book.rejecting(ApplicationsApi.effective_answers(after))
-        if met is None:
-            continue
-        rule, reason = met
-        met_rows.add(line)
-        # What ``judge`` skips: already rejected by this rule for this reason, changed or not.
-        if after.get("status") == ApplicationStatus.REVIEWER_REJECTED.value \
-                and (after.get("verdict_by") or {}).get("rule") == rule \
-                and after.get("verdict_reason") == reason:
-            continue
-        rejected.append(
-            {"row": line, "email": email, "formData": stored, "rule": rule, "reason": reason})
-    return rejected, met_rows
+        met = None
+        newly_rejected = False
+        if ApplicationsApi.is_judgeable(after):
+            met = book.rejecting(ApplicationsApi.effective_answers(after))
+            by_rule = after.get("status") == ApplicationStatus.REVIEWER_REJECTED.value
+            if met is None:
+                if by_rule and not book.results_published:
+                    if overturns is None:
+                        overturns = _overturns(by, market)
+                    if overturns:
+                        after["status"] = ApplicationStatus.OPEN.value
+            elif not (by_rule and (after.get("verdict_by") or {}).get("rule") == met[0]
+                      and after.get("verdict_reason") == met[1]):
+                after.update(status=ApplicationStatus.REVIEWER_REJECTED.value,
+                             verdict_by={"kind": "rule", "rule": met[0]}, verdict_reason=met[1])
+                newly_rejected = True
+        left.append(_Left(line, email, data, stored, existing, after, met, newly_rejected))
+    return left
+
+
+def _rule_rejections(left: Sequence[_Left]) -> Tuple[List[Dict[str, Any]], Set[int]]:
+    """The rows of the file the automatic rejections will newly reject once they are imported, with
+    the rule and the reason, and every row a rule meets (E38/F03/S02). Writes nothing.
+
+    A row a rule meets is returned in the second set even when it is not newly rejected: one
+    already rejected by that same rule with that same reason is what ``judge`` skips, so the import
+    rejects nothing new for it - but it is still not a sample of a row that imports to review.
+    """
+    rejected = [
+        {"row": row.line, "email": row.email, "formData": row.stored,
+         "rule": row.met[0], "reason": row.met[1]}
+        for row in left if row.met is not None and row.newly_rejected
+    ]
+    return rejected, {row.line for row in left if row.met is not None}
+
+
+def _kept_verdicts(market_doc: Dict[str, Any], left: Sequence[_Left]) -> int:
+    """How many written rows update an application already decided that the import leaves at that
+    verdict (T116 rereview 10): not one it sends back to review, not one the rules newly reject -
+    the preview lists that one instead - and not one whose rule's rejection it returns to review.
+    A row that would store what the application holds already is not written, so not counted."""
+    return sum(
+        1 for row in left
+        if row.before is not None and ApplicationsApi.is_decided(row.before)
+        and not _unchanged(market_doc, row.before, row.data)
+        and not row.newly_rejected
+        and row.after.get("status") == row.before.get("status")
+    )
 
 
 def _answers_as_stored(
@@ -1838,12 +1905,10 @@ def import_applications(
     # The rules judge what this import wrote - after any approval it sent back to review - and
     # anything else still undecided (E33/F03/S02), returning a rule's rejection to open only for an
     # importer who may overturn one (E38/F06/S01).
-    import api.markets as MarketsApi
-
     judged_market = market_from_document(market_doc)
     verdicts = RejectionRules.judge(
         RejectionRules.Rulebook(judged_market), market_id,
-        overturns=by is not None and MarketsApi.may_overturn(by, judged_market))
+        overturns=_overturns(by, judged_market))
 
     # Only now, the rows written: a draft's first import is its way into Review (E38/F04/S01).
     phase = phase_from_market_document(market_doc).value

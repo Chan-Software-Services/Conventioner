@@ -4,11 +4,12 @@ Membership alone gave Viewer on an organization's markets, even to its owner and
 admin of the organization running the market saw the seats and could not swap one. A member still
 reads; a role on the market itself still counts, and the higher of the two is the one held.
 """
+import copy
 from types import SimpleNamespace
 
 import pytest
 
-from conftest import FakeMarketsCollection, mongo_matches, stored_market
+from conftest import FakeMarketsCollection, mongo_matches, mongo_project, stored_market
 import api.markets as MarketsApi
 import api.organizations as OrgsApi
 import api.permissions as PermissionsApi
@@ -115,9 +116,10 @@ class FakeMarkets:
         self.docs = docs
         self.reads = 0
 
-    def find(self, query):
+    def find(self, query, projection=None):
         self.reads += 1
-        return [doc for doc in self.docs if mongo_matches(doc, query)]
+        return [mongo_project(copy.deepcopy(doc), projection)
+                for doc in self.docs if mongo_matches(doc, query)]
 
 
 @pytest.fixture

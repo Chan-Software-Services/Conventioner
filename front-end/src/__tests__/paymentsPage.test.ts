@@ -12,38 +12,43 @@ import {
   type PaymentsVendor,
 } from '@/utils/paymentsPage';
 
-// Each with the state the server read (`balance_state` in back-end/payments.py).
+// Each with the state the server read (`balance_state` in back-end/payments.py) and whether their
+// account compares (`compares`).
 const ANA: PaymentsVendor = {
   email: 'ana@example.com',
   owedCents: 7000,
   paidCents: 3500,
   balanceState: 'owes',
+  compares: true,
 };
 const BEN: PaymentsVendor = {
   email: 'ben@example.com',
   owedCents: 3000,
   paidCents: 3000,
   balanceState: 'paid',
+  compares: true,
 };
 const CY: PaymentsVendor = {
   email: 'cy@example.com',
   owedCents: 1750,
   paidCents: 2500,
   balanceState: 'over',
+  compares: true,
 };
 const DEE: PaymentsVendor = {
   email: 'dee@example.com',
   owedCents: 0,
   paidCents: 0,
   balanceState: null,
+  compares: true,
 };
 const NAMES = { 'ana@example.com': 'Zed Ana', 'cy@example.com': 'Alice Cy' };
 const ALL = [ANA, BEN, CY, DEE];
-const priced = { currency: 'CAD', vendors: ALL };
-/** A market without prices: nobody owes, whatever they paid. */
+const priced = { offersPaymentStates: true, vendors: ALL };
+/** A market without prices: nobody owes, whatever they paid, so the server offers no state. */
 const unpriced = {
-  currency: null,
-  vendors: ALL.map((v) => ({ ...v, owedCents: 0, balanceState: null })),
+  offersPaymentStates: false,
+  vendors: ALL.map((v) => ({ ...v, owedCents: 0, balanceState: null, compares: false })),
 };
 
 describe('the Payments page filters', () => {
@@ -85,18 +90,23 @@ describe('the Payments page filters', () => {
     expect(paymentsFilters(unpriced)).toEqual([]);
   });
 
-  it('offers the filters on a market without prices where an amount owed was set by hand', () => {
-    // The reading follows the account, not the market (finding 10).
-    const setByHand = { currency: null, vendors: [{ ...DEE, owedCents: 2000 }] };
+  it('offers the filters wherever the server offers payment states, prices or not', () => {
+    // An amount owed set by hand, or a refund beyond what was paid, on a market without prices
+    // (findings 10 and 14): the server reads it, and the page takes its word.
+    const setByHand = {
+      offersPaymentStates: true,
+      vendors: [{ ...DEE, owedCents: 2000, balanceState: 'owes' as const }],
+    };
+    expect(owingCounted(setByHand)).toBe(true);
     expect(paymentsFilters(setByHand)).toEqual(PAYMENTS_SHOWN);
     expect(paymentsShownFrom('owes', setByHand)).toBe('owes');
   });
 
-  it('offers the filters on a market without prices where a refund went beyond what was paid', () => {
-    // A negative net paid is money owed back to the market (finding 14).
-    const refundedBeyond = { currency: null, vendors: [{ ...DEE, paidCents: -1500 }] };
-    expect(owingCounted(refundedBeyond)).toBe(true);
-    expect(paymentsShownFrom('owes', refundedBeyond)).toBe('owes');
+  it("counts what is owed by the server's word, not by reading the amounts again", () => {
+    const told = { offersPaymentStates: false, vendors: ALL };
+    expect(owingCounted(told)).toBe(false);
+    expect(paymentsFilters(told)).toEqual([]);
+    expect(owingCounted(null)).toBe(false);
   });
 
   it('ignores a filter in the address on a market without prices where nobody owes', () => {
@@ -187,29 +197,30 @@ describe('the Payments page search', () => {
 
 describe("the market's money caption", () => {
   // "Paid" holds what a vendor whose account compares with nothing paid, so it is said only where
-  // one did (T153 review finding 15).
-  const ben = { ...BEN, owedCents: 0, balanceState: null };
+  // one did (T153 review finding 15), by each vendor's served `compares`.
+  const ben = { ...BEN, owedCents: 0, balanceState: null, compares: false };
 
-  it('is drawn where a vendor owing nothing on a market without prices paid', () => {
-    expect(paidOwingNothing({ currency: null, vendors: [{ ...ANA, owedCents: 2000 }, ben] })).toBe(
-      true,
-    );
+  it('is drawn where a vendor whose account does not compare paid', () => {
+    expect(paidOwingNothing({ offersPaymentStates: true, vendors: [ANA, ben] })).toBe(true);
   });
 
-  it('is not drawn where every vendor who paid owes', () => {
-    const owing = { currency: null, vendors: [{ ...ANA, owedCents: 2000 }, DEE] };
-    expect(paidOwingNothing(owing)).toBe(false);
+  it('is not drawn where every vendor who paid compares', () => {
+    expect(paidOwingNothing({ offersPaymentStates: true, vendors: [ANA, DEE] })).toBe(false);
   });
 
-  it('is not drawn where a vendor owing nothing was refunded beyond what they paid', () => {
-    // A negative amount paid is owed back (finding 14): it compares, and reads "Owes".
-    expect(paidOwingNothing({ currency: null, vendors: [{ ...DEE, paidCents: -1500 }] })).toBe(
-      false,
-    );
+  it('is not drawn for a vendor who does not compare and paid nothing, or was refunded', () => {
+    const none = { ...DEE, compares: false };
+    expect(paidOwingNothing({ offersPaymentStates: false, vendors: [none] })).toBe(false);
+    expect(
+      paidOwingNothing({ offersPaymentStates: false, vendors: [{ ...none, paidCents: -1500 }] }),
+    ).toBe(false);
   });
 
-  it('is not drawn on a market with prices', () => {
-    expect(paidOwingNothing({ currency: 'CAD', vendors: [ben] })).toBe(false);
+  it("reads each vendor's served comparison, not the amounts", () => {
+    // Served as comparing, Ben's payment is no payment owing nothing, whatever he owes.
+    expect(
+      paidOwingNothing({ offersPaymentStates: true, vendors: [{ ...ben, compares: true }] }),
+    ).toBe(false);
     expect(paidOwingNothing(null)).toBe(false);
   });
 });

@@ -45,6 +45,7 @@ import review_team as ReviewTeam  # noqa: E402
 from bson.errors import InvalidDocument  # noqa: E402
 from utils.application_token import generate_application_token  # noqa: E402
 from datatypes import MarketPerson, MarketPhase, PaymentEntry, fill_plan_ids  # noqa: E402
+from test_a_vendors_payments import plant_amount_owed  # noqa: E402
 from test_csv_import import MAPPING, _csv, _market_doc  # noqa: E402
 from test_csv_proposal_api import CSV as A_GOOGLE_FORM_EXPORT  # noqa: E402
 from test_essential_fields import VALID_ANSWERS, _applicant_market_doc  # noqa: E402
@@ -541,7 +542,7 @@ def _set_owed(client, world):
 
 def _use_calculated_price(client, world):
     _priced_seat(world)
-    Payments.set_amount_owed(MARKET, VENDOR, DATE, 0, OWNER)
+    plant_amount_owed(MARKET, VENDOR, DATE, 0, OWNER)
     return client.delete(f"/markets/{MARKET}/payments/{VENDOR}/owed/{DATE}")
 
 

@@ -68,6 +68,14 @@ def stores(monkeypatch, market_records):
                            history=market_records.history)
 
 
+def plant_amount_owed(market_id, vendor_email, date, cents, by):
+    """An Admin's amount on a vendor's day, stored as the release before wrote it: the legacy
+    ``set_by_hand`` and no state, so a test planting one reads it through ``state_of``'s rule."""
+    Payments.amounts_owed_collection.insert_one({
+        "market_id": market_id, "vendor_email": vendor_email, "date": date,
+        "set_by_hand": {"cents": cents, "by": by, "at": "2099-04-01T10:00:00+00:00"}})
+
+
 def account():
     return PaymentsApi.vendor_account(MARKET, ANA, EDITOR)
 
@@ -107,7 +115,7 @@ class TestTheAmountOwed:
         assert got["owedCents"] == 6500
 
     def test_an_amount_set_by_hand_stays_when_the_seat_moves(self, market):
-        Payments.set_amount_owed(MARKET, ANA, SAT, 2000, "admin@example.com")
+        plant_amount_owed(MARKET, ANA, SAT, 2000, "admin@example.com")
 
         PlacementsApi.write_placement(MARKET, {"email": ANA, "date": SAT, "table_code": "Landing 2",
                                                "table_choice": "Full Table"}, EDITOR)
@@ -177,7 +185,8 @@ class TestFreeingATable:
         PlacementsApi.write_placement(MARKET, {"email": ANA, "date": SUN, "table_code": "Landing 1",
                                                "table_choice": "Full Table"}, EDITOR)
 
-        assert stores.owed.documents[0]["freed"] is None
+        # Following its new seat, the day keeps no record at all.
+        assert stores.owed.documents == []
         market.doc["assignmentObject"]["vendorAssignments"] = [
             seat for seat in market.doc["assignmentObject"]["vendorAssignments"]
             if seat["date"] != SUN]
@@ -205,7 +214,7 @@ class TestFreeingATable:
 
         assert status == 200
         kept = {doc["date"]: doc["freed"] for doc in stores.owed.documents}
-        assert kept[SUN] is None and kept[SAT]
+        assert SUN not in kept and kept[SAT]
         assert owed(account()["lines"]) == [(SAT, "North Wing 1", 3500, True),
                                             (SUN, "Landing 1", 3000, False)]
         # The deduction the run took back is recorded, by whoever ran it (review, note 18).
@@ -339,8 +348,8 @@ class TestTheHistory:
 class TestTheRecordsGoWithTheMarket:
     def test_deleting_the_market_deletes_its_payments_and_amounts_owed(self, market, stores):
         pay(3500)
-        Payments.set_amount_owed(MARKET, ANA, SAT, 2000, "admin@example.com")
-        Payments.set_amount_owed("another-market", ANA, SAT, 1000, "admin@example.com")
+        plant_amount_owed(MARKET, ANA, SAT, 2000, "admin@example.com")
+        plant_amount_owed("another-market", ANA, SAT, 1000, "admin@example.com")
 
         MarketsApi.MarketDeletion.delete_market_and_records(market, MARKET)
 

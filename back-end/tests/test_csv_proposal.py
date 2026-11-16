@@ -633,3 +633,47 @@ def test_a_few_repeated_words_do_not_let_a_column_of_who_they_are_through():
 def test_a_column_of_who_they_are_passes_only_when_a_third_of_it_is_the_same_words():
     """The case ADR 0023 accepts by name: the rule counts how different the answers are, not whose."""
     assert CsvProposal.every_reading(_field_answering(_usernames_and_na(68, 32))) is not None
+
+
+# --- An option that names someone is off by default (T352, ADR 0018) ------------------------------
+
+def _question_answering(answers):
+    """The proposal's column for a question these applicants answered, one answer each."""
+    rows = [[f"vendor{i:03d}@example.com", answer] for i, answer in enumerate(answers)]
+    return CsvProposal.proposal(["Email Address", "Where can we see your work?"], rows)["columns"][1]
+
+
+def _option(column, value):
+    return next(o for o in column["field"]["options"] if o["value"] == value)
+
+
+def test_an_option_that_names_someone_is_listed_off_after_the_kept_ones_and_checked():
+    link = "Online at https://example.com/prints"
+    # The rules read the type without the link, so nine in ten answers name nobody.
+    column = _question_answering(["In person"] * 24 + ["Instagram"] * 12 + [link] * 3 + ["Etsy"])
+
+    assert column["field"]["type"] == "select"
+    assert [(o["value"], o["namesSomeone"], o["keep"]) for o in column["field"]["options"]] == [
+        ("In person", False, True), ("Instagram", False, True),
+        (link, True, False), ("Etsy", False, False),
+    ]
+    assert _option(column, link)["rare"] is False
+    assert CsvProposal.CHECK_NAMES_SOMEONE in column["check"]
+
+
+def test_a_link_without_its_scheme_the_rules_filter_misses_is_caught():
+    link = "example.org/shop"
+    assert not CsvProposal._identifying(link)
+    column = _question_answering(["In person"] * 6 + [link] * 3)
+
+    assert _option(column, link)["namesSomeone"] is True
+    assert _option(column, link)["keep"] is False
+    assert CsvProposal.CHECK_NAMES_SOMEONE in column["check"]
+
+
+def test_a_plain_common_answer_is_kept_and_its_question_unchecked():
+    column = _question_answering(["In person"] * 6 + ["Instagram"] * 4)
+
+    assert _option(column, "In person") == {
+        "value": "In person", "count": 6, "rare": False, "namesSomeone": False, "keep": True}
+    assert CsvProposal.CHECK_NAMES_SOMEONE not in column["check"]

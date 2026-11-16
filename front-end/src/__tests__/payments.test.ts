@@ -3,9 +3,6 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  balanceChip,
-  balanceState,
-  balanceText,
   entryText,
   entryChange,
   lineSource,
@@ -15,12 +12,7 @@ import {
   today,
   type Payment,
   type PaymentLine,
-  type VendorAccount,
 } from '@/utils/payments';
-
-function account(owedCents: number, paidCents: number, currency: string | null = 'CAD') {
-  return { currency, lines: [], payments: [], owedCents, paidCents } satisfies VendorAccount;
-}
 
 const LINE: PaymentLine = {
   date: '2099-05-07',
@@ -35,61 +27,6 @@ const LINE: PaymentLine = {
   freedAt: null,
   freedBy: null,
 };
-
-describe('how what they paid compares with what they owe', () => {
-  it('says what they still owe', () => {
-    expect(balanceText(account(7000, 4300))).toBe('Owes $27.00');
-    expect(balanceState(account(7000, 4300))).toBe('owing');
-  });
-
-  it('says they paid in full', () => {
-    expect(balanceText(account(7000, 7000))).toBe('Paid in full');
-    expect(balanceState(account(7000, 7000))).toBe('settled');
-  });
-
-  it('says how much more than owed they paid, the case for a refund', () => {
-    expect(balanceText(account(3500, 5000))).toBe('Paid $15.00 more than owed');
-    expect(balanceState(account(3500, 5000))).toBe('overpaid');
-  });
-
-  it('says nothing is owed when nothing is owed or paid', () => {
-    expect(balanceText(account(0, 0))).toBe('Nothing owed');
-  });
-
-  it('keeps the cents where there are any', () => {
-    expect(balanceText(account(3001, 1500))).toBe('Owes $15.01');
-  });
-
-  it('says only what was paid on a market without prices, in the card’s own default currency', () => {
-    // Nothing is priced there, so a payment is never "more than owed" (finding 8), and its chip
-    // takes no tone: neither square nor a refund to issue.
-    expect(balanceText(account(0, 2500, null))).toBe('Paid $25.00');
-    expect(balanceChip(account(0, 2500, null))).toBe('chip--neutral');
-    expect(balanceText(account(0, 0, null))).toBe('Nothing owed');
-  });
-
-  it('reads an amount owed set by hand on a market without prices as anywhere', () => {
-    // The reading follows the account, not the market (finding 10).
-    expect(balanceText(account(2000, 3500, null))).toBe('Paid $15.00 more than owed');
-    expect(balanceChip(account(2000, 3500, null))).toBe('chip--informational');
-    expect(balanceText(account(2000, 1000, null))).toBe('Owes $10.00');
-    expect(balanceChip(account(2000, 1000, null))).toBe('chip--attention');
-  });
-
-  it('reads a refund beyond what was paid on a market without prices as owed back', () => {
-    // A negative net paid is money owed back to the market (finding 14), as the server's
-    // `balance_state` reads it: "Owes", on the attention chip.
-    expect(balanceText(account(0, -1500, null))).toBe('Owes $15.00');
-    expect(balanceChip(account(0, -1500, null))).toBe('chip--attention');
-  });
-
-  it('tones the comparison as it reads', () => {
-    expect(balanceChip(account(7000, 4300))).toBe('chip--attention');
-    expect(balanceChip(account(7000, 7000))).toBe('chip--positive');
-    expect(balanceChip(account(3500, 5000))).toBe('chip--informational');
-    expect(balanceChip(account(0, 0))).toBe('chip--neutral');
-  });
-});
 
 describe('a line’s seat', () => {
   it('names the table, the tier and the size', () => {

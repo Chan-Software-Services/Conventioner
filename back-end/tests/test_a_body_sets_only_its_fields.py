@@ -161,7 +161,7 @@ class TestAnOrganizationUpdate:
     @pytest.fixture
     def organization(self, monkeypatch):
         return install_organizations(monkeypatch, FakeOrganizations({
-            "id": ORG_ID, "name": "Night Market Society", "owner": OWNER_ID,
+            "_id": "org-object-id", "id": ORG_ID, "name": "Night Market Society", "owner": OWNER_ID,
             "admins": [], "members": [], "markets": ["market-1"], "theme": None,
         }))
 

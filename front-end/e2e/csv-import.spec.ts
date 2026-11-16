@@ -650,6 +650,53 @@ test.describe('CSV vendor import', () => {
     expect(statusOf(after)).toBe('open');
   });
 
+  test('a re-import says an approval it leaves alone keeps its verdict, and keeps it', async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    const seed = await seedPlannedMarket(request);
+    const importPage = new CsvImportPage(page);
+
+    const onlyNadia = [HEADERS.join(','), ROWS[0]].join('\n');
+    await openImport(importPage, request, seed.marketId);
+    await importPage.chooseFile(onlyNadia);
+    await importPage.mapColumns(HEADERS, FULL_MAPPING);
+    await importPage.previewAndConfirm();
+
+    const imported = (await listApplications(request, seed.marketId)).find(
+      (a) => a.applicantEmail === 'nadia@ember.test',
+    )!;
+    const reviewRes = await request.put(
+      `${BACKEND_URL}/markets/${seed.marketId}/applications/${imported.id}/review`,
+      { data: { status: 'reviewer_approved' } },
+    );
+    expect(reviewRes.ok()).toBeTruthy();
+
+    // A corrected business name moves nothing the solver reads, so the approval stands - and the
+    // preview says so, rather than that every row awaits review (T116 rereview 10).
+    const renamed = [
+      HEADERS.join(','),
+      ROWS[0].replace('Ember Ceramics', 'Ember Ceramics Studio'),
+    ].join('\n');
+    await openImport(importPage, request, seed.marketId);
+    await importPage.chooseFile(renamed);
+    await importPage.clickPreview();
+
+    await expect(importPage.previewMerge).toHaveText(
+      '0 new, 1 updated. The 1 updated application already decided keeps its verdict. Nothing has been written yet.',
+    );
+    await expect(importPage.returningNote).toBeHidden();
+
+    await importPage.clickConfirm();
+    await expect(importPage.resultSummary).toBeVisible();
+
+    const after = (await listApplications(request, seed.marketId)).find(
+      (a) => a.applicantEmail === 'nadia@ember.test',
+    )!;
+    expect(statusOf(after)).toBe('reviewer_approved');
+    expect(after.formData.business_name).toBe('Ember Ceramics Studio');
+  });
+
   test('importing is refused once the market reaches assignment, and said before a file', async ({
     authenticatedPage: page,
     request,

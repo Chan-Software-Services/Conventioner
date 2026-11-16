@@ -1499,6 +1499,169 @@ class TestReviewsInvalidatedByAReImport:
         )
 
 
+class TestThePreviewSaysWhichVerdictsAreKept:
+    """A re-import's preview counts the updated applications already decided that the import leaves
+    at their verdict (T116 rereview 10), judged as the import then judges them: an approval it sends
+    back to review, a rule's new rejection and a rule's rejection it returns to review are not kept.
+    """
+
+    HALF = [{"key": EssentialFields.TABLE_CHOICE_KEY, "answers": ["half"]}]
+    HALF_REASON = "Answered “Half a table, shared” to “Table choice”"
+    PERSON = {"kind": "person", "user_id": "user-alex", "email": "alex@market.test"}
+    RULE = {"kind": "rule", "rule": EssentialFields.TABLE_CHOICE_KEY}
+    # A new business name changes nothing the solver reads, so a verdict stands.
+    RENAMED = GOOD_ROW.replace("Ember Ceramics", "Ember Ceramics Studio")
+    FULL = GOOD_ROW.replace(",half,", ",full,")
+
+    @pytest.fixture(autouse=True)
+    def _overturns(self, monkeypatch):
+        """Only the owner may overturn a rule's rejection, as the market's change row says."""
+        monkeypatch.setattr(MarketsApi, "may_overturn", lambda who, _m: who == "owner@market.test")
+
+    def _decided(self, markets, applications, status, row=GOOD_ROW, **verdict):
+        CsvImport.import_applications(markets, markets.doc, _csv(row), MAPPING)
+        applications.documents[0].update(status=status.value, **verdict)
+
+    def _kept(self, markets, row, by="owner@market.test"):
+        body, status = CsvImport.preview_values(markets.doc, _csv(row), MAPPING, by=by)
+        assert status == 200, body
+        return body["keptVerdicts"]
+
+    def test_an_approval_whose_table_does_not_move_is_kept(self, markets, applications):
+        self._decided(markets, applications, ApplicationStatus.REVIEWER_APPROVED,
+                      verdict_by=self.PERSON)
+
+        assert self._kept(markets, self.RENAMED) == 1
+
+    def test_a_persons_rejection_is_kept(self, markets, applications):
+        self._decided(markets, applications, ApplicationStatus.REVIEWER_REJECTED,
+                      verdict_by=self.PERSON)
+
+        assert self._kept(markets, self.FULL) == 1
+
+    def test_an_approval_the_import_returns_to_review_is_not_kept(self, markets, applications):
+        self._decided(markets, applications, ApplicationStatus.REVIEWER_APPROVED,
+                      verdict_by=self.PERSON)
+
+        body, _ = CsvImport.preview_values(markets.doc, _csv(self.FULL), MAPPING)
+
+        assert (body["returningToReview"], body["keptVerdicts"]) == (1, 0)
+
+    def test_a_rules_rejection_for_the_same_reason_is_kept(self, markets, applications):
+        markets.doc["rejectionRules"] = self.HALF
+        self._decided(markets, applications, ApplicationStatus.REVIEWER_REJECTED)
+        assert applications.documents[0]["verdict_reason"] == self.HALF_REASON
+
+        assert self._kept(markets, self.RENAMED) == 1
+
+    def test_a_rules_rejection_for_a_new_reason_is_listed_and_not_kept(
+        self, markets, applications,
+    ):
+        markets.doc["rejectionRules"] = self.HALF
+        self._decided(markets, applications, ApplicationStatus.REVIEWER_REJECTED,
+                      verdict_by=self.RULE, verdict_reason="An earlier wording of the rule")
+
+        body, _ = CsvImport.preview_values(markets.doc, _csv(self.RENAMED), MAPPING,
+                                           by="owner@market.test")
+
+        assert [r["email"] for r in body["rejected"]] == ["nadia@ember.test"]
+        assert body["keptVerdicts"] == 0
+
+    def test_a_rules_rejection_no_rule_meets_returns_for_one_who_may_overturn(
+        self, markets, applications,
+    ):
+        markets.doc["rejectionRules"] = self.HALF
+        self._decided(markets, applications, ApplicationStatus.REVIEWER_REJECTED)
+
+        assert self._kept(markets, self.FULL) == 0
+
+    def test_a_rules_rejection_no_rule_meets_stands_for_one_who_may_not(
+        self, markets, applications,
+    ):
+        markets.doc["rejectionRules"] = self.HALF
+        self._decided(markets, applications, ApplicationStatus.REVIEWER_REJECTED)
+
+        assert self._kept(markets, self.FULL, by="viewer@market.test") == 1
+        assert self._kept(markets, self.FULL, by=None) == 1
+
+    def test_a_rules_rejection_no_rule_meets_stands_once_results_are_published(
+        self, markets, applications,
+    ):
+        markets.doc["rejectionRules"] = self.HALF
+        self._decided(markets, applications, ApplicationStatus.REVIEWER_REJECTED)
+        markets.doc["resultsPublished"] = True
+
+        assert self._kept(markets, self.FULL) == 1
+
+    def test_an_unchanged_row_is_not_counted(self, markets, applications):
+        self._decided(markets, applications, ApplicationStatus.REVIEWER_APPROVED,
+                      verdict_by=self.PERSON)
+
+        assert self._kept(markets, GOOD_ROW) == 0
+
+    def test_an_undecided_update_is_not_counted(self, markets, applications):
+        CsvImport.import_applications(markets, markets.doc, _csv(GOOD_ROW), MAPPING)
+
+        assert self._kept(markets, self.RENAMED) == 0
+
+    def test_a_new_row_is_not_counted(self, markets, applications):
+        assert self._kept(markets, GOOD_ROW) == 0
+
+    @pytest.mark.parametrize("row,by", [(RENAMED, "owner@market.test"),
+                                        (FULL, "owner@market.test"),
+                                        (FULL, "viewer@market.test")],
+                             ids=["same-reason", "returned", "stands"])
+    def test_the_count_is_what_the_import_then_keeps(self, markets, applications, row, by):
+        markets.doc["rejectionRules"] = self.HALF
+        CsvImport.import_applications(markets, markets.doc, _csv(GOOD_ROW), MAPPING)
+        before = applications.documents[0]["status"]
+
+        kept = self._kept(markets, row, by=by)
+        CsvImport.import_applications(markets, markets.doc, _csv(row), MAPPING, by=by)
+
+        assert kept == int(applications.documents[0]["status"] == before)
+
+
+class TestThePreviewRouteNamesWhoPreviews:
+    """The preview judges a rule's rejection as the import will for the person previewing: only
+    one who may overturn it sees it return to review."""
+
+    def test_the_signed_in_address_decides_whether_a_rules_rejection_returns(
+        self, monkeypatch, applications,
+    ):
+        from types import SimpleNamespace
+
+        import api.users as UsersApi
+        import app as app_module
+        from conftest import sessions_load_through_get_user
+
+        owner = "owner@market.test"
+        monkeypatch.setattr(app_module.login_manager, "session_protection", None)
+        sessions_load_through_get_user(monkeypatch)
+        monkeypatch.setattr(UsersApi, "get_user", lambda email: SimpleNamespace(
+            id="user-1", email=email, is_active=True, is_authenticated=True,
+            is_anonymous=False, get_id=lambda e=email: e,
+        ) if email == owner else None)
+        asked = []
+        monkeypatch.setattr(MarketsApi, "may_overturn", lambda who, _m: asked.append(who) or True)
+        doc = _market_doc(rejectionRules=TestThePreviewSaysWhichVerdictsAreKept.HALF)
+        markets = bound_markets(monkeypatch, doc)
+        monkeypatch.setattr(MarketsApi, "markets_collection", markets)
+        CsvImport.import_applications(markets, markets.doc, _csv(GOOD_ROW), MAPPING)
+        client = app_module.app.test_client()
+        with client.session_transaction() as session:
+            session["_user_id"] = owner
+            session["_fresh"] = True
+
+        response = client.post("/markets/market-123/applications/import/preview", json={
+            "csvContent": _csv(TestThePreviewSaysWhichVerdictsAreKept.FULL), "mapping": MAPPING,
+        })
+
+        assert response.status_code == 200, response.get_json()
+        assert response.get_json()["keptVerdicts"] == 0
+        assert asked == [owner]
+
+
 class TestImportingOnlyWhatItImports:
     """A row the preview says it will skip is not written at all (E26/F02/S02).
 

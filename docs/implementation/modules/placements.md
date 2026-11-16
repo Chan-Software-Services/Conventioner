@@ -24,7 +24,7 @@ describes:
   - front-end/src/components/PlacementDialog.vue
   - back-end/api/attendance.py#checked_in_on
   - back-end/tests/test_a_vendor_who_is_here_is_asked_for.py
-verified: 2026-11-14
+verified: 2026-11-16
 sources:
   - wayfinding/readable-journey/08
   - wayfinding/claims-and-room/map
@@ -55,6 +55,7 @@ sources:
   - T201
   - T277
   - T316
+  - T335
   - T318
 ---
 
@@ -70,8 +71,8 @@ Its routes are in [`back-end/app.py`](../../../back-end/app.py).
 
 | Route                               | Function           | Does                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ----------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /markets/:id/assignment`      | `run_assignment`   | runs the solver over the approved applications and stores what it produced, with [what it was made from](made-from.md), the review the verdicts were given in among it; every vendor-day held before the run or after it forgets its freed record, and the $0 a free's deduction set on it ([payments](../data/payments.md))                                                                                         |
-| `PUT /markets/:id/placements`       | `write_placement`  | places one vendor in one seat on one date, replacing whatever they held that date, so it is also the move to an empty seat, from either end of the dialog: the vendor's seat or the empty one (T208); the day forgets that vendor's freed record, and the $0 a free's deduction set on it ([payments](../data/payments.md))                                                                                          |
+| `POST /markets/:id/assignment`      | `run_assignment`   | runs the solver over the approved applications and stores what it produced, with [what it was made from](made-from.md), the review the verdicts were given in among it; every vendor-day it seats takes back its freed line, and every vendor-day held before it and not after is dropped, with any amount an Admin set for it ([payments](../data/payments.md#the-owed-days-state))                                 |
+| `PUT /markets/:id/placements`       | `write_placement`  | places one vendor in one seat on one date, replacing whatever they held that date, so it is also the move to an empty seat, from either end of the dialog: the vendor's seat or the empty one (T208); the day takes back that vendor's freed line, and the $0 a free's deduction set on it ([payments](../data/payments.md#the-owed-days-state))                                                                     |
 | `DELETE /markets/:id/placements`    | `remove_placement` | frees the seat one vendor holds on one date, first keeping the seat's line of what they owe for it, which freeing never changes ([payments](../data/payments.md)), unless `deductOwed` asks that it owe $0, which asks the row "Change the amount owed" too, before anything is freed; freeing a seat nobody holds is not an error, and with `deductOwed` sets that $0 on a freed line holding no amount set by hand |
 | `POST /markets/:id/placements/swap` | `swap_placements`  | trades two vendors' seats on one date in one document update: both change or neither does; both days forget any freed record a stopped free left on them                                                                                                                                                                                                                                                             |
 
@@ -81,18 +82,25 @@ Its routes are in [`back-end/app.py`](../../../back-end/app.py).
 **A free writes what the vendor owes before the seat, in one write.**
 `remove_placement`, for a seat held, writes in this order ([payments](../data/payments.md#the-amount-owed-per-table-day)):
 
-1. One write on the day's owed record, landing only while its amount by hand is the one read, keeps the freed line and, when `deductOwed` asked it, the free's $0 (`PaymentsApi.keep_freed_line`); unasked, it puts back the amount a stopped free's $0 replaced, or none.
-   An amount that keeps changing under it is refused, 409, with nothing written.
+1. One write on the day's owed record, through its one writer and holding the record as read, keeps the freed line and, when `deductOwed` asked it, the free's $0 (`PaymentsApi.keep_freed_line`, the `freed` or `freed_with_deduction` event).
+   A record that keeps changing under it is refused, 409, with nothing written.
 2. The seat is freed (`lifecycle.store`).
-3. When step 2 is refused by the revision, the record goes back as it held before, only while it still holds what step 1 wrote, and the error goes on.
+3. When step 2 is refused by the revision, the record goes back as it was read (`undo()`), only while it still holds the revision step 1 wrote, and the error goes on.
    When it raises anything else, which may come after the store reached the database, the record goes back that way only while the stored assignment still seats the vendor that day; when that cannot be read, the line stays, since a held seat reads its own price over it.
 4. The freed entry is recorded, and with the deduction an "owed set" entry from what the line owed as the request read it, while the seat was held, to 0.
 
 So no stop after the seat leaves it free and its full amount owed, no seat write that landed before its error loses the day's line, and no seat write refused, or failed with the seat read as still held, leaves a freed record behind; one that failed with the seat unread leaves its line, read over by the held seat until the next write of the day forgets it.
 
-**Every write of the assignment hands `seated_again` the days it touched, after its store.**
-A placement hands its vendor's day, a swap its two vendors' day, and a run every day held in the assignment it read and every day held in the one it wrote.
-Each also hands the days held in the assignment it read: a freed record on such a day is one a stopped free left, cleared with no history entry, and only a day not held there, which really read as freed, records "owed taken back".
+**Every write of the assignment tells each owed day it moved, after its store** (`PaymentsApi.assignment_written(market_id, *, seated, held_before, dropped, by)`).
+It hands the rows it seats as `seated`, the rows of the assignment it read that it moved as `held_before`, and the days it dropped as `dropped`:
+
+- a placement seats its vendor's day, with the seat the vendor left that day as held before, and drops none;
+- a swap seats its two vendors' day, both held before, and drops none;
+- a run seats every row it wrote, hands the whole assignment it read as held before, and drops every vendor-day held there and not in the one it wrote;
+- a free never calls it: it writes its own day first (above).
+
+Each seated day takes the `seated` event: a freed record on a day held before is one a stopped free left, tidied with no history entry, and only a day not held before, which really read as freed, records "owed taken back".
+Each dropped day takes `dropped_by_run`, and an amount an Admin set for it goes with it, recorded as `owed_dropped` under the run's row by whoever allocated tables (Daniel's choice, T335, [payments](../data/payments.md#the-owed-days-state)); so is an Admin's amount a day seated afresh finds there, which no line showed, marked `held_no_table`.
 
 **All four ask the table's Assignment row** ([the market's actions](market-actions.md)), whose default is EDITOR, the bar every other market write sets, and deliberately not stricter: an EDITOR already owns the tiers, sections and table counts the whole assignment is computed from, so withholding "move one vendor between two seats" protects nothing.
 Each loads its market through `_load_market_to_change`, so an archived market is refused.
@@ -142,7 +150,7 @@ A pinned vendor counts against their own ceiling and the section's half-table sh
 
 **An applicant outside the run is seated as held.**
 A pin for someone the run does not place (an applicant the review did not approve, or a vendor added by hand) is seated from `held_vendors_for` (`held_solver_vendors` in [`back-end/assignment/vendor_input.py`](../../../back-end/assignment/vendor_input.py)), read leniently since no answer of theirs decides anything.
-The seat is occupied, they are placed nowhere else, and the solver never counts them among the run's vendors; the statistics the Assignments page reads then count a vendor added by hand among the vendors who need a table, seated or not, and never a not-approved one (`count_added_vendors` in [`back-end/api/markets.py`](../../../back-end/api/markets.py), [adding a vendor who never applied](../../business/rules/adding-a-vendor-who-never-applied.md)).
+The seat is occupied, they are placed nowhere else, and the solver never counts them among the run's vendors; the statistics the Assignments page reads then count a vendor added by hand among the vendors who need a table, seated or not, and never a not-approved one (`count_outside_vendors_who_need_tables` in [`back-end/api/markets.py`](../../../back-end/api/markets.py), [adding a vendor who never applied](../../business/rules/adding-a-vendor-who-never-applied.md)).
 
 **A pin that overrides an answer stands, and is marked.**
 `overridden_placements` in [`back-end/placement_reasons.py`](../../../back-end/placement_reasons.py) compares every hand placement with the vendor's answers as the organizer reads them (an organizer's update included) when the statistics are read, never when the pin is made: someone the review left out of the run first, then a date they did not offer, a tier they did not accept on a date they did offer (the one that costs money, since tier sets the price), and a table size they did not ask for.

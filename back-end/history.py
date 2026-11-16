@@ -104,6 +104,10 @@ DISCORD_MATCH_DECLINED = "discord_match_declined"
 # Assignment; its placement kinds are with the placements, below
 RULES = "rules"
 OWED_TAKEN_BACK = "owed_taken_back"
+#: A run left a vendor without a table on a day whose amount an Admin set, so the amount went with
+#: the day (Daniel's choice, T335); also an amount a seating, or the owed day's migration, found
+#: already hidden on a day not held.
+OWED_DROPPED = "owed_dropped"
 
 # Payments
 OWED_SET = "owed_set"
@@ -163,8 +167,13 @@ Part = Union[Dict[str, Any], None, Callable[[], Optional[Dict[str, Any]]]]
 def record(
     market_id: str, actor: Optional[str], action: Union[Action, str], *,
     kind: Optional[str] = None, vendors: Iterable[str] = (), subject: Part = None, detail: Part,
+    at: Optional[str] = None,
 ) -> None:
     """Write one entry. Never raises: a history that can break a change is worse than no history.
+
+    The entry is at ``at``, the time the change landed, or now when it is not given. Only an
+    Admin's amount owed recorded after a write that dropped it gives one (T335): the amount was
+    set when its owner wrote it, before the drop's own entry, and the history reads newest first.
 
     ``action`` is the table's row the change asked, or ``APPLY`` for what an applicant's own save
     did beyond their answers (the deal of their application, E38/F07/S03).
@@ -179,7 +188,7 @@ def record(
     A detail that builds to None is a write that changed nothing, and records nothing.
     """
     _write({MARKET_ID_FIELD: market_id}, actor, action if isinstance(action, str) else action.id,
-           kind, vendors, subject, detail)
+           kind, vendors, subject, detail, at=at)
 
 
 def record_applicant(
@@ -201,6 +210,7 @@ def _built(part: Part) -> Optional[Dict[str, Any]]:
 def _write(
     owner: Dict[str, str], actor: Optional[str], action_id: str, kind: Optional[str],
     vendors: Iterable[str], subject: Part, detail: Part, entry_id: Optional[str] = None,
+    at: Optional[str] = None,
 ) -> None:
     """Write one entry of the market or the organization ``owner`` names, by its key. Given an
     ``entry_id``, the entry is written once: it is stored under that id as its ``_id``, which the
@@ -213,7 +223,7 @@ def _write(
             "id": entry_id or str(uuid.uuid4()),
             **owner,
             "actor": actor,
-            "at": _now(),
+            "at": at or _now(),
             "action": action_id,
             "kind": kind,
             # Lowercased, because an address is a person and case is not part of who they are:

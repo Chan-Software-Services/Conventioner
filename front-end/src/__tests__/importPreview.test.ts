@@ -8,6 +8,7 @@ import {
   findsRejectedRow,
   findsReplacedRow,
   previewHeadline,
+  previewMergeLine,
   rejectedRowsWhy,
   type ImportPreviewCounts,
 } from '@/utils/importPreview';
@@ -19,6 +20,7 @@ function counts(overrides: Partial<ImportPreviewCounts>): ImportPreviewCounts {
     newRows: 0,
     updatedRows: 0,
     unchangedRows: 0,
+    keptVerdicts: 0,
     rejected: 0,
     ...overrides,
   };
@@ -60,6 +62,52 @@ describe('the import preview headline', () => {
   it('adds no rejection clause when nothing is rejected', () => {
     expect(previewHeadline(counts({ rowCount: 3, validRows: 3, newRows: 3 }))).toBe(
       '3 of 3 rows will be imported',
+    );
+  });
+});
+
+describe('what the preview says each row becomes (T116 rereview 10)', () => {
+  it('says a new row awaits review, alone on a first import', () => {
+    expect(previewMergeLine(counts({ newRows: 3 }))).toBe(
+      'A new row becomes an application awaiting your review. Nothing has been written yet.',
+    );
+  });
+
+  it('says the one updated application already decided keeps its verdict', () => {
+    expect(previewMergeLine(counts({ updatedRows: 1, keptVerdicts: 1 }))).toBe(
+      '0 new, 1 updated. The 1 updated application already decided keeps its verdict. Nothing has been written yet.',
+    );
+  });
+
+  it('says the updated applications already decided keep their verdict', () => {
+    expect(previewMergeLine(counts({ updatedRows: 3, unchangedRows: 2, keptVerdicts: 2 }))).toBe(
+      '0 new, 3 updated, 2 unchanged. The 2 updated applications already decided keep their verdict. Nothing has been written yet.',
+    );
+  });
+
+  it('says the one row listed below arrives already rejected', () => {
+    expect(previewMergeLine(counts({ updatedRows: 1, rejected: 1 }))).toBe(
+      '0 new, 1 updated. The 1 listed below arrives already rejected. Nothing has been written yet.',
+    );
+  });
+
+  it('says the rows listed below arrive already rejected', () => {
+    expect(previewMergeLine(counts({ updatedRows: 2, rejected: 2 }))).toBe(
+      '0 new, 2 updated. The 2 listed below arrive already rejected. Nothing has been written yet.',
+    );
+  });
+
+  it('joins every clause, the first capitalised', () => {
+    expect(
+      previewMergeLine(counts({ newRows: 2, updatedRows: 3, keptVerdicts: 2, rejected: 1 })),
+    ).toBe(
+      '2 new, 3 updated. A new row becomes an application awaiting your review; the 2 updated applications already decided keep their verdict; the 1 listed below arrives already rejected. Nothing has been written yet.',
+    );
+  });
+
+  it('says only that nothing is written yet when no row becomes anything', () => {
+    expect(previewMergeLine(counts({ unchangedRows: 4 }))).toBe(
+      '0 new, 0 updated, 4 unchanged. Nothing has been written yet.',
     );
   });
 });

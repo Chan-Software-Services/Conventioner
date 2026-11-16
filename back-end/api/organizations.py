@@ -35,19 +35,31 @@ users_collection = db["users"]
 markets_collection = db["markets"]
 
 
+def _refuse_a_name_you_already_hold(
+    user_id: str, name: str, renamed: Optional[str] = None,
+) -> None:
+    """Refuse ``name`` when another live organization this person belongs to has it, compared with
+    its outer spaces stripped and casefolded (T352).
+
+    Only the person's own organizations are read, so the refusal never says whether anyone else's
+    organization has the name. ``renamed`` is the organization being renamed, left out, so it may
+    change its own capitals. Two creates of one name by one person at the same instant can both
+    pass: no index holds a name unique among a person's organizations.
+    """
+    wanted = name.strip().casefold()
+    for org in organization_documents_of(user_id):
+        if org["id"] != renamed and (org.get("name") or "").strip().casefold() == wanted:
+            raise ConflictError(f'You already belong to an organization named "{org["name"]}".')
+
+
 def create_organization(owner_email: str, name: str) -> str:
-    """Create a new organization."""
-    # Check if organization already exists
-    existing_org = organizations_collection.find_one({"name": name})
-    if existing_org:
-        raise BadRequestError("Organization already exists")
-    
-    # Verify owner exists and get user id
+    """Create a new organization, refused when another of the owner's has the name."""
     owner = UsersApi.get_user(owner_email)
     if not owner:
         raise BadRequestError("Owner user not found")
     owner_id = owner.id
-    
+    _refuse_a_name_you_already_hold(owner_id, name)
+
     org_id = str(uuid.uuid4())
     org_dict = {
         "id": org_id,
@@ -175,7 +187,8 @@ def get_organizations_for_user(user_email: str) -> List[Dict[str, Any]]:
 
 
 def update_organization(org_id: str, requesting_user_email: str, name: str) -> UpdateResult:
-    """Rename an organization. Only owner can update.
+    """Rename an organization. Only owner can update, and never onto the name of another
+    organization the owner belongs to (``_refuse_a_name_you_already_hold``).
 
     The name is the one field an owner edits: its owner, admins, members and markets change only
     through their own endpoints, which keep each user's ``organizations`` in step with them.
@@ -189,7 +202,8 @@ def update_organization(org_id: str, requesting_user_email: str, name: str) -> U
         raise ForbiddenError("User not found")
     if _role_in(org, requesting_user.id) != OrganizationRole.OWNER:
         raise ForbiddenError("Only organization owner can update organization")
-    
+    _refuse_a_name_you_already_hold(requesting_user.id, name, renamed=org_id)
+
     result = organizations_collection.update_one(
         live({"id": org_id}),
         {"$set": {"name": name}}

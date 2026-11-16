@@ -20,7 +20,7 @@ describes:
   - front-end/e2e/helpers/phoneWindow.ts#inTheWindow
   - front-end/e2e/helpers/stackReady.ts
   - front-end/e2e/helpers/signInWindow.ts
-verified: 2026-11-12
+verified: 2026-11-16
 sources:
   - E21/F02/S02
   - E22/F04/S02

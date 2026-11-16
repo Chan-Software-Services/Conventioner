@@ -9,7 +9,7 @@ describes:
   - front-end/src/utils/marketPage.ts
   - front-end/src/views/ToolsView.vue
   - front-end/src/views/PaymentsView.vue
-verified: 2026-11-11
+verified: 2026-11-16
 sources:
   - T209
   - T277

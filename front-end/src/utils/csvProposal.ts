@@ -27,6 +27,8 @@ export interface ProposedOption {
   count: number;
   /** Few chose it: shown unticked, for the organizer to keep or not. */
   rare: boolean;
+  /** Names someone: shown unticked, for the organizer to keep or not. */
+  namesSomeone: boolean;
   keep: boolean;
 }
 

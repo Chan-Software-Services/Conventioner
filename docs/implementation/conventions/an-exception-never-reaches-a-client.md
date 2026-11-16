@@ -103,7 +103,7 @@ describes:
   - front-end/e2e/a-request-too-large-to-carry.spec.ts
   - back-end/host_limits.py
   - back-end/tests/test_the_hosts_request_limit.py
-verified: 2026-11-13
+verified: 2026-11-16
 sources:
   - T74
   - E41/F01/S01
@@ -121,6 +121,7 @@ sources:
   - T311
   - T315
   - T318
+  - T335
 ---
 
 # An exception never reaches a client
@@ -183,7 +184,7 @@ Its own types are client errors too:
 
 **Every other module's refusals** are client errors too, each with the status its routes answer today.
 
-- [`back-end/api/organizations.py`](../../../back-end/api/organizations.py) raises `BadRequestError` and `ForbiddenError`, and `NotFoundError` for "Organization not found", which every organization route answers 404; `OrganizationHasLiveMarkets` is a 409 whose `body()` names the blocking markets ([when an organization may be deleted](../../business/rules/when-an-organization-may-be-deleted.md)).
+- [`back-end/api/organizations.py`](../../../back-end/api/organizations.py) raises `BadRequestError` and `ForbiddenError`, and `NotFoundError` for "Organization not found", which every organization route answers 404; `ConflictError`, a 409, for a create or rename onto the name of another of the person's organizations ([an organization's name](../data/organization-document.md#an-organizations-name)); `OrganizationHasLiveMarkets` is a 409 whose `body()` names the blocking markets ([when an organization may be deleted](../../business/rules/when-an-organization-may-be-deleted.md)).
 - [`back-end/organization_people.py`](../../../back-end/organization_people.py), the one writer of an organization's people, raises the table's `BadRequestError`, `ForbiddenError` and `NotFoundError`, and `OrganizationChanged`, a 409 whose `body()` adds `code: "organization_changed"`, for a change that met another ([the organization's people](../modules/organization-people.md)).
 - [Placements](../modules/placements.md): `PlacementError` is a `BadRequestError`, `SeatTakenError` one with status 409, and `AssignPhaseError` a `ConflictError`.
 - [Placements](../modules/placements.md): `VendorIsHere` is a `ConflictError` whose `body()` adds `code: "vendor_is_here"`, a free, a move or a swap of a vendor who has checked in that day, asked first (T318).
@@ -244,8 +245,9 @@ A mail that carries a sign-in or an account link is logged by what it is, never 
 A failed send logs the exception's type and never its text, and the provider's status code when the failure is a `ResendError`, but never its response body, since each can carry the address back.
 
 **A failure a route goes on past is logged as a 500 is.**
-Two routes catch an exception and answer as though it had not happened, and each logs it once with `logger.error`, the market and `traceback_without_messages(error)`, with no `exc_info`, whose formatter would print the message under the frames.
+Three places catch an exception and answer as though it had not happened, and each logs it once with `logger.error`, the market and `traceback_without_messages(error)`, with no `exc_info`, whose formatter would print the message under the frames.
 An applicant's code send that raises (`request_login_code` in [`back-end/api/applicant_auth.py`](../../../back-end/api/applicant_auth.py)) is named by the market's slug and answered as a sent one, and the offers sweep that fails once a move from offers to market days is written (`take_move` in [`back-end/api/markets.py`](../../../back-end/api/markets.py)) is named by the market's id and the move still answers 200.
+An owed day the tidy after a write of the assignment could not move (`assignment_written` in [`back-end/api/payments.py`](../../../back-end/api/payments.py), its record kept changing or the event refused) is named by the market's id and the date, never the vendor's address, and the write, which has landed, still answers as it did ([payments](../data/payments.md#the-one-writer)).
 reCAPTCHA's verification (`verify_recaptcha` in [`back-end/utils/captcha.py`](../../../back-end/utils/captcha.py)) prints nothing and logs its three failures: no secret it can use, outside the escape hatch, as an error naming `RECAPTCHA_SECRET_KEY`, a failed verification as a warning with Google's `success` and `score` and nothing the caller sent, and an exception as an error by its type's name alone.
 Two lines keep a message on purpose: `healthz`'s `logger.exception`, since the database driver's message is how an operator reads an outage and holds no request's value, and the CSV import's parse warning, since the `csv` module's messages name a limit or a character class, never a cell.
 

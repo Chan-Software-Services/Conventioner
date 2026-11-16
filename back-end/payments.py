@@ -6,41 +6,50 @@ outside the app, by e-transfer or cash (Q7), and an organizer records each payme
 - **The amount owed is kept per table-day** (Q26): by default the price of the seat the vendor holds
   that day, priced as the drawer's date cards price it (``pricing.Groups``), so it follows the seat
   while nobody has set it by hand.
-  An amount set by hand (``set_amount_owed``, an Admin's by default) holds whatever the seat does,
-  until ``use_calculated_price`` takes it back; setting $0 is how a fee is waived.
+  An amount an Admin sets by hand (``OwedEvent.ADMIN_SETS``) holds whatever the seat does, until
+  "Use the calculated price" takes it back; setting $0 is how a fee is waived.
 - **Freeing a table never changes either amount by itself** (Q26: after the cancellation deadline
   "the amount owed and amount paid dont change even though the table did"): the seat's line is kept
-  as it stood when it was freed (``keep_freed_line``), still owed, until someone sets the amount.
-  A free that asks "Also remove its $35.00 from what they owe?" sets the day's $0 in that same
-  write, marked as the free's; a seat held on the day always wins over it (``lines``, T270).
+  as it stood when it was freed, still owed, until someone sets the amount.
+  A free that asks "Also remove its $35.00 from what they owe?" waives the day in that same
+  write; a seat held on the day always wins over it (``on_day``, T270).
+- **Each owed table-day stores its state** (T335), written only by ``owed_day_transition``, which
+  holds the record's ``revision``; ``lines`` is a projection of that state and the held seat.
 - **The amount paid is the sum of the vendor's entries still standing**, each with who recorded it
   and when (Q15): a payment, or a refund an Admin records as a negative entry once it is given back
-  (Q26). An edit or a removal keeps what the entry read before in its own ``changes``, and a removed
-  entry is kept, marked, rather than deleted.
+  (Q26). An edit or a removal keeps what the entry read before in its own ``changes``, and lands
+  only on the entry as it read it (``entry_as_read``, T335); a removed entry is kept, marked,
+  rather than deleted.
 - **An entry is recorded once per press of Record** (T270): it keeps the ``request_key`` the dialog
   sent, unique on the market, so a press repeated after its answer was lost records nothing new.
 
 Two collections, each a record kind keyed by market: ``payments``, one document per payment, and
 ``amounts_owed``, one document per vendor per table-day that holds something the seat cannot say -
-the line of a freed table, or an amount set by hand. A seat held now is read from the market's
-assignment, never copied here. Like ``vendor_notes``, no applicant endpoint reads either: what a
-vendor owes is the organizers' to read (Q20.2).
+the line of a freed table, or an amount set by hand - in its ``state``, beside the ``freed`` and
+``set_by_hand`` the release before reads, kept as a mirror (``legacy_fields``). A seat held now
+is read from the market's assignment, never copied here. Like ``vendor_notes``, no applicant
+endpoint reads either: what a vendor owes is the organizers' to read (Q20.2).
 
 Storage contract: snake_case with the market foreign key ``market_id`` and the vendor's address
 lowercased; every reader and writer goes through this module, and a market's payments and amounts
 owed are deleted with the market (``market_deletion``).
 """
+import logging
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from enum import Enum
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from datatypes import PaymentEntry
 from db_config import get_database
 from unique_indexes import ensure_unique_index, ensure_vendor_day_index
 from utils.email_address import normalized_email
+
+logger = logging.getLogger(__name__)
 
 PAYMENTS_COLLECTION = "payments"
 AMOUNTS_OWED_COLLECTION = "amounts_owed"
@@ -59,11 +68,10 @@ def ensure_payment_indexes() -> None:
     """One owed record per vendor's day, and one entry per request key, held by the database
     (T270).
 
-    The freed line and an amount set by hand are each written by an upsert by market, vendor and
-    date, and two that land at once - an Admin setting the amount as an Editor frees the seat -
-    both match nothing and both insert, so only a unique index keeps the day one record: with two,
-    whichever the server found first won, and the amount set did not stick or the freed line was
-    lost. ``app.py`` builds it at boot and refuses to start without it (``unique_indexes``).
+    Two writes of a day with no record yet - an Admin setting the amount as an Editor frees the
+    seat - both read none and both insert, so only a unique index keeps the day one record: it
+    refuses the second insert, and ``owed_day_transition`` reads the day again. ``app.py`` builds
+    it at boot and refuses to start without it (``unique_indexes``).
     """
     ensure_vendor_day_index(amounts_owed_collection, AMOUNTS_OWED_COLLECTION)
     # One entry per press of Record payment: pressing it again after the first answer never came
@@ -163,34 +171,57 @@ def _trail(doc: Mapping[str, Any], by: str, what: str) -> Dict[str, Any]:
             "before": {key: doc.get(key) for key in ENTRY_FIELDS}}
 
 
+class EntryChanged(Exception):
+    """An edit or a removal whose entry no longer stood as it was read when the write came: another
+    change landed on it first (``removed`` False), or it was removed (``removed`` True). Nothing
+    was written; the person decided on the entry as it stood, so it is not tried again."""
+
+    def __init__(self, removed: bool):
+        super().__init__("removed" if removed else "changed")
+        self.removed = removed
+
+
+def entry_as_read(doc: Mapping[str, Any]) -> Dict[str, Any]:
+    """The filter that finds an entry only as ``doc`` read it: still standing (``removed_at`` null
+    or absent), with as many lines in its own history (``changes``), since every edit and removal
+    adds one."""
+    count = len(doc.get("changes") or [])
+    held: Dict[str, Any] = (
+        {"changes": {"$size": count}} if count
+        else {"$or": [{"changes": {"$exists": False}}, {"changes": {"$size": 0}}]})
+    return {MARKET_ID_FIELD: doc.get(MARKET_ID_FIELD), "id": doc.get("id"), "removed_at": None,
+            **held}
+
+
+def _change_as_read(market_id: str, doc: Mapping[str, Any], update: Dict[str, Any],
+                    ) -> Dict[str, Any]:
+    """Apply ``update`` to the entry only as ``doc`` read it, and return it as it now reads, or
+    raise ``EntryChanged``, reading it again to say whether it was changed or removed."""
+    after = payments_collection.find_one_and_update(
+        entry_as_read(doc), update, return_document=ReturnDocument.AFTER)
+    if after is None:
+        now = payment(market_id, doc.get("id") or "")
+        raise EntryChanged(removed=now is None or bool(now.get("removed_at")))
+    return after
+
+
 def edit_payment(
-    market_id: str, payment_id: str, entry: PaymentEntry, by: str,
-) -> Optional[Dict[str, Any]]:
-    """Change a standing entry's fields, keeping what it read before in its own history. Returns
-    the entry as it now reads, or None when this market has no such entry standing."""
-    doc = payment(market_id, payment_id)
-    if doc is None or doc.get("removed_at"):
-        return None
-    payments_collection.update_one(
-        {MARKET_ID_FIELD: market_id, "id": payment_id},
-        {"$set": _signed(entry, doc.get("kind") or PAYMENT),
-         "$push": {"changes": _trail(doc, by, "edited")}},
-    )
-    return payment(market_id, payment_id)
+    market_id: str, doc: Mapping[str, Any], entry: PaymentEntry, by: str,
+) -> Dict[str, Any]:
+    """Change a standing entry's fields, as ``doc`` read it, keeping what it read before in its own
+    history. Returns the entry as it now reads, or raises ``EntryChanged``."""
+    return _change_as_read(market_id, doc, {
+        "$set": _signed(entry, doc.get("kind") or PAYMENT),
+        "$push": {"changes": _trail(doc, by, "edited")}})
 
 
-def remove_payment(market_id: str, payment_id: str, by: str) -> Optional[Dict[str, Any]]:
-    """Take a standing entry out of the amount paid. It is kept, marked removed with who and
-    when, so its own history stands. Returns it as it now reads, or None when there is none."""
-    doc = payment(market_id, payment_id)
-    if doc is None or doc.get("removed_at"):
-        return None
-    payments_collection.update_one(
-        {MARKET_ID_FIELD: market_id, "id": payment_id},
-        {"$set": {"removed_by": by, "removed_at": _now()},
-         "$push": {"changes": _trail(doc, by, "removed")}},
-    )
-    return payment(market_id, payment_id)
+def remove_payment(market_id: str, doc: Mapping[str, Any], by: str) -> Dict[str, Any]:
+    """Take a standing entry, as ``doc`` read it, out of the amount paid. It is kept, marked removed
+    with who and when, so its own history stands. Returns it as it now reads, or raises
+    ``EntryChanged``."""
+    return _change_as_read(market_id, doc, {
+        "$set": {"removed_by": by, "removed_at": _now()},
+        "$push": {"changes": _trail(doc, by, "removed")}})
 
 
 def _last_first(found: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -211,165 +242,471 @@ def payments_by_vendor(market_id: str) -> Dict[str, List[Dict[str, Any]]]:
 
 
 # --- The amount owed ------------------------------------------------------------------------------
+#
+# Each owed table-day stores its state (T335): it follows the seat (no record at all), an Admin set
+# an amount (``SetByHand``), its table was freed (``Freed``), or it was freed and waived by the
+# free's deduction (``FreedWaived``). ``next_owed_state`` is the one table of what each event makes
+# of each state, ``owed_day_transition`` the one writer of a record, and ``lines`` a projection of
+# the state and the held seat.
 
 def _owed_key(market_id: str, vendor_email: str, date: str) -> Dict[str, str]:
     return {**_vendor(market_id, vendor_email), "date": date}
 
 
-def _upsert_owed(
-    market_id: str, vendor_email: str, date: str, update: Dict[str, Any],
-) -> Optional[Dict[str, Any]]:
-    """Write one vendor's day's owed record, creating it if there is none; returns what it held
-    before, if anything.
-
-    Two writes of a day with no record yet both match nothing and both insert, and the unique
-    index refuses the second (``ensure_payment_indexes``). The one refused runs once more, which
-    lands on the winner's record, so the day holds what each wrote; a second refusal is not this
-    race, and goes on as the error it is.
-    """
-    key = _owed_key(market_id, vendor_email, date)
-    try:
-        return amounts_owed_collection.find_one_and_update(key, update, upsert=True)
-    except DuplicateKeyError:
-        return amounts_owed_collection.find_one_and_update(key, update, upsert=True)
+#: The seat's fields as a freed record keeps them.
+_SEAT_FIELDS = ("table_code", "tier", "table_choice", "cents", "group")
 
 
-def _free_deduction(by: str) -> Dict[str, Any]:
-    """The $0 a free's deduction sets, marked as the free's: seating the day again takes it back."""
-    return {"cents": 0, "by": by, "at": _now(), "by_free": True}
+@dataclass(frozen=True)
+class HandAmount:
+    """An amount owed an Admin chose for a table-day, $0 being a waiver, with who and when."""
+
+    cents: int
+    by: Optional[str]
+    at: Optional[str]
+
+    def to_stored(self) -> Dict[str, Any]:
+        return {"cents": self.cents, "by": self.by, "at": self.at}
+
+    @classmethod
+    def from_stored(cls, doc: Any) -> Optional["HandAmount"]:
+        if not isinstance(doc, Mapping):
+            return None
+        return cls(doc["cents"], doc.get("by"), doc.get("at"))
 
 
-def _hand_amount(doc: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]]:
-    """The amount an Admin set by hand on a record, whether it stands or a free's $0 replaced it."""
-    by_hand = (doc or {}).get("set_by_hand")
-    if not by_hand:
+@dataclass(frozen=True)
+class FreedSeat:
+    """The seat of a freed table-day as it stood when it was freed, and who freed it and when."""
+
+    seat: Seat
+    by: Optional[str]
+    at: Optional[str]
+
+    def to_stored(self) -> Dict[str, Any]:
+        """The ``seat`` and ``freed`` of a freed state's stored ``state``."""
+        return {"seat": _seat_stored(self.seat), "freed": {"by": self.by, "at": self.at}}
+
+    def to_legacy(self) -> Dict[str, Any]:
+        """The ``freed`` field the release before reads: the seat's fields beside who and when."""
+        return {**_seat_stored(self.seat), "by": self.by, "at": self.at}
+
+
+def _seat_from(doc: Mapping[str, Any]) -> Seat:
+    return Seat(**{key: doc.get(key) for key in _SEAT_FIELDS})
+
+
+def _seat_stored(seat: Seat) -> Dict[str, Any]:
+    return {key: getattr(seat, key) for key in _SEAT_FIELDS}
+
+
+@dataclass(frozen=True)
+class FollowsSeat:
+    """The day owes what its held seat costs, or nothing without one: no record is stored."""
+
+    kind = "follows_seat"
+
+    def to_stored(self) -> None:
         return None
-    return by_hand.get("replaced") if by_hand.get("by_free") else by_hand
 
 
-#: How many times a free reads the day again when its amount by hand moved under it.
-_FREE_TRIES = 3
+@dataclass(frozen=True)
+class SetByHand:
+    """An Admin set what the day owes; it holds through a move of the seat."""
+
+    amount: HandAmount
+    kind = "set"
+
+    def to_stored(self) -> Dict[str, Any]:
+        return {"kind": self.kind, "amount": self.amount.to_stored()}
 
 
-class OwedChangedUnderFree(Exception):
-    """The day's amount by hand kept changing while a free was writing its line."""
+@dataclass(frozen=True)
+class Freed:
+    """The day's table was freed: its line is kept as the seat stood, still owed, owing the
+    Admin's amount if one stands, else the freed seat's price."""
+
+    freed: FreedSeat
+    amount: Optional[HandAmount]
+    kind = "freed"
+
+    def to_stored(self) -> Dict[str, Any]:
+        stored: Dict[str, Any] = {"kind": self.kind, **self.freed.to_stored()}
+        if self.amount is not None:
+            stored["amount"] = self.amount.to_stored()
+        return stored
 
 
-def keep_freed_line(
-    market_id: str, vendor_email: str, date: str, seat: Seat, by: str, deduct: bool = False,
-) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """Keep the line of a seat being freed, as it stood: its table and what it cost that day, and
-    with ``deduct`` the free's $0 too, in one write before the seat goes (T270).
+@dataclass(frozen=True)
+class FreedWaived:
+    """The day's table was freed by a free that ticked "Also remove its $35.00 from what they
+    owe?": the line owes $0, and keeps the Admin's amount it replaced (``before``), which seating
+    the day again puts back."""
 
-    One write, so no stop between the seat and the deduction leaves the seat free and its full
-    amount owed. The $0 keeps an amount an Admin set by hand as ``replaced``: while the seat is
-    held, a free that stopped before its seat went leaves that amount what the day owes, and
-    seating the day again puts it back. The seat is held as this runs, so a free's $0 found on
-    the day is such a stopped free's, and a free without ``deduct`` puts its ``replaced`` back
-    (or nothing, with none), since freeing a table changes no amount (Q26).
+    freed: FreedSeat
+    waiver_by: Optional[str]
+    waiver_at: Optional[str]
+    before: Optional[HandAmount]
+    kind = "freed_waived"
 
-    The write lands only while the amount by hand is still the one read, so an Admin's amount set
-    in between is never written over unkept: the free reads the day again, and after
-    ``_FREE_TRIES`` raises ``OwedChangedUnderFree`` having written nothing. Returns what the
-    record held of each field written before, and what was written, so a free whose seat could
-    not be freed puts both back (``restore_freed_line``).
+    def to_stored(self) -> Dict[str, Any]:
+        stored: Dict[str, Any] = {"kind": self.kind, **self.freed.to_stored(),
+                                  "waiver": {"by": self.waiver_by, "at": self.waiver_at}}
+        if self.before is not None:
+            stored["before"] = self.before.to_stored()
+        return stored
+
+
+OwedState = Union[FollowsSeat, SetByHand, Freed, FreedWaived]
+
+
+def owed_state_from_stored(doc: Optional[Mapping[str, Any]]) -> OwedState:
+    """A record's stored ``state`` as its state; ``ValueError`` (or a ``KeyError``) when it is not
+    one this build reads."""
+    if doc is None:
+        return FollowsSeat()
+    kind = doc.get("kind")
+    if kind == SetByHand.kind:
+        return SetByHand(HandAmount.from_stored(doc["amount"]) or _unreadable(doc))
+    if kind in (Freed.kind, FreedWaived.kind):
+        freed = FreedSeat(_seat_from(doc["seat"]), doc["freed"].get("by"), doc["freed"].get("at"))
+        if kind == Freed.kind:
+            return Freed(freed, HandAmount.from_stored(doc.get("amount")))
+        return FreedWaived(freed, doc["waiver"].get("by"), doc["waiver"].get("at"),
+                           HandAmount.from_stored(doc.get("before")))
+    return _unreadable(doc)
+
+
+def _unreadable(doc: Any) -> Any:
+    raise ValueError(f"not an owed state this build reads: {doc!r}")
+
+
+class OwedEvent(str, Enum):
+    """What may happen to an owed table-day."""
+
+    #: A placement, a move, a swap or a run that seats the day.
+    SEATED = "seated"
+    #: The day's table freed, the free unticked.
+    FREED = "freed"
+    #: The day's table freed with "Also remove its $35.00 from what they owe?" ticked.
+    FREED_WITH_DEDUCTION = "freed_with_deduction"
+    #: A run that leaves the vendor without a table on the day.
+    DROPPED_BY_RUN = "dropped_by_run"
+    #: An Admin's "Change the amount owed".
+    ADMIN_SETS = "admin_sets"
+    #: An Admin's "Use the calculated price".
+    ADMIN_CALCULATED = "admin_calculated"
+
+
+class OwedEventRefused(Exception):
+    """An event the day's state does not take: nothing is written."""
+
+
+class OwedDayChanged(Exception):
+    """The day's record kept changing between the owner's read and its write, ``OWED_TRIES``
+    times: nothing was written."""
+
+
+def on_day(state: OwedState, held: bool) -> OwedState:
+    """The state a day reads as, ``held`` or not in the assignment read.
+
+    A held seat always wins over a free (T270): on a held day a freed state is a free that stopped
+    before its seat went, or a seating that stopped before it tidied the day, so it reads as
+    seating the day makes it. On a day not held, an Admin's amount is no line anybody sees (a
+    record a rolled-back release left), so it reads as following the seat.
     """
-    freed = {"freed": {**asdict(seat), "by": by, "at": _now()}}
-    key = _owed_key(market_id, vendor_email, date)
-    refused = False
-    for _ in range(_FREE_TRIES):
-        found = amounts_owed_collection.find_one(key)
-        standing = (found or {}).get("set_by_hand")
-        written = dict(freed)
-        if deduct:
-            deduction = _free_deduction(by)
-            replaced = _hand_amount(found)
-            if replaced:
-                deduction["replaced"] = replaced
-            written["set_by_hand"] = deduction
-        elif standing and standing.get("by_free"):
-            written["set_by_hand"] = standing.get("replaced")
+    if held:
+        if isinstance(state, Freed):
+            return SetByHand(state.amount) if state.amount else FollowsSeat()
+        if isinstance(state, FreedWaived):
+            return SetByHand(state.before) if state.before else FollowsSeat()
+        return state
+    if isinstance(state, SetByHand):
+        return FollowsSeat()
+    return state
+
+
+def next_owed_state(
+    state: OwedState, event: OwedEvent, *, held: bool, cents: Optional[int] = None,
+    seat: Optional[Seat] = None, by: Optional[str], at: Optional[str],
+) -> OwedState:
+    """What ``event`` makes of a day in ``state``, ``held`` or not in the assignment the write
+    read: the one table of every (state, event), raising ``OwedEventRefused`` on a refused cell.
+
+    ``seat`` is the seat being freed, on ``FREED`` and on ``FREED_WITH_DEDUCTION`` of a held day;
+    ``cents`` the Admin's amount on ``ADMIN_SETS``. The state is read through ``on_day`` first,
+    so a held day is following its seat or set, and a day not held is following it or freed.
+
+    Except that an Admin's amount on a freed record keeps the freed seat even on a held day: the
+    Admin's request read the seat before a free may have, and a free in flight has written its
+    record but not yet freed the seat. Kept with the seat, the amount reads as set while the seat
+    is held, and as the freed line's once it goes, so either way the free ends the day is right.
+    """
+    freed_line = isinstance(state, (Freed, FreedWaived)) and (
+        not held or event in (OwedEvent.ADMIN_SETS, OwedEvent.ADMIN_CALCULATED))
+    state = state if freed_line else on_day(state, held)
+    standing = state.amount if isinstance(state, SetByHand) else None
+
+    if event == OwedEvent.SEATED:
+        # Seated, the day reads as a held day does.
+        return on_day(state, True)
+    if event == OwedEvent.FREED:
+        if not held:
+            raise OwedEventRefused()
+        return Freed(FreedSeat(_needed(seat, "seat"), by, at), standing)
+    if event == OwedEvent.FREED_WITH_DEDUCTION:
+        if held:
+            return FreedWaived(FreedSeat(_needed(seat, "seat"), by, at), by, at, standing)
+        # Pressing Free again on a day a free from before T270 left freed and owing its full
+        # amount, which stopped between its seat and its deduction, finishes that deduction.
+        if isinstance(state, Freed) and state.amount is None:
+            return FreedWaived(state.freed, by, at, None)
+        raise OwedEventRefused()
+    if event == OwedEvent.DROPPED_BY_RUN:
+        return FollowsSeat() if held else state
+    if event == OwedEvent.ADMIN_SETS:
+        amount = HandAmount(_needed(cents, "cents"), by, at)
+        if freed_line:
+            # Kept with its seat, so the line still says where it came from.
+            return Freed(state.freed, amount)
+        if not held:
+            raise OwedEventRefused()
+        return SetByHand(amount)
+    if event == OwedEvent.ADMIN_CALCULATED:
+        if freed_line:
+            return Freed(state.freed, None)
+        if not held:
+            raise OwedEventRefused()
+        return FollowsSeat()
+    raise ValueError(f"not an owed event: {event!r}")
+
+
+def _needed(value: Any, name: str) -> Any:
+    if value is None:
+        raise ValueError(f"this event needs its {name}")
+    return value
+
+
+# The legacy fields, kept as a mirror for one release: the release before reads ``freed`` and
+# ``set_by_hand`` alone, so every write stores them as it would, and a rollback past this release
+# reads every line as it did.
+
+def legacy_fields(state: OwedState) -> Dict[str, Any]:
+    """The ``freed`` and ``set_by_hand`` the release before reads ``state`` from."""
+    freed: Optional[Dict[str, Any]] = None
+    set_by_hand: Optional[Dict[str, Any]] = None
+    if isinstance(state, (Freed, FreedWaived)):
+        freed = state.freed.to_legacy()
+    if isinstance(state, SetByHand):
+        set_by_hand = state.amount.to_stored()
+    elif isinstance(state, Freed) and state.amount is not None:
+        set_by_hand = state.amount.to_stored()
+    elif isinstance(state, FreedWaived):
+        set_by_hand = {"cents": 0, "by": state.waiver_by, "at": state.waiver_at, "by_free": True}
+        if state.before is not None:
+            set_by_hand["replaced"] = state.before.to_stored()
+    return {"freed": freed, "set_by_hand": set_by_hand}
+
+
+def _legacy_of(doc: Mapping[str, Any]) -> Dict[str, Any]:
+    return {"freed": doc.get("freed") or None, "set_by_hand": doc.get("set_by_hand") or None}
+
+
+def derive_from_legacy(doc: Mapping[str, Any]) -> OwedState:
+    """The state the release before's fields say, for a record with no ``state``, or one whose
+    mirror disagrees with it: a free's $0 with no freed seat is a free that stopped before its
+    seat went, and reads as the Admin's amount it replaced, or as following the seat."""
+    freed = doc.get("freed")
+    by_hand = doc.get("set_by_hand")
+    if not isinstance(by_hand, Mapping) or not by_hand:
+        by_hand = None
+    if isinstance(freed, Mapping) and freed:
+        seat = FreedSeat(_seat_from(freed), freed.get("by"), freed.get("at"))
+        if by_hand is None:
+            return Freed(seat, None)
+        if by_hand.get("by_free"):
+            return FreedWaived(seat, by_hand.get("by"), by_hand.get("at"),
+                               HandAmount.from_stored(by_hand.get("replaced")))
+        return Freed(seat, HandAmount.from_stored(by_hand))
+    if by_hand is None:
+        return FollowsSeat()
+    if by_hand.get("by_free"):
+        replaced = HandAmount.from_stored(by_hand.get("replaced"))
+        return SetByHand(replaced) if replaced else FollowsSeat()
+    return SetByHand(HandAmount.from_stored(by_hand))
+
+
+def _named(doc: Mapping[str, Any]) -> str:
+    """A record as a log names it: by market, date and record id, never the vendor's address."""
+    return (f"market_id {doc.get(MARKET_ID_FIELD)}, date {doc.get('date')}, "
+            f"record {doc.get('_id')}")
+
+
+#: What reading a malformed stored state or legacy field raises.
+UNREADABLE = (KeyError, TypeError, ValueError, AttributeError)
+
+
+def read_record(doc: Optional[Mapping[str, Any]]) -> Tuple[OwedState, bool]:
+    """``state_of`` a record, and whether that is its stored ``state``, trusted because its
+    mirror agrees (or there is no record): only then is a result equal to it nothing to write.
+    The one rule the owner and the migration both judge a record by."""
+    if doc is None:
+        return FollowsSeat(), True
+    stored = doc.get("state")
+    if stored is not None:
         try:
-            # With no record read, an upsert; one created since is refused by the unique index.
-            before = amounts_owed_collection.find_one_and_update(
-                {**key, "set_by_hand": standing}, {"$set": written}, upsert=found is None)
-        except DuplicateKeyError:
-            # Only an upsert races a record created since, and only once: any other refusal is
-            # not this race, and goes on as the error it is.
-            if found is not None or refused:
-                raise
-            refused = True
-            continue
-        if found is None or before is not None:
-            before = before or {}
-            return {field: before.get(field) for field in written}, written
-    raise OwedChangedUnderFree()
+            state: Optional[OwedState] = owed_state_from_stored(stored)
+        except UNREADABLE:
+            state = None
+        if state is not None and _legacy_of(doc) == legacy_fields(state):
+            return state, True
+        logger.warning("Owed record %s holds a state its legacy fields disagree with; read from "
+                       "the legacy fields.", _named(doc))
+    try:
+        return derive_from_legacy(doc), False
+    except UNREADABLE:
+        logger.warning("Owed record %s could not be read; read as following the seat.",
+                       _named(doc))
+        return FollowsSeat(), False
 
 
-def restore_freed_line(
-    market_id: str, vendor_email: str, date: str,
-    written: Dict[str, Any], before: Dict[str, Any],
-) -> None:
-    """Put a record back as it held before ``keep_freed_line`` wrote ``written``, for a free whose
-    seat was not freed, and only while it still holds all of ``written``: a free of the same seat
-    that landed meanwhile kept its own record over it, and that record is the line's now."""
-    amounts_owed_collection.update_one(
-        {**_owed_key(market_id, vendor_email, date), **written}, {"$set": before},
-    )
+def state_of(doc: Optional[Mapping[str, Any]]) -> OwedState:
+    """The state of a stored record, or following the seat for none. Never raises.
 
-
-def deduct_freed_day(market_id: str, vendor_email: str, date: str, by: str) -> bool:
-    """Set the free's $0 on a day whose line is freed and holds no amount set by hand at all, and
-    say whether it did: a free from before T270 set it after the seat, so a stop between left the
-    day freed and owing its full amount, and pressing Free again finishes it."""
-    return bool(amounts_owed_collection.update_one(
-        {**_owed_key(market_id, vendor_email, date), "freed": {"$type": "object"},
-         "set_by_hand": None},
-        {"$set": {"set_by_hand": _free_deduction(by)}},
-    ).matched_count)
-
-
-def clear_freed_lines(
-    market_id: str, seated: Iterable[Tuple[str, str]],
-) -> List[Tuple[str, str, int]]:
-    """Forget the freed record of each ``(vendor, date)`` a write of the assignment touched: a day
-    seated again reads its new seat, and a freed record left behind would come back as the line
-    if that seat went some other way than a free. A $0 the free's deduction set goes with it,
-    since it was about the freed table, and stands only while the table is freed; an amount an
-    Admin set by hand belongs to the day, not the table, so it stays, and one the $0 replaced is
-    set by hand again.
-
-    Returns each deduction cleared, ``(vendor, date, cents)``, for the history to record where the
-    day really read as freed (``api.payments.seated_again``).
+    The stored ``state`` is trusted only while the legacy fields agree with it: a rolled-back
+    release writes only them, so a record whose mirror disagrees is read from what that release
+    wrote, with a warning on each read, until its next write stores the state again.
     """
-    wanted = {(normalized_email(email), date) for email, date in seated}
-    taken_back: List[Tuple[str, str, int]] = []
-    if not wanted:
-        return taken_back
-    for doc in amounts_owed_collection.find({MARKET_ID_FIELD: market_id,
-                                             "freed": {"$type": "object"}}):
-        key = (doc.get(VENDOR_EMAIL_FIELD), doc.get("date"))
-        if key in wanted:
-            cleared: Dict[str, Any] = {"freed": None}
-            deduction = doc.get("set_by_hand") or {}
-            if deduction.get("by_free"):
-                cleared["set_by_hand"] = deduction.get("replaced")
-                taken_back.append((key[0], key[1], deduction.get("cents") or 0))
-            amounts_owed_collection.update_one(_owed_key(market_id, *key), {"$set": cleared})
-    return taken_back
+    return read_record(doc)[0]
 
 
-def set_amount_owed(market_id: str, vendor_email: str, date: str, cents: int, by: str) -> None:
-    """Set what a vendor owes for one table-day by hand, over what the pricing calculates."""
-    set_by_hand: Dict[str, Any] = {"cents": cents, "by": by, "at": _now()}
-    _upsert_owed(market_id, vendor_email, date, {"$set": {"set_by_hand": set_by_hand}})
+def _reading(doc: Optional[Mapping[str, Any]], state: OwedState, held: bool) -> OwedState:
+    """The state the stored day ``doc``, read as ``state``, reads as (``on_day``), logging an
+    Admin's amount on a day not held: no line shows it, so it reads as following the seat until
+    the migration drops it."""
+    if doc is not None and not held and isinstance(state, SetByHand):
+        logger.warning("Owed record %s holds an amount set by hand on a day not held; read as "
+                       "following the seat.", _named(doc))
+    return on_day(state, held)
 
 
-def use_calculated_price(market_id: str, vendor_email: str, date: str) -> None:
-    """Take back an amount set by hand: the line owes what the pricing calculates again."""
-    amounts_owed_collection.find_one_and_update(
-        _owed_key(market_id, vendor_email, date), {"$set": {"set_by_hand": None}},
-    )
+#: How many times the owner reads a day whose record changed between its read and its write.
+OWED_TRIES = 3
+
+#: The fields of a record its owner writes, and an ``undo`` puts back.
+OWNED_FIELDS = ("state", "freed", "set_by_hand", "revision")
+
+
+@dataclass(frozen=True)
+class OwedTransition:
+    """What ``owed_day_transition`` did to one vendor's day: the state the day read as
+    (``before``), the state it left (``after``), the record as read, the revision written and the
+    ``_id`` of the record written (both None for a record deleted or nothing written), and whether
+    what the day reads as changed, which alone the history records: a write that only tidies a
+    stopped free's record on a held day leaves the day reading as it did. ``stored`` is the state
+    the record held as read, before ``on_day``: an Admin's amount on a day not held reads as
+    following the seat, but it was there.
+    """
+
+    key: Dict[str, str]
+    stored: OwedState
+    before: OwedState
+    after: OwedState
+    record: Optional[Dict[str, Any]]
+    revision: Optional[int]
+    wrote: bool
+    changed: bool
+    record_id: Optional[Any]
+
+    def undo(self) -> bool:
+        """Put the record back as it was read, for a free whose seat could not be freed or an
+        Admin's amount whose day went meanwhile, and only while it still holds the revision
+        written on the record written: a write that landed since is the day's now, a record made
+        since at the same revision included, and False says nothing was put back.
+        Only a write that left a record is undone: neither caller's events end in following the
+        seat, which deletes it."""
+        if not self.wrote:
+            return True
+        if self.revision is None:
+            raise ValueError("only a write that left a record is undone")
+        still_written = {**self.key, "_id": self.record_id, "revision": self.revision}
+        if self.record is None:
+            return amounts_owed_collection.delete_one(still_written).deleted_count == 1
+        restore: Dict[str, Any] = {}
+        as_read = {field: self.record[field] for field in OWNED_FIELDS if field in self.record}
+        if as_read:
+            restore["$set"] = as_read
+        lacked = {field: "" for field in OWNED_FIELDS if field not in self.record}
+        if lacked:
+            restore["$unset"] = lacked
+        return amounts_owed_collection.update_one(still_written, restore).matched_count == 1
+
+
+def _held_after(event: OwedEvent, held: bool) -> bool:
+    """Whether the day is held once ``event`` has happened: seated, it is; freed or dropped, not."""
+    if event == OwedEvent.SEATED:
+        return True
+    if event in (OwedEvent.FREED, OwedEvent.FREED_WITH_DEDUCTION, OwedEvent.DROPPED_BY_RUN):
+        return False
+    return held
+
+
+def owed_day_transition(
+    market_id: str, vendor_email: str, date: str, event: OwedEvent, *,
+    held: Optional[Seat], by: Optional[str], cents: Optional[int] = None,
+    seat: Optional[Seat] = None,
+) -> OwedTransition:
+    """The only writer of an ``amounts_owed`` record: read the day, apply ``event`` to the state it
+    reads as (``on_day``), and write the result holding what was read.
+
+    ``held`` is the seat the day holds in the assignment the caller read, or None; for
+    ``SEATED`` it is the seat held before the write. A result that is the stored state exactly
+    writes nothing. Otherwise a day with no record gets one by ``insert_one`` at ``revision`` 1
+    (none for following the seat), and the unique index refuses one created since (T270); a
+    record read is updated, or deleted for following the seat, only while it holds the
+    ``revision`` read. A refusal or a miss reads the day again, and after ``OWED_TRIES`` reads
+    ``OwedDayChanged`` is raised having written nothing. A refused cell raises
+    ``OwedEventRefused``, also having written nothing.
+
+    Not a transaction with the seat's write: a free writes this first, while the seat is held,
+    and a freed state on a held day reads as the seat (``on_day``), so a free that stopped in
+    between is harmless.
+    """
+    key = _owed_key(market_id, vendor_email, date)
+    for _ in range(OWED_TRIES):
+        doc = amounts_owed_collection.find_one(key)
+        stored, trusted = read_record(doc)
+        before = _reading(doc, stored, held is not None)
+        after = next_owed_state(stored, event, held=held is not None, cents=cents, seat=seat,
+                                by=by, at=_now())
+        changed = before != on_day(after, _held_after(event, held is not None))
+        if after == stored and trusted:
+            return OwedTransition(key, stored, before, after, doc, None, False, changed, None)
+        if doc is None:
+            revision = 1
+            try:
+                inserted = amounts_owed_collection.insert_one(
+                    {**key, "state": after.to_stored(), **legacy_fields(after),
+                     "revision": revision})
+            except DuplicateKeyError:
+                continue
+            return OwedTransition(key, stored, before, after, doc, revision, True, changed,
+                                  inserted.inserted_id)
+        read = doc.get("revision")
+        holding = {**key, "_id": doc["_id"],
+                   "revision": read if read is not None else {"$exists": False}}
+        if isinstance(after, FollowsSeat):
+            if amounts_owed_collection.delete_one(holding).deleted_count:
+                return OwedTransition(key, stored, before, after, doc, None, True, changed,
+                                      None)
+            continue
+        revision = (read or 0) + 1
+        if amounts_owed_collection.update_one(holding, {"$set": {
+                "state": after.to_stored(), **legacy_fields(after), "revision": revision,
+        }}).matched_count:
+            return OwedTransition(key, stored, before, after, doc, revision, True, changed,
+                                  doc["_id"])
+    raise OwedDayChanged()
 
 
 def amounts_owed_for(market_id: str, vendor_email: str) -> Dict[str, Dict[str, Any]]:
@@ -388,46 +725,62 @@ def amounts_owed_by_vendor(market_id: str) -> Dict[str, Dict[str, Dict[str, Any]
     return found
 
 
+def records_that_may_move(market_id: str, dates: Iterable[str]) -> List[Dict[str, Any]]:
+    """The market's owed records a write of the assignment may change: each holding a freed line,
+    which seating its day again takes back, and any on ``dates``, those of the days it seats afresh
+    (which may hold an amount a rolled-back release left on a day not held) or drops. One read, so
+    a run never reads the market's records one by one; the caller keeps the vendor-days it wrote."""
+    dates = sorted(set(dates))
+    either: List[Dict[str, Any]] = [{"freed": {"$type": "object"}}]
+    if dates:
+        either.append({"date": {"$in": dates}})
+    return list(amounts_owed_collection.find({MARKET_ID_FIELD: market_id, "$or": either}))
+
+
+def _line(date: str, seat: Seat, amount: Optional[HandAmount], *, by_free: bool = False,
+          freed: Optional[FreedSeat] = None) -> Dict[str, Any]:
+    return {
+        "date": date,
+        "tableCode": seat.table_code,
+        "tier": seat.tier,
+        "tableChoice": seat.table_choice,
+        "group": seat.group,
+        "priceCents": seat.cents,
+        "owedCents": amount.cents if amount else seat.cents,
+        "owedSetBy": amount.by if amount else None,
+        "owedSetAt": amount.at if amount else None,
+        # Set by the free that asked "Also remove its $35.00 …?", not by hand: seating the day
+        # again takes it back, so the tab says which amounts hold.
+        "owedByFree": by_free,
+        "freed": freed is not None,
+        "freedAt": freed.at if freed else None,
+        "freedBy": freed.by if freed else None,
+    }
+
+
 def lines(
     seats: Mapping[str, Seat], kept: Mapping[str, Mapping[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """A vendor's table-day lines, by date, camelCased for the wire.
+    """A vendor's table-day lines, by date, camelCased for the wire: a projection of each day's
+    state as it reads (``on_day``) and the seat held on it, reading nothing else of the record.
 
-    A day they hold a seat on reads that seat and its price; a day whose seat was freed reads the
-    seat as it was freed, with who freed it and when, so the line says where its number came from.
-    Either way an amount an Admin set by hand is what they owe.
-
-    A held seat always wins over a free (T270): on a day held, a freed record and a free's $0 are
-    what a free left that the seat since outlived, a seating again that stopped before it forgot
-    them, or a free that stopped before its seat went, so the day owes its seat's price, or the
-    amount an Admin set by hand that the free's $0 replaced.
+    A held day reads its seat and its price, or the amount an Admin set; a freed day reads the
+    seat as it was freed, with who freed it and when, owing the Admin's amount if one stands, its
+    price if none, or the free's $0; a day neither held nor freed has no line.
     """
     found = []
-    for date in sorted({*seats, *(day for day, doc in kept.items() if doc.get("freed"))}):
+    for date in sorted({*seats, *kept}):
         held = seats.get(date)
-        freed = None if held else kept[date]["freed"]
-        seat = held or Seat(**{key: freed.get(key)
-                               for key in ("table_code", "tier", "table_choice", "cents", "group")})
-        by_hand = (kept.get(date) or {}).get("set_by_hand")
-        if held and by_hand and by_hand.get("by_free"):
-            by_hand = by_hand.get("replaced")
-        found.append({
-            "date": date,
-            "tableCode": seat.table_code,
-            "tier": seat.tier,
-            "tableChoice": seat.table_choice,
-            "group": seat.group,
-            "priceCents": seat.cents,
-            "owedCents": by_hand["cents"] if by_hand else seat.cents,
-            "owedSetBy": by_hand["by"] if by_hand else None,
-            "owedSetAt": by_hand["at"] if by_hand else None,
-            # Set by the free that asked "Also remove its $35.00 …?", not by hand: seating the day
-            # again takes it back, so the tab says which amounts hold.
-            "owedByFree": bool(by_hand and by_hand.get("by_free")),
-            "freed": held is None,
-            "freedAt": freed.get("at") if freed else None,
-            "freedBy": freed.get("by") if freed else None,
-        })
+        doc = kept.get(date)
+        state = _reading(doc, state_of(doc), held is not None)
+        if held is not None:
+            found.append(_line(date, held, state.amount if isinstance(state, SetByHand) else None))
+        elif isinstance(state, Freed):
+            found.append(_line(date, state.freed.seat, state.amount, freed=state.freed))
+        elif isinstance(state, FreedWaived):
+            found.append(_line(date, state.freed.seat,
+                               HandAmount(0, state.waiver_by, state.waiver_at),
+                               by_free=True, freed=state.freed))
     return found
 
 
@@ -452,19 +805,22 @@ def _payment(doc: Mapping[str, Any]) -> Dict[str, Any]:
 def account(
     currency: Optional[str], day_lines: List[Dict[str, Any]], paid: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    """A vendor's account as the drawer's Payment tab reads it: each line, each entry, and the
-    two totals. An unpriced line owes nothing toward the total, and a removed entry pays nothing."""
-    return {
+    """A vendor's account as the drawer's Payment tab reads it: each line, each entry, the two
+    totals, and how they compare (``balanceState`` and ``compares``), which every screen words as
+    it is served and keeps no copy of. An unpriced line owes nothing toward the total, and a
+    removed entry pays nothing."""
+    held: Dict[str, Any] = {
         "currency": currency,
         "lines": day_lines,
         "payments": [_payment(doc) for doc in paid],
         "owedCents": sum(line["owedCents"] or 0 for line in day_lines),
         "paidCents": sum(doc.get("cents") or 0 for doc in paid if not doc.get("removed_at")),
     }
+    return {**held, "balanceState": balance_state(held), "compares": compares(held)}
 
 
-#: How what a vendor paid compares with what they owe, as the Payment tab reads it
-#: (``balanceText`` in ``front-end/src/utils/payments.ts``): "Owes $27.00", "Paid in full", or
+#: How what a vendor paid compares with what they owe, served on every account for the screens to
+#: word (``balanceText`` in ``front-end/src/utils/payments.ts``): "Owes $27.00", "Paid in full", or
 #: "Paid $15.00 more than owed", a refund to issue (Q26). Nothing owed and nothing paid is none.
 OWES = "owes"
 PAID_IN_FULL = "paid"
@@ -498,6 +854,16 @@ def balance_state(vendor_account: Mapping[str, Any]) -> Optional[str]:
     return PAID_IN_FULL if vendor_account["owedCents"] > 0 else None
 
 
+def offers_payment_states(
+    currency: Optional[str], accounts: Mapping[str, Mapping[str, Any]],
+) -> bool:
+    """Whether anyone on the market may be in a payment state (``balance_state``), which the
+    Payments page's figures and filters and the export's payment filter are offered by: always on a
+    market that sets prices (a ``currency``), and on one that does not only where some account
+    ``compares``: one owing an amount set by hand, or refunded beyond what it paid."""
+    return currency is not None or any(compares(held) for held in accounts.values())
+
+
 # --- The market's money (E44/F02/S01) -------------------------------------------------------------
 
 def _figures(owed: int, paid: int, compared: bool = True) -> Dict[str, int]:
@@ -525,8 +891,9 @@ def market_summary(
     accounts: Mapping[str, Mapping[str, Any]], tier_order: List[str],
 ) -> Dict[str, Any]:
     """The Payments page from every vendor's account: each vendor with a line or a payment, by
-    address, with their ``balance_state`` (what the page's lists and the export's payment filter
-    both read), and the market's figures, also by tier and by date.
+    address, with the ``balanceState`` (what the page's lists and the export's payment filter
+    both read) and ``compares`` their account serves, and the market's figures, also by tier and
+    by date.
 
     A payment is a vendor's, never a day's, so what a vendor paid is shared across their table-days
     in proportion to what each owes, or evenly where they owe nothing, and each day's share counts
@@ -550,9 +917,10 @@ def market_summary(
         held = accounts[email]
         if not held["lines"] and not held["payments"]:
             continue
+        compared = held["compares"]
         vendors.append({"email": email, "owedCents": held["owedCents"],
-                        "paidCents": held["paidCents"], "balanceState": balance_state(held)})
-        compared = compares(held)
+                        "paidCents": held["paidCents"], "balanceState": held["balanceState"],
+                        "compares": compared})
         add(totals, held["owedCents"], held["paidCents"], compared)
         owed = [line["owedCents"] or 0 for line in held["lines"]]
         if not owed:

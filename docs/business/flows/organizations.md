@@ -25,6 +25,7 @@ sources:
   - T223
   - T283
   - T315
+  - T352
 ---
 
 # Organizations
@@ -51,6 +52,9 @@ Covered by:
 1. "Organizations" in the app bar (or `/organizations`).
 2. "New organization", name it, "Create".
 3. Expect a card with the name and your role (Owner).
+
+A name another of your organizations has, in any capitals and with any spaces around it, is refused in the dialog: "You already belong to an organization named "Harbour Makers"." (T352).
+Only your own organizations are compared, so another organizer may have one of the same name, and nothing says whether anyone does ([an organization's name](../../implementation/data/organization-document.md#an-organizations-name)); [`organization-names.spec.ts`](../../../front-end/e2e/organization-names.spec.ts) walks it.
 
 Each organization's card says its name, your role in it, how many markets it holds and its owner.
 The cards are a [list frame](../../design-system.md), in the order the organizations were made (T223): a line counts them, "3 organizations", past 12 a field, "Find an organization", finds by any part of a name, capitals and accents aside, as Markets' search does, its words held in the address as `search`, and the list shows 50 at a time, "Showing 50 of 51" and "Show 1 more".
@@ -129,8 +133,10 @@ Covered by:
 
 **Status:** Works (walked live).
 Manage, "Rename organization", edit, "Save"; the owner's alone, so an admin's dialog has no such section.
+A name another of the owner's organizations has is refused under the field, as B1's is; the organization's own name in other capitals is not.
 Covered by:
 
+- `organization-names.spec.ts`
 - `tier2.spec.ts`
 
 ## B5. Delete an organization

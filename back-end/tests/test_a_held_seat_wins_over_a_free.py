@@ -69,12 +69,18 @@ def a_run_that_seats(monkeypatch, market, *seats):  # noqa: F811
     monkeypatch.setattr(PlacementsApi.MadeFrom, "fingerprint", lambda *_a: {})
 
 
-def a_stale_freed_record(date, deducted=True):
-    """What a free that stopped before its seat write left on a day the vendor still holds."""
-    held = PaymentsApi.seats_by_vendor(
+def held_seat(date):
+    """The seat Ana holds on ``date`` in the stored market."""
+    return PaymentsApi.seats_by_vendor(
         PlacementsApi.MarketsApi.market_from_document(
             PlacementsApi.MarketsApi.markets_collection.doc))[ANA][date]
-    Payments.keep_freed_line(MARKET, ANA, date, held, EDITOR, deduct=deducted)
+
+
+def a_stale_freed_record(date, deducted=True):
+    """What a free that stopped before its seat write left on a day the vendor still holds."""
+    held = held_seat(date)
+    event = (Payments.OwedEvent.FREED_WITH_DEDUCTION if deducted else Payments.OwedEvent.FREED)
+    Payments.owed_day_transition(MARKET, ANA, date, event, held=held, seat=held, by=EDITOR)
 
 
 SATURDAY_ELSEWHERE = VendorAssignmentResult(
@@ -86,7 +92,7 @@ class TestAHeldSeatOwesItsPrice:
     def test_a_re_seat_after_a_deducted_free_owes_the_new_seat_even_when_it_stopped(
             self, admin, monkeypatch):
         PlacementsApi.remove_placement(MARKET, ANA, SUN, ADMIN, deduct_owed=True)
-        monkeypatch.setattr(PaymentsApi, "seated_again", stop)
+        monkeypatch.setattr(PaymentsApi, "assignment_written", stop)
 
         with pytest.raises(Stopped):
             PlacementsApi.write_placement(MARKET, seat(SUN), ADMIN)
@@ -141,7 +147,7 @@ class TestAHeldSeatOwesItsPrice:
             self, admin, stores, monkeypatch):  # noqa: F811
         PaymentsApi.set_amount_owed(MARKET, ANA, SUN, {"cents": 5000}, ADMIN)
         PlacementsApi.remove_placement(MARKET, ANA, SUN, EDITOR, deduct_owed=True)
-        stop_once(monkeypatch, PaymentsApi, "seated_again")
+        stop_once(monkeypatch, PaymentsApi, "assignment_written")
 
         with pytest.raises(Stopped):
             PlacementsApi.write_placement(MARKET, seat(SUN), ADMIN)
@@ -362,17 +368,17 @@ class TestAnAmountSetAsTheFreeWrites:
 
     @staticmethod
     def the_index_refuses_a_second_record(monkeypatch, owed):
-        """An upsert that matches nothing on a day that has a record inserts a second one, which
-        the unique index refuses, as MongoDB does; the fake holds no index."""
-        write = owed.find_one_and_update
+        """An insert on a day that has a record is refused by the unique index, as MongoDB
+        refuses it; the fake holds no index."""
+        insert = owed.insert_one
 
-        def refused(query, update, upsert=False, **kwargs):
-            day = {key: query[key] for key in ("market_id", "vendor_email", "date")}
-            if upsert and owed._first(query) is None and owed._first(day) is not None:
+        def refused(document, *args, **kwargs):
+            day = {key: document[key] for key in ("market_id", "vendor_email", "date")}
+            if owed._first(day) is not None:
                 raise DuplicateKeyError("E11000 duplicate key error", code=11000)
-            return write(query, update, upsert=upsert, **kwargs)
+            return insert(document, *args, **kwargs)
 
-        monkeypatch.setattr(owed, "find_one_and_update", refused, raising=False)
+        monkeypatch.setattr(owed, "insert_one", refused, raising=False)
 
     def test_an_amount_changed_after_the_frees_read_is_the_one_kept(
             self, admin, stores, monkeypatch):  # noqa: F811
@@ -409,7 +415,10 @@ class TestAnAmountSetAsTheFreeWrites:
 
         def read_then_set(query, *args, **kwargs):
             found = read(query, *args, **kwargs)
-            Payments.set_amount_owed(MARKET, ANA, SUN, next(amounts), ADMIN)
+            monkeypatch.setattr(stores.owed, "find_one", read)
+            Payments.owed_day_transition(MARKET, ANA, SUN, Payments.OwedEvent.ADMIN_SETS,
+                                         held=held_seat(SUN), by=ADMIN, cents=next(amounts))
+            monkeypatch.setattr(stores.owed, "find_one", read_then_set)
             return found
 
         monkeypatch.setattr(stores.owed, "find_one", read_then_set, raising=False)
@@ -423,7 +432,7 @@ class TestAnAmountSetAsTheFreeWrites:
         # amount the Admin set, the seat is still Ana's, and nothing was recorded but the sets.
         [record] = [doc for doc in stores.owed.documents if doc["date"] == SUN]
         assert record.get("freed") is None
-        assert record["set_by_hand"]["cents"] == 4100 + 100 * (Payments._FREE_TRIES - 1)
+        assert record["set_by_hand"]["cents"] == 4100 + 100 * (Payments.OWED_TRIES - 1)
         assert not record["set_by_hand"].get("by_free")
         held = PaymentsApi.seats_by_vendor(
             PlacementsApi.MarketsApi.market_from_document(
@@ -443,8 +452,8 @@ class TestEveryWriteForgetsTheStaleFreedRecordsOfItsDays:
         _result, status = PlacementsApi.run_assignment(MARKET, ADMIN)
 
         assert status == 200
-        [record] = stores.owed.documents
-        assert (record["freed"], record["set_by_hand"]) == (None, None)
+        # Following its seat, the day keeps no record.
+        assert stores.owed.documents == []
         assert [line["date"] for line in PaymentsApi.vendor_account(MARKET, ANA, ADMIN)["lines"]] == [
             SAT]
         assert taken_back(stores) == []
@@ -472,8 +481,8 @@ class TestEveryWriteForgetsTheStaleFreedRecordsOfItsDays:
 
         PlacementsApi.swap_placements(MARKET, SUN, ANA, BEN, ADMIN)
 
-        [record] = stores.owed.documents
-        assert (record["freed"], record["set_by_hand"]) == (None, None)
+        # Following its seat, the day keeps no record.
+        assert stores.owed.documents == []
         sunday = line(SUN)
         assert (sunday["tableCode"], sunday["owedCents"], sunday["owedByFree"]) == (
             "Landing 1", 3000, False)
@@ -484,8 +493,8 @@ class TestEveryWriteForgetsTheStaleFreedRecordsOfItsDays:
 
         PlacementsApi.write_placement(MARKET, seat(SUN), ADMIN)
 
-        [record] = stores.owed.documents
-        assert (record["freed"], record["set_by_hand"]) == (None, None)
+        # Following its seat, the day keeps no record.
+        assert stores.owed.documents == []
         assert taken_back(stores) == []
 
     def test_a_re_seat_of_a_freed_day_records_the_taking_back(self, admin, stores):  # noqa: F811
@@ -496,3 +505,27 @@ class TestEveryWriteForgetsTheStaleFreedRecordsOfItsDays:
         [entry] = taken_back(stores)
         assert entry["detail"] == {"before": {"owed_cents": 0}, "after": {"owed_cents": 3000}}
 
+
+    def test_a_dropped_day_forgets_the_amount_it_held(self, admin, stores, market):  # noqa: F811
+        """A day the write held and no longer seats takes ``dropped_by_run``; its record is read
+        though it holds no freed line."""
+        PaymentsApi.set_amount_owed(MARKET, ANA, SUN, {"cents": 0}, ADMIN)
+        [sunday] = [row for row in PlacementsApi.MarketsApi.market_from_document(
+            market.doc).assignment_object.vendor_assignments if row.date == SUN]
+
+        PaymentsApi.assignment_written(MARKET, seated=[], held_before=[sunday], dropped=[sunday],
+                                       by=ADMIN)
+
+        assert stores.owed.documents == []
+
+    def test_the_calculated_price_on_a_held_day_with_a_stopped_frees_record_records_nothing(
+            self, admin, stores):  # noqa: F811
+        """The line reads its seat's price before and after, so nothing is recorded: what the day
+        reads as is what decides, not the stopped free's record the write tidies (review of 01)."""
+        a_stale_freed_record(SUN)
+
+        PaymentsApi.use_calculated_price(MARKET, ANA, SUN, ADMIN)
+
+        sunday = line(SUN)
+        assert (sunday["freed"], sunday["owedCents"], sunday["owedSetBy"]) == (False, 3500, None)
+        assert entries(stores, "change-owed") == []
