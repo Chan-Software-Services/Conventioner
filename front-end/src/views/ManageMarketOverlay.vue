@@ -123,7 +123,15 @@ const read = useServerRead<string, Market>(
     },
   },
 );
-const marketData = read.data;
+/**
+ * The market as Manage market last read it; after its first read failed, the opener's copy of the
+ * same market, with the failure said, so the dialog still works on a bad network as it did.
+ */
+const marketData = computed(() => {
+  if (read.data.value) return read.data.value;
+  const opener = props.market;
+  return read.phase.value === 'failed' && opener && opener.id === read.key.value ? opener : null;
+});
 /** Its first read is out: the dialog names the market it was opened on, and says it is loading. */
 const loading = computed(() => read.phase.value === 'loading');
 /** A read that failed, said by the shell: the first, or a re-read with the market kept. */

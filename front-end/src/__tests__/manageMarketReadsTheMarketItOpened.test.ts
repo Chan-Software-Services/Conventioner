@@ -171,6 +171,29 @@ describe('Manage market opened on B never shows or writes A', () => {
   });
 });
 
+describe('a failed first read', () => {
+  it("says the failure over the opener's copy of the market, and writes to it", async () => {
+    const A = market('market-a', 'Market A', 'ana@example.com');
+    api.get.mockImplementation((url: string) =>
+      url === '/markets/market-a'
+        ? Promise.reject(new Error('unreachable'))
+        : Promise.resolve({ data: { entries: [], next: null } }),
+    );
+    api.put.mockResolvedValue({ data: {} });
+    mountOn(A);
+    await flushPromises();
+
+    expect(byTestId('manage-market-error')?.textContent?.trim()).toBe(
+      'The market could not be loaded.',
+    );
+    expect(dialogText()).toContain('ana@example.com');
+    await typeName('Market A renamed');
+    byTestId('manage-market-rename-save-button')!.click();
+    await flushPromises();
+    expect(api.put).toHaveBeenCalledWith('/markets/market-a/name', { name: 'Market A renamed' });
+  });
+});
+
 describe('a re-read asked before a write never lands after it', () => {
   it("a re-read asked before a rename, answering after the rename's own, keeps the new name", async () => {
     const before = market('market-1', 'Spring Market');
