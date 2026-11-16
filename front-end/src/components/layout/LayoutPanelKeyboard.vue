@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
- * The layout page's "Keyboard" card (T257): the editor's keys, folded away until asked for. What
- * each key does is `LayoutEditor.vue`'s to do; this card only lists them, group by group, as the
- * hint under the map says the few that matter where the keys are.
+ * The layout editor's keyboard shortcuts (T257), in the panel the keyboard button or `?` shows
+ * beside the page (T422): what each key does is `LayoutEditor.vue`'s to do; this list only names
+ * them, group by group, the tools' keys first, as the hint under the map says the few that matter
+ * where the keys are.
  *
  * Past Draft (`settled`) it leaves out the keys that add or remove tables, which do nothing there:
  * Delete, Ctrl+D, Add table's Enter, and the Row of tables and Fill an area groups.
@@ -10,7 +11,7 @@
 import { computed } from 'vue';
 
 const props = defineProps<{
-  /** Whether the market has left Draft, so no table is added or removed. */
+  /** Whether the layout's seats are settled, so no table is added or removed. */
   settled?: boolean;
 }>();
 
@@ -25,6 +26,18 @@ const GROUPS: readonly {
   /** Its title once its keys that add tables are left out. */
   settledTitle?: string;
 }[] = [
+  {
+    title: 'Tools',
+    keys: [
+      [['V'], 'Select'],
+      [['T'], 'Add table', 'seats'],
+      [['W'], 'Row of tables', 'seats'],
+      [['A'], 'Fill an area', 'seats'],
+      [['Z'], 'No-table zone'],
+      [['Escape'], 'Back to Select, with nothing being drawn'],
+      [['?'], 'Show or hide these shortcuts'],
+    ],
+  },
   {
     title: 'On the map',
     keys: [
@@ -104,8 +117,8 @@ const shown = computed(() =>
 
 <template>
   <section data-testid="layout-panel-keyboard">
-    <details class="keyboard">
-      <summary class="keyboard-title" data-testid="layout-keyboard-summary">Keyboard</summary>
+    <div class="keyboard">
+      <h2 class="keyboard-heading">Keyboard shortcuts</h2>
       <template v-for="group in shown" :key="group.title">
         <h3 class="keyboard-group">{{ group.title }}</h3>
         <dl class="keyboard-keys">
@@ -120,7 +133,7 @@ const shown = computed(() =>
         </dl>
       </template>
       <p class="keyboard-note">On a Mac, Command stands in for Ctrl.</p>
-    </details>
+    </div>
   </section>
 </template>
 
@@ -129,32 +142,14 @@ const shown = computed(() =>
   width: 100%;
 }
 
-/* The card's title is the disclosure's summary: as wide as its words, so its halo hugs them. */
-.keyboard-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: fit-content;
-  min-height: var(--target-min);
+.keyboard-heading {
+  margin: 0;
   font-size: var(--text-md);
   font-weight: 600;
-  cursor: pointer;
-  list-style: none;
 }
 
-.keyboard-title::-webkit-details-marker {
-  display: none;
-}
-
-/* Its own marker, the native one being hidden to keep the title on one baseline. */
-.keyboard-title::before {
-  content: '▸';
-  font-size: var(--text-xs);
-  transition: transform 0.12s ease;
-}
-
-.keyboard[open] .keyboard-title::before {
-  transform: rotate(90deg);
+.keyboard-heading + .keyboard-group {
+  margin-top: var(--space-2);
 }
 
 .keyboard-group {
@@ -166,7 +161,8 @@ const shown = computed(() =>
 /* The keys in one column and what they do beside them, every group's columns the same width. */
 .keyboard-keys {
   display: grid;
-  grid-template-columns: 6.5rem minmax(0, 1fr);
+  /* Room for the longest keys on one line. */
+  grid-template-columns: 9rem minmax(0, 1fr);
   gap: var(--space-1) var(--space-2);
   margin: 0;
   font-size: var(--text-sm);
@@ -190,11 +186,5 @@ const shown = computed(() =>
   margin: var(--space-3) 0 0;
   font-size: var(--text-xs);
   color: var(--mm-text-muted);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .keyboard-title::before {
-    transition: none;
-  }
 }
 </style>

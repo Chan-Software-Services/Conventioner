@@ -47,6 +47,7 @@ import type {
   TableTypeObject,
 } from '@/assets/types/datatypes';
 import MarketFrame from '@/components/MarketFrame.vue';
+import AppDialog from '@/components/AppDialog.vue';
 import { api } from '@/utils/api';
 import { useOpenMarket } from '@/utils/openMarket';
 import { useUnsavedWork } from '@/utils/useUnsavedWork';
@@ -58,12 +59,14 @@ import LayoutCalibration from './LayoutCalibration.vue';
 import LayoutEditor from './LayoutEditor.vue';
 import LayoutExportDialog from './LayoutExportDialog.vue';
 import LayoutMap from './LayoutMap.vue';
-import LayoutPanelKeyboard from './LayoutPanelKeyboard.vue';
 import LayoutPanelSections from './LayoutPanelSections.vue';
 import LayoutPanelSelection, { type Arrangement } from './LayoutPanelSelection.vue';
 import LayoutPanelTable from './LayoutPanelTable.vue';
 import LayoutPanelTypes from './LayoutPanelTypes.vue';
 import LayoutPanelZones from './LayoutPanelZones.vue';
+import LayoutToolCard from './LayoutToolCard.vue';
+import { isAdding, type Tool } from './layoutTools';
+import { rememberedChoice } from './layoutViewChoices';
 import { metresAcross, pxPerMm, type Point } from './calibration';
 import {
   NO_TABLE_FITS,
@@ -106,6 +109,13 @@ const router = useRouter();
 const marketId = computed(() => String(route.params.marketId ?? ''));
 const locationId = computed(() => String(route.params.locationId ?? ''));
 const { market, refresh } = useOpenMarket(marketId);
+/** The editor's tool on: any but Select shows its card in place of the selection's. */
+const editorTool = ref<Tool>('select');
+/** The section and the type the adding tools give a new table, shared by the three, chosen on the
+ *  tool's card; the editor starts them at the first of each. */
+const toolSectionId = ref<string | null>(null);
+const toolTypeId = ref('');
+const editorView = ref<InstanceType<typeof LayoutEditor> | null>(null);
 
 /** The locations a layout can be opened for: named, and with the id a layout names. */
 const locations = computed<(LocationObject & { id: string })[]>(() =>
@@ -235,7 +245,16 @@ const calibrated = computed(() => Boolean(floorplan.value?.scalePxPerUnit));
 const recalibrating = ref(false);
 
 /** Whether the venue's floorplan is drawn under the tables; unticked, the hall is its floor. */
-const showImage = ref(true);
+const showImage = rememberedChoice('showImage', true);
+/** Whether it is drawn in greyscale, as it is by default, so the sections' colours are the only
+ *  colours; unticked, in its own. A choice of the person viewing, as `showImage` is, kept in their
+ *  browser. */
+const imageInGrey = rememberedChoice('imageInGrey', true);
+/** Whether it is drawn at half strength, as it is by default, so the tables stand out over a busy
+ *  plan; unticked, at full strength. A choice of the person viewing, kept in their browser. */
+const imageFaded = rememberedChoice('imageFaded', true);
+/** Whether the Layout settings dialog is open. */
+const settingsOpen = ref(false);
 
 // ── Replacing the image ──────────────────────────────────────────────────────
 
@@ -325,6 +344,8 @@ async function onReplacementCalibrated(line: { start: Point; end: Point; lengthM
 const sections = computed(() =>
   floorplan.value ? layoutSections(floorplan.value, market.value?.setupObject?.sections ?? []) : [],
 );
+/** Those sections themselves, which the adding tools put a new table in. */
+const ownLaidOutSections = computed(() => sections.value.map(({ section }) => section));
 
 /** The layout's tables in no section: of none, or of one that is gone or another location's. */
 const unsectioned = computed(() => {
@@ -747,6 +768,15 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
           >
             Export PNG
           </button>
+          <button
+            v-if="editing"
+            type="button"
+            class="btn btn--secondary"
+            data-testid="layout-settings-open"
+            @click="settingsOpen = true"
+          >
+            Layout settings
+          </button>
           <RouterLink
             :to="marketPath(market.id, 'setup')"
             class="btn btn--secondary"
@@ -862,12 +892,18 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
               :sections="market.setupObject?.sections ?? []"
               :tableTypes="tableTypes"
               :imageUrl="imageUrl"
-              :showImage="showImage"
+              v-model:showImage="showImage"
+              v-model:imageInGrey="imageInGrey"
+              v-model:imageFaded="imageFaded"
               :settled="seatsSettled"
               :fill="(request) => placeTables(marketId, request)"
               @announce="say"
               @status="showStatus"
               @zoneAdded="zonesCard?.focusZone($event)"
+              @tool="editorTool = $event"
+              ref="editorView"
+              v-model:sectionId="toolSectionId"
+              v-model:typeId="toolTypeId"
             />
             <div
               v-else
@@ -883,6 +919,8 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
                 :tableTypes="tableTypes"
                 :imageUrl="imageUrl"
                 :showImage="showImage"
+                :imageInGrey="imageInGrey"
+                :imageFaded="imageFaded"
                 mode="read"
                 :selection="readTable ? [readTable.id] : []"
                 @activate="readId = $event"
@@ -938,13 +976,8 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
             </p>
           </section>
           <template v-else-if="calibrated">
-            <p
-              v-if="editing && status"
-              class="layout-card layout-fill-status"
-              data-testid="layout-status"
-            >
-              {{ status }}
-            </p>
+            <!-- A reader's card of the table read heads the panel, where a phone shows it first under
+                 the map. -->
             <LayoutPanelTable
               v-if="reading"
               class="layout-card"
@@ -953,8 +986,54 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
               :tableTypes="tableTypes"
               :phone="!atADesk"
             />
+            <!-- What stands: the location's sections, informational, at the head of an editor's
+                 panel; what is worked with (the status, the tool's or the selection's card) under
+                 it. -->
+            <LayoutPanelSections
+              class="layout-card layout-card--info"
+              :locationName="location.name"
+              :sections="sections"
+              :unsectioned="unsectioned.length"
+              :startingCounts="floorplan?.startingCounts ?? []"
+              :editable="editing"
+              :settled="seatsSettled"
+              :followsPlan="followsPlan"
+              @color="(sectionId, color) => editor.setSectionStyle(sectionId, { color })"
+              @renumber="editor.renumber($event)"
+              @selectUnsectioned="editor.select(unsectioned.map((table) => table.id))"
+            />
+            <p
+              v-if="editing && status"
+              class="layout-card layout-fill-status"
+              data-testid="layout-status"
+            >
+              {{ status }}
+            </p>
+            <!-- The card of the tool on, while it is one that adds tables, in place of the
+                 selection's: its options, never over the map. -->
+            <LayoutToolCard
+              v-if="editing && isAdding(editorTool)"
+              v-model:sectionId="toolSectionId"
+              v-model:typeId="toolTypeId"
+              :tool="editorTool"
+              :sections="ownLaidOutSections"
+              :tableTypes="tableTypes"
+              :rowClosed="editorView?.rowClosed ?? false"
+              @flip="editorView?.flipRow()"
+              @fillInView="editorView?.fillInView()"
+            />
+            <!-- The no-table zones are the No-table zone tool's card: a zone is named as it is
+                 drawn. -->
+            <LayoutPanelZones
+              v-if="editing && editorTool === 'zone'"
+              ref="zonesCard"
+              class="layout-card"
+              :zones="floorplan?.zones ?? []"
+              @label="editor.setZoneLabel"
+              @remove="removeZone"
+            />
             <LayoutPanelSelection
-              v-if="editing"
+              v-if="editing && editorTool === 'select'"
               class="layout-card"
               :tables="selectedTables"
               :sections="sections"
@@ -971,64 +1050,36 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
               @row="rowOnFromTheSelection"
               @number="numberSelection"
             />
-            <LayoutPanelSections
+            <section
+              v-if="atADesk && !editing"
               class="layout-card"
-              :locationName="location.name"
-              :sections="sections"
-              :unsectioned="unsectioned.length"
-              :startingCounts="floorplan?.startingCounts ?? []"
-              :editable="editing"
-              :settled="seatsSettled"
-              :followsPlan="followsPlan"
-              @color="(sectionId, color) => editor.setSectionStyle(sectionId, { color })"
-              @renumber="editor.renumber($event)"
-              @selectUnsectioned="editor.select(unsectioned.map((table) => table.id))"
-            />
-            <LayoutPanelTypes
-              v-if="editing"
-              class="layout-card"
-              :tableTypes="tableTypes"
-              :counts="typeCounts"
-              :settled="settled"
-              :save="writeTableTypes"
-              :listSaved="listSaved"
-              :saveAs="saveTheseTypes"
-            />
-            <LayoutPanelZones
-              v-if="editing"
-              ref="zonesCard"
-              class="layout-card"
-              :zones="floorplan?.zones ?? []"
-              @label="editor.setZoneLabel"
-              @remove="removeZone"
-            />
-            <section v-if="atADesk" class="layout-card" data-testid="layout-panel-floorplan">
+              data-testid="layout-panel-floorplan"
+            >
               <h2 class="layout-card-title">Floorplan</h2>
               <p class="layout-card-text">{{ location.name }}'s floorplan reads {{ scaleText }}.</p>
               <label class="layout-tick">
                 <input v-model="showImage" type="checkbox" data-testid="layout-show-image" />
                 <span>Show the floorplan</span>
               </label>
-              <div v-if="editsHere && !recalibrating && !replacing" class="layout-card-actions">
-                <button
-                  type="button"
-                  class="btn btn--secondary"
-                  data-testid="layout-replace-image"
-                  @click="startReplacing"
-                >
-                  Replace the image
-                </button>
-                <button
-                  type="button"
-                  class="btn btn--secondary"
-                  data-testid="layout-recalibrate"
-                  @click="recalibrating = true"
-                >
-                  Recalibrate
-                </button>
-              </div>
+              <label class="layout-tick">
+                <input
+                  v-model="imageInGrey"
+                  type="checkbox"
+                  :disabled="!showImage"
+                  data-testid="layout-image-grey"
+                />
+                <span>Greyscale</span>
+              </label>
+              <label class="layout-tick">
+                <input
+                  v-model="imageFaded"
+                  type="checkbox"
+                  :disabled="!showImage"
+                  data-testid="layout-image-faded"
+                />
+                <span>Faded</span>
+              </label>
             </section>
-            <LayoutPanelKeyboard v-if="editing" class="layout-card" :settled="seatsSettled" />
             <p v-if="reading && !atADesk" class="layout-phone-hint" data-testid="layout-phone-hint">
               Pinch to zoom, drag to look around, tap a table to read it. The layout is edited at a
               desk.
@@ -1036,6 +1087,63 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
           </template>
         </aside>
       </div>
+      <!-- What is set up once or seldom, out of the panel: the table types, the floorplan's image
+           and scale, and the keys (the QC walk of 2026-11-16). -->
+      <AppDialog
+        v-if="editing && location"
+        :open="settingsOpen"
+        title="Layout settings"
+        testid="layout-settings"
+        size="wide"
+        scroll="body"
+        @close="settingsOpen = false"
+      >
+        <div class="layout-settings">
+          <div class="layout-settings__column">
+            <LayoutPanelTypes
+              class="layout-settings__section"
+              :tableTypes="tableTypes"
+              :counts="typeCounts"
+              :settled="settled"
+              :save="writeTableTypes"
+              :listSaved="listSaved"
+              :saveAs="saveTheseTypes"
+            />
+            <section
+              class="layout-settings__section"
+              aria-labelledby="layout-settings-floorplan"
+              data-testid="layout-panel-floorplan"
+            >
+              <h2 id="layout-settings-floorplan" class="layout-card-title">Floorplan image</h2>
+              <p class="layout-card-text">{{ location.name }}'s floorplan reads {{ scaleText }}.</p>
+              <div v-if="!recalibrating && !replacing" class="layout-card-actions">
+                <button
+                  type="button"
+                  class="btn btn--secondary"
+                  data-testid="layout-replace-image"
+                  @click="
+                    settingsOpen = false;
+                    startReplacing();
+                  "
+                >
+                  Replace the image
+                </button>
+                <button
+                  type="button"
+                  class="btn btn--secondary"
+                  data-testid="layout-recalibrate"
+                  @click="
+                    settingsOpen = false;
+                    recalibrating = true;
+                  "
+                >
+                  Recalibrate
+                </button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </AppDialog>
       <LayoutExportDialog
         v-if="location"
         :open="exportOpen"
@@ -1071,11 +1179,18 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
   min-width: 0;
 }
 
+/* The page's head is a bar across the whole page, ruled off from the work under it: where it is and
+   how it stands (the title, the locations, the save state, the scale) and the page's own actions
+   above; the tools, the map and the panel below (the QC walk of 2026-11-16). */
 .layout-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3) var(--space-4);
+  /* Out to the page's edges, through its inset, which it keeps inside. */
+  margin: calc(-1 * var(--space-6)) calc(-1 * var(--space-6)) 0;
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--mm-border);
 }
 
 .layout-title {
@@ -1209,6 +1324,40 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
   box-shadow: var(--shadow-card);
 }
 
+/* Layout settings: what is set up once, each part set off by a rule rather than drawn as a card
+   inside the dialog's own card. */
+.layout-settings {
+  display: flex;
+  flex-direction: column;
+}
+
+.layout-settings__column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.layout-settings__section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.layout-settings__section + .layout-settings__section {
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--mm-border);
+}
+
+/* A card that informs rather than one worked in: flat on the page's ground, edged and unlifted,
+   so the card of the tool or the selection under it reads as the one in hand. */
+.layout-card--info {
+  background: var(--mm-beige);
+  box-shadow: none;
+  border: 1px solid var(--mm-border);
+}
+
 .layout-card-title {
   margin: 0;
   font-size: var(--text-md);
@@ -1252,6 +1401,11 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
 /* A phone's 16px gutter, as on every page that fits one. */
 @media (width <= 640px) {
   .layout-page {
+    padding: var(--space-4);
+  }
+
+  .layout-head {
+    margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;
     padding: var(--space-4);
   }
 }

@@ -5,7 +5,8 @@
  * legend, listed from the same sections and colours (`layoutSections`).
  *
  * For someone editing the layout a section's swatch is a button that opens the palette's eight
- * colours under its row, and its row's menu renumbers its tables by where they stand. Tables in
+ * colours in a bubble under the swatch, over the card, so the card keeps its size (the QC walk of
+ * 2026-11-16); a press outside it closes it, and its row's menu renumbers its tables by where they stand. Tables in
  * no section are counted under the list, with "Select them" for the editor, and while a section
  * has fewer tables than Section Setup had typed for it when the layout began, a note says how many
  * are placed. Past Draft (`settled`) a section's numbers are settled, so its row's menu is disabled.
@@ -13,7 +14,7 @@
  * On a layout that follows the plan (`followsPlan`, T422) each section counts "<placed> of <count>",
  * its count the plan's, which says what is left to place, so Section Setup's start goes unsaid.
  */
-import { computed, nextTick, ref, useId } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import type { StartingCount } from '@/assets/types/datatypes';
 import RowMenu from '@/components/RowMenu.vue';
 import { plural } from '@/utils/utils';
@@ -71,13 +72,52 @@ const swatchOf = (sectionId: string) =>
     (button) => button.dataset.swatchOf === sectionId,
   );
 
+/** Whether the open bubble hangs above its swatch: under it, it would run past the window's foot. */
+const above = ref(false);
+
 async function toggle(sectionId: string) {
   choosing.value = choosing.value === sectionId ? null : sectionId;
+  above.value = false;
   if (!choosing.value) return;
   await nextTick();
+  const bubble = list.value?.querySelector<HTMLElement>('[data-palette]');
+  if (bubble && bubble.getBoundingClientRect().bottom > window.innerHeight) {
+    above.value = true;
+    await nextTick();
+  }
   // The colour the section wears, where the eye already is.
   list.value?.querySelector<HTMLButtonElement>('[data-palette] [aria-pressed="true"]')?.focus();
 }
+
+/** A press anywhere but the open bubble or its swatch closes it, the focus left where the press
+ *  put it; a press on nothing that takes the focus gives it back to the swatch, as the app's menus
+ *  do (`RowMenu.vue`), rather than to the page. */
+function onPressOutside(event: PointerEvent) {
+  const target = event.target as Element | null;
+  if (target?.closest('[data-palette], [data-swatch-of]')) return;
+  const sectionId = choosing.value;
+  choosing.value = null;
+  if (!sectionId) return;
+  const pressEnded = new AbortController();
+  document.addEventListener(
+    'pointerup',
+    () => {
+      pressEnded.abort();
+      if (document.activeElement === document.body) {
+        swatchOf(sectionId)?.focus({ preventScroll: true });
+      }
+    },
+    { signal: pressEnded.signal },
+  );
+  document.addEventListener('pointercancel', () => pressEnded.abort(), {
+    signal: pressEnded.signal,
+  });
+}
+watch(choosing, (open) => {
+  if (open) document.addEventListener('pointerdown', onPressOutside, true);
+  else document.removeEventListener('pointerdown', onPressOutside, true);
+});
+onBeforeUnmount(() => document.removeEventListener('pointerdown', onPressOutside, true));
 
 /** Close the palette and give the focus back to the swatch that opened it. */
 async function close(sectionId: string) {
@@ -185,6 +225,7 @@ const short = computed(() =>
           v-if="editable && choosing === section.id"
           :id="paletteId"
           class="sections-palette"
+          :class="{ 'sections-palette--above': above }"
           role="group"
           :aria-label="`${nameOf(section)}'s colour`"
           data-palette
@@ -293,15 +334,58 @@ const short = computed(() =>
 
 .sections-swatch-button:hover,
 .sections-swatch-button[aria-expanded='true'] {
-  background: var(--mm-beige);
+  background: var(--mm-beige-hover);
 }
 
-/* The palette lies under its section's row, across the card. */
+/* The palette is a bubble under the swatch, over what follows, its point at the swatch: the card
+   keeps its size while a colour is chosen. */
+.sections-row {
+  position: relative;
+}
+
 .sections-palette {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: calc(-1 * var(--space-2));
+  z-index: 10;
+  display: grid;
+  grid-template-columns: repeat(4, auto);
   gap: var(--space-1);
+  padding: var(--space-2);
+  background: white;
+  border: 1px solid var(--mm-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+/* Its point, a square turned a quarter-half, edged on its two outer sides as the bubble is. */
+.sections-palette::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: calc(var(--space-2) + var(--target-min) / 2 - 5px);
+  width: 10px;
+  height: 10px;
+  background: white;
+  border-top: 1px solid var(--mm-border);
+  border-left: 1px solid var(--mm-border);
+  transform: rotate(45deg);
+}
+
+/* Near the window's foot it hangs above its swatch, its point under it. */
+.sections-palette--above {
+  top: auto;
+  bottom: calc(100% + var(--space-2));
+}
+
+.sections-palette--above::before {
+  top: auto;
+  bottom: -6px;
+  transform: rotate(225deg);
+}
+
+.sections-palette .sections-swatch-button:hover {
+  background: var(--mm-beige);
 }
 
 /* The colour the section wears: its swatch edged twice as heavily. */

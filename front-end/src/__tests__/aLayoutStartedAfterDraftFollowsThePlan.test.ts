@@ -14,7 +14,6 @@ import { createPinia, setActivePinia } from 'pinia';
 import type { FloorplanObject, FloorplanTable } from '@/assets/types/datatypes';
 import FloorplanUploader from '@/components/layout/FloorplanUploader.vue';
 import LayoutEditor from '@/components/layout/LayoutEditor.vue';
-import LayoutPanelKeyboard from '@/components/layout/LayoutPanelKeyboard.vue';
 import LayoutPanelSections from '@/components/layout/LayoutPanelSections.vue';
 import LayoutPanelSelection from '@/components/layout/LayoutPanelSelection.vue';
 import LayoutPanelTypes from '@/components/layout/LayoutPanelTypes.vue';
@@ -356,6 +355,8 @@ describe('the layout page past Draft', () => {
         stubs: {
           RouterLink: { template: '<a><slot /></a>' },
           MarketFrame: { name: 'MarketFrame', props: ['market'], template: '<div><slot /></div>' },
+          // Layout settings shows its body while open, as the dialog does.
+          AppDialog: { props: ['open'], template: '<div v-if="open"><slot /></div>' },
         },
       },
     });
@@ -423,8 +424,8 @@ describe('the layout page past Draft', () => {
       settled: false,
       followsPlan: true,
     });
+    await wrapper.get('[data-testid="layout-settings-open"]').trigger('click');
     expect(wrapper.getComponent(LayoutPanelTypes).props('settled')).toBe(true);
-    expect(wrapper.getComponent(LayoutPanelKeyboard).props('settled')).toBe(false);
   });
 
   it('keeps a layout started in Draft settled, under the setup-settled sentence', async () => {

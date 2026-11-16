@@ -69,7 +69,12 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useId, watch } from 'vue';
 import type { FloorplanTable, SectionObject, TableTypeObject } from '@/assets/types/datatypes';
 import { getApiErrorMessage } from '@/utils/api';
+import IconCloseRound from '@/components/icons/IconCloseRound.vue';
+import IconKeyboard from '@/components/icons/IconKeyboard.vue';
+import RowMenu from '@/components/RowMenu.vue';
+import ScrollBox from '@/components/ScrollBox.vue';
 import LayoutFillDialog from './LayoutFillDialog.vue';
+import LayoutPanelKeyboard from './LayoutPanelKeyboard.vue';
 import LayoutFillPreview from './LayoutFillPreview.vue';
 import LayoutMap, { type MapView } from './LayoutMap.vue';
 import LayoutRowPreview from './LayoutRowPreview.vue';
@@ -140,13 +145,14 @@ import {
 import {
   keepSample,
   rowChoices,
-  rowFieldErrors,
   strokeFrom,
   strokeOptions,
   useRowTool,
   type KeptStroke,
 } from './layoutRow';
 import { centreOf, selectionBounds, turnSelection } from './layoutSelection';
+import { ADDING_TOOLS, TOOL_KEYS, type Tool } from './layoutTools';
+import { SHORTCUTS_WIDTH, rememberedChoice, useRoomBesideTheFrame } from './layoutViewChoices';
 import { MAX_ZONES, heldBackSaid, type LayoutEditor } from './useLayoutEditor';
 
 const props = withDefaults(
@@ -159,13 +165,25 @@ const props = withDefaults(
     imageUrl?: string;
     /** Whether the venue's floorplan is drawn under the tables. */
     showImage?: boolean;
+    /** Whether that floorplan is drawn in greyscale, as it is unless told, rather than in its own
+     *  colours. */
+    imageInGrey?: boolean;
+    /** Whether that floorplan is drawn at half strength, as it is unless told. */
+    imageFaded?: boolean;
     /** Ask the placement to fill an area of this market's layout (`layoutFill.ts`). */
     fill?: (request: FillRequest) => Promise<FillAnswer>;
     /** Whether the layout's seats are settled (past Draft, on a layout started in Draft), so no
      *  table is added or removed here. */
     settled?: boolean;
   }>(),
-  { imageUrl: '', showImage: true, fill: undefined, settled: false },
+  {
+    imageUrl: '',
+    showImage: true,
+    imageInGrey: true,
+    imageFaded: true,
+    fill: undefined,
+    settled: false,
+  },
 );
 
 const emit = defineEmits<{
@@ -175,6 +193,12 @@ const emit = defineEmits<{
   zoneAdded: [id: string];
   /** What Fill an area did, or why it did not, for the panel's status line; '' clears it. */
   status: [words: string];
+  /** The tool on, for the panel, which shows the tool's card in place of the selection's. */
+  tool: [tool: Tool];
+  /** The view's choices of the floorplan, made in the map's Floorplan menu. */
+  'update:showImage': [shown: boolean];
+  'update:imageInGrey': [inGrey: boolean];
+  'update:imageFaded': [faded: boolean];
 }>();
 const say = (words: string) => emit('announce', words);
 /** Say something on the panel's status line, and to a screen reader. */
@@ -208,10 +232,27 @@ const tableOf = (id: string | null) =>
 
 // ── The tools ────────────────────────────────────────────────────────────────
 
-type Tool = 'select' | 'add' | 'row' | 'fill' | 'zone';
 const tool = ref<Tool>('select');
+/** Whether the keyboard's shortcuts are shown: a choice of the person, kept in their browser. */
+const shortcutsShown = rememberedChoice('shortcutsShown', false);
+/** Whether they stand beside the market's frame, where the window has room, rather than over the
+ *  map's top-left corner. */
+const shortcutsBeside = useRoomBesideTheFrame();
+/** The map's Floorplan menu: how the venue's floorplan is drawn under the tables, each choice the
+ *  page's to keep. Greyscale and Faded do nothing while the floorplan is hidden. */
+const viewItems = computed(() => [
+  { id: 'show-image', label: 'Show the floorplan', checked: props.showImage },
+  { id: 'image-grey', label: 'Greyscale', checked: props.imageInGrey, disabled: !props.showImage },
+  { id: 'image-faded', label: 'Faded', checked: props.imageFaded, disabled: !props.showImage },
+]);
+function chooseView(id: string) {
+  if (id === 'show-image') emit('update:showImage', !props.showImage);
+  else if (id === 'image-grey') emit('update:imageInGrey', !props.imageInGrey);
+  else if (id === 'image-faded') emit('update:imageFaded', !props.imageFaded);
+}
+watch(tool, (now) => emit('tool', now), { immediate: true });
 /** The tools that add tables, which past Draft are disabled. */
-const ADDING: readonly string[] = ['add', 'row', 'fill'];
+const ADDING = ADDING_TOOLS;
 // The market left Draft with one of them on: its path or area goes, and Select is on.
 watch(
   () => props.settled,
@@ -225,8 +266,8 @@ const drawnSections = computed(() => layoutSections(layout.value, props.sections
 const ownSections = computed(() => drawnSections.value.map(({ section }) => section));
 /** The section and the type a new table takes: the first of each until another is chosen. */
 /** '' is "No section", a choice like another; null is no choice made yet. */
-const addSectionId = ref<string | null>(null);
-const addTypeId = ref('');
+const addSectionId = defineModel<string | null>('sectionId', { default: null });
+const addTypeId = defineModel<string>('typeId', { default: '' });
 watch(
   [ownSections, () => props.tableTypes],
   ([sections, types]) => {
@@ -257,8 +298,6 @@ const row = useRowTool({
   sectionId: () => addSectionId.value || null,
   tableTypeId: () => addTypeId.value || (props.tableTypes[0]?.id ?? ''),
 });
-/** What the strip's Gap and Aisle say of a value that is no length, each under its own id. */
-const rowErrors = computed(rowFieldErrors);
 /** What the pending path holds, as its sentences say it: its count, or the refusal of a field
  *  that is no length, while the path holds and places none. */
 const rowHolds = () => row.refusal.value || row.poses.value.length;
@@ -1311,8 +1350,10 @@ function onWindowKeydown(event: KeyboardEvent) {
   // Shift pressed under a line being drawn makes it a straight row, with no pointer move.
   if (event.key === 'Shift') showStroke(true);
   if (event.defaultPrevented || inAField(event)) return;
-  // A dialog over the page has the keys.
-  if (document.querySelector('[role="dialog"][aria-modal="true"], dialog[open]')) return;
+  // A dialog over the page has the keys; a closed side panel, whose window stays in the page
+  // hidden, has none.
+  const modalOpen = '[role="dialog"][aria-modal="true"]:not([aria-hidden="true"]), dialog[open]';
+  if (document.querySelector(modalOpen)) return;
   const command = event.ctrlKey || event.metaKey;
   const plain = !command && !event.altKey;
   const key = event.key.toLowerCase();
@@ -1333,6 +1374,22 @@ function onWindowKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape' && gesture) {
     event.preventDefault();
     abandon();
+  } else if (event.key === '?' && !command && !event.altKey && !event.repeat) {
+    event.preventDefault();
+    shortcutsShown.value = !shortcutsShown.value;
+  } else if (event.key === 'Escape' && tool.value !== 'select') {
+    // Nothing being drawn: Escape is the way back to Select, as a right-click on the map is.
+    event.preventDefault();
+    tool.value = 'select';
+  } else if (
+    plain &&
+    !event.shiftKey &&
+    !event.repeat &&
+    key in TOOL_KEYS &&
+    !(props.settled && ADDING.includes(TOOL_KEYS[key]))
+  ) {
+    event.preventDefault();
+    tool.value = TOOL_KEYS[key];
   } else if (event.key === 'Escape' && selection.value.length && mapHasTheKeys()) {
     event.preventDefault();
     props.editor.select([]);
@@ -1817,7 +1874,7 @@ const effectiveStop = computed(() => {
   const off =
     (toolbarStop.value === 'undo' && !canUndo.value) ||
     (toolbarStop.value === 'redo' && !canRedo.value) ||
-    (props.settled && ADDING.includes(toolbarStop.value));
+    (props.settled && ADDING.includes(toolbarStop.value as Tool));
   return off ? 'select' : toolbarStop.value;
 });
 
@@ -1961,6 +2018,17 @@ watch(
     fit();
   },
 );
+
+// The tool's card is the page's, beside the editor: what its buttons do, and what it shows of the
+// row being drawn, are the editor's.
+defineExpose({
+  /** Swap the side of the line a row's tables stand on. */
+  flipRow,
+  /** Fill what the map shows of the floorplan. */
+  fillInView: () => openFill(true),
+  /** Whether the row being drawn is a closed shape. */
+  rowClosed: computed(() => row.closed.value),
+});
 </script>
 
 <template>
@@ -1976,63 +2044,88 @@ watch(
     >
       <button
         type="button"
-        class="btn btn--secondary btn--compact"
+        class="btn btn--secondary btn--compact layout-tool"
         data-tool="select"
         data-testid="layout-tool-select"
         :aria-pressed="tool === 'select'"
         :tabindex="effectiveStop === 'select' ? 0 : -1"
         @click="tool = 'select'"
+        :aria-keyshortcuts="'V'"
+        :title="'Select (V)'"
       >
-        Select
+        Select<kbd class="layout-tool__key" aria-hidden="true">V</kbd>
       </button>
       <button
         type="button"
-        class="btn btn--secondary btn--compact"
+        class="btn btn--secondary btn--compact layout-tool"
         data-tool="add"
         data-testid="layout-tool-add"
         :aria-pressed="tool === 'add'"
         :disabled="settled"
         :tabindex="effectiveStop === 'add' ? 0 : -1"
         @click="tool = 'add'"
+        :aria-keyshortcuts="'T'"
+        :title="'Add table (T)'"
       >
-        Add table
+        Add table<kbd class="layout-tool__key" aria-hidden="true">T</kbd>
       </button>
       <button
         type="button"
-        class="btn btn--secondary btn--compact"
+        class="btn btn--secondary btn--compact layout-tool"
         data-tool="row"
         data-testid="layout-tool-row"
         :aria-pressed="tool === 'row'"
         :disabled="settled"
         :tabindex="effectiveStop === 'row' ? 0 : -1"
         @click="tool = 'row'"
+        :aria-keyshortcuts="'W'"
+        :title="'Row of tables (W)'"
       >
-        Row of tables
+        Row of tables<kbd class="layout-tool__key" aria-hidden="true">W</kbd>
       </button>
       <button
         type="button"
-        class="btn btn--secondary btn--compact"
+        class="btn btn--secondary btn--compact layout-tool"
         data-tool="fill"
         data-testid="layout-tool-fill"
         :aria-pressed="tool === 'fill'"
         :disabled="settled"
         :tabindex="effectiveStop === 'fill' ? 0 : -1"
         @click="tool = 'fill'"
+        :aria-keyshortcuts="'A'"
+        :title="'Fill an area (A)'"
       >
-        Fill an area
+        Fill an area<kbd class="layout-tool__key" aria-hidden="true">A</kbd>
       </button>
       <button
         type="button"
-        class="btn btn--secondary btn--compact"
+        class="btn btn--secondary btn--compact layout-tool"
         data-tool="zone"
         data-testid="layout-tool-zone"
         :aria-pressed="tool === 'zone'"
         :tabindex="effectiveStop === 'zone' ? 0 : -1"
         @click="tool = 'zone'"
+        :aria-keyshortcuts="'Z'"
+        :title="'No-table zone (Z)'"
       >
-        No-table zone
+        No-table zone<kbd class="layout-tool__key" aria-hidden="true">Z</kbd>
       </button>
-      <span class="layout-toolbar__rule" role="separator" aria-orientation="vertical" />
+      <!-- The keyboard's shortcuts, shown or hidden beside the page (the QC walk of 2026-11-16). -->
+      <button
+        type="button"
+        class="btn btn--secondary btn--compact layout-tool layout-shortcuts-toggle"
+        data-tool="shortcuts"
+        data-testid="layout-shortcuts-toggle"
+        :aria-pressed="shortcutsShown"
+        aria-label="Keyboard shortcuts"
+        aria-keyshortcuts="?"
+        title="Keyboard shortcuts (?)"
+        :tabindex="effectiveStop === 'shortcuts' ? 0 : -1"
+        @click="shortcutsShown = !shortcutsShown"
+      >
+        <IconKeyboard class="layout-shortcuts-toggle__icon" />
+      </button>
+      <span class="layout-toolbar__spacer" aria-hidden="true" />
       <button
         type="button"
         class="btn btn--secondary btn--compact"
@@ -2055,303 +2148,204 @@ watch(
       >
         Redo
       </button>
-      <span class="layout-toolbar__rule" role="separator" aria-orientation="vertical" />
-      <button
-        type="button"
-        class="btn btn--secondary btn--compact"
-        data-tool="zoom-out"
-        data-testid="layout-zoom-out"
-        :tabindex="effectiveStop === 'zoom-out' ? 0 : -1"
-        @click="stepZoom(-1)"
-      >
-        Zoom out
-      </button>
-      <button
-        type="button"
-        class="btn btn--secondary btn--compact"
-        data-tool="zoom-in"
-        data-testid="layout-zoom-in"
-        :tabindex="effectiveStop === 'zoom-in' ? 0 : -1"
-        @click="stepZoom(1)"
-      >
-        Zoom in
-      </button>
-      <button
-        type="button"
-        class="btn btn--secondary btn--compact"
-        data-tool="fit"
-        data-testid="layout-fit"
-        :tabindex="effectiveStop === 'fit' ? 0 : -1"
-        @click="fit"
-      >
-        Fit
-      </button>
-      <span class="layout-toolbar__zoom" data-testid="layout-zoom">
-        <span class="visually-hidden">Zoom </span>{{ zoomText }}
-      </span>
     </div>
 
-    <div
-      v-if="tool !== 'select' && tool !== 'zone'"
-      class="layout-options"
-      :class="{ 'layout-options--row': tool === 'row' }"
-      data-testid="layout-add-options"
-    >
-      <label class="layout-option">
-        <span class="layout-option__name">Section</span>
-        <select
-          v-model="addSectionId"
-          class="field field--select layout-option__field"
-          data-testid="layout-add-section"
+    <div class="layout-stage-frame">
+      <div
+        ref="stage"
+        class="layout-stage"
+        :class="{
+          'layout-stage--drawing': tool !== 'select' && tool !== 'zone',
+          'layout-stage--zone': tool === 'zone',
+          'layout-stage--hand': spaceHeld,
+          'layout-stage--dragging': dragging,
+        }"
+        :style="{ aspectRatio: `${layout.imageWidth ?? 4} / ${layout.imageHeight ?? 3}` }"
+        data-testid="layout-stage"
+        @pointerdown="onPointerDown"
+        @pointermove="onPointerMove"
+        @pointerup="endGesture($event, false)"
+        @pointercancel="endGesture($event, true)"
+        @pointerenter="hovering = true"
+        @pointerleave="onPointerLeave"
+        @keydown.capture="onStageKeydown"
+        @keyup="onStageKeyup"
+        @focusin="onStageFocusIn"
+        @focusout="onStageFocusOut"
+      >
+        <LayoutMap
+          ref="map"
+          :layout="layout"
+          :locationName="locationName"
+          :sections="sections"
+          :tableTypes="tableTypes"
+          :imageUrl="imageUrl"
+          :showImage="showImage"
+          :imageInGrey="imageInGrey"
+          :imageFaded="imageFaded"
+          :view="view"
+          :selection="selection"
+          :guides="guides"
+          :carried="pickedUp"
+          :aria-describedby="keysId"
+          mode="edit"
         >
-          <option v-for="section in ownSections" :key="section.id" :value="section.id">
-            {{ section.name || 'Unnamed section' }}
-          </option>
-          <option value="">No section</option>
-        </select>
-      </label>
-      <label class="layout-option">
-        <span class="layout-option__name">Table type</span>
-        <select
-          v-model="addTypeId"
-          class="field field--select layout-option__field"
-          data-testid="layout-add-type"
-        >
-          <option v-for="type in tableTypes" :key="type.id" :value="type.id">
-            {{ type.name }}
-          </option>
-        </select>
-      </label>
-      <template v-if="tool === 'row'">
-        <label class="layout-option">
-          <span class="layout-option__name">Gap (cm)</span>
-          <input
-            v-model="rowChoices.gapCm"
-            class="field layout-option__field layout-option__field--number"
-            type="text"
-            inputmode="decimal"
-            autocomplete="off"
-            :aria-invalid="!!rowErrors.gap"
-            :aria-describedby="rowErrors.gap ? 'layout-row-gap-error' : undefined"
-            data-testid="layout-row-gap"
-          />
-        </label>
-        <label class="layout-option">
-          <span class="layout-option__name">Tables</span>
-          <select
-            v-model="rowChoices.centred"
-            class="field field--select layout-option__field"
-            data-testid="layout-row-stand"
-          >
-            <option :value="false">Beside the line</option>
-            <option :value="true">Centred on the line</option>
-          </select>
-        </label>
+          <template #default="{ mmPerPx }">
+            <rect
+              v-if="selectBox"
+              class="layout-select-box"
+              :x="selectBox.left"
+              :y="selectBox.top"
+              :width="selectBox.right - selectBox.left"
+              :height="selectBox.bottom - selectBox.top"
+              fill="var(--mm-blue)"
+              fill-opacity="0.08"
+              stroke="var(--mm-blue)"
+              stroke-width="1"
+              stroke-dasharray="4 4"
+              vector-effect="non-scaling-stroke"
+              aria-hidden="true"
+              data-testid="layout-select-box"
+            />
+            <rect
+              v-if="zoneBox"
+              class="layout-zone-box"
+              :x="zoneBox.left"
+              :y="zoneBox.top"
+              :width="zoneBox.right - zoneBox.left"
+              :height="zoneBox.bottom - zoneBox.top"
+              fill="var(--layout-zone-fill)"
+              fill-opacity="0.7"
+              stroke="var(--layout-zone-edge)"
+              stroke-width="1.5"
+              stroke-dasharray="6 4"
+              vector-effect="non-scaling-stroke"
+              aria-hidden="true"
+              data-testid="layout-zone-box"
+            />
+            <LayoutRowPreview
+              v-if="tool === 'row' && (row.pending.value || crosshair)"
+              :runs="row.runs.value"
+              :poses="row.poses.value"
+              :size="row.size.value"
+              :points="row.points.value"
+              :countAt="
+                row.pending.value && !row.refusal.value ? (crosshair ?? row.countAt.value) : null
+              "
+              :closeAt="row.closeAt.value"
+              :finished="row.closed.value || row.drawn.value"
+              :crosshair="crosshair"
+              :paint="rowPaint"
+              :mmPerPx="mmPerPx"
+            />
+            <LayoutFillPreview
+              v-if="tool === 'fill' && (fillTool.pending.value || fillCrosshair || fillArea)"
+              :outline="fillTool.outline.value"
+              :points="fillTool.points.value"
+              :box="fillTool.box.value"
+              :area="fillArea"
+              :closes="fillTool.closing.value && fillTool.closable.value && !fillTool.crosses.value"
+              :crosses="fillTool.crosses.value"
+              :crosshair="fillCrosshair"
+              :mmPerPx="mmPerPx"
+            />
+            <g
+              v-if="handle"
+              class="layout-turn-handle"
+              data-turn-handle
+              data-testid="layout-turn-handle"
+              aria-hidden="true"
+            >
+              <line
+                :x1="handle.xMm + handle.dx * 5 * mmPerPx"
+                :y1="handle.yMm + handle.dy * 5 * mmPerPx"
+                :x2="handle.xMm + handle.dx * 17 * mmPerPx"
+                :y2="handle.yMm + handle.dy * 17 * mmPerPx"
+                stroke="var(--mm-black)"
+                stroke-width="1.5"
+                vector-effect="non-scaling-stroke"
+              />
+              <!-- A thumb's reach round a 14 px knob. -->
+              <circle
+                :cx="handle.xMm + handle.dx * 24 * mmPerPx"
+                :cy="handle.yMm + handle.dy * 24 * mmPerPx"
+                :r="14 * mmPerPx"
+                fill="transparent"
+              />
+              <circle
+                :cx="handle.xMm + handle.dx * 24 * mmPerPx"
+                :cy="handle.yMm + handle.dy * 24 * mmPerPx"
+                :r="7 * mmPerPx"
+                fill="white"
+                stroke="var(--mm-black)"
+                stroke-width="1.5"
+                vector-effect="non-scaling-stroke"
+                data-testid="layout-turn-knob"
+              />
+            </g>
+          </template>
+        </LayoutMap>
+      </div>
+      <aside
+        v-if="shortcutsShown"
+        class="layout-shortcuts"
+        :class="{ 'layout-shortcuts--beside': shortcutsBeside }"
+        aria-label="Keyboard shortcuts"
+        data-testid="layout-shortcuts"
+      >
         <button
           type="button"
-          class="btn btn--secondary btn--compact"
-          :disabled="rowChoices.centred"
-          data-testid="layout-row-flip"
-          @click="flipRow"
+          class="layout-shortcuts__close"
+          aria-label="Hide the keyboard shortcuts"
+          data-testid="layout-shortcuts-close"
+          @click="shortcutsShown = false"
         >
-          Flip side
+          <IconCloseRound />
         </button>
-        <label class="layout-option">
-          <span class="layout-option__name">Rows</span>
-          <input
-            v-model="rowChoices.rows"
-            class="field layout-option__field layout-option__field--number"
-            type="text"
-            inputmode="numeric"
-            autocomplete="off"
-            data-testid="layout-row-rows"
-          />
-        </label>
-        <label class="layout-option">
-          <span class="layout-option__name">Aisle (cm)</span>
-          <input
-            v-model="rowChoices.aisleCm"
-            class="field layout-option__field layout-option__field--number"
-            type="text"
-            inputmode="decimal"
-            autocomplete="off"
-            :aria-invalid="!!rowErrors.aisle"
-            :aria-describedby="rowErrors.aisle ? 'layout-row-aisle-error' : undefined"
-            data-testid="layout-row-aisle"
-          />
-        </label>
-        <label class="layout-option layout-option--tick">
-          <input
-            v-model="rowChoices.spread"
-            type="checkbox"
-            :disabled="row.closed.value"
-            data-testid="layout-row-spread"
-          />
-          <span class="layout-option__name">Spread evenly to the ends</span>
-        </label>
-        <p v-if="rowErrors.gap || rowErrors.aisle" class="layout-options__error">
-          <span
-            v-if="rowErrors.gap"
-            id="layout-row-gap-error"
-            role="alert"
-            data-testid="layout-row-gap-error"
-            >{{ rowErrors.gap }}</span
-          >
-          <span
-            v-if="rowErrors.aisle"
-            id="layout-row-aisle-error"
-            role="alert"
-            data-testid="layout-row-aisle-error"
-            >{{ rowErrors.aisle }}</span
-          >
-        </p>
-      </template>
-      <button
-        v-if="tool === 'fill'"
-        type="button"
-        class="btn btn--secondary btn--compact"
-        :disabled="!fill"
-        data-testid="layout-fill-view"
-        @click="openFill(true)"
-      >
-        Fill what is in view
-      </button>
-    </div>
-
-    <div
-      ref="stage"
-      class="layout-stage"
-      :class="{
-        'layout-stage--drawing': tool !== 'select' && tool !== 'zone',
-        'layout-stage--zone': tool === 'zone',
-        'layout-stage--row': tool === 'row',
-        'layout-stage--row-said': tool === 'row' && Boolean(rowErrors.gap || rowErrors.aisle),
-        'layout-stage--hand': spaceHeld,
-        'layout-stage--dragging': dragging,
-      }"
-      :style="{ aspectRatio: `${layout.imageWidth ?? 4} / ${layout.imageHeight ?? 3}` }"
-      data-testid="layout-stage"
-      @pointerdown="onPointerDown"
-      @pointermove="onPointerMove"
-      @pointerup="endGesture($event, false)"
-      @pointercancel="endGesture($event, true)"
-      @pointerenter="hovering = true"
-      @pointerleave="onPointerLeave"
-      @keydown.capture="onStageKeydown"
-      @keyup="onStageKeyup"
-      @focusin="onStageFocusIn"
-      @focusout="onStageFocusOut"
-    >
-      <LayoutMap
-        ref="map"
-        :layout="layout"
-        :locationName="locationName"
-        :sections="sections"
-        :tableTypes="tableTypes"
-        :imageUrl="imageUrl"
-        :showImage="showImage"
-        :view="view"
-        :selection="selection"
-        :guides="guides"
-        :carried="pickedUp"
-        :aria-describedby="keysId"
-        mode="edit"
-      >
-        <template #default="{ mmPerPx }">
-          <rect
-            v-if="selectBox"
-            class="layout-select-box"
-            :x="selectBox.left"
-            :y="selectBox.top"
-            :width="selectBox.right - selectBox.left"
-            :height="selectBox.bottom - selectBox.top"
-            fill="var(--mm-blue)"
-            fill-opacity="0.08"
-            stroke="var(--mm-blue)"
-            stroke-width="1"
-            stroke-dasharray="4 4"
-            vector-effect="non-scaling-stroke"
-            aria-hidden="true"
-            data-testid="layout-select-box"
-          />
-          <rect
-            v-if="zoneBox"
-            class="layout-zone-box"
-            :x="zoneBox.left"
-            :y="zoneBox.top"
-            :width="zoneBox.right - zoneBox.left"
-            :height="zoneBox.bottom - zoneBox.top"
-            fill="var(--layout-zone-fill)"
-            fill-opacity="0.7"
-            stroke="var(--layout-zone-edge)"
-            stroke-width="1.5"
-            stroke-dasharray="6 4"
-            vector-effect="non-scaling-stroke"
-            aria-hidden="true"
-            data-testid="layout-zone-box"
-          />
-          <LayoutRowPreview
-            v-if="tool === 'row' && (row.pending.value || crosshair)"
-            :runs="row.runs.value"
-            :poses="row.poses.value"
-            :size="row.size.value"
-            :points="row.points.value"
-            :countAt="
-              row.pending.value && !row.refusal.value ? (crosshair ?? row.countAt.value) : null
-            "
-            :closeAt="row.closeAt.value"
-            :finished="row.closed.value || row.drawn.value"
-            :crosshair="crosshair"
-            :paint="rowPaint"
-            :mmPerPx="mmPerPx"
-          />
-          <LayoutFillPreview
-            v-if="tool === 'fill' && (fillTool.pending.value || fillCrosshair || fillArea)"
-            :outline="fillTool.outline.value"
-            :points="fillTool.points.value"
-            :box="fillTool.box.value"
-            :area="fillArea"
-            :closes="fillTool.closing.value && fillTool.closable.value && !fillTool.crosses.value"
-            :crosses="fillTool.crosses.value"
-            :crosshair="fillCrosshair"
-            :mmPerPx="mmPerPx"
-          />
-          <g
-            v-if="handle"
-            class="layout-turn-handle"
-            data-turn-handle
-            data-testid="layout-turn-handle"
-            aria-hidden="true"
-          >
-            <line
-              :x1="handle.xMm + handle.dx * 5 * mmPerPx"
-              :y1="handle.yMm + handle.dy * 5 * mmPerPx"
-              :x2="handle.xMm + handle.dx * 17 * mmPerPx"
-              :y2="handle.yMm + handle.dy * 17 * mmPerPx"
-              stroke="var(--mm-black)"
-              stroke-width="1.5"
-              vector-effect="non-scaling-stroke"
-            />
-            <!-- A thumb's reach round a 14 px knob. -->
-            <circle
-              :cx="handle.xMm + handle.dx * 24 * mmPerPx"
-              :cy="handle.yMm + handle.dy * 24 * mmPerPx"
-              :r="14 * mmPerPx"
-              fill="transparent"
-            />
-            <circle
-              :cx="handle.xMm + handle.dx * 24 * mmPerPx"
-              :cy="handle.yMm + handle.dy * 24 * mmPerPx"
-              :r="7 * mmPerPx"
-              fill="white"
-              stroke="var(--mm-black)"
-              stroke-width="1.5"
-              vector-effect="non-scaling-stroke"
-              data-testid="layout-turn-knob"
-            />
-          </g>
-        </template>
-      </LayoutMap>
+        <ScrollBox class="layout-shortcuts__scroll" testid="layout-shortcuts-scroll">
+          <LayoutPanelKeyboard class="layout-shortcuts__list" :settled="settled" />
+        </ScrollBox>
+      </aside>
+      <div class="layout-zoom" role="group" aria-label="Zoom" data-testid="layout-zoom-controls">
+        <RowMenu
+          label="Floorplan"
+          :items="viewItems"
+          testid="layout-view-menu"
+          opens="above"
+          buttonClass="btn btn--secondary btn--compact"
+          @select="chooseView"
+        >
+          <template #trigger>Floorplan</template>
+        </RowMenu>
+        <span class="layout-zoom__rule" aria-hidden="true" />
+        <button
+          type="button"
+          class="btn btn--secondary btn--compact layout-zoom__button"
+          data-testid="layout-zoom-out"
+          @click="stepZoom(-1)"
+        >
+          <span aria-hidden="true">-</span><span class="visually-hidden">Zoom out</span>
+        </button>
+        <span class="layout-zoom__level" data-testid="layout-zoom">
+          <span class="visually-hidden">Zoom </span>{{ zoomText }}
+        </span>
+        <button
+          type="button"
+          class="btn btn--secondary btn--compact layout-zoom__button"
+          data-testid="layout-zoom-in"
+          @click="stepZoom(1)"
+        >
+          <span aria-hidden="true">+</span><span class="visually-hidden">Zoom in</span>
+        </button>
+        <button
+          type="button"
+          class="btn btn--secondary btn--compact layout-zoom__button"
+          data-testid="layout-fit"
+          @click="fit"
+        >
+          Fit
+        </button>
+      </div>
     </div>
 
     <p class="layout-hint" data-testid="layout-hint">{{ hint }}</p>
@@ -2388,64 +2382,135 @@ watch(
   gap: var(--space-2);
 }
 
-.layout-toolbar__rule {
+/* The tools on the left, the history on the right: one line at every tool, so the map under it
+   holds still. */
+.layout-toolbar__spacer {
+  flex: 1;
+}
+
+.layout-tool {
+  gap: var(--space-2);
+}
+
+.layout-tool__key {
+  font-family: inherit;
+  font-size: var(--text-xs);
+  color: var(--mm-text-muted);
+}
+
+/* The tool on is filled in the deep green, plainly the one in hand. */
+.layout-tool[aria-pressed='true'] {
+  background: var(--mm-green);
+  border-color: var(--mm-green);
+  color: white;
+}
+
+.layout-tool[aria-pressed='true'] .layout-tool__key {
+  color: white;
+  opacity: 0.8;
+}
+
+.layout-shortcuts-toggle {
+  min-width: 2.25rem;
+  justify-content: center;
+}
+
+.layout-shortcuts-toggle__icon {
+  font-size: var(--text-md);
+}
+
+/* The shortcuts stand over the map's top-left corner, under the toolbar, where the window has no
+   room beside the page; with room (the market's frame, and the panel and its margins on each side,
+   `useRoomBesideTheFrame`) they stand in the empty space left of the frame, and stay put as the
+   page scrolls. */
+.layout-shortcuts {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  width: v-bind(SHORTCUTS_WIDTH);
+  max-width: calc(100% - 2 * var(--space-3));
+  max-height: calc(100% - 2 * var(--space-3));
+  overflow: hidden;
+  background: white;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.layout-shortcuts--beside {
+  position: fixed;
+  top: calc(var(--space-12) + var(--space-4));
+  left: calc((100vw - var(--workspace-max)) / 2 - v-bind(SHORTCUTS_WIDTH) - var(--space-4));
+  max-width: none;
+  max-height: calc(100vh - var(--space-12) - 2 * var(--space-4));
+}
+
+/* The list scrolls inside the panel where it is taller than the room, the close staying put. */
+.layout-shortcuts__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.layout-shortcuts__list {
+  padding: var(--space-4);
+}
+
+.layout-shortcuts__close {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-3);
+  right: var(--space-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--target-min);
+  height: var(--target-min);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--mm-text-muted);
+  font-size: var(--text-lg);
+  cursor: pointer;
+}
+
+.layout-stage-frame {
+  position: relative;
+}
+
+/* The zoom stands on the map's bottom-right corner, as a map's does. */
+.layout-zoom {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: white;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.layout-zoom__rule {
   align-self: stretch;
   width: 1px;
   margin: 0 var(--space-1);
   background: var(--mm-border);
 }
 
-.layout-toolbar__zoom {
+.layout-zoom__button {
+  min-width: 2.25rem;
+  justify-content: center;
+}
+
+.layout-zoom__level {
   min-width: 3rem;
+  text-align: center;
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   color: var(--mm-black);
-}
-
-.layout-options {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3) var(--space-4);
-}
-
-/* A field of the strip that holds no length says so on a line of its own, under the fields, the
-   Gap's and the Aisle's sentences side by side when both stand. */
-.layout-options__error {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 var(--space-4);
-  flex-basis: 100%;
-  margin: 0;
-  font-size: var(--text-xs);
-  color: var(--mm-red);
-}
-
-.layout-option {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-}
-
-.layout-option__name {
-  white-space: nowrap;
-}
-
-.layout-option__field {
-  width: 14rem;
-  max-width: 100%;
-}
-
-/* A row's strip holds eight controls: its fields are narrower, so they stand on two lines
-   beside the panel. */
-.layout-options--row .layout-option__field {
-  width: 10.5rem;
-}
-
-.layout-options--row .layout-option__field--number,
-.layout-option__field--number {
-  width: 4.5rem;
 }
 
 /* The stage is a window onto the hall, at the floorplan's shape and never taller than leaves the
@@ -2467,22 +2532,6 @@ watch(
 
 /* Round the hall the stage is a pasteboard, a step darker than the floor, so where the floorplan
    ends reads at any pan and zoom, whatever the venue's image shows of its own edge. */
-/* With a tool's options strip above it the stage gives up the strip's height, so the hint stays on
-   the screen. */
-.layout-stage--drawing {
-  max-height: max(20rem, calc(100vh - 26.5rem));
-}
-
-/* A row's strip, of eight controls, takes a second line. */
-.layout-stage--row {
-  max-height: max(20rem, calc(100vh - 29.5rem));
-}
-
-/* And a third while a field of it says it holds no length. */
-.layout-stage--row-said {
-  max-height: max(20rem, calc(100vh - 31.5rem));
-}
-
 .layout-stage :deep(.layout-map) {
   background: var(--mm-beige);
 }

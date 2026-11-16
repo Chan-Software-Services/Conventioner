@@ -229,31 +229,35 @@ function onMenu(type: TableTypeObject, item: string) {
       </div>
     </div>
 
-    <LayoutTypeDialog
-      :open="editing !== undefined"
-      :type="editing ?? null"
-      :others="others"
-      :busy="busy"
-      :error="dialogError"
-      @close="closeAll"
-      @submit="submitType"
-    />
-    <LayoutSavedTypesDialog
-      :open="usingSaved"
-      :list="listSaved"
-      :busy="busy"
-      :error="dialogError"
-      @close="closeAll"
-      @use="useSaved"
-    />
-    <LayoutSaveTypesDialog
-      :open="savingAs"
-      :count="tableTypes.length"
-      :busy="busy"
-      :error="dialogError"
-      @close="closeAll"
-      @save="saveUnderName"
-    />
+    <!-- Its dialogs are siblings of the dialog it stands in (Layout settings), each over it, not
+         a window inside a window (`dialogs.md`). -->
+    <Teleport to="body">
+      <LayoutTypeDialog
+        :open="editing !== undefined"
+        :type="editing ?? null"
+        :others="others"
+        :busy="busy"
+        :error="dialogError"
+        @close="closeAll"
+        @submit="submitType"
+      />
+      <LayoutSavedTypesDialog
+        :open="usingSaved"
+        :list="listSaved"
+        :busy="busy"
+        :error="dialogError"
+        @close="closeAll"
+        @use="useSaved"
+      />
+      <LayoutSaveTypesDialog
+        :open="savingAs"
+        :count="tableTypes.length"
+        :busy="busy"
+        :error="dialogError"
+        @close="closeAll"
+        @save="saveUnderName"
+      />
+    </Teleport>
   </section>
 </template>
 

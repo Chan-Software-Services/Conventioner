@@ -95,6 +95,12 @@ async function mountPage(): Promise<VueWrapper> {
     global: {
       stubs: {
         RouterLink: { template: '<a><slot /></a>' },
+        // Layout settings shows its body while open, as the dialog does.
+        AppDialog: {
+          name: 'AppDialog',
+          props: ['open', 'testid'],
+          template: '<div v-if="open" :data-testid="testid"><slot /></div>',
+        },
         // The frame stands as itself would, its page in its slot, its props read by the test.
         MarketFrame: {
           name: 'MarketFrame',
@@ -110,6 +116,13 @@ async function mountPage(): Promise<VueWrapper> {
 
 function editorOf(wrapper: VueWrapper): Editor {
   return wrapper.findComponent(LayoutEditor).props('editor') as Editor;
+}
+
+/** Open Layout settings from the page's head, where the table types and the floorplan's image
+ *  are set (T422, the QC walk's item 9). */
+async function openSettings(wrapper: VueWrapper) {
+  await wrapper.get('[data-testid="layout-settings-open"]').trigger('click');
+  await vi.advanceTimersByTimeAsync(0);
 }
 
 async function moveATable(wrapper: VueWrapper) {
@@ -216,28 +229,37 @@ describe('a refused change once the market is settled elsewhere', () => {
 });
 
 describe('a layout past Draft', () => {
+  // The editor's own shortcuts list is told by the editor (`theLayoutPagesFrame.test.ts`); the
+  // table types stand in Layout settings.
   const PANELS = [
     'LayoutEditor',
     'LayoutPanelSelection',
     'LayoutPanelSections',
     'LayoutPanelTypes',
-    'LayoutPanelKeyboard',
   ];
 
   it('is edited under the settled sentence, every card told its seats are settled', async () => {
     market = served({ phase: 'applications', setupLockReason: SETTLED });
     const wrapper = await mountPage();
+    await openSettings(wrapper);
 
     expect(wrapper.get('[data-testid="layout-setup-settled"]').text()).toBe(SETTLED);
     for (const name of PANELS) {
       expect(wrapper.findComponent({ name }).props('settled'), name).toBe(true);
     }
-    expect(wrapper.find('[data-testid="layout-replace-image"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="layout-recalibrate"]').exists()).toBe(true);
+    // The image and its scale still change, from Layout settings, not the panel.
+    const settings = wrapper.get('[data-testid="layout-settings"]');
+    expect(settings.find('[data-testid="layout-replace-image"]').exists()).toBe(true);
+    expect(settings.find('[data-testid="layout-recalibrate"]').exists()).toBe(true);
+    const panel = wrapper.get('.layout-panel');
+    expect(panel.find('[data-testid="layout-replace-image"]').exists()).toBe(false);
+    expect(panel.find('[data-testid="layout-recalibrate"]').exists()).toBe(false);
+    expect(panel.findComponent({ name: 'LayoutPanelTypes' }).exists()).toBe(false);
   });
 
   it('is told so in Draft', async () => {
     const wrapper = await mountPage();
+    await openSettings(wrapper);
 
     expect(wrapper.find('[data-testid="layout-setup-settled"]').exists()).toBe(false);
     for (const name of PANELS) {
@@ -308,6 +330,7 @@ describe('a layout read only', () => {
 describe('a recalibration that would leave tables outside the floorplan', () => {
   it('is refused in the page with how many, and writes nothing', async () => {
     const wrapper = await mountPage();
+    await openSettings(wrapper);
     await wrapper.get('[data-testid="layout-recalibrate"]').trigger('click');
     await vi.advanceTimersByTimeAsync(0);
     const calibration = wrapper.findComponent({ name: 'LayoutCalibration' });
@@ -343,6 +366,7 @@ describe("a recalibration's refusal", () => {
       },
     });
     const wrapper = await mountPage();
+    await openSettings(wrapper);
     await wrapper.get('[data-testid="layout-recalibrate"]').trigger('click');
     await vi.advanceTimersByTimeAsync(0);
     wrapper
