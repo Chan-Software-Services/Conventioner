@@ -12,7 +12,7 @@ describes:
   - back-end/guards.py#_earliest_calendar_day
   - back-end/guards.py#LayoutTablesHaveSectionsGuard
   - back-end/api/floorplans_save.py#save_floorplan_to_market
-verified: 2026-11-13
+verified: 2026-11-16
 sources:
   - wayfinding/the-order-of-the-work/03
   - wayfinding/the-order-of-the-work/map

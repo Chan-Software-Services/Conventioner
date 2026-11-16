@@ -17,7 +17,7 @@ describes:
   - back-end/tests/conftest.py#FakeSlugMarketsCollection
   - back-end/db_config.py#uri_targets
   - scripts/real-mongo-test.sh
-verified: 2026-11-13
+verified: 2026-11-16
 sources:
   - T244
   - T274

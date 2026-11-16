@@ -10,7 +10,7 @@ describes:
   - front-end/src/components/application/AutomaticRejections.vue
   - front-end/src/components/application/ChoiceConditions.vue
   - back-end/api/markets.py#may_overturn
-verified: 2026-11-11
+verified: 2026-11-16
 sources:
   - wayfinding/november-2026-dry-run/map
   - wayfinding/rejection-visibility/map
