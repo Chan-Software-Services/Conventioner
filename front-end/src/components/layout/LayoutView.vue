@@ -140,6 +140,12 @@ const settled = computed(() => Boolean(market.value?.setupLockReason));
 const followsPlan = computed(() => Boolean(floorplan.value?.followsPlan));
 /** Whether the layout's seats are settled: past Draft, on a layout started in Draft. */
 const seatsSettled = computed(() => settled.value && !followsPlan.value);
+/** Whether the page says the layout follows the plan: one that does, past Draft, and a location
+ * with no layout yet past Draft for someone who may start it here, since the layout they start
+ * will; a reader is told the setup is settled. */
+const saysFollowsPlan = computed(
+  () => followsPlan.value || (settled.value && !floorplan.value && editsHere.value),
+);
 /** What the page says under its head past Draft, of a layout that follows the plan. */
 const FOLLOWS_THE_PLAN =
   "This layout follows the plan: place each section's tables, up to its count. The seats " +
@@ -751,7 +757,11 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
         </div>
       </header>
 
-      <p v-if="settled && !archived && followsPlan" class="note" data-testid="layout-follows-plan">
+      <p
+        v-if="settled && !archived && saysFollowsPlan"
+        class="note"
+        data-testid="layout-follows-plan"
+      >
         {{ FOLLOWS_THE_PLAN }}
       </p>
       <p v-else-if="settled && !archived" class="note" data-testid="layout-setup-settled">

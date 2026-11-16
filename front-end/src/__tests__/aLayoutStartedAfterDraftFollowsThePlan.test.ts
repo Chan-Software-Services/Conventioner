@@ -376,6 +376,10 @@ describe('the layout page past Draft', () => {
     expect(wrapper.get('[data-testid="layout-panel-start"]').text()).toBe(
       "Upload the venue's floorplan for Upper Hall to start.",
     );
+    // The layout it starts will follow the plan, which the page says in place of the setup's
+    // settled sentence over an upload it offers.
+    expect(wrapper.find('[data-testid="layout-follows-plan"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="layout-setup-settled"]').exists()).toBe(false);
   });
 
   it('says a layout that follows the plan follows it, and opens its seats but not its types', async () => {

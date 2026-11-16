@@ -1406,7 +1406,7 @@ export const SCREENS: Screen[] = [
     name: 'the layout, past draft',
     who: 'organizer',
     sizes: FITS_A_PHONE,
-    open: at(screen('big', 'layout'), 'layout-setup-settled'),
+    open: at(screen('big', 'layout'), 'layout-panel-start'),
   },
   // Its upload step is the app's one drop zone (T205). The page fits a phone (T257), where it only
   // reads: a layout is started and its scale set at a desk.

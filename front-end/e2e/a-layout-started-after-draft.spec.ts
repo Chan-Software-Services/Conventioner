@@ -31,8 +31,9 @@ test.describe('A layout started after Draft', () => {
     const layout = new LayoutPage(page);
     await layout.goto(marketId);
 
-    // No layout yet: the setup is settled, and the upload is offered all the same.
-    await expect(layout.setupSettled).toContainText('The setup is settled');
+    // No layout yet: the upload is offered, and the layout it starts will follow the plan.
+    await expect(layout.followsPlan).toBeVisible();
+    await expect(layout.setupSettled).toHaveCount(0);
     await expect(layout.uploadDropzone).toBeVisible();
     await layout.uploadFileInput.setInputFiles(LAYOUT_FLOORPLAN_PATH);
     await expect(layout.calibrationMap).toBeVisible();
