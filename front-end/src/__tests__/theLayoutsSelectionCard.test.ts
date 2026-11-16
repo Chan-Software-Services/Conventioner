@@ -208,3 +208,79 @@ describe('the map in the editor', () => {
     expect(order & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 });
+
+describe("the selection card's Number field, on a layout that follows the plan (T422)", () => {
+  const PLANNED: SectionObject[] = SECTIONS.map((section) => ({ ...section, count: 6 }));
+  const following = (tables: FloorplanTable[], props: Record<string, unknown> = {}) =>
+    mount(LayoutPanelSelection, {
+      props: {
+        tables,
+        sections: layoutSections(LAYOUT, PLANNED),
+        tableTypes: TYPES,
+        followsPlan: true,
+        typesSettled: true,
+        ...props,
+      },
+    });
+  const number = (wrapper: ReturnType<typeof following>) =>
+    wrapper.get('[data-testid="layout-selection-number"]');
+
+  it("reads one table's number, and sets the number typed", async () => {
+    const wrapper = following([TABLES[1]]);
+    expect((number(wrapper).element as HTMLInputElement).value).toBe('2');
+
+    // Typed and let go of: `setValue` sends the field's input and change.
+    await number(wrapper).setValue('5');
+
+    expect(wrapper.emitted('number')).toEqual([[5]]);
+    expect(wrapper.find('[data-testid="layout-selection-number-error"]').exists()).toBe(false);
+  });
+
+  it.each(['0', '7', '2.5', 'four', ''])(
+    'says what to type for %j, and sets nothing',
+    async (typed) => {
+      const wrapper = following([TABLES[1]]);
+
+      await number(wrapper).setValue(typed);
+
+      expect(wrapper.emitted('number')).toBeUndefined();
+      const error = wrapper.get('[data-testid="layout-selection-number-error"]');
+      expect(error.text()).toBe('Type a number from 1 to 6.');
+      expect(number(wrapper).attributes('aria-invalid')).toBe('true');
+      expect(number(wrapper).attributes('aria-describedby')).toBe(error.attributes('id'));
+    },
+  );
+
+  it('reads the number again once another table is selected', async () => {
+    const wrapper = following([TABLES[1]]);
+    await number(wrapper).setValue('9');
+    await wrapper.setProps({ tables: [TABLES[0]] });
+    expect((number(wrapper).element as HTMLInputElement).value).toBe('1');
+    expect(wrapper.find('[data-testid="layout-selection-number-error"]').exists()).toBe(false);
+  });
+
+  it('is offered for one table of a section alone', () => {
+    expect(following([TABLES[2]]).find('[data-testid="layout-selection-number"]').exists()).toBe(
+      false,
+    );
+    expect(
+      following([TABLES[0], TABLES[1]]).find('[data-testid="layout-selection-number"]').exists(),
+    ).toBe(false);
+    expect(
+      following([TABLES[0]], { followsPlan: false })
+        .find('[data-testid="layout-selection-number"]')
+        .exists(),
+    ).toBe(false);
+  });
+
+  it('keeps the seat controls enabled past Draft and the table type settled', () => {
+    const wrapper = following([TABLES[0]]);
+    const disabled = (id: string) =>
+      wrapper.get(`[data-testid="${id}"]`).attributes('disabled') !== undefined;
+    expect(disabled('layout-selection-section')).toBe(false);
+    expect(disabled('layout-selection-duplicate')).toBe(false);
+    expect(disabled('layout-selection-row')).toBe(false);
+    expect(disabled('layout-selection-remove')).toBe(false);
+    expect(disabled('layout-selection-type')).toBe(true);
+  });
+});

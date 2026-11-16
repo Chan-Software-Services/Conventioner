@@ -3012,6 +3012,21 @@ def release_removed_floorplans(
         )
 
 
+def _setup_as_held(
+    stored: Optional[SetupObject], plan: SetupObject,
+    floorplans: Optional[List[FloorplanObject]],
+) -> Dict[str, Any]:
+    """The stored plan's setup, as a write past draft is compared with it: on a layout's own save
+    (``floorplans`` passed) to a market with no table type, the types the save gives it count as
+    held, since a layout started past draft gives such a market "Standard 6 ft" (T422, D23). Only
+    a layout's start passes types to a market with none past draft: the types write is refused
+    before it reaches here (``layouts.save_table_types``)."""
+    held = setup_part(stored)
+    if floorplans is not None and stored is not None and not stored.table_types:
+        held["table_types"] = Layout.settled_part(plan)["table_types"]
+    return held
+
+
 def prepared_plan(
     market: Market, body: Dict[str, Any], *,
     floorplans: Optional[List[FloorplanObject]] = None,
@@ -3061,8 +3076,14 @@ def prepared_plan(
 
     # And the setup the same way, from leaving draft on (E31/F01/S02): restating it is not a change.
     setup_settled = setup_lock_reason(market)
-    if setup_settled and setup_part(plan) != setup_part(market.setup_object):
+    if setup_settled and setup_part(plan) != _setup_as_held(market.setup_object, plan, floorplans):
         raise BadRequestError(setup_settled)
+    # A layout that follows the plan draws the seats it numbers; its own save judges its numbers
+    # (``layout.layout_refusal``), every other write of the plan the counts under them (T422).
+    if floorplans is None:
+        held_number = Layout.count_refusal(plan)
+        if held_number:
+            raise BadRequestError(held_number)
 
     # The plan saves as the organizer types, in every phase, and always carries the rules it holds;
     # restating the stored rules is not a change, and anything else is refused once they are

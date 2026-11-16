@@ -33,6 +33,7 @@ sources:
   - T271
   - T257
   - T274
+  - T422
 ---
 
 # Planning the market
@@ -166,7 +167,10 @@ It saves itself a moment after each change, the head row saying "Saving…" then
 The head row's switch moves between the market's locations, each its own layout, and when another tab or person saved the layout first it says "This layout changed elsewhere. Reload to see the latest." with Reload, the tab keeping what it shows until then.
 The layout makes no AI calls ([a location's layout](../../implementation/modules/floorplan-placement.md)).
 Only one table type is used by assignment in this release ([F6](form-tab.md#f6-table-type-preference)).
-Past Draft, until the market is archived, the editor stays under the setup-settled sentence: tables are still moved and turned, and the zones, the image, the scale and the sections' colours and labels still change, while Add table, Row of tables, Fill an area, Duplicate, "Row of N…", Remove, the Section and Table type fields, Renumber and the table types' changes are disabled, and a location with no layout offers nothing to upload ([E7](#e7-edit-the-plan-after-draft)).
+Past Draft, until the market is archived, the editor of a layout started in Draft stays under the setup-settled sentence: tables are still moved and turned, and the zones, the image, the scale and the sections' colours and labels still change, while Add table, Row of tables, Fill an area, Duplicate, "Row of N…", Remove, the Section and Table type fields, Renumber and the table types' changes are disabled ([E7](#e7-edit-the-plan-after-draft)).
+A location with no layout past Draft can still be laid out: its layout follows the plan, under "This layout follows the plan: place each section's tables, up to its count. The seats themselves are settled."
+Each section holds at most the tables Section Setup settled, each numbered once up to that count; the Sections card says "4 of 13"; a tool that would pass the count places what fits and says "Gold row has 13 tables in the plan; 4 were placed."; a removal leaves the other numbers alone and a new table takes the lowest free number; and the selection's card gains a Number field for one table, which swaps numbers with the table that holds the one typed.
+Only the table types stay settled, and Section Setup keeps that location's counts as typed ([ADR 0033](../../adr/0033-a-layout-started-after-draft-follows-the-plan.md)).
 No vendor's table changes: a table keeps its section and number wherever it stands.
 An archived market's layout, and a Viewer's in any phase, is read: the map and the sections with no toolbar, and the frame saying why.
 Anyone on the market exports a location's layout as a PNG to print or send, in any phase: "Export PNG" in the head row, with or without the venue's floorplan under the tables and with or without the tables' numbers, saves the market's name, the location and the market's dates over the map and a legend of its sections under it, 3200 px wide, named for the market and the location.
@@ -176,6 +180,7 @@ Covered by:
 - `a-layout-is-the-plans-tables.spec.ts`
 - `a-layout-on-a-phone.spec.ts`
 - `a-layout-saves-once.spec.ts`
+- `a-layout-started-after-draft.spec.ts`
 - `a-table-moves-by-keyboard.spec.ts`
 - `a-table-moves-by-pointer.spec.ts`
 - `numbers-follow-the-rules.spec.ts`
@@ -199,7 +204,8 @@ What still changes after Draft, and where:
 - the assignment rules (priority and options), on the Assignment tab, until the market can no longer return to Assignment or its results are published ([J14](assignment-and-result.md#j14-the-rules-close-with-the-assignment));
 - what a reviewer reads first, on the form tab's Review setup, in every phase but Archived, and the automatic rejections there until the market reaches Assignment ([F3](form-tab.md#f3-what-a-reviewer-reads-first));
 - the Discord card, in every phase until the market is archived, since it is a manual tool rather than part of the plan ([the Discord connection](../../implementation/modules/discord.md));
-- where a layout's tables stand, on the layout page, until the market is archived: its tables moved and turned, its no-table zones, its image, its scale and its sections' colours and labels, never a table added, removed, renumbered or given another section or type ([E6](#e6-a-locations-layout)).
+- where a layout's tables stand, on the layout page, until the market is archived: its tables moved and turned, its no-table zones, its image, its scale and its sections' colours and labels, never a table of a layout started in Draft added, removed, renumbered or given another section or type ([E6](#e6-a-locations-layout));
+- a location's layout started after Draft, which follows the plan: its tables placed, removed and numbered up to each section's settled count ([E6](#e6-a-locations-layout)).
 
 What else freezes, and when:
 

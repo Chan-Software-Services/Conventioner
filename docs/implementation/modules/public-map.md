@@ -3,10 +3,6 @@ layer: implementation
 kind: module
 describes:
   - back-end/public_map.py
-  - front-end/src/components/market/MarketPublicMapCard.vue
-  - front-end/src/utils/historyReaders/publicMap.ts
-  - front-end/src/__tests__/thePublicMapCard.test.ts
-  - front-end/e2e/the-public-map-card.spec.ts
   - back-end/public_answers.py
   - back-end/market_documents.py#public_map_market_by_slug
   - back-end/datatypes.py#PublicMapSettings
@@ -14,6 +10,10 @@ describes:
   - back-end/tests/test_the_public_map_settings.py
   - back-end/tests/test_public_answers.py
   - back-end/tests/test_a_layouts_stored_shapes.py
+  - front-end/src/components/market/MarketPublicMapCard.vue
+  - front-end/src/utils/historyReaders/publicMap.ts
+  - front-end/src/__tests__/thePublicMapCard.test.ts
+  - front-end/e2e/the-public-map-card.spec.ts
 verified: 2026-11-17
 sources:
   - T422
@@ -83,7 +83,7 @@ It reads the image by the layout it found, never by an id the request names.
 ## What a layout stores for it
 
 A no-table zone stores its turn, `rotation`, degrees clockwise about its centre, read into 0 to 360 as it parses; a turn that is not a finite number is refused by the floorplan's bounds.
-A layout stores `followsPlan`, whether it was started after Draft: false on one started in Draft, and kept on every later save whatever the body sends ([`back-end/api/floorplans_save.py`](../../../back-end/api/floorplans_save.py)).
+A layout stores `followsPlan`, whether it was started after Draft: true on one started past Draft ([ADR 0033](../../adr/0033-a-layout-started-after-draft-follows-the-plan.md)), false on one started in Draft, and kept on every later save whatever the body sends ([`back-end/api/floorplans_save.py`](../../../back-end/api/floorplans_save.py)).
 [`back-end/tests/test_a_layouts_stored_shapes.py`](../../../back-end/tests/test_a_layouts_stored_shapes.py) saves both through the layout's own route.
 
 ## Tests

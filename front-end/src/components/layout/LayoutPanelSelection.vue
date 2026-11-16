@@ -11,6 +11,12 @@
  *
  * Past Draft (`settled`) a table's seat is settled: the Section and Table type fields, Duplicate,
  * "Row of N…" and Remove are disabled, and Turn 90° and Align, which only move tables, stay.
+ *
+ * On a layout that follows the plan (`followsPlan`, T422) the seat's controls stay enabled past
+ * Draft, the Table type field alone settled with the market's types (`typesSettled`), and one
+ * table of a section gains a Number field: a whole number from 1 to the section's count in the
+ * plan, a number another table holds swapping the two (`useLayoutEditor`'s `setNumber`), and
+ * anything else saying what to type under it.
  */
 import { computed, ref, useId, watch } from 'vue';
 import type { FloorplanTable, TableTypeObject } from '@/assets/types/datatypes';
@@ -30,9 +36,13 @@ const props = defineProps<{
   /** The location's sections, as the map draws them. */
   sections: readonly LayoutSection[];
   tableTypes: readonly TableTypeObject[];
-  /** Whether the market has left Draft, so no table is added, removed or re-sectioned or
+  /** Whether the layout's seats are settled, so no table is added, removed, re-sectioned or
    *  re-typed. */
   settled?: boolean;
+  /** Whether the market's table types are settled, so no table is re-typed; unsaid, as the seats. */
+  typesSettled?: boolean;
+  /** Whether the layout follows the plan, so one table of a section is numbered by hand. */
+  followsPlan?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -45,6 +55,8 @@ const emit = defineEmits<{
   type: [tableTypeId: string];
   /** That many more tables, going on along the one selected table's line. */
   row: [count: number];
+  /** The number typed for the one selected table, a whole one from 1 to its section's count. */
+  number: [number: number];
 }>();
 
 const titleId = useId();
@@ -52,6 +64,8 @@ const sectionFieldId = useId();
 const typeFieldId = useId();
 const rowFormId = useId();
 const rowCountId = useId();
+const numberFieldId = useId();
+const numberErrorId = useId();
 
 /** The most tables one "Add row" asks for. */
 const MOST_IN_A_ROW = 100;
@@ -102,6 +116,41 @@ const codes = computed(() => {
   const more = all.length - CODES_SHOWN;
   return more > 0 ? `${all.slice(0, CODES_SHOWN).join(', ')} and ${more} more` : all.join(', ');
 });
+
+/** Whether a table's type may change here. */
+const typeSettled = computed(() => props.typesSettled ?? props.settled);
+
+/** The one selected table's section and its count in the plan, on a layout that follows it. */
+const numbered = computed(() => {
+  if (!props.followsPlan || props.tables.length !== 1) return null;
+  const table = props.tables[0];
+  const section = sectionOf(table);
+  return section ? { id: table.id, number: table.number, count: section.count } : null;
+});
+/** What the Number field holds, and what it says of what was typed that is no number to take. */
+const numberTyped = ref('');
+const numberError = ref('');
+watch(
+  () => numbered.value && `${numbered.value.id}:${numbered.value.number}`,
+  () => {
+    numberTyped.value = String(numbered.value?.number ?? '');
+    numberError.value = '';
+  },
+  { immediate: true },
+);
+
+function setNumber() {
+  const held = numbered.value;
+  if (!held) return;
+  const typed = numberTyped.value.trim();
+  const number = Number(typed);
+  if (typed === '' || !Number.isInteger(number) || number < 1 || number > held.count) {
+    numberError.value = `Type a number from 1 to ${held.count}.`;
+    return;
+  }
+  numberError.value = '';
+  if (number !== held.number) emit('number', number);
+}
 
 /** The one selected table, as the card reads it. */
 const one = computed(() => {
@@ -179,7 +228,7 @@ const ARRANGEMENTS: readonly { id: Arrangement; label: string }[] = [
           :id="typeFieldId"
           class="field field--select"
           :value="typeValue"
-          :disabled="settled"
+          :disabled="typeSettled"
           data-testid="layout-selection-type"
           @change="emit('type', chosen($event))"
         >
@@ -189,6 +238,32 @@ const ARRANGEMENTS: readonly { id: Arrangement; label: string }[] = [
             {{ type.name }}
           </option>
         </select>
+        <template v-if="numbered">
+          <label class="selection-field-name" :for="numberFieldId">Number</label>
+          <div class="selection-number">
+            <input
+              :id="numberFieldId"
+              v-model="numberTyped"
+              class="field selection-number-field"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              :aria-invalid="numberError ? 'true' : undefined"
+              :aria-describedby="numberError ? numberErrorId : undefined"
+              data-testid="layout-selection-number"
+              @change="setNumber"
+              @keydown.enter.prevent="setNumber"
+            />
+            <p
+              v-if="numberError"
+              :id="numberErrorId"
+              class="selection-number-error"
+              data-testid="layout-selection-number-error"
+            >
+              {{ numberError }}
+            </p>
+          </div>
+        </template>
         <template v-if="one">
           <span class="selection-field-name">Position</span>
           <span class="selection-position" data-testid="layout-selection-position">
@@ -322,6 +397,25 @@ const ARRANGEMENTS: readonly { id: Arrangement; label: string }[] = [
 }
 
 .selection-position {
+  text-align: right;
+}
+
+/* The Number field, its sentence under it when what was typed is no number to take. */
+.selection-number {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+}
+
+.selection-number-field {
+  width: 4.5rem;
+}
+
+.selection-number-error {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--mm-red);
   text-align: right;
 }
 
