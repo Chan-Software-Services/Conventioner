@@ -27,6 +27,7 @@ import {
 import { organizationRemoval } from '@/utils/organizations';
 import { marketRemoval } from '@/utils/peopleWithAccess';
 import { answersRefusing } from './support/servedAnswers';
+import { tryEveryClose } from './support/dialogCloses';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 
@@ -648,6 +649,53 @@ describe('Manage market asks before it removes', () => {
       'They can still run it as an admin of Seed Test Org.',
     );
     expect(api.delete).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('holds by the shell while it removes: every close refused, one removal for two presses', async () => {
+    const wrapper = await open([person()]);
+    byTestId('manage-market-remove-user-button')!.click();
+    await flushPromises();
+    let answer!: (value: unknown) => void;
+    api.delete.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+
+    const confirm = () =>
+      byTestId('manage-market-remove-window')!.querySelector('form')!.requestSubmit();
+    confirm();
+    confirm();
+    await flushPromises();
+
+    expect(api.delete).toHaveBeenCalledTimes(1);
+    expect(byTestId('manage-market-remove-cancel-button')!.hasAttribute('disabled')).toBe(true);
+    await tryEveryClose('manage-market-remove');
+    expect(byTestId('manage-market-remove-window')).not.toBeNull();
+
+    served = market([]);
+    answer({ data: {} });
+    await flushPromises();
+    expect(byTestId('manage-market-remove-window')).toBeNull();
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('manage-market-people');
+    wrapper.unmount();
+  });
+
+  it('keeps a refusal out of the next Remove it opens', async () => {
+    api.delete.mockRejectedValue(refusing(400, 'Only an admin can change roles'));
+    const wrapper = await open([person()]);
+    byTestId('manage-market-remove-user-button')!.click();
+    await flushPromises();
+    byTestId('manage-market-remove-submit-button')!.click();
+    await flushPromises();
+    expect(byTestId('manage-market-remove-error')?.textContent?.trim()).toBe(
+      'Only an admin can change roles',
+    );
+
+    byTestId('manage-market-remove-cancel-button')!.click();
+    await flushPromises();
+    byTestId('manage-market-remove-user-button')!.click();
+    await flushPromises();
+
+    expect(byTestId('manage-market-remove-error')).toBeNull();
+    expect(byTestId('manage-market-remove-submit-button')!.hasAttribute('disabled')).toBe(false);
     wrapper.unmount();
   });
 });
