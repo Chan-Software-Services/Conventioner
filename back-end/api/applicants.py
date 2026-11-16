@@ -519,7 +519,7 @@ def save_applicant_application(
     # Then dealt to the next reviewer in turn, if reviewers are chosen and it is still open
     # (E38/F07/S03): the applicant's own save is its arrival, so it is recorded as theirs, and it
     # deals theirs alone.
-    ReviewTeam.deal_arrivals(market, email, History.APPLY, only=app.id)
+    ReviewTeam.deal_an_applicants_own(market, email, app.id)
     # After the save's last write: a deletion that began after the market was read above has
     # swept, or will sweep, everything written here, or this takes it back (``market_deletion``).
     gone = _gone_under_the_save(db["markets"], market_id)
@@ -688,7 +688,11 @@ def review_application(
 def _verdict_asking(reviewing: Reviewing, before: List[Dict[str, Any]]) -> Actions.Asked:
     """The asking of the table's row a reviewer's write took, which records its history entry:
     changing a verdict when any application it wrote was decided, else giving one (E38/F06/S01).
-    A reviewer the change row refuses writes only undecided ones, so theirs is always giving."""
+    A reviewer the change row refuses writes only undecided ones (``unless_decided``), so theirs
+    is always giving, even when the read before the write found one decided that an undo has since
+    returned to open."""
+    if reviewing.changing.refused:
+        return reviewing.giving
     if any(ApplicationsApi.is_decided(doc) for doc in before):
         return reviewing.changing
     return reviewing.giving

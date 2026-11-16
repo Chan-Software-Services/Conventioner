@@ -334,6 +334,30 @@ class TestTheHistory:
         actions = [entry["action"] for entry in market_records.history.documents]
         assert actions == ["give-verdicts", "change-verdicts"]
 
+    def test_a_verdict_read_decided_but_written_open_by_whom_the_change_row_refuses_is_giving(
+        self, client, market_records, monkeypatch,
+    ):
+        """An editor saw it open; another reviewer's verdict was read as it reached their request,
+        then undone before their write, which, held to an undecided application, landed: the write
+        gave a verdict, so it records under the giving row, never the change row they may not
+        take (review of T352's phase 2, finding 1)."""
+        _as(client, "editor@market.test")
+        seen = _seen(client.stored["open"])
+        read_decided = {**client.stored["open"], "status": APPROVED.value, "verdict_by": KAI,
+                        "verdict_at": "2026-10-03T00:00:00+00:00"}
+        find = ApplicantsApi.ApplicationsApi.find_application_by_id
+        reads = iter([read_decided])
+        monkeypatch.setattr(ApplicantsApi.ApplicationsApi, "find_application_by_id",
+                            lambda app_id: next(reads, None) or find(app_id))
+
+        response = client.put("/markets/market-1/applications/open/review",
+                              json={"status": REJECTED.value, "seen": seen})
+
+        assert response.status_code == 200, response.get_json()
+        assert client.stored["open"]["status"] == REJECTED.value
+        assert [(entry["action"], entry["kind"]) for entry in market_records.history.documents] \
+            == [("give-verdicts", "verdict")]
+
     def test_records_a_selection_that_changed_any_verdict_under_the_change_row(
         self, client, market_records,
     ):
