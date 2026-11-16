@@ -12,7 +12,8 @@ import { MarketPhase } from '@/assets/types/datatypes';
 type Pending = { resolve: (value: unknown) => void; reject: (reason: unknown) => void };
 const calls: Array<{ url: string } & Pending> = [];
 
-vi.mock('@/utils/api', () => ({
+vi.mock('@/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/utils/api')>()),
   api: {
     get: (url: string) =>
       new Promise((resolve, reject) => {
@@ -58,7 +59,7 @@ describe('the market store', () => {
     calls[0].resolve(apiMarket('m1', { phase: 'applications' }));
     await opened;
 
-    expect(store.status).toBe('loaded');
+    expect(store.status).toBe('ready');
     expect(store.market?.id).toBe('m1');
     expect(store.market?.phase).toBe(MarketPhase.Applications);
   });
@@ -95,7 +96,7 @@ describe('the market store', () => {
 
     const reread = store.refresh();
     expect(store.market?.id).toBe('m1');
-    expect(store.status).toBe('loaded');
+    expect(store.status).toBe('refreshing');
 
     calls[1].resolve(apiMarket('m1', { phase: 'applications' }));
     await reread;
@@ -139,7 +140,7 @@ describe('the market store', () => {
     const retried = store.refresh();
     calls[1].resolve(apiMarket('m1'));
     await retried;
-    expect(store.status).toBe('loaded');
+    expect(store.status).toBe('ready');
     expect(store.market?.id).toBe('m1');
   });
 
@@ -159,13 +160,13 @@ describe('the market store', () => {
     await reread;
 
     expect(store.market?.id).toBe('m1');
-    expect(store.status).toBe('loaded');
-    expect(store.stale).toBe(true);
+    expect(store.status).toBe('refresh_failed');
 
     const recovered = store.refresh();
+    expect(store.market?.id).toBe('m1');
     calls[2].resolve(apiMarket('m1'));
     await recovered;
-    expect(store.stale).toBe(false);
+    expect(store.status).toBe('ready');
   });
 
   it('lets go of a market that has gone, even one it was holding', async () => {
@@ -193,6 +194,79 @@ describe('the market store', () => {
 
     expect(store.market).toBeNull();
     expect(store.marketId).toBeNull();
-    expect(store.status).toBe('idle');
+    expect(store.status).toBe('empty');
+  });
+
+  /**
+   * T277 probe 15 (T421): a failed re-read of A left A marked old, and B failing to arrive kept the
+   * mark, so the store read failed and stale at once and the frame could say both.
+   */
+  it('a failed re-read of one market, then another failing to arrive, reads failed alone', async () => {
+    const store = useMarketStore();
+    const a = store.open('a');
+    calls[0].resolve(apiMarket('a'));
+    await a;
+    const again = store.refresh();
+    calls[1].reject({ isAxiosError: true, message: 'Network Error' });
+    await again;
+    expect(store.status).toBe('refresh_failed');
+
+    const b = store.open('b');
+    calls[2].reject({ isAxiosError: true, message: 'Network Error' });
+    await b;
+    await settle();
+
+    expect(store.status).toBe('failed');
+    expect(store.market).toBeNull();
+  });
+
+  it('forgets an answer that lands after it was cleared', async () => {
+    const store = useMarketStore();
+    const opened = store.open('m1');
+    store.clear();
+    calls[0].resolve(apiMarket('m1'));
+    await opened;
+    await settle();
+
+    expect(store.market).toBeNull();
+    expect(store.status).toBe('empty');
+  });
+
+  it('points "Previously opened" at each market that arrives', async () => {
+    localStorage.clear();
+    const store = useMarketStore();
+    const opened = store.open('m1');
+    expect(localStorage.getItem('lastMarketId')).toBeNull();
+    calls[0].resolve(apiMarket('m1'));
+    await opened;
+
+    expect(localStorage.getItem('lastMarketId')).toBe('m1');
+  });
+
+  it('forgets the pointer to a market that has gone, and only to that one', async () => {
+    localStorage.setItem('lastMarketId', 'm1');
+    const store = useMarketStore();
+    const other = store.open('m2');
+    calls[0].reject(httpError(404));
+    await other;
+    expect(localStorage.getItem('lastMarketId')).toBe('m1');
+
+    const gone = store.open('m1');
+    calls[1].reject(httpError(403));
+    await gone;
+    expect(localStorage.getItem('lastMarketId')).toBeNull();
+  });
+
+  it('resolves an open only once the market it opened has arrived', async () => {
+    const store = useMarketStore();
+    let done = false;
+    const opened = store.open('m1').then(() => (done = true));
+    await settle();
+    expect(done).toBe(false);
+
+    calls[0].resolve(apiMarket('m1'));
+    await opened;
+    expect(done).toBe(true);
+    expect(store.status).toBe('ready');
   });
 });

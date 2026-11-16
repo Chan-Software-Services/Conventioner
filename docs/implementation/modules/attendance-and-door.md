@@ -48,6 +48,7 @@ sources:
   - T201
   - T274
   - T318
+  - T421
 ---
 
 # Attendance and the door
@@ -148,12 +149,15 @@ An organizer checking a vendor in on a past market date is not refused, and on o
 It was read on load and after the organizer's own tap, so a vendor who scanned themselves in, or another organizer's check-in, showed only after this organizer's next tap or a reload, and "who is missing" was stale at exactly the moment it was asked.
 Attendance reads its roster again every 15 seconds while the page is in view (`REREAD_MS`), and at once when the tab comes back into view or the browser comes back online; hidden, it reads nothing, and the clock never asks for a read while one is out.
 A read that has not answered in `REREAD_MS` is given up (its own axios `timeout`, not the shared instance's) and fails as any read does, so a stalled request on the venue's wifi never stops the clock or holds Refresh disabled.
-Every read takes a number from one counter as it is asked, and its answer lands only if nothing newer was asked or landed since, so two reads answering out of order never show a vendor just checked in as not here; a dropped answer changes nothing on screen, its error included.
-A check-in or its undo shows on its row from the server's answer at once (`checkedInAt` from the answer, `checkedInBy` the signed-in address and `state` `here` at the row's own table, or all three cleared and `state` `expected`; an undone row with no seat goes), counts as newer than every read in flight, and a re-read follows; each row is held busy only while its own write is out, so taps on several rows all go through.
+The roster is one keyed read, by the market open ([reads keyed by market](market-store.md#reads-keyed-by-market)): only the newest read's answer lands, so two reads answering out of order never show a vendor just checked in as not here, and a dropped answer changes nothing on screen, its error included.
+Moved to another market, the page says "Loading…" at once, never the last market's roster, and nothing the last market's reads or writes answer lands on it.
+A check-in or its undo is held on the market whose roster the row came from, and posts there only: no read asked before it lands, so none undoes it, and it shows on its row from the server's answer at once (`checkedInAt` from the answer, `checkedInBy` the signed-in address and `state` `here` at the row's own table, or all three cleared and `state` `expected`; an undone row with no seat goes), and a re-read follows.
+Its refusal is said only on the market it was made on, so a refusal landing after the organizer moved says nothing on the market they moved to, and it is forgotten on moving, so coming back to that market never says it again; each row is held busy only while its own write is out, by its market, date and vendor, so taps on several rows all go through and a write still out on the last market holds no row of this one.
 The top row ends with [`ListFreshness`](../../../front-end/src/components/ListFreshness.vue) (`attendance-updated`, `attendance-refresh`) before Print roster and Door code: when the roster was last read, ageing on screen, and Refresh.
 A re-read or a Refresh that fails keeps the rows and says "Could not update. The roster is as it was last read." on a line under the top row, until a read lands: between Refresh and Door code it pushed Door code onto a line of its own on a phone; a first read that fails is still the page that could not be read, with Try again.
+The clock, a tab coming back and the browser coming back online read it again quietly, so that page stays, with its sentence, while their read is out; only Try again says "Loading…".
 There is no offline copy and no queue of taps.
-`AttendanceStatusView.test.ts` holds each of these, and [`the-door-stays-fresh.spec.ts`](../../../front-end/e2e/the-door-stays-fresh.spec.ts) a vendor's own check-in showing on the open roster once `page.clock` runs 15 seconds, and a re-read that fails.
+`AttendanceStatusView.test.ts` holds each of these, `theDoorReadsItsOwnMarket.test.ts` the move to another market while a read or a check-in is out, and [`the-door-stays-fresh.spec.ts`](../../../front-end/e2e/the-door-stays-fresh.spec.ts) a vendor's own check-in showing on the open roster once `page.clock` runs 15 seconds, and a re-read that fails.
 
 **The roster prints whole, and the door is asked to print it** (T318).
 Paper is the door's only fallback when the venue's network or the back end fails, and nothing prompted the organizer to keep one.
