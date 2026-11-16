@@ -5,7 +5,8 @@
  * started over, dropping the file, and the check's late answer then moved the page from Upload to
  * Preview with no file, whose Import posted an empty `csvContent`. A form read sent by "Add a
  * question for it" answered the same way, opening the amend dialog over Upload.
- * Back now waits while a request is out, and Start over drops every answer still to come.
+ * Back now waits while the values check, a re-read of the questions or the import is out, and
+ * Start over drops every answer still to come, the form read's included.
  * The steps carry their data (`utils/importWizard`): a change made during the check withdraws it,
  * and a file the server could not read is not named.
  */
