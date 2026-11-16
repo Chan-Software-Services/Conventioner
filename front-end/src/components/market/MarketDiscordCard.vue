@@ -41,6 +41,7 @@ import { formTextQuestions } from '@/utils/discordQuestion';
 import { rolesStillNeed } from '@/utils/discordRoles';
 import { marketPath } from '@/utils/market';
 import { MarketAction, actionRefusal } from '@/utils/marketActions';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import type { Ref } from 'vue';
 import type { PickerGroup } from '@/components/SearchPicker.vue';
 import type { DiscordRole, Market } from '@/assets/types/datatypes';
@@ -267,17 +268,19 @@ function openChoice(which: CardChoice): void {
 }
 
 const confirmingDisconnect = ref(false);
-const disconnectError = ref<string | null>(null);
+/** Disconnect's write, held by the shell and sent once however often it is pressed (T411). */
+const disconnecting = useDialogSubmit({
+  opening: () => confirmingDisconnect.value,
+  failure: 'Discord was not disconnected.',
+});
 
 async function disconnect(): Promise<void> {
-  disconnectError.value = null;
-  try {
-    await api.delete(`${base.value}/connection`);
-    confirmingDisconnect.value = false;
-    emit('changed');
-  } catch (err) {
-    disconnectError.value = getApiErrorMessage(err, 'Discord was not disconnected.');
-  }
+  await disconnecting.submit(() => api.delete(`${base.value}/connection`), {
+    done: () => {
+      confirmingDisconnect.value = false;
+      emit('changed');
+    },
+  });
 }
 </script>
 
@@ -532,7 +535,7 @@ async function disconnect(): Promise<void> {
         testid="discord-disconnect"
         destructive
         confirm-label="Disconnect"
-        :error="disconnectError ?? undefined"
+        :submission="disconnecting"
         @close="confirmingDisconnect = false"
         @submit="disconnect"
       >
