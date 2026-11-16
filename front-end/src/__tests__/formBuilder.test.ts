@@ -457,6 +457,102 @@ describe('FormBuilder, on a market started from a file (E38/F02/S02)', () => {
   });
 });
 
+describe('the Key of a question from a column of the file (T352)', () => {
+  const KEPT = 'Kept to match its column in your file.';
+  const keyOf = (wrapper: ReturnType<typeof mount>, at = 0) =>
+    wrapper.findAll('[data-testid="form-field-key-input"]')[at]!;
+  const keptLines = (wrapper: ReturnType<typeof mount>) =>
+    wrapper.findAll('[data-testid="form-field-key-kept"]');
+
+  it('reads only, stays reachable, and says why, on a question the start made', async () => {
+    const booth = question({ key: 'booth_size', label: 'Booth size', type: 'checkbox' });
+    const { wrapper, form } = mountWithParent({ fields: [booth] }, false, [BOOTH]);
+    const key = keyOf(wrapper);
+
+    expect(key.attributes('readonly')).toBeDefined();
+    expect(key.attributes('disabled')).toBeUndefined();
+    const [line] = keptLines(wrapper);
+    expect(line!.text()).toBe(KEPT);
+    expect(key.attributes('aria-describedby')).toBe(line!.attributes('id'));
+
+    await key.setValue('booth');
+    expect(form.value!.fields[0].key).toBe('booth_size');
+  });
+
+  it('reads only on a question added from the file', async () => {
+    const { wrapper, form } = mountWithParent({ fields: [] }, false, [STATUS]);
+
+    await wrapper.get('[data-testid="form-builder-add-from-file"]').setValue('status');
+
+    expect(keyOf(wrapper).attributes('readonly')).toBeDefined();
+    expect(keptLines(wrapper)).toHaveLength(1);
+    await keyOf(wrapper).setValue('state');
+    expect(form.value!.fields[0].key).toBe('status');
+  });
+
+  it('never moves with a label edit', async () => {
+    const booth = question({ key: 'booth_size', label: 'Booth size', type: 'checkbox' });
+    const { wrapper, form } = mountWithParent({ fields: [booth] }, false, [BOOTH]);
+
+    await wrapper.get('[data-testid="form-field-label-input"]').setValue('Table size');
+    await wrapper.get('[data-testid="form-field-label-input"]').trigger('blur');
+
+    expect(form.value!.fields[0]).toMatchObject({ label: 'Table size', key: 'booth_size' });
+  });
+
+  it('stays editable with no line on a question added by hand', async () => {
+    const { wrapper, form } = mountWithParent({ fields: [] }, false, [STATUS]);
+
+    await wrapper.get('[data-testid="form-builder-add-field-button"]').trigger('click');
+    await wrapper.get('[data-testid="form-field-label-input"]').setValue('Shop name');
+
+    expect(keyOf(wrapper).attributes('readonly')).toBeUndefined();
+    expect(keyOf(wrapper).attributes('aria-describedby')).toBeUndefined();
+    expect(keptLines(wrapper)).toHaveLength(0);
+    await keyOf(wrapper).setValue('shop');
+    expect(form.value!.fields[0].key).toBe('shop');
+  });
+
+  it('stays editable on a question added by hand whose label slugs into a column key', async () => {
+    const { wrapper, form } = mountWithParent({ fields: [] }, false, [STATUS]);
+
+    await wrapper.get('[data-testid="form-builder-add-field-button"]').trigger('click');
+    const label = wrapper.get('[data-testid="form-field-label-input"]');
+    await label.setValue('Status');
+    expect(form.value!.fields[0].key).toBe('status');
+
+    expect(keyOf(wrapper).attributes('readonly')).toBeUndefined();
+    expect(keptLines(wrapper)).toHaveLength(0);
+    // It still follows its label, past the column's key.
+    await label.setValue('Status of the shop');
+    expect(form.value!.fields[0].key).toBe('status_of_the_shop');
+  });
+
+  it('stays editable on a question added by hand whose key is typed into a column key', async () => {
+    const { wrapper, form } = mountWithParent({ fields: [] }, false, [STATUS]);
+
+    await wrapper.get('[data-testid="form-builder-add-field-button"]').trigger('click');
+    await keyOf(wrapper).setValue('statu');
+    await keyOf(wrapper).setValue('status');
+    expect(form.value!.fields[0].key).toBe('status');
+
+    expect(keyOf(wrapper).attributes('readonly')).toBeUndefined();
+    expect(keptLines(wrapper)).toHaveLength(0);
+    await keyOf(wrapper).setValue('status_note');
+    expect(form.value!.fields[0].key).toBe('status_note');
+  });
+
+  it('is disabled with no line on a locked form, as every field there is', () => {
+    const booth = question({ key: 'booth_size', label: 'Booth size', type: 'checkbox' });
+    const { wrapper } = mountWithParent({ fields: [booth] }, true, [BOOTH]);
+
+    expect(keyOf(wrapper).attributes('disabled')).toBeDefined();
+    expect(keyOf(wrapper).attributes('readonly')).toBeUndefined();
+    expect(keyOf(wrapper).attributes('aria-describedby')).toBeUndefined();
+    expect(keptLines(wrapper)).toHaveLength(0);
+  });
+});
+
 describe('an option on a question from the file (T213)', () => {
   const COUNTED: ExampleColumn = {
     ...SELLS,

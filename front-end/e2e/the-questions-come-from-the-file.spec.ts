@@ -155,6 +155,84 @@ test('the Questions tab fills options from the example file and adds a left-out 
   });
 });
 
+test("a question's Key is kept to match its column, and a question added by hand keeps its own", async ({
+  authenticatedPage: page,
+  request,
+  expectAccessible,
+}) => {
+  const KEPT = 'Kept to match its column in your file.';
+  const { marketId } = await seedDraftMarket(
+    request,
+    BACKEND_URL,
+    TEST_USER.email,
+    TEST_USER.password,
+  );
+  const started = await request.post(`${BACKEND_URL}/markets/${marketId}/csv-proposal/confirm`, {
+    data: { csvContent: readFileSync(FIXTURE, 'utf8') },
+  });
+  expect(started.ok(), await started.text()).toBe(true);
+
+  const form = new ApplicationFormPage(page);
+  await page.goto(`${marketScreenPath(marketId, 'form')}?step=questions`);
+  await form.builder.locator('.field-item').first().waitFor();
+  const booth = (await form.builder.locator('.field-item').allInnerTexts()).findIndex((card) =>
+    card.includes('Booth size'),
+  );
+  expect(booth).toBeGreaterThanOrEqual(0);
+
+  // A question the start made: read only, still a stop of the keys, its line read with it.
+  const key = form.keyInput(booth);
+  await expect(key).toHaveValue('booth_size');
+  await expect(key).not.toBeEditable();
+  await expect(key).toBeEnabled();
+  await expect(key).toHaveAccessibleDescription(KEPT);
+  await expect(form.fieldCard(booth).getByTestId('form-field-key-kept')).toHaveText(KEPT);
+  await form.labelInput(booth).focus();
+  await page.keyboard.press('Tab');
+  await expect(key).toBeFocused();
+  await page.keyboard.type('x');
+  await expect(key).toHaveValue('booth_size');
+  // Relabelled, it keeps its key, and its column is never offered again.
+  await form.labelInput(booth).fill('Table size');
+  await expect(key).toHaveValue('booth_size');
+  await expect(form.addFromFile.root.locator('option')).toHaveText([
+    'Choose a column',
+    'Status',
+    'Notes',
+  ]);
+
+  // A question added from the file is kept the same way.
+  await form.addQuestionFromFile('Status');
+  const status = (await form.builder.locator('.field-item').count()) - 1;
+  await expect(form.keyInput(status)).toHaveValue('status');
+  await expect(form.keyInput(status)).not.toBeEditable();
+  await expect(form.keyInput(status)).toHaveAccessibleDescription(KEPT);
+  await expect(form.addFromFile.root.locator('option')).toHaveText(['Choose a column', 'Notes']);
+
+  // A question added by hand follows its label, and its Key is the organizer's to edit.
+  await form.addField();
+  const own = (await form.builder.locator('.field-item').count()) - 1;
+  await form.fillLabel(own, 'Own question');
+  await expect(form.keyInput(own)).toHaveValue('own_question');
+  await expect(form.keyInput(own)).toBeEditable();
+  await expect(form.fieldCard(own).getByTestId('form-field-key-kept')).toHaveCount(0);
+  await form.keyInput(own).fill('own_key');
+  await expect(form.keyInput(own)).toHaveValue('own_key');
+
+  expect(await namelessControls(page)).toEqual([]);
+  await expectAccessible('the Questions step with a Key kept for its column');
+  expect((await sweep(page)).failures, 'the kept Key or its line has text below AA').toEqual([]);
+
+  await form.save();
+  await expect(form.saveSuccess).toBeVisible();
+  const market = (await (await request.get(`${BACKEND_URL}/markets/${marketId}`)).json()).market;
+  const keys = market.applicationForm.fields.map((f: { key: string }) => f.key);
+  expect(keys).toEqual(expect.arrayContaining(['booth_size', 'status', 'own_key']));
+  expect(
+    market.applicationForm.fields.find((f: { key: string }) => f.key === 'booth_size').label,
+  ).toBe('Table size');
+});
+
 test('an option lists every answer the file gave that is no other option, and keeps what is typed', async ({
   authenticatedPage: page,
   request,

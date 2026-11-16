@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { type ExampleColumn, type FormField } from '@/assets/types/datatypes';
 import IconAddRound from '@/components/icons/IconAddRound.vue';
 import IconCloseRound from '@/components/icons/IconCloseRound.vue';
@@ -92,9 +92,23 @@ function updateLabel(label: string) {
   emitUpdate(props.keyTouched ? { label } : { label, key: slugify(label) });
 }
 
+/** True once the organizer has typed in this question's key since the editor opened. */
+const keyTyped = ref(false);
+
+/**
+ * A question of a column of the file keeps its key once it no longer follows its label: the saved
+ * import mapping and "Add from your file" know the column by it, so an edit would unlink them. A
+ * question added by hand whose label slugs, or whose key is typed, into a column's key stays
+ * editable, so it never locks mid-typing.
+ */
+const keyKept = computed(
+  () => !props.readonly && !!props.column && props.keyTouched && !keyTyped.value,
+);
+
 /** Clearing the key hands it back to the label, which is what its placeholder promises. */
 function updateKey(key: string) {
-  if (props.readonly) return;
+  if (props.readonly || keyKept.value) return;
+  keyTyped.value = true;
   emit('update:keyTouched', Boolean(key));
   emitUpdate({ key });
 }
@@ -187,16 +201,28 @@ function updateOption(idx: number, value: string) {
 
     <div class="field-row">
       <label class="field-label" :for="`question-${index}-key`">Key</label>
-      <input
-        :id="`question-${index}-key`"
-        class="field field-input field-input-sm"
-        :value="local.key"
-        @input="updateKey(($event.target as HTMLInputElement).value)"
-        @blur="keyBlurred()"
-        :disabled="readonly"
-        placeholder="auto-generated from label"
-        data-testid="form-field-key-input"
-      />
+      <div class="key-control">
+        <input
+          :id="`question-${index}-key`"
+          class="field field-input field-input-sm"
+          :value="local.key"
+          @input="updateKey(($event.target as HTMLInputElement).value)"
+          @blur="keyBlurred()"
+          :disabled="readonly"
+          :readonly="keyKept"
+          :aria-describedby="keyKept ? `question-${index}-key-kept` : undefined"
+          placeholder="auto-generated from label"
+          data-testid="form-field-key-input"
+        />
+        <p
+          v-if="keyKept"
+          :id="`question-${index}-key-kept`"
+          class="file-note"
+          data-testid="form-field-key-kept"
+        >
+          Kept to match its column in your file.
+        </p>
+      </div>
     </div>
 
     <div class="field-row">
@@ -301,11 +327,7 @@ function updateOption(idx: number, value: string) {
           <IconAddRound /> Add option
         </button>
         <template v-if="!readonly">
-          <p
-            v-if="filledFromFile"
-            class="options-from-file"
-            data-testid="form-field-options-from-file"
-          >
+          <p v-if="filledFromFile" class="file-note" data-testid="form-field-options-from-file">
             Filled from the answers in your file.
           </p>
           <button
@@ -411,6 +433,27 @@ function updateOption(idx: number, value: string) {
   flex: 0 1 auto;
 }
 
+/* The key and, when it is kept for its column, the line under it saying so. */
+.key-control {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+/* Its caption names the field, not the field and its line, so it sits on the field's line. */
+.field-row:has(.key-control > p) {
+  align-items: flex-start;
+}
+
+/* A kept key reads as it stands, black on the editor's beige, its line still drawn: it can be
+   reached and copied, but it is not a field to type in. */
+.field-input[readonly] {
+  background-color: var(--mm-beige);
+}
+
 .options-list {
   flex: 1;
   min-width: 0;
@@ -454,9 +497,9 @@ function updateOption(idx: number, value: string) {
   color: var(--mm-red);
 }
 
-/* The note says where the options came from, quietly: it is not a control. The editor is beige,
+/* A note says what the file gave a field, quietly: it is not a control. The editor is beige,
    where `--mm-text-muted` falls below AA. */
-.options-from-file {
+.file-note {
   margin: 0;
   font-size: var(--text-xs);
   color: var(--mm-text-muted-on-beige);
