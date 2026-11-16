@@ -245,6 +245,33 @@ describe("a Google Form market's essential questions (E33/F01/S02)", () => {
   });
 });
 
+describe('a question the market does not ask', () => {
+  it('says so in the words every other card describes itself in', async () => {
+    const { default: EssentialFieldsPanel } =
+      await import('@/components/application/EssentialFieldsPanel.vue');
+    const panel = mount(EssentialFieldsPanel, {
+      props: {
+        options: {
+          dates: [],
+          sections: [],
+          tableTypes: [],
+          tiers: [],
+          unasked: ['essential_section_ranking', 'essential_request'],
+        },
+      },
+    });
+    // The description of Table-share partner, which stands among them.
+    const description = panel
+      .get('[data-testid="essential-item-table-share-email"]')
+      .get('p')
+      .classes();
+
+    for (const line of ['essential-section-not-asked', 'essential-request-not-asked']) {
+      expect(panel.get(`[data-testid="${line}"]`).classes()).toEqual(description);
+    }
+  });
+});
+
 describe('a locked form opens on the review setup (E33/F01/S03)', () => {
   const LOCKED = 'Application form is locked: 1 application has already been submitted.';
 
