@@ -1068,49 +1068,56 @@ def asking(monkeypatch, world) -> Asking:
 class Unasked:
     """An entry written under a row its request never asked: by the function ``by``, called on a
     request through one of ``under`` (anywhere, when empty), under ``action``, or under whatever
-    action the write it stands for stored, when None."""
+    action the write it stands for stored, when None. Its reason is its door's: the constant the
+    guard's ``DOORS`` names beside the function that opens it, with what this file adds."""
 
     name: str
     by: str
     under: Tuple[str, ...]
     action: Optional[Actions.Action]
-    because: str
+    #: What this file adds to the door's reason, such as why no write here sends it.
+    adds: str = ""
+
+    @property
+    def doors(self) -> Tuple[str, ...]:
+        """The guard's doors among its functions, each a function that opens the unasked door."""
+        return tuple(door for door in (self.by, *self.under) if door in DOORS)
+
+    @property
+    def because(self) -> str:
+        """Why nothing asked it: its doors' reasons, read from their modules, then ``adds``."""
+        reasons = dict.fromkeys(
+            getattr(importlib.import_module(door.rsplit(".", 1)[0]), DOORS[door])
+            for door in self.doors)
+        return "; ".join([*reasons, *([self.adds] if self.adds else [])])
 
     def holds(self, entry: Dict[str, Any], callers: FrozenSet[str]) -> bool:
         return (self.by in callers and (not self.under or not callers.isdisjoint(self.under))
                 and (self.action is None or entry["action"] == self.action.id))
 
 
+#: Why a record here is sent by no write: only an operator's script makes it.
+NO_ROUTE = "no route reaches it, so no write here sends it"
+
 FIRST_IMPORTS_MOVE = Unasked(
     "the first import's phase move", "api.markets.take_move", ("csv_import.enter_review",),
-    Actions.MOVE_PHASE,
-    "a Google Form market's first import is its way into Review: the move follows from the rows "
-    "the import row let in, judged as any move is, and is never asked of the person")
+    Actions.MOVE_PHASE)
 STARTS_RELEASE = Unasked(
     "the start's floorplans released", "api.markets.release_removed_floorplans",
-    ("csv_start.confirm",), Actions.CHANGE_SETUP,
-    "the plan the start writes drops the floorplans of locations it no longer has: the import row "
-    "lets the start write its plan, and the release records what that plan dropped")
+    ("csv_start.confirm",), Actions.CHANGE_SETUP)
 VENDORS_OWN_CHECK_IN = Unasked(
     "a vendor's own check-in", "api.attendance._record_door",
     ("api.vendor_check_in.check_in", "api.vendor_check_in.undo_check_in"), Actions.CHECK_IN,
-    "a vendor holds no role: their sign-in and the market's door code are the check (ADR 0022), "
-    "and the entry is the door's, with no actor")
+    "the entry is the door's, with no actor")
 ARRIVALS_DEAL = Unasked(
     "the deal of an arriving application", "review_team._deal_arriving", (), None,
-    "an application waiting to be dealt is dealt by whichever request next holds the market, and "
-    "its entry is the write it arrived by, under that write's action and actor, never the "
-    "request's that dealt it")
+    "never under the row or the person of the request that dealt it")
 SEEDERS_MOVES = Unasked(
     "the test markets' phase moves", "api.markets.take_move",
-    ("seed_test_markets.seed_test_market",), Actions.MOVE_PHASE,
-    "an operator's seed, run from a shell and never a request: it reads the owner's phase row "
-    "with Actions.may, which lets nobody in, and no route reaches it, so no write here sends it")
+    ("seed_test_markets.seed_test_market",), Actions.MOVE_PHASE, NO_ROUTE)
 MIGRATIONS_DROPS = Unasked(
     "the owed-day migration's dropped amounts", "migrations.migrate_owed_day_state.record_dropped",
-    (), Actions.ASSIGN,
-    "an operator's migration, run from a shell and never a request: it records an amount nobody "
-    "could see as a run's drop, with no actor, and no route reaches it, so no write here sends it")
+    (), Actions.ASSIGN, NO_ROUTE)
 
 #: The records no request asks, each kept as it is, and why.
 UNASKED = (FIRST_IMPORTS_MOVE, STARTS_RELEASE, VENDORS_OWN_CHECK_IN, ARRIVALS_DEAL, SEEDERS_MOVES,
@@ -1229,10 +1236,19 @@ def test_an_unasked_record_names_functions_that_exist(unasked):
 def test_every_unasked_record_is_made_through_a_door_allowed_its_reason():
     """Each record here is made under one of the guard's doors, and each door makes one: the
     guard holds who may open the door, this file what each opening records."""
-    named = {unasked.name: {unasked.by, *unasked.under} & set(DOORS) for unasked in UNASKED}
+    named = {unasked.name: set(unasked.doors) for unasked in UNASKED}
 
     assert [name for name, doors in named.items() if not doors] == []
     assert set().union(*named.values()) == set(DOORS)
+
+
+@pytest.mark.parametrize("unasked", UNASKED, ids=lambda unasked: unasked.name)
+def test_an_unasked_records_reason_is_its_doors(unasked):
+    """Kept once, beside the function that opens the door: this file reads it from there."""
+    for door in unasked.doors:
+        module, constant = door.rsplit(".", 1)[0], DOORS[door]
+        reason = getattr(importlib.import_module(module), constant)
+        assert reason.strip() and unasked.because.startswith(reason), door
 
 
 class TestWhatAnEntryHolds:
