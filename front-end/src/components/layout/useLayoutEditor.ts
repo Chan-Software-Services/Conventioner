@@ -224,7 +224,8 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
 
   /** The revision the server holds, as the last answer or read said it. */
   let revision = 0;
-  /** A save was refused as stale: nothing more is sent until the server's layout is taken. */
+  /** A save was refused as stale: until the server's layout is taken, no change and no closing tab
+   *  sends the layout, though a flush still does. */
   const stale = shallowRef(false);
   /** The layout as a gesture found it, and with every table of a section that is gone put in no
    *  section, which the gesture's frames are made from; reckoned once, at the first frame. */
