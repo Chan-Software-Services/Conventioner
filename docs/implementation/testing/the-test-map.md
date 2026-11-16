@@ -31,12 +31,12 @@ One JSON file, `test-map.json`:
     }
   },
   "endpoints": {
-    "GET /markets/<market_id>": { "back-end/api/markets.py": ["get_market"] }
+    "GET /markets/<market_id>": { "back-end/api/markets.py": ["get_market_for_user"] }
   }
 }
 ```
 
-- A spec file is named as Playwright lists it, relative to `front-end/e2e/`, and every spec file of the run is in `specs`; the screen sweeps' tests, registered by `helpers/screenSweeps.ts`, count under the spec file that calls `sweepTheScreens()`.
+- A spec file is named as Playwright lists it, relative to `front-end/e2e/`, and every spec file with a test that ran is in `specs`, whatever it reached; the screen sweeps' tests, registered by `helpers/screenSweeps.ts`, count under the spec file that calls `sweepTheScreens()`.
 - A module is the repository path of a file under `front-end/src/` that a page of the spec loaded, whichever of its tests loaded it.
 - An endpoint is the method and the Flask rule, so `/markets/<market_id>` is one endpoint whatever the id.
 - An endpoint's functions are the ones whose bodies ran while the app handled one of its requests in the back end's pytest suite, by file, each by its qualified name (`outer.inner`, `Class.method`).
@@ -60,7 +60,7 @@ Each push to `dev` records three things and builds the map from them, the last t
 4. **The build lays each shard's log against that shard's tests.**
    `test_map.py build` gives each request line of a shard's log to the test of that shard whose window holds it (one worker a shard, so at most one), and a line between two tests to none, so what a `beforeAll`, the global setup or the seed does counts for no spec.
    It matches each path to its rule, adds the pages' own `/api/` calls, and writes the map.
-   It refuses, writing nothing, when a shard recorded no test or fewer shards than the matrix's ten uploaded records (`--shards-expected`), so a map is whole or not made.
+   It refuses, writing nothing, when a shard recorded no test, or when the shards that uploaded records are not the matrix's ten (`--shards-expected`), so a map is whole or not made.
 
 The `endpoints` pass skips the real-MongoDB package, as a plain run does, since no server is given to it: a route only that package drives has no functions in the map.
 Code that runs before the app dispatches a request, such as the session's loading, counts for the test that sent it, never for the endpoint.
