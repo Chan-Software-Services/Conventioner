@@ -156,7 +156,7 @@ def _started(plan: SetupObject, floorplan: FloorplanObject, settled: bool) -> Fl
     """A location's first layout, holding what Section Setup had for each of its sections.
 
     Started in Draft, its tables are the seats; started past it (``settled``), it follows the plan
-    (T422, D21, ADR 0033): it draws the seats Section Setup settled and never counts them. The
+    (T422, D21, ADR 0034): it draws the seats Section Setup settled and never counts them. The
     server's word, whatever the body says, kept on every later save.
     """
     counts = [
@@ -195,7 +195,7 @@ def save_floorplan_to_market() -> Tuple[Any, int]:
          changes a seat (a table added, removed, renumbered, of another id, section or type) is
          refused 409 with the setup-settled sentence (``layout.settled_layout_refusal``); where a
          table stands, the zones, the image, the scale and the sections' colours and labels still
-         change. A new layout past draft starts, and follows the plan (T422, ADR 0033): its seats
+         change. A new layout past draft starts, and follows the plan (T422, ADR 0034): its seats
          are the plan's, so its tables are added, removed, renumbered and moved between its
          location's sections in any phase but archived. A layout keeps its location, its starting
          counts and whether it follows the plan (``followsPlan``, whatever the body sends), and

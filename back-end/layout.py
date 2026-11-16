@@ -6,7 +6,7 @@ its number. The word "layout" is what an organizer reads; the code and the route
 
 - ``derive_counts``: a laid-out location's sections count its tables, so the solver and every
   reader read true counts; ``prepared_plan`` runs it on every write of the plan. A layout that
-  follows the plan (``follows_plan``, one started after Draft: T422, ADR 0033) is never counted:
+  follows the plan (``follows_plan``, one started after Draft: T422, ADR 0034) is never counted:
   its sections keep the counts typed on Section Setup.
 - ``tables_in_no_section``: the tables of a layout no section counts, which keep a market in draft
   (``guards.LayoutTablesHaveSectionsGuard``).

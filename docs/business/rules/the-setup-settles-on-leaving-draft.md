@@ -36,7 +36,7 @@ sources:
 
 Everything on Market Setup (the dates, the locations, the tiers, the sections and their tables, each location layout's seats and the market's table types, the prices, and how vendors reach the market) is settled once the market leaves draft, and may change again only if it goes back.
 Where a layout's tables stand is not: until the market is archived its tables still move and turn, and its no-table zones, its image, its scale and its sections' colours and labels still change, while no table of a layout started in Draft is added, removed, renumbered or given another section or type.
-A location with no layout may still be given one past draft, and that layout follows the plan ([ADR 0033](../../adr/0033-a-layout-started-after-draft-follows-the-plan.md)): it draws the seats Section Setup settled, its sections keep their typed counts, and its tables are placed, removed and numbered up to each count, since they move no seat; only the market's table types stay settled for it.
+A location with no layout may still be given one past draft, and that layout follows the plan ([ADR 0034](../../adr/0034-a-layout-started-after-draft-follows-the-plan.md)): it draws the seats Section Setup settled, its sections keep their typed counts, and its tables are placed, removed and numbered up to each count, since they move no seat; only the market's table types stay settled for it.
 So leaving draft requires a complete setup: dates none of which has passed, a location, and tables at every tier, each its own blocker line.
 A tier whose section is in a location with a layout gets its tables from that layout, so its line sends the organizer there rather than to Market Setup, where that section's count cannot be typed, one such tier at a time.
 

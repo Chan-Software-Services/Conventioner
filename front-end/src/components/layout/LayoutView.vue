@@ -23,7 +23,7 @@
  * tables still move and turn, and the zones, the image, the scale and the colours still change,
  * while what would add, remove, renumber, re-section or re-type a table is disabled. A location
  * with no layout past Draft offers the upload all the same, and its layout follows the plan (T422,
- * ADR 0033): under the follows-the-plan sentence its tables are added, removed, numbered and put
+ * ADR 0034): under the follows-the-plan sentence its tables are added, removed, numbered and put
  * in another section, up to each section's count, which the Sections card counts against, and the
  * selection's card numbers one table by hand; only the table types stay settled.
  * It is drawn over the floor alone while the image is on its way or could not be had, and the

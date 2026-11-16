@@ -12,7 +12,6 @@ describes:
 verified: 2026-11-16
 sources:
   - T209
-  - T422
   - T277
   - T316
   - wayfinding/the-market-frame/map
@@ -39,6 +38,8 @@ sources:
   - T181
   - T217
   - T263
+  - T422
+  - T421
 ---
 
 # The market frame
@@ -82,6 +83,13 @@ The dot, the tab's page and the landing read the served `allocation` instead (`c
 The page gutter (on three sides; the card hangs from the app bar), the card's width, corners and white ground, and the loading, missing and failed states are the frame's own.
 Until the market is in hand the bar holds its place and [`MarketArrival`](../../../front-end/src/components/MarketArrival.vue) says "Loading market…", that the market could not be loaded with a retry, or the one message for a market that is missing or not this organizer's.
 A screen's content is rendered only once its market is in hand, and `@retry` lets a screen refetch its own data beside the market.
+
+**A failed re-read of the market is said once, by the frame.**
+While [the market store](market-store.md#interface)'s `rereadFailed` holds (a re-read failed, other than a 404 or 403, and none has landed since, the next one's `refreshing` included), the card says "Could not update the market. It is shown as it was last read." with Try again, right under the pinned block and above the tab note or the read-only note, on every market screen (T421).
+It is `--mm-red` at `--text-sm` with `role="alert"`, Try again a `btn btn--secondary btn--compact` after the sentence where it fits and under it where it does not; testids `market-reread-failed` and `market-reread-retry`.
+It is inset as the read-only note is, the phone's `--space-4` only on a screen that fits a phone, and not pinned, so on a phone it scrolls with the page.
+Try again is the arrival's `retry`: it re-reads the market and emits `retry` to the screen.
+A market that failed to arrive, or is missing, says only the arrival's words, never this line; `aFailedMarketRereadIsSaidOnce.test.ts` holds each case.
 A screen that pads itself or renders its own arrival is how one market's pages came to put the frame in four different places.
 A page inside the card insets its content `--space-6`, the rail's inset, so what the frame says above a page (`market-read-only`) lines up with it; Market Setup's tabs were 40px in until T15, and [the import](../../business/flows/import.md) 32px until T181.
 

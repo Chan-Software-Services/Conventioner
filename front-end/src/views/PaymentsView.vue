@@ -18,7 +18,6 @@
  */
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter, type LocationQuery } from 'vue-router';
-import { getApiErrorMessage } from '@/utils/api';
 import { marketPath } from '@/utils/market';
 import { hasAssignment } from '@/utils/marketPage';
 import { useOpenMarket } from '@/utils/openMarket';
@@ -42,6 +41,7 @@ import { withoutQueryKey } from '@/utils/routeQuery';
 import { signedInEmail } from '@/utils/signedIn';
 import { dateLabel, useVendorDetails } from '@/utils/vendorDetails';
 import { useVendorDrawer } from '@/utils/vendorDrawer';
+import { useServerRead } from '@/utils/useServerRead';
 import ListFrame from '@/components/ListFrame.vue';
 import MarketFrame from '@/components/MarketFrame.vue';
 import NothingAssigned from '@/components/NothingAssigned.vue';
@@ -53,44 +53,52 @@ const router = useRouter();
 const marketId = computed(() => String(route.params.marketId ?? ''));
 const { market } = useOpenMarket(marketId);
 
-/** The market's vendors, for their names and the drawer (E35/F01/S01). */
-const details = useVendorDetails(marketId, market);
+/** Whether someone is signed in: asked again on each market, and by Try again. */
+const signedIn = ref(!!signedInEmail());
+watch(marketId, () => (signedIn.value = !!signedInEmail()), { flush: 'sync' });
+/** The market read, nobody's while nobody is signed in. */
+const readId = computed(() => (signedIn.value ? marketId.value : ''));
+
+/**
+ * The market's vendors, for their names and the drawer (E35/F01/S01), read on arriving at each
+ * market; the payments beside them. Each one keyed read (T421): a move to another market drops what
+ * the last one showed in the same tick, and its answers, landing late, never land here.
+ */
+const details = useVendorDetails(readId, market, { lazy: false });
 const names = computed(() => details.vendorNames.value);
 const drawer = useVendorDrawer();
 
+const paymentsRead = useServerRead(() => readId.value || null, loadMarketPayments, {
+  failure: 'The payments could not be loaded.',
+});
 /** What the server counted, or null until it answers. */
-const found = ref<MarketPayments | null>(null);
-const loadError = ref('');
-
-async function load(): Promise<void> {
-  if (!marketId.value) return;
-  loadError.value = '';
-  try {
-    found.value = await loadMarketPayments(marketId.value);
-  } catch (err: unknown) {
-    loadError.value = getApiErrorMessage(err, 'The payments could not be loaded.');
-  }
-}
+const found = computed<MarketPayments | null>(() => paymentsRead.data.value);
+const loadError = computed(() =>
+  paymentsRead.phase.value === 'failed' || paymentsRead.phase.value === 'refresh_failed'
+    ? paymentsRead.sentence.value
+    : '',
+);
 
 /**
- * The market whose payments and vendors' names have both been read, or failed to be: the list
- * waits for it, so a jump to another market's Payments waits for that market's names. A failed
- * read of the names still draws the list, by address.
+ * Whether this market's payments and its vendors' names have both been read, or failed to be: the
+ * list waits for both, so a jump to another market's Payments waits for that market's names. A
+ * failed read of the names still draws the list, by address.
  */
-const listReadFor = ref('');
-const listRead = computed(() => listReadFor.value === marketId.value);
+const listRead = computed(
+  () =>
+    paymentsRead.phase.value !== 'loading' &&
+    paymentsRead.phase.value !== 'empty' &&
+    (details.loaded.value || !!details.loadError.value),
+);
 
-async function loadAll(): Promise<void> {
-  const id = marketId.value;
-  if (!signedInEmail() || !id) return;
-  try {
-    await Promise.all([load(), details.load()]);
-  } finally {
-    // An earlier market's reads settling late leave the one on screen waiting for its own.
-    if (marketId.value === id) listReadFor.value = id;
-  }
+/** The frame's Try again: a sign-in found since reads the market, else the payments and the names. */
+function readAgain(): void {
+  const wasSignedIn = signedIn.value;
+  signedIn.value = !!signedInEmail();
+  if (signedIn.value !== wasSignedIn) return;
+  void paymentsRead.reread();
+  void details.load();
 }
-watch(marketId, () => void loadAll(), { immediate: true });
 
 const priced = computed(() => found.value?.currency != null);
 /** Whether there is money owed to count: prices, or an amount set by hand on a market without. */
@@ -205,7 +213,7 @@ const nobodyShown = computed(() => {
 
 <template>
   <div class="payments-view">
-    <MarketFrame :market="market" @retry="loadAll">
+    <MarketFrame :market="market" @retry="readAgain">
       <template #pinned>
         <div v-if="market && vendors.length" class="payments-toolbar">
           <label class="payments-search-label" for="payments-search">Search vendors</label>
@@ -496,7 +504,7 @@ const nobodyShown = computed(() => {
       :tab="drawer.tab.value"
       @close="drawer.close()"
       @update:tab="drawer.setTab"
-      @payment-changed="load"
+      @payment-changed="paymentsRead.reread()"
     />
   </div>
 </template>

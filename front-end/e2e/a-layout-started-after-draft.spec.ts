@@ -4,7 +4,7 @@ import { seedAssignedMarket } from './helpers/seedAssignedMarket';
 import { LAYOUT_FLOORPLAN_PATH, storedLayoutTables } from './helpers/seeds';
 
 /**
- * A layout started after Draft follows the plan (T422 ticket 03, ADR 0033). On a market already
+ * A layout started after Draft follows the plan (T422 ticket 03, ADR 0034). On a market already
  * assigned, its six Hall A seats settled and vendors at them, the organizer opens Main Hall, which
  * has no layout, uploads its floorplan and sets its scale. The layout follows the plan: the page
  * says so, the tools that add tables are on and the table types stay settled. A row drawn longer

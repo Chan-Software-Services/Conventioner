@@ -1,4 +1,4 @@
-"""A layout started after Draft follows the plan (T422 ticket 03, D21 to D23, ADR 0033).
+"""A layout started after Draft follows the plan (T422 ticket 03, D21 to D23, ADR 0034).
 
 On a market past Draft a location with no layout can now be given one. Its tables draw the seats
 Section Setup already settled and never change them: each section's tables are numbered once each

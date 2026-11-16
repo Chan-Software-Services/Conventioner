@@ -25,6 +25,7 @@ sources:
   - T277
   - T316
   - T422
+  - T421
 ---
 
 # Publishing, and the door on market day
@@ -124,6 +125,7 @@ Covered by:
 7. The roster reads itself again every 15 seconds while the page is in view, and at once when the tab comes back into view or the browser comes back online, so a vendor who scanned in, or another organizer's check-in, shows with no tap or reload.
    "Updated just now" or "Updated N minutes ago" and "Refresh" stand before "Print roster" and "Door code", at the end of the dates' row; a read that fails keeps the rows and says "Could not update. The roster is as it was last read." under that row.
    Taps on several rows' Check in go through at once, each row showing its check-in as soon as the server answers.
+   Moved to another market, the page reads "Loading…" until that market's roster arrives, never the last market's, and a check-in tapped on the last market posts there and says nothing on this one, even when it was refused.
 8. "Print roster", in the dates' row for anyone who reads Attendance, prints the chosen date's roster on paper, the door's fallback when the venue's network or the app fails: the market's name, the date in words, "<N> vendors", "Printed <date> at <time>", then every vendor of the date by table, their name with their address under it, and when they came or an empty box to tick, whatever "Show" and "Find a vendor" leave on screen; vendors checked in with no table that day print under their own heading.
    In Market Days, on today or a date to come, a note over the roster asks for it: "If the venue's network fails, a printed roster still works. Print this day's roster before the doors open."
 9. "List" and "Map", first in the dates' row, show the day as its rows or as a map of the venue's layouts (T422); the map is kept across a change of day and a reload.

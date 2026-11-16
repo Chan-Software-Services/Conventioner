@@ -38,9 +38,6 @@ describes:
   - front-end/src/components/layout/layoutSelection.ts
   - front-end/src/components/layout/layoutAnnouncements.ts
   - front-end/src/components/layout/LayoutPanelKeyboard.vue
-  - front-end/src/components/layout/LayoutToolCard.vue
-  - front-end/src/components/layout/layoutTools.ts
-  - front-end/src/components/layout/layoutViewChoices.ts
   - front-end/src/components/layout/layoutRow.ts
   - front-end/src/components/layout/LayoutRowPreview.vue
   - front-end/src/components/layout/layoutFill.ts
@@ -57,6 +54,9 @@ describes:
   - front-end/src/components/layout/LayoutPanelZones.vue
   - front-end/src/components/layout/exportLayoutPng.ts
   - front-end/src/components/layout/LayoutExportDialog.vue
+  - front-end/src/components/layout/LayoutToolCard.vue
+  - front-end/src/components/layout/layoutTools.ts
+  - front-end/src/components/layout/layoutViewChoices.ts
   - front-end/src/components/daymap/DayMap.vue
   - front-end/src/components/daymap/dayMap.ts
 verified: 2026-11-14
@@ -113,7 +113,7 @@ A location with no layout says it has none, and a layout with no scale shows its
 A person the Market Setup row refuses, everyone on an archived market among them, reads the page with nothing to upload or calibrate, no card that edits and no save state, the frame saying why.
 **Past draft the editor stays, its seats settled** (`settled`, from the market's `setupLockReason`): under the setup-settled sentence (left out on an archived market, whose rail says it is archived), tables still move and turn, and the zones, the image, the scale and the sections' colours and labels still change, while the toolbar's Add table, Row of tables and Fill an area, the selection card's Section and Table type fields, Duplicate, "Row of N…" and Remove, each section's menu (Renumber, through [`RowMenu.vue`](../../../front-end/src/components/RowMenu.vue)'s `disabled`), and Layout settings' "Add a type", "Use saved types" and each type's menu are disabled; Delete and Ctrl+D do nothing, the T, W and A keys take no tool, and the shortcuts leave those keys out.
 `useLayoutEditor`'s seat commands (`addTables`, `duplicate`, `removeTables`, `setSection`, `setType`, `renumber`, `setNumber`) do nothing on such a layout once its `draft` answers false, whatever asks them.
-**A layout started past Draft follows the plan** ([ADR 0033](../../adr/0033-a-layout-started-after-draft-follows-the-plan.md)): past Draft a location with no layout offers the upload to a person who may change the setup, under "This layout follows the plan: place each section's tables, up to its count. The seats themselves are settled." in place of the setup-settled sentence, which stays on such a layout once started (`followsPlan`).
+**A layout started past Draft follows the plan** ([ADR 0034](../../adr/0034-a-layout-started-after-draft-follows-the-plan.md)): past Draft a location with no layout offers the upload to a person who may change the setup, under "This layout follows the plan: place each section's tables, up to its count. The seats themselves are settled." in place of the setup-settled sentence, which stays on such a layout once started (`followsPlan`).
 Its seats are not settled (`seatsSettled`): the adding tools, Duplicate, Remove, the Section field, "Row of N…", Renumber and the keys that add and remove stay on, while the Table type field and Layout settings' Table types stay as a settled market's (`typesSettled`).
 The model's seat commands work in three ways: open (a layout started in Draft, in Draft), following (`followsPlan`, in any phase) and settled (a layout started in Draft, past Draft).
 Following, a table's number is its seat's: a removal leaves the other numbers alone, a new table, a copy or a table put in another section takes its section's lowest free number up to the section's count in the plan (`counts`), and what would pass the count is not placed, the tools placing what fits in the order drawn and the panel's status line saying "<Section> has <n> tables in the plan; <m> were placed.", or with none placed "<Section>'s <n> tables are all on the layout." (`heldBack`, `heldBackSaid`).
@@ -199,7 +199,7 @@ It draws the working copy through [the drawing](#the-drawing) in `edit` mode and
   The layout's own fields (its start, its image, its scale) are written at once by `write`, outside undo, since an undone image would name one the save deleted.
 - **It saves through the app's one queue**, `useAutosave` ([the plan's autosave](plan-autosave.md#the-queue)), told to keep the working copy on a refusal (`keepOnRefusal`): 600 ms after the last change, one write at a time, a change made while a write is out sent when its answer is in, with the revision that answer gave.
   The answer's revision and the fields the server owns are taken; the tables and the sections' styles stay the working copy's.
-  A save that fails or is refused keeps the working copy and says the sentence with Retry, and the next change sends it again; one refused as stale ("This layout changed elsewhere. Reload to see the latest.") sends nothing more until Reload takes the server's layout, dropping the working copy and its undo.
+  A save that fails or is refused keeps the working copy and says the sentence with Retry, a refusal's sentence alone; the next change, Retry or leaving the page sends it again, and a change made while a refused save was out waits for one of those rather than its pause; after one refused as stale ("This layout changed elsewhere. Reload to see the latest.") no change and no closing tab sends it and Reload stands in place of Retry, though a flush (leaving the page in the app, a phase move, a write of the layout's own fields) still sends it and is refused again, until Reload takes the server's layout, dropping the working copy and its undo.
   A write of the layout's own fields refused as stale puts the layout back as it was read.
   A re-read of the market that brings a newer layout is taken only while nothing is unsaved and no drag is in hand.
 - **A change still waiting is saved before the page is left**: the route's leave and update guards and a phase move wait for the flush, and when that save did not land a move in the app asks "Leave without saving?" before it drops the change ([unsaved work asks before it is dropped](../conventions/unsaved-work-asks-before-it-is-dropped.md)); a reload or a closed tab is asked by the browser first and the layout sent as the page goes, a keepalive request (`saveLayoutOnUnload`).
@@ -461,7 +461,7 @@ The route has no blanket `except`, so a refusal `prepared_plan` raises answers i
 It answers 409 "This layout changed elsewhere. Reload to see the latest." when the layout of that id holds another revision, when a new id names a revision but 0, and when a new layout's location already has one, so two tabs that each start a hall's layout cannot both land; the write itself holds what was read (the layout at its place and revision, or no layout of its id or location), so a save landing between this one's read and its write makes this one 409 too.
 **Past draft a save moves the tables of a layout started in Draft, never its seats** ([the setup settles on leaving draft](../../business/rules/the-setup-settles-on-leaving-draft.md)).
 Once the market has left draft (`setup_lock_reason`), after the revision's 409, a save that `layout.settled_layout_refusal` finds changing the seats of a layout started in Draft (each table's id, section, number and type), the table types or the set of those layouts is refused 409 with the setup-settled sentence; a table moved or turned, the zones, the image, the scale and the section styles save.
-A new layout past draft starts, and follows the plan ([ADR 0033](../../adr/0033-a-layout-started-after-draft-follows-the-plan.md)): `settled_part` leaves it out, so its tables are added, removed, renumbered and put in another of its location's sections, and `derive_counts` never counts it, so its sections keep their typed counts.
+A new layout past draft starts, and follows the plan ([ADR 0034](../../adr/0034-a-layout-started-after-draft-follows-the-plan.md)): `settled_part` leaves it out, so its tables are added, removed, renumbered and put in another of its location's sections, and `derive_counts` never counts it, so its sections keep their typed counts.
 Its rules replace "numbered 1 to N": each section's tables numbered once each from 1 to the section's count, fewer saving, else 400 "<Section>'s tables are numbered 1 to <count>, each number once.", a number that is not whole among them (`_not_whole_refusal`, answered before the parse's own sentence).
 A layout keeps its location, its starting counts and whether it follows the plan (`followsPlan`, [the public map](public-map.md#what-a-layout-stores-for-it)) whatever the body sends; a new one records `startingCounts`, Section Setup's count for each section of its location as the save found them, follows the plan when it starts past draft, and gives a market with no table type "Standard 6 ft" (1830 by 760 mm), through `prepared_plan`'s `table_types`, which past draft the setup's comparison takes as held for a market that had none (`_setup_as_held`).
 An image the layout no longer names is deleted by id once the write has landed.
