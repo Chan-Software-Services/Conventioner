@@ -284,4 +284,34 @@ describe('useSubmit', () => {
 
     expect(told).toEqual([]);
   });
+
+  it('leaves the screen that took the form away alone, with nothing read on its behalf', async () => {
+    // A form taken away by its parent's render, as the phase rail drops a dialog: the form going
+    // must not make that render read its state, and draw again for the write it makes.
+    const shown = ref(true);
+    let draws = 0;
+    const Form = defineComponent({
+      setup() {
+        useSubmit({ scope: () => shown.value });
+        return () => h('form');
+      },
+    });
+    const Parent = defineComponent({
+      setup() {
+        return () => {
+          draws += 1;
+          return h('div', shown.value ? [h(Form)] : []);
+        };
+      },
+    });
+    const parent = mount(Parent);
+    draws = 0;
+
+    shown.value = false;
+    await flushPromises();
+    await flushPromises();
+
+    expect(draws).toBe(1);
+    parent.unmount();
+  });
 });
