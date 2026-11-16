@@ -10,6 +10,10 @@
  * A free, a move or a swap of a vendor who has checked in that day is asked about first by the
  * server (T318): the dialog then shows its sentence with "Free anyway", "Move anyway" or "Swap
  * anyway" beside Cancel, and the page sends the change again when it is pressed.
+ *
+ * The page writes each change through the `submission` it hands here (T411), keyed by the seat the
+ * dialog was opened on: while a change is out nothing closes the dialog and no other change is
+ * offered, the shell says its refusal, and an answer for another seat's opening never lands here.
  */
 import { computed, ref, watch } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
@@ -18,6 +22,7 @@ import SearchPicker, { type PickerGroup, type PickerOption } from '@/components/
 import { vendorLabel, vendorOption } from '@/utils/personChoice';
 import { type VendorNames } from '@/utils/vendorIdentity';
 import { vendorFound, type VendorSearch } from '@/utils/resultFilters';
+import type { DialogSubmission } from '@/utils/useDialogSubmit';
 import {
   FULL_TABLE,
   HALF_TABLE_LEFT,
@@ -62,8 +67,8 @@ const props = defineProps<{
   vendorNames: VendorNames;
   /** What the pages' search finds each vendor by, which the pickers search by too (E38/F08/S03). */
   vendorSearch: VendorSearch;
-  busy?: boolean;
-  errorMessage?: string;
+  /** The page's write of the change, which holds the dialog while it sends. */
+  submission: DialogSubmission;
   /**
    * What freeing this seat may also take off what its vendor owes (E44/F01/S02), for whoever may
    * change the amount owed: what the seat's line owes and the vendor's name. Null where it is not
@@ -96,6 +101,9 @@ const emit = defineEmits<{
   anyway: [];
   close: [];
 }>();
+
+/** A change is out: nothing closes, and no other change is offered. */
+const sending = computed(() => props.submission.sending.value);
 
 const chosenEmail = ref('');
 const deductOwed = ref(false);
@@ -206,8 +214,8 @@ const swapWarnings = computed(() => {
     },
   ].filter((side) => side.warnings.length > 0);
 });
-const canPlace = computed(() => Boolean(chosenEmail.value) && !props.busy);
-const canSwap = computed(() => Boolean(swapWith.value) && !props.busy);
+const canPlace = computed(() => Boolean(chosenEmail.value) && !sending.value);
+const canSwap = computed(() => Boolean(swapWith.value) && !sending.value);
 
 /** The empty seat chosen to move the occupant to. */
 const moveTarget = computed(() => props.emptySeats.find((seat) => seat.tableCode === moveTo.value));
@@ -232,7 +240,7 @@ const moveWarnings = computed(() => {
   if (!target) return [];
   return seatWarnings(vendorFor(props.occupantEmail), props.date, target.tier, moveSeat.value);
 });
-const canMove = computed(() => Boolean(moveTarget.value) && !props.busy);
+const canMove = computed(() => Boolean(moveTarget.value) && !sending.value);
 
 /** The occupied mode's primary, which follows the action chosen. */
 const occupiedPrimary = computed(() =>
@@ -418,8 +426,8 @@ function findsToMove(option: PickerOption, words: string): boolean {
     size="wide"
     scroll="body"
     :confirm-label="question ? anywayLabel : primaryLabel"
-    :confirm-disabled="question ? busy : !primaryEnabled"
-    :error="errorMessage"
+    :confirm-disabled="!question && !primaryEnabled"
+    :submission="submission"
     @close="emit('close')"
     @submit="submitPrimary"
   >
@@ -487,6 +495,7 @@ function findsToMove(option: PickerOption, words: string): boolean {
         <button
           type="button"
           class="btn btn--secondary btn--compact"
+          :disabled="sending"
           data-testid="placement-dialog-view-vendor"
           @click="emit('view')"
         >
@@ -617,6 +626,7 @@ function findsToMove(option: PickerOption, words: string): boolean {
       <button
         type="button"
         class="btn btn--secondary"
+        :disabled="sending"
         data-testid="placement-dialog-cancel"
         @click="emit('close')"
       >
@@ -626,7 +636,7 @@ function findsToMove(option: PickerOption, words: string): boolean {
         v-if="question"
         type="button"
         :class="['btn', question.change === 'free' ? 'btn--destructive' : 'btn--primary']"
-        :disabled="busy"
+        :disabled="sending"
         data-testid="placement-dialog-anyway"
         @click="emit('anyway')"
       >
@@ -636,7 +646,7 @@ function findsToMove(option: PickerOption, words: string): boolean {
         v-else-if="mode === 'occupied'"
         type="button"
         class="btn btn--destructive"
-        :disabled="busy"
+        :disabled="sending"
         data-testid="placement-dialog-free"
         @click="emit('free', !!deduction && deductOwed)"
       >

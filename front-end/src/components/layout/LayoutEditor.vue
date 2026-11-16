@@ -66,7 +66,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useId, watch } from 'vue';
 import type { FloorplanTable, SectionObject, TableTypeObject } from '@/assets/types/datatypes';
-import { getApiErrorMessage } from '@/utils/api';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import LayoutFillDialog from './LayoutFillDialog.vue';
 import LayoutFillPreview from './LayoutFillPreview.vue';
 import LayoutMap, { type MapView } from './LayoutMap.vue';
@@ -717,8 +717,11 @@ function hoverFill(event: PointerEvent) {
 /** Whether the dialog is open, and whether it fills what is in view in place of an area drawn. */
 const fillAsked = ref(false);
 const fillInView = ref(false);
-const fillBusy = ref(false);
-const fillError = ref('');
+/** The fill's write, opened on each asking of the dialog (T411). */
+const filling = useDialogSubmit({ opening: () => fillAsked.value, failure: FILL_FAILED });
+
+/** A fill refused before anything is asked of the placement: said in the dialog as a refusal. */
+class FillNotAsked extends Error {}
 
 /** The part of the hall the map shows, as an area. */
 function viewArea(): FillArea | null {
@@ -742,7 +745,6 @@ const fillArea = computed(() => {
 
 function openFill(inView: boolean) {
   fillInView.value = inView;
-  fillError.value = '';
   fillAsked.value = true;
 }
 
@@ -760,31 +762,31 @@ function closeFillDialog() {
 }
 
 /** Fill the area as the dialog chose: ask the placement, add what it placed as one change, and
- *  say how many. A refusal is written into the dialog, which stays open. */
-async function runFill(choice: FillChoice) {
+ *  say how many. The dialog holds while the placement runs, and a refusal is said in it, which
+ *  stays open. */
+function runFill(choice: FillChoice) {
   const area = fillArea.value;
   const typeId = addTypeId.value || (props.tableTypes[0]?.id ?? '');
-  if (!area || !props.fill || fillBusy.value) return;
+  const ask = props.fill;
+  if (!area || !ask) return;
   const request = fillRequest(layout.value, props.tableTypes, typeId, area, choice);
-  if (!request.counts[typeId]) {
-    fillError.value = LAYOUT_IS_FULL;
-    return;
-  }
   const asked = layout.value.id;
-  fillBusy.value = true;
-  fillError.value = '';
-  try {
-    const answer = await props.fill(request);
-    // Another layout meanwhile: the answer is for a hall no longer shown.
-    if (layout.value.id !== asked) return;
-    const added = fillTool.add(answer);
-    fillAsked.value = false;
-    tell(saidFilled(added.length, choice.count, answer.timed_out, request.counts[typeId]));
-  } catch (err: unknown) {
-    fillError.value = getApiErrorMessage(err, FILL_FAILED);
-  } finally {
-    fillBusy.value = false;
-  }
+  void filling.submit(
+    async () => {
+      if (!request.counts[typeId]) throw new FillNotAsked(LAYOUT_IS_FULL);
+      return ask(request);
+    },
+    {
+      done: (answer) => {
+        // Another layout meanwhile: the answer is for a hall no longer shown.
+        if (layout.value.id !== asked) return;
+        const added = fillTool.add(answer);
+        fillAsked.value = false;
+        tell(saidFilled(added.length, choice.count, answer.timed_out, request.counts[typeId]));
+      },
+      refused: (err) => (err instanceof FillNotAsked ? err.message : undefined),
+    },
+  );
 }
 
 function pinchOf(): { distance: number; middle: { xPx: number; yPx: number } } | null {
@@ -2353,8 +2355,7 @@ watch(
       :sections="ownSections"
       :tableTypes="tableTypes"
       :area="fillTool.area.value"
-      :busy="fillBusy"
-      :error="fillError"
+      :submission="filling"
       @fill="runFill"
       @close="closeFillDialog"
     />
