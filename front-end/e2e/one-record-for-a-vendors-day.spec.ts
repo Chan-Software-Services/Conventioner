@@ -15,7 +15,7 @@ import { marketScreenPath } from './helpers/marketScreens';
  * An Admin setting what a vendor owes as an Editor freed their seat left two owed records, and
  * whichever the server found first won, so the amount set did not stick or the freed line was
  * lost. A unique index on each now refuses the second record, and the write that loses the race
- * lands on the winner's.
+ * reads the day again and lands on the winner's.
  *
  * A payment is recorded once per press the same way: the dialog sends a key it made when it opened,
  * a unique index on it refuses a second entry, and a repeat of the key answers what was recorded.
@@ -183,9 +183,15 @@ test.describe("One record for a vendor's day", () => {
     expect(count('amounts_owed', day)).toBe(1);
     const held = mongoEval(`
       const record = db.amounts_owed.findOne(${JSON.stringify(day)});
-      print(JSON.stringify({ freed: Boolean(record.freed), set: record.set_by_hand?.cents }));
+      print(JSON.stringify({
+        kind: record.state?.kind,
+        amount: record.state?.amount?.cents,
+        freed: Boolean(record.freed),
+        set: record.set_by_hand?.cents,
+      }));
     `);
-    expect(JSON.parse(held)).toEqual({ freed: true, set: 1000 });
+    // The day's state, and the mirror the release before reads it from, both hold both.
+    expect(JSON.parse(held)).toEqual({ kind: 'freed', amount: 1000, freed: true, set: 1000 });
 
     // And the Payment tab reads both: the freed table's line, owing the amount the Admin set.
     const account = await request.get(

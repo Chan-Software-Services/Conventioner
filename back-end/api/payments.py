@@ -11,8 +11,9 @@ changing a table-day's amount owed asks ``Actions.CHANGE_OWED``, and recording a
 or removing an entry ``Actions.ADJUST_PAID``, each an Admin's by default (Q26, E44/F01/S02). An
 archived market refuses every write.
 """
+import logging
 import uuid
-from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, NamedTuple, Optional, Tuple
 
 from pydantic import ValidationError
 from pymongo.errors import DuplicateKeyError
@@ -22,7 +23,7 @@ import api.market_actions as Actions
 import api.markets as MarketsApi
 from assignment.utils import convert_keys_to_snake_case
 from client_errors import BadRequestError, ConflictError, NotFoundError, field_named_copy
-from datatypes import Market, PaymentEntry
+from datatypes import Market, PaymentEntry, VendorAssignmentResult
 import history as History
 import payments as Payments
 import pricing as Pricing
@@ -30,12 +31,16 @@ from tombstone import live
 from utils.email_address import normalized_email
 from utils.request_body import string_field
 
+logger = logging.getLogger(__name__)
+
 #: The most a table-day may be set to owe: what a price cell may hold, $100,000.00.
 MOST_OWED_CENTS = 10_000_000
 
 NO_LINE = "That vendor holds no table that day, so nothing is owed for it."
 NO_ENTRY = "This market has no such payment standing."
 NOT_A_REQUEST_KEY = "A payment's request key must be a UUID."
+OWED_KEPT_CHANGING = ("What this vendor owes for that day kept changing as it was saved, so "
+                      "nothing was changed. Try again.")
 OWED_CHANGED_UNDER_FREE = ("What this vendor owes for that day changed as the seat was freed, so "
                            "nothing was freed. Try again.")
 #: What a second press of one opening of the Record dialog is told when it differs from the entry
@@ -304,22 +309,45 @@ def _record_owed(
     )
 
 
+def _held(market: Market, address: str, date: str) -> Optional[Payments.Seat]:
+    return seats_by_vendor(market).get(address, {}).get(date)
+
+
+def _change_owed(
+    market: Market, requesting_user: str, address: str, date: str, event: Payments.OwedEvent,
+    kind: str, cents: Optional[int] = None,
+) -> Dict[str, Any]:
+    """An Admin's change of one table-day's amount owed, through the day's owner: a day with no
+    line is refused, as is one whose record kept changing under the write, and a change that
+    leaves the day reading as it did records nothing."""
+    before = _line(market, address, date)
+    if before is None:
+        raise NotFoundError(NO_LINE)
+    try:
+        moved = Payments.owed_day_transition(
+            market.id, address, date, event, held=_held(market, address, date),
+            by=requesting_user, cents=cents)
+    except Payments.OwedEventRefused:
+        # The line went between this request's read and the owner's.
+        raise NotFoundError(NO_LINE) from None
+    except Payments.OwedDayChanged:
+        raise ConflictError(OWED_KEPT_CHANGING) from None
+    account = _account(market, address)
+    if moved.changed:
+        _record_owed(market, requesting_user, address, date, kind, before,
+                     _line(market, address, date))
+    return account
+
+
 def set_amount_owed(
     market_id: str, vendor_email: str, date: str, body: Any, requesting_user: str,
 ) -> Dict[str, Any]:
     """Set what a vendor owes for one table-day, ``{cents}``, $0 being how a fee is waived (Q26).
     Asks ``Actions.CHANGE_OWED``; a day with no line, held or freed, is refused."""
     market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.CHANGE_OWED)
-    address = normalized_email(vendor_email)
     cents = _owed_cents(body)
-    before = _line(market, address, date)
-    if before is None:
-        raise NotFoundError(NO_LINE)
-    Payments.set_amount_owed(market_id, address, date, cents, requesting_user)
-    account = _account(market, address)
-    _record_owed(market, requesting_user, address, date, History.OWED_SET, before,
-                 _line(market, address, date))
-    return account
+    return _change_owed(market, requesting_user, normalized_email(vendor_email), date,
+                        Payments.OwedEvent.ADMIN_SETS, History.OWED_SET, cents)
 
 
 def use_calculated_price(
@@ -328,17 +356,8 @@ def use_calculated_price(
     """Take back an amount set by hand on one table-day: it owes the calculated price again.
     Asks ``Actions.CHANGE_OWED``."""
     market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.CHANGE_OWED)
-    address = normalized_email(vendor_email)
-    before = _line(market, address, date)
-    if before is None:
-        raise NotFoundError(NO_LINE)
-    if before["owedSetBy"] is None:
-        return _account(market, address)
-    Payments.use_calculated_price(market_id, address, date)
-    account = _account(market, address)
-    _record_owed(market, requesting_user, address, date, History.OWED_CALCULATED, before,
-                 _line(market, address, date))
-    return account
+    return _change_owed(market, requesting_user, normalized_email(vendor_email), date,
+                        Payments.OwedEvent.ADMIN_CALCULATED, History.OWED_CALCULATED)
 
 
 class KeptLine(NamedTuple):
@@ -355,33 +374,36 @@ def keep_freed_line(
 ) -> KeptLine:
     """Keep the line of the seat a vendor holds on ``date``, which is about to be freed: freeing a
     table changes neither what they owe nor what they paid (Q26). With ``deduct``, the free asked
-    "Also remove its $15.00 from what they owe?", and the same write sets the line's $0: the line
+    "Also remove its $15.00 from what they owe?", and the same write waives the day: the line
     stays, owing $0.00, and the amount paid is untouched, so a vendor who paid shows paid more
     than owed, a refund to issue by hand.
+
+    Written while the seat is still held, before it goes (T270); ``undo`` puts the record back as
+    it was read, for a free whose seat could not be freed. A day whose record kept changing under
+    the write frees nothing, ``OWED_CHANGED_UNDER_FREE``.
 
     The deduction's history entry runs from what the line owed as this request read it, while the
     seat was held, to 0, and reads nothing again: a line read once the seat is freed, off the
     market as this request read it, would say the seat's price.
     """
     address = normalized_email(vendor_email)
-    seat = seats_by_vendor(market).get(address, {}).get(date)
+    seat = _held(market, address, date)
     if seat is None:
         return KeptLine(lambda: None, lambda: None)
     owed = _line(market, address, date) if deduct else None
+    event = (Payments.OwedEvent.FREED_WITH_DEDUCTION if deduct
+             else Payments.OwedEvent.FREED)
     try:
-        before, written = Payments.keep_freed_line(market.id, address, date, seat, by,
-                                                   deduct=deduct)
-    except Payments.OwedChangedUnderFree:
+        moved = Payments.owed_day_transition(market.id, address, date, event, held=seat,
+                                             seat=seat, by=by)
+    except Payments.OwedDayChanged:
         raise ConflictError(OWED_CHANGED_UNDER_FREE) from None
 
     def record_deduction() -> None:
         if owed is not None:
             _record_owed(market, by, address, date, History.OWED_SET, owed, {"owedCents": 0})
 
-    return KeptLine(
-        lambda: Payments.restore_freed_line(market.id, address, date, written, before),
-        record_deduction,
-    )
+    return KeptLine(moved.undo, record_deduction)
 
 
 def deduct_freed_day(market: Market, vendor_email: str, date: str, by: str) -> None:
@@ -391,38 +413,79 @@ def deduct_freed_day(market: Market, vendor_email: str, date: str, by: str) -> N
     left as it is."""
     address = normalized_email(vendor_email)
     owed = _line(market, address, date)
-    if owed is None or not owed["freed"] or owed["owedSetBy"] is not None:
+    if owed is None:
         return
-    if Payments.deduct_freed_day(market.id, address, date, by):
+    try:
+        moved = Payments.owed_day_transition(
+            market.id, address, date, Payments.OwedEvent.FREED_WITH_DEDUCTION, held=None, by=by)
+    except Payments.OwedEventRefused:
+        return
+    except Payments.OwedDayChanged:
+        raise ConflictError(OWED_CHANGED_UNDER_FREE) from None
+    if moved.changed:
         _record_owed(market, by, address, date, History.OWED_SET, owed, {"owedCents": 0})
 
 
-def seated_again(
-    market_id: str, touched: List[Tuple[str, str]], held_before: List[Tuple[str, str]], by: str,
+def _day(row: VendorAssignmentResult) -> Tuple[str, str]:
+    return normalized_email(row.email), row.date
+
+
+def assignment_written(
+    market_id: str, *, seated: Iterable[VendorAssignmentResult],
+    held_before: Iterable[VendorAssignmentResult], dropped: Iterable[VendorAssignmentResult],
+    by: str,
 ) -> None:
-    """Every write of the assignment forgets the freed records of the vendor-days it touched
-    (T270): a day it seats reads its new seat, and a day that was held already carries a freed
-    record only when a free stopped before its seat went, which nothing must surface later.
+    """Tell each owed day a write of the assignment moved what it did, through the day's owner:
+    ``seated`` every row the write seats, ``held_before`` the rows of the assignment it read, and
+    ``dropped`` the rows it read that it no longer seats.
 
-    A deduction a free set that goes with them is recorded only for a day not in ``held_before``,
-    the days held in the assignment the write read, since only such a day read as freed. It is
-    recorded under the row the seating asked (``Actions.ASSIGN``), as the amount it took back and
-    what the day owes now, read off the market as it stands."""
-    held = {(normalized_email(address), date) for address, date in held_before}
-    for address, date, cents in Payments.clear_freed_lines(market_id, touched):
-        if (address, date) in held:
+    A day seated afresh takes back its freed line, and a day that was held already loses any freed
+    record a free that stopped before its seat went left on it (T270). Where a free's $0 is taken
+    back on a day not in ``held_before``, which alone read as freed, it is recorded under the row
+    the seating asked (``Actions.ASSIGN``), as the amount it took back and what the day owes now,
+    read off the market as it stands. A dropped day forgets what it held.
+
+    The assignment's write has landed, so a day whose record kept changing never fails it: it is
+    logged, and the day reads through ``on_day`` until its next write.
+    """
+    held = {_day(row): Payments.Seat(row.table_code, row.tier, row.table_choice, None)
+            for row in held_before}
+    events = {_day(row): Payments.OwedEvent.DROPPED_BY_RUN for row in dropped}
+    events.update({_day(row): Payments.OwedEvent.SEATED for row in seated})
+    if not events:
+        return
+    # One read of the records that may move; a day with none follows its seat whatever it took.
+    # Beside every freed line, that is any record on a day seated afresh or dropped.
+    moving = {(doc.get(Payments.VENDOR_EMAIL_FIELD), doc.get("date"))
+              for doc in Payments.records_that_may_move(market_id, {
+                  date for (address, date), event in events.items()
+                  if (address, date) not in held or event == Payments.OwedEvent.DROPPED_BY_RUN})}
+    for (address, date), event in events.items():
+        if (address, date) not in moving:
             continue
+        try:
+            moved = Payments.owed_day_transition(market_id, address, date, event,
+                                                 held=held.get((address, date)), by=by)
+        except (Payments.OwedDayChanged, Payments.OwedEventRefused) as missed:
+            logger.warning("The owed day of market_id %s, date %s was not tidied after a write "
+                           "of the assignment (%s).", market_id, date, type(missed).__name__)
+            continue
+        if ((address, date) not in held and isinstance(moved.before, Payments.FreedWaived)
+                and moved.changed):
+            _record_taken_back(market_id, address, date, by)
 
-        def detail(address=address, date=date, cents=cents):
-            market = MarketsApi.market_from_document(
-                MarketsApi.markets_collection.find_one(live({"id": market_id})))
-            line = _line(market, address, date) or {}
-            return History.changes({"owed_cents": cents}, {"owed_cents": line.get("owedCents")})
 
-        def subject(date=date):
-            market = MarketsApi.market_from_document(
-                MarketsApi.markets_collection.find_one(live({"id": market_id})))
-            return {"date": date, **_currency(market)}
+def _record_taken_back(market_id: str, address: str, date: str, by: str) -> None:
+    def detail():
+        market = MarketsApi.market_from_document(
+            MarketsApi.markets_collection.find_one(live({"id": market_id})))
+        line = _line(market, address, date) or {}
+        return History.changes({"owed_cents": 0}, {"owed_cents": line.get("owedCents")})
 
-        History.record(market_id, by, Actions.ASSIGN, kind=History.OWED_TAKEN_BACK,
-                       vendors=[address], subject=subject, detail=detail)
+    def subject():
+        market = MarketsApi.market_from_document(
+            MarketsApi.markets_collection.find_one(live({"id": market_id})))
+        return {"date": date, **_currency(market)}
+
+    History.record(market_id, by, Actions.ASSIGN, kind=History.OWED_TAKEN_BACK,
+                   vendors=[address], subject=subject, detail=detail)

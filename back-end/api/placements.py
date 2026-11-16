@@ -262,7 +262,7 @@ def run_assignment(market_id: str, requesting_user: str) -> Tuple[Dict[str, Any]
         return {"error": NOTHING_TO_ASSIGN}, 400
 
     # Read before the run, which replaces the market's assignment with the one it produced.
-    held_before = [(seat.email, seat.date) for seat in market.assignment_object.vendor_assignments]
+    held_before = list(market.assignment_object.vendor_assignments)
     market.assignment_object.assignment_statistics = None
     # Raises ``BrokenAllocationError`` on an allocation that breaks the solver's own rules (T253),
     # so nothing below it runs then: no store, no history entry, no payment change.
@@ -282,10 +282,9 @@ def run_assignment(market_id: str, requesting_user: str) -> Tuple[Dict[str, Any]
     )
     # Every day held before the run or after it: a day it seats forgets its freed line, and a day
     # it drops forgets any freed record a stopped free left on it while it was held.
-    PaymentsApi.seated_again(
-        market_id,
-        [*held_before, *((seat.email, seat.date) for seat in assignment.vendor_assignments)],
-        held_before, requesting_user)
+    PaymentsApi.assignment_written(
+        market_id, seated=[*held_before, *assignment.vendor_assignments],
+        held_before=held_before, dropped=[], by=requesting_user)
 
     # The same shape ``GET /markets/<id>/assignment`` returns, so a caller swapping to this one
     # reads the result the same way - the organization's display name included, because the
@@ -356,8 +355,9 @@ def write_placement(
                     assignment_date=market.assignment_object.assignment_date)
     History.record_placed(market_id, requesting_user, placement, left,
                           after_results=Lifecycle.results_published(market))
-    PaymentsApi.seated_again(market_id, [(placement.email, placement.date)],
-                             [(left.email, left.date)] if left else [], requesting_user)
+    PaymentsApi.assignment_written(market_id, seated=[placement],
+                                   held_before=[left] if left else [], dropped=[],
+                                   by=requesting_user)
 
     return {"placement": convert_keys_to_camel_case(placement.model_dump())}, 200
 
@@ -512,8 +512,9 @@ def swap_placements(
     )
 
     # Both days were held, so a freed record on either is one a stopped free left, and goes.
-    traded = [(first.email, date), (second.email, date)]
-    PaymentsApi.seated_again(market_id, traded, traded, requesting_user)
+    PaymentsApi.assignment_written(
+        market_id, seated=[placements[held[first_email]], placements[held[second_email]]],
+        held_before=[first, second], dropped=[], by=requesting_user)
 
     return {
         "placements": [

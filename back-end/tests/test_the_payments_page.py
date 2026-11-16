@@ -11,7 +11,7 @@ import copy
 import pytest
 
 from conftest import FakeMarketsCollection, stored_market
-from test_a_vendors_payments import PLAN
+from test_a_vendors_payments import PLAN, plant_amount_owed
 
 import api.markets as MarketsApi
 import api.payments as PaymentsApi
@@ -175,7 +175,7 @@ class TestTheTotals:
 
     def test_a_vendor_owing_nothing_shares_their_payment_evenly(self, market):
         for date in (SAT, SUN):
-            Payments.set_amount_owed(MARKET, ANA, date, 0, "admin@example.com")
+            plant_amount_owed(MARKET, ANA, date, 0, "admin@example.com")
 
         by_date = {row["date"]: figures(row) for row in page()["byDate"]}
         # Ana's $35 is now all paid more than owed, half on each day.
@@ -212,7 +212,7 @@ class TestTheTotals:
         # amount owed set by hand holds on a market with no prices, so he owes, is square, or paid
         # more than owed like anyone; the others, owing nothing, are in no state.
         market.doc["setupObject"]["pricing"] = None
-        Payments.set_amount_owed(MARKET, BEN, SAT, owed, "admin@example.com")
+        plant_amount_owed(MARKET, BEN, SAT, owed, "admin@example.com")
 
         assert {v["email"]: v["balanceState"] for v in page()["vendors"]} == {
             ANA: None, BEN: state, CY: None, DEE: None}
@@ -223,7 +223,7 @@ class TestTheTotals:
         # set by hand and paid $30, $10 more than owed; the others owe nothing, so what they paid
         # counts toward "Paid" but is never "more than owed", in the totals or any share of them.
         market.doc["setupObject"]["pricing"] = None
-        Payments.set_amount_owed(MARKET, BEN, SAT, 2000, "admin@example.com")
+        plant_amount_owed(MARKET, BEN, SAT, 2000, "admin@example.com")
 
         got = page()
         assert figures(got["totals"]) == (2000, 10000, 0, 1000)
@@ -247,7 +247,7 @@ class TestTheTotals:
         # owing nothing, had her $35 removed and $15 refunded, so she owes $15, in her state, the
         # totals and her days' shares alike; Ben owes $20 by hand and paid $30.
         market.doc["setupObject"]["pricing"] = None
-        Payments.set_amount_owed(MARKET, BEN, SAT, 2000, "admin@example.com")
+        plant_amount_owed(MARKET, BEN, SAT, 2000, "admin@example.com")
         entry = next(doc for doc in market_records.payments.documents if doc["vendor_email"] == ANA)
         PaymentsApi.remove_payment(MARKET, entry["id"], EDITOR)
         PaymentsApi.record_refund(
