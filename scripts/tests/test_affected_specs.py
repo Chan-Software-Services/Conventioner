@@ -340,6 +340,28 @@ class TestAFileNoRulePlaces:
             "front-end/src/__tests__/Door.test.ts",
             "front-end/src/utils/door.test.ts",
             "scripts/tests/test_x.py",
+            # The unit suite's own files and config, which Vitest alone reads.
+            "front-end/src/utils/door.spec.ts",
+            "front-end/src/components/Door.test.tsx",
+            "front-end/vitest.config.ts",
+            "front-end/tsconfig.vitest.json",
+            # The lint and format configs, the back end's pytest config.
+            "front-end/eslint.config.ts",
+            "front-end/stylelint.config.js",
+            "front-end/.prettierrc.json",
+            "front-end/.prettierignore",
+            "front-end/.editorconfig",
+            "back-end/pytest.ini",
+            # The scripts that deal, repeat or measure the specs, or that nothing runs.
+            "front-end/scripts/e2e-shard-timings.json",
+            "front-end/scripts/e2e-shards.ts",
+            "front-end/scripts/e2e-repeat.ts",
+            "front-end/scripts/bundle-budget.ts",
+            "front-end/scripts/no-eval.ts",
+            "front-end/scripts/brand-icons.ts",
+            # The deploy's own config, which the stack does not read.
+            "front-end/vercel.json",
+            "back-end/vercel.json",
         ],
     )
     def test_docs_and_the_suites_that_are_not_e2e_choose_nothing(self, repo, path):
