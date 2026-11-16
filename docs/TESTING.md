@@ -221,6 +221,14 @@ It sees only work that goes through `Math`.
 `aSpeedLimitCountsWork.test.ts` fails when a file the unit suite runs, or a helper under `src/__tests__/support/` or `src/__tests__/helpers/`, names `performance.now`, `performance.mark`, `performance.measure`, `hrtime`, `Date.now(`, `.getTime(` or `console.time`, and lists each such line.
 A date used as data trips it too: write the date out, so it reads the same on every run.
 
+A test's timeout is for a test that hangs, not one that is slow: a test whose work takes a second on an idle core sets its own, forty times that work, since Vitest's default 5 s fails it on a busy machine (ten workers on two cores).
+A test that mounts a screen with a timer unmounts it once the test ends, or the timer fires into a later test of its file on a run slow enough to reach it.
+
+A unit test makes no network call.
+happy-dom would send an unstubbed request for real, to `http://localhost:3000`, and log an `ECONNREFUSED` that names no test.
+Instead the setup ([`noNetwork.ts`](../front-end/src/__tests__/support/noNetwork.ts)) refuses every request sent through XHR, which the app's axios uses, or `fetch`, and fails the test that sent it, naming the request.
+Stub the module that sends it (`vi.mock('@/utils/api', ...)`), or `fetch` with `vi.stubGlobal` or `vi.spyOn`, over the refusal.
+
 Configuration: `front-end/vitest.config.ts` with `happy-dom` environment.
 
 ## Bundle Budget
