@@ -212,13 +212,13 @@ class TestTheOrganizationsDefault:
         assert world.organizations.writes == []
         assert default_entries(world) == []
 
-    def test_its_history_is_newest_first_and_holds_only_the_defaults_changes(self, world):
+    def test_its_history_is_newest_first_and_holds_only_the_defaults_changes(
+        self, world, monkeypatch,
+    ):
+        monkeypatch.setattr(OrgsApi, "organization_documents_of",
+                            lambda user_id: [world.organizations.doc])
         OrgsApi.set_default_permission(ORG_ID, "check-in", "admin", ORG_ADMIN)
-        # A rename, recorded as ``update_organization`` records it: that call reads the owner's
-        # organizations by id, and this world's ids are addresses, which no people map keys.
-        History.record_for_organization(
-            ORG_ID, ORG_OWNER, History.CHANGE_ORGANIZATION, kind=History.RENAMED,
-            detail={"before": {"name": "Ember Markets"}, "after": {"name": "Ember Collective"}})
+        OrgsApi.update_organization(ORG_ID, ORG_OWNER, "Ember Collective")
         OrgsApi.set_default_permission(ORG_ID, "export-csv", "editor", ORG_OWNER)
 
         entries = OrgsApi.get_default_permission_history(ORG_ID, ORG_MEMBER)
