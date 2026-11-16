@@ -22,6 +22,8 @@ from guards import AllApplicationsReviewedGuard  # noqa: E402
 
 ALEX = VerdictGiver(kind="person", user_id="user-alex", email="alex@market.test")
 SAM = MarketPerson(user_id="user-sam", email="sam@market.test")
+#: The market the follow-ups are on, with no reviewers chosen: a hand-on deals nothing there.
+MARKET = client_market(id="market-1")
 
 
 def _app(app_id="app-1", status=ApplicationStatus.OPEN):
@@ -75,14 +77,14 @@ class TestReassigningIt:
             "market-1", "app-1", ApplicationStatus.NEEDS_FOLLOW_UP, by=ALEX,
             seen=seen_as_read("app-1"))
 
-        result, status = ApplicantsApi.reassign_follow_up("market-1", "app-1", SAM, ALEX.email)
+        result, status = ApplicantsApi.reassign_follow_up(MARKET, None, "app-1", SAM, ALEX.email)
 
         assert status == 200
         assert stored[0]["follow_up_owner"]["email"] == "sam@market.test"
         assert stored[0]["status"] == "needs_follow_up"
 
     def test_only_a_follow_up_has_an_owner(self, stored):
-        _, status = ApplicantsApi.reassign_follow_up("market-1", "app-1", SAM, ALEX.email)
+        _, status = ApplicantsApi.reassign_follow_up(MARKET, None, "app-1", SAM, ALEX.email)
 
         assert status == 409
 

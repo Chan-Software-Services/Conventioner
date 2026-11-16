@@ -187,9 +187,30 @@ def undoable_by(doc: Dict[str, Any], user_id: Optional[str],
     return (now or datetime.now(timezone.utc)) - at <= UNDO_WINDOW
 
 
+# --- Waiting for the deal (E38/F07/S03, ADR 0020) --------------------------------------------------
+
+@dataclass(frozen=True)
+class Arrival:
+    """The write that moved an application into open or follow-up: who made it and by which action.
+
+    Every such move marks the application for the deal in its own update, storing this as
+    ``arriving``, whether or not reviewers are chosen and whoever its reviewer is. The deal, holding
+    the market, then keeps an able reviewer or deals it to the next one in turn
+    (``review_team.py``), and records the deal under this write. Marking every move, and judging who
+    is able only in the deal that holds the market, is what closes the race between a change of
+    reviewers and the move: a move landing after the change read its pool is still marked, and
+    the change's let-go deals it."""
+
+    actor: Optional[str]
+    action: str
+
+    def stored(self) -> Dict[str, Any]:
+        return {"actor": self.actor, "action": self.action}
+
+
 # --- An application arrives, or is added ----------------------------------------------------------
 
-def find_or_create_application(app: Application) -> Application:
+def find_or_create_application(app: Application, arrival: Optional[Arrival] = None) -> Application:
     """Store this application, unless one already exists for the applicant it belongs to.
 
     A single conditional upsert, so that a request which loses the race to another one for the same
@@ -202,6 +223,9 @@ def find_or_create_application(app: Application) -> Application:
     nothing -- the winner's insert lands between this one's read and its own write -- so it is caught
     and the winner's document is returned. Either way the caller gets the one application that
     exists, which is what it asked for.
+
+    ``arrival`` is the write an open application arrives by: it is created marked for the deal
+    (``Arrival``). An added vendor arrives approved, with none.
     """
     ApplicationsApi.ensure_application_indexes()
     identity = ApplicationsApi.applicant_filter(
@@ -210,6 +234,8 @@ def find_or_create_application(app: Application) -> Application:
     # The identity fields come from the filter, which is where an upsert takes them from; repeating
     # them in the insert body would only be a second chance to disagree with it.
     body = {key: value for key, value in app.model_dump().items() if key not in identity}
+    if arrival is not None:
+        body[ApplicationsApi.ARRIVING_FIELD] = arrival.stored()
 
     for _attempt in range(2):
         try:
@@ -239,6 +265,7 @@ def find_or_create_application(app: Application) -> Application:
 def update_application_form_data(
     app_id: str, form_data: Dict[str, Any], submitted_at: str, updated_at: str,
     *, held: Optional[Dict[str, Any]] = None, back_to_review: bool = False,
+    arrival: Optional[Arrival] = None,
 ) -> bool:
     """Write form answers and timestamps for an application. Returns whether it matched.
 
@@ -248,9 +275,12 @@ def update_application_form_data(
 
     ``back_to_review`` returns it to open in the same update, clearing what every move to open
     clears (``RuleReturns``'s move): the verdict's giver, time and reason, the follow-up's owner,
-    the claim and ``undo_to``. One update, so no stop between
-    the answers and the status can leave a vendor approved on answers nobody saw.
+    the claim and ``undo_to``, and marks it for the deal by ``arrival``, the import's write. One
+    update, so no stop between the answers and the status can leave a vendor approved on answers
+    nobody saw, nor open in nobody's share.
     """
+    if back_to_review and arrival is None:
+        raise ValueError("A return to open is marked for the deal by the write it came by.")
     ApplicationsApi.ensure_application_indexes()
     query: Dict[str, Any] = {"id": app_id}
     if held is not None:
@@ -263,6 +293,7 @@ def update_application_form_data(
     }}
     if back_to_review:
         update["$set"]["status"] = ApplicationStatus.OPEN.value
+        update["$set"][ApplicationsApi.ARRIVING_FIELD] = arrival.stored()
         update["$unset"] = {"verdict_by": "", "verdict_at": "", "verdict_reason": "",
                             "follow_up_owner": "", "undo_to": "", **ApplicationsApi.CLAIM_UNSET}
     result = ApplicationsApi.applications_collection.update_one(query, update)
@@ -320,9 +351,10 @@ class ChangeVerdict:
 
 @dataclass(frozen=True)
 class Undo:
-    """The giver of a verdict takes it back within ``UNDO_WINDOW`` (E38/F10/S01)."""
+    """The giver of a verdict takes it back within ``UNDO_WINDOW`` (E38/F10/S01), by ``arrival``."""
 
     user_id: Optional[str]
+    arrival: Arrival
 
 
 @dataclass(frozen=True)
@@ -335,14 +367,18 @@ class RuleRejects:
 
 @dataclass(frozen=True)
 class RuleReturns:
-    """No automatic rejection meets the answers of an application a rule rejected any longer."""
+    """No automatic rejection meets the answers of an application a rule rejected any longer: the
+    rules judged after ``arrival``, the write that changed the answers or the rules."""
+
+    arrival: Arrival
 
 
 @dataclass(frozen=True)
 class HandOnFollowUp:
-    """A follow-up is handed to someone else (E34/F02/S01)."""
+    """A follow-up is handed to someone else (E34/F02/S01), by ``arrival``."""
 
     owner: MarketPerson
+    arrival: Arrival
 
 
 Event = Union[GiveVerdict, ChangeVerdict, Undo, RuleRejects, RuleReturns, HandOnFollowUp]
@@ -445,6 +481,8 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
     write all read the same answer. Every move holds the status and the verdict's time as read; a
     verdict, a rule's and a person's, holds the answers' time (``updated_at``) too, so neither a
     verdict nor answers changed in between are written over (E33/F03/S02, E34/F03/S01, T270).
+    Every move into open or follow-up (an undo, a rule's return, a hand-on) marks the application
+    for the deal by the event's ``arrival``; every verdict ends the wait.
     """
     state = state_of(doc)
     if state not in TABLE[type(event)]:
@@ -475,7 +513,8 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
         kept = {key: undo_to.get(key) for key in UNDO_KEEPS}
         return Move(
             to=state_of(kept),
-            set={key: value for key, value in kept.items() if value is not None},
+            set={**{key: value for key, value in kept.items() if value is not None},
+                 ApplicationsApi.ARRIVING_FIELD: event.arrival.stored()},
             unset=(*(key for key, value in kept.items() if value is None),
                    "undo_to", "verdict_reason", *_CLAIM),
             pins=held,
@@ -498,7 +537,8 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
     if isinstance(event, RuleReturns):
         return Move(
             to=State.OPEN,
-            set={"status": ApplicationStatus.OPEN.value},
+            set={"status": ApplicationStatus.OPEN.value,
+                 ApplicationsApi.ARRIVING_FIELD: event.arrival.stored()},
             unset=(*_VERDICT, "follow_up_owner", "undo_to", *_CLAIM),
             pins={**held, **_held(doc, "updated_at")},
         )
@@ -507,7 +547,8 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
     # stays, so the marking can still be undone by whoever gave it.
     return Move(
         to=State.FOLLOW_UP,
-        set={"follow_up_owner": event.owner.model_dump()},
+        set={"follow_up_owner": event.owner.model_dump(),
+             ApplicationsApi.ARRIVING_FIELD: event.arrival.stored()},
         unset=(),
         pins={"status": ApplicationStatus.NEEDS_FOLLOW_UP.value},
     )
@@ -556,14 +597,15 @@ def change_verdict(read: Dict[str, Any], seen: Dict[str, Any], status: Applicati
     return _write(read, ChangeVerdict(status, by, owner), held)
 
 
-def undo(read: Dict[str, Any], seen: Dict[str, Any], by: VerdictGiver) -> Written:
+def undo(read: Dict[str, Any], seen: Dict[str, Any], by: VerdictGiver,
+         arrival: Arrival) -> Written:
     """Return an application to what its giver's verdict found it as (``undo_to``, E38/F10/S01): its
     status, giver, time and follow-up owner as they were, so a follow-up comes back marked by
-    whoever marked it. Refused once it is not theirs to undo; False when it changed since ``seen``,
-    the verdict as written."""
+    whoever marked it, and marked for the deal by ``arrival``. Refused once it is not theirs to
+    undo; False when it changed since ``seen``, the verdict as written."""
     if _as_seen(read, seen) is None:
         return False
-    return _write(read, Undo(by.user_id))
+    return _write(read, Undo(by.user_id, arrival))
 
 
 def rule_rejects(read: Dict[str, Any], rule: str, reason: str) -> Written:
@@ -572,14 +614,17 @@ def rule_rejects(read: Dict[str, Any], rule: str, reason: str) -> Written:
     return _write(read, RuleRejects(rule, reason))
 
 
-def rule_returns(read: Dict[str, Any]) -> Written:
-    """Return an application a rule rejected to open, once no rule meets it."""
-    return _write(read, RuleReturns())
+def rule_returns(read: Dict[str, Any], arrival: Arrival) -> Written:
+    """Return an application a rule rejected to open, once no rule meets it, marked for the deal by
+    ``arrival``, the write whose rules returned it."""
+    return _write(read, RuleReturns(arrival))
 
 
-def hand_on_follow_up(read: Dict[str, Any], owner: MarketPerson) -> Written:
-    """Hand a follow-up to someone else (E34/F02/S01). Written only while it still needs one."""
-    return _write(read, HandOnFollowUp(owner))
+def hand_on_follow_up(read: Dict[str, Any], owner: MarketPerson, arrival: Arrival) -> Written:
+    """Hand a follow-up to someone else (E34/F02/S01), marked for the deal by ``arrival``: the deal
+    keeps the new owner while they may review here, and hands it on otherwise. Written only while
+    it still needs one."""
+    return _write(read, HandOnFollowUp(owner, arrival))
 
 
 def store_open(app_id: str) -> bool:
@@ -598,12 +643,11 @@ def deal(app_id: str, reviewer: Optional[MarketPerson], was: Optional[Dict[str, 
     """Deal an application to ``reviewer``, or back to first come, first served with None.
 
     Written only while it is still open and still dealt to whom the caller read (``was``), so a
-    verdict landing mid-deal is never touched and no other deal is written over. Only
-    ``review_team.py`` calls it.
+    verdict landing mid-deal is never touched and no other deal is written over. Dealt to someone,
+    it waits for the deal no longer. Only ``review_team.py`` calls it, holding the market.
     """
     ApplicationsApi.ensure_application_indexes()
     arriving = ApplicationsApi.ARRIVING_FIELD
-    # Dealt, it is no longer an arrival waiting for a deal (``mark_arriving``).
     update: Dict[str, Any] = (
         {"$set": {"reviewer": reviewer.model_dump()}, "$unset": {arriving: ""}} if reviewer
         else {"$unset": {"reviewer": ""}}
@@ -617,68 +661,34 @@ def deal(app_id: str, reviewer: Optional[MarketPerson], was: Optional[Dict[str, 
     return result.matched_count > 0
 
 
-def mark_arriving(app_id: str, actor: Optional[str], action: str) -> bool:
-    """Mark an open, undealt application as waiting to be dealt as it arrived, by ``action`` of
-    ``actor``; one already waiting keeps the write it first arrived by. Only ``review_team.py``
-    calls it, and whichever deal next holds the market deals it."""
-    ApplicationsApi.ensure_application_indexes()
-    arriving = ApplicationsApi.ARRIVING_FIELD
-    result = ApplicationsApi.applications_collection.update_one(
-        {"id": app_id, "status": {"$in": list(UNDECIDED_STATUSES)},
-         "reviewer": {"$in": [None]}, arriving: {"$exists": False}},
-        {"$set": {arriving: {"actor": actor, "action": action}}},
-    )
-    return result.matched_count > 0
-
-
-def mark_all_arriving(market_id: str, actor: Optional[str], action: str) -> int:
-    """Mark every open, undealt application of a market as waiting to be dealt as it arrived, by
-    ``action`` of ``actor``; one already waiting keeps the write it first arrived by. Only
-    ``review_team.py`` calls it, and whichever deal next holds the market deals them. The ids are
-    read as a projection of ``id`` alone, never every application's answers."""
-    ApplicationsApi.ensure_application_indexes()
-    ids = ApplicationsApi.applications_collection.find(
-        {ApplicationsApi.MARKET_ID_FIELD: market_id, "status": {"$in": list(UNDECIDED_STATUSES)},
-         "reviewer": {"$in": [None]}, ApplicationsApi.ARRIVING_FIELD: {"$exists": False}},
-        {"_id": 0, "id": 1},
-    )
-    marked = 0
-    for doc in ids:
-        if mark_arriving(doc["id"], actor, action):
-            marked += 1
-    return marked
-
-
-def deal_arrival(app_id: str, reviewer: Optional[MarketPerson]) -> bool:
-    """Deal an application waiting as it arrived to ``reviewer``, or with None let it go undealt:
-    either way it waits no longer. The reviewer is written only while it is still open and undealt,
-    so one decided meanwhile is let go with its verdict alone."""
-    ApplicationsApi.ensure_application_indexes()
-    arriving = ApplicationsApi.ARRIVING_FIELD
-    if reviewer is not None:
-        result = ApplicationsApi.applications_collection.update_one(
-            {"id": app_id, "status": {"$in": list(UNDECIDED_STATUSES)},
-             "reviewer": {"$in": [None]}, arriving: {"$exists": True}},
-            {"$set": {"reviewer": reviewer.model_dump()}, "$unset": {arriving: ""}},
-        )
-        if result.matched_count > 0:
-            return True
-    ApplicationsApi.applications_collection.update_one({"id": app_id}, {"$unset": {arriving: ""}})
-    return False
-
-
-def deal_follow_up(app_id: str, reviewer: MarketPerson, owner_was: Dict[str, Any]) -> bool:
-    """Hand a removed reviewer's follow-up to the reviewer it is dealt to: its owner and its
-    reviewer both become them, and it keeps its status. Written only while it still needs a
-    follow-up from ``owner_was``, so one taken on or decided meanwhile is left as it is. Only
-    ``review_team.py`` calls it."""
+def deal_follow_up(app_id: str, reviewer: MarketPerson,
+                   owner_was: Optional[Dict[str, Any]]) -> bool:
+    """Hand a follow-up whose owner may no longer review on to the reviewer it is dealt to: its
+    owner and its reviewer both become them, it keeps its status, and it waits for the deal no
+    longer. Written only while it still needs a follow-up from ``owner_was``, so one taken on or
+    decided meanwhile is left as it is. Only ``review_team.py`` calls it, holding the market."""
     ApplicationsApi.ensure_application_indexes()
     result = ApplicationsApi.applications_collection.update_one(
         {"id": app_id, "status": ApplicationStatus.NEEDS_FOLLOW_UP.value,
-         "follow_up_owner": owner_was},
-        {"$set": {"follow_up_owner": reviewer.model_dump(), "reviewer": reviewer.model_dump()}},
+         "follow_up_owner": owner_was if owner_was else {"$in": [None]}},
+        {"$set": {"follow_up_owner": reviewer.model_dump(), "reviewer": reviewer.model_dump()},
+         "$unset": {ApplicationsApi.ARRIVING_FIELD: ""}},
     )
     return result.matched_count > 0
+
+
+def settle_waiting(read: Dict[str, Any]) -> bool:
+    """End the wait of an application the deal leaves where it is: decided since it was marked,
+    open with an able reviewer, or a follow-up whose owner may review here. Held on its status and
+    its mark as the deal read them, so a move landing in between keeps the mark it wrote for the
+    next round. Only ``review_team.py`` calls it, holding the market."""
+    ApplicationsApi.ensure_application_indexes()
+    arriving = ApplicationsApi.ARRIVING_FIELD
+    return ApplicationsApi.applications_collection.update_one(
+        {"id": read["id"], "status": _as_read(read.get("status")),
+         arriving: _as_read(read.get(arriving))},
+        {"$unset": {arriving: ""}},
+    ).matched_count > 0
 
 
 # --- The offers' deadline -------------------------------------------------------------------------

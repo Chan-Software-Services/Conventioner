@@ -8,7 +8,9 @@ event lands another write between the event's read and its own, and the event wr
 over it. The pure ``move`` is checked over the same grid, so a preview reads the table the writes
 do. The table itself is stated once, in ``docs/implementation/data/application-document.md``.
 
-The changed-answers and arrival rows are T277 ticket 04's, and the marks for the deal ticket 03's.
+Every move into open or follow-up marks the application for the deal by the write it came by
+(``arriving``), and every cell asserts the mark it leaves. The changed-answers and arrival rows are
+T277 ticket 04's.
 
 The Editor gives verdicts but may not change one; the Admin and the owner may. ``app-v1`` answers
 that it is not a student and did not tick the no-shows box, so rule A (affiliation) and rule B (no
@@ -221,8 +223,19 @@ TABLE: Dict[Tuple[State, str], Cell] = {
 }
 
 
+#: The cells that move an application into open or follow-up, each marking it for the deal by its
+#: route's write: who made it, and by which action. Every other cell leaves no mark.
+MARKED: Dict[Tuple[State, str], Dict[str, str]] = {
+    **{(state, "undo"): {"actor": EDITOR, "action": "give-verdicts"} for state in (
+        State.FOLLOW_UP, State.APPROVED_BY_A_PERSON, State.REJECTED_BY_A_PERSON)},
+    (State.REJECTED_BY_A_RULE, "rule_returns"): {"actor": OWNER, "action": "change-form"},
+    (State.FOLLOW_UP, "hand_on"): {"actor": EDITOR, "action": "give-verdicts"},
+}
+
+
 def test_the_table_holds_every_pair():
     assert set(TABLE) == {(state, event) for state in STATES for event in EVENTS}
+    assert set(MARKED) <= set(TABLE)
 
 
 def _entries_after(world, before):
@@ -243,6 +256,7 @@ def test_each_cell(market, state, event):
     if error is not None:
         assert response.get_json()["error"] == error
     assert ReviewState.state_of(_doc(market)) is after
+    assert _doc(market).get(ApplicationsApi.ARRIVING_FIELD) == MARKED.get((state, event))
     entries = _entries_after(market, recorded)
     if entry is None:
         assert entries == []
@@ -462,6 +476,8 @@ def test_a_stale_read_writes_nothing_over_what_landed(monkeypatch, market, event
 
 EDITOR_GIVER = VerdictGiver(kind="person", user_id="user-editor", email=EDITOR)
 ADMIN_GIVER = VerdictGiver(kind="person", user_id="user-admin", email=ADMIN)
+#: The write a pure event came by, which a move into open or follow-up marks for the deal.
+ARRIVAL = ReviewState.Arrival(EDITOR, "give-verdicts")
 
 
 def _stored(state: State) -> dict:
@@ -500,11 +516,14 @@ MOVES: Dict[str, Callable[[State], ReviewState.Event]] = {
         if state in (State.APPROVED_BY_A_PERSON, State.APPROVED_ADDED)
         else ApplicationStatus.REVIEWER_APPROVED,
         ADMIN_GIVER),
-    "undo": lambda state: ReviewState.Undo("user-editor"),
+    "undo": lambda state: ReviewState.Undo("user-editor", ARRIVAL),
     "rule_rejects": lambda state: ReviewState.RuleRejects("no_shows", REASON_B),
-    "rule_returns": lambda state: ReviewState.RuleReturns(),
-    "hand_on": lambda state: ReviewState.HandOnFollowUp(MarketPerson(user_id="u", email=ADMIN)),
+    "rule_returns": lambda state: ReviewState.RuleReturns(ARRIVAL),
+    "hand_on": lambda state: ReviewState.HandOnFollowUp(
+        MarketPerson(user_id="u", email=ADMIN), ARRIVAL),
 }
+#: The pure events whose every move is into open or follow-up, so marks for the deal.
+MARKING = ("undo", "rule_returns", "hand_on")
 
 _DECIDED = (State.APPROVED_BY_A_PERSON, State.APPROVED_ADDED, State.REJECTED_BY_A_PERSON,
             State.REJECTED_BY_A_RULE)
@@ -559,13 +578,20 @@ def test_each_pure_move(state, event):
         assert moved.to is expected
         assert ReviewState.state_of({**{k: v for k, v in doc.items() if k not in moved.unset},
                                      **moved.set}) is expected
+        if event in MARKING:
+            assert moved.set[ApplicationsApi.ARRIVING_FIELD] == ARRIVAL.stored()
+        else:
+            assert ApplicationsApi.ARRIVING_FIELD not in moved.set
+        # A verdict ends the wait; a follow-up given keeps whatever wait it had.
+        if not expected.undecided:
+            assert ApplicationsApi.ARRIVING_FIELD in moved.unset
 
 
 class TestThePureMove:
     def test_holds_the_status_and_the_verdicts_time_as_read(self):
         doc = _stored(State.REJECTED_BY_A_PERSON)
 
-        moved = ReviewState.move(doc, ReviewState.Undo("user-editor"))
+        moved = ReviewState.move(doc, ReviewState.Undo("user-editor", ARRIVAL))
 
         assert moved.pins == {"status": "reviewer_rejected", "verdict_at": doc["verdict_at"]}
 
@@ -590,12 +616,13 @@ class TestThePureMove:
     def test_an_undo_after_the_window_is_refused(self):
         doc = {**_stored(State.APPROVED_BY_A_PERSON), "verdict_at": "2026-10-01T00:00:00+00:00"}
 
-        assert isinstance(ReviewState.move(doc, ReviewState.Undo("user-editor")),
+        assert isinstance(ReviewState.move(doc, ReviewState.Undo("user-editor", ARRIVAL)),
                           ReviewState.Refused)
 
     def test_an_undo_by_someone_else_is_refused(self):
         assert isinstance(ReviewState.move(_stored(State.APPROVED_BY_A_PERSON),
-                                           ReviewState.Undo("user-admin")), ReviewState.Refused)
+                                           ReviewState.Undo("user-admin", ARRIVAL)),
+                          ReviewState.Refused)
 
 
 # --- Every stored status reads as a state ---------------------------------------------------------

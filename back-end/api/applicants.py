@@ -43,6 +43,7 @@ from datatypes import (
     IntakeMode,
     Market,
     MarketPerson,
+    Organization,
     VendorAssignmentResult,
     VerdictGiver,
     MarketPhase,
@@ -486,12 +487,14 @@ def save_applicant_application(
         refusal = validate_application_answers(market_doc, form_data)
         if refusal:
             return {"error": refusal}, 422
+    # The applicant's own save is its arrival, marked for the deal as it is created.
+    arrival = ReviewState.Arrival(email, History.APPLY)
     app_doc = existing or ReviewState.find_or_create_application(Application(
         market_id=market_id,
         applicant_email=email,
         form_data={},
         status=ApplicationStatus.OPEN,
-    )).model_dump()
+    ), arrival).model_dump()
 
     # Validation, the offering freeze, the write and the status all live in one place, so an
     # imported application and a form-submitted one cannot drift apart.
@@ -511,16 +514,17 @@ def save_applicant_application(
     if whole is None:
         return _gone_under_the_save(db["markets"], market_id) or ({"error": "Market not found."}, 404)
     market = market_from_document(whole)
-    verdicts = RejectionRules.judge(RejectionRules.Rulebook(market), market_id, app.id)
+    verdicts = RejectionRules.judge(RejectionRules.Rulebook(market), market_id, app.id,
+                                    arrival=arrival)
     # After the rules, so the entry says what they did to it: no rule records an entry of its own.
     saved = app
     History.record_applicant(
         market_id, email, History.EDITED if existing else History.SUBMITTED, app.id,
         lambda: _with_rules(History.changes(answered, saved.form_data or {}), verdicts))
     # Then dealt to the next reviewer in turn, if reviewers are chosen and it is still open
-    # (E38/F07/S03): the applicant's own save is its arrival, so it is recorded as theirs, and it
-    # deals theirs alone.
-    ReviewTeam.deal_arrivals(market, email, History.APPLY, only=app.id)
+    # (E38/F07/S03), recorded as the applicant's own arrival; anything else waiting is recorded
+    # under the write that marked it, never theirs.
+    ReviewTeam.deal_arrivals(market)
     # After the save's last write: a deletion that began after the market was read above has
     # swept, or will sweep, everything written here, or this takes it back (``market_deletion``).
     gone = _gone_under_the_save(db["markets"], market_id)
@@ -856,7 +860,8 @@ def _undo_one(
     owner = (doc["undo_to"].get("follow_up_owner") or {}).get("email")
     if owner and not owner_offered(owner):
         return doc, None, (UNDO_OWNER_REFUSED, 400)
-    done = ReviewState.undo(doc, pinned, by)
+    done = ReviewState.undo(doc, pinned, by,
+                            ReviewState.Arrival(by.email, Actions.GIVE_VERDICTS.id))
     if isinstance(done, ReviewState.Refused):
         return doc, None, (UNDO_REFUSED, 403)
     if not done:
@@ -866,19 +871,21 @@ def _undo_one(
 
 
 def undo_verdict(
-    market_id: str, asked: UndoAsked, by: VerdictGiver, owner_offered: OwnerOffered,
+    market: Market, organization: Optional[Organization], asked: UndoAsked, by: VerdictGiver,
+    owner_offered: OwnerOffered,
 ) -> Tuple[Dict[str, Any], int]:
     """Undo the verdict, or the follow-up, this reviewer gave an application (E38/F10/S01).
 
     Theirs alone, within ``UNDO_WINDOW``, while they may still give verdicts (the caller asks
     ``verdict_refusal``) - giving, taken back, so never the change row. It returns the application
-    to what the verdict found it as, open, or needs follow-up marked and owned as it was, and
-    leaves whom it was dealt to as it is. Refused with ``UNDO_REFUSED`` (403) once it is not theirs
+    to what the verdict found it as, open, or needs follow-up marked and owned as it was, and then
+    deals it: still dealt to whom it was while they may review, else to the next reviewer in turn
+    (E38/F07/S03). Refused with ``UNDO_REFUSED`` (403) once it is not theirs
     to undo, with ``UNDO_OWNER_REFUSED`` (400) for a follow-up whose owner it may no longer hand
     one to, and with the stale-verdict sentence and the application as it stands (409) when someone
     wrote over it since.
     """
-    was, now, refused = _undo_one(market_id, asked, by, owner_offered)
+    was, now, refused = _undo_one(market.id, asked, by, owner_offered)
     if refused:
         reason, status = refused
         if status == 409 and was is not None:
@@ -886,16 +893,20 @@ def undo_verdict(
                     "application": _application_response_organizer(Application(**was))}, 409
         return {"error": reason}, status
     History.record(
-        market_id, by.email, Actions.GIVE_VERDICTS, kind=History.VERDICT_UNDONE,
+        market.id, by.email, Actions.GIVE_VERDICTS, kind=History.VERDICT_UNDONE,
         vendors=[was.get("applicant_email")], subject={"application_id": asked[0]},
         detail=lambda: {"before": _verdict_state(was), "after": _verdict_state(now),
                         **_dealt_to(was)},
     )
+    # After its entry, so the history reads the undo before the deal it waited for.
+    if ReviewTeam.deal_waiting(market, organization):
+        now = ApplicationsApi.find_application_by_id(asked[0]) or now
     return {"application": _application_response_organizer(Application(**now))}, 200
 
 
 def undo_selection(
-    market_id: str, selection: List[UndoAsked], by: VerdictGiver, owner_offered: OwnerOffered,
+    market: Market, organization: Optional[Organization], selection: List[UndoAsked],
+    by: VerdictGiver, owner_offered: OwnerOffered,
 ) -> Tuple[Dict[str, Any], int]:
     """Undo what a selection's verdict wrote (E38/F10/S01), each as ``undo_verdict`` undoes one,
     answering which were written and, for each skipped, why - as ``review_selection`` answers."""
@@ -904,7 +915,7 @@ def undo_selection(
     now: Dict[str, Dict[str, Any]] = {}
     skipped: List[Dict[str, Any]] = []
     for asked in selection:
-        before, after, refused = _undo_one(market_id, asked, by, owner_offered)
+        before, after, refused = _undo_one(market.id, asked, by, owner_offered)
         if refused:
             skipped.append({"id": asked[0], "email": (before or {}).get("applicant_email"),
                             "reason": refused[0]})
@@ -913,7 +924,7 @@ def undo_selection(
         was[asked[0]], now[asked[0]] = before, after
     if written:
         History.record(
-            market_id, by.email, Actions.GIVE_VERDICTS, kind=History.VERDICTS_UNDONE,
+            market.id, by.email, Actions.GIVE_VERDICTS, kind=History.VERDICTS_UNDONE,
             vendors=[was[app_id].get("applicant_email") for app_id in written],
             subject={"application_ids": written},
             detail=lambda: {
@@ -922,27 +933,32 @@ def undo_selection(
                 **_each_dealt_to(was[app_id] for app_id in written),
             },
         )
+        ReviewTeam.deal_waiting(market, organization)
     return {"written": written, "skipped": skipped}, 200
 
 
 def reassign_follow_up(
-    market_id: str, application_id: str, owner: MarketPerson, by: str,
+    market: Market, organization: Optional[Organization], application_id: str,
+    owner: MarketPerson, by: str,
 ) -> Tuple[Dict[str, Any], int]:
     """Hand a follow-up to someone else with a role on the market (E34/F02/S01), ``by`` the
-    signed-in reviewer."""
+    signed-in reviewer; then the deal keeps it with its new owner while they may review here, and
+    hands it on to the next reviewer in turn otherwise (E38/F07/S03)."""
     app_doc = ApplicationsApi.find_application_by_id(application_id)
-    if not app_doc or app_doc.get("market_id") != market_id:
+    if not app_doc or app_doc.get("market_id") != market.id:
         return {"error": "Application not found for this market."}, 404
-    if not ReviewState.hand_on_follow_up(app_doc, owner):
+    if not ReviewState.hand_on_follow_up(
+            app_doc, owner, ReviewState.Arrival(by, Actions.GIVE_VERDICTS.id)):
         return {"error": "Only an application that needs a follow-up has an owner."}, 409
     History.record(
-        market_id, by, Actions.GIVE_VERDICTS, kind=History.FOLLOW_UP_OWNER,
+        market.id, by, Actions.GIVE_VERDICTS, kind=History.FOLLOW_UP_OWNER,
         vendors=[app_doc.get("applicant_email")], subject={"application_id": application_id},
         detail=lambda: History.changes(
             {"follow_up_owner": (app_doc.get("follow_up_owner") or {}).get("email")},
             {"follow_up_owner": owner.email},
         ),
     )
+    ReviewTeam.deal_waiting(market, organization)
     app = Application(**ApplicationsApi.find_application_by_id(application_id))
     return {"application": _application_response_organizer(app)}, 200
 

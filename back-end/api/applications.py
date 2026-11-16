@@ -341,15 +341,17 @@ def undecided_in_arrival_order(
                               if dealable(doc)])
 
 
-#: An application waiting to be dealt as it arrived (E38/F07/S03): ``{actor, action}``, the write it
-#: arrived by, for the deal's history entry. Set by ``ReviewState.mark_arriving``, cleared as it is
-#: dealt.
+#: An application waiting for the deal (E38/F07/S03): ``{actor, action}``, the write that moved it
+#: into open or follow-up, for the deal's history entry (``ReviewState.Arrival``). Set by that
+#: move's own write, cleared as the deal deals it or leaves it where it is.
 ARRIVING_FIELD = "arriving"
 
 
-#: What a deal reads of an application waiting as it arrived: enough to order, deal and record it.
+#: What a deal reads of an application waiting for it: enough to order it, read its state, deal it
+#: and record it.
 _ARRIVING_PROJECTION = {"_id": 0, "id": 1, "applicant_email": 1, "submitted_at": 1,
-                        ARRIVING_FIELD: 1}
+                        ARRIVING_FIELD: 1, STATUS_FIELD: 1, "verdict_by": 1, "added_by": 1,
+                        "origin": 1, "reviewer": 1, "follow_up_owner": 1}
 
 
 def _waiting_filter(market_id: str) -> Dict[str, Any]:
@@ -360,7 +362,7 @@ def _waiting_filter(market_id: str) -> Dict[str, Any]:
 
 
 def arriving_in_arrival_order(market_id: str) -> List[Dict[str, Any]]:
-    """The market's applications waiting to be dealt as they arrived, earliest arrival first:
+    """The market's applications waiting for the deal, earliest arrival first:
     those alone, and only what a deal reads of them, since it reads them while holding the market
     (the ``market_id, arriving`` lookup index)."""
     ensure_application_indexes()
@@ -369,7 +371,7 @@ def arriving_in_arrival_order(market_id: str) -> List[Dict[str, Any]]:
 
 
 def any_arriving(market_id: str) -> bool:
-    """Whether any application of the market waits to be dealt as it arrived."""
+    """Whether any application of the market waits for the deal."""
     return applications_collection.find_one(
         _waiting_filter(market_id)) is not None
 

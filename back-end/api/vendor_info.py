@@ -120,7 +120,8 @@ def update_vendor_info(
     judging = (updates or cleared) and MarketsApi.review_is_open(market.phase)
     verdicts = (RejectionRules.judge(
         RejectionRules.Rulebook(market), market_id, application_id,
-        overturns=MarketsApi.may_overturn(updater.email, market))
+        overturns=MarketsApi.may_overturn(updater.email, market),
+        arrival=ReviewState.Arrival(updater.email, Actions.UPDATE_VENDOR_INFO.id))
         if judging else RejectionRules.Judged())
     moved = [key for key in values if key not in kept and key not in matched]
     History.record(
@@ -133,8 +134,7 @@ def update_vendor_info(
             kept, kept_over, matched, verdicts),
     )
     # One the rules returned to open is an arrival, dealt to the next reviewer (E38/F07/S03).
-    dealt = ReviewTeam.deal_arrivals(market, updater.email, Actions.UPDATE_VENDOR_INFO) \
-        if verdicts.returned else 0
+    dealt = ReviewTeam.deal_arrivals(market) if verdicts.returned else 0
     if verdicts.rejected or verdicts.returned or dealt:
         stored = ApplicationsApi.find_application_by_id(application_id) or stored
     return {"application": ApplicantsApi.organizer_view(stored)}, 200

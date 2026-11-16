@@ -22,6 +22,7 @@ import api.markets as MarketsApi  # noqa: E402
 import market_write as MarketWrite  # noqa: E402
 import api.permissions as PermissionsApi  # noqa: E402
 import api.users as UsersApi  # noqa: E402
+import application_status as ReviewState  # noqa: E402
 import rejection_rules as Rules  # noqa: E402
 from conftest import client_market, complete_setup, sessions_load_through_get_user, stored_market  # noqa: E402
 from datatypes import (  # noqa: E402
@@ -46,6 +47,8 @@ ROLES = {"user-owner": "owner", "user-admin": "admin", "user-editor": "editor",
          "user-viewer": "viewer"}
 RULE = {"kind": "rule", "user_id": None, "email": None, "rule": "no_shows"}
 KAI = {"kind": "person", "user_id": "user-kai", "email": "kai@market.test", "rule": None}
+#: The write whose rules judge here, which marks for the deal what they return to open.
+BY = ReviewState.Arrival("kai@market.test", "change-form")
 
 OPEN = ApplicationStatus.OPEN
 APPROVED = ApplicationStatus.REVIEWER_APPROVED
@@ -375,12 +378,13 @@ def holding(monkeypatch):
 
 class TestJudgingAgain:
     def test_returns_a_rule_rejection_no_rule_meets_when_it_may(self, ruled_out):
-        Rules.judge(Rules.Rulebook(_rules_market()), "market-1")
+        Rules.judge(Rules.Rulebook(_rules_market()), "market-1", arrival=BY)
 
         assert ruled_out["status"] == OPEN.value
 
     def test_leaves_it_standing_when_it_may_not(self, ruled_out):
-        verdicts = Rules.judge(Rules.Rulebook(_rules_market()), "market-1", overturns=False)
+        verdicts = Rules.judge(Rules.Rulebook(_rules_market()), "market-1", overturns=False,
+                               arrival=BY)
 
         assert ruled_out["status"] == REJECTED.value
         assert ruled_out["verdict_by"] == RULE
@@ -389,7 +393,8 @@ class TestJudgingAgain:
     def test_still_rejects_an_undecided_one_when_it_may_not_return(self, applications):
         applications.documents = [_application("open", OPEN, no_shows=False)]
 
-        Rules.judge(Rules.Rulebook(_rules_market(NO_SHOW_RULE)), "market-1", overturns=False)
+        Rules.judge(Rules.Rulebook(_rules_market(NO_SHOW_RULE)), "market-1", overturns=False,
+                    arrival=BY)
 
         assert applications.documents[0]["status"] == REJECTED.value
 
@@ -485,7 +490,8 @@ class TestAWriteThatJudgesAgain:
         """The applicant changed the answer the rule read; nobody overturned a decision."""
         ruled_out["form_data"] = {"no_shows": True}
 
-        Rules.judge(Rules.Rulebook(_rules_market(NO_SHOW_RULE)), "market-1", "ruled-out")
+        Rules.judge(Rules.Rulebook(_rules_market(NO_SHOW_RULE)), "market-1", "ruled-out",
+                    arrival=BY)
 
         assert ruled_out["status"] == OPEN.value
 

@@ -13,6 +13,7 @@ import pytest
 
 from conftest import FakeMarketsCollection, stored_market
 
+import application_status as ReviewState
 import essential_fields as EssentialFields
 from application_write import (
     ANSWERS_MOVED, record_application_answers, validate_application_answers,
@@ -145,6 +146,7 @@ class TestRecordApplicationAnswers:
             markets, markets.doc, _app_doc(status=ApplicationStatus.OPEN.value), ANSWERS,
             imported=True, held=_app_doc(status=ApplicationStatus.OPEN.value),
             back_to_review=True,
+            arrival=ReviewState.Arrival("admin@market.test", "import-applications"),
         )
 
         assert (error, app) == (ANSWERS_MOVED, None)

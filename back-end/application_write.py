@@ -95,6 +95,7 @@ def record_application_answers(
     imported: bool = False,
     held: Optional[Dict[str, Any]] = None,
     back_to_review: bool = False,
+    arrival: Optional[ReviewState.Arrival] = None,
 ) -> Tuple[Optional[str], Optional[Application]]:
     """Validate, freeze, persist and status an applicant's answers. The whole sequence, once.
 
@@ -109,9 +110,10 @@ def record_application_answers(
     unfrozen offering, and a concurrent first save that froze a different offering is handled by
     re-validating against whichever one actually governs.
 
-    ``held`` and ``back_to_review`` are ``update_application_form_data``'s: the write lands only
-    while the application's status and verdict's time are still those ``held`` has, and with
-    ``back_to_review`` it returns the application to open in the same update. When the held write
+    ``held``, ``back_to_review`` and ``arrival`` are ``update_application_form_data``'s: the write
+    lands only while the application's status and verdict's time are still those ``held`` has, and
+    with ``back_to_review`` it returns the application to open in the same update, marked for the
+    deal by ``arrival``. When the held write
     matches nothing the answer is ``ANSWERS_MOVED`` with no application, and nothing was written.
     An applicant's own save passes neither.
     """
@@ -149,6 +151,7 @@ def record_application_answers(
 
     written = ReviewState.update_application_form_data(
         app_id, stored_form_data, submitted_at, now, held=held, back_to_review=back_to_review,
+        arrival=arrival,
     )
     if held is not None and not written:
         return ANSWERS_MOVED, None

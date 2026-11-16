@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import api.applicants as ApplicantsApi  # noqa: E402
 import api.applications as ApplicationsApi  # noqa: E402
+import application_status as ReviewState  # noqa: E402
 import market_write as MarketWrite  # noqa: E402
 import rejection_rules as Rules  # noqa: E402
 from conftest import (  # noqa: E402
@@ -40,6 +41,8 @@ FIELDS = [
 NO_SHOW_RULE = RejectionRule(key="no_shows", answers=[Rules.NOT_TICKED])
 AFFILIATION_RULE = RejectionRule(key="affiliation", answers=[OUTSIDER])
 ALEX = VerdictGiver(kind="person", user_id="user-alex", email="alex@market.test")
+#: The write whose rules judge here, which marks for the deal what they return to open.
+BY = ReviewState.Arrival("alex@market.test", "change-form")
 
 
 def _market(*rules, **overrides):
@@ -87,7 +90,7 @@ class TestJudgingTheMarket:
     def test_an_undecided_application_is_rejected_with_the_rule_and_the_reason(self, stored):
         stored.append(_app("a", no_shows=False))
 
-        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123")
+        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123", arrival=BY)
 
         assert stored[0]["status"] == ApplicationStatus.REVIEWER_REJECTED.value
         assert stored[0]["verdict_by"] == {"kind": "rule", "rule": "no_shows",
@@ -99,25 +102,26 @@ class TestJudgingTheMarket:
         stored.append({**_app("a", ApplicationStatus.REVIEWER_APPROVED, no_shows=False), **given})
         stored.append({**_app("b", ApplicationStatus.REVIEWER_REJECTED, no_shows=True), **given})
 
-        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123")
+        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123", arrival=BY)
 
         assert [a["status"] for a in stored] == ["reviewer_approved", "reviewer_rejected"]
         assert all(a["verdict_by"]["kind"] == "person" for a in stored)
 
     def test_a_rule_that_no_longer_matches_returns_its_rejections_to_undecided(self, stored):
         stored.append(_app("a", no_shows=False, affiliation=OUTSIDER))
-        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123")
+        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123", arrival=BY)
 
-        Rules.judge(Rules.Rulebook(_market()), "market-123")
+        Rules.judge(Rules.Rulebook(_market()), "market-123", arrival=BY)
 
         assert stored[0]["status"] == ApplicationStatus.OPEN.value
         assert "verdict_by" not in stored[0] and "verdict_reason" not in stored[0]
 
     def test_another_rule_still_matching_keeps_it_rejected_with_its_own_reason(self, stored):
         stored.append(_app("a", no_shows=False, affiliation=OUTSIDER))
-        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE, AFFILIATION_RULE)), "market-123")
+        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE, AFFILIATION_RULE)), "market-123",
+                    arrival=BY)
 
-        Rules.judge(Rules.Rulebook(_market(AFFILIATION_RULE)), "market-123")
+        Rules.judge(Rules.Rulebook(_market(AFFILIATION_RULE)), "market-123", arrival=BY)
 
         assert stored[0]["status"] == ApplicationStatus.REVIEWER_REJECTED.value
         assert stored[0]["verdict_by"]["rule"] == "affiliation"
@@ -125,7 +129,8 @@ class TestJudgingTheMarket:
     def test_one_application_alone_when_it_arrives(self, stored):
         stored.extend([_app("a", no_shows=False), _app("b", no_shows=False)])
 
-        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123", application_id="b")
+        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123", application_id="b",
+                    arrival=BY)
 
         assert [a["status"] for a in stored] == ["open", "reviewer_rejected"]
 
@@ -133,9 +138,9 @@ class TestJudgingTheMarket:
 class TestWhatJudgingNeverDoes:
     def test_return_a_rejection_its_applicant_has_seen(self, stored):
         stored.append(_app("a", no_shows=False))
-        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123")
+        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123", arrival=BY)
 
-        Rules.judge(Rules.Rulebook(_market(results_published=True)), "market-123")
+        Rules.judge(Rules.Rulebook(_market(results_published=True)), "market-123", arrival=BY)
 
         assert stored[0]["status"] == ApplicationStatus.REVIEWER_REJECTED.value
 
@@ -152,7 +157,8 @@ class TestWhatJudgingNeverDoes:
 
         monkeypatch.setattr(ApplicationsApi, "judgeable_applications", read_then_a_person_decides)
 
-        assert Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123") == Rules.Judged()
+        assert Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123",
+                           arrival=BY) == Rules.Judged()
         assert stored[0]["status"] == ApplicationStatus.REVIEWER_APPROVED.value
         assert stored[0]["verdict_by"]["kind"] == "person"
 
@@ -176,7 +182,7 @@ class TestWhoSeesTheReason:
 
     def test_a_person_overturning_it_makes_it_theirs(self, stored):
         stored.append(_app("a", no_shows=False))
-        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123")
+        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123", arrival=BY)
 
         ApplicantsApi.review_application(
             "market-123", "a", ApplicationStatus.REVIEWER_APPROVED, by=ALEX, seen=seen_as_read("a"))
@@ -184,7 +190,7 @@ class TestWhoSeesTheReason:
         assert stored[0]["verdict_by"]["kind"] == "person"
         assert "verdict_reason" not in stored[0]
         # A person's verdict is theirs: the rule, judged again, leaves it.
-        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123")
+        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123", arrival=BY)
         assert stored[0]["status"] == ApplicationStatus.REVIEWER_APPROVED.value
 
 
@@ -244,7 +250,7 @@ class TestTheyApplyWhen:
         import api.markets as MarketsApi
 
         stored.append(_app("a", no_shows=False))
-        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123")
+        Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123", arrival=BY)
         without_it = _market(NO_SHOW_RULE).model_copy(update={"application_form": ApplicationForm(
             fields=[f for f in FIELDS if f["key"] != "no_shows"])})
         monkeypatch.setattr(MarketsApi, "_load_market_to_change", lambda *_a: without_it)

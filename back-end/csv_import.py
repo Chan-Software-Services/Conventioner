@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 import api.applications as ApplicationsApi
+import api.market_actions as Actions
 import application_status as ReviewState
 import rejection_rules as RejectionRules
 import essential_fields as EssentialFields
@@ -1724,13 +1725,14 @@ class _RowOutcome(NamedTuple):
 
 def _write_row(
     markets_collection: Any, market_doc: Dict[str, Any], market_id: str, email: str,
-    submitted_at: str, form_data: Dict[str, Any],
+    submitted_at: str, form_data: Dict[str, Any], arrival: ReviewState.Arrival,
 ) -> _RowOutcome:
     """Write one row's answers, held to the application as it was read (T270).
 
     The answers and any "back to review" are one update, held to the status and the verdict's time
     this read: a verdict given between the read and the write makes it match nothing, and the row
-    is decided again on what is stored then, at most ``ROW_TRIES`` times in all.
+    is decided again on what is stored then, at most ``ROW_TRIES`` times in all. A row that creates
+    an application, or sends one back to review, marks it for the deal by ``arrival``, the import.
     """
     existing = ApplicationsApi.find_application_by_email(market_id, email)
     created_here = False
@@ -1747,7 +1749,7 @@ def _write_row(
             form_data={},
             status=ApplicationStatus.OPEN,
             submitted_at=submitted_at or None,
-        )).model_dump()
+        ), arrival).model_dump()
         created_now = existing is None
         created_here = created_here or created_now
 
@@ -1757,7 +1759,7 @@ def _write_row(
 
         row_error, _ = record_application_answers(
             markets_collection, market_doc, app_doc, form_data, imported=True,
-            held=held, back_to_review=stale_review,
+            held=held, back_to_review=stale_review, arrival=arrival,
         )
         if row_error == ANSWERS_MOVED:
             existing = ApplicationsApi.find_application_by_email(market_id, email)
@@ -1868,6 +1870,8 @@ def import_applications(
     )
     failures = _row_faults(market_doc, applicants, left_out_at_start(market_doc, resolutions))
     refused = {failure["row"] for failure in failures}
+    # The import is how each row it creates or sends back to review arrives, for the deal.
+    arrival = ReviewState.Arrival(by, Actions.IMPORT_APPLICATIONS.id)
 
     # Counted before the writes, so it means "already here and not in this file" rather than
     # being confused by the rows this run is about to add.
@@ -1886,7 +1890,7 @@ def import_applications(
             continue
 
         outcome = _write_row(markets_collection, market_doc, market_id, email, submitted_at,
-                             form_data)
+                             form_data, arrival)
         if outcome.error:
             failures.append({"row": row_number, "email": email, "error": outcome.error})
         elif outcome.unchanged:
@@ -1909,7 +1913,7 @@ def import_applications(
     judged_market = market_from_document(market_doc)
     verdicts = RejectionRules.judge(
         RejectionRules.Rulebook(judged_market), market_id,
-        overturns=_overturns(by, judged_market))
+        overturns=_overturns(by, judged_market), arrival=arrival)
 
     # Only now, the rows written: a draft's first import is its way into Review (E38/F04/S01).
     phase = phase_from_market_document(market_doc).value
