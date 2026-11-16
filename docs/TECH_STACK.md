@@ -269,7 +269,7 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 ### Continuous Integration
 
 - **GitHub Actions** - CI pipeline (`.github/workflows/test.yml`)
-  - Runs on pushes and pull requests to `main` or `dev`
+  - Runs on pushes and pull requests to `main` or `dev`, and on a merge queue's trial commit for `dev`
   - Its jobs, what each runs and which checks branch protection requires: [CI and the gate](implementation/testing/ci-and-the-gate.md)
 - **GitHub Actions** - Release automation (`.github/workflows/release-please.yml`)
   - Runs [release-please](https://github.com/googleapis/release-please) on pushes to `main`
