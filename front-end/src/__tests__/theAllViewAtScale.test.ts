@@ -85,11 +85,16 @@ beforeEach(() => {
 });
 
 // A list left mounted re-reads every half-minute into the next tests' counts of reads, on a
-// machine busy enough to take that long over this file: every list goes after its test.
+// machine busy enough to take that long over this file: every list goes after its test, or before,
+// by `unmountNow`.
 const shown: VueWrapper[] = [];
 afterEach(() => {
-  for (const wrapper of shown.splice(0)) if (!wrapper.vm.$.isUnmounted) wrapper.unmount();
+  for (const wrapper of shown.splice(0)) wrapper.unmount();
 });
+function unmountNow(wrapper: VueWrapper) {
+  shown.splice(shown.indexOf(wrapper), 1);
+  wrapper.unmount();
+}
 
 async function allView(market: Market = MARKET) {
   const wrapper = mount(ApplicationsAll, {
@@ -270,7 +275,7 @@ describe('the place in the list', () => {
       await flushPromises();
       expect(fetchMarketApplications).toHaveBeenCalledTimes(2);
       expect(rows(wrapper)).toHaveLength(100);
-      wrapper.unmount();
+      unmountNow(wrapper);
     } finally {
       vi.useRealTimers();
     }
@@ -408,7 +413,7 @@ describe('the states', () => {
     expect(none.get('[data-testid="applications-all-empty"]').text()).toBe(
       'No applications received yet.',
     );
-    none.unmount();
+    unmountNow(none);
 
     fetchMarketApplications.mockResolvedValue(many(3));
     route.query = { status: ApplicationStatus.ReviewerRejected };
