@@ -136,6 +136,8 @@ describe('sessionLoop', () => {
       const { stdinFlags, sleeps } = JSON.parse(said) as { stdinFlags: string; sleeps: number };
       // O_NONBLOCK, octal 04000: the loop was given the stdin mongosh leaves it.
       expect(parseInt(stdinFlags, 8) & 0o4000).toBe(0o4000);
+      // Today's loop calls no `sleep`; this holds it there. The loop that read fd 0 and slept 5 ms
+      // on each `EAGAIN` fails here, with 56 sleeps in the 300 ms pause.
       expect(sleeps).toBe(0);
       const ready = readAnswer(printed, nonce);
       expect(ready?.answer).toEqual({ ok: true, output: '' });
