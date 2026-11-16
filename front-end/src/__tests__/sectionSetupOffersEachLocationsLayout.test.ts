@@ -98,8 +98,8 @@ describe("Section Setup's layouts", () => {
     );
   });
 
-  it('offers a plan that cannot change only the layouts it has, as links', () => {
-    for (const locks of [{ readOnly: true }, { settled: 'The setup has settled.' }]) {
+  it('offers a person who may not change the setup only the layouts it has, as links', () => {
+    for (const locks of [{ readOnly: true }, { readOnly: true, settled: 'The setup has settled.' }]) {
       const wrapper = mountPlan(plan({ floorplans: [LAID_OUT] as never }), locks);
 
       expect(wrapper.find('[data-testid="plan-layout-start-loc-upper"]').exists()).toBe(false);
@@ -107,6 +107,21 @@ describe("Section Setup's layouts", () => {
       expect(link.props('to')).toBe('/markets/market-1/layout/loc-lower');
       expect(link.text()).toBe("Open Lower Hall's layout · 2 tables");
     }
+  });
+
+  it('past Draft offers to lay out a location with none, as a link, to a person who may change the setup', () => {
+    const wrapper = mountPlan(plan({ floorplans: [LAID_OUT] as never }), {
+      settled: 'The setup has settled.',
+    });
+
+    const links = wrapper.findAllComponents(RouterLinkStub);
+    expect(links.map((link) => [link.text(), link.props('to')])).toEqual([
+      ['Lay out Upper Hall', '/markets/market-1/layout/loc-upper'],
+      ["Open Lower Hall's layout · 2 tables", '/markets/market-1/layout/loc-lower'],
+    ]);
+    expect(wrapper.find('[data-testid="plan-layout-start-loc-upper"]').text()).toBe(
+      'Lay out Upper Hall',
+    );
   });
 
   it('offers nothing with no named location', () => {

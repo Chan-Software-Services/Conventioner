@@ -130,7 +130,7 @@ Covered by:
 
 **Status:** Works (T257): a location's floorplan, its scale, its table types and no-table zones, and tables placed one at a time, as rows along a drawn line, or filling an area, then moved, turned, duplicated, lined up, renumbered and removed, one or several at a time, by pointer or by keyboard, moved and turned after Draft, read on a phone and exported as a PNG; walked whole, from a new market's two halls to the Assignments page naming a moved table's vendor, by `a-layout-is-the-plans-tables.spec.ts`.
 It replaced the floorplan beta, a wizard whose save nothing read again.
-Under Section Setup's rows, each named location offers "Lay out Upper Hall", or "Open Upper Hall's layout · 49 tables" once it has one; a location with no name offers nothing until it has one, and a plan that cannot change offers only the layouts it has, to read.
+Under Section Setup's rows, each named location offers "Lay out Upper Hall", or "Open Upper Hall's layout · 49 tables" once it has one; a location with no name offers nothing until it has one, and a person who may not change the setup is offered only the layouts it has, to read; past Draft a person who may is offered "Lay out Upper Hall" too, since a layout started then follows the plan ([ADR 0034](../../adr/0034-a-layout-started-after-draft-follows-the-plan.md)).
 Opening one saves the plan's pending edits first, then goes to `/markets/<id>/layout/<location>`, under the Market Setup tab; `/markets/<id>/layout` opens the first location's, and the floorplan beta's old address, `/markets/<id>/floorplan`, lands there too.
 
 1. **Upload:** "Drop the floorplan's image or PDF here, or choose a file", the app's one drop zone, with "Upload the venue's floorplan for Upper Hall to start." beside it.

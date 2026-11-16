@@ -16,7 +16,7 @@ import { ToolsPage } from './pages/ToolsPage';
  * sections' counts were typed on Section Setup, Aisle A's four and Aisle B's three, and its seven
  * vendors are seated by those counts, Kiln & Co at Aisle A 2 today; its results are not out.
  *
- * The organizer starts East Hall's layout, which follows the plan, and places Aisle A's four tables
+ * The organizer starts North Wing's layout, which follows the plan, and places Aisle A's four tables
  * with Row of tables. On Tools, as the market's Admin, they choose the three public questions and
  * turn the map on, which waits for the results; they publish them. A visitor, signed out on a
  * phone, opens the map, finds Kiln & Co by name and reads their table. The organizer publishes the
@@ -35,9 +35,16 @@ test('a market past Draft with no layout gets a public map a visitor reads a ven
   const kiln = seed.vendors.find((vendor) => vendor.answers.businessName === 'Kiln & Co')!;
   expect(kiln.today.tableCode).toBe('Aisle A 2');
 
-  // East Hall has no layout: the upload is offered past Draft, and the layout follows the plan.
+  // North Wing has no layout: past Draft, Market Setup offers to lay it out, the upload is
+  // offered, and the layout follows the plan.
+  const setup = new MarketSetupPage(page);
+  await setup.goto(seed.marketId);
+  const layOut = page.getByTestId(`plan-layout-start-${seed.north.id}`);
+  await expect(layOut).toHaveText(`Lay out ${seed.north.name}`);
+  await layOut.click();
   const layout = new LayoutPage(page);
-  await layout.goto(seed.marketId, seed.east.id);
+  await expect(page).toHaveURL(new RegExp(`/markets/${seed.marketId}/layout/${seed.north.id}$`));
+  await expect(layout.root).toBeVisible({ timeout: 15000 });
   await expect(layout.followsPlan).toBeVisible();
   await layout.uploadFileInput.setInputFiles(LAYOUT_FLOORPLAN_PATH);
   await expect(layout.calibrationMap).toBeVisible();
@@ -79,7 +86,6 @@ test('a market past Draft with no layout gets a public map a visitor reads a ven
   await map.goto(seed.slug);
   await expect(map.page.getByTestId('page-not-found')).toBeVisible();
 
-  const setup = new MarketSetupPage(page);
   await setup.openPublishResults(seed.marketId);
   await setup.confirmPublishResults();
   await tools.goto(seed.marketId);
@@ -90,13 +96,13 @@ test('a market past Draft with no layout gets a public map a visitor reads a ven
   await map.goto(seed.slug);
   await expect(map.heading).toHaveText(seed.marketName);
   await expect(map.day(seed.today)).toHaveAttribute('aria-pressed', 'true');
-  // East Hall alone is laid out, so the map has no location switch.
+  // North Wing alone is laid out, so the map has no location switch.
   await expect(map.page.getByTestId('day-map-locations')).toHaveCount(0);
   await expect(map.targets).toHaveCount(5);
   await map.find.fill('kiln');
   await expect(map.vendors).toHaveCount(1);
   await expect(map.vendors).toContainText('Kiln & Co');
-  await expect(map.vendors).toContainText(`Table Aisle A 2, ${seed.east.name}`);
+  await expect(map.vendors).toContainText(`Table Aisle A 2, ${seed.north.name}`);
   await map.vendors.click();
   await expect(map.card.getByRole('heading')).toHaveText('Table Aisle A 2');
   await expect(map.card.getByTestId('public-map-card-name')).toHaveText('Kiln & Co');
