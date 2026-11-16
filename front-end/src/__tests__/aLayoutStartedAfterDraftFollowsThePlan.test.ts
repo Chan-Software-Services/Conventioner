@@ -304,6 +304,27 @@ describe('a layout that starts following the plan as the server answers its star
   });
 });
 
+describe('a copy never shares an id with its source (D45)', () => {
+  it("gives every duplicated table an id of its own, with the app's own id maker", () => {
+    const editor = useLayoutEditor({
+      save: async (layout): Promise<SavedLayout> => ({
+        floorplan: { ...layout, revision: layout.revision + 1 },
+      }),
+      draft: () => true,
+      sectionIds: () => ['gold'],
+      counts: () => new Map([['gold', 12]]),
+    });
+    editor.adopt(aLayout(true, GOLD_1_3_5()));
+    const source = new Set(editor.layout.value!.tables.map((table) => table.id));
+
+    const copies = editor.duplicate([...source]);
+
+    expect(copies).toHaveLength(3);
+    expect(copies.filter((id) => source.has(id))).toEqual([]);
+    expect(new Set(editor.layout.value!.tables.map((table) => table.id)).size).toBe(6);
+  });
+});
+
 describe('the layout page past Draft', () => {
   const SETTLED = 'The setup is settled: it cannot change once applications have opened.';
   const UPPER = { id: 'loc-upper', name: 'Upper Hall' };
@@ -431,6 +452,30 @@ describe('the layout page past Draft', () => {
 
     expect(editor.layout.value!.tables.map((table) => table.number)).toEqual([3, 1, 5]);
     expect(wrapper.get('[data-testid="layout-announcement"]').text()).toBe('Numbered Gold row 3');
+  });
+
+  it("starts a layout of its own id and no table, sharing no id with another location's", async () => {
+    const LOWER = { id: 'loc-lower', name: 'Lower Hall' };
+    const lowerLayout = { ...aLayout(true, GOLD_1_3_5()), id: 'fp-lower', locationId: LOWER.id };
+    market = served([lowerLayout]);
+    (market.setupObject as { locations: unknown[] }).locations.push(LOWER);
+    api.post.mockReset();
+    api.post.mockImplementation(async (_url: string, body: { floorplan: FloorplanObject }) => ({
+      data: { floorplan: { ...body.floorplan, revision: 1, followsPlan: true }, sections: [] },
+    }));
+    const wrapper = await mountPage();
+
+    wrapper.getComponent(FloorplanUploader).vm.$emit('uploaded', {
+      gridfs_id: 'img-upper',
+      width: 800,
+      height: 600,
+    });
+    await vi.advanceTimersByTimeAsync(700);
+
+    const started = api.post.mock.calls[0][1].floorplan as FloorplanObject;
+    expect(started.locationId).toBe(UPPER.id);
+    expect(started.id).not.toBe(lowerLayout.id);
+    expect(started.tables).toEqual([]);
   });
 
   it('says on the status line what an add held back', async () => {
