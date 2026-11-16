@@ -5,13 +5,20 @@ on:
     branches: [main, dev]
   pull_request:
     branches: [main, dev]
+  # A merge queue's trial commit (`gh-readonly-queue/dev/...`): a queued pull request merges only
+  # once every required check has passed on it too. Only `dev` can have a queue: `main` moves only
+  # through Promote.
+  merge_group:
+    types: [checks_requested]
+    branches: [dev]
 
 permissions:
   contents: read
 
 # A push to a pull request's branch makes the run of its earlier head moot, so that run is
 # cancelled. A push to dev or main never cancels one: each commit there keeps the checks a
-# promotion reads, so its group is its own commit.
+# promotion reads, so its group is its own commit. A merge queue's trial commit is never cancelled
+# either: its ref is its own queue branch, and its group its own commit.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -276,13 +283,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Shard 1 alone saves what it built, so ten shards never race to write one key.
+      # Shard 1 alone saves what it built, so ten shards never race to write one key. A merge
+      # queue's trial commit saves nothing: a cache written on its queue branch no other run reads.
       - uses: ./.github/actions/front-end-deps # zizmor: ignore[self-repository] actionlint 1.7.12, the latest, refuses the $/ form
         with:
-          save-cache: ${{ matrix.shard == 1 }}
+          save-cache: ${{ matrix.shard == 1 && github.event_name != 'merge_group' }}
       - uses: ./.github/actions/e2e-stack # zizmor: ignore[self-repository] actionlint 1.7.12, the latest, refuses the $/ form
         with:
-          save-caches: ${{ matrix.shard == 1 }}
+          save-caches: ${{ matrix.shard == 1 && github.event_name != 'merge_group' }}
       - name: Run Playwright tests
         working-directory: front-end
         env:
