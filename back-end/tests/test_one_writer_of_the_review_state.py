@@ -9,10 +9,11 @@ waiting for the rule it forgot.
 This walks every ``.py`` file under ``back-end/`` but ``tests/`` by AST, as
 ``test_every_market_write_holds_what_it_read.py`` walks the markets collection, and finds each call
 of a write method whose receiver is the applications collection: a name or attribute ending in
-``applications_collection`` or ``applications``, or a subscript of ``"applications"`` or
-``APPLICATIONS_COLLECTION``. Each must be in ``application_status.py`` or in ``EXCEPTIONS``, keyed by
-module and function, with its reason; a receiver the walk cannot name may be the applications
-collection too, so it must be listed the same way.
+``applications_collection`` or ``applications``, a subscript of ``"applications"`` or
+``APPLICATIONS_COLLECTION``, or a name its function or its module binds to one of those, so a write
+through a local alias of the collection is seen too. Each must be in ``application_status.py`` or
+in ``EXCEPTIONS``, keyed by module and function, with its reason; a receiver the walk cannot name
+may be the applications collection too, so it must be listed the same way.
 
 An excepted write must name no owned field in what it writes: its update (each key of each
 operator, ``$set`` and ``$unset`` among them, exact or as a dotted path under one), its replacement,
@@ -24,7 +25,7 @@ rules by design.
 """
 import ast
 from pathlib import Path
-from typing import Dict, Iterator, List, NamedTuple, Optional, Tuple
+from typing import Dict, FrozenSet, Iterable, Iterator, List, NamedTuple, Optional, Tuple
 
 import conftest
 
@@ -86,8 +87,11 @@ def _named(node: ast.expr) -> Optional[str]:
     return None
 
 
-def _to_applications(receiver: ast.expr) -> Optional[bool]:
-    """Whether ``receiver`` is the applications collection, by its name; None when it has none."""
+def _to_applications(receiver: ast.expr, aliases: FrozenSet[str] = frozenset()) -> Optional[bool]:
+    """Whether ``receiver`` is the applications collection, by its name, or a name ``aliases`` holds
+    as bound to it; None when it has none."""
+    if isinstance(receiver, ast.Name) and receiver.id in aliases:
+        return True
     name = _named(receiver)
     if name is not None:
         return name.endswith("applications_collection") or name.endswith("applications")
@@ -125,6 +129,27 @@ def _module_bindings(tree: ast.Module) -> Dict[str, ast.expr]:
     return bound
 
 
+def _aliases(nodes: Iterable[ast.AST], outer: FrozenSet[str] = frozenset()) -> FrozenSet[str]:
+    """The names ``nodes`` bind to the applications collection, as the walk names it, or to a name
+    already bound to it, beside those ``outer`` holds: so ``collection = ...applications_collection``
+    makes ``collection`` the collection."""
+    assigns = [(node.targets[0].id, node.value) for node in nodes
+               if isinstance(node, ast.Assign) and len(node.targets) == 1
+               and isinstance(node.targets[0], ast.Name)]
+    assigns += [(node.target.id, node.value) for node in nodes
+                if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+                and node.value is not None]
+    aliases = set(outer)
+    grown = True
+    while grown:
+        grown = False
+        for name, value in assigns:
+            if name not in aliases and _to_applications(value, frozenset(aliases)):
+                aliases.add(name)
+                grown = True
+    return frozenset(aliases)
+
+
 def write_sites(root: Path) -> Iterator[Site]:
     """Every call of a write method in the back end's own ``.py`` files under ``root``."""
     for path in sorted(root.rglob("*.py")):
@@ -139,14 +164,18 @@ class _Walk(ast.NodeVisitor):
         self.path, self.module, self.bound = path, module, bound
         self.scope: List[str] = []
         self.found: List[Site] = []
+        self.aliases: List[FrozenSet[str]] = []
 
-    def sites(self, tree: ast.AST) -> List[Site]:
+    def sites(self, tree: ast.Module) -> List[Site]:
+        self.aliases.append(_aliases(tree.body))
         self.visit(tree)
         return self.found
 
     def _scoped(self, node):
         self.scope.append(node.name)
+        self.aliases.append(_aliases(ast.walk(node), self.aliases[-1]))
         self.generic_visit(node)
+        self.aliases.pop()
         self.scope.pop()
 
     visit_FunctionDef = visit_AsyncFunctionDef = visit_ClassDef = _scoped
@@ -156,7 +185,8 @@ class _Walk(ast.NodeVisitor):
         if isinstance(func, ast.Attribute) and func.attr in WRITE_METHODS:
             self.found.append(Site(self.path, node.lineno, self.module,
                                    ".".join(self.scope) or "<module>", func.attr,
-                                   _to_applications(func.value), node, self.bound))
+                                   _to_applications(func.value, self.aliases[-1]), node,
+                                   self.bound))
         self.generic_visit(node)
 
 
@@ -323,6 +353,25 @@ class TestThePlantedWrite:
             "api/planted.py:2: update_one on the applications collection in approve, outside "
             "application_status; write the review state through it, or list the site with its "
             "reason"]
+
+    def test_a_write_through_a_name_bound_to_the_collection_fails_it(self, tmp_path):
+        """A name bound to the collection, in its function or its module, is the collection, so
+        a write through an alias of it is seen as one."""
+        root = self._tree(tmp_path, (
+            "import api.applications as ApplicationsApi\n"
+            "module_alias = ApplicationsApi.applications_collection\n"
+            "def approve(app_id):\n"
+            "    collection = ApplicationsApi.applications_collection\n"
+            "    again = collection\n"
+            "    collection.update_one({'id': app_id}, {'$set': {'x': 1}})\n"
+            "    again.update_one({'id': app_id}, {'$set': {'x': 1}})\n"
+            "    module_alias.update_one({'id': app_id}, {'$set': {'x': 1}})\n"
+            "def elsewhere(app_id):\n"
+            "    collection = markets_collection\n"
+            "    collection.update_one({'id': app_id}, {'$set': {'x': 1}})\n"))
+
+        assert [failure.split(": ")[0] for failure in unexcused(root, EXCEPTIONS)] == [
+            "api/planted.py:6", "api/planted.py:7", "api/planted.py:8"]
 
     def test_listing_a_write_of_no_owned_field_lets_it_pass(self, tmp_path):
         root = self._tree(tmp_path, (
