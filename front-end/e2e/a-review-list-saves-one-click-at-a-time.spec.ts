@@ -7,11 +7,10 @@ import { marketSetupPath } from './helpers/marketScreens';
 /**
  * A list saved on the market a click at a time writes one click at a time (T420).
  *
- * What a reviewer reads first is saved as each answer is marked, each click its own write. Two
- * quick clicks used to put two writes out at once; when the first did not land, the screen showed
- * a list the server never took. Now a click made while a write is out waits for its answer, and a
- * write that does not land takes the clicks behind it back with it: the list shows what the server
- * holds, beside the reason.
+ * What a reviewer reads first is saved as each answer is marked. Two quick clicks used to put two
+ * writes out at once; when the first did not land, the screen showed a list the server never took.
+ * Now a click made while a write is out waits for its answer, and a write that does not land takes
+ * the clicks behind it back with it: the list shows what the server holds, beside the reason.
  */
 
 const HIGHLIGHTS_WRITE = /\/markets\/[^/]+\/review-highlights$/;
