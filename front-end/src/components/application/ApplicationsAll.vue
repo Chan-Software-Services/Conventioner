@@ -29,7 +29,6 @@ import {
   reviewSelection,
   type SelectionResult,
 } from '@/utils/applicantApi';
-import { getApiErrorMessage } from '@/utils/api';
 import { applicantName } from '@/utils/essentialFields';
 import {
   ALL_VIEW_FILTERS,
@@ -54,7 +53,8 @@ import {
 import { useVendorDetails } from '@/utils/vendorDetails';
 import { useMarketStore } from '@/stores/market';
 import { useVendorDrawer } from '@/utils/vendorDrawer';
-import { useVerdictActions, type VerdictOutcome } from '@/utils/verdictActions';
+import { mergeApplication, useVerdictActions, type VerdictOutcome } from '@/utils/verdictActions';
+import { useServerRead } from '@/utils/useServerRead';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import { Refusal } from '@/utils/useSubmit';
 import { useVerdictUndo, type UndoOutcome } from '@/utils/verdictUndo';
@@ -84,51 +84,44 @@ const router = useRouter();
 const marketStore = useMarketStore();
 const marketId = computed(() => props.market?.id ?? '');
 
-const applications = ref<Application[]>([]);
-const loading = ref(false);
-const errorMessage = ref('');
+/**
+ * The list, one keyed read of the open market (T421): a move to another market drops the last
+ * one's list in the same tick, and an answer for a market no longer open, or one a newer read has
+ * overtaken, never lands. Every verdict, follow-up and undo below is a write held on it, so a read
+ * asked before or during one never puts the application back as it was, and each ends in a re-read.
+ */
+const listRead = useServerRead(() => marketId.value || null, fetchMarketApplications, {
+  failure: 'The applications could not be loaded.',
+  refreshFailure: 'Could not refresh. The list is as it was last read.',
+});
+const applications = computed<Application[]>(() => listRead.data.value ?? []);
+/** Why the first read of this market failed: the list then says it in place of rows. */
+const errorMessage = computed(() =>
+  listRead.phase.value === 'failed' ? listRead.sentence.value : '',
+);
 /** When the list was last read from the server, by any of the reads below (E38/F05/S03). */
-const readAt = ref<number | null>(null);
-const refreshing = ref(false);
-const refreshError = ref('');
-
-/** The one read: the list, and when. A list read is no longer one that failed to load. */
-async function read() {
-  applications.value = await fetchMarketApplications(marketId.value);
-  readAt.value = Date.now();
-  errorMessage.value = '';
-  refreshError.value = '';
-}
-
-async function load() {
-  if (!marketId.value) return;
-  loading.value = true;
-  errorMessage.value = '';
-  try {
-    await read();
-  } catch (err) {
-    errorMessage.value = getApiErrorMessage(err, 'The applications could not be loaded.');
-  } finally {
-    loading.value = false;
-  }
-}
-watch(marketId, () => void load(), { immediate: true });
+const readAt = listRead.readAt;
+const refreshing = computed(() => listRead.phase.value === 'refreshing');
+/** A failed re-read keeps the list as last read, and says so beside Refresh until one lands. */
+const refreshError = computed(() =>
+  listRead.phase.value === 'refresh_failed' || listRead.phase.value === 'refreshing'
+    ? listRead.sentence.value
+    : '',
+);
+/** A read is out: a re-read asked now would only overtake it. */
+const reading = computed(() => listRead.phase.value === 'loading' || refreshing.value);
 
 /**
  * Read again every half minute while the tab is in view, so who holds what and what others decided
  * show without a reload (E34/F03/S02) - a tick is refused rather than written over someone's card,
- * but a row should not invite the tick in the first place. Quiet: a failed re-read keeps the list,
- * and the time it was last read goes on ageing on screen.
+ * but a row should not invite the tick in the first place. A failed re-read keeps the list, says so
+ * beside Refresh, and the time it was last read goes on ageing on screen.
  */
 const REREAD_MS = 30_000;
 let rereading: ReturnType<typeof setInterval> | null = null;
-async function reread() {
-  if (!marketId.value || document.visibilityState !== 'visible' || saving.value) return;
-  try {
-    await read();
-  } catch {
-    // The list on screen stands; the next re-read tries again.
-  }
+function rereadOnTheClock() {
+  if (document.visibilityState !== 'visible' || saving.value || reading.value) return;
+  void listRead.reread();
 }
 
 /**
@@ -137,23 +130,16 @@ async function reread() {
  */
 async function refresh() {
   // Not while a verdict is being written, as the background re-read waits too.
-  if (!marketId.value || refreshing.value || saving.value) return;
-  refreshing.value = true;
-  try {
-    await read();
-    // The rail counts what is left as well: it should agree with the list just read.
-    void marketStore.refresh();
-  } catch {
-    refreshError.value = 'Could not refresh. The list is as it was last read.';
-  } finally {
-    refreshing.value = false;
-  }
+  if (reading.value || saving.value) return;
+  await listRead.reread();
+  // The rail counts what is left as well: it should agree with the list just read.
+  if (listRead.phase.value === 'ready') void marketStore.refresh();
 }
 watch(
   () => props.dealt,
   () => void refresh(),
 );
-onMounted(() => (rereading = setInterval(() => void reread(), REREAD_MS)));
+onMounted(() => (rereading = setInterval(rereadOnTheClock, REREAD_MS)));
 onUnmounted(() => {
   if (rereading) clearInterval(rereading);
 });
@@ -168,10 +154,16 @@ const words = computed(() => {
   return typeof asked === 'string' ? asked.trim() : '';
 });
 
-/** Giving verdicts, as the one-by-one review gives them too (`useVerdictActions`). */
+/**
+ * Giving verdicts, as the one-by-one review gives them too (`useVerdictActions`). Each answer is
+ * taken into the list for the market it was given on, and only while that market is open.
+ */
+function adoptInto(id: string, app: Application) {
+  listRead.adopt(id, (list) => mergeApplication(list, app));
+}
 const verdicts = useVerdictActions(
   computed(() => props.market),
-  applications,
+  adoptInto,
 );
 const { me, people, writesNotes } = verdicts;
 
@@ -181,8 +173,10 @@ const { me, people, writesNotes } = verdicts;
  * is not refused as answers changed since (T270); then the list is read again.
  */
 function infoUpdated(saved: Application) {
+  const wasRereading = listRead.phase.value === 'refreshing';
   verdicts.adopt(saved);
-  void load();
+  // A re-read out was asked before the update, and the adopt has already asked again past it.
+  if (!wasRereading) void listRead.reread();
 }
 
 /**
@@ -239,8 +233,8 @@ const applicationKey = (app: Application) => app.id;
 /** The filters as one string: a change is the reader's own choice of rows, so the list folds back. */
 const filterKey = computed(() => `${filter.value}|${mine.value}|${assignedTo.value}`);
 const listState = computed(() => {
-  if (errorMessage.value) return 'failed';
-  return loading.value && !applications.value.length ? 'loading' : 'ready';
+  if (listRead.phase.value === 'failed') return 'failed';
+  return listRead.phase.value === 'loading' ? 'loading' : 'ready';
 });
 
 /** The rows on screen, as the frame drew them, and whether the cap leaves any off. */
@@ -374,7 +368,11 @@ async function give(status: ApplicationStatus) {
   verdictMessage.value = '';
   const before = { ...app };
   try {
-    const outcome = await verdicts.give(app, status);
+    const held = await listRead.holdWhile(() => verdicts.give(app, status));
+    // A verdict answers its own refusals; one left unanswered here was given on a market no longer
+    // open, so nothing of it is said or offered on this one.
+    if (held.kind !== 'ok') return;
+    const outcome = held.answer;
     rowVerdictWritten(before, outcome, status);
     // Someone decided it first (E34/F03/S01): the drawer shows what is really there, and who.
     if (outcome.kind !== 'written') verdictMessage.value = outcome.message;
@@ -385,8 +383,9 @@ async function give(status: ApplicationStatus) {
 }
 
 /**
- * The list and the notes take the answer whichever opening it lands in; the dialog hears it only in
- * the opening it was sent from, closing on it or saying its refusal (T411).
+ * The notes take the answer whichever opening it lands in, and the list while the market it was
+ * given on is open; the dialog hears it only in the opening it was sent from, closing on it or
+ * saying its refusal (T411).
  */
 async function markFollowUp(choice: { ownerEmail: string; note?: string }) {
   const app = opened.value;
@@ -396,7 +395,13 @@ async function markFollowUp(choice: { ownerEmail: string; note?: string }) {
   try {
     await followUp.submit(
       async () => {
-        const outcome = await verdicts.markFollowUp(app, choice, noteBefore.value);
+        const held = await listRead.holdWhile(() =>
+          verdicts.markFollowUp(app, choice, noteBefore.value),
+        );
+        // Marked on a market no longer open: nothing of it is said or offered on this one.
+        if (held.kind === 'left') return null;
+        if (held.kind === 'failed') throw held.error;
+        const outcome = held.answer;
         rowVerdictWritten(before, outcome, ApplicationStatus.NeedsFollowUp);
         void drawerPanel.value?.loadNotes();
         if (outcome.kind === 'failed') throw new Refusal(outcome.message);
@@ -404,6 +409,7 @@ async function markFollowUp(choice: { ownerEmail: string; note?: string }) {
       },
       {
         done: (outcome) => {
+          if (!outcome) return;
           followUpOpen.value = false;
           if (outcome.kind === 'changed') verdictMessage.value = outcome.message;
           else void details.load();
@@ -509,7 +515,8 @@ const selection = useDialogSubmit({
   failure: 'Could not decide the selection.',
 });
 // Another market's list: a confirmation asked over the last one's selection is no question here.
-watch(marketId, () => (asking.value = null));
+// A reset of what the page shows on a change of the list's key, never a read.
+watch(listRead.key, () => (asking.value = null));
 const plural = (n: number) => `${n} application${n === 1 ? '' : 's'}`;
 const askingTitle = computed(() =>
   asking.value ? `${VERDICT_WORDS[asking.value]?.verb} ${plural(selected.value.size)}?` : '',
@@ -540,40 +547,56 @@ function offerSelectionUndo(written: string[], seconds: number) {
   );
 }
 
-/** Undo the verdict on offer, a row's or a selection's; a selection's says what it skipped. */
+/**
+ * Undo the verdict on offer, a row's or a selection's; a selection's says what it skipped. The undo
+ * is a write held on the list, which it ends by reading again.
+ */
 async function undoLast() {
+  if (!undoOffered.value || undoRefusal.value || undoing.value) return;
   const from = undoFrom.value;
-  const outcome: UndoOutcome = await undo.undo();
+  const held = await listRead.holdWhile(() => undo.undo());
+  // Undone on a market no longer open: nothing of it is said on this one.
+  if (held.kind !== 'ok') return;
+  const outcome: UndoOutcome = held.answer;
   if (outcome.kind !== 'undone') return;
   if (from === 'selection') {
     const written = outcome.result?.written ?? outcome.applications.map((app) => app.id);
     result.value = { written, skipped: outcome.result?.skipped ?? [], done: 'undone' };
   }
-  await load();
   void details.load();
 }
 
 /**
- * One verdict however often it is pressed, held until it answers (T411). An answer that lands after
- * the confirmation was taken away, by another market, closes nothing and says nothing: that list is
- * read again on its own.
+ * One verdict however often it is pressed, held until it answers (T411), and a write held on the
+ * list, which it ends by reading again. An answer that lands after the confirmation was taken away,
+ * by another market, closes nothing and says nothing: that market's list is not the one open.
  */
 async function decideSelection() {
   const status = asking.value;
   const market = props.market;
   if (!status || !market) return;
   const picked = applications.value.filter((a) => selected.value.has(a.id));
-  await selection.submit(() => reviewSelection(market.id, picked, status), {
-    done: async (answer) => {
-      result.value = { ...answer, done: VERDICT_WORDS[status]?.done ?? '' };
-      asking.value = null;
-      clearSelection();
-      await load();
-      offerSelectionUndo(answer.written, answer.undoSeconds ?? 0);
-      void details.load();
-      void marketStore.refresh();
+  await selection.submit(
+    async () => {
+      const held = await listRead.holdWhile((id) => reviewSelection(id, picked, status));
+      if (held.kind === 'failed') throw held.error;
+      return held;
     },
-  });
+    {
+      done: async (held) => {
+        if (held.kind !== 'ok') return;
+        const answer = held.answer;
+        result.value = { ...answer, done: VERDICT_WORDS[status]?.done ?? '' };
+        asking.value = null;
+        clearSelection();
+        // The undo is offered on each application as the re-read that ended the write reads it.
+        await listRead.settled();
+        offerSelectionUndo(answer.written, answer.undoSeconds ?? 0);
+        void details.load();
+        void marketStore.refresh();
+      },
+    },
+  );
 }
 </script>
 
@@ -785,7 +808,7 @@ async function decideSelection() {
       </template>
 
       <template #failed>
-        <ReadFailed name="applications" :message="errorMessage" @retry="load" />
+        <ReadFailed name="applications" :message="errorMessage" @retry="listRead.reread()" />
       </template>
       <!-- Nothing has come in is not nothing matching: the tab opens here now (E38/F05/S01). -->
       <template #empty>
