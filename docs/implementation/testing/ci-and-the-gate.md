@@ -104,6 +104,7 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 - on a push to `dev` alone, once the shards are done, whatever their result: the back end's suite once under coverage and the build of [the test map](the-test-map.md) from it and the shards' records, uploaded as `test-map` (kept 90 days)
 - not a required check, and never run on a pull request
+- it continues on error (`continue-on-error: true`), so a map that fails is not made but never decides the run's conclusion or Promote, which reads it
 
 **`dev`'s branch protection requires nine checks, and `main`'s rulesets six.**
 Both require `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, `e2e` and `real-data-and-workflows`.
