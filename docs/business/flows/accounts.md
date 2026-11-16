@@ -26,6 +26,7 @@ sources:
   - T315
   - T338
   - T318
+  - T411
 ---
 
 # Accounts
@@ -44,7 +45,7 @@ Steps 1 to 3 walked live as far as reCAPTCHA allows (the slot-1 stack has real k
 **Task:** "Create an account for yourself."
 
 1. Go to `/login` and choose the Register tab.
-2. Enter email, password (at least 8 characters) and the same password again; choose "Create account".
+2. Enter email, password (at least 8 characters) and the same password again; choose "Create account", which reads "Creating account…" and is disabled until the answer lands.
 3. Expect a success message asking them to check their email to verify the account; the line under "Create account" already says sign-in waits until the emailed link is followed.
 4. Open the emailed link, which lands on `/verify-email`; expect confirmation and "Redirecting to sign in…"; three seconds later the page goes to sign in.
 5. Sign in (A2).
@@ -98,7 +99,7 @@ Covered by:
 **Status:** Works (walked live).
 **Task:** "Sign in, then sign out."
 
-1. At `/login`, Sign in tab, enter email and password, choose "Sign in".
+1. At `/login`, Sign in tab, enter email and password, choose "Sign in", which reads "Signing in…" and is disabled until the answer lands, so a double press is one try.
    "Remember me" under the password is unticked: the sign-in then ends when the browser closes, and at the latest 12 hours after it; ticked, it lasts 30 days from signing in, however the browser is used.
    Either way it is held to the browser, not the network: a phone that moves from the venue's wifi to cellular stays signed in, and the same cookies in another browser are refused (T318, [the cookies](../../implementation/conventions/security-invariants.md#the-cookies)).
 2. Expect the Markets list (`/markets`), or the page the address carried in `next` (E38/F11/S01).
@@ -140,9 +141,10 @@ Covered by:
 
 **Status:** Works as far as it can be walked without a mailer (walked live).
 
-1. At `/login`, choose the "Sign-in code" tab, enter email, choose "Send code".
-2. Enter the code from the email, tick "Remember me" or leave it, and choose "Sign in"; the choice is the Sign in tab's, kept between the two (A2).
+1. At `/login`, choose the "Sign-in code" tab, enter email, choose "Send code", which reads "Sending…" and is disabled until the answer lands: a double press sends one request, so "code sent" stays.
+2. Enter the code from the email, tick "Remember me" or leave it, and choose "Sign in", which reads "Signing in…" while it is out; the choice is the Sign in tab's, kept between the two (A2).
 3. "Use a different email", a button, returns to step 1 with the focus in the Email field.
+   It and the way-in tabs stay enabled while a request is out, and an answer that lands after the move is dropped, so the screen moved to says nothing of the one left ([dialogs](../../implementation/conventions/dialogs.md), T411).
 
 The server keeps the code only as a salted hash, so a copy of the database holds no code that signs in ([the sign-in secrets](../../implementation/data/users-and-email.md#the-sign-in-secrets)).
 
@@ -151,7 +153,7 @@ Branches: a wrong code ("That code is not right."), which replaces the line sayi
 - The fifth wrong code discards the code and says "That code is not right." as the others do, so the right code after it is refused alike.
 - A right code that has expired says "That code has expired. You can ask for a new code in N minutes.": a new code can be asked for an hour after the last one expired, whether it expired or five wrong tries discarded it, and once that wait is over it says "Ask for a new one." instead.
 - Asking for another code before then says "You can ask for a new code in N minutes.".
-- Two requests for a code at once, as a browser that sends one press twice makes, mail one code, the one that signs in, and the other is answered "You can ask for a new code in N minutes.".
+- Two requests for a code at once mail one code, the one that signs in, and the other is answered "You can ask for a new code in N minutes.".
 - A code that could not be mailed says "Something went wrong on our side. Try again in a moment.", as any fault of the server does, and asking again sends one at once.
 - Past five codes asked for one address in 15 minutes, or thirty from one caller, the next says "You have asked several times. Try again in N minutes.", the same for every address.
 - Past ten tries at one address in 15 minutes, or sixty from one caller, the next says "Too many sign-in attempts. Try again in N minutes, or reset your password.", the same for every address; a right code takes its own try back, as a right password does ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
@@ -159,6 +161,7 @@ Branches: a wrong code ("That code is not right."), which replaces the line sayi
 Covered by:
 
 - `a-failure-says-what-to-do.spec.ts`, which stubs the send and plants a code it knows as the mail would carry it (`plantSignInCode`), then signs in with it
+- `a-sign-in-sends-once.spec.ts`, which holds the code request while Send code is double-clicked and counts one request
 - `auth.spec.ts` ("shows error for invalid OTP code"), which stubs the send and walks only a wrong code
 - `remember-me.spec.ts`, which stubs the send and plants a code it knows, then signs in with it
 - `sign-in-fits-a-phone.spec.ts`
