@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import {
   requestLoginCode,
   verifyLoginCode,
@@ -190,13 +190,23 @@ export type CodeAnswer =
   { ok: true } | { ok: false; sentence: string; codeState: CodeState | null };
 
 export const useApplicationStore = defineStore('application', () => {
-  const kept = storedSession();
-  const marketId = ref<string | null>(kept?.marketId ?? null);
-  const marketSlug = ref<string | null>(kept?.marketSlug ?? null);
-  const applicantEmail = ref<string | null>(kept?.applicantEmail ?? null);
-  const token = ref<string | null>(kept?.token ?? null);
+  /**
+   * The vendor's sign-in, one thing (T421): held whole or not at all, so a sign-out never leaves
+   * an address or a token behind. The four names below read it and nothing writes them.
+   */
+  const session = ref<StoredSession | null>(storedSession());
+  const marketId = computed(() => session.value?.marketId ?? null);
+  const marketSlug = computed(() => session.value?.marketSlug ?? null);
+  const applicantEmail = computed(() => session.value?.applicantEmail ?? null);
+  const token = computed(() => session.value?.token ?? null);
+  /**
+   * Moved on by `clearSession` alone. Each signed-in request notes it as it starts, and one that
+   * answers after it moved writes nothing: on a shared door device the vendor who asked has signed
+   * out, and the next person sees nothing of theirs. A renewal (`resume`) signs the same vendor in
+   * again and leaves it, so the request it renews still lands.
+   */
+  let epoch = 0;
   const application = ref<Application | null>(null);
-  const loading = ref(false);
   const error = ref<string | null>(null);
   /**
    * The vendor page's one state (ADR 0022): the market as the page reads it before sign-in, and,
@@ -269,11 +279,13 @@ export const useApplicationStore = defineStore('application', () => {
   async function loadVendorRead(): Promise<VendorRead> {
     const slug = marketSlug.value;
     if (!slug) return { failed: false, notFound: false };
+    const asked = epoch;
     const asksQuestions = page.value?.intakeMode === IntakeMode.Form;
     const [read, form] = await Promise.all([
       fetchApplication(),
       asksQuestions ? fetchPublicApplicationForm(slug) : Promise.resolve(null),
     ]);
+    if (epoch !== asked) return { failed: false, notFound: false };
     formFields.value = form?.fields ?? [];
     essentialOptions.value = form?.essentialOptions ?? EMPTY_ESSENTIAL_OPTIONS;
     return {
@@ -283,14 +295,11 @@ export const useApplicationStore = defineStore('application', () => {
   }
 
   async function requestCode(slug: string, email: string): Promise<CodeAnswer> {
-    loading.value = true;
     try {
       await requestLoginCode(slug, email);
       return { ok: true };
     } catch (err: unknown) {
       return { ok: false, sentence: requestErrorFrom(err), codeState: null };
-    } finally {
-      loading.value = false;
     }
   }
 
@@ -301,16 +310,13 @@ export const useApplicationStore = defineStore('application', () => {
     if (held && held.marketSlug === slug && held.applicantEmail !== result.applicantEmail) {
       dropDraft();
     }
-    marketId.value = result.marketId;
-    marketSlug.value = slug;
-    applicantEmail.value = result.applicantEmail;
-    token.value = result.token;
-    keepSession({
+    session.value = {
       marketId: result.marketId,
       marketSlug: slug,
       applicantEmail: result.applicantEmail,
       token: result.token,
-    });
+    };
+    keepSession(session.value);
   }
 
   async function verifyCode(
@@ -319,7 +325,6 @@ export const useApplicationStore = defineStore('application', () => {
     code: string,
     remember = false,
   ): Promise<CodeAnswer> {
-    loading.value = true;
     try {
       const result = await verifyLoginCode(slug, email, code, remember);
       // Every successful sign-in carries a token now, applied or not (E26/F07/S01). Without one
@@ -336,8 +341,6 @@ export const useApplicationStore = defineStore('application', () => {
       return { ok: true };
     } catch (err: unknown) {
       return { ok: false, sentence: verifyErrorFrom(err), codeState: codeStateFrom(err) };
-    } finally {
-      loading.value = false;
     }
   }
 
@@ -365,15 +368,22 @@ export const useApplicationStore = defineStore('application', () => {
    * the device is remembered and make it again with the sign-in that gives (ADR 0022). The 30-minute
    * sign-in ends while a vendor waits at the door; a remembered one should not then be sent a code.
    * Anything else, or a device that is not remembered, is the first answer, thrown as it came.
+   *
+   * A sign-in that ended here meanwhile (`asked`, the epoch the request was made in) is never
+   * renewed: the remembered device may be the next vendor's by then, and the request is not theirs.
    */
-  async function withRenewal<T>(call: (slug: string, token: string) => Promise<T>): Promise<T> {
+  async function withRenewal<T>(
+    asked: number,
+    call: (slug: string, token: string) => Promise<T>,
+  ): Promise<T> {
     const slug = marketSlug.value;
     if (!slug || !token.value) throw new Error('Not signed in');
     try {
       return await call(slug, token.value);
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
-      if (status !== 401 || !(await resume(slug)) || !token.value) throw err;
+      if (status !== 401 || epoch !== asked || !(await resume(slug))) throw err;
+      if (epoch !== asked || !token.value) throw err;
       return call(slug, token.value);
     }
   }
@@ -384,16 +394,20 @@ export const useApplicationStore = defineStore('application', () => {
    * A failed read is never reported as "none". It was, and on a slow connection Your Application
    * told a vendor who had applied that they had not, and the apply page opened empty over answers
    * a save would then replace.
+   *
+   * Answering after the vendor signed out, it writes nothing and answers as signed out (`epoch`).
    */
   async function fetchApplication(): Promise<ApplicationRead> {
     if (!token.value || !marketSlug.value) return { application: null, failed: false };
-    loading.value = true;
+    const asked = epoch;
     error.value = null;
     try {
-      const app = await withRenewal(fetchApplicantApplication);
+      const app = await withRenewal(asked, fetchApplicantApplication);
+      if (epoch !== asked) return { application: null, failed: false };
       application.value = app;
       return { application: app, failed: false };
     } catch (err: unknown) {
+      if (epoch !== asked) return { application: null, failed: false };
       if ((err as { response?: { status?: number } })?.response?.status === 401) {
         // Not a failure to load: the sign-in has ended, and the caller sends them to sign in.
         clearSession();
@@ -402,24 +416,29 @@ export const useApplicationStore = defineStore('application', () => {
       }
       error.value = requestErrorFrom(err);
       return { application: null, failed: true };
-    } finally {
-      loading.value = false;
     }
   }
 
+  /**
+   * Save the vendor's answers; their application as the server now holds it, or null with the
+   * reason in `error`. Answering after the vendor signed out, it writes nothing - no application,
+   * no sentence, no answers kept for the next sign-in - and answers null (`epoch`).
+   */
   async function saveApplication(formData: Record<string, unknown>): Promise<Application | null> {
     if (!token.value || !marketSlug.value) return null;
     const slug = marketSlug.value;
     const email = applicantEmail.value;
-    loading.value = true;
+    const asked = epoch;
     error.value = null;
     try {
-      const app = await withRenewal((slug, current) =>
+      const app = await withRenewal(asked, (slug, current) =>
         saveApplicantApplication(slug, current, formData),
       );
+      if (epoch !== asked) return null;
       application.value = app;
       return app;
     } catch (err: unknown) {
+      if (epoch !== asked) return null;
       if ((err as { response?: { status?: number } })?.response?.status === 401) {
         // An ended sign-in the device could not renew (`withRenewal`): the answers are kept, to be
         // sent once the vendor signs in again, and the sentence says so.
@@ -440,8 +459,6 @@ export const useApplicationStore = defineStore('application', () => {
         error.value = saveErrorFrom(err);
       }
       return null;
-    } finally {
-      loading.value = false;
     }
   }
 
@@ -479,16 +496,26 @@ export const useApplicationStore = defineStore('application', () => {
     return { ok: false, message: error.value, signedOut: true };
   }
 
+  /**
+   * What a check-in or an undo answering after the vendor signed out comes to: nothing marked and
+   * nothing said. Not `signedOut`, which has the section keep a scanned code for the next sign-in:
+   * on a shared door device, the next vendor's.
+   */
+  const LEFT: CheckInResult = { ok: false, message: '', signedOut: false };
+
   /** Check the vendor in for `date` with the market's door code, scanned or typed (ADR 0022). */
   async function checkIn(date: string, doorCode: string): Promise<CheckInResult> {
     if (!token.value || !marketSlug.value) return signedOutRefusal();
+    const asked = epoch;
     try {
-      const { checkedInAt } = await withRenewal((slug, current) =>
+      const { checkedInAt } = await withRenewal(asked, (slug, current) =>
         checkInWithDoorCode(slug, current, date, doorCode),
       );
+      if (epoch !== asked) return LEFT;
       setCheckedIn(date, checkedInAt);
       return { ok: true };
     } catch (err: unknown) {
+      if (epoch !== asked) return LEFT;
       return checkInRefusal(err, 'You were not checked in. Please try again.');
     }
   }
@@ -496,20 +523,22 @@ export const useApplicationStore = defineStore('application', () => {
   /** Take back the vendor's own check-in for `date`, after a mis-tap. */
   async function undoCheckIn(date: string): Promise<CheckInResult> {
     if (!token.value || !marketSlug.value) return signedOutRefusal();
+    const asked = epoch;
     try {
-      await withRenewal((slug, current) => undoOwnCheckIn(slug, current, date));
+      await withRenewal(asked, (slug, current) => undoOwnCheckIn(slug, current, date));
+      if (epoch !== asked) return LEFT;
       setCheckedIn(date, null);
       return { ok: true };
     } catch (err: unknown) {
+      if (epoch !== asked) return LEFT;
       return checkInRefusal(err, 'Your check-in was not undone. Please try again.');
     }
   }
 
+  /** End this tab's sign-in whole; every request still out then writes nothing (`epoch`). */
   function clearSession(): void {
-    marketId.value = null;
-    marketSlug.value = null;
-    applicantEmail.value = null;
-    token.value = null;
+    epoch += 1;
+    session.value = null;
     application.value = null;
     formFields.value = [];
     essentialOptions.value = EMPTY_ESSENTIAL_OPTIONS;
@@ -541,7 +570,6 @@ export const useApplicationStore = defineStore('application', () => {
     applicantEmail,
     token,
     application,
-    loading,
     error,
     page,
     formFields,
