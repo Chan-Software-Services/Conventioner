@@ -12,10 +12,17 @@
  *
  * "Remember me on this device" (ADR 0022) sits under the code, unticked until ticked, and only
  * while the market has a date left (`rememberUntil`); it says the date it would last until.
+ *
+ * Its requests go one at a time through one submit scoped by the step (T277 ticket 08): it moves
+ * on, and says a refusal, from its own request's answer, never from the store's shared `error`,
+ * which another reader may write while the request is out; and "Use a different email" waits for
+ * the answer, so a late one never lands on the email step.
  */
 import { computed, nextTick, onUnmounted, ref } from 'vue';
 import CodeInput from '@/components/CodeInput.vue';
-import { useApplicationStore } from '@/stores/application';
+import { useApplicationStore, type CodeAnswer } from '@/stores/application';
+import type { CodeState } from '@/utils/applicantApi';
+import { useSubmit } from '@/utils/useSubmit';
 import { getShortDate } from '@/utils/utils';
 
 const props = defineProps<{ marketSlug: string }>();
@@ -27,9 +34,33 @@ const RESEND_COOLDOWN_SECONDS = 60;
 const email = ref('');
 const code = ref('');
 const step = ref<'email' | 'code'>('email');
-const submitting = ref(false);
 const validationError = ref<string | null>(null);
-const displayedError = computed(() => validationError.value || store.error);
+const { sending: submitting, sentence: refusal, submit } = useSubmit({ scope: () => step.value });
+/** A request sent from here: from then on the sign-in says only its own answers. */
+const sent = ref(false);
+/**
+ * Why the vendor is asked to sign in, until they send a request: the store's sentence for a sign-in
+ * that ended under them ("Your session has expired..."), which brought them here.
+ */
+const arrivedWith = computed(() => (sent.value ? null : store.error));
+const displayedError = computed(() => validationError.value || refusal.value || arrivedWith.value);
+
+/** A refused request's answer, thrown so the submit says its sentence. */
+class Refused extends Error {
+  readonly answer: Extract<CodeAnswer, { ok: false }>;
+  constructor(answer: Extract<CodeAnswer, { ok: false }>) {
+    super(answer.sentence);
+    this.answer = answer;
+  }
+}
+
+/** One of the store's code requests, sent from here, its refusal thrown for the submit to say. */
+async function sendFromHere(request: () => Promise<CodeAnswer>): Promise<void> {
+  validationError.value = null;
+  sent.value = true;
+  const answer = await request();
+  if (!answer.ok) throw new Refused(answer);
+}
 
 const codeInput = ref<InstanceType<typeof CodeInput> | null>(null);
 const remember = ref(false);
@@ -38,8 +69,10 @@ const rememberUntil = computed(() => {
   const until = store.page?.rememberUntil;
   return until ? getShortDate(until) : null;
 });
+/** Where the last refused code stands, from that refusal's answer; null until one is refused. */
+const codeState = ref<CodeState | null>(null);
 /** The code can no longer pass: only a new one is offered. */
-const spent = computed(() => store.codeState === 'spent');
+const spent = computed(() => codeState.value === 'spent');
 
 const requestedEmail = ref('');
 const cooldownRemaining = ref(0);
@@ -71,20 +104,19 @@ async function requestCode() {
   if (cooldownApplies.value) {
     return;
   }
-  validationError.value = null;
-  store.error = null;
-  submitting.value = true;
   const address = email.value.trim().toLowerCase();
-  await store.requestCode(props.marketSlug, address);
-  submitting.value = false;
-  if (!store.error) {
-    requestedEmail.value = address;
-    startCooldown();
-    code.value = '';
-    step.value = 'code';
-    await nextTick();
-    codeInput.value?.focus();
-  }
+  await submit(() => sendFromHere(() => store.requestCode(props.marketSlug, address)), {
+    done: async () => {
+      codeState.value = null;
+      requestedEmail.value = address;
+      startCooldown();
+      code.value = '';
+      step.value = 'code';
+      await nextTick();
+      codeInput.value?.focus();
+    },
+    refused: (err) => (err instanceof Refused ? err.answer.sentence : undefined),
+  });
 }
 
 async function verifyCode() {
@@ -92,29 +124,33 @@ async function verifyCode() {
     validationError.value = 'Verification code is required.';
     return;
   }
-  validationError.value = null;
-  store.error = null;
-  submitting.value = true;
-  await store.verifyCode(
-    props.marketSlug,
-    email.value.trim().toLowerCase(),
-    code.value.trim(),
-    Boolean(rememberUntil.value) && remember.value,
+  const typed = code.value.trim();
+  const keep = Boolean(rememberUntil.value) && remember.value;
+  // A right code signs the vendor in through the store, and the page draws their sections.
+  await submit(
+    () =>
+      sendFromHere(() =>
+        store.verifyCode(props.marketSlug, email.value.trim().toLowerCase(), typed, keep),
+      ),
+    {
+      refused: (err) => {
+        if (!(err instanceof Refused)) return;
+        codeState.value = err.answer.codeState;
+        if (codeState.value === 'retry') {
+          code.value = '';
+          void nextTick(() => codeInput.value?.focus());
+        }
+        return err.answer.sentence;
+      },
+    },
   );
-  submitting.value = false;
-  if (store.codeState === 'retry') {
-    code.value = '';
-    await nextTick();
-    codeInput.value?.focus();
-  }
 }
 
 function goBack() {
   step.value = 'email';
   code.value = '';
   validationError.value = null;
-  store.error = null;
-  store.codeState = null;
+  codeState.value = null;
 }
 </script>
 
@@ -234,6 +270,7 @@ function goBack() {
         <button
           type="button"
           class="sign-in-link-btn"
+          :disabled="submitting"
           data-testid="vendor-sign-in-back-btn"
           @click="goBack"
         >

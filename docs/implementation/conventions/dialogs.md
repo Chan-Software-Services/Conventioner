@@ -27,6 +27,10 @@ describes:
   - front-end/src/__tests__/scrollBox.test.ts
   - front-end/e2e/the-long-dialogs-scroll-their-body.spec.ts
   - front-end/e2e/a-refusal-keeps-the-focus-in-the-dialog.spec.ts
+  - front-end/src/utils/useSubmit.ts
+  - front-end/src/__tests__/aSubmitBelongsToItsForm.test.ts
+  - front-end/src/__tests__/aSignInSendsOnce.test.ts
+  - front-end/e2e/a-sign-in-sends-once.spec.ts
 verified: 2026-11-13
 sources:
   - wayfinding/the-order-of-the-work/08
@@ -57,6 +61,7 @@ sources:
   - T271
   - T257
   - T315
+  - T411
 ---
 
 # Dialogs
@@ -121,6 +126,21 @@ A long list goes in that body as a [`ListFrame.vue`](../../../front-end/src/comp
 The shell emits `submit` and `close` as separate events and never turns one into the other.
 Three closes are correct and are pinned: deleting the thing, the explicit close control, and Escape or the backdrop.
 The parent learns about a save through its own event, never through `close`: `OrganizationsView` treating close as its refresh signal is why every membership change used to close the dialog.
+
+**A form's submit is one transition table, [`useSubmit`](../../../front-end/src/utils/useSubmit.ts)** (T411): a second press while its request is out sends nothing, and an answer that lands after the form moved on is dropped.
+`submitStep` is the table: a form is editing, sending, refused with its sentence, or done, in an opening each answer is tied to.
+A submit is taken from any phase but sending; an answer moves only the opening it was sent in; an edit takes a refusal, or a save that stays open, back to editing; and an opening starts editing again, whatever is still out.
+`useSubmit({ scope })` holds the table in a component: a change of `scope`'s value is a new opening, taken at once by a synchronous watch, so no answer lands between the change and the opening.
+`submit(send, { done, refused, late })` hands the answer to `done`, or the refusal to `refused`, whose returned string is the sentence (else the server's, else the form's `failure`), when it lands in the opening it was sent in, and to `late` when it does not; once the component unmounts no handler is called, `late` included.
+The sign-in pages' forms use it.
+The organizer's sign-in ([`LoginView.vue`](../../../front-end/src/views/LoginView.vue)) has one per form, each scoped by the way in, and the code form's by its step too, so Send code and its Sign in share one and "Use a different email" starts another.
+So Send code pressed twice sends one request and keeps "code sent", where the server's one-code wait answered the second with a refusal in its place, and a sign-in that lands after the person moved to another way in signs nobody in.
+Each button is disabled while its request is out and says so: "Signing in…", "Creating account…" and "Sending…"; the way-in tabs and "Use a different email" stay enabled, since moving on is allowed and drops the answer.
+Each form's line stays the page's own, written from its answer, so the submit's sentence is unused there.
+A market's vendor sign-in ([`VendorSignIn.vue`](../../../front-end/src/components/vendorPage/VendorSignIn.vue)) has one scoped by its step, so Send code, Send a new code and Sign in go through it.
+It moves to the code step, and says a refusal, from its own request's answer, which the store's `requestCode` and `verifyCode` return (`{ ok: true }`, or the sentence and where the code stands), never from the store's shared `error`, which another reader may write while the request is out.
+Until the vendor sends a request it says the store's sentence for a sign-in that ended under them ("Your session has expired..."), which brought them to it.
+"Use a different email" is disabled while a request is out, so a late answer never lands on the email step.
 
 **A dialog whose close would hide a refusal or expose an old copy holds through its save and any re-read, with `closeDisabled`.**
 While it holds, Cancel and the close control are drawn in the one disabled state, and Escape and the scrim do nothing; the shell refuses them all, so its parent's `close` handler needs no guard.
@@ -204,6 +224,8 @@ With exactly one organization it names it rather than offering a select with one
 - [`removingSomeoneAsksFirst.test.ts`](../../../front-end/src/__tests__/removingSomeoneAsksFirst.test.ts) and [`removing-someone-asks-first.spec.ts`](../../../front-end/e2e/removing-someone-asks-first.spec.ts) open each Remove's confirmation, find it named by its question and opened on Cancel, close it by Cancel and by Escape (only it, not the dialog beneath) with focus back on the Remove and nothing removed, and confirm it, with focus on the list; at 390 the spec finds the address in each Remove's title, and in Manage market's role change's, broken only before its "@" or a dot, as a phone draws it and in a line narrower than the address ([`addressBreaks.ts`](../../../front-end/e2e/helpers/addressBreaks.ts)).
 - [`changingARoleAsksFirst.test.ts`](../../../front-end/src/__tests__/changingARoleAsksFirst.test.ts) and [`changing-a-role-asks-first.spec.ts`](../../../front-end/e2e/changing-a-role-asks-first.spec.ts) choose a role, find the confirmation named by its question with nothing sent, close it by Cancel, Escape and the backdrop (only it, not the dialog beneath) with the select back on the role held and focused, confirm it with one write and focus on the select, or on the list when the select has gone, and find a refusal said beneath the row, with the list re-read.
 - [`a-refusal-keeps-the-focus-in-the-dialog.spec.ts`](../../../front-end/e2e/a-refusal-keeps-the-focus-in-the-dialog.spec.ts) refuses the vendor drawer's Record payment, pressed with the mouse, by a 400 with a sentence, and finds focus inside the dialog's window, on its first safe control, after the refusal, and the next Tab still inside it.
+- [`aSubmitBelongsToItsForm.test.ts`](../../../front-end/src/__tests__/aSubmitBelongsToItsForm.test.ts) holds `submitStep`'s table, one test per row, and `useSubmit` in a small form: a second press sending nothing, a refusal's sentence (its own, the server's, the form's `failure`) gone on an edit, an answer or refusal landing after the scope moved on handed to `late`, and nothing called once the form is gone.
+- [`aSignInSendsOnce.test.ts`](../../../front-end/src/__tests__/aSignInSendsOnce.test.ts) drives the sign-in pages: Send code pressed twice sending one request with "code sent" kept, each button's words while its request is out, an answer dropped after a move to another way in or "Use a different email", and the vendor sign-in moving on its own answer, saying its own refusal and holding "Use a different email" while a code is checked; [`a-sign-in-sends-once.spec.ts`](../../../front-end/e2e/a-sign-in-sends-once.spec.ts) double-clicks Send code in a browser, the request held until both presses are in, and counts one request, with "code sent" shown and no refusal.
 - [`dialog-idiom.spec.ts`](../../../front-end/e2e/dialog-idiom.spec.ts) drives, in a browser, Enter in every dialog, focus on open and focus given back on close (the create-market dialog and a dialog opened from a dialog), Manage organization staying open through saves and closing by its close control, the backdrop and Escape, its controls at the product's height with each add row's own Cancel and opening on no Remove, a dialog opened from a dialog, and Escape there closing only the one on top; and a location's layout's dialogs: Fill an area's (narrow, opening on its first field, Enter filling through the button's guard, every way of closing filling nothing, and the focus given back to "Fill what is in view" when it opened from there) and the table types' (a type added in a narrow dialog opening on its name, Enter adding it, a type refused staying in the dialog with why under its field, every way of closing adding nothing, and "Save these types" narrow beside "Use saved types" wide).
 
 ## What breaks it
