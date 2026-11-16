@@ -6,7 +6,7 @@ describes:
   - back-end/assignment/vendor_input.py
   - back-end/assignment/csv_output.py
   - back-end/assignment/invariants.py
-verified: 2026-11-12
+verified: 2026-11-17
 sources:
   - wayfinding/v0-1-0/map
   - wayfinding/v0-1-0/02
@@ -58,7 +58,7 @@ Every other value is written exactly as it is; the date cells are the organizer'
 
 **`assign_market` reads the market's own approved applications.**
 Only `reviewer_approved` main applications feed it: a waitlist application stands beside a person's main one, so reading both would place one person twice, and nothing creates one yet.
-A vendor added by hand does not feed it either: they are seated by hand ([adding a vendor who never applied](../../business/rules/adding-a-vendor-who-never-applied.md)).
+A vendor added by hand does not feed it either while their origin is still `added` (`is_added`): they are seated by hand, until their answers arrive by an import or their own save ([adding a vendor who never applied](../../business/rules/adding-a-vendor-who-never-applied.md)).
 Hand-placed rows on the stored assignment are seated first, and applicants outside the run who hold one are seated as held ([placements](placements.md#pins)).
 
 **`vendor_input.py` is the one seam where application shape meets solver shape**, and the only place that knows both.

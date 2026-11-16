@@ -68,6 +68,11 @@ One applicant's submission to one market. The canonical vendor-intake record: bo
 _Avoid_: Submission, entry, registration
 See [Application](docs/business/concepts/application.md).
 
+**Origin**:
+How an application came to the market: applied on its page, imported from a file, or added by hand by an organizer. Separate from its verdict: a vendor added by hand is approved by the adding, and once their answers arrive by an import or their own save they are imported or applied, read like any applicant and placed by the run.
+_Avoid_: Source, intake (the market's way of taking vendors, not one application's)
+See [the application document](docs/implementation/data/application-document.md#the-states-and-how-they-are-stored).
+
 **Essential question**:
 A question the product owns, that every application form asks. Purpose-built and non-removable. Most are read directly by the assignment solver, which is why they cannot be deleted - it would then have nothing to read. The vendor's name is the exception: it is essential because identity is, not because the solver needs it. Distinct from the custom fields an organizer adds freely.
 _Avoid_: Required field (custom fields can be required too)
@@ -99,7 +104,7 @@ _Avoid_: Assignee (an assignment is a table), the reviewer for whoever happens t
 See [The review is dealt among chosen reviewers](docs/business/rules/the-review-is-dealt-among-chosen-reviewers.md).
 
 **Share**:
-The applications dealt to one reviewer, and the follow-ups they own wherever those were dealt. An application stays in the share it was dealt to after it is decided, as the record of whose it was. One that comes back to open or to a follow-up (a verdict undone, a rule's rejection returned, a re-import's back to review) stays in that share only while its reviewer, or its follow-up's owner, may still review; otherwise it is dealt again.
+The applications dealt to one reviewer, and the follow-ups they own wherever those were dealt. An application stays in the share it was dealt to after it is decided, as the record of whose it was. One that comes back to open or to a follow-up (a verdict undone, a rule's rejection returned, an applicant's edit or a re-import sending a verdict back to review) stays in that share only while its reviewer, or its follow-up's owner, may still review; otherwise it is dealt again.
 
 **Deal**:
 Handing the open applications out among the reviewers, round robin in the order they arrived. Any change of reviewers deals the open applications again; a decided application stays where it is, and so does a follow-up, unless its owner is a reviewer the change removed. Every application that comes into open or a follow-up waits for the next deal, which keeps it with its reviewer or follow-up owner while they may review, deals it to the next reviewer in turn otherwise, and hands a follow-up on as its owner too.
@@ -110,7 +115,7 @@ An application that came into open or a follow-up and is not yet in an able revi
 _Avoid_: Unassigned, stranded (what waiting replaced: an application left in nobody's share for good)
 
 **Solver-relevant answer**:
-An answer whose change invalidates a completed review, because it changes what the solver would do with the application. Named by `SOLVER_RELEVANT_KEYS` in `back-end/essential_fields.py`.
+An answer the solver reads, so its change changes what the solver would do with the application; updating one is "Update info the assignment or price reads". Any changed answer, solver-relevant or not, sends a person's verdict back to open when the applicant or an import changes it. Named by `SOLVER_RELEVANT_KEYS` in `back-end/essential_fields.py`.
 
 **These three are independent, and the glossary keeps them apart deliberately.** A required answer may be noise on a triage card; a review highlight may be optional; a solver-relevant answer may be neither. Blurring them is how the form builder grows two controls an organizer cannot tell apart.
 

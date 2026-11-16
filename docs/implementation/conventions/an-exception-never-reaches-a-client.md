@@ -78,7 +78,7 @@ describes:
   - back-end/csv_import.py#parse_csv
   - back-end/csv_start.py#confirm
   - back-end/api/applicants.py#list_market_applications
-  - back-end/application_status.py#find_or_create_application
+  - back-end/application_status.py#_upsert
   - back-end/api/added_vendors.py#AddVendorRefused
   - back-end/api/vendor_export.py#ExportInvalid
   - back-end/api/placements.py#AssignPhaseError
@@ -240,7 +240,7 @@ So do the applicant, review, import and door routes: every public route an appli
 None catches anything, and each keeps its literal answers: the applicant's expired session 401, a gated market's answer as absent (decided in the applicants API, unchanged), `Invalid status: <status>`, `csvContent is required`, the import's phase 409 with its `phase`, and the permission 403s the routes ask themselves; a review write once the review is closed answers 403 with why it closed and what to do instead ([what a closed review says](../../business/rules/verdicts-settle-on-entering-assignment.md#what-a-closed-review-says)).
 A status a request names is read by `_named_status`, which names none for anything but a status's own string, as `_named_phase` does for a phase.
 A follow-up owner the market does not offer answers its `BadRequestError`, 400; `confirm` in [`back-end/csv_start.py`](../../../back-end/csv_start.py) lets a `ConfirmRefused`, a locked form and a refused plan or form reach the handler as raised; a door write on a market that does not exist, is archived or cannot be read answers what the change loader raises.
-Two lines these routes reach are kept free of an applicant's address for the 500 log: an application that keeps losing its upsert race (`find_or_create_application` in [`back-end/application_status.py`](../../../back-end/application_status.py)) is named by its market, and an application document that cannot be parsed (`list_market_applications` in [`back-end/api/applicants.py`](../../../back-end/api/applicants.py)) logs `parse_failure_detail`, never its answers.
+Two lines these routes reach are kept free of an applicant's address for the 500 log: an application that keeps losing its upsert race (`_upsert`, under `arrive` and `add`, in [`back-end/application_status.py`](../../../back-end/application_status.py)) is named by its market, and an application document that cannot be parsed (`list_market_applications` in [`back-end/api/applicants.py`](../../../back-end/api/applicants.py)) logs `parse_failure_detail`, never its answers.
 A mail that carries a sign-in or an account link is logged by what it is, never by whom it went to: all five, the verification, existing account, password reset and sign-in code emails and the applicant sign-in code (`_send_code_email` in [`back-end/api/applicant_auth.py`](../../../back-end/api/applicant_auth.py)), go through `send_mail` in [`back-end/utils/email.py`](../../../back-end/utils/email.py), which names their kind, and `request_login_code` names the market's slug when the applicant's code was not sent.
 A failed send logs the exception's type and never its text, and the provider's status code when the failure is a `ResendError`, but never its response body, since each can carry the address back.
 

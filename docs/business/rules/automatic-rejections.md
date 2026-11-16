@@ -48,6 +48,7 @@ A question of 12 answers or fewer draws them as checkboxes; past 12 they are a f
 
 **A rule judges only what no person has decided**: the undecided applications, and those a rule rejected.
 A person's verdict, an overturned rejection included, is never read, and neither is a follow-up.
+An applicant's edit or a re-import that changes the answers under a person's verdict sends it back to undecided first, and the rules then judge it like any other; a rule's rejection stays one through changed answers, and the rules judge it again ([the transition table](../../implementation/data/application-document.md#the-transition-table)'s answers-changed columns, decision 9.1).
 An application a rule meets is stored rejected, with the rule as its giver and the answer as its reason ("Answered “Half a table, shared” to “Table choice”", "Did not tick “I understand that no-shows”").
 One a rule rejected that no rule meets any longer, because the rule or the answers changed, returns to undecided; once results are published it stands instead, since its applicant has read the outcome.
 **Returning it overturns the rejection, so a person's write returns it only when the change row is theirs** (`may_overturn`, E38/F06/S01): someone the change row refuses (an Editor, by default) who narrows or removes a rule, takes a question off the form, updates a vendor's answer or imports leaves what the rules already rejected standing, with its rule and reason, and an Admin or the owner can overturn each one in the review.
@@ -57,7 +58,7 @@ An organizer may [update a vendor's answer](an-update-is-kept-beside-the-vendors
 
 **A question the application holds no answer to meets no rule**: a checkbox added since it was written, or a column an import left out, is not an unticked box.
 
-**The rules judge when something they read changes**: when the list is saved (every judgeable application of the market), when an applicant saves online (that application), when an organizer updates a vendor's info while the review is open (that application), and at the end of an import (the market, after any approval the import sent back to review), whose result says how many the rules rejected.
+**The rules judge when something they read changes**: when the list is saved (every judgeable application of the market), when an applicant saves online (that application), when an organizer updates a vendor's info while the review is open (that application), and at the end of an import (the market, after any verdict the import sent back to review), whose result says how many the rules rejected.
 Before an import writes anything, its preview judges the file's rows the same way and lists every row they will newly reject, with its reason, so an organizer checks the rules before they reject anyone ([importing a Google Form's responses](../flows/import.md#h2a-first-import-everything-maps)).
 Every write is conditioned on the application being as it was read, so a reviewer's verdict that lands in between is never overwritten ([ADR 0014](../../adr/0014-reviewers-claim-and-a-verdict-is-a-conditional-write.md)).
 
