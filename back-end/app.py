@@ -2109,7 +2109,7 @@ def update_vendor_info(market_id: str, application_id: str) -> Response:
 
 class ImportingMarket(NamedTuple):
     """The stored market an import or a start reads, the organization its check read, and the
-    asker's Import applications asking, which records what the import or the start writes."""
+    asker's Import applications asking, which records the import's and the start's own entries."""
     document: Dict[str, Any]
     organization: Optional[Organization]
     asked: Actions.Asked

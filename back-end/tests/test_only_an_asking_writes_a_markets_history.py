@@ -1,12 +1,14 @@
-"""Only an asking or the unasked door writes a market's history (T105-9, ADR 0032).
+"""Only an asking, the unasked door or an applicant's own save writes a market's history through
+the history's writer (T105-9, ADR 0032).
 
 A change on a market records under the row its request asked: through the ``Asked`` its check
 returned (``Actions.Asked.record``), or, for the few records no request asks, through
 ``History.unasked``, which only the functions in ``DOORS`` call, each with its reason. The history's
 writer is private (``History._record``): only the history module and the asking's ``record`` call
 it, and only ``ask`` and ``unasked`` build the two recorders. This file reads every server module
-and fails one that writes the history any other way, so an entry can never name a row passed by
-hand beside a check made elsewhere.
+and fails one that uses the history's private writers or its collection through the history
+module, opens the unasked door outside ``DOORS``, or builds a recorder by hand, so an entry can
+never name a row passed by hand beside a check made elsewhere.
 
 What each write records, and under which row, is ``test_every_write_records.py``'s: it sends each
 write and ties each entry to a row the write asked, or to one of its ``UNASKED``.
