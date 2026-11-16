@@ -18,6 +18,7 @@ from test_choosing_reviewers_deals_the_open_applications import (  # noqa: F401 
 
 import api.applications as ApplicationsApi
 import api.markets as MarketsApi
+import application_status as ReviewState
 import history as History
 import review_team as ReviewTeam
 
@@ -263,7 +264,7 @@ class TestEveryLetGoLooksAgain:
     def test_a_burst_of_arrivals_each_landing_while_the_last_is_dealt_is_all_dealt(
             self, world, monkeypatch):
         _dealt_seven(world)
-        real = ApplicationsApi.deal_arrival
+        real = ReviewState.deal_arrival
         burst = [f"b{n}" for n in range(12)]
         landed = []
 
@@ -273,9 +274,9 @@ class TestEveryLetGoLooksAgain:
                 _arrive(world, landed[-1], 22 + len(landed))
             return real(app_id, reviewer)
 
-        monkeypatch.setattr(ApplicationsApi, "deal_arrival", another_lands_as_each_is_dealt)
+        monkeypatch.setattr(ReviewState, "deal_arrival", another_lands_as_each_is_dealt)
         _arrive(world, "x", 21)
-        monkeypatch.setattr(ApplicationsApi, "deal_arrival", real)
+        monkeypatch.setattr(ReviewState, "deal_arrival", real)
 
         assert landed == burst
         _nothing_left_waiting_or_held(world)
@@ -284,19 +285,19 @@ class TestEveryLetGoLooksAgain:
     def test_a_change_that_fails_holding_the_market_still_deals_what_arrived_meanwhile(
             self, world, monkeypatch):
         _dealt_seven(world)
-        real = ApplicationsApi.deal
+        real = ReviewState.deal
 
         def an_arrival_lands_then_the_change_fails(app_id, reviewer, was):
             _arrive(world, "x", 21)
             raise RuntimeError("the database went away")
 
-        monkeypatch.setattr(ApplicationsApi, "deal", an_arrival_lands_then_the_change_fails)
+        monkeypatch.setattr(ReviewState, "deal", an_arrival_lands_then_the_change_fails)
         with pytest.raises(RuntimeError):
             ReviewTeam.choose(MarketsApi.market_from_document(_market(world)), None,
                               [person for person in ReviewTeam.team_of(
                                   MarketsApi.market_from_document(_market(world))).reviewers
                                if person.email != ANA], ANA)
-        monkeypatch.setattr(ApplicationsApi, "deal", real)
+        monkeypatch.setattr(ReviewState, "deal", real)
 
         _nothing_left_waiting_or_held(world)
         assert _reviewer_of(world)["x"] is not None
@@ -304,7 +305,7 @@ class TestEveryLetGoLooksAgain:
     def test_a_deal_of_arrivals_that_fails_looks_again_before_its_error_goes_on(
             self, world, monkeypatch):
         _dealt_seven(world)
-        real = ApplicationsApi.deal_arrival
+        real = ReviewState.deal_arrival
         failed = []
 
         def y_lands_then_the_deal_of_x_fails(app_id, reviewer):
@@ -314,10 +315,10 @@ class TestEveryLetGoLooksAgain:
                 raise RuntimeError("the database went away")
             return real(app_id, reviewer)
 
-        monkeypatch.setattr(ApplicationsApi, "deal_arrival", y_lands_then_the_deal_of_x_fails)
+        monkeypatch.setattr(ReviewState, "deal_arrival", y_lands_then_the_deal_of_x_fails)
         with pytest.raises(RuntimeError):
             _arrive(world, "x", 21)
-        monkeypatch.setattr(ApplicationsApi, "deal_arrival", real)
+        monkeypatch.setattr(ReviewState, "deal_arrival", real)
 
         # Looking again dealt both: x, still waiting, then y.
         dealt = _reviewer_of(world)

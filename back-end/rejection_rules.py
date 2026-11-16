@@ -17,6 +17,7 @@ from datetime import date
 from typing import Any, Dict, List, Optional, Tuple
 
 import api.applications as ApplicationsApi
+import application_status as ReviewState
 import essential_fields as EssentialFields
 from client_errors import BadRequestError
 from datatypes import AnswerCondition, ApplicationStatus, Market, RejectionRule, VerdictGiver
@@ -222,7 +223,7 @@ def judge(
         met = book.rejecting(ApplicationsApi.effective_answers(doc))
         if met is None:
             if by_rule and overturns and not book.results_published \
-                    and ApplicationsApi.update_application_status(
+                    and ReviewState.update_application_status(
                         doc["id"], ApplicationStatus.OPEN, if_unchanged_since=doc):
                 returned += 1
             continue
@@ -230,7 +231,7 @@ def judge(
         if by_rule and (doc.get("verdict_by") or {}).get("rule") == rule_key \
                 and doc.get("verdict_reason") == reason:
             continue
-        if ApplicationsApi.update_application_status(
+        if ReviewState.update_application_status(
                 doc["id"], ApplicationStatus.REVIEWER_REJECTED,
                 by=VerdictGiver(kind="rule", rule=rule_key), reason=reason,
                 if_unchanged_since=doc):

@@ -12,6 +12,7 @@ from datatypes import Application, ApplicationStatus, ApplicationType, MarketPer
 
 import api.applicant_auth as ApplicantAuth
 import api.applications as ApplicationsApi
+import application_status as ReviewState
 import sign_in_limits
 from real_mongo import harness
 
@@ -36,7 +37,7 @@ class TestOneApplicantIsOneApplication:
         """The create is an upsert on a public endpoint: twenty requests for one new address at
         once all read nothing, and only the unique identity index stops the second document."""
         harness.warm(applications, 20)
-        answered = race(20, lambda _i: ApplicationsApi.find_or_create_application(
+        answered = race(20, lambda _i: ReviewState.find_or_create_application(
             _application("market-race")))
 
         assert [a for a in answered if isinstance(a, BaseException)] == []
@@ -49,7 +50,7 @@ class TestOneApplicantIsOneApplication:
         waitlist application leave one of each."""
         def create(i):
             kind = ApplicationType.MAIN if i % 2 else ApplicationType.WAITLIST
-            return ApplicationsApi.find_or_create_application(
+            return ReviewState.find_or_create_application(
                 _application("market-race", application_type=kind))
 
         harness.warm(applications, 20)

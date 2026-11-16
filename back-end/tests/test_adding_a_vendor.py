@@ -33,7 +33,7 @@ def stored(monkeypatch):
             AddedVendors.ApplicationsApi, "find_application_by_email",
             lambda _market_id, email: {"id": "app-1"} if email in already_applied else None)
         monkeypatch.setattr(
-            AddedVendors.ApplicationsApi, "find_or_create_application",
+            AddedVendors.ReviewState, "find_or_create_application",
             lambda application: written.append(application) or application)
         return written
 

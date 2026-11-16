@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 import api.applications as ApplicationsApi
+import application_status as ReviewState
 import rejection_rules as RejectionRules
 import essential_fields as EssentialFields
 from application_write import (
@@ -1532,7 +1533,7 @@ def _as_the_import_leaves_them(
             after["status"] = ApplicationStatus.OPEN.value
         met = None
         newly_rejected = False
-        if ApplicationsApi.is_judgeable(after):
+        if ReviewState.is_judgeable(after):
             met = book.rejecting(ApplicationsApi.effective_answers(after))
             by_rule = after.get("status") == ApplicationStatus.REVIEWER_REJECTED.value
             if met is None:
@@ -1573,7 +1574,7 @@ def _kept_verdicts(market_doc: Dict[str, Any], left: Sequence[_Left]) -> int:
     A row that would store what the application holds already is not written, so not counted."""
     return sum(
         1 for row in left
-        if row.before is not None and ApplicationsApi.is_decided(row.before)
+        if row.before is not None and ReviewState.is_decided(row.before)
         and not _unchanged(market_doc, row.before, row.data)
         and not row.newly_rejected
         and row.after.get("status") == row.before.get("status")
@@ -1740,7 +1741,7 @@ def _write_row(
         # Decided BEFORE the write, while the stored answers are still the ones the organizer
         # approved: afterwards there is nothing left to compare against.
         stale_review = _would_return_to_review(market_doc, existing, form_data)
-        app_doc = existing or ApplicationsApi.find_or_create_application(Application(
+        app_doc = existing or ReviewState.find_or_create_application(Application(
             market_id=market_id,
             applicant_email=email,
             form_data={},

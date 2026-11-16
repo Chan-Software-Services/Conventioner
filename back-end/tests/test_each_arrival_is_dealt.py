@@ -250,9 +250,9 @@ def test_a_market_with_no_team_is_not_read_for_a_deal(world, monkeypatch):
     def untouched(*_a, **_k):
         raise AssertionError("dealt with no reviewers")
 
-    import api.applications as ApplicationsApi
-    monkeypatch.setattr(ApplicationsApi, "mark_arriving", untouched)
-    monkeypatch.setattr(ApplicationsApi, "mark_all_arriving", untouched)
+    import application_status as ReviewState
+    monkeypatch.setattr(ReviewState, "mark_arriving", untouched)
+    monkeypatch.setattr(ReviewState, "mark_all_arriving", untouched)
     monkeypatch.setattr(world.markets, "find_one_and_update", untouched)
 
     market = MarketsApi.market_from_document(stored_market(MarketPhase.APPLICATIONS))

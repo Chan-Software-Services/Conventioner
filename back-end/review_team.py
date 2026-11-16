@@ -17,7 +17,7 @@ reviewers from writing its team to writing its turn, and a deal of arrivals from
 to writing it. So the turn is only ever read and written by the one deal holding the market, and no
 interleaving of a change and an arrival can deal an application twice or skip a reviewer. An
 arrival never waits for the market: it marks its application as arriving
-(``ApplicationsApi.mark_arriving``) and deals every application so marked if it can hold the
+(``ReviewState.mark_arriving``) and deals every application so marked if it can hold the
 market; if it cannot, the deal holding it deals them when it lets go (``_settle``), since an
 application is marked before its arrival tries to hold, and every holder looks for marked ones
 after letting go. A holder the host ended never lets go: its lease runs out, and the next deal
@@ -36,6 +36,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
 import api.applications as ApplicationsApi
 import api.market_actions as Actions
 import api.organizations as OrgsApi
+import application_status as ReviewState
 import history as History
 from assignment.utils import convert_keys_to_camel_case, convert_keys_to_snake_case
 from client_errors import ConflictError
@@ -212,12 +213,12 @@ def _choose_holding(
         was = doc.get("reviewer") or None
         if doc.get("status") == ApplicationStatus.NEEDS_FOLLOW_UP.value:
             owner = doc.get("follow_up_owner")
-            if ApplicationsApi.deal_follow_up(doc["id"], to, owner):
+            if ReviewState.deal_follow_up(doc["id"], to, owner):
                 moved.append((doc, was, to, owner))
             continue
         if was == (to.model_dump() if to else None):
             continue
-        if ApplicationsApi.deal(doc["id"], to, was):
+        if ReviewState.deal(doc["id"], to, was):
             moved.append((doc, was, to, None))
     turn = len(pool) if able else 0
 
@@ -291,9 +292,9 @@ def deal_arrivals(
         return 0
     action_id = action if isinstance(action, str) else action.id
     if only is not None:
-        ApplicationsApi.mark_arriving(only, actor, action_id)
+        ReviewState.mark_arriving(only, actor, action_id)
     else:
-        ApplicationsApi.mark_all_arriving(market.id, actor, action_id)
+        ReviewState.mark_all_arriving(market.id, actor, action_id)
     return _settle(market, _organization(market))
 
 
@@ -352,7 +353,7 @@ def _deal_arriving(market: Market, organization: Optional[Organization], deal: s
     dealt: List[Tuple[Dict[str, Any], MarketPerson]] = []
     for doc in ApplicationsApi.arriving_in_arrival_order(market.id):
         to = able[turn % len(able)] if able else None
-        if ApplicationsApi.deal_arrival(doc["id"], to):
+        if ReviewState.deal_arrival(doc["id"], to):
             dealt.append((doc, to))
             turn += 1
     if dealt and markets_collection.update_one(

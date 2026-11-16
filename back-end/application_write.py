@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import api.applications as ApplicationsApi
+import application_status as ReviewState
 import essential_fields as EssentialFields
 from datatypes import Application, ApplicationStatus
 from market_documents import market_doc_field
@@ -146,13 +147,13 @@ def record_application_answers(
     submitted_at = app_doc.get("submitted_at") or now
     app_id = app_doc.get("id", "")
 
-    written = ApplicationsApi.update_application_form_data(
+    written = ReviewState.update_application_form_data(
         app_id, stored_form_data, submitted_at, now, held=held, back_to_review=back_to_review,
     )
     if held is not None and not written:
         return ANSWERS_MOVED, None
     if not app_doc.get("status"):
-        ApplicationsApi.update_application_status(app_id, ApplicationStatus.OPEN)
+        ReviewState.update_application_status(app_id, ApplicationStatus.OPEN)
 
     updated_doc = ApplicationsApi.find_application_by_id(app_id)
     return None, Application(**(updated_doc or app_doc))

@@ -55,7 +55,7 @@ def adding(monkeypatch):
         monkeypatch.setattr(
             AddedVendors.ApplicationsApi, "find_application_by_email", lambda *_a: None)
         monkeypatch.setattr(
-            AddedVendors.ApplicationsApi, "find_or_create_application",
+            AddedVendors.ReviewState, "find_or_create_application",
             lambda application: written.append(application) or application)
         return written
 

@@ -54,6 +54,7 @@ from assignment.assignment import (
 )
 from assignment.vendor_input import SolverVendor, outside_solver_vendors
 from assignment.utils import convert_keys_to_snake_case, convert_keys_to_camel_case, snake_to_camel
+import application_status as ReviewState
 import api.applications as ApplicationsApi
 import api.applicants as ApplicantsApi
 import result_outcome as ResultOutcome
@@ -2208,7 +2209,7 @@ def take_move(context: MarketContext, to_phase: str, by: Optional[str] = None) -
     swept: Dict[str, int] = {}
     if from_phase == MarketPhase.OFFERS.value and to_phase == MarketPhase.MARKET_DAYS.value:
         try:
-            swept["swept"] = ApplicationsApi.sweep_unanswered_offers(market_id)
+            swept["swept"] = ReviewState.sweep_unanswered_offers(market_id)
             logger.info(
                 "Swept %d assignment_sent applications to vendor_refused for market %s",
                 swept["swept"],

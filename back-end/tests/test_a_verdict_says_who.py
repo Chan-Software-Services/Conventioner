@@ -18,6 +18,7 @@ import api.applications as ApplicationsApi  # noqa: E402
 import api.market_actions as Actions  # noqa: E402
 import api.markets as MarketsApi  # noqa: E402
 import api.users as UsersApi  # noqa: E402
+import application_status as ReviewState
 from conftest import FakeApplicationsCollection, sessions_load_through_get_user  # noqa: E402
 from datatypes import ApplicationStatus, MarketPhase, VerdictGiver  # noqa: E402
 
@@ -78,7 +79,7 @@ class TestTheGiverIsStored:
             "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=ALEX)
 
         # Answers that changed send an approval back to review (the import, E32/F02/S02).
-        ApplicationsApi.update_application_status("app-1", ApplicationStatus.OPEN)
+        ReviewState.update_application_status("app-1", ApplicationStatus.OPEN)
 
         assert "verdict_by" not in stored[0] and "verdict_at" not in stored[0]
 

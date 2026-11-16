@@ -41,6 +41,7 @@ import api.discord_connection as DiscordConnectionApi
 import api.door as DoorApi
 import api.markets as MarketsApi
 import api.organizations as OrgsApi
+import application_status as ReviewState
 import organization_people as OrganizationPeople
 import api.payments as PaymentsApi
 import api.permissions as PermissionsApi
@@ -1086,7 +1087,7 @@ class TestTheApplicantReviewImportAndDoorRoutes:
         monkeypatch.setattr(applications, "find_one", lambda *_a, **_kw: None)
 
         with pytest.raises(PyMongoError) as raised:
-            ApplicationsApi.find_or_create_application(Application(
+            ReviewState.find_or_create_application(Application(
                 market_id="market-123", applicant_email="vendor@example.com",
                 application_type=ApplicationType.MAIN, form_data={},
                 status=ApplicationStatus.OPEN,
@@ -2055,7 +2056,7 @@ class TestAFailureARouteSurvivesIsLoggedWithoutItsMessage:
         use_market(monkeypatch, stored_market(phase=MarketPhase.OFFERS, setupObject=COMPLETE_PLAN))
         monkeypatch.setattr(MarketsApi, "evaluate_transition", lambda *_args: [])
         monkeypatch.setattr(
-            ApplicationsApi, "sweep_unanswered_offers", fail_with(RuntimeError(LIBRARY_MESSAGE)),
+            ReviewState, "sweep_unanswered_offers", fail_with(RuntimeError(LIBRARY_MESSAGE)),
         )
 
         with caplog.at_level(logging.DEBUG):

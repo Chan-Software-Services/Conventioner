@@ -19,6 +19,7 @@ import api.applicants as ApplicantsApi
 import api.applications as ApplicationsApi
 import api.market_actions as Actions
 import api.markets as MarketsApi
+import application_status as ReviewState
 import essential_fields as EssentialFields
 import history as History
 import pricing as Pricing
@@ -108,7 +109,7 @@ def update_vendor_info(
         else:
             updates[key] = AnswerUpdate(value=value, by=updater, at=now, over=theirs.get(key))
 
-    ApplicationsApi.write_answer_updates(application_id, updates, cleared)
+    ReviewState.write_answer_updates(application_id, updates, cleared)
     stored = ApplicationsApi.find_application_by_id(application_id) or doc
     after = ApplicationsApi.effective_answers(stored)
     # The rules judge what the organizer now reads, as they judge an applicant's own save, while

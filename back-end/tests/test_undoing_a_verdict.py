@@ -18,6 +18,7 @@ from test_choosing_reviewers_deals_the_open_applications import (  # noqa: F401 
 )
 
 import api.applications as ApplicationsApi
+import application_status as ReviewState
 import history as History
 from datatypes import ApplicationStatus, MarketPhase, VerdictGiver
 
@@ -68,7 +69,7 @@ def _entries(world, kind):
 
 class TestTheWindow:
     def test_is_two_minutes(self):
-        assert ApplicationsApi.UNDO_WINDOW == timedelta(minutes=2)
+        assert ReviewState.UNDO_WINDOW == timedelta(minutes=2)
 
     def test_a_verdicts_answer_says_how_long_it_may_be_undone(self, world):
         response = _client(EDITOR).put(f"/markets/{MARKET}/applications/app-v1/review",
@@ -288,9 +289,9 @@ class TestWhatItComesBackTo:
                                                            "email": ADMIN}
         giver = VerdictGiver(kind="person", user_id="user-editor", email=EDITOR)
 
-        written = ApplicationsApi.update_application_status(
+        written = ReviewState.update_application_status(
             "app-follow-up", ApplicationStatus.REVIEWER_APPROVED, by=giver,
-            kept_for_undo=ApplicationsApi.undo_to_of(read))
+            kept_for_undo=ReviewState.undo_to_of(read))
 
         assert written is False
         assert _doc(world, "app-follow-up")["status"] == "needs_follow_up"
@@ -299,7 +300,7 @@ class TestWhatItComesBackTo:
         _give(EDITOR, "app-v1", "reviewer_rejected")
         assert _doc(world, "app-v1")["undo_to"]["status"] == "open"
 
-        ApplicationsApi.update_application_status(
+        ReviewState.update_application_status(
             "app-v1", ApplicationStatus.REVIEWER_REJECTED,
             by=VerdictGiver(kind="rule", rule="x"), reason="r")
 

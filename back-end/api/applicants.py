@@ -59,6 +59,7 @@ from utils.application_token import (
 import api.applications as ApplicationsApi
 import api.attendance as AttendanceApi
 import api.market_actions as Actions
+import application_status as ReviewState
 import history as History
 import market_deletion as MarketDeletion
 import review_team as ReviewTeam
@@ -485,7 +486,7 @@ def save_applicant_application(
         refusal = validate_application_answers(market_doc, form_data)
         if refusal:
             return {"error": refusal}, 422
-    app_doc = existing or ApplicationsApi.find_or_create_application(Application(
+    app_doc = existing or ReviewState.find_or_create_application(Application(
         market_id=market_id,
         applicant_email=email,
         form_data={},
@@ -641,17 +642,17 @@ def review_application(
     may. An application they saw decided is then refused with it, a 403; one decided since they saw
     it is the 409 above, never written over.
     """
-    if new_status not in ApplicationsApi.MARKED_STATUSES:
+    if new_status not in ReviewState.MARKED_STATUSES:
         return {"error": f"Invalid review status: {new_status.value}"}, 400
 
     app_doc = ApplicationsApi.find_application_by_id(application_id)
     if not app_doc or app_doc.get("market_id") != market_id:
         return {"error": "Application not found for this market."}, 404
-    if change_refused and ApplicationsApi.is_decided(seen or app_doc):
+    if change_refused and ReviewState.is_decided(seen or app_doc):
         return {"error": change_refused}, 403
 
-    kept = ApplicationsApi.undo_to_of(app_doc)
-    written = ApplicationsApi.update_application_status(
+    kept = ReviewState.undo_to_of(app_doc)
+    written = ReviewState.update_application_status(
         application_id, new_status, by=by, owner=owner, if_unchanged_since=seen,
         unless_decided=bool(change_refused), kept_for_undo=kept)
     if not written:
@@ -678,7 +679,7 @@ def review_application(
 def _verdict_row(before: List[Dict[str, Any]]) -> "Actions.Action":
     """The table's row a reviewer's write took, for its history entry: changing a verdict when any
     application it wrote was decided, else giving one (E38/F06/S01)."""
-    if any(ApplicationsApi.is_decided(doc) for doc in before):
+    if any(ReviewState.is_decided(doc) for doc in before):
         return Actions.CHANGE_VERDICTS
     return Actions.GIVE_VERDICTS
 
@@ -727,7 +728,7 @@ def review_selection(
     hands. One already approved or rejected is skipped with ``change_refused`` when it is set:
     this reviewer gives verdicts but may not change one (E38/F06/S01).
     """
-    if new_status not in ApplicationsApi.MARKED_STATUSES:
+    if new_status not in ReviewState.MARKED_STATUSES:
         return {"error": f"Invalid review status: {new_status.value}"}, 400
     me = {"user_id": by.user_id, "email": by.email}
     written: List[str] = []
@@ -748,15 +749,15 @@ def review_selection(
                             "reason": f"Already {_STATUS_WORD[new_status.value]}."})
             continue
         # Decided as they saw it, or by now: either way not theirs to change, so the row says why.
-        if change_refused and (ApplicationsApi.is_decided(seen or doc)
-                               or ApplicationsApi.is_decided(doc)):
+        if change_refused and (ReviewState.is_decided(seen or doc)
+                               or ReviewState.is_decided(doc)):
             skipped.append({"id": app_id, "email": doc.get("applicant_email"),
                             "reason": change_refused})
             continue
-        if ApplicationsApi.update_application_status(
+        if ReviewState.update_application_status(
                 app_id, new_status, by=by, if_unchanged_since=seen,
                 unless_decided=bool(change_refused),
-                kept_for_undo=ApplicationsApi.undo_to_of(doc)):
+                kept_for_undo=ReviewState.undo_to_of(doc)):
             written.append(app_id)
             was[app_id] = doc
         else:
@@ -780,7 +781,7 @@ def review_selection(
             },
         )
     # Undone only as a whole, so offered only when every one it wrote kept what it was.
-    undoable = written and all(ApplicationsApi.undo_to_of(was[app_id]) for app_id in written)
+    undoable = written and all(ReviewState.undo_to_of(was[app_id]) for app_id in written)
     return {"written": written, "skipped": skipped, **(undo_window() if undoable else {})}, 200
 
 
@@ -801,7 +802,7 @@ def undo_window() -> Dict[str, int]:
     """How long a verdict just written may be undone by its giver, for its answer: the client times
     its Undo from this, so the window is kept in one place (E38/F10/S01). Answered only for a
     verdict that kept what the application was, so the client offers Undo only where it may."""
-    return {"undoSeconds": int(ApplicationsApi.UNDO_WINDOW.total_seconds())}
+    return {"undoSeconds": int(ReviewState.UNDO_WINDOW.total_seconds())}
 
 
 #: What a reviewer asks to undo: the application, and how they saw it once their verdict was written.
@@ -832,13 +833,13 @@ def _undo_one(
     if (pinned["status"] != doc.get("status")
             or (pinned["verdict_at"] or None) != (doc.get("verdict_at") or None)):
         return doc, None, (_changed_since_seen(doc, seen), 409)
-    if not ApplicationsApi.undoable_by(doc, by.user_id):
+    if not ReviewState.undoable_by(doc, by.user_id):
         return doc, None, (UNDO_REFUSED, 403)
     undo_to = doc["undo_to"]
     owner = (undo_to.get("follow_up_owner") or {}).get("email")
     if owner and not owner_offered(owner):
         return doc, None, (UNDO_OWNER_REFUSED, 400)
-    if not ApplicationsApi.restore_before_verdict(app_id, undo_to, pinned):
+    if not ReviewState.restore_before_verdict(app_id, undo_to, pinned):
         now = ApplicationsApi.find_application_by_id(app_id) or doc
         return now, None, (_changed_since_seen(now, seen), 409)
     return doc, ApplicationsApi.find_application_by_id(app_id), None
@@ -912,7 +913,7 @@ def reassign_follow_up(
     app_doc = ApplicationsApi.find_application_by_id(application_id)
     if not app_doc or app_doc.get("market_id") != market_id:
         return {"error": "Application not found for this market."}, 404
-    if not ApplicationsApi.reassign_follow_up_owner(application_id, owner):
+    if not ReviewState.reassign_follow_up_owner(application_id, owner):
         return {"error": "Only an application that needs a follow-up has an owner."}, 409
     History.record(
         market_id, by, Actions.GIVE_VERDICTS, kind=History.FOLLOW_UP_OWNER,

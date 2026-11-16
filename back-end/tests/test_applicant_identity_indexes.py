@@ -17,6 +17,7 @@ from conftest import skip_without_real_dependencies
 from datatypes import Application, ApplicationStatus, ApplicationType
 
 import api.applications as ApplicationsApi
+import application_status as ReviewState
 
 
 @pytest.fixture(autouse=True)
@@ -97,7 +98,7 @@ class TestTheApplicationIdentityIndex:
         _unbuildable(applications, monkeypatch)
 
         with pytest.raises(ApplicationsApi.ApplicationIndexError):
-            ApplicationsApi.find_or_create_application(Application(
+            ReviewState.find_or_create_application(Application(
                 market_id="market-123",
                 applicant_email="vendor@example.com",
                 application_type=ApplicationType.MAIN,
@@ -108,7 +109,7 @@ class TestTheApplicationIdentityIndex:
         assert applications.documents == []
 
     def test_an_index_that_builds_lets_the_application_be_stored(self, applications):
-        stored = ApplicationsApi.find_or_create_application(Application(
+        stored = ReviewState.find_or_create_application(Application(
             market_id="market-123",
             applicant_email="vendor@example.com",
             application_type=ApplicationType.MAIN,
@@ -144,8 +145,8 @@ class TestCreatingAnApplicationConcurrently:
     def test_two_calls_for_the_same_identity_leave_one_document(self, applications):
         app = self._app()
 
-        first = ApplicationsApi.find_or_create_application(app)
-        second = ApplicationsApi.find_or_create_application(app)
+        first = ReviewState.find_or_create_application(app)
+        second = ReviewState.find_or_create_application(app)
 
         assert len(applications.documents) == 1
         assert first.applicant_email == "vendor@example.com"
@@ -154,9 +155,9 @@ class TestCreatingAnApplicationConcurrently:
     def test_the_second_call_is_a_no_op_not_an_error(self, applications):
         """The caller gets the application that exists; it does not have to catch anything."""
         app = self._app()
-        ApplicationsApi.find_or_create_application(app)
+        ReviewState.find_or_create_application(app)
 
-        second = ApplicationsApi.find_or_create_application(app)
+        second = ReviewState.find_or_create_application(app)
 
         assert second is not None
         assert second.applicant_email == "vendor@example.com"
@@ -166,8 +167,8 @@ class TestCreatingAnApplicationConcurrently:
         waitlist = self._app(application_type=ApplicationType.WAITLIST,
                              main_application_id=main.id)
 
-        ApplicationsApi.find_or_create_application(main)
-        ApplicationsApi.find_or_create_application(waitlist)
+        ReviewState.find_or_create_application(main)
+        ReviewState.find_or_create_application(waitlist)
 
         assert len(applications.documents) == 2
 
@@ -175,8 +176,8 @@ class TestCreatingAnApplicationConcurrently:
         market_a = self._app(market_id="market-a")
         market_b = self._app(market_id="market-b")
 
-        ApplicationsApi.find_or_create_application(market_a)
-        ApplicationsApi.find_or_create_application(market_b)
+        ReviewState.find_or_create_application(market_a)
+        ReviewState.find_or_create_application(market_b)
 
         assert len(applications.documents) == 2
 
@@ -202,11 +203,11 @@ class TestCreatingAnApplicationConcurrently:
 
         # Pre-seed the winner's document so the fallback find_one can read it back
         app = self._app()
-        ApplicationsApi.find_or_create_application(app)
+        ReviewState.find_or_create_application(app)
         monkeypatch.setattr(applications, "find_one_and_update", one_duplicate)
 
         # Now race: the upsert raises DuplicateKeyError, but find_one finds the existing doc
-        stored = ApplicationsApi.find_or_create_application(app)
+        stored = ReviewState.find_or_create_application(app)
 
         assert stored is not None
         assert stored.applicant_email == "vendor@example.com"

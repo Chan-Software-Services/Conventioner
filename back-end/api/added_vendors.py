@@ -18,6 +18,7 @@ from typing import Any, Dict, Tuple
 import api.applications as ApplicationsApi
 import api.market_actions as Actions
 import api.markets as MarketsApi
+import application_status as ReviewState
 import history as History
 import market_deletion as MarketDeletion
 import essential_fields as EssentialFields
@@ -59,7 +60,7 @@ def add_vendor(
         )
 
     now = datetime.now(timezone.utc).isoformat()
-    application = ApplicationsApi.find_or_create_application(Application(
+    application = ReviewState.find_or_create_application(Application(
         market_id=market_id,
         applicant_email=address,
         form_data={EssentialFields.FULL_NAME_KEY: name, **answers},

@@ -20,7 +20,7 @@ from test_choosing_reviewers_deals_the_open_applications import (  # noqa: F401 
 )
 from test_every_order_of_a_deal import _arrive
 
-import api.applications as ApplicationsApi
+import application_status as ReviewState
 import history as History
 import review_team as ReviewTeam
 
@@ -86,7 +86,7 @@ def _unfinished(world):
 class TestTheSameChoiceAgainFinishesAStoppedChange:
     def test_a_change_stopped_at_its_second_deal_is_finished_by_saving_the_same_reviewers(
             self, world, monkeypatch):
-        stop_at_call(monkeypatch, ApplicationsApi, "deal", call=2)
+        stop_at_call(monkeypatch, ReviewState, "deal", call=2)
 
         assert _choose([ANA, BEN, CAT]).status_code == 500
         assert [_reviewers(world)[v] for v in OPEN] == [ANA, None, None, None, None, None, None]
@@ -101,7 +101,7 @@ class TestTheSameChoiceAgainFinishesAStoppedChange:
         assert not _unfinished(world)
 
     def test_the_next_arrival_after_the_finish_goes_where_the_turn_says(self, world, monkeypatch):
-        stop_at_call(monkeypatch, ApplicationsApi, "deal", call=2)
+        stop_at_call(monkeypatch, ReviewState, "deal", call=2)
         _choose([ANA, BEN, CAT])
         _choose([ANA, BEN, CAT])
 
@@ -113,7 +113,7 @@ class TestTheSameChoiceAgainFinishesAStoppedChange:
 
     def test_the_history_records_the_change_once_and_the_deal_the_finish_made(
             self, world, monkeypatch):
-        stop_at_call(monkeypatch, ApplicationsApi, "deal", call=2)
+        stop_at_call(monkeypatch, ReviewState, "deal", call=2)
         _choose([ANA, BEN, CAT])
 
         _choose([ANA, BEN, CAT])
@@ -133,7 +133,7 @@ class TestTheSameChoiceAgainFinishesAStoppedChange:
         follow_up["follow_up_owner"] = {"user_id": "user-ben", "email": BEN}
         follow_up["reviewer"] = {"user_id": "user-ben", "email": BEN}
         # The follow-up arrived first, so it is the first the change deals.
-        stop_at_call(monkeypatch, ApplicationsApi, "deal_follow_up", call=1)
+        stop_at_call(monkeypatch, ReviewState, "deal_follow_up", call=1)
         assert _choose([ANA]).status_code == 500
         assert follow_up["follow_up_owner"]["email"] == BEN
 
@@ -148,7 +148,7 @@ class TestTheSameChoiceAgainFinishesAStoppedChange:
         _choose([ANA, BEN])
         follow_up = next(d for d in world.applications.documents if d["id"] == "app-follow-up")
         follow_up["follow_up_owner"] = {"user_id": "user-ben", "email": BEN}
-        stop_at_call(monkeypatch, ApplicationsApi, "deal_follow_up", call=1)
+        stop_at_call(monkeypatch, ReviewState, "deal_follow_up", call=1)
         _choose([ANA])
 
         assert _choose([ANA, CAT]).status_code == 200
@@ -157,7 +157,7 @@ class TestTheSameChoiceAgainFinishesAStoppedChange:
         assert not _unfinished(world)
 
     def test_a_finished_change_saved_again_writes_and_records_nothing(self, world, monkeypatch):
-        stop_at_call(monkeypatch, ApplicationsApi, "deal", call=2)
+        stop_at_call(monkeypatch, ReviewState, "deal", call=2)
         _choose([ANA, BEN, CAT])
         _choose([ANA, BEN, CAT])
         writes, entries = world.markets.writes, len(world.history.documents)
@@ -170,7 +170,7 @@ class TestTheSameChoiceAgainFinishesAStoppedChange:
 
 class TestTheMarkIsTakenAwayInEveryWayAChangeEnds:
     def test_it_stands_while_the_change_is_unfinished(self, world, monkeypatch):
-        stop_at_call(monkeypatch, ApplicationsApi, "deal", call=2)
+        stop_at_call(monkeypatch, ReviewState, "deal", call=2)
 
         _choose([ANA, BEN, CAT])
 
