@@ -45,6 +45,7 @@ sources:
   - T274
   - T271
   - T315
+  - T419
 ---
 
 # Importing a Google Form's responses
@@ -83,6 +84,7 @@ Covered by:
 - `form-amendment.spec.ts`
 - `market-journey.spec.ts`
 - `the-import-lines-up.spec.ts`
+- `the-import-never-previews-without-a-file.spec.ts`
 - `the-upload-steps-are-one.spec.ts`
 
 ### H2a. First import, everything maps
@@ -121,6 +123,8 @@ On Map columns and Preview, "Cancel import", a tab, a link, Back or a jump to an
 A reload or closing the tab is asked by the browser, in its own words ([unsaved work asks before it is dropped](../../implementation/conventions/unsaved-work-asks-before-it-is-dropped.md)).
 Upload and the done step leave without asking, "Back to applications" and "Go to the review" included, and so does a page whose import is being written, since leaving does not stop it.
 The import's own Back stays inside the page and never asks; from Map columns it returns to Upload, without the file (`the-import-asks-before-it-drops-a-mapping.spec.ts`).
+Back waits for the values check, a re-read of the questions and the import: it is disabled while the values are checked, while the questions are read again after a change to the form made from the import, and while the import is written, and a return to Upload drops every answer still to come, so a values check answering late never opens Preview without the file, and Import always posts the file previewed (T419; `the-import-never-previews-without-a-file.spec.ts`).
+A change to a column or a value while the values are checked withdraws the check: the check can be sent again, and the first check's answer is dropped, so Preview always shows the mapping on screen.
 
 ### H2b. Answers that match no option
 
@@ -155,6 +159,7 @@ A custom question can be made optional on Market Setup's form while the market i
 
 Refused when it would leave the form asking nothing, which could not enter Review.
 Refused, too, when the form was saved elsewhere since the dialog read it: the dialog stays open on [the market write's one sentence](../../implementation/modules/market-write.md#what-it-answers) and shows the questions as they now stand.
+"Add a question for it" and "Stop asking it" wait, disabled, while the values are checked or the questions are read again, so the dialog never opens over a request still out.
 Once anything is imported the questions are fixed, and the dead end says so in the lock's own words ("The questions are fixed: …") instead of offering the dialog.
 How it works is [the form amendment](../../implementation/modules/form-amendment.md).
 Covered by:
