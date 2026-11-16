@@ -1,14 +1,18 @@
 /**
- * Every unit test gets a fresh Pinia (E21/F02).
+ * Every unit test gets a fresh Pinia (E21/F02), and a happy-dom unit test sends no request
+ * (`noNetwork.ts`).
  *
  * The open market lives in one store, and the phase rail, the market screens and the review
  * highlights all reach for it - so any test that mounts one of them needs a Pinia, and no test may
  * see a market another test left behind.
+ *
+ * A request a test sends through XHR or `fetch` is refused, and fails the test that sent it, or the
+ * file, for one sent after its last test.
  */
-import { afterEach, beforeEach } from 'vitest';
+import { beforeEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 
-import { refuseRequests, takeSentRequests } from './noNetwork';
+import { refuseRequests } from './noNetwork';
 
 beforeEach(() => {
   setActivePinia(createPinia());
@@ -21,13 +25,5 @@ if (typeof window !== 'undefined') {
   window.scrollTo = () => {};
 }
 
-// A unit test makes no network call (`noNetwork.ts`): a request is refused, and fails its test. A
-// test that stubs `fetch` (`vi.stubGlobal`, `vi.spyOn`) stubs it over the refusal.
+// A test that stubs `fetch` (`vi.stubGlobal`, `vi.spyOn`) stubs it over the refusal.
 refuseRequests();
-afterEach(() => {
-  const sent = takeSentRequests();
-  if (sent.length) {
-    const named = sent.map(({ request, test }) => `${request} (in "${test}")`).join(', ');
-    throw new Error(`A unit test makes no network call, and this one sent ${named}: stub it.`);
-  }
-});

@@ -224,10 +224,12 @@ A date used as data trips it too: write the date out, so it reads the same on ev
 A test's timeout is for a test that hangs, not one that is slow: a test whose work takes a second on an idle core sets its own, forty times that work, since Vitest's default 5 s fails it on a busy machine (ten workers on two cores).
 A test that mounts a screen with a timer unmounts it once the test ends, or the timer fires into a later test of its file on a run slow enough to reach it.
 
-A unit test makes no network call.
-happy-dom would send an unstubbed request for real, to `http://localhost:3000`, and log an `ECONNREFUSED` that names no test.
-Instead the setup ([`noNetwork.ts`](../front-end/src/__tests__/support/noNetwork.ts)) refuses every request sent through XHR, which the app's axios uses, or `fetch`, and fails the test that sent it, naming the request.
+A happy-dom unit test makes no network call.
+happy-dom would send an unstubbed request for real, to its page's address, `http://localhost:3000`, or to the app's `VITE_FLASK_HOST`, and log an `ECONNREFUSED` that names no test.
+Instead the setup ([`noNetwork.ts`](../front-end/src/__tests__/support/noNetwork.ts)) refuses every request sent through XHR, which the app's axios uses, or `fetch`, and fails the test that sent it, naming the request, or the file, for a request sent after its last test.
 Stub the module that sends it (`vi.mock('@/utils/api', ...)`), or `fetch` with `vi.stubGlobal` or `vi.spyOn`, over the refusal.
+A navigation (`location.assign`, a link followed, a form submitted) is not refused, since happy-dom sends it through its own fetch: a test that navigates stubs it, as `pageFailed.ts`'s tests pass a stub `location`.
+A test that runs in Node (`@vitest-environment node`) has no window, and nothing refuses its `fetch`.
 
 Configuration: `front-end/vitest.config.ts` with `happy-dom` environment.
 
