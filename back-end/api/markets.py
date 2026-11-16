@@ -174,6 +174,16 @@ def _load_market_and_organization_for(
 ) -> LoadedMarket:
     """``_load_market_for``, with the organization it read to ask the row, for a write that asks
     another row too and so need not read the organization again."""
+    loaded = _read_market(market_id)
+    refused = Actions.refusal(action, requesting_user, loaded.market, loaded.organization)
+    if refused:
+        raise ForbiddenError(refused)
+    return loaded
+
+
+def _read_market(market_id: str) -> LoadedMarket:
+    """The live market with this id and its organization, for a loader to ask a row of: not found
+    when there is none, refused when the stored document does not parse."""
     market_dict = markets_collection.find_one(live({"id": market_id}))
     if not market_dict:
         raise MarketNotFoundError("Market not found")
@@ -184,12 +194,7 @@ def _load_market_and_organization_for(
         _log_unreadable_market(market_id, e)
         raise BadRequestError("Invalid market data") from e
 
-    organization = _load_organization(market.organization_id)
-    refused = Actions.refusal(action, requesting_user, market, organization)
-    if refused:
-        raise ForbiddenError(refused)
-
-    return LoadedMarket(market, organization)
+    return LoadedMarket(market, _load_organization(market.organization_id))
 
 
 ARCHIVED_REFUSAL = (
@@ -389,27 +394,48 @@ def adding_refusal(phase: MarketPhase) -> Optional[str]:
     return None if phase in ADDING_PHASES else NOT_YET_ADDING
 
 
+class MarketChange(NamedTuple):
+    """A market loaded for a change (``_market_change``): the market, the organization read to ask
+    its row, and the asking, through which the change is recorded under that row."""
+    market: Market
+    organization: Optional[Organization]
+    asked: Actions.Asked
+
+
+def _market_change(
+    market_id: str, requesting_user: str, row: Actions.Action,
+) -> MarketChange:
+    """Load a market for a write and ask its row (T105-9): refused in the row's words when the
+    person may not take it, then, whoever may, refused when the market is archived.
+
+    Every write that loads its market here meets the archived rule without saying so, so a new
+    write that loads through this cannot forget it, and records its change through ``asked``, so
+    its entry names the row it was let through on. Roles and deletion do not come through here:
+    who may see a record, and whether to keep it, are decisions about the record, not changes to it.
+    """
+    market, organization = _read_market(market_id)
+    asked = Actions.ask(row, requesting_user, market, organization)
+    if asked.refused:
+        raise ForbiddenError(asked.refused)
+    refusal = archived_refusal(market)
+    if refusal:
+        raise MarketArchivedError(refusal)
+    return MarketChange(market, organization, asked)
+
+
 def _load_market_to_change(
     market_id: str, requesting_user: str, action: Actions.Action,
 ) -> Market:
-    """``_load_market_for``, for a write: an archived market is refused whoever is asking.
-
-    Every write that loads its market here meets the archived rule without saying so, so a new
-    write that loads through this cannot forget it. Roles and deletion do not come through here:
-    who may see a record, and whether to keep it, are decisions about the record, not changes to it.
-    """
-    return _load_market_and_organization_to_change(market_id, requesting_user, action).market
+    """``_market_change``'s market, for a write that records by hand (until T105-9 moves it)."""
+    return _market_change(market_id, requesting_user, action).market
 
 
 def _load_market_and_organization_to_change(
     market_id: str, requesting_user: str, action: Actions.Action,
 ) -> LoadedMarket:
     """``_load_market_to_change``, with the organization it read to ask the row."""
-    loaded = _load_market_and_organization_for(market_id, requesting_user, action)
-    refusal = archived_refusal(loaded.market)
-    if refusal:
-        raise MarketArchivedError(refusal)
-    return loaded
+    change = _market_change(market_id, requesting_user, action)
+    return LoadedMarket(change.market, change.organization)
 
 
 def application_form_lock_reason(market: Market) -> Optional[str]:

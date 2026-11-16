@@ -36,6 +36,7 @@ A market's history is deleted with the market, and an organization's with the or
 """
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
@@ -180,6 +181,33 @@ def record(
     """
     _write({MARKET_ID_FIELD: market_id}, actor, action if isinstance(action, str) else action.id,
            kind, vendors, subject, detail)
+
+
+@dataclass(frozen=True)
+class UnaskedRecorder:
+    """A recorder for a change no request asked its row of (``unasked``): it writes as ``record``
+    does, under ``row`` as ``actor``, and keeps why nothing asked it."""
+
+    market_id: str
+    actor: Optional[str]
+    row: Action
+    because: str
+
+    def record(
+        self, *, kind: Optional[str] = None, vendors: Iterable[str] = (), subject: Part = None,
+        detail: Part,
+    ) -> None:
+        record(self.market_id, self.actor, self.row, kind=kind, vendors=vendors, subject=subject,
+               detail=detail)
+
+
+def unasked(market_id: str, actor: Optional[str], row: Action, *, because: str) -> UnaskedRecorder:
+    """The one door for a change on a market recorded under a row no request asked (T105-9): a
+    record its request's asking cannot write (``Actions.Asked.record``), such as a vendor's own
+    check-in, under the door's row with no actor. ``because`` says why nothing asked it; the
+    records no request asks are listed with their reasons in ``tests/test_every_write_records.py``
+    (``UNASKED``)."""
+    return UnaskedRecorder(market_id, actor, row, because)
 
 
 def record_applicant(

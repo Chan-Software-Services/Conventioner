@@ -13,6 +13,7 @@ describes:
   - back-end/api/organizations.py#get_history
   - back-end/tests/test_the_organizations_history.py
   - back-end/api/organizations.py#get_default_permission_history
+  - back-end/tests/test_the_history.py
 verified: 2026-11-16
 sources:
   - wayfinding/readable-journey/08
@@ -45,6 +46,7 @@ sources:
   - T316
   - T315
   - T318
+  - T352
 ---
 
 # The market's history
@@ -78,6 +80,9 @@ Stored snake_case with the market foreign key `market_id` (an organization's own
 | `detail`    | structured, per kind: the date, table code and table choice placed, and the seat left; the date and table freed; the date and both seats swapped; how many placements a run wrote and how many pins it kept                                                                                                                                                                                                                   |
 
 `record(market_id, actor, action, kind=, vendors=, subject=, detail=)` writes one, and `record_applicant` writes an applicant's own; the placement writes call `record_placed`, `record_freed`, `record_swapped` and `record_assignment_run`, which build the detail and its subject (`placement_subject`).
+Two recorders write through `record` and bind its market, actor and action, so a change can be recorded only under a row it is entitled to (T105-9): the `Asked` a write's asking of its row returns (`Asked.record`, [the market's actions](../modules/market-actions.md#the-interface)), and, for a record no request asked, `unasked(market_id, actor, row, because=)`, whose `UnaskedRecorder` keeps why nothing asked it; each takes `kind`, `vendors`, `subject` and `detail` as `record` does.
+No write records through either yet: T352's later tickets move every `record` call to them.
+`TestARecordNoRequestAsked` in [`back-end/tests/test_the_history.py`](../../../back-end/tests/test_the_history.py) pins what the unasked recorder writes and that it never raises.
 Every other kind of change gives its detail the changed fields before and after, never a whole document: `changes(before, after)` keeps the fields that differ, and answers None when none does; a detail that builds to None records nothing, so a write that restates what is stored (the plan's autosave, a note saved unchanged, a vendor checked in again) records nothing.
 An import, the start from a CSV and a run record their counts instead, and a verdict is recorded whole each time it is given, since each one is.
 **The placement kinds are the one exception**: their details keep the shapes they had before the history widened, because the entries moved from `placement_history` have no before to give.

@@ -93,6 +93,53 @@ class TestAnEntry:
         assert history.docs == []
 
 
+class TestARecordNoRequestAsked:
+    """The one door for an entry under a row no request asked (T105-9): it writes as ``record``
+    does, and says why nothing asked it."""
+
+    @pytest.fixture
+    def unasked(self):
+        return History.unasked("m1", None, Actions.CHECK_IN,
+                               because="a vendor's sign-in and the door code are the check")
+
+    def test_it_holds_its_market_actor_row_and_reason(self, unasked):
+        assert unasked.market_id == "m1"
+        assert unasked.actor is None
+        assert unasked.row is Actions.CHECK_IN
+        assert unasked.because == "a vendor's sign-in and the door code are the check"
+
+    def test_it_writes_the_entry_as_record_does(self, history, unasked):
+        unasked.record(kind=History.CHECKED_IN, vendors=["Ana@Example.com"],
+                       subject=lambda: {"date": "2026-11-18"}, detail={"at": "door"})
+
+        [entry] = history.docs
+        assert entry["market_id"] == "m1"
+        assert entry["actor"] is None
+        assert entry["action"] == "check-in"
+        assert entry["kind"] == "checked_in"
+        assert entry["vendors"] == ["ana@example.com"]
+        assert entry["subject"] == {"date": "2026-11-18"}
+        assert entry["detail"] == {"at": "door"}
+
+    def test_a_write_that_changed_nothing_records_nothing(self, history, unasked):
+        unasked.record(detail=lambda: None)
+
+        assert history.docs == []
+
+    def test_a_write_that_cannot_be_saved_is_swallowed(self, monkeypatch, unasked):
+        class Broken:
+            def insert_one(self, _doc):
+                raise RuntimeError("mongo is having a day")
+
+        monkeypatch.setattr(History, "history_collection", Broken())
+
+        unasked.record(detail={})
+
+    def test_its_reason_is_given_by_name(self):
+        with pytest.raises(TypeError):
+            History.unasked("m1", None, Actions.CHECK_IN, "a reason")  # type: ignore[misc]
+
+
 class TestAnEntryWrittenOnceUnderItsId:
     def test_it_is_stored_under_that_id_so_the_database_holds_it_once(self, history):
         """``_id`` is unique in every collection, so two writes at once cannot both insert."""

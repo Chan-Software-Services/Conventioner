@@ -22,6 +22,8 @@ describes:
   - back-end/api/markets.py#hand_on_market
   - back-end/tests/test_handing_a_market_on.py
   - back-end/tests/real_mongo/test_handing_a_market_on_on_the_server.py
+  - back-end/api/markets.py#_market_change
+  - back-end/tests/test_a_change_records_under_the_row_it_asked.py
 verified: 2026-11-16
 sources:
   - E39
@@ -53,6 +55,7 @@ sources:
   - T274
   - T283
   - T315
+  - T352
 ---
 
 # The market's actions
@@ -73,6 +76,13 @@ The row asks the role `minimum_role(row, market)` gives: the market's own row wh
 The person's role is the one `get_user_market_role` resolves (the market's own and the one its organization gives, the higher counting, [the organization document](../data/organization-document.md#what-a-person-may-do-on-a-market)), and `refusal` ranks it through `user_has_permission` in [`back-end/api/permissions.py`](../../../back-end/api/permissions.py), which nothing else calls.
 `role_refusal(row, role, rows, chosen)` asks a row of a role already resolved, on a market holding `rows`, for the market read, which resolves the person's role once, and the markets list, which resolves each entry's role from the market and the organization its memo holds (`_summary_role`) and passes the rows of the market as the read parses it; both rank through `role_reaches`, the one ranking.
 Both ask the read row the same way, through `read_refused` in [`back-end/api/markets.py`](../../../back-end/api/markets.py), so the list leaves out every market the read answers as absent ([the organization document](../data/organization-document.md#what-a-person-may-do-on-a-market)).
+
+**A write asks its row with `ask`, and records its change through the answer** (T105-9): `ask(row, user_email, market, organization)` is an `Asked` holding the row, the market's id, the person as the actor, and `refused`, which is what `refusal` answers, since `ask` asks through it.
+`Asked.record(*, kind=None, vendors=(), subject=None, detail)` writes the change's entry into [the market's history](../data/history.md) under that row and as that person, through `History.record`, so it never raises for the entry and builds the subject and the detail under its guard.
+Called on an `Asked` that was refused it raises `RecordedARefusal`, an `AssertionError`: a refused write raises before it writes anything, so a record of one is a programming error, answered to no client.
+`_market_change(market_id, user, row)` in [`back-end/api/markets.py`](../../../back-end/api/markets.py) loads a market for a write and asks its row, and returns a `MarketChange` of the market, the organization it read, and the `Asked`; it is not found, refused as an unreadable market, refused in the row's words, then refused as archived whoever may, in that order.
+`_load_market_to_change` and `_load_market_and_organization_to_change` are thin wrappers over it, and every write still loads through them and records with `History.record` by hand until T352's later tickets move each to `_market_change` and `Asked.record`.
+[`back-end/tests/test_a_change_records_under_the_row_it_asked.py`](../../../back-end/tests/test_a_change_records_under_the_row_it_asked.py) pins `ask` against `refusal` for every row and role, the entry `Asked.record` writes, the refused record's error, `_market_change`'s refusals and their order, the two wrappers, and the rules' asking below.
 
 **Being chosen as a reviewer passes the giving row** (E38/F07/S03, [ADR 0020](../../adr/0020-an-application-is-dealt-to-one-reviewer.md)): `refusal` and `role_refusal` answer None for `give-verdicts` to someone its role refuses when they are a chosen reviewer and their role reaches `review-when-chosen`.
 `refusal` reads it off the market's team by address (`is_chosen`); `role_refusal` takes it as `chosen`, which the market read passes once and the markets list once for each entry (`_listed`), both from the reader's address, so a card answers the giving row as the market's page does.
@@ -104,7 +114,7 @@ Each check keeps the order it had, so every route answers each person as it did 
 **A write of the plan asks two rows**: its own row always, and the Assignment row too when the plan changes the assignment rules, which ride in it; restating them asks only its own row.
 The plan write's own row is Market Setup, and the start from a CSV's is the import's.
 A market with no setup yet holds the rules a new plan starts with (`assignment_rules` in [what an assignment was made from](made-from.md)), so a first plan that keeps them asks only the write's own row.
-Both ask the Assignment row through one function, `ask_assign_if_the_rules_change`, which takes the market, the plan `prepared_plan` parsed, the requester and the organization, and raises the row's refusal as a 403.
+Both ask the Assignment row through one function, `ask_assign_if_the_rules_change`, which takes the market, the plan `prepared_plan` parsed, the requester and the organization, raises the row's refusal as a 403, and returns the Assignment row's `Asked` when the plan changes the rules, None when it changes none, so the rules' entry can be recorded only through the asking that let it in.
 `save_plan` passes the organization its load read to ask Market Setup (`_load_market_and_organization_to_change`), and the start's confirm the one `_importing_market_document` read to ask the import's row ([the CSV proposal and start](csv-proposal-and-start.md#sharp-edges)).
 
 One block per row, in the `ACTIONS` order: a new action is a block in its place in that order, and a new route or caller one line in its action's "Asked by" list ([two features never share a line](../conventions/two-features-never-share-a-line.md#the-markets-actions)).
@@ -462,6 +472,7 @@ The search cannot see a raw read of `market.roles` or `organization.admins`: com
 The same file pins every row's default, label, group and fixed flag against the epic's table, and for each row that its default role may, that every role above may, and that the role below is refused with its sentence; and which row each loader-backed write and read asks.
 
 **A test that fakes who may patches `user_has_permission` or `Actions.refusal`**: the first still sees the role the row asks on the market (its default unless the market holds the row), so a fake that answers by role keeps working.
+`ask` asks through `Actions.refusal` as the module holds it, so a patch of `refusal` answers `ask`, `_market_change` and the two loaders over it too, and `test_every_write_records.py`'s spy on it sees a write that asks through `ask`.
 
 ## Why
 
