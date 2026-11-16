@@ -3,6 +3,10 @@ layer: implementation
 kind: module
 describes:
   - back-end/public_map.py
+  - front-end/src/components/market/MarketPublicMapCard.vue
+  - front-end/src/utils/historyReaders/publicMap.ts
+  - front-end/src/__tests__/thePublicMapCard.test.ts
+  - front-end/e2e/the-public-map-card.spec.ts
   - back-end/public_answers.py
   - back-end/market_documents.py#public_map_market_by_slug
   - back-end/datatypes.py#PublicMapSettings
@@ -30,6 +34,20 @@ The page that draws it, and Attendance's map beside the list, read what this ans
 - It asks the table's "Publish the map" row (`publish-map`, an Admin's by default, [the market's actions](market-actions.md), [what each role may do](../../business/rules/what-each-role-may-do.md)) and loads through `_load_market_to_change`, so an archived market refuses it 403 whoever asks.
 - It writes the settings whole through [the market write](market-write.md), holding `publicMap` as read: a product-made market stores `publicMap: null`, under which no field can be created, and a change saved meanwhile in another tab, of another setting even, refuses it 409 rather than being written over.
 - It answers 200 `{"publicMap": {...}}` as stored, and records a history entry, action `publish-map`, kind `public_map`, its detail the fields that changed, each question by its key and its label (`name_question` and `name_question_label`, and so for the website and Instagram), as Discord's question is ([the market's history](../data/history.md)); a write that changes nothing writes and records nothing.
+
+## The card
+
+**The Public map card stands on the Tools tab, after Discord's** ([`MarketPublicMapCard.vue`](../../../front-end/src/components/market/MarketPublicMapCard.vue), in [`ToolsView.vue`](../../../front-end/src/views/ToolsView.vue), [the market frame](market-frame.md)).
+It says what the map shows and never shows, offers three pickers of the form's short text questions (`formTextQuestions`, the Discord card's own reading), "Public name", "Website" and "Instagram", each with "Not shown" first, and the switch "Show the public map", a checkbox with `role="switch"`.
+
+- Each change is saved at once through the settings write, and the page reads the market again (`changed`), never patching it; a refusal is said on the card's error line and the picker or the switch goes back to what is stored, as Discord's card does.
+- A stored question the form no longer asks as short text shows as "Not shown", as the server reads it (`chosen_question`).
+- Off with no public name chosen, the switch is disabled with "Choose the public name's question first." under it; on, it can always be turned off, even after the form lost the name's question.
+- Someone the "Publish the map" row refuses reads the same controls, disabled, with the row's sentence; on an archived market the card says "An archived market's map is closed." in its place.
+- While on, it shows the address, `/<slug>/map` under the app's origin, built as the rail and Publish results build the vendor page's, with "Copy link" (`useCopyAddress`, "Copied" for two seconds) and "Open the map", a new tab with `rel="noopener noreferrer"`.
+- It says the first thing the gate still lacks, in the gate's order: "Lay out a location first: the map draws the market's layouts." with "Open the layout", while no location is laid out as `mapped_locations` reads it (a scale, and a table numbered in one of the location's sections); then "The map opens once results are published." until `vendorsWereTold` ([`vendorPage.ts`](../../../front-end/src/utils/vendorPage.ts), the server's `results_are_out`).
+
+The market's history reads each change in words ([the market's history](../data/history.md), [`historyReaders/publicMap.ts`](../../../front-end/src/utils/historyReaders/publicMap.ts)).
 
 ## The gate
 
@@ -74,4 +92,6 @@ A layout stores `followsPlan`, whether it was started after Draft: false on one 
 - [`back-end/tests/test_the_public_map_settings.py`](../../../back-end/tests/test_the_public_map_settings.py): the write and its refusals one by one, its history entry, and a write that changes nothing.
 - [`back-end/tests/test_public_answers.py`](../../../back-end/tests/test_public_answers.py): the cleaning's table for each value, hostile inputs included.
 - The walks every write joins hold it too: it records (`test_every_write_records.py`), names its row (`test_every_check_names_an_action.py`), is refused on an archived market (`test_an_archive_is_read_only.py`), and is refused on a changed market against a real MongoDB (`test_every_held_write_is_refused_on_a_changed_market.py`).
+- [`front-end/src/__tests__/thePublicMapCard.test.ts`](../../../front-end/src/__tests__/thePublicMapCard.test.ts): the card's text and pickers, each save and its refusal, the switch's reason, a refused person and an archived market, the address and its copy, and what is still missing, case by case; `historyReaders.test.ts` holds the history's words.
+- [`front-end/e2e/the-public-map-card.spec.ts`](../../../front-end/e2e/the-public-map-card.spec.ts), on the seam's market: an Admin chooses the three questions and turns the map on, a signed-out read then answers a vendor's public name, and turned off it answers 404; an Editor reads the card disabled with the row's sentence; the card fits a phone; each state passes the accessibility check.
 - [`front-end/e2e/helpers/seedMarketDayMap.ts`](../../../front-end/e2e/helpers/seedMarketDayMap.ts) seeds a market on its days with a map to draw, for every spec of the map ([E2E seeds](../testing/e2e-seeds.md)).
