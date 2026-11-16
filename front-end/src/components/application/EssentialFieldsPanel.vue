@@ -214,7 +214,7 @@ function asks(key: string): boolean {
       </div>
       <p
         v-if="!asks(SECTION_RANKING_KEY)"
-        class="essential-item-hint"
+        class="essential-item-detail"
         data-testid="essential-section-not-asked"
       >
         {{ doesNot }} for a section ranking, so every vendor is treated equally on it. Vendors are
@@ -288,7 +288,7 @@ function asks(key: string): boolean {
         Optional. An extra chair, an outlet, anything else they need - shown beside their name in
         review, on Vendors and at the door.
       </p>
-      <p v-else class="essential-item-hint" data-testid="essential-request-not-asked">
+      <p v-else class="essential-item-detail" data-testid="essential-request-not-asked">
         {{ doesNot }} for what else a vendor needs.
       </p>
       <label v-if="editable" class="essential-asks-toggle" data-testid="essential-asks-request">
