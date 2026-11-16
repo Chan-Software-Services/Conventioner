@@ -343,6 +343,8 @@ describe('fitting a stroke 20 hands drew', () => {
 });
 
 describe('fitting anything a hand can do', () => {
+  // 300 fits, about 2.5 ms each on an idle core: a second's work, which the default 5 s failed on
+  // a busy machine (ten workers on two cores). Forty times the work fails only a fit that hangs.
   it('answers 300 random strokes with finite points, 48 at most, and a corner only where one was drawn', () => {
     const next = seeded(99);
     let curved = 0;
@@ -384,7 +386,7 @@ describe('fitting anything a hand can do', () => {
       gentle: 174,
       cornersAmongGentle: 0,
     });
-  });
+  }, 40_000);
 
   it('stops at 48 points, on a 96 m snake drawn zoomed in', () => {
     const fit = fitStroke(hand(SHAPES.snake, 12, 1), optionsAt(12));

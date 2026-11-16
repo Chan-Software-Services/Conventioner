@@ -3,8 +3,8 @@
  * how many are shown of how many, and every verdict stays on rows in front of them. The real
  * `ListFrame` under the real screen, on a route that follows the address.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { flushPromises, mount } from '@vue/test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { reactive } from 'vue';
 
@@ -32,6 +32,16 @@ vi.mock('@/utils/applicantApi', async (importOriginal) => {
   };
 });
 vi.mock('@/utils/signedIn', () => ({ signedInEmail: () => 'owner@market.test' }));
+// The drawer reads where the vendors sit after a verdict; nobody sits anywhere here.
+vi.mock('@/utils/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/api')>();
+  return { ...actual, api: { get: () => Promise.resolve({ data: {} }) } };
+});
+
+// Each test draws the real list, 50 to 100 rows of it, about half a second's work on an idle core;
+// the default 5 s failed one on a busy machine (ten workers on two cores). Forty times the work
+// fails only a test that hangs.
+vi.setConfig({ testTimeout: 20_000 });
 
 const pad = (n: number) => String(n).padStart(3, '0');
 
@@ -74,6 +84,13 @@ beforeEach(() => {
   fetchMarketApplications.mockResolvedValue(many(120));
 });
 
+// A list left mounted re-reads every half-minute into the next tests' counts of reads, on a
+// machine busy enough to take that long over this file: every list goes after its test.
+const shown: VueWrapper[] = [];
+afterEach(() => {
+  for (const wrapper of shown.splice(0)) if (!wrapper.vm.$.isUnmounted) wrapper.unmount();
+});
+
 async function allView(market: Market = MARKET) {
   const wrapper = mount(ApplicationsAll, {
     props: { market },
@@ -101,6 +118,7 @@ async function allView(market: Market = MARKET) {
       },
     },
   });
+  shown.push(wrapper);
   await flushPromises();
   return wrapper;
 }
@@ -210,14 +228,12 @@ describe('the place in the list', () => {
   it('hands the focus to the first new row', async () => {
     const wrapper = await onTheSecondPage();
     expect(document.activeElement).toBe(rows(wrapper)[50]!.element);
-    wrapper.unmount();
   });
 
   it('folds back on a filter', async () => {
     const wrapper = await onTheSecondPage();
     await go({ status: 'undecided' });
     expect(rows(wrapper)).toHaveLength(50);
-    wrapper.unmount();
   });
 
   it('folds back on Mine', async () => {
@@ -226,14 +242,12 @@ describe('the place in the list', () => {
     expect(wrapper.find('[data-testid="applications-all-list-empty"]').exists()).toBe(true);
     await go({});
     expect(rows(wrapper)).toHaveLength(50);
-    wrapper.unmount();
   });
 
   it('folds back on new words', async () => {
     const wrapper = await onTheSecondPage();
     await find(wrapper, 'person');
     expect(rows(wrapper)).toHaveLength(50);
-    wrapper.unmount();
   });
 
   it('holds through a Refresh that changes a row', async () => {
@@ -246,7 +260,6 @@ describe('the place in the list', () => {
     await flushPromises();
     expect(fetchMarketApplications).toHaveBeenCalledTimes(2);
     expect(rows(wrapper)).toHaveLength(100);
-    wrapper.unmount();
   });
 
   it('holds through the half-minute re-read', async () => {
@@ -271,14 +284,12 @@ describe('Select all', () => {
     await selectAll(wrapper).trigger('click');
     expect(selection(wrapper).text()).toContain('50 applications selected');
     expect(ticked(wrapper)).toBe(50);
-    wrapper.unmount();
   });
 
   it('reads as it did with every row shown', async () => {
     fetchMarketApplications.mockResolvedValue(many(50));
     const wrapper = await allView();
     expect(selectAll(wrapper).text()).toBe('Select all');
-    wrapper.unmount();
   });
 
   it('counts the rows on screen after "Show 50 more", leaving the new ones unticked', async () => {
@@ -290,7 +301,6 @@ describe('Select all', () => {
     expect(selection(wrapper).text()).toContain('50 applications selected');
     await selectAll(wrapper).trigger('click');
     expect(selection(wrapper).text()).toContain('100 applications selected');
-    wrapper.unmount();
   });
 
   it('says it left out only the rows on screen', async () => {
@@ -308,7 +318,6 @@ describe('Select all', () => {
       '1 application not selected: another reviewer has it open.',
     );
     expect(selection(wrapper).text()).toContain('49 applications selected');
-    wrapper.unmount();
   });
 
   it('sends a verdict only on the rows on screen', async () => {
@@ -321,14 +330,12 @@ describe('Select all', () => {
     expect(reviewSelection).toHaveBeenCalledOnce();
     const sent = reviewSelection.mock.calls[0]![1] as Application[];
     expect(sent.map((app) => app.id)).toEqual(many(50).map((app) => app.id));
-    wrapper.unmount();
   });
 
   it('draws nothing when the words find no row', async () => {
     const wrapper = await allView();
     await find(wrapper, 'nobody at all');
     expect(wrapper.find('[data-testid="applications-all-select-all"]').exists()).toBe(false);
-    wrapper.unmount();
   });
 });
 
@@ -346,7 +353,6 @@ describe('a tick leaves with its row', () => {
     expect(selection(wrapper).text()).toContain('1 application selected');
     await find(wrapper, '');
     expect(selection(wrapper).text()).toContain('1 application selected');
-    wrapper.unmount();
   });
 
   it('when a filter folds the list back past it', async () => {
@@ -359,7 +365,6 @@ describe('a tick leaves with its row', () => {
     await go({ status: 'undecided' });
     expect(rows(wrapper)).toHaveLength(50);
     expect(selection(wrapper).exists()).toBe(false);
-    wrapper.unmount();
   });
 
   it('forgets what Select all left out when the words change', async () => {
@@ -374,7 +379,6 @@ describe('a tick leaves with its row', () => {
     expect(wrapper.find('[data-testid="applications-all-select-all-skipped"]').exists()).toBe(
       false,
     );
-    wrapper.unmount();
   });
 });
 
@@ -387,7 +391,6 @@ describe('the states', () => {
     );
     expect(wrapper.find('[data-testid="applications-all-list-count"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="applications-all-filter-all"]').exists()).toBe(true);
-    wrapper.unmount();
   });
 
   it('says it is loading, with the filters still there', async () => {
@@ -397,7 +400,6 @@ describe('the states', () => {
       'Loading applications…',
     );
     expect(wrapper.find('[data-testid="applications-all-filter-all"]').exists()).toBe(true);
-    wrapper.unmount();
   });
 
   it('tells nothing come in from nothing matching', async () => {
@@ -415,7 +417,6 @@ describe('the states', () => {
       'No application matches.',
     );
     expect(unmatched.find('[data-testid="applications-all-filter-all"]').exists()).toBe(true);
-    unmatched.unmount();
   });
 
   it('drops the ticks when a read fails and takes the rows away', async () => {
@@ -428,7 +429,6 @@ describe('the states', () => {
     expect(wrapper.find('[data-testid="applications-read-failed"]').exists()).toBe(true);
     expect(rows(wrapper)).toHaveLength(0);
     expect(selection(wrapper).exists()).toBe(false);
-    wrapper.unmount();
   });
 });
 
@@ -439,6 +439,5 @@ describe('Export', () => {
     await wrapper.get('[data-testid="applications-all-export-button"]').trigger('click');
     const seed = wrapper.findComponent({ name: 'ExportVendorsDialog' }).props('seed');
     expect(seed).toMatchObject({ statuses: ['open'], mine: true, search: 'person' });
-    wrapper.unmount();
   });
 });
