@@ -22,7 +22,7 @@ describes:
   - back-end/api/markets.py#hand_on_market
   - back-end/tests/test_handing_a_market_on.py
   - back-end/tests/real_mongo/test_handing_a_market_on_on_the_server.py
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - E39
   - E39/F01/S01
@@ -97,7 +97,7 @@ Each check keeps the order it had, so every route answers each person as it did 
 
 ## Each route's row
 
-**A verdict on an application already approved or rejected asks two rows**: the giving row at `_reviewer_on`, and the change row of each application it writes (E38/F06/S01); the write itself carries `unless_decided`, so a verdict landing between the reviewer's look and the write is the 409 it always was ([what each role may do](../../business/rules/what-each-role-may-do.md#where-it-is-kept)).
+**A verdict on an application already approved or rejected asks two rows**: the giving row at `_reviewer_on`, and the change row of each application it writes (E38/F06/S01); what the reviewer saw (`seen`) says which: one they saw undecided gives, held on that status, so a verdict landing between their look and the write is the 409 it always was ([what each role may do](../../business/rules/what-each-role-may-do.md#where-it-is-kept)).
 
 **Taking a role asks both roles rows first**: `DELETE /markets/:id/roles/<user_id>` (`remove_market_role`) asks the Editor-and-Viewer row and the Admin row before it looks at the person, so someone both refuse reads the Editor-and-Viewer row's refusal whoever the person is; then it answers someone holding no role as gone, refuses taking the only owner, and asks the row of the role taken.
 
