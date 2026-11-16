@@ -45,10 +45,6 @@ UNDECIDED_STATUSES = (ApplicationStatus.OPEN.value, ApplicationStatus.UNDER_REVI
 #: The statuses a reviewer gives, each with who gave it: a verdict, or a follow-up (E34).
 MARKED_STATUSES = (ApplicationStatus.REVIEWER_APPROVED, ApplicationStatus.REVIEWER_REJECTED,
                    ApplicationStatus.NEEDS_FOLLOW_UP)
-#: The verdicts: an application at one is decided, and a reviewer's write over it changes a verdict
-#: (E38/F06/S01). A follow-up is marked, not decided: deciding one is giving a verdict.
-VERDICT_STATUSES = (ApplicationStatus.REVIEWER_APPROVED.value,
-                    ApplicationStatus.REVIEWER_REJECTED.value)
 
 
 # --- The states -----------------------------------------------------------------------------------
