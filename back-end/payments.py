@@ -603,8 +603,9 @@ class OwedTransition:
     (``before``), the state it left (``after``), the record as read, the revision written and the
     ``_id`` of the record written (both None for a record deleted or nothing written), and whether
     what the day reads as changed, which alone the history records: a write that only tidies a
-    stopped free's record on a held day leaves the day reading as it did. ``stored`` is the state the record held as read, before
-    ``on_day``: an Admin's amount on a day not held reads as following the seat, but it was there.
+    stopped free's record on a held day leaves the day reading as it did. ``stored`` is the state
+    the record held as read, before ``on_day``: an Admin's amount on a day not held reads as
+    following the seat, but it was there.
     """
 
     key: Dict[str, str]
@@ -615,7 +616,7 @@ class OwedTransition:
     revision: Optional[int]
     wrote: bool
     changed: bool
-    record_id: Any = None
+    record_id: Optional[Any]
 
     def undo(self) -> bool:
         """Put the record back as it was read, for a free whose seat could not be freed or an
@@ -680,7 +681,7 @@ def owed_day_transition(
                                 by=by, at=_now())
         changed = before != on_day(after, _held_after(event, held is not None))
         if after == stored and trusted:
-            return OwedTransition(key, stored, before, after, doc, None, False, changed)
+            return OwedTransition(key, stored, before, after, doc, None, False, changed, None)
         if doc is None:
             revision = 1
             try:
@@ -696,7 +697,8 @@ def owed_day_transition(
                    "revision": read if read is not None else {"$exists": False}}
         if isinstance(after, FollowsSeat):
             if amounts_owed_collection.delete_one(holding).deleted_count:
-                return OwedTransition(key, stored, before, after, doc, None, True, changed)
+                return OwedTransition(key, stored, before, after, doc, None, True, changed,
+                                      None)
             continue
         revision = (read or 0) + 1
         if amounts_owed_collection.update_one(holding, {"$set": {
