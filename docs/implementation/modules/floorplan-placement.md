@@ -54,7 +54,7 @@ describes:
   - front-end/src/components/layout/LayoutPanelZones.vue
   - front-end/src/components/layout/exportLayoutPng.ts
   - front-end/src/components/layout/LayoutExportDialog.vue
-verified: 2026-11-14
+verified: 2026-11-17
 sources:
   - bug/38
   - E26/F09/S01

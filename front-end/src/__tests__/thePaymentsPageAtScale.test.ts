@@ -32,9 +32,12 @@ vi.mock('@/utils/vendorDetails', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/utils/vendorDetails')>();
   return {
     ...actual,
+    // The vendors' names read, and nobody named: the list waits for that read, then draws by address.
     useVendorDetails: () => ({
       vendorNames: ref({}),
       legalNames: ref({}),
+      loaded: ref(true),
+      loadError: ref(''),
       load: vi.fn(() => Promise.resolve()),
     }),
   };
