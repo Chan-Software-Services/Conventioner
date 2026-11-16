@@ -270,6 +270,9 @@ describe('the steps carry their data', () => {
         return { data: {} };
       });
       await press(view, 'import-preview-button');
+      expect(
+        view.get<HTMLButtonElement>('[data-testid="import-add-a-field-button"]').element.disabled,
+      ).toBe(true);
       await addAQuestionIfOffered(view);
       valuesCheck.resolve({ data: { validRows: 1, newRows: 1 } });
       await flushPromises();
@@ -317,6 +320,9 @@ describe('the steps carry their data', () => {
       dialog.vm.$emit('close');
       dialog.vm.$emit('amended');
       await flushPromises();
+      expect(
+        view.get<HTMLButtonElement>('[data-testid="import-add-a-field-button"]').element.disabled,
+      ).toBe(true);
       api.get.mockImplementation(async (url: string) => {
         if (url.endsWith('/application-form')) throw new Error('Network Error');
         return { data: {} };
