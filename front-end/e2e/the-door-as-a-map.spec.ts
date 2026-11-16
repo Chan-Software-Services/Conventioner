@@ -135,7 +135,9 @@ for (const size of PHONE_AND_DESK) {
       // The map is kept across a reload, and across the other location.
       await page.reload();
       await expect(door.viewMap).toHaveAttribute('aria-pressed', 'true');
-      await press(page.getByTestId('day-map-locations').getByRole('button', { name: 'South Wing' }));
+      await press(
+        page.getByTestId('day-map-locations').getByRole('button', { name: 'South Wing' }),
+      );
       await expect(door.mapTable('Aisle B 1')).toBeVisible();
       await expectFits(page, 'The door as a map, South Wing');
     });

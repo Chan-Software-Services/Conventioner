@@ -18,6 +18,7 @@ import {
   tableBounds,
   tableCorners,
   readsUpsideDown,
+  halfAt,
   halfTable,
   zoneBounds,
   zoneCorners,
@@ -366,6 +367,52 @@ describe('the halves of a shared table', () => {
     });
     expect(halfTable(deep, 'right', 0).size).toEqual({ widthMm: 760, depthMm: 915 });
   });
+
+  /** Where a half's centre stands on the page, about the table's centre, the table turned. */
+  const onThePage = (
+    size: { widthMm: number; depthMm: number },
+    side: 'left' | 'right',
+    turn: number,
+  ) => {
+    const { centre } = halfTable(size, side, turn);
+    const r = (turn * Math.PI) / 180;
+    return {
+      xMm: centre.xMm * Math.cos(r) - centre.yMm * Math.sin(r),
+      yMm: centre.xMm * Math.sin(r) + centre.yMm * Math.cos(r),
+    };
+  };
+
+  it.each([
+    [0, 'xMm', -1],
+    [90, 'yMm', -1],
+    [180, 'xMm', -1],
+    [270, 'yMm', -1],
+  ] as const)(
+    'stands left at the reader’s left at 0° and 180°, and at the page’s top at 90° and 270° (%i°)',
+    (turn, axis, sign) => {
+      expect(Math.sign(onThePage(SIX_FOOT, 'left', turn)[axis])).toBe(sign);
+      expect(Math.sign(onThePage(SIX_FOOT, 'right', turn)[axis])).toBe(-sign);
+      // A press on the page lands on the half drawn there.
+      const at = onThePage(SIX_FOOT, 'left', turn);
+      expect(halfAt(at, { xMm: 0, yMm: 0, rotation: turn }, SIX_FOOT)).toBe('left');
+    },
+  );
+
+  it.each([
+    // A quarter turn reads top to bottom: the number's top, and the left half, face the page's right.
+    [90, 'xMm', 1],
+    // Past a quarter the number is turned back, so left is the table's own bottom, at the page's top.
+    [180, 'yMm', -1],
+  ] as const)(
+    'keeps a deep table’s left at its top as its number reads, turned %i°',
+    (turn, axis, sign) => {
+      const deep = { widthMm: 760, depthMm: 1830 };
+      expect(Math.sign(onThePage(deep, 'left', turn)[axis])).toBe(sign);
+      expect(Math.sign(onThePage(deep, 'right', turn)[axis])).toBe(-sign);
+      const at = onThePage(deep, 'left', turn);
+      expect(halfAt(at, { xMm: 0, yMm: 0, rotation: turn }, deep)).toBe('left');
+    },
+  );
 
   it('draws each half with its outer corners round and the split square, grown on every side', () => {
     const { d } = halfTable(SIX_FOOT, 'left', 0);

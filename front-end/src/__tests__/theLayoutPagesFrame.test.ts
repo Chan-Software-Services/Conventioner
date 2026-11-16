@@ -276,6 +276,22 @@ describe('the keyboard shortcuts', () => {
     expect(shown(w)).toBe(false);
   });
 
+  it('leave out the keys that add or remove tables where the seats are settled', async () => {
+    for (const settled of [false, true]) {
+      const w = anEditor({ settled });
+      // Shown again as the person left them, on the second mount.
+      if (!shown(w)) await toggle(w).trigger('click');
+      const list = w.get('[data-testid="layout-shortcuts"]');
+      const groups = list.findAll('h3').map((group) => group.text());
+      expect(groups.includes('With Fill an area on'), String(settled)).toBe(!settled);
+      expect(groups.includes('Undo and the view'), String(settled)).toBe(settled);
+      expect(list.text().includes('place a table at the middle of the view')).toBe(!settled);
+      expect(list.text()).toContain('Undo');
+      w.unmount();
+      wrapper = null;
+    }
+  });
+
   it('are shown again on the next visit, as the person left them', async () => {
     const first = anEditor();
     await toggle(first).trigger('click');

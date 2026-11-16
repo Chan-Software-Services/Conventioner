@@ -367,6 +367,23 @@ describe('a press on the map', () => {
     expect(route.query.vendor).toBe(DEE);
   });
 
+  it('on the free half of a shared table opens nothing and says nothing, the half no button', async () => {
+    // Dee is not seated today: Aisle A 3's right half is nobody's.
+    answer = day({ [DEE]: { date: '2099-01-01' } });
+    const wrapper = await openOnMap();
+    const free = halfOf(wrapper, 't3', 'right');
+    expect(halfFill(wrapper, 't3', 'right')).toBe('var(--layout-floor)');
+    expect(free.attributes('role')).toBeUndefined();
+    expect(free.attributes('tabindex')).toBeUndefined();
+    expect(halfOf(wrapper, 't3', 'left').attributes('role')).toBe('button');
+
+    await free.get('path').trigger('click');
+
+    expect(router.push).not.toHaveBeenCalled();
+    expect(wrapper.find(testid('attendance-map-note')).exists()).toBe(false);
+    expect(marks(wrapper)).toHaveLength(0);
+  });
+
   it("marks the open vendor's seat as the picked one", async () => {
     route.query = { view: 'map', vendor: DEE };
     const wrapper = await open();

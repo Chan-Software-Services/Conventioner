@@ -99,7 +99,10 @@ describe("Section Setup's layouts", () => {
   });
 
   it('offers a person who may not change the setup only the layouts it has, as links', () => {
-    for (const locks of [{ readOnly: true }, { readOnly: true, settled: 'The setup has settled.' }]) {
+    for (const locks of [
+      { readOnly: true },
+      { readOnly: true, settled: 'The setup has settled.' },
+    ]) {
       const wrapper = mountPlan(plan({ floorplans: [LAID_OUT] as never }), locks);
 
       expect(wrapper.find('[data-testid="plan-layout-start-loc-upper"]').exists()).toBe(false);
