@@ -1,7 +1,8 @@
 /**
  * The layouts the `layout-map` entry draws (T257), every value made here: a hall of four sections
  * and 49 tables, a hall of nine sections, and a hall of 400 tables dealt from a seeded draw, so the
- * same seed draws the same hall. No file and no market is read.
+ * same seed draws the same hall; and (T422) the `day-map` entry's market day, two locations with
+ * their seats dealt from a seeded draw. No file and no market is read.
  */
 import type {
   FloorplanObject,
@@ -10,6 +11,8 @@ import type {
   SectionObject,
   TableTypeObject,
 } from '@/assets/types/datatypes';
+import type { DayMapLocation } from '@/components/daymap/dayMap';
+import type { MapSeat, SeatHalf, SeatTone } from '@/components/layout/layoutDrawing';
 
 export interface FixtureHall {
   layout: FloorplanObject;
@@ -95,10 +98,11 @@ function hall(
   heightMm: number,
   tables: FloorplanTable[],
   zones: FloorplanZone[],
+  locationId = 'loc-upper',
 ): FloorplanObject {
   return {
     id,
-    locationId: 'loc-upper',
+    locationId,
     revision: 1,
     imageGridfsId: `${id}-image`,
     imageWidth: widthMm / 30,
@@ -112,10 +116,16 @@ function hall(
 }
 
 const UPPER = { id: 'loc-upper', name: 'Upper Hall' };
-const section = (id: string, name: string, tier: SectionObject['tier'] = null): SectionObject => ({
+const LOWER = { id: 'loc-lower', name: 'Lower Hall' };
+const section = (
+  id: string,
+  name: string,
+  tier: SectionObject['tier'] = null,
+  location = UPPER,
+): SectionObject => ({
   id,
   name,
-  location: UPPER,
+  location,
   tier,
   count: 0,
 });
@@ -217,5 +227,148 @@ export function bigHall(seed: number, count = 400): FixtureHall {
     sections,
     tableTypes: [SIX_FOOT],
     imageUrl: planImage(60_000, 40_000, []),
+  };
+}
+
+// ── A market day (T422) ──────────────────────────────────────────────────────
+
+/**
+ * Lower Hall, 24 m by 16 m: Craft lane's 8 tables across the north wall, Food lane's 6 down the
+ * east wall, and a stage turned 30 degrees in the middle of the floor.
+ */
+export function lowerHall(): FixtureHall {
+  const tables = [
+    ...row('sec-craft', [3000, 2500], 8, { stepMm: 2300 }),
+    ...row('sec-food-lane', [21_500, 5000], 6, { down: true, stepMm: 1900 }),
+  ];
+  const zones: FloorplanZone[] = [
+    {
+      id: 'zone-lower-stage',
+      label: 'Stage',
+      xMm: 7000,
+      yMm: 8000,
+      widthMm: 6000,
+      depthMm: 3000,
+      rotation: 30,
+    },
+  ];
+  return {
+    layout: hall('fp-lower', 24_000, 16_000, tables, zones, LOWER.id),
+    locationName: LOWER.name,
+    sections: [
+      section('sec-craft', 'Craft lane', null, LOWER),
+      section('sec-food-lane', 'Food lane', null, LOWER),
+    ],
+    tableTypes: [SIX_FOOT, SQUARE],
+    imageUrl: planImage(24_000, 16_000, [['Lift', [660, 400, 100, 90]]]),
+  };
+}
+
+/** The words a fixture vendor's name is made from: never a person's name. */
+const NAME_FIRST = [
+  'Amber',
+  'Birch',
+  'Cobalt',
+  'Driftwood',
+  'Ember',
+  'Fennel',
+  'Granite',
+  'Harbour',
+  'Indigo',
+  'Juniper',
+  'Kelp',
+  'Linden',
+  'Marigold',
+  'Nettle',
+  'Oakmoss',
+  'Pebble',
+  'Quill',
+  'Rowan',
+];
+const NAME_KIND = [
+  'Ceramics',
+  'Candles',
+  'Prints',
+  'Knits',
+  'Soaps',
+  'Jams',
+  'Leather',
+  'Glass',
+  'Tea',
+  'Woodwork',
+  'Zines',
+  'Bakery',
+];
+
+/** A market day as the `day-map` entry draws it, with how many of each it dealt. */
+export interface FixtureDay {
+  locations: DayMapLocation[];
+  tableTypes: TableTypeObject[];
+  /** The seats as Attendance draws them: here filled, expected outlined. */
+  seats: MapSeat[];
+  counts: {
+    tables: number;
+    /** Tables with no seat. */
+    free: number;
+    /** Tables shared by two seats, and those with one half free. */
+    shared: number;
+    halfFree: number;
+    filled: number;
+    outlined: number;
+  };
+}
+
+/**
+ * Upper Hall and Lower Hall on one market day, every seat dealt from the seeded draw: a table in
+ * eight is free; one in six is shared, a third of those with one half free; and of the seats, two
+ * in three are here (filled) and the rest expected (outlined). Each seat's key is its vendor's,
+ * `vendor-<n>`, and its name is two words of the lists above.
+ */
+export function marketDay(seed: number): FixtureDay {
+  const draw = seeded(seed);
+  const halls = [upperHall(), lowerHall()];
+  const seats: MapSeat[] = [];
+  const counts = { tables: 0, free: 0, shared: 0, halfFree: 0, filled: 0, outlined: 0 };
+  const seat = (tableId: string, half: SeatHalf) => {
+    const tone: SeatTone = draw() < 2 / 3 ? 'filled' : 'outlined';
+    counts[tone] += 1;
+    const n = seats.length + 1;
+    seats.push({
+      key: `vendor-${n}`,
+      tableId,
+      half,
+      tone,
+      name: `${NAME_FIRST[Math.floor(draw() * NAME_FIRST.length)]} ${NAME_KIND[Math.floor(draw() * NAME_KIND.length)]}`,
+    });
+  };
+  for (const { layout } of halls) {
+    for (const table of layout.tables) {
+      counts.tables += 1;
+      const r = draw();
+      if (r < 1 / 8) {
+        counts.free += 1;
+      } else if (r < 1 / 8 + 1 / 6) {
+        counts.shared += 1;
+        const free = draw();
+        if (free < 1 / 6) counts.halfFree += 1;
+        else seat(table.id, 'left');
+        if (free >= 1 / 6 && free < 1 / 3) counts.halfFree += 1;
+        else seat(table.id, 'right');
+      } else {
+        seat(table.id, 'whole');
+      }
+    }
+  }
+  return {
+    locations: halls.map((fixture) => ({
+      id: fixture.layout.locationId!,
+      name: fixture.locationName,
+      layout: fixture.layout,
+      sections: fixture.sections,
+      imageUrl: fixture.imageUrl,
+    })),
+    tableTypes: [SIX_FOOT, SQUARE],
+    seats,
+    counts,
   };
 }

@@ -429,16 +429,33 @@ A table in no section is grey, `--layout-no-section-fill` and `-edge` (12.36:1, 
 
 **How a layout is drawn** ([`LayoutMap.vue`](../front-end/src/components/layout/LayoutMap.vue), [the drawing](implementation/modules/floorplan-placement.md#the-drawing)):
 
-- the floor is `--layout-floor`, and on a screen the venue's floorplan lies on it at half strength and in grey, so the sections' colours are the only colours;
+- the floor is `--layout-floor`, and on a screen the venue's floorplan lies on it at half strength and in grey, so the sections' colours are the only colours, unless the person viewing unticks Greyscale or Faded (`imageInGrey`, `imageFaded`), which draw it in its own colours or at full strength;
 - a table is a rectangle at its true size with a 40 mm corner, its edge 1.5px, its number in Outfit 600 at 14px (`--text-sm`) where the table has the room, smaller to fit, and left out below 6px; the number turns with the table and never reads upside down;
 - a section's name is `--text-xs` at 600 in a white pill 22px tall, edged 1.5px in the section's edge, 6px from its tables;
-- a no-table zone is hatched at 45°, 10px apart, inside a 1.5px dashed edge with a 4px corner, its label at 14px where it fits;
-- a selected table is outlined 2.5px in `--mm-black`, 3px outside its edge, and an alignment guide is 1px of `--mm-blue`, dashed;
+- a no-table zone is hatched at 45°, 10px apart, inside a 1.5px dashed edge with a 4px corner, its label at 14px where it fits; a turned zone is drawn turned about its centre, its label upright;
+- a selected table is outlined 1.5px in `--mm-black`, the outline's inner side on the outer side of the table's edge with no floor between them (T422), and an alignment guide is 1px of `--mm-blue`, dashed;
 - a table picked up by keyboard is drawn lifted: its outline dashed, 6px on and 4px off, and a shadow of `--mm-black` at 30%, 3px under it, straight down the screen however it is turned;
 - while the keys are on the editor's map, the stage round it wears the halo, and the focused table its own border;
 - a row being drawn is its path, 2px of `--mm-blue`, each point laid a 5px white dot edged 2px in it, the first ringed at 11px in 2px of it while a click on it would close the path, as the place a line drawn by hand began is while letting go there would close it, the tables it would place in their section's tint at 75% with a dashed edge, 5px on and 3px off, their count in white at 12px on a `--mm-black` chip 22px tall, 14px from the pointer, and the keys' crosshair two 24px arms of `--mm-black` over white;
 - an area being drawn for Fill an area is its outline, 2px of `--mm-blue`, each corner a 5px white dot edged 2px in it, the first ringed at 11px while a click on it would close the shape; a shape whose sides cross is drawn in `--mm-text-red-on-tint` instead, since it cannot be closed; a box in hand and an area closed are `--mm-blue` at 10% with a dashed edge of 1.5px, 5px on and 3px off;
 - every one of those pixel sizes holds at any zoom, and a table's millimetres are what zoom: 100% is 1px to 25 mm, at which a 6 ft table is 73 by 30px.
+
+**A day's map draws each table by who holds it** (T422, D40, D41; [`DayMap.vue`](../front-end/src/components/daymap/DayMap.vue)), never by colour alone:
+
+| Tone       | Means                                     | Fill               | Edge                                              | Number       |
+| ---------- | ----------------------------------------- | ------------------ | ------------------------------------------------- | ------------ |
+| `filled`   | here at the door; taken on the public map | the section's tint | the section's hue                                 | `--mm-black` |
+| `outlined` | expected (or did not come) at the door    | white              | the section's hue                                 | `--mm-black` |
+| free       | no vendor at it                           | `--layout-floor`   | `--layout-no-section-edge`, dashed 4px on 3px off | `--mm-black` |
+
+Every tone's number is `--mm-black`, held to the 7:1 a table's number is held to on each of the three fills (15.54 on white, 13.90 on the floor); a section's hue as the number on white would be as low as 3.83 (gold) and the muted ink on the floor 4.40, so neither is used.
+A free table's dashed edge is the grey of a table in no section, 4.03 on the floor, where `--mm-border` would be about 1.6; `contrast.test.ts` holds each tone for each of the eight colours.
+
+- a table shared by two vendors is two halves split across its longer side, each its own shape with its outer corners round and the split square, so the two edges meet as the line between them; left is the half on the reader's left as the number reads, a table turned a quarter having its left half at the top; each half is labelled with the number and "L" or "R" ("12L") at the size a number takes for the half's box, left out where it does not fit, and drawn in its own tone, a half with nobody at it free;
+- a seat or table marked, as a search marks it or a press picks it, takes the selection's outline: round the table, or round the half its seat holds;
+- the legend under the map is one line of swatches, each 24 by 14px drawn in its tone in the open location's first section's colours, with the page's word for it at `--text-sm` ("Here", "Expected", "No vendor"; "Taken", "Free");
+- the zoom stands on the map's bottom-right corner, as the editor's does: Zoom out, Zoom in and Fit as compact secondary buttons on a white card with the card's shadow; each press zooms by half again or a third less about the map's middle, Ctrl and the wheel zoom about the pointer at a desk, a mouse drag pans once zoomed, a plain wheel scrolls the page, and a phone pinches and drags; in a box narrower than 30rem the zoom stands under the map at the legend's end instead, with no card, so it covers none of a phone's small map, and the phone keeps the buttons as the one-finger way to zoom a pinch needs beside it (WCAG 2.5.1);
+- two locations or more are switched by a row of filter toggles above the map, the open one pressed.
 
 ### The brand green is `--mm-green` (`#36826f`)
 
