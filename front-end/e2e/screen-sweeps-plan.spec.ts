@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from './fixtures';
@@ -15,7 +15,23 @@ import { PHONE, SCREEN_GROUPS, SCREENS, type Screen, type Size } from './helpers
  * it.
  */
 
-const HERE = dirname(fileURLToPath(import.meta.url));
+const FRONT_END = dirname(dirname(fileURLToPath(import.meta.url)));
+
+type ListedSuite = { title: string; file: string; suites?: ListedSuite[] };
+
+/** Each describe Playwright registers, with the spec file it comes from, by `--list`. */
+function registeredDescribes(): { title: string; file: string }[] {
+  const listed = JSON.parse(
+    execFileSync('npx', ['playwright', 'test', '--list', '--reporter=json'], {
+      cwd: FRONT_END,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    }),
+  ) as { suites: ListedSuite[] };
+  const describes = (suite: ListedSuite, file: string): { title: string; file: string }[] =>
+    (suite.suites ?? []).flatMap((s) => [{ title: s.title, file }, ...describes(s, file)]);
+  return listed.suites.flatMap((specFile) => describes(specFile, specFile.file));
+}
 
 /** The sizes the old sweep with these options walked a screen at. */
 function walked(s: Screen, { everySize, alsoAt }: { everySize: boolean; alsoAt?: Size }): Size[] {
@@ -74,13 +90,16 @@ test.describe('The screen sweeps walk once', () => {
       SCREENS.length,
     );
 
-    const sweeping = readdirSync(HERE)
-      .filter((file) => file.endsWith('.spec.ts'))
-      .flatMap((file) =>
-        [...readFileSync(`${HERE}/${file}`, 'utf8').matchAll(/sweepTheScreens\('([^']+)'\)/g)].map(
-          ([, group]) => group,
-        ),
-      );
-    expect(sweeping.sort()).toEqual(Object.keys(SCREEN_GROUPS).sort());
+    const registered = registeredDescribes();
+    for (const group of Object.keys(SCREEN_GROUPS)) {
+      const files = registered
+        .filter((d) => d.title === `The screen sweeps, ${group}`)
+        .map((d) => d.file);
+      expect(files, `the ${group} group`).toHaveLength(1);
+    }
+    const sweeps = registered.filter((d) => d.title.startsWith('The screen sweeps, '));
+    expect(sweeps.map((d) => d.title.slice('The screen sweeps, '.length)).sort()).toEqual(
+      Object.keys(SCREEN_GROUPS).sort(),
+    );
   });
 });
