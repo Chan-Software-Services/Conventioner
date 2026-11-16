@@ -387,6 +387,7 @@ Its `TestWhatAnEntryHolds` pins what some entries hold beyond that, among them a
 **Writing an entry never fails the change it records.**
 Every write records after its change has landed, a market's deletion once its records are gone (the placement writes in `api/placements.py`, [placements](../modules/placements.md), after the seat is taken), and `record` logs and swallows its own failure: telling an organizer their change did not land when it did is worse than a missing entry.
 So a write refused because the market changed under it ([the market write](../modules/market-write.md)) stored nothing and records nothing.
+An entry is at the time `record` writes it, except where its caller gives `at`, the time the change landed: only an Admin's amount owed that a run's tidy dropped before the request recorded it, which is at the time its owner wrote it, so the set reads before the drop ([payments](payments.md#the-one-writer)).
 A subject or a detail that reads or computes anything is given to `record` as a builder, a callable it runs inside the same guard as the insert, since one that raised before it got there would answer the change with a 500 just the same.
 The failure is logged by the error's type, the kind and the market's id only, never its message: a driver's message can quote the document it refused, and an entry holds answers and addresses.
 

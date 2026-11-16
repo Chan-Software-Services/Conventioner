@@ -571,7 +571,7 @@ class TestUndo:
         moved = Payments.owed_day_transition(MARKET, ANA, DAY, OwedEvent.FREED, held=SEAT,
                                              seat=SEAT, by=EDITOR)
 
-        moved.undo()
+        assert moved.undo()
 
         doc = _the_record(owed)
         assert (Payments.state_of(doc), doc["revision"]) == (SetByHand(A), 3)
@@ -581,7 +581,7 @@ class TestUndo:
         moved = Payments.owed_day_transition(MARKET, ANA, DAY, OwedEvent.FREED, held=SEAT,
                                              seat=SEAT, by=EDITOR)
 
-        moved.undo()
+        assert moved.undo()
 
         assert owed.documents == []
 
@@ -590,19 +590,20 @@ class TestUndo:
         moved = Payments.owed_day_transition(MARKET, ANA, DAY, OwedEvent.FREED, held=SEAT,
                                              seat=SEAT, by=EDITOR)
 
-        moved.undo()
+        assert moved.undo()
 
         doc = _the_record(owed)
         assert "state" not in doc and "revision" not in doc and "freed" not in doc
         assert doc["set_by_hand"] == A.to_stored()
 
     def test_it_lands_only_on_its_own_revision(self, owed):
+        """A write that landed since owns the day: nothing is put back, and the undo says so."""
         moved = Payments.owed_day_transition(MARKET, ANA, DAY, OwedEvent.FREED, held=SEAT,
                                              seat=SEAT, by=EDITOR)
         Payments.owed_day_transition(MARKET, ANA, DAY, OwedEvent.ADMIN_SETS, held=None,
                                      by=ADMIN, cents=900)
 
-        moved.undo()
+        assert not moved.undo()
 
         doc = _the_record(owed)
         assert (doc["state"]["amount"]["cents"], doc["revision"]) == (900, 2)
@@ -612,7 +613,7 @@ class TestUndo:
         moved = Payments.owed_day_transition(MARKET, ANA, DAY, OwedEvent.ADMIN_CALCULATED,
                                              held=None, by=ADMIN)
 
-        moved.undo()
+        assert moved.undo()
 
         assert _the_record(owed)["revision"] == 1
 

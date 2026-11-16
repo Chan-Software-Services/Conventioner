@@ -148,6 +148,39 @@ class TestAnAmountNeverStaysHiddenOnADayNotHeld:
         assert [entry["kind"] for entry in stores.history.documents
                 if entry["kind"].startswith("owed_")] == []
 
+    def test_an_amount_a_run_drops_after_it_was_set_is_answered_and_recorded_as_set(
+            self, client, stores, market, monkeypatch):  # noqa: F811
+        """The run lands its seats and its tidy between the owner's write of Sunday's amount and
+        the request's second read of the assignment: the tidy dropped the amount and recorded the
+        drop, naming it and the Admin, so the amount was set, and the history says it was, before
+        it says the run dropped it."""
+        import api.placements as PlacementsApi
+        import payments as Payments
+
+        a_run_that_seats(monkeypatch, market, SATURDAY_ELSEWHERE)
+        owner = Payments.owed_day_transition
+
+        def a_run_lands_after(*args, **kwargs):
+            moved = owner(*args, **kwargs)
+            if args[3] == Payments.OwedEvent.ADMIN_SETS:
+                PlacementsApi.run_assignment(MARKET, ADMIN)
+            return moved
+
+        monkeypatch.setattr(Payments, "owed_day_transition", a_run_lands_after)
+
+        waived = client.put(SUNDAY_OWED, json={"cents": 0})
+
+        assert waived.status_code == 200
+        assert [line["date"] for line in waived.get_json()["lines"]] == [SAT]
+        assert [doc for doc in stores.owed.documents if doc["date"] == SUN] == []
+        owed = sorted((entry for entry in stores.history.documents
+                       if entry["kind"].startswith("owed_")), key=lambda entry: entry["at"])
+        assert [(entry["kind"], entry["actor"]) for entry in owed] == [
+            ("owed_set", ADMIN), (OWED_DROPPED, ADMIN)]
+        assert owed[0]["at"] < owed[1]["at"]
+        assert owed[0]["detail"]["after"] == {"owed_cents": 0}
+        assert owed[1]["subject"]["set_by"] == ADMIN
+
     def test_seating_a_day_holding_a_hidden_amount_records_its_drop(
             self, client, stores, market, monkeypatch):  # noqa: F811
         """A record left holding an Admin's $0 on a day Ana holds no table (a release before this

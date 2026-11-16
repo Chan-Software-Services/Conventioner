@@ -616,19 +616,19 @@ class OwedTransition:
     wrote: bool
     changed: bool
 
-    def undo(self) -> None:
+    def undo(self) -> bool:
         """Put the record back as it was read, for a free whose seat could not be freed or an
         Admin's amount whose day went meanwhile, and only while it still holds the revision
-        written: a write that landed since is the day's now. Only a write that left a record is
-        undone: neither caller's events end in following the seat, which deletes it."""
+        written: a write that landed since is the day's now, and False says nothing was put back.
+        Only a write that left a record is undone: neither caller's events end in following the
+        seat, which deletes it."""
         if not self.wrote:
-            return
+            return True
         if self.revision is None:
             raise ValueError("only a write that left a record is undone")
         still_written = {**self.key, "revision": self.revision}
         if self.record is None:
-            amounts_owed_collection.delete_one(still_written)
-            return
+            return amounts_owed_collection.delete_one(still_written).deleted_count == 1
         restore: Dict[str, Any] = {}
         as_read = {field: self.record[field] for field in OWNED_FIELDS if field in self.record}
         if as_read:
@@ -636,7 +636,7 @@ class OwedTransition:
         lacked = {field: "" for field in OWNED_FIELDS if field not in self.record}
         if lacked:
             restore["$unset"] = lacked
-        amounts_owed_collection.update_one(still_written, restore)
+        return amounts_owed_collection.update_one(still_written, restore).matched_count == 1
 
 
 def _held_after(event: OwedEvent, held: bool) -> bool:

@@ -346,13 +346,14 @@ def _currency(market: Market) -> Dict[str, Any]:
 
 def _record_owed(
     market: Market, requesting_user: str, address: str, date: str, kind: str,
-    before: Dict[str, Any], after: Optional[Dict[str, Any]],
+    before: Dict[str, Any], after: Optional[Dict[str, Any]], at: Optional[str] = None,
 ) -> None:
     History.record(
         market.id, requesting_user, Actions.CHANGE_OWED, kind=kind, vendors=[address],
         subject={"date": date, **_currency(market)},
         detail=lambda: History.changes({"owed_cents": before["owedCents"]},
                                        {"owed_cents": (after or {}).get("owedCents")}),
+        at=at,
     )
 
 
@@ -360,16 +361,21 @@ def _held(market: Market, address: str, date: str) -> Optional[Payments.Seat]:
     return seats_by_vendor(market).get(address, {}).get(date)
 
 
+def _market_now(market_id: str) -> Optional[Market]:
+    """The market as stored now, or None for one gone."""
+    doc = MarketsApi.markets_collection.find_one(live({"id": market_id}))
+    return None if doc is None else MarketsApi.market_from_document(doc)
+
+
 def _holds_now(market_id: str, address: str, date: str) -> bool:
     """Whether the stored assignment, read again now, seats ``address`` on ``date``, by the rows
     the lines read (``seats_by_vendor``); True for a market gone, whose records go with it."""
-    doc = MarketsApi.markets_collection.find_one(live({"id": market_id}))
-    if doc is None:
+    market = _market_now(market_id)
+    if market is None:
         return True
     return any(row.date == date and address in {normalized_email(email)
                                                  for email in row.assignment if email}
-               for row in MarketsApi.derive_market_table_rows(
-                   MarketsApi.market_from_document(doc)))
+               for row in MarketsApi.derive_market_table_rows(market))
 
 
 def _change_owed(
@@ -393,12 +399,18 @@ def _change_owed(
         raise ConflictError(OWED_KEPT_CHANGING) from None
     if (moved.wrote and isinstance(moved.after, Payments.SetByHand)
             and not _holds_now(market.id, address, date)):
-        # A write of the assignment that left the vendor without the day landed between this
-        # request's read of the market and the owner's write: the amount would stand on a day
-        # with no line, which nobody sees. It goes back as it was read, and the request is
-        # refused as one for a day with no line.
-        moved.undo()
-        raise NotFoundError(NO_LINE)
+        # A write of the assignment that left the vendor without the day landed since this
+        # request's read of the market: the amount would stand on a day with no line, which
+        # nobody sees. It goes back as it was read, and the request is refused as one for a day
+        # with no line, unless a write since owns the day: the run's tidy, landing after the
+        # owner's write, dropped the amount and recorded the drop, so the amount was set, and is
+        # recorded as set when the owner wrote it, before the drop.
+        if moved.undo():
+            raise NotFoundError(NO_LINE)
+        account = _account(_market_now(market.id) or market, address)
+        _record_owed(market, requesting_user, address, date, kind, before,
+                     {"owedCents": moved.after.amount.cents}, at=moved.after.amount.at)
+        return account
     account = _account(market, address)
     if moved.changed:
         _record_owed(market, requesting_user, address, date, kind, before,
@@ -430,8 +442,9 @@ def use_calculated_price(
 class KeptLine(NamedTuple):
     """What a free kept of a seat's line before the seat goes (``keep_freed_line``)."""
 
-    #: Puts the record back as it was, for a free whose seat could not be freed.
-    undo: Callable[[], None]
+    #: Puts the record back as it was, for a free whose seat could not be freed; False when a
+    #: write since owns the day.
+    undo: Callable[[], bool]
     #: Records the deduction the free made, if it made one, once the seat is freed.
     record_deduction: Callable[[], None]
 

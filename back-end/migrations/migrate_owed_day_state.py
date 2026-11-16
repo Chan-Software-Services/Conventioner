@@ -59,7 +59,6 @@ from utils.email_address import normalized_email  # noqa: E402
 TRIES = 3
 
 
-
 class Unreadable(Exception):
     """A record whose legacy fields do not parse; the app reads it as following the seat."""
 
