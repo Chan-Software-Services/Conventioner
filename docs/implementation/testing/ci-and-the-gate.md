@@ -98,7 +98,7 @@ Each job is one block, what it runs one item a line ([two features never share a
 **`e2e`**
 
 - passes only when every shard did
-- on a pull request it first runs [the selection audit](the-test-map.md#where-a-miss-shows), which lists each spec the shards failed in the job's summary as ran, left to CI or missed by `affected-specs.py` for the pull request's diff, each miss also a warning annotation, its steps continuing on error so they never decide the job
+- on a pull request it first runs [the selection audit](the-test-map.md#where-a-miss-shows), which lists each spec the shards failed in the job's summary as ran, left to CI or missed by `affected-specs.py` for the pull request's diff, each miss also a warning annotation once a test map exists, its steps continuing on error so they never decide the job
 
 **`test-map`**
 

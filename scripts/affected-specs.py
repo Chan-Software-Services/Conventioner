@@ -34,7 +34,8 @@ whatever the cap. With no map at all (no `gh`, offline, none made yet) it says s
 rule 1 alone, which is what Playwright's own `--only-changed` chooses.
 `audit`, which CI's `e2e` job runs on a pull request, names each spec that failed in the reports
 as ran (the selection runs it), left to CI (it chose it past the cap) or missed (it did not
-choose it); `--github` also writes them to the run's summary and each miss as a warning annotation.
+choose it); `--github` also writes them to the run's summary and, when there is a map, each miss
+as a warning annotation.
 `docs/implementation/testing/the-test-map.md` says what the map holds.
 
 Exit codes: Playwright's with `--run`, 0 with nothing to run, `--list` or `audit` (whatever it

@@ -1736,8 +1736,8 @@ export const SCREEN_GROUPS = {
       sizes: PUBLIC,
       open: async (page, seed) => {
         await at(slug('open'), 'vendor-sign-in-email-input')(page, seed);
-        // An address of its own each time: every sweep opens this at every size, past the limit of
-        // codes one address may ask for (`sign_in_limits`).
+        // An address of its own each time: the screen sweeps open this once at each of its sizes,
+        // and one address may ask for only so many codes (`sign_in_limits`).
         const address = `e2e-screens-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
         await page.getByTestId('vendor-sign-in-email-input').fill(address);
         await page.getByTestId('vendor-sign-in-request-btn').click();

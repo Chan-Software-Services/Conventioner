@@ -472,8 +472,9 @@ jobs:
       # On a pull request, the selection audit (docs/implementation/testing/the-test-map.md): each
       # spec the shards failed, as `scripts/affected-specs.py` would have treated it for the PR's
       # diff (from the merge commit's first parent, as e2e-repeat reads it, hence two commits):
-      # ran, left to CI past the cap, or missed, each miss a warning annotation. Every step of it
-      # continues on error, so the job passes or fails on the last step alone.
+      # ran, left to CI past the cap, or missed, each miss a warning annotation once a test map
+      # exists. Every step of it continues on error, so the job passes or fails on the last step
+      # alone.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: github.event_name == 'pull_request'
         continue-on-error: true
