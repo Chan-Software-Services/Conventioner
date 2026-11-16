@@ -34,8 +34,9 @@
  * gathered, pinned above the actions (`dialogs.md`).
  *
  * A dialog that writes hands its `submission` (`useDialogSubmit`, T411), and the hold is derived
- * here, never asked for: while it sends nothing closes the dialog and its confirm is disabled, and
- * its refusal is said in the error line until a field changes.
+ * here, never asked for: while it sends nothing closes the dialog and its confirm is disabled, and a
+ * single form's one submission that `says: 'dialog'` has its refusal said in the error line until a
+ * field changes.
  */
 import { computed, nextTick, ref, watch, type FunctionalComponent } from 'vue';
 import EmailAddress from '@/components/EmailAddress.vue';

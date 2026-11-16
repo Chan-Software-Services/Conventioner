@@ -127,8 +127,9 @@ const showingReviewed = ref(false);
 const reviewedWords = ref('');
 /**
  * A change of verdict, for the dialog's one opening (T411): one that was not written is said in the
- * dialog, since the card behind is out of sight; one answered after the dialog was closed under it,
- * which only an unmount does today, would be said beside the card (`late`, below).
+ * dialog, since the card behind is out of sight; one answered after the dialog was closed under it
+ * would be said beside the card (`late`, below), though today only an unmount closes it under a
+ * write, and after one nothing is said.
  */
 const reviewedChange = useDialogSubmit({
   opening: () => showingReviewed.value,
