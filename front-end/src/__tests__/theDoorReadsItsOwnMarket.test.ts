@@ -184,4 +184,27 @@ describe("market A's roster and writes never stand on market B's page", () => {
     expect(w.get('[data-testid="attendance-row-status"]').text()).toBe('Not yet');
     expect(w.find('.door-error').exists()).toBe(false);
   });
+
+  it('a check-in refused on A is not said again when the organizer comes back to A', async () => {
+    api.get.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.endsWith('/attendance') ? rosterOf(url.includes('-a/') ? ANA : BEN) : { data: {} },
+      ),
+    );
+    api.post.mockRejectedValue(
+      Object.assign(new AxiosError('refused'), {
+        response: { status: 409, data: { error: 'Ana is not seated on that date.' } },
+      }),
+    );
+    const w = await open();
+    await w.get('[data-testid="attendance-check-in"]').trigger('click');
+    await flushPromises();
+    expect(w.get('.door-error').text()).toContain('Ana is not seated on that date.');
+
+    await moveTo('market-b');
+    expect(rows(w)).toEqual([BEN]);
+    await moveTo('market-a');
+    expect(rows(w)).toEqual([ANA]);
+    expect(w.find('.door-error').exists()).toBe(false);
+  });
 });

@@ -410,4 +410,36 @@ describe("the drawer's vendors and notes", () => {
     expect(details.rows.value.map((row) => row.email)).toEqual([ANA]);
     expect(details.loadError.value).toBe('Where the vendors sit could not be read.');
   });
+
+  it('say a failed re-read keeps the vendors as last read, never that they could not be loaded', async () => {
+    api.get.mockImplementation((url: string) => placementsServed(url) ?? never());
+    fetchMarketApplications.mockRejectedValueOnce(new Error('offline'));
+    const { details } = detailsOn(ref('market-a'));
+    await details.load();
+    expect(details.loaded.value).toBe(false);
+    expect(details.loadError.value).toBe('The vendors could not be loaded.');
+
+    fetchMarketApplications.mockResolvedValueOnce([applicationOf(ANA, 'Ana at A')]);
+    await details.load();
+    expect(details.loadError.value).toBe('');
+
+    fetchMarketApplications.mockRejectedValueOnce(new Error('offline'));
+    await details.load();
+    expect(details.rows.value.map((row) => row.email)).toEqual([ANA]);
+    expect(details.loadError.value).toBe(
+      'Could not update. The vendors are as they were last read.',
+    );
+
+    // Said on while the next re-read is out, as the roster's is, and gone once one lands.
+    const again = held<Application[]>();
+    fetchMarketApplications.mockReturnValueOnce(again.promise);
+    const next = details.load();
+    expect(details.isLoading.value).toBe(true);
+    expect(details.loadError.value).toBe(
+      'Could not update. The vendors are as they were last read.',
+    );
+    again.settle([applicationOf(ANA, 'Ana at A')]);
+    await next;
+    expect(details.loadError.value).toBe('');
+  });
 });

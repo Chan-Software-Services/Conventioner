@@ -35,7 +35,7 @@ export const REREAD_MS = 15_000;
  * say (`DoorRosterPrint`), and in Market Days a note asks for it on each day still to be run.
  */
 import { MarketAction, mayTake } from '@/utils/marketActions';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import { api, getApiErrorMessage } from '@/utils/api';
@@ -141,6 +141,9 @@ const refusal = ref<{ key: string; sentence: string } | null>(null);
 const errorMessage = computed(() =>
   refusal.value && refusal.value.key === rosterRead.key.value ? refusal.value.sentence : '',
 );
+// Moved to another market, the refusal is forgotten, so coming back to the market it was made on
+// never says it again. A reset of what the page shows, never a read: the roster's read is keyed.
+watch(rosterRead.key, () => (refusal.value = null), { flush: 'sync' });
 const show = ref<Show>('all');
 const search = ref('');
 /**

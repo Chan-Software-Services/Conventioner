@@ -243,7 +243,12 @@ export function useVendorDetails(
   const read = useServerRead<string, VendorDetailsRead>(
     () => marketId.value || null,
     readVendorDetails,
-    { failure: 'The vendors could not be loaded.', lazy: options.lazy ?? true },
+    {
+      failure: 'The vendors could not be loaded.',
+      // A failed re-read keeps the vendors as last read, so it never says they were not loaded.
+      refreshFailure: 'Could not update. The vendors are as they were last read.',
+      lazy: options.lazy ?? true,
+    },
   );
 
   const applications = computed<Application[]>(() => read.data.value?.applications ?? []);
