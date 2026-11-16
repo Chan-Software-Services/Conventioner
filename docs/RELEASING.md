@@ -15,7 +15,7 @@ describes:
   - .github/workflows/promote.yml
   - scripts/promote_check.py
   - scripts/github_runs.py
-verified: 2026-11-14
+verified: 2026-11-17
 sources:
   - T74
   - T254
@@ -416,7 +416,7 @@ Daniel runs it through an ops session, with the production address passed inline
 The merge does not wait on it; the promotion does.
 
 `create_applications_collection.py` creates the applications collection and builds both its indexes: `market_id` (the lookup the D9 lock counts on) and the unique compound index on `(market_id, applicant_email, application_type)` that enforces one applicant per market.
-The uniqueness is the database's, not the application code's - the write that creates an application is an atomic upsert (`find_or_create_application` in `api/applications.py`), and the unique index is what makes it safe under concurrency.
+The uniqueness is the database's, not the application code's - the write that creates an application is an atomic upsert (`find_or_create_application` in `application_status.py`), and the unique index is what makes it safe under concurrency.
 A database that already holds duplicates cannot take the index; the migration detects them and names the conflicting documents rather than failing with a cryptic key-build error.
 See `api.applications.ensure_application_indexes`.
 

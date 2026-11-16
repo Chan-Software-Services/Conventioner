@@ -4,8 +4,8 @@ kind: adr
 describes:
   - back-end/review_team.py
   - back-end/datatypes.py#ReviewTeam
-  - back-end/api/applications.py#deal
-verified: 2026-11-13
+  - back-end/application_status.py#deal
+verified: 2026-11-17
 sources:
   - E38/F07
   - E38/F07/S01
@@ -48,7 +48,7 @@ An arrival never waits: it marks its application as arriving (`arriving` on the 
 A change of reviewers waits for the market a few seconds, and is refused in words if another deal holds it longer.
 `tests/test_every_order_of_a_deal.py` proves it by enumeration rather than by picking orders: an arrival landed before every step of a change, to a new team and to none, a change landed before every step of an arrival, and an arrival before every step of another.
 The same cases run over a real MongoDB server in `tests/real_mongo/test_every_order_of_a_deal_on_the_server.py`, where the lease's hold is also raced by ten deals at once ([the real-MongoDB suite](../implementation/testing/real-mongo-suite.md#the-market-sides-guarantees)).
-Three writes in [`back-end/api/applications.py`](../../back-end/api/applications.py) set an application's reviewer, each made while its deal holds the market and conditioned on the application as that deal read it.
+Three writes in [`back-end/application_status.py`](../../back-end/application_status.py), the one writer of the review state ([ADR 0034](0034-an-applications-review-state-has-one-owner.md)), set an application's reviewer, each called only from here while its deal holds the market and conditioned on the application as that deal read it.
 A change of reviewers writes an open application with `deal`, only while it is still open and dealt as it was read, so a verdict landing mid-deal is never touched, and hands a removed reviewer's follow-up on with `deal_follow_up`, only while that reviewer still owns it.
 An arrival is written with `deal_arrival`, only while it is still open, undealt and marked; one decided meanwhile is let go with its verdict alone.
 A decided application stays where it is, and so does a follow-up, unless its owner is a reviewer the change removed: then it is dealt with the open applications and handed, still a follow-up, to the reviewer it goes to. An unchanged set writes and records nothing; no reviewers returns every open application to first come, first served.

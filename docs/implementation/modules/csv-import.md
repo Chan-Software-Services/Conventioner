@@ -13,7 +13,7 @@ describes:
   - front-end/src/components/csvImport/ImportRefusedRows.vue
   - front-end/src/views/CsvImportView.vue#mapsTo
   - front-end/src/views/CsvImportView.vue#holdsAMapping
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - wayfinding/readable-journey/05
   - wayfinding/v0-1-0/map

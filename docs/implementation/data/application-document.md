@@ -3,6 +3,8 @@ layer: implementation
 kind: data
 describes:
   - back-end/api/applications.py
+  - back-end/application_status.py
+  - back-end/tests/test_one_writer_of_the_review_state.py
   - back-end/datatypes.py#Application
   - back-end/datatypes.py#ApplicationStatus
   - back-end/datatypes.py#ApplicationType
@@ -11,7 +13,7 @@ describes:
   - back-end/datatypes.py#AnswerUpdate
   - back-end/migrations/create_applications_collection.py
   - back-end/migrations/migrate_submitted_at_to_iso.py
-verified: 2026-11-10
+verified: 2026-11-17
 sources:
   - wayfinding/v0-1-0/map
   - wayfinding/real-market-readiness/01
@@ -35,6 +37,8 @@ sources:
 
 One document per application in the `applications` collection: a vendor's answers to one market's form, and where review has got to with them.
 [`back-end/api/applications.py`](../../../back-end/api/applications.py) is the single owner of the collection, and every reader and writer goes through it, so the storage contract lives in one place.
+Its review state is the one exception: every write of `status`, `verdict_by`, `verdict_at`, `verdict_reason`, `follow_up_owner`, `undo_to`, `added_by`, `added_at`, `origin`, `arriving` and `reviewer` is [`back-end/application_status.py`](../../../back-end/application_status.py)'s (imported as `ReviewState`, [ADR 0034](../../adr/0034-an-applications-review-state-has-one-owner.md)), through the collection `api/applications.py` binds, which keeps the reads, the claim's writes, the deletes and the indexes.
+[`tests/test_one_writer_of_the_review_state.py`](../../../back-end/tests/test_one_writer_of_the_review_state.py) fails a write of any of those fields anywhere else.
 The model is `Application` in [`back-end/datatypes.py`](../../../back-end/datatypes.py).
 
 The glossary concepts: [Application](../../business/concepts/application.md) and [Essential question](../../business/concepts/essential-question.md).
@@ -84,7 +88,7 @@ It has no boot marker: a raw timestamp misorders in plain sight, and the marker 
 **An update is stored beside the vendor's answer, never over it** ([an update is kept beside the vendor's answer](../../business/rules/an-update-is-kept-beside-the-vendors-answer.md)): `answer_updates` maps a form field key to an `AnswerUpdate`, `{value, by, at, over}`, the value read, who made it (`{user_id, email}`), when, and the vendor's answer it was made over.
 `form_data` stays the vendor's: only their own save and an import write it, so a re-import writes the file's answers there and leaves every update standing.
 Writing over `form_data` instead would last until the next re-import.
-`write_answer_updates` sets and unsets each update by its own dotted path, so two organizers updating different answers at once both land.
+`write_answer_updates` (in `application_status.py`) sets and unsets each update by its own dotted path, so two organizers updating different answers at once both land.
 It sets `updated_at` to now in the same update, since an update changes the answers every reader reads, and `updated_at` is the answers' version a verdict is conditioned on: a verdict on a card opened before the update is refused (T270); with nothing to set or unset it writes nothing.
 
 **`effective_answers` is the one reader of the answers as the organizer reads them**: `form_data` with each update's value in its place.
@@ -99,6 +103,8 @@ A re-import still compares the file with `form_data` (`csv_import._would_return_
 ## Statuses
 
 The applicant never reads a status: their page reads "Submitted" until results are published, then an outcome read off the stored seats ([an applicant never reads a verdict early](../../business/rules/an-applicant-never-reads-a-verdict-early.md)).
+
+Every function this section names is in `application_status.py`, the review state's owner.
 
 `ApplicationStatus` names eleven values, and five are in use:
 
@@ -125,7 +131,7 @@ A rule's verdict is not an entry of its own: the write that judged counts it in 
 
 **`(market_id, applicant_email, application_type)` identifies an application, and the database enforces it:** the unique index `market_applicant_type_unique`, built by `ensure_application_indexes()`.
 Creating one is a read-then-insert on a public endpoint, so two concurrent saves for a new address would otherwise both insert, leaving an orphan that sits on the organizer's list and double-counts through review, assignment and the form lock.
-`find_or_create_application()` is one conditional upsert against that index, and returns the winner's document when it loses the race; an applicant's first valid save creates theirs through it ([a vendor signs in before applying](../../business/rules/a-vendor-signs-in-before-applying.md)), and so does an import row.
+`find_or_create_application()` (in `application_status.py`, since the document it creates holds the review state) is one conditional upsert against that index, and returns the winner's document when it loses the race; an applicant's first valid save creates theirs through it ([a vendor signs in before applying](../../business/rules/a-vendor-signs-in-before-applying.md)), and so does an import row.
 `app.py` builds the index at boot and refuses to start when it cannot (`verify_application_indexes`); the likeliest cause is duplicates already stored, which the refusal names by application id, never by address, and which have to be merged by hand ([Operations](../../OPERATIONS.md#when-the-back-end-refuses-to-boot)).
 The index's `market_id` prefix serves every read of a market's applications; `id` is a [lookup index](lookup-indexes.md).
 

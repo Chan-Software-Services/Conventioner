@@ -16,7 +16,7 @@ describes:
   - back-end/tests/test_a_chosen_reviewer_decides.py
   - back-end/tests/test_undoing_a_verdict.py
   - back-end/tests/test_the_market_list_shows_what_the_read_serves.py
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - brain-dump/2026-10-19#22
   - E26/F08/S01
@@ -69,7 +69,7 @@ An Editor works on the market (the plan, the seats, the review) but takes none o
 A verdict is Editor's (E34/F01/S01): reviewers decide applications, and a verdict records who gave it.
 **Changing one is an Admin's** (E38/F06/S01, the 2026-10-29 walk): a verdict is approved or rejected, and once given, turning it into the other, sending it back to needs follow-up, or overturning an automatic rejection undoes a decision someone already made, so it is the row "Change a verdict, or overturn an automatic rejection", default Admin.
 Deciding a follow-up, approved or rejected, is giving a verdict, not changing one.
-**Undoing a verdict just given is the giver's** (E38/F10/S01, Daniel's decision of 2026-10-31): a verdict is one click or one key, so whoever gave it, an Editor or a chosen Viewer included, takes it back within 2 minutes (`UNDO_WINDOW`, beside the verdict rules in [`back-end/api/applications.py`](../../../back-end/api/applications.py)), while they may still give verdicts and the review is open.
+**Undoing a verdict just given is the giver's** (E38/F10/S01, Daniel's decision of 2026-10-31): a verdict is one click or one key, so whoever gave it, an Editor or a chosen Viewer included, takes it back within 2 minutes (`UNDO_WINDOW`, beside the verdict rules in [`back-end/application_status.py`](../../../back-end/application_status.py)), while they may still give verdicts and the review is open.
 It is giving, taken back, so it asks the giving row and never the change row; after the window, or for someone else's verdict, changing it stays the change row's.
 **Being chosen as a reviewer lets a Viewer decide** (E38/F07/S03): an Admin or the owner could not put a volunteer or a helper from the organization to work on the review without making them an Editor, a role that also changes the plan, the seats and the notes.
 Being chosen is per review and lost when removed, so it is a privilege of the table rather than a role ([ADR 0020](../../adr/0020-an-application-is-dealt-to-one-reviewer.md)): who may be chosen is the row "Be chosen as a reviewer, and then give verdicts and follow-ups", default Viewer, and the owner raising it to Editor takes the privilege from the chosen Viewers on that market.

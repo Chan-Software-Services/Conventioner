@@ -7,7 +7,7 @@ describes:
   - front-end/src/components/UpdateInfoTheirs.vue
   - front-end/src/components/AnswerUpdateNote.vue
   - front-end/src/utils/answerUpdates.ts
-verified: 2026-11-10
+verified: 2026-11-17
 sources:
   - E41/F01/S01
   - E41/F01/S02

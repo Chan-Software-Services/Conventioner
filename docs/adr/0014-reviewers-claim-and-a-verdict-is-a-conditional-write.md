@@ -2,12 +2,12 @@
 layer: implementation
 kind: adr
 describes:
-  - back-end/api/applications.py#update_application_status
+  - back-end/application_status.py#update_application_status
   - back-end/api/applications.py#claim_next_for_review
   - back-end/api/applications.py#CLAIM_LEASE
   - back-end/api/applicants.py#review_selection
   - front-end/src/utils/reviewClaims.ts
-verified: 2026-11-11
+verified: 2026-11-17
 sources:
   - brain-dump/2026-10-19#11
   - brain-dump/2026-10-19#23
@@ -45,7 +45,7 @@ Someone who gives no verdicts walks the queue locally and holds nothing.
 
 **A verdict is written only on what the reviewer saw.**
 Every review sends `seen` with its verdict: the status, the verdict's time and the answers' time it showed.
-`update_application_status` writes only if all three are still those (`if_unchanged_since`); otherwise the verdict is refused with a 409 naming who changed it and to what ("<email> approved this application since you opened it.", an automatic rejection, or "Its answers changed since you opened it."), with the application as it stands, and the card stays on it until the reviewer decides again.
+`update_application_status` in [`back-end/application_status.py`](../../back-end/application_status.py), the one writer of the review state ([ADR 0034](0034-an-applications-review-state-has-one-owner.md)), writes only if all three are still those (`if_unchanged_since`); otherwise the verdict is refused with a 409 naming who changed it and to what ("<email> approved this application since you opened it.", an automatic rejection, or "Its answers changed since you opened it."), with the application as it stands, and the card stays on it until the reviewer decides again.
 The automatic rejections write through the same condition, so a person's verdict that lands while a rule is judging is never overwritten.
 For a reviewer who may not change a verdict (E38/F06/S01), the write also refuses an application already approved or rejected (`unless_decided`), so one decided between their look and their write is this same 409, never written over.
 
