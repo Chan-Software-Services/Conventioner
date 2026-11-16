@@ -41,7 +41,8 @@ Creating an application writes its answers only on insert, so a re-import riding
   Absence almost always means the organizer exported a filtered or partial range, not that the applicant withdrew.
 - **The preview says all of it before anything is written**: how many are new, updated and unchanged, how many decided applications will return to review because their answers changed, and how many existing applications are not in the file ([importing a Google Form's responses](../business/flows/import.md#h2h-import-a-later-export)).
 - **An applicant listed twice in one file is one application**, judged on their latest row and dated by their first (bug 34).
-  Rejected:
+
+Rejected:
 
 - **Keeping the verdict whatever changed**, which lets an edited answer slip past review entirely.
 - **Returning every re-imported application to review**, which can un-approve fifty vendors mid-review and make the organizer redo all of it.

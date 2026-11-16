@@ -37,7 +37,7 @@ Absent, both read as before this existed: no reviewers, first come, first served
 `assigned_reviewer_id` and `review_config` are gone.
 
 **The deal is strict round robin, in arrival order.**
-One module, [`back-end/review_team.py`](../../back-end/review_team.py), writes both fields; nothing else does.
+One module, [`back-end/review_team.py`](../../back-end/review_team.py), decides both fields; the writes of an application's `reviewer` are [`back-end/application_status.py`](../../back-end/application_status.py)'s, called only from there ([ADR 0034](0034-an-applications-review-state-has-one-owner.md)).
 Choosing reviewers stores the team with its turn reset, then deals every open application (undecided: `open` or `under_review`) round robin from the first reviewer in the order they arrived, and sets the turn to how many it dealt; the first reviewers in address order take the remainder, and the next arrivals go first to those who got one fewer.
 A deal never counts what each reviewer has left open.
 

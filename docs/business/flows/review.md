@@ -124,6 +124,7 @@ A verdict on a card whose answers changed since it was opened, by the vendor's o
 If they approved or rejected it, the card offers a verdict only to someone who may change one (below), and tells a reviewer it refuses the row's sentence instead.
 A verdict on the card hands out the one after it in arrival order, even when Next had moved the reviewer ahead.
 Someone who gives no verdicts walks the queue with Next and holds nothing, and is told when the card on screen is open with someone else.
+Next is disabled while a hand-out is saving, and otherwise only when no other card is left to walk to.
 The card on screen is always the one the newest Next, verdict, refresh or load handed over, found by its id, even when the list read since does not hold it: an answer that comes back late, after a later one was asked for, never puts its card up (the Next race, E38/F07/S04), and a card decided between the server's read of the queue and its claim is never handed (T277 P4).
 Taking the follow-ups in or out while a hand-out is on its way asks again of the walk as it is now, so a card marked for follow-up and taken straight back in comes up again, not "Every application left is open with another reviewer." (T151).
 An advisory appears when the form asks only the essential questions, since every card then reads alike.
