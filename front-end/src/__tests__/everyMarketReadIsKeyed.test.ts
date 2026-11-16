@@ -62,7 +62,7 @@ const MAY_WATCH_A_MARKET_ID: Record<string, { most: number; why: string }> = {
   },
   'views/CsvImportView.vue': {
     most: 2,
-    why: "resets the wizard and the reviewers ticked to the market's own (T277 ticket 13, T419)",
+    why: "resets the wizard, and the reviewers ticked to the market's own: resets, never a read",
   },
   'views/VendorsView.vue': {
     most: 1,
