@@ -1,4 +1,4 @@
-import { computed, getCurrentInstance, onMounted, onUnmounted, readonly, ref } from 'vue';
+import { computed, getCurrentInstance, onMounted, onUnmounted, readonly, shallowRef } from 'vue';
 import { getApiErrorMessage, getApiErrorStatus } from '@/utils/api';
 
 export type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'failed' | 'refused';
@@ -41,12 +41,217 @@ export interface AutosaveOptions {
    * copy again. The screen that then takes the server's copy (its Reload) calls `forget`.
    */
   keepOnRefusal?: boolean;
-  /** The pause after an edit. */
+  /**
+   * The pause after an edit. 0 is no pause: an edit is sent in the same call, or, while a save is
+   * out, when that save answers (a click saved as it is made, one write out at a time).
+   */
   delay?: number;
+  /**
+   * Take the server's copy back on a failure too, as on a refusal: for a screen with no Retry, so
+   * nothing is kept unsaved for a button it does not have. `afterRefusal` runs with the sentence.
+   */
+  takesBackOnFailure?: boolean;
+}
+
+// The table (T420): an autosave's state is one phase, and only `transition` moves it.
+
+/**
+ * Where the working copy stands against the server.
+ *
+ * - `clean`: nothing unsaved, nothing out; `saved` while "Plan saved" shows.
+ * - `pausing`: an edit waits for its pause.
+ * - `held`: an edit waits for the hold to end.
+ * - `sending`: a save is out; `after` is what follows it (`none`: no edit since it went;
+ *   `pausing`: an edit since, its pause running; `wanted`: an edit since, whose pause ended or
+ *   which the hold keeps), and `drop` is set once the person may no longer write, so its answer
+ *   drops everything.
+ * - `failed`: a save failed on the way; its edits are kept for the next edit, Retry or a flush.
+ * - `refused`: the server refused a save; `kept` when the screen keeps its copy (`keepOnRefusal`).
+ */
+export type AutosavePhase =
+  | { kind: 'clean'; saved: boolean }
+  | { kind: 'pausing' }
+  | { kind: 'held' }
+  | { kind: 'sending'; after: 'none' | 'pausing' | 'wanted'; drop: boolean }
+  | { kind: 'failed'; sentence: string }
+  | { kind: 'refused'; sentence: string; kept: boolean };
+
+/** `hold` is the screen's (the Pricing card's), and outlives every phase; no pause runs under it. */
+export interface AutosaveState {
+  phase: AutosavePhase;
+  hold: boolean;
+}
+
+export type AutosaveEvent =
+  | { kind: 'edit' }
+  | { kind: 'pauseEnds' }
+  | { kind: 'ok' }
+  | { kind: 'failed'; sentence: string }
+  | { kind: 'refused'; sentence: string; keep: boolean }
+  /** The person may no longer write. */
+  | { kind: 'lost' }
+  | { kind: 'holdOn' }
+  | { kind: 'holdOff' }
+  | { kind: 'flush' }
+  /** The screen took the server's copy in place of its own. */
+  | { kind: 'forget' }
+  /** "Plan saved" has shown its 2 s. */
+  | { kind: 'savedEnds' };
+
+export interface AutosaveStep {
+  state: AutosaveState;
+  /** Start a save of the working copy as it stands. */
+  send: boolean;
+}
+
+const CLEAN: AutosavePhase = { kind: 'clean', saved: false };
+const SENDING: AutosavePhase = { kind: 'sending', after: 'none', drop: false };
+
+/**
+ * The next state, and whether to start a save; the same object, and no send, for a pair not in
+ * the table. `docs/implementation/modules/plan-autosave.md` has the table whole.
+ */
+export function transition(state: AutosaveState, event: AutosaveEvent): AutosaveStep {
+  const { phase, hold } = state;
+  const same: AutosaveStep = { state, send: false };
+  const to = (next: AutosavePhase, nextHold = hold, send = false): AutosaveStep => ({
+    state: { phase: next, hold: nextHold },
+    send,
+  });
+  const holdOn = () => (hold ? same : to(phase, true));
+  const holdOff = () => (hold ? to(phase, false) : same);
+  /** An edit after nothing is out: it waits for its pause, or for the hold. */
+  const waiting: AutosavePhase = hold ? { kind: 'held' } : { kind: 'pausing' };
+  switch (phase.kind) {
+    case 'clean':
+      if (event.kind === 'edit') return to(waiting);
+      if (event.kind === 'holdOn') return holdOn();
+      if (event.kind === 'holdOff') return holdOff();
+      if (event.kind === 'savedEnds') return phase.saved ? to(CLEAN) : same;
+      return same;
+    case 'pausing':
+      // A new state for an edit, so the composable starts its pause again.
+      if (event.kind === 'edit') return to({ kind: 'pausing' });
+      if (event.kind === 'pauseEnds' || event.kind === 'flush') return to(SENDING, hold, true);
+      if (event.kind === 'lost' || event.kind === 'forget') return to(CLEAN);
+      if (event.kind === 'holdOn') return to({ kind: 'held' }, true);
+      return same;
+    case 'held':
+      if (event.kind === 'holdOff') return to({ kind: 'pausing' }, false);
+      // A held edit is sent as kept: the working copy holds the value from before the text that
+      // is not one.
+      if (event.kind === 'flush') return to(SENDING, hold, true);
+      if (event.kind === 'lost' || event.kind === 'forget') return to(CLEAN);
+      return same;
+    case 'sending':
+      switch (event.kind) {
+        case 'edit':
+          if (phase.drop || phase.after === 'wanted') return same;
+          return to({ ...phase, after: hold ? 'wanted' : 'pausing' });
+        case 'pauseEnds':
+        case 'flush':
+          return phase.after === 'pausing' ? to({ ...phase, after: 'wanted' }) : same;
+        case 'holdOn':
+          if (hold) return same;
+          return to({ ...phase, after: phase.after === 'pausing' ? 'wanted' : phase.after }, true);
+        case 'holdOff':
+          if (!hold) return same;
+          return to({ ...phase, after: phase.after === 'wanted' ? 'pausing' : phase.after }, false);
+        case 'lost':
+          return phase.drop ? same : to({ ...phase, drop: true });
+        case 'forget':
+          return phase.after === 'none' ? same : to({ ...phase, after: 'none' });
+        case 'ok':
+          if (phase.drop) return to({ kind: 'clean', saved: phase.after === 'none' });
+          if (phase.after === 'none') return to({ kind: 'clean', saved: true });
+          // "Saving…" stands only while a save is out: an edit this one did not carry, in its
+          // pause or held, shows nothing until a save carries it.
+          if (phase.after === 'pausing') return to({ kind: 'pausing' });
+          return hold ? to({ kind: 'held' }) : to(SENDING, hold, true);
+        case 'failed':
+          // Retry could never send it, so neither the edits nor the failed line are kept for it.
+          if (phase.drop) return to(CLEAN);
+          if (phase.after === 'none') return to({ kind: 'failed', sentence: event.sentence });
+          if (phase.after === 'pausing') return to({ kind: 'pausing' });
+          return hold ? to({ kind: 'held' }) : to(SENDING, hold, true);
+        case 'refused':
+          // The copy is written whole and every later edit builds on the refused one, so a
+          // refusal drops them all, unless the screen keeps its copy.
+          return to({ kind: 'refused', sentence: event.sentence, kept: event.keep && !phase.drop });
+        default:
+          return same;
+      }
+    case 'failed':
+      if (event.kind === 'edit') return to(waiting);
+      if (event.kind === 'lost' || event.kind === 'forget') return to(CLEAN);
+      if (event.kind === 'holdOn') return holdOn();
+      if (event.kind === 'holdOff') return holdOff();
+      if (event.kind === 'flush') return to(SENDING, hold, true);
+      return same;
+    case 'refused':
+      if (event.kind === 'edit') return to(waiting);
+      if (event.kind === 'lost') return phase.kept ? to({ ...phase, kept: false }) : same;
+      if (event.kind === 'forget') return to(CLEAN);
+      if (event.kind === 'holdOn') return holdOn();
+      if (event.kind === 'holdOff') return holdOff();
+      if (event.kind === 'flush') return phase.kept ? to(SENDING, hold, true) : same;
+      return same;
+  }
+}
+
+/** The status line's state: "Saving…" only while a save is out, "Plan saved" only when clean. */
+export function statusOf(phase: AutosavePhase): AutosaveStatus {
+  switch (phase.kind) {
+    case 'clean':
+      return phase.saved ? 'saved' : 'idle';
+    case 'sending':
+      return 'saving';
+    case 'failed':
+      return 'failed';
+    case 'refused':
+      return 'refused';
+    default:
+      return 'idle';
+  }
 }
 
 /**
- * The order of the saves of one working copy that saves itself as it is edited (T271).
+ * The status line's sentence. A screen that keeps its copy on a refusal (`keepOnRefusal`) says the
+ * refusal's sentence alone, even once the copy is dropped because the person may no longer write:
+ * that screen takes the server's copy back by its own re-read, not by the refusal.
+ */
+export function messageOf(phase: AutosavePhase, keepsOnRefusal = false): string {
+  if (phase.kind === 'failed') return phase.sentence;
+  if (phase.kind !== 'refused') return '';
+  if (phase.kept || keepsOnRefusal) return phase.sentence;
+  // Some refusals carry no full stop ("Market not found"), so the line after it would run on.
+  return (/[.!?…]$/.test(phase.sentence) ? phase.sentence : `${phase.sentence}.`) + TAKEN_BACK;
+}
+
+/** Whether the server lacks an edit that may still be sent. */
+export function unsavedIn(phase: AutosavePhase): boolean {
+  if (phase.kind === 'clean') return false;
+  if (phase.kind === 'refused') return phase.kept;
+  return true;
+}
+
+/** An edit the server does not have and no save out carries. */
+function behindIn(phase: AutosavePhase): boolean {
+  if (phase.kind === 'sending') return phase.after !== 'none';
+  return unsavedIn(phase);
+}
+
+/** Whether the state runs a pause: no pause runs under the hold. */
+function pauseRuns(state: AutosaveState): boolean {
+  return (
+    state.phase.kind === 'pausing' ||
+    (state.phase.kind === 'sending' && state.phase.after === 'pausing')
+  );
+}
+
+/**
+ * The order of the saves of one working copy that saves itself as it is edited (T271), on one
+ * transition table (T420).
  *
  * The copy is written whole a pause after each edit, one save at a time. The plan used to send a
  * save at every pause whether or not one was still out, and answers are not promised in order: a
@@ -55,207 +260,107 @@ export interface AutosaveOptions {
  *
  * So a pause that ends while a save is out marks a save as wanted, and the answer sends it at once
  * with the working copy as it then stands; an edit whose pause is still running when the answer
- * comes is sent by its pause. Edits are counted, and an answered save marks stored only the edits
- * it carried, so `unsaved` holds until the server has the last one.
+ * comes is sent by its pause. `unsaved` holds until the server has the last edit.
  *
  * A save the server refuses drops every edit made so far, since the copy is written whole and every
  * later edit builds on the refused one, and the screen takes the server's copy back and says why;
  * a screen that keeps its copy instead says so with `keepOnRefusal`.
  * A save that fails on the way (no answer, a 401, 408, 429 or 5xx) keeps the edits unsaved and
  * says so; nothing retries on a timer, and the next edit, `retry` or a flush sends the copy again.
+ * A screen with no Retry takes its copy back on a failure too, with `takesBackOnFailure`.
  *
  * A reload or a closed tab never unmounts the view, so an edit still waiting then (in its pause,
  * held, or after a failure) used to be lost. On `pagehide` the screen's `sendOnUnload` starts one
  * last write that outlives the page; the screen's browser question (`useUnsavedWork`) is the
  * guard, and this is a best effort.
  *
- * It knows nothing of markets: the screen gives it the write, the re-read and who may write.
+ * Its state is one `AutosaveState`, moved only by `transition`; the status, its sentence and
+ * `unsaved` are read from it, never stored beside it. It knows nothing of markets: the screen
+ * gives it the write, the re-read and who may write.
  */
 export function useAutosave(options: AutosaveOptions) {
   const delay = options.delay ?? 600;
-  const status = ref<AutosaveStatus>('idle');
-  const message = ref('');
-  /** Edits made, and the edits the last save the server took carried. */
-  const edits = ref(0);
-  const stored = ref(0);
+  const refusal = options.takesBackOnFailure ? () => true : isRefusal;
+  const state = shallowRef<AutosaveState>({ phase: CLEAN, hold: false });
   /** The save out, settled once its answer is handled; null while none is out. */
-  const out = ref<Promise<string | null> | null>(null);
-  /** The edits the save out carries. */
-  let outCarrying = 0;
-
+  let out: Promise<string | null> | null = null;
   let pause: ReturnType<typeof setTimeout> | null = null;
   let savedShown: ReturnType<typeof setTimeout> | null = null;
-  /** A pause ended while a save was out: send when it answers. */
-  let wanted = false;
-  let held = false;
-  /** An edit made, or wanted, while held, which waits for the hold to end. */
-  let heldEdit = false;
-
-  const unsaved = computed(() => edits.value !== stored.value || out.value !== null);
 
   function stopPause() {
     if (pause !== null) clearTimeout(pause);
     pause = null;
   }
 
-  function startPause() {
-    stopPause();
-    pause = setTimeout(() => {
-      pause = null;
-      if (out.value) wanted = true;
-      else if (edits.value !== stored.value) void save();
-    }, delay);
+  function pauseEnds() {
+    pause = null;
+    feed(options.may() ? { kind: 'pauseEnds' } : { kind: 'lost' });
   }
 
-  /** Send the working copy now; the caller makes sure no save is out. */
-  function save(): Promise<string | null> {
-    // This save carries every edit so far, so no pause or wanted save is left to send them.
-    stopPause();
-    wanted = false;
-    if (!options.may()) {
-      dropUnsendable();
-      return Promise.resolve(null);
+  /** Move the state by the table, then run what the new state asks: the pause, the timer, a save. */
+  function feed(event: AutosaveEvent) {
+    const before = state.value;
+    const step = transition(before, event);
+    if (step.state === before) return;
+    state.value = step.state;
+
+    const runs = pauseRuns(step.state);
+    if (!runs || event.kind === 'edit') stopPause();
+    const wasSaved = before.phase.kind === 'clean' && before.phase.saved;
+    const isSaved = step.state.phase.kind === 'clean' && step.state.phase.saved;
+    if (!isSaved && savedShown !== null) {
+      clearTimeout(savedShown);
+      savedShown = null;
     }
-    const carrying = edits.value;
-    outCarrying = carrying;
-    if (savedShown !== null) clearTimeout(savedShown);
-    savedShown = null;
-    status.value = 'saving';
-    message.value = '';
+    if (isSaved && !wasSaved) {
+      savedShown = setTimeout(() => {
+        savedShown = null;
+        feed({ kind: 'savedEnds' });
+      }, 2000);
+    }
+    if (step.send) startSend();
+    else if (runs && pause === null) {
+      if (delay === 0) pauseEnds();
+      else pause = setTimeout(pauseEnds, delay);
+    }
+  }
+
+  /**
+   * Send the working copy as it stands. At its answer the state moves, and a wanted save goes,
+   * before `afterSave` or `afterRefusal` runs, so the re-read of the answer that freed it lands
+   * while an edit is unsaved and the screen ignores it.
+   */
+  function startSend() {
     const answered = options.send().then(
       async () => {
-        out.value = null;
-        stored.value = carrying;
+        out = null;
         // An edit made after this save went, which the person may no longer write, is dropped here
         // whether or not a pause or a wanted save is behind it: a held one has neither.
-        if (!options.may()) dropUnsendable();
-        // "Saving…" stands only while a save is out: an edit this one did not carry, waiting in its
-        // pause or held, shows nothing until a save carries it.
-        const next = sendWanted();
-        if (!next) {
-          if (edits.value === stored.value) showSaved();
-          else status.value = 'idle';
-        }
+        if (!options.may()) feed({ kind: 'lost' });
+        feed({ kind: 'ok' });
         await options.afterSave();
         return null;
       },
       async (err: unknown) => {
-        out.value = null;
+        out = null;
         const sentence = getApiErrorMessage(err, options.failure);
-        if (isRefusal(err) && options.keepOnRefusal) {
-          status.value = 'refused';
-          message.value = sentence;
+        if (!options.may()) feed({ kind: 'lost' });
+        if (refusal(err)) {
+          feed({ kind: 'refused', sentence, keep: Boolean(options.keepOnRefusal) });
           await options.afterRefusal(sentence);
           return sentence;
         }
-        if (isRefusal(err)) {
-          dropEdits();
-          status.value = 'refused';
-          // Some refusals carry no full stop ("Market not found"), so the line after it would run on.
-          message.value = (/[.!?…]$/.test(sentence) ? sentence : `${sentence}.`) + TAKEN_BACK;
-          await options.afterRefusal(sentence);
-          return sentence;
-        }
-        status.value = 'failed';
-        message.value = sentence;
-        // Retry could never send it, so neither the edits nor the failed line are kept for it.
-        if (!options.may()) dropUnsendable();
-        else sendWanted();
+        feed({ kind: 'failed', sentence });
         return sentence;
       },
     );
-    out.value = answered;
-    return answered;
-  }
-
-  /** At an answer: a save wanted while it was out goes now, unless the copy is held. */
-  function sendWanted(): boolean {
-    if (!wanted) return false;
-    wanted = false;
-    if (edits.value === stored.value) return false;
-    if (!options.may()) {
-      dropUnsendable();
-      return false;
-    }
-    if (held) {
-      heldEdit = true;
-      return false;
-    }
-    void save();
-    return true;
-  }
-
-  /** A refusal: nothing made so far is to be sent, by a pause, a hold or a wanted save. */
-  function dropEdits() {
-    stored.value = edits.value;
-    stopPause();
-    wanted = false;
-    heldEdit = false;
-  }
-
-  /**
-   * The person may no longer write (the market archived, their role gone, by another person's
-   * change): nothing made so far can ever be sent, so it is dropped as a refusal drops it, rather
-   * than left unsaved for good, which kept the screen off every later re-read and had the browser
-   * ask at every reload. The screen takes the server's copy back by its re-read.
-   *
-   * A send finds it (a pause's save, a wanted save, a save's answer, a flush), and so does the
-   * screen, by `forgetUnsendable`, for an edit no send is coming for: one a failed save left, whose
-   * failed line and Retry would stand beside the server's copy, or one held.
-   */
-  function dropUnsendable() {
-    dropEdits();
-    if (status.value === 'failed') {
-      status.value = 'idle';
-      message.value = '';
-    }
-  }
-
-  /**
-   * The screen read that the person may no longer write: drop what can never be sent now, rather
-   * than at a send that may never come. A save out is left to answer, and its answer drops what is
-   * still unsaved, since a drop before it would be undone when it moves `stored`.
-   */
-  function forgetUnsendable() {
-    if (!options.may() && !out.value) dropUnsendable();
-  }
-
-  /**
-   * The screen took the server's copy in place of its own (a layout's Reload, or another
-   * location's layout): what was unsaved is no longer its work, so it is dropped with the line
-   * that spoke of it. A save out is left to answer.
-   */
-  function forget() {
-    dropEdits();
-    if (status.value === 'failed' || status.value === 'refused') {
-      status.value = 'idle';
-      message.value = '';
-    }
-  }
-
-  function showSaved() {
-    status.value = 'saved';
-    savedShown = setTimeout(() => {
-      savedShown = null;
-      if (status.value === 'saved') status.value = 'idle';
-    }, 2000);
+    out = answered;
   }
 
   /** The working copy changed. */
   function edited() {
     if (!options.may()) return;
-    edits.value += 1;
-    // "Plan saved", and a refusal's "back as it was last saved", are not true of the new edit.
-    if (status.value === 'saved' || status.value === 'refused') {
-      status.value = 'idle';
-      message.value = '';
-    }
-    if (held) {
-      stopPause();
-      heldEdit = true;
-      return;
-    }
-    startPause();
+    feed({ kind: 'edit' });
   }
 
   /**
@@ -264,15 +369,7 @@ export function useAutosave(options: AutosaveOptions) {
    * beside it. An edit made meanwhile waits, and is sent a pause after the hold ends.
    */
   function hold(next: boolean) {
-    held = next;
-    if (held) {
-      if (pause !== null || wanted) heldEdit = true;
-      stopPause();
-      wanted = false;
-    } else if (heldEdit) {
-      heldEdit = false;
-      startPause();
-    }
+    feed({ kind: next ? 'holdOn' : 'holdOff' });
   }
 
   /**
@@ -282,31 +379,50 @@ export function useAutosave(options: AutosaveOptions) {
    */
   async function flush(): Promise<string | null> {
     if (!options.may()) {
-      forgetUnsendable();
+      feed({ kind: 'lost' });
       return null;
     }
-    stopPause();
-    heldEdit = false;
-    wanted = false;
+    feed({ kind: 'flush' });
     for (;;) {
-      if (out.value) {
-        const stopped = await out.value;
+      if (out) {
+        const stopped = await out;
         if (stopped !== null) return stopped;
         continue;
       }
-      if (edits.value === stored.value) return null;
+      if (!unsavedIn(state.value.phase)) return null;
       if (!options.may()) {
-        dropUnsendable();
+        feed({ kind: 'lost' });
         return null;
       }
-      const failed = await save();
-      if (failed !== null) return failed;
+      const before = state.value;
+      feed({ kind: 'flush' });
+      if (state.value === before) return null;
     }
   }
 
   /** Send what is not stored again, after a failure: the button beside it. */
   function retry() {
     void flush();
+  }
+
+  /**
+   * The screen read that the person may no longer write (the market archived, their role gone, by
+   * another person's change): what can never be sent is dropped now, rather than at a send that
+   * may never come, and left unsaved for good, which kept the screen off every later re-read and had
+   * the browser ask at every reload. A save out is left to answer, and its answer drops what is
+   * still unsaved. The screen takes the server's copy back by its re-read.
+   */
+  function forgetUnsendable() {
+    if (!options.may()) feed({ kind: 'lost' });
+  }
+
+  /**
+   * The screen took the server's copy in place of its own (a layout's Reload, or another
+   * location's layout): what was unsaved is no longer its work, so it is dropped with the line
+   * that spoke of it. A save out is left to answer.
+   */
+  function forget() {
+    feed({ kind: 'forget' });
   }
 
   /**
@@ -319,8 +435,7 @@ export function useAutosave(options: AutosaveOptions) {
    */
   function onPageHide() {
     if (!options.may()) return;
-    const behind = out.value ? edits.value !== outCarrying : edits.value !== stored.value;
-    if (behind) options.sendOnUnload();
+    if (behindIn(state.value.phase)) options.sendOnUnload();
   }
 
   if (getCurrentInstance()) {
@@ -333,9 +448,9 @@ export function useAutosave(options: AutosaveOptions) {
   }
 
   return {
-    status: readonly(status),
-    message: readonly(message),
-    unsaved,
+    status: readonly(computed(() => statusOf(state.value.phase))),
+    message: readonly(computed(() => messageOf(state.value.phase, Boolean(options.keepOnRefusal)))),
+    unsaved: computed(() => unsavedIn(state.value.phase)),
     edited,
     hold,
     flush,
