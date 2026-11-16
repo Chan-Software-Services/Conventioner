@@ -841,3 +841,83 @@ def test_a_rules_rejection_reads_as_the_rules():
 def test_a_status_nothing_spells_is_refused():
     with pytest.raises(ValueError):
         ReviewState.state_of({"status": "maybe_later"})
+
+
+# --- Stored before the migration: each event on an old spelling, through the routes ---------------
+
+#: A verdict the old offers flow carried on was given long before, outside any undo's window.
+LONG_AGO = "2026-09-01T00:00:00+00:00"
+
+
+def _stored_as(status: str) -> Callable:
+    """Store ``app-v1``'s status as ``status``, its verdict given long ago."""
+
+    def store(world):
+        doc = _doc(world)
+        doc["status"] = status
+        if doc.get("verdict_at"):
+            doc.update(verdict_at=LONG_AGO)
+            doc.pop("undo_to", None)
+
+    return store
+
+
+#: Each spelling stored before the stored applications are migrated, the state it reads as, and
+#: how it is reached: the state's own setup, then the status rewritten as stored. An application
+#: stored with no status is not among them: the application model requires one, so no route serves
+#: it, and nothing stores one.
+OLD_SPELLINGS: Dict[str, Tuple[State, Callable]] = {
+    "under_review": (State.OPEN, _stored_as(ApplicationStatus.UNDER_REVIEW.value)),
+    "assigned": (State.APPROVED_BY_A_PERSON, _stored_as(ApplicationStatus.ASSIGNED.value)),
+    "cancelled": (State.REJECTED_BY_A_PERSON, _stored_as(ApplicationStatus.CANCELLED.value)),
+}
+
+
+def _cell_for_an_old_spelling(state: State, event: str) -> Cell:
+    """The table's cell, but for an undo of a verdict given long ago, which is refused."""
+    if event == "undo" and not state.undecided:
+        return _refused(state, 403, UNDO_REFUSED)
+    return TABLE[(state, event)]
+
+
+@pytest.mark.parametrize("spelling", OLD_SPELLINGS)
+@pytest.mark.parametrize("event", EVENTS)
+def test_each_cell_on_a_status_stored_before_the_migration(market, spelling, event):
+    """An application stored ``under_review``, or in a status the old offers flow wrote, moves as
+    the state it reads as, through every event's route."""
+    state, store = OLD_SPELLINGS[spelling]
+    STATES[state](market)
+    store(market)
+    assert ReviewState.state_of(_doc(market)) is state
+    recorded = len(market.history.documents)
+
+    response = EVENTS[event](market)
+
+    code, error, after, entry = _cell_for_an_old_spelling(state, event)
+    assert response.status_code == code, response.get_json()
+    if error is not None:
+        assert response.get_json()["error"] == error
+    assert ReviewState.state_of(_doc(market)) is after
+    marked = None if code != 200 else MARKED.get((state, event))
+    assert _doc(market).get(ApplicationsApi.ARRIVING_FIELD) == marked
+    entries = _entries_after(market, recorded)
+    assert [(e["kind"], e["action"]) for e in entries] == ([] if entry is None else [entry])
+
+
+def test_a_verdict_on_one_stored_under_review_undone_returns_to_it_and_waits(market):
+    """A verdict given on an application stored ``under_review`` is held on it, and its undo
+    restores it as stored, marked, so the next deal deals it."""
+    _state, store = OLD_SPELLINGS["under_review"]
+    store(market)
+    stored = _doc(market).get("status")
+    _ok(_verdict(EDITOR, "reviewer_approved"))
+
+    _ok(_client(EDITOR).post(f"/markets/{MARKET}/applications/{APP}/review/undo",
+                             json={"seen": seen_as_stored(APP)}))
+
+    doc = _doc(market)
+    assert doc.get("status") == stored
+    assert ReviewState.state_of(doc) is State.OPEN
+    assert doc.get(ApplicationsApi.ARRIVING_FIELD) == {"actor": EDITOR, "action": "give-verdicts"}
+    [waiting] = [d for d in ApplicationsApi.arriving_in_arrival_order(MARKET) if d["id"] == APP]
+    assert ReviewState.state_of(waiting) is State.OPEN
