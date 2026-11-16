@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { MarketAction, mayTake } from '@/utils/marketActions';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { withoutQueryKey } from '@/utils/routeQuery';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -57,12 +57,10 @@ const assigned = computed(() => hasAssignment(market.value));
 
 /**
  * Nobody is signed in: the page says so and reads nothing. Asked again on each market, as the page
- * reads each.
+ * reads each, and by Try again.
  */
-const signedOut = computed(() => {
-  void marketId.value;
-  return !signedInEmail();
-});
+const signedOut = ref(!signedInEmail());
+watch(marketId, () => (signedOut.value = !signedInEmail()), { flush: 'sync' });
 
 /**
  * The market's vendors, read on arriving at each market and shared with the drawer (E35/F01/S01):
@@ -80,6 +78,13 @@ const drawer = useVendorDrawer();
 const loadError = computed(() =>
   signedOut.value ? 'You must be signed in.' : details.loadError.value,
 );
+
+/** The frame's Try again: a sign-in found since reads the market, else the vendors are read again. */
+function readAgain(): void {
+  const wasSignedOut = signedOut.value;
+  signedOut.value = !signedInEmail();
+  if (signedOut.value === wasSignedOut) void details.load();
+}
 
 /**
  * Every applicant (E36/F02/S04): anyone may be seated by hand, so anyone may need finding. The
@@ -297,7 +302,7 @@ const assignedVendorCount = computed(() => tableVendors.value.filter((v) => v.is
 
 <template>
   <div class="vendors-view">
-    <MarketFrame :market="market" @retry="details.load()">
+    <MarketFrame :market="market" @retry="readAgain">
       <!-- The search stays in view with the frame; it used to stick inside the card's own
            scroller, which is gone (E21/F04/S02). -->
       <template #pinned>

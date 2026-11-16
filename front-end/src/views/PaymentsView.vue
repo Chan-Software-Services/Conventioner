@@ -16,7 +16,7 @@
  * The server counts all of it (`utils/paymentsPage.ts`). It reads and changes nothing itself, so
  * anyone who reads the market reads it; a market that sets no prices says so, and where to set them.
  */
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter, type LocationQuery } from 'vue-router';
 import { marketPath } from '@/utils/market';
 import { hasAssignment } from '@/utils/marketPage';
@@ -53,8 +53,11 @@ const router = useRouter();
 const marketId = computed(() => String(route.params.marketId ?? ''));
 const { market } = useOpenMarket(marketId);
 
-/** The market read, nobody's while nobody is signed in: asked again on each market. */
-const readId = computed(() => (signedInEmail() ? marketId.value : ''));
+/** Whether someone is signed in: asked again on each market, and by Try again. */
+const signedIn = ref(!!signedInEmail());
+watch(marketId, () => (signedIn.value = !!signedInEmail()), { flush: 'sync' });
+/** The market read, nobody's while nobody is signed in. */
+const readId = computed(() => (signedIn.value ? marketId.value : ''));
 
 /**
  * The market's vendors, for their names and the drawer (E35/F01/S01), read on arriving at each
@@ -84,8 +87,11 @@ const listRead = computed(
     (details.loaded.value || !!details.loadError.value),
 );
 
-/** The frame's Try again: the payments and the names, both. */
+/** The frame's Try again: a sign-in found since reads the market, else the payments and the names. */
 function readAgain(): void {
+  const wasSignedIn = signedIn.value;
+  signedIn.value = !!signedInEmail();
+  if (signedIn.value !== wasSignedIn) return;
   void paymentsRead.reread();
   void details.load();
 }

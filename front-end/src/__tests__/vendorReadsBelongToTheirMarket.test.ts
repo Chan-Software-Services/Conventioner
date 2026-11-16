@@ -50,7 +50,6 @@ vi.mock('@/utils/paymentsPage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/utils/paymentsPage')>();
   return { ...actual, loadMarketPayments: (id: string) => loadMarketPayments(id) };
 });
-vi.mock('@/utils/signedIn', () => ({ signedInEmail: () => 'org@example.com' }));
 vi.mock('@/utils/openMarket', () => ({
   useOpenMarket: () => ({
     market: computed(() => marketOf(String(route.params.marketId))),
@@ -92,6 +91,20 @@ function held<T>() {
 }
 
 const never = () => new Promise<never>(() => {});
+
+/** The frame, with its Try again. */
+const RETRYING_FRAME = {
+  emits: ['retry'],
+  template:
+    '<div><button data-testid="frame-retry" @click="$emit(\'retry\')" /><slot name="pinned" /><slot /></div>',
+};
+
+/** Signs in on another tab, as it were, and presses the frame's Try again. */
+async function signInAndRetry(w: VueWrapper): Promise<void> {
+  localStorage.setItem('user', JSON.stringify({ email: 'org@example.com' }));
+  await w.get('[data-testid="frame-retry"]').trigger('click');
+  await flushPromises();
+}
 
 function applicationOf(email: string, name: string): Application {
   return {
@@ -211,6 +224,29 @@ describe('Payments never shows another market', () => {
     expect(w.text()).toContain('Ana at B');
     expect(w.text()).not.toContain('Ana at A');
   });
+
+  it('reads the market once someone has signed in and Try again is pressed', async () => {
+    localStorage.removeItem('user');
+    loadMarketPayments.mockResolvedValue(paymentsOf(ANA));
+    fetchMarketApplications.mockResolvedValue([]);
+    const w = mount(PaymentsView, {
+      attachTo: document.body,
+      global: {
+        stubs: {
+          MarketFrame: RETRYING_FRAME,
+          NothingAssigned: true,
+          RouterLink: true,
+          VendorDrawer: true,
+        },
+      },
+    });
+    await flushPromises();
+    expect(loadMarketPayments).not.toHaveBeenCalled();
+    await signInAndRetry(w);
+    expect(loadMarketPayments).toHaveBeenCalledWith('market-a');
+    expect(fetchMarketApplications).toHaveBeenCalledWith('market-a');
+    expect(emails(w)).toEqual([ANA]);
+  });
 });
 
 describe('Vendors never shows another market', () => {
@@ -275,6 +311,32 @@ describe('Vendors never shows another market', () => {
     await flushPromises();
     expect(w.text()).not.toContain('The vendors could not be loaded.');
     expect(listed(w).join(' ')).toContain('Ben at B');
+  });
+
+  it('reads the market once someone has signed in and Try again is pressed', async () => {
+    localStorage.removeItem('user');
+    fetchMarketApplications.mockResolvedValue([applicationOf(ANA, 'Ana at A')]);
+    const w = mount(VendorsView, {
+      attachTo: document.body,
+      shallow: true,
+      global: {
+        stubs: {
+          MarketFrame: RETRYING_FRAME,
+          ListFrame: false,
+          ScrollBox: false,
+          Unwrapped: false,
+          EmailAddress: false,
+          VendorIdentity: false,
+        },
+      },
+    });
+    await flushPromises();
+    expect(w.text()).toContain('You must be signed in.');
+    expect(fetchMarketApplications).not.toHaveBeenCalled();
+    await signInAndRetry(w);
+    expect(fetchMarketApplications).toHaveBeenCalledWith('market-a');
+    expect(w.text()).not.toContain('You must be signed in.');
+    expect(listed(w).join(' ')).toContain('Ana at A');
   });
 });
 
