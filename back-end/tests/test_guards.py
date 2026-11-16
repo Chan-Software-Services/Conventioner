@@ -1170,8 +1170,9 @@ class TestEveryTierHasTablesGuard:
     SILVER = TierObject(id=2, name="Silver")
     BRONZE = TierObject(id=3, name="Bronze")
 
-    def _market(self, tiers, sections, laid_out=("loc-upper",), tables=None):
-        """``tables`` gives a laid-out location's count of tables in no section."""
+    def _market(self, tiers, sections, laid_out=("loc-upper",), tables=None, follows=()):
+        """``tables`` gives a laid-out location's count of tables in no section; ``follows`` names
+        the locations whose layouts follow the plan."""
         tables = tables or {}
         return _make_market(setup_object=SetupObject(
             priority=[],
@@ -1181,10 +1182,12 @@ class TestEveryTierHasTablesGuard:
             sections=list(sections),
             assignment_options=AssignmentOptionObject(),
             floorplans=[
-                FloorplanObject(id=f"fp-{location}", location_id=location, tables=[
-                    FloorplanTable(table_type_id="tt-standard", x_mm=1000.0 * n, y_mm=1000.0)
-                    for n in range(tables.get(location, 0))
-                ])
+                FloorplanObject(
+                    id=f"fp-{location}", location_id=location, follows_plan=location in follows,
+                    tables=[
+                        FloorplanTable(table_type_id="tt-standard", x_mm=1000.0 * n, y_mm=1000.0)
+                        for n in range(tables.get(location, 0))
+                    ])
                 for location in laid_out
             ],
         ))
@@ -1387,6 +1390,53 @@ class TestEveryTierHasTablesGuard:
         market.setup_object.floorplans = [FloorplanObject(id="fp-beta", location_id=None)]
 
         assert self._evaluate(market).resolution_link == "setup"
+
+    def test_a_bare_tier_on_a_layout_that_follows_the_plan_is_sent_to_section_setup(self):
+        """A layout that follows the plan takes its sections' counts from Section Setup (D46): a
+        market back in Draft holding one types the bare tier's count there, never on the layout."""
+        market = self._market(tiers=(self.GOLD, self.SILVER), sections=(
+            self._section("Gold row", self.GOLD, 0, self.UPPER),
+            self._section("Bronze corner", self.SILVER, 4, self.LOWER),
+        ), follows=("loc-upper",))
+
+        result = self._evaluate(market)
+
+        assert result.message == (
+            "Tier Gold has no tables. Give each a section with tables on Market Setup, or "
+            "remove it.")
+        assert result.resolution_link == "setup"
+        assert result.resolution_label == "Give every tier tables"
+
+    def test_a_tier_on_a_layout_that_follows_the_plan_is_typed_beside_one_on_a_layout(self):
+        """Only a layout that decides its counts is where a tier's tables are put (D46): the tier
+        on a layout that follows the plan is typed, and the Market Setup line leaves out the tier
+        whose fix is the other layout."""
+        market = self._market(tiers=(self.GOLD, self.SILVER, self.BRONZE), sections=(
+            self._section("Gold row", self.GOLD, 0, self.UPPER),
+            self._section("Silver corner", self.SILVER, 0, self.LOWER),
+            self._section("Bronze corner", self.BRONZE, 4, self.LOWER),
+        ), laid_out=("loc-upper", "loc-lower"), follows=("loc-upper",))
+
+        result = self._evaluate(market)
+
+        assert result.message == (
+            "Tier Gold has no tables. Give each a section with tables on Market Setup, or "
+            "remove it.")
+        assert result.resolution_link == "setup"
+
+    def test_no_tables_on_a_layout_that_follows_the_plan_are_sent_to_market_setup(self):
+        """With every count 0 the plan has no table to place, so even tables of no section on a
+        layout that follows the plan wait on Section Setup's counts first (D46)."""
+        market = self._market(tiers=(self.GOLD,), sections=(
+            self._section("Gold row", self.GOLD, 0, self.UPPER),
+        ), tables={"loc-upper": 3}, follows=("loc-upper",))
+
+        result = self._evaluate(market)
+
+        assert result.message == (
+            "This market has no tables yet. Add a section with tables on Market Setup.")
+        assert result.resolution_link == "setup"
+        assert result.resolution_label == "Add tables"
 
     def test_every_tier_with_tables_passes(self):
         market = self._market(tiers=(self.GOLD, self.SILVER), sections=(

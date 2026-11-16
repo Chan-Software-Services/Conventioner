@@ -87,6 +87,8 @@ A market none of whose sections has a table is told one of three things (T422):
 - when layouts hold tables but no section is on any of them, "This market's tables are in no section yet. Add sections on Market Setup's Section Setup, then put the tables in them on the layout.", its remedy "Add sections" leading to Market Setup;
 - when no layout holds a table, "This market has no tables yet.", leading to the layout of its first section in a laid-out location as above, else "Add tables" on Market Setup.
 
+A layout that follows the plan, started after Draft, is no laid-out location to `EveryTierHasTablesGuard` (T422): its sections keep the counts typed on Section Setup, so on a market back in Draft its tiers, and its tables, are sent to Market Setup, never to that layout.
+
 A link without an action, or an action without a link, is refused at construction.
 That the action is a row of the table is held by `TestEveryRemedyNamesTheActionItTakes` in [`back-end/tests/test_guards.py`](../../../back-end/tests/test_guards.py), not at construction, so a renamed row fails the build rather than answering the organizer with a 500.
 

@@ -236,6 +236,9 @@ class EveryTierHasTablesGuard:
     (T422): the fix is the layout of the plan's first section on a layout holding tables, else
     Section Setup, where their location's sections are added; only a market with no table anywhere
     is told it has none.
+
+    A layout that follows the plan is no laid-out location here: it takes its sections'
+    counts from Section Setup, so on a market back in Draft its tiers are sent there (T422, D46).
     """
 
     id: str = "every_tier_has_tables"
@@ -244,7 +247,11 @@ class EveryTierHasTablesGuard:
     def evaluate(self, market: Market, _db) -> PreconditionResult:
         setup = market.setup_object
         planned = setup.sections if setup else []
-        floorplans = Layout.laid_out(setup) if setup else []
+        # A layout that follows the plan never decides its sections' counts (D46).
+        floorplans = [
+            floorplan for floorplan in (Layout.laid_out(setup) if setup else [])
+            if not floorplan.follows_plan
+        ]
         laid_out = {floorplan.location_id for floorplan in floorplans}
         # A plan's sections in a laid-out location, in its order: their counts are the layout's.
         on_a_layout = [s for s in planned if s.location is not None and s.location.id in laid_out]
