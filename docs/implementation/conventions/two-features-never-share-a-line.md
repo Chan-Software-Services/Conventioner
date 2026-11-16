@@ -120,3 +120,8 @@ A new kind's example is one line in its block's place.
 
 [The design language](../../design-system.md#what-keeps-this-true), "What keeps this true": the states the sweeps walk are a list, one state a line, each beside the state it is most like, and the stress seed's description is a sentence after it.
 A new state is one line beside the state it is most like, not at the list's end, where every lane would add its own.
+
+### CI and the gate
+
+[CI and the gate](../testing/ci-and-the-gate.md#ci), the jobs of the Test workflow: one block per job, its id a bold lead line, then a list of what it runs, one step or fact a line.
+A new job is a new block beside the job it is most like; a new step of a job is one item beside the step it is most like.
