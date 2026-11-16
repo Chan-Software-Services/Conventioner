@@ -210,6 +210,13 @@ function chooseView(next: View) {
   void router.replace({ query: next === 'map' ? { ...query, view: 'map' } : query });
 }
 
+/** The map's "Show in the list": the list with every vendor the map counted under it shown, so
+ *  the Show toggle, hidden on Map, hides none of them. */
+function showListFromMap() {
+  show.value = 'all';
+  chooseView('list');
+}
+
 const signedInAs = computed(() => (signedInEmail() ?? '').toLowerCase());
 
 const names = computed<VendorNames>(() => {
@@ -619,7 +626,7 @@ const drawer = useVendorDrawer();
           :notHere="notHere"
           :hereWithoutSeat="withoutSeatToday"
           @open="drawer.open($event)"
-          @showList="chooseView('list')"
+          @showList="showListFromMap"
         />
         <template v-else>
           <p v-if="today.expected === 0 && withoutSeatToday === 0" class="door-note">

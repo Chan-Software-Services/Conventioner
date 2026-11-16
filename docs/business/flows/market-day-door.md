@@ -132,7 +132,7 @@ Covered by:
    Each table is drawn by its vendor: filled once they are here, outlined while they are expected, and a grey dashed outline with nobody at it, as its legend says ("Here", "Expected" or "Did not come", "No vendor"); a shared table is two halves, each its own vendor's.
    A press on a vendor's table opens their drawer, as their name on the list does, and Back closes it on the map; a press on a table with nobody says "Table Aisle A 4: no vendor on Nov 17, 2026." under the map.
    "Find a vendor" outlines the tables of the vendors it finds, and the map changes as the roster reads itself again.
-   Under the map, "<n> here with no table" and "<n> vendors are at tables not on a layout." count the vendors it cannot draw, each with "Show in the list"; with no location laid out it says "No location has a layout yet.", with "Open the layout" for whoever may change the setup.
+   Under the map, "<n> here with no table" and "<n> vendors are at tables not on a layout." count the vendors it cannot draw, each with "Show in the list", which opens the list showing all; with no location laid out it says "No location has a layout yet." alone, with "Open the layout" for whoever may change the setup.
    Check in and Undo stay on the list: the map and the drawer check nobody in, so a Viewer reads the map as an Editor does.
 
 It lists everyone expected on the day, so it shows who is missing; "Nobody is assigned on this date." on a date with nobody.

@@ -55,7 +55,7 @@ vi.mock('@/utils/vendorDetails', () => ({
 
 const TODAY = calendarToday();
 const ARRIVED = '2099-08-01T09:41:00Z';
-const EAST = { id: 'loc-east', name: 'East Hall' };
+const NORTH = { id: 'loc-north', name: 'North Wing' };
 const AISLE = { id: 'sec-aisle', name: 'Aisle A' };
 
 const ANA = 'ana@example.com';
@@ -69,15 +69,15 @@ function table(id: string, number: number, xMm: number): FloorplanTable {
   return { id, sectionId: AISLE.id, number, tableTypeId: 'type-6ft', xMm, yMm: 3000, rotation: 0 };
 }
 
-/** East Hall laid out, its Aisle A of four tables in a row, 30 m across. */
+/** North Wing laid out, its Aisle A of four tables in a row, 30 m across. */
 const LAID_OUT = {
-  locations: [EAST],
-  sections: [{ ...AISLE, location: EAST, tier: null, count: 4 }],
+  locations: [NORTH],
+  sections: [{ ...AISLE, location: NORTH, tier: null, count: 4 }],
   tableTypes: [{ id: 'type-6ft', name: 'Standard 6 ft', widthMm: 1830, depthMm: 760 }],
   floorplans: [
     {
-      id: 'fp-east',
-      locationId: EAST.id,
+      id: 'fp-north',
+      locationId: NORTH.id,
       revision: 1,
       imageGridfsId: null,
       imageWidth: 800,
@@ -131,7 +131,7 @@ function row(email: string, name: string, tableCode: string | null, extra: Parti
     tableCode,
     tableChoice: 'Full Table',
     section: 'Aisle A',
-    location: EAST.name,
+    location: NORTH.name,
     state: 'expected',
     checkedInTableCode: null,
     checkedInAt: null,
@@ -412,11 +412,33 @@ describe('under the map', () => {
     expect(words(wrapper, 'attendance-map-off-layout')).toBe(
       '1 vendor is at a table not on a layout. Show in the list',
     );
-    await wrapper
-      .get(`${testid('attendance-map-off-layout')} ${testid('attendance-map-show-list')}`)
-      .trigger('click');
+    await wrapper.get(testid('attendance-map-off-layout-show-list')).trigger('click');
     expect(router.replace).toHaveBeenLastCalledWith({ query: {} });
   });
+
+  it.each([
+    ['attendance-map-unseated-show-list', 'Eve Jams'],
+    ['attendance-map-off-layout-show-list', 'Fay Candles'],
+  ])(
+    'Show in the list (%s) lands on a list that shows whom it counted, whatever Show was',
+    async (button, vendor) => {
+      const wrapper = await open();
+      // Eve is here and Fay is not: each Show but All hides one of them.
+      for (const toggle of ['attendance-show-not-yet', 'attendance-show-here']) {
+        await wrapper.get(testid(toggle)).trigger('click');
+        await wrapper.get(testid('attendance-view-map')).trigger('click');
+        await flushPromises();
+
+        await wrapper.get(testid(button)).trigger('click');
+        await flushPromises();
+
+        expect(route.query.view).toBeUndefined();
+        const listed = wrapper.findAll(testid('attendance-row')).map((one) => one.text());
+        expect(listed.some((text) => text.includes(vendor))).toBe(true);
+        expect(wrapper.get(testid('attendance-show-all')).attributes('aria-pressed')).toBe('true');
+      }
+    },
+  );
 
   it('says each count only when it applies, and in the plural for more than one', async () => {
     answer = day({
@@ -444,6 +466,8 @@ describe('with no location laid out', () => {
       '/markets/market-1/',
     );
     expect(wrapper.find(testid('day-map')).exists()).toBe(false);
+    // Every seated vendor is then at a table on no layout, which the line above says already.
+    expect(wrapper.find(testid('attendance-map-off-layout')).exists()).toBe(false);
   });
 
   it('with no link for a person who may not', async () => {

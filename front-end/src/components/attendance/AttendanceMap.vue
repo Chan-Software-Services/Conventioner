@@ -207,18 +207,24 @@ const mayChangeSetup = computed(() => mayTake(props.market, MarketAction.ChangeS
       <button
         type="button"
         class="btn btn--secondary btn--compact"
-        data-testid="attendance-map-show-list"
+        data-testid="attendance-map-unseated-show-list"
         @click="emit('showList')"
       >
         Show in the list
       </button>
     </p>
-    <p v-if="offLayout > 0" class="door-map__count" data-testid="attendance-map-off-layout">
+    <!-- With no location laid out every seated vendor is at a table on no layout, which the line
+         above says already. -->
+    <p
+      v-if="locations.length && offLayout > 0"
+      class="door-map__count"
+      data-testid="attendance-map-off-layout"
+    >
       {{ offLayoutWords }}
       <button
         type="button"
         class="btn btn--secondary btn--compact"
-        data-testid="attendance-map-show-list"
+        data-testid="attendance-map-off-layout-show-list"
         @click="emit('showList')"
       >
         Show in the list
