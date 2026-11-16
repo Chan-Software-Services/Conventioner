@@ -154,17 +154,9 @@ const placeChange = useDialogSubmit({
   opening: over(() => placing.value),
   failure: 'Their place was not changed.',
 });
-/**
- * Counts Manage organization's openings, so a re-read of the organization it was open on that
- * lands after it was closed, or opened on another organization, writes nothing into the one the
- * person is in.
- */
-let openings = 0;
-
 watch(
   () => [props.manageOpen, props.org] as const,
   ([open, org]) => {
-    openings++;
     if (open && org) {
       orgData.value = org;
       renameValue.value = org.name;
@@ -199,33 +191,34 @@ function isOwner(): boolean {
  * guessing the new membership locally would be a second copy of the server's rules about who may
  * hold which role.
  *
- * `opening` is the opening the read is for, the one a write was sent from: once Manage organization
- * has moved on, nothing is read, and a read that lands after it moved on writes nothing.
+ * Run inside a write, with its submission's `isCurrent`: once the opening the write was sent from
+ * has gone (Manage organization closed, or opened on another organization), nothing is read, and a
+ * read that lands after it writes nothing.
  */
-async function refreshOrg(failed: string, opening: number): Promise<void> {
+async function refreshOrg(failed: string, isCurrent: () => boolean): Promise<void> {
   const id = orgData.value?.id;
-  if (!id || opening !== openings) return;
+  if (!id || !isCurrent()) return;
   try {
     const mine = await fetchOrganizations();
-    if (opening !== openings) return;
+    if (!isCurrent()) return;
     const found = mine.find((candidate) => candidate.id === id);
     if (found) orgData.value = found;
   } catch (err) {
-    if (opening !== openings) return;
+    if (!isCurrent()) return;
     errorMessage.value = getApiErrorMessage(err, failed);
   }
 }
 
 /** Saved, inside the write: the organization read again, so the hold lasts until it shows. */
-const readAfterSaving = (opening: number) =>
-  refreshOrg('Saved, but could not re-read the organization', opening);
+const readAfterSaving = (isCurrent: () => boolean) =>
+  refreshOrg('Saved, but could not re-read the organization', isCurrent);
 
 /**
- * A change landed, from the opening `opening`: its History reads it while that opening lasts, and
+ * A change landed: its History reads it while the opening it was sent from lasts (`current`), and
  * the list behind is told either way. Neither of those is closing.
  */
-function changeLanded(opening: number): void {
-  if (opening === openings) changesMade.value++;
+function changeLanded(current: boolean): void {
+  if (current) changesMade.value++;
   emit('changed');
 }
 
@@ -241,10 +234,10 @@ function lateAnswer(answer: LateAnswer<unknown>): void {
  * list behind and the History read the change that did land. Inside the write, before its refusal
  * is said.
  */
-async function readAgainIfChanged(err: unknown, opening: number): Promise<void> {
+async function readAgainIfChanged(err: unknown, isCurrent: () => boolean): Promise<void> {
   if (!isOrganizationChanged(err)) return;
-  await refreshOrg('Could not re-read the organization', opening);
-  changeLanded(opening);
+  await refreshOrg('Could not re-read the organization', isCurrent);
+  changeLanded(isCurrent());
 }
 
 /**
@@ -312,11 +305,10 @@ async function handleRename() {
   const org = orgData.value;
   const name = renameValue.value.trim();
   if (!org || name === org.name) return;
-  const opening = openings;
   await rename.submit(() => api.put(`/organizations/${encodeURIComponent(org.id)}`, { name }), {
     done: () => {
       if (orgData.value) orgData.value = { ...orgData.value, name };
-      changeLanded(opening);
+      changeLanded(true);
     },
     late: lateAnswer,
   });
@@ -357,23 +349,22 @@ async function addPerson(place: 'admins' | 'members') {
   const email = field.value.trim();
   const org = orgData.value;
   if (!org || !email) return;
-  const opening = openings;
   await adding.submit(
-    async () => {
+    async (isCurrent) => {
       try {
         await api.post(`/organizations/${encodeURIComponent(org.id)}/${place}`, {
           user_email: email,
         });
       } catch (err) {
-        await readAgainIfChanged(err, opening);
+        await readAgainIfChanged(err, isCurrent);
         throw err;
       }
-      await readAfterSaving(opening);
+      await readAfterSaving(isCurrent);
     },
     {
       done: () => {
         field.value = '';
-        changeLanded(opening);
+        changeLanded(true);
         const people =
           place === 'admins' ? orgData.value?.adminPeople : orgData.value?.memberPeople;
         findAdded(words, people ?? [], email);
@@ -411,26 +402,25 @@ async function handleRemoveUser() {
   const target = removing.value;
   const org = orgData.value;
   if (!org || !target) return;
-  const opening = openings;
   await removal.submit(
-    async () => {
+    async (isCurrent) => {
       try {
         await api.delete(
           `/organizations/${encodeURIComponent(org.id)}/users/${encodeURIComponent(target.userId)}`,
         );
       } catch (err) {
         if (getApiErrorStatus(err) !== 404) {
-          await readAgainIfChanged(err, opening);
+          await readAgainIfChanged(err, isCurrent);
           throw err;
         }
       }
       // Held until the confirmation closes: during the re-read its Remove would send a second
       // removal.
-      await readAfterSaving(opening);
+      await readAfterSaving(isCurrent);
     },
     {
       done: async () => {
-        changeLanded(opening);
+        changeLanded(true);
         removing.value = null;
         // Once the confirmation has closed and the page behind it is no longer inert.
         await nextTick();
@@ -467,9 +457,8 @@ async function handlePlaceChange() {
   const target = placing.value;
   const org = orgData.value;
   if (!org || !target) return;
-  const opening = openings;
   await placeChange.submit(
-    async (): Promise<OrganizationPlace> => {
+    async (isCurrent): Promise<OrganizationPlace> => {
       let landedIn: OrganizationPlace = target.to;
       try {
         await api.put(
@@ -478,19 +467,19 @@ async function handlePlaceChange() {
         );
       } catch (err) {
         if (getApiErrorStatus(err) !== 404) {
-          await readAgainIfChanged(err, opening);
+          await readAgainIfChanged(err, isCurrent);
           throw err;
         }
         landedIn = target.from;
       }
       // Held until the confirmation closes: during the re-read its confirm would send a second
       // change.
-      await readAfterSaving(opening);
+      await readAfterSaving(isCurrent);
       return landedIn;
     },
     {
       done: async (landedIn) => {
-        changeLanded(opening);
+        changeLanded(true);
         placing.value = null;
         // Once the confirmation has closed and the page behind it is no longer inert.
         await nextTick();

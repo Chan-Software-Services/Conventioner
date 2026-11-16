@@ -142,9 +142,18 @@ const deletion = useDialogSubmit({
 });
 /**
  * Counts Manage market's openings, so a read of the market it was open on that lands after it was
- * closed, or opened on another market, writes nothing into the one the person is in.
+ * closed, or opened on another market, writes nothing into the one the person is in. Kept for the
+ * reads no write sends, and so no submission holds: the one as it opens and the one after a
+ * permissions change (`market-changed`). A write's own re-read goes by its submission's
+ * `isCurrent`, keyed by the same opening.
  */
 let openings = 0;
+
+/** Whether Manage market is still in the opening it is in now. */
+function thisOpening(): () => boolean {
+  const at = openings;
+  return () => at === openings;
+}
 
 watch(
   () => [props.manageOpen, props.market] as const,
@@ -171,24 +180,25 @@ watch(
 );
 
 /**
- * Reads the market Manage market is open on into its copy. `opening` is the opening the read is
- * for, the one a write was sent from: once Manage market has moved on, nothing is read.
+ * Reads the market Manage market is open on into its copy. `isCurrent` says whether the opening the
+ * read is for still stands, a write's from its submission: once Manage market has moved on, nothing
+ * is read, and a read that lands after it writes nothing.
  */
-async function fetchMarket(showLoading = true, opening = openings) {
-  if (!marketData.value || opening !== openings) return;
+async function fetchMarket(showLoading = true, isCurrent = thisOpening()) {
+  if (!marketData.value || !isCurrent()) return;
   if (showLoading) loading.value = true;
   errorMessage.value = '';
   try {
     const response = await api.get(`/markets/${encodeURIComponent(marketData.value.id)}`);
-    if (opening !== openings) return;
+    if (!isCurrent()) return;
     const m = response.data.market;
     marketData.value = parseMarketFromApi(m);
     renameValue.value = marketData.value.name;
   } catch (err) {
-    if (opening !== openings) return;
+    if (!isCurrent()) return;
     errorMessage.value = getApiErrorMessage(err, 'The market could not be loaded.');
   } finally {
-    if (showLoading && opening === openings) loading.value = false;
+    if (showLoading && isCurrent()) loading.value = false;
   }
 }
 
@@ -281,10 +291,9 @@ async function handleAddUser() {
   const email = newUserEmail.value.trim();
   const market = marketData.value;
   if (!market || !email) return;
-  const opening = openings;
   const role = newUserRole.value;
   await addUser.submit(
-    async () => {
+    async (isCurrent) => {
       try {
         await api.post(`/markets/${encodeURIComponent(market.id)}/roles`, {
           user_email: email,
@@ -292,10 +301,10 @@ async function handleAddUser() {
         });
       } catch (err) {
         // The market changed under the add (ADR 0024): who has access is re-read, the sentence kept.
-        if (isMarketChanged(err)) await fetchMarket(false, opening);
+        if (isMarketChanged(err)) await fetchMarket(false, isCurrent);
         throw err;
       }
-      await fetchMarket(false, opening);
+      await fetchMarket(false, isCurrent);
     },
     {
       done: () => {
@@ -348,9 +357,8 @@ async function handleRemoveUser() {
   const target = removing.value;
   const market = marketData.value;
   if (!market || !target) return;
-  const opening = openings;
   await removal.submit(
-    async () => {
+    async (isCurrent) => {
       userError.value = null;
       try {
         await api.delete(
@@ -360,13 +368,13 @@ async function handleRemoveUser() {
         if (getApiErrorStatus(err) !== 404) {
           // The market changed under the removal (ADR 0024): the list behind is re-read, the
           // confirmation kept open with the sentence.
-          if (isMarketChanged(err)) await fetchMarket(false, opening);
+          if (isMarketChanged(err)) await fetchMarket(false, isCurrent);
           throw err;
         }
       }
       // Held until the confirmation closes: during the re-read its Remove would send a second
       // removal.
-      await fetchMarket(false, opening);
+      await fetchMarket(false, isCurrent);
     },
     {
       done: async () => {
@@ -424,9 +432,8 @@ async function handleRoleChange() {
   const target = roleChange.value;
   const market = marketData.value;
   if (!market || !target) return;
-  const opening = openings;
   await roleChanging.submit(
-    async () => {
+    async (isCurrent) => {
       // A refusal closes the confirmation as a change does: what the write answers is its refusal's
       // sentence, or nothing.
       let refusal = '';
@@ -440,7 +447,7 @@ async function handleRoleChange() {
       }
       // Held until the confirmation closes: during the re-read its confirm would send a second
       // write.
-      await fetchMarket(false, opening);
+      await fetchMarket(false, isCurrent);
       return refusal;
     },
     {
@@ -476,19 +483,18 @@ async function handleRename() {
   const market = marketData.value;
   const name = renameValue.value.trim();
   if (!market || name === market.name) return;
-  const opening = openings;
   await rename.submit(
-    async () => {
+    async (isCurrent) => {
       try {
         // Its own write, carrying only the name - not the whole market (E21/F03/S04).
         await api.put(`/markets/${encodeURIComponent(market.id)}/name`, { name });
       } catch (err) {
         // The market changed under the rename (ADR 0024), most likely leaving draft: it is read
         // again, so the field gives way to why the name is fixed, the sentence kept.
-        if (isMarketChanged(err)) await fetchMarket(false, opening);
+        if (isMarketChanged(err)) await fetchMarket(false, isCurrent);
         throw err;
       }
-      await fetchMarket(false, opening);
+      await fetchMarket(false, isCurrent);
     },
     {
       done: () => {
@@ -524,17 +530,16 @@ function cancelHandOn() {
 async function handleHandOn(userId: string) {
   const market = marketData.value;
   if (!market) return;
-  const opening = openings;
   await handOn.submit(
-    async () => {
+    async (isCurrent) => {
       try {
         await api.post(`/markets/${encodeURIComponent(market.id)}/hand-on`, { userId });
       } catch (err) {
         if (isMarketChanged(err) || getApiErrorStatus(err) === 400)
-          await fetchMarket(false, opening);
+          await fetchMarket(false, isCurrent);
         throw err;
       }
-      await fetchMarket(false, opening);
+      await fetchMarket(false, isCurrent);
     },
     {
       done: async () => {

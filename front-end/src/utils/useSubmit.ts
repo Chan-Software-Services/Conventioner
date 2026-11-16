@@ -100,11 +100,13 @@ export interface SubmitOptions {
 /**
  * A form's submit, held by `submitStep`'s table (T277 ticket 08).
  *
- * `submit(send, handlers)` sends nothing while one is out; otherwise it awaits `send()` and hands
- * the answer to `done` or `refused` when the form is still in the opening it was sent in, and to
- * `late` when it is not. A change of `scope` is a new opening, at once (a synchronous watch, so no
- * answer can land between the change and the opening). Once the component is gone no handler is
- * called, `late` included: the screen it would speak to is gone.
+ * `submit(send, handlers)` sends nothing while one is out; otherwise it awaits `send(isCurrent)` and
+ * hands the answer to `done` or `refused` when the form is still in the opening it was sent in, and
+ * to `late` when it is not. `isCurrent()` says whether that opening still stands, for a re-read
+ * inside `send` to drop what it read once the form has moved on. A change of `scope` is a new
+ * opening, at once (a synchronous watch, so no answer can land between the change and the
+ * opening). Once the component is gone no handler is called, `late` included: the screen it would
+ * speak to is gone.
  *
  * No timer and no retry: a request that never answers is left to a reload.
  */
@@ -136,14 +138,18 @@ export function useSubmit(options: SubmitOptions = {}) {
   const sending = computed(() => phase.value.kind === 'sending');
   const sentence = computed(() => (phase.value.kind === 'refused' ? phase.value.sentence : ''));
 
-  async function submit<T>(send: () => Promise<T>, handlers: SubmitHandlers<T> = {}) {
+  async function submit<T>(
+    send: (isCurrent: () => boolean) => Promise<T>,
+    handlers: SubmitHandlers<T> = {},
+  ) {
     const before = now;
     step({ kind: 'submit' });
     if (now === before) return;
     const opening = now.opening;
+    const isCurrent = () => !gone && now.opening === opening;
     let answer: T;
     try {
-      answer = await send();
+      answer = await send(isCurrent);
     } catch (error: unknown) {
       if (gone) return;
       if (now.opening !== opening) {

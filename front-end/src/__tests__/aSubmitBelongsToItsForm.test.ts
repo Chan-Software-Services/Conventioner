@@ -111,7 +111,7 @@ const told: string[] = [];
  * A form with a field, a Send button and a step the test moves: the scope. It shows the phase, the
  * sentence and what `done` handed it; `refusedSays` is what its `refused` handler returns.
  */
-function tinyForm(send: () => Promise<string>, refusedSays?: string) {
+function tinyForm(send: (isCurrent: () => boolean) => Promise<string>, refusedSays?: string) {
   return defineComponent({
     setup() {
       const step = ref('one');
@@ -289,6 +289,42 @@ describe('useSubmit', () => {
     expect(send).toHaveBeenCalledTimes(2);
     expect(text('shown')).toBe('second');
     expect(told).toEqual(['done second', 'late ok first']);
+  });
+
+  it("tells the send whether its opening is still the form's, for a re-read inside it", async () => {
+    const answer = held<string>();
+    let isCurrent!: () => boolean;
+    wrapper = mount(
+      tinyForm((current) => {
+        isCurrent = current;
+        return answer.promise;
+      }),
+    );
+
+    await wrapper.get('form').trigger('submit');
+    expect(isCurrent()).toBe(true);
+
+    await wrapper.get('[data-testid="move"]').trigger('click');
+    expect(isCurrent()).toBe(false);
+
+    await wrapper.get('[data-testid="move"]').trigger('click');
+    expect(isCurrent()).toBe(false);
+  });
+
+  it('tells the send its opening is gone once the form is', async () => {
+    let isCurrent!: () => boolean;
+    wrapper = mount(
+      tinyForm((current) => {
+        isCurrent = current;
+        return new Promise(() => {});
+      }),
+    );
+
+    await wrapper.get('form').trigger('submit');
+    wrapper.unmount();
+    wrapper = null;
+
+    expect(isCurrent()).toBe(false);
   });
 
   it('calls nothing for an answer that lands after the form is gone', async () => {
