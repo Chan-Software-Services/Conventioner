@@ -140,7 +140,7 @@ CHECK_IN = action(
 CONNECT_DISCORD = action(
     "connect-discord", "Discord", "Connect Discord and give roles", MarketRole.ADMIN,
     "connect this market to Discord or give its role")
-#: The public map (T422, D25, ADR 0032): it publishes vendors' chosen answers to anyone, so it is
+#: The public map (T422, D25, ADR 0035): it publishes vendors' chosen answers to anyone, so it is
 #: a deliberate act of someone senior, and the market's history records who took it.
 PUBLISH_MAP = action(
     "publish-map", "Public map", "Publish the map", MarketRole.ADMIN,

@@ -14,7 +14,7 @@ sources:
 
 # The public map page
 
-A market's public map is a page anyone opens with no sign-in, at `/<market-slug>/map`, to find a vendor's table on a market day ([ADR 0032](../../adr/0032-the-public-map-publishes-a-vendors-chosen-answers.md)).
+A market's public map is a page anyone opens with no sign-in, at `/<market-slug>/map`, to find a vendor's table on a market day ([ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md)).
 [`PublicMapView.vue`](../../../front-end/src/views/PublicMapView.vue) draws it from [the public map's read](public-map.md), with the day map that Attendance draws too ([the component library](component-library.md) has its entry); [`utils/publicMap.ts`](../../../front-end/src/utils/publicMap.ts) holds its two reads and what it makes of the answer, pure but for the reads.
 
 ## The route
@@ -61,5 +61,5 @@ Every link opens in a new tab with `rel="noopener noreferrer"`.
 
 ## Why
 
-- [ADR 0032](../../adr/0032-the-public-map-publishes-a-vendors-chosen-answers.md): the map publishes only the answers the organizer chose, cleaned.
+- [ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md): the map publishes only the answers the organizer chose, cleaned.
 - [A gated market answers as absent](../../business/rules/a-gated-market-answers-as-absent.md): a closed map reads as no market.

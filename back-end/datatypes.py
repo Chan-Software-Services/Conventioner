@@ -819,7 +819,7 @@ class Market(BaseModel):
     # The Discord server it is connected to (E46/F01/S02). Server-owned: only the Discord card's
     # routes write it. Absent is not connected.
     discord: Optional["DiscordConnection"] = None
-    # What the public map shows and whether it is open (T422, ADR 0032). Server-owned: only the
+    # What the public map shows and whether it is open (T422, ADR 0035). Server-owned: only the
     # Public map card's write (``public_map.save_settings``) writes it. Absent is never set: off.
     public_map: Optional["PublicMapSettings"] = None
     # The stored document this market was parsed from, as it was read: what a write judged on this
@@ -1072,7 +1072,7 @@ class DiscordConnection(BaseModel):
 
 
 class PublicMapSettings(BaseModel):
-    """What a market's public map shows, and whether it is open (T422, ADR 0032).
+    """What a market's public map shows, and whether it is open (T422, ADR 0035).
 
     Each question is the key of a short text question of the market's own form, or None for not
     shown: the vendor's public name, their website and their Instagram handle are read from those

@@ -1776,7 +1776,7 @@ def public_get_vendor_page(market_slug: str) -> Response:
 
 @app.route('/public/markets/<market_slug>/map', methods=['GET'])
 def public_get_map(market_slug: str) -> Response:
-    """Public: the market's map, each market day's tables and who is at them (T422, ADR 0032). No
+    """Public: the market's map, each market day's tables and who is at them (T422, ADR 0035). No
     authentication. A market whose map is closed answers as a slug naming no market does."""
     answer = PublicMapApi.public_map(market_slug)
     if answer is None:

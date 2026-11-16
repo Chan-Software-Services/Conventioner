@@ -480,7 +480,7 @@ def vendor_page_market_by_slug(
 
 
 def public_map_market_by_slug(collection: Any, market_slug: str) -> Optional[Market]:
-    """The market whose public map is at this slug, or ``None`` (T422, D30, ADR 0032).
+    """The market whose public map is at this slug, or ``None`` (T422, D30, ADR 0035).
 
     The public map, ``/<slug>/map``, shows anyone each market day's tables and the vendors' chosen
     answers at them. A market has one while all of these hold: the vendor page finds it

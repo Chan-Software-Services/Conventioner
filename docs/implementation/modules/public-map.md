@@ -21,7 +21,7 @@ sources:
 
 # The public map
 
-A market's public map shows anyone, with no sign-in, each market day's tables and who is at them, at `/<slug>/map` ([ADR 0032](../../adr/0032-the-public-map-publishes-a-vendors-chosen-answers.md)).
+A market's public map shows anyone, with no sign-in, each market day's tables and who is at them, at `/<slug>/map` ([ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md)).
 [`back-end/public_map.py`](../../../back-end/public_map.py) holds its settings' write, its gate's own conditions, its read and its image; [`back-end/public_answers.py`](../../../back-end/public_answers.py) cleans the three answers it publishes.
 The page that draws it, and Attendance's map beside the list, read what this answers.
 

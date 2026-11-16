@@ -1,4 +1,4 @@
-"""A vendor's chosen answers as the public map publishes them, cleaned (T422, D28, ADR 0032).
+"""A vendor's chosen answers as the public map publishes them, cleaned (T422, D28, ADR 0035).
 
 The public map shows anyone three of a vendor's answers, each read from a short text question of the
 market's own form the organizer chose: a public name, a website and an Instagram handle. They are

@@ -69,7 +69,7 @@ Before then it has nothing to tell anyone, so its page would only confirm the ma
 One that has reached its market days has a page too, published or not: a Google Form market went live before it could publish results, and the change must not lock its vendors out; its vendors read their tables there as if its results were published.
 An archived one that reached them counts, by its phase record, and where that record began late, by a check-in, as everywhere else that asks whether a market ran.
 
-**A market's public map, `/<slug>/map`, answers the same way while it is closed** ([ADR 0032](../../adr/0032-the-public-map-publishes-a-vendors-chosen-answers.md)).
+**A market's public map, `/<slug>/map`, answers the same way while it is closed** ([ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md)).
 It is open only while the vendor page finds the market, its results are out (published, or it reached its market days), it is not archived, an Admin has turned it on, its public name question is still a short text question of the form, and a location is laid out with a table in a section; its read and its image then answer byte for byte as a slug naming no market does, with the vendor page's own body.
 A seat is never public before its vendor is told it, and an archived market can no longer be written, so its switch could never be turned off.
 What a public read may answer at all is [security invariants](../../implementation/conventions/security-invariants.md#each-request)' to say.

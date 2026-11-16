@@ -126,7 +126,7 @@ Everything an Editor may, and:
 - changing what a vendor owes (Daniel, T92 Q26: "this number can be changed by the admin")
 - adjusting what a vendor paid (Daniel, T92 Q26: "this number can be changed by the admin")
 - connect the market to Discord, choose its role, check who is in its server and give its role to the assigned vendors ([the Discord connection](../../implementation/modules/discord.md))
-- turn the public map on or off and choose what it shows ([the public map](../../implementation/modules/public-map.md), [ADR 0032](../../adr/0032-the-public-map-publishes-a-vendors-chosen-answers.md)), since it publishes vendors' answers to anyone
+- turn the public map on or off and choose what it shows ([the public map](../../implementation/modules/public-map.md), [ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md)), since it publishes vendors' answers to anyone
 - manage editors and viewers
 
 ### Owner

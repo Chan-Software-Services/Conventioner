@@ -1,4 +1,4 @@
-"""The public map's read and its image, for anyone (T422, ADR 0032).
+"""The public map's read and its image, for anyone (T422, ADR 0035).
 
 ``GET /public/markets/<slug>/map`` answers an allowlist (D26): the market's name and dates, its
 table types, each laid-out location's sections and layout, and each seat with three of its vendor's

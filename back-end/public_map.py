@@ -1,4 +1,4 @@
-"""The public map: each market day's tables and who is at them, for anyone (T422, ADR 0032).
+"""The public map: each market day's tables and who is at them, for anyone (T422, ADR 0035).
 
 **The settings are the Public map card's** (``PUT /markets/<id>/public-map``): whether the map is on,
 and which of the market's own short text questions hold each vendor's public name, website and

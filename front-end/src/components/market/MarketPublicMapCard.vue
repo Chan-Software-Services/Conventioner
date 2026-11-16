@@ -4,7 +4,7 @@
  *
  * The public map is a page anyone may open at `/<slug>/map`, with no sign-in, drawing each market
  * day's tables and who is at them. It publishes three answers of each vendor and nothing else of
- * them (ADR 0032): the form's short text questions an Admin points at here for the public name,
+ * them (ADR 0035): the form's short text questions an Admin points at here for the public name,
  * the website and the Instagram handle. The switch turns it on, and only once a name is chosen.
  *
  * Each choice saves as it is made through `PUT /markets/<id>/public-map`, and the page reads the
