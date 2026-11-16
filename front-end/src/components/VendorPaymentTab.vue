@@ -173,7 +173,7 @@ function onEntryMenu(entry: Payment, id: string): void {
   show(id === 'remove' ? { kind: 'remove', entry } : { kind: 'edit', entry });
 }
 
-/** The served state, for the chip's `data-state`: `none` for an account in none. */
+/** The served state, for the chip's `data-state`: `none` where the server reads no balance state. */
 const state = computed(() => account.value?.balanceState ?? 'none');
 
 /** What a line owes, as it reads: its amount, or that the market gives the seat no price. */

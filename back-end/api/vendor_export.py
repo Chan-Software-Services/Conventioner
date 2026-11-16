@@ -253,11 +253,12 @@ def money_cell(cents: int, currency: Optional[str]) -> str:
 
 def _offers_payment_states(market: Market) -> bool:
     """Whether anyone on the market may be in a payment state, as the Payments page reads it
-    (``Payments.offers_payment_states``); a market that sets prices reads no account for it."""
+    (``Payments.offers_payment_states``). Every account is read only on a market that sets no
+    prices, the one place the rule reads them."""
     pricing = market.setup_object.pricing if market.setup_object else None
-    if pricing:
-        return True
-    return Payments.offers_payment_states(None, PaymentsApi.accounts(market))
+    currency = pricing.currency if pricing else None
+    return Payments.offers_payment_states(
+        currency, PaymentsApi.accounts(market) if currency is None else {})
 
 
 def _no_account(currency: Optional[str]) -> Dict[str, Any]:

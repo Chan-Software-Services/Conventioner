@@ -66,8 +66,8 @@ export interface Payment {
  * How what a vendor paid compares with what they owe, as the server reads it (`balance_state` in
  * `back-end/payments.py`), the one reading the Payment tab, the Payments page's lists and the
  * export's payment filter share: they owe, paid in full (square, with something owed), or paid more
- * than owed. Null for a vendor in none: owing nothing and paying nothing, or owing nothing on a
- * market without prices.
+ * than owed. Null for a vendor in none: owing nothing and paying nothing, or, on a market without
+ * prices, owing nothing and paying something.
  */
 export type BalanceState = 'owes' | 'paid' | 'over';
 

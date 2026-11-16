@@ -68,12 +68,9 @@ type QueryValue = LocationQueryValue | LocationQueryValue[] | undefined;
 type Owing = Pick<MarketPayments, 'offersPaymentStates' | 'vendors'> | null | undefined;
 
 /**
- * Whether the market has money owed to count, as the server reads it (`offersPaymentStates`):
- * always where it sets prices, and where it sets none only where some vendor's account `compares`:
- * one owing an amount set by hand, or refunded beyond what it paid. Elsewhere nothing is owed, so
- * nobody is in a payment state: the reading follows each vendor's account, not the market (T153
- * review findings 10 and 14). The page draws the market's figures and offers its filters only where
- * this holds (finding 12).
+ * Whether the market has money owed to count, as the server serves it (`offersPaymentStates`, from
+ * `offers_payment_states` in `back-end/payments.py`). The page draws the market's figures and offers
+ * its filters only where this holds (T153 review finding 12).
  */
 export function owingCounted(payments: Owing): boolean {
   return !!payments?.offersPaymentStates;

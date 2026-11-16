@@ -2,7 +2,7 @@
  * A vendor's balance state is the server's to read (T335): the screens word and tone the state they
  * are served, over the one table of cases the back end's `compares` and `balance_state` are run
  * over (`back-end/tests/fixtures/balance_states.json`), so a case added there is checked on both
- * sides, and the two can never drift.
+ * sides.
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
