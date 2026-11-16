@@ -4,11 +4,16 @@
  * and an Admin may set it, $0 being how a fee is waived (Daniel, T92 Q26: "instead of a button to
  * waive, the admin will set amount owed to zero"). The dialog says the change before Save, which is
  * its confirmation.
+ *
+ * Its write belongs to its opening (T411): nothing closes it while it saves, and an answer that
+ * lands after it was closed and opened again leaves the new opening alone, handing on the account
+ * it carries (`refreshed`) so the account behind the dialog is true.
  */
 import { computed, ref, watch } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
-import { getApiErrorMessage } from '@/utils/api';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import {
+  accountAsItStands,
   currencyOf,
   money,
   setAmountOwed,
@@ -26,11 +31,19 @@ const props = defineProps<{
   line: PaymentLine | null;
   currency: string | null;
 }>();
-const emit = defineEmits<{ close: []; saved: [account: VendorAccount] }>();
+const emit = defineEmits<{
+  close: [];
+  saved: [account: VendorAccount];
+  /** An earlier opening's answer: the account as it stands, with this opening left open. */
+  refreshed: [account: VendorAccount];
+}>();
 
 const amount = ref('');
-const error = ref('');
-const busy = ref(false);
+const submission = useDialogSubmit({
+  opening: () => props.open,
+  failure: 'The amount owed could not be changed.',
+});
+const { sending } = submission;
 const account = computed(() => ({ currency: props.currency }));
 
 /** The amount reads as currency once left, in the account's (Canadian dollars where none is set). */
@@ -41,7 +54,6 @@ watch(
   (open) => {
     if (!open) return;
     amount.value = money(props.line?.owedCents ?? 0, account.value);
-    error.value = '';
   },
   { immediate: true },
 );
@@ -59,22 +71,20 @@ const sentence = computed(() => {
   const was = line.owedCents == null ? 'no price' : money(line.owedCents, account.value);
   return `${dateLabel(line.date)} will owe ${money(cents.value, account.value)} instead of ${was}.`;
 });
-const ready = computed(
-  () => cents.value !== null && cents.value !== props.line?.owedCents && !busy.value,
-);
+const ready = computed(() => cents.value !== null && cents.value !== props.line?.owedCents);
 
 async function save(): Promise<void> {
   const line = props.line;
-  if (!ready.value || !line || cents.value === null) return;
-  busy.value = true;
-  error.value = '';
-  try {
-    emit('saved', await setAmountOwed(props.marketId, props.email, line.date, cents.value));
-  } catch (err: unknown) {
-    error.value = getApiErrorMessage(err, 'The amount owed could not be changed.');
-  } finally {
-    busy.value = false;
-  }
+  const owed = cents.value;
+  if (!ready.value || !line || owed === null) return;
+  await submission.submit(() => setAmountOwed(props.marketId, props.email, line.date, owed), {
+    done: (account) => emit('saved', account),
+    // An earlier opening's answer: the account behind the dialog takes it, and this opening stays.
+    late: (answer) => {
+      const standing = answer.ok ? answer.answer : accountAsItStands(answer.error);
+      if (standing) emit('refreshed', standing);
+    },
+  });
 }
 </script>
 
@@ -84,9 +94,9 @@ async function save(): Promise<void> {
     title="Change the amount owed"
     testid="change-owed"
     anchored
-    :confirm-label="busy ? 'Saving…' : 'Set amount owed'"
+    :confirm-label="sending ? 'Saving…' : 'Set amount owed'"
     :confirm-disabled="!ready"
-    :error="error"
+    :submission="submission"
     @close="emit('close')"
     @submit="save"
   >

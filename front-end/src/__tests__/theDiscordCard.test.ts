@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils';
+import { tryEveryClose } from './support/dialogCloses';
 
 import MarketDiscordCard from '@/components/market/MarketDiscordCard.vue';
 import type { DiscordConnection, Market } from '@/assets/types/datatypes';
@@ -382,6 +383,48 @@ describe('a market connected, for an Admin', () => {
 
     expect(api.delete).toHaveBeenCalledWith('/markets/market-123/discord/connection');
     expect(wrapper.emitted('changed')).toHaveLength(1);
+    wrapper.unmount();
+  });
+});
+
+describe('Disconnect, while its write is out', () => {
+  it('sends one disconnect for two presses, and nothing closes it meanwhile', async () => {
+    let answer!: (value: unknown) => void;
+    api.delete.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const wrapper = card(market({ discord: CONNECTED }));
+    await flushPromises();
+    await find(wrapper, 'discord-disconnect-button').trigger('click');
+
+    await find(wrapper, 'discord-disconnect-window').find('form').trigger('submit');
+    await find(wrapper, 'discord-disconnect-window').find('form').trigger('submit');
+    await flushPromises();
+
+    expect(api.delete).toHaveBeenCalledTimes(1);
+    expect(find(wrapper, 'discord-disconnect-submit-button').attributes('disabled')).toBeDefined();
+    await tryEveryClose('discord-disconnect');
+    expect(find(wrapper, 'discord-disconnect-window').exists()).toBe(true);
+
+    answer({ data: {} });
+    await flushPromises();
+    expect(find(wrapper, 'discord-disconnect-window').exists()).toBe(false);
+    expect(wrapper.emitted('changed')).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it('says a refusal, and opens afresh without it', async () => {
+    api.delete.mockRejectedValueOnce(refusedWith('Discord could not be reached.'));
+    const wrapper = card(market({ discord: CONNECTED }));
+    await flushPromises();
+    await find(wrapper, 'discord-disconnect-button').trigger('click');
+    await find(wrapper, 'discord-disconnect-submit-button').trigger('click');
+    await flushPromises();
+    expect(find(wrapper, 'discord-disconnect-error').text()).toBe('Discord could not be reached.');
+
+    await find(wrapper, 'discord-disconnect-cancel-button').trigger('click');
+    await find(wrapper, 'discord-disconnect-button').trigger('click');
+
+    expect(find(wrapper, 'discord-disconnect-window').exists()).toBe(true);
+    expect(find(wrapper, 'discord-disconnect-error').exists()).toBe(false);
     wrapper.unmount();
   });
 });
