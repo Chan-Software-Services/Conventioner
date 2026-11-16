@@ -87,8 +87,9 @@ const props = withDefaults(
     scroll?: 'window' | 'body';
     /**
      * With `scroll="body"`, at 640px wide or tall or less: as tall as its content needs, up to the
-     * window less the gutter, where every other such dialog is that tall whatever it holds (Daniel's
-     * choice 22). Its title and actions stay pinned and its body scrolls between them past the cap.
+     * window less the gutter, where every other such dialog is that tall whatever it holds
+     * (Daniel's choice 22). Its title and actions stay pinned and its body scrolls between them
+     * past the cap.
      * For a long dialog whose list is usually short, as "Choose what leads the card" (T446).
      */
     fitsContentOnAPhone?: boolean;

@@ -262,11 +262,9 @@ test.describe('What a reviewer reads first', () => {
 });
 
 /**
- * The ticks open in a dialog over the card (T217), where they used to unfold between its answers and
- * its verdict buttons: the card stays where it is, the same application is up after, and a verdict
- * key never reaches a card the reviewer cannot see.
+ * A queue of its own: a test in either describe below may give a verdict, which would move the
+ * others' cards.
  */
-/** A queue of its own: a test here gives a verdict, which would move the others' cards. */
 async function aQueue(
   request: APIRequestContext,
   page: Page,
@@ -283,6 +281,11 @@ async function aQueue(
   return monitor;
 }
 
+/**
+ * The ticks open in a dialog over the card (T217), where they used to unfold between its answers and
+ * its verdict buttons: the card stays where it is, the same application is up after, and a verdict
+ * key never reaches a card the reviewer cannot see.
+ */
 test.describe('Choosing what leads the card, in a dialog', () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 

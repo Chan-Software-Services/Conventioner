@@ -11,9 +11,9 @@ import { inTheWindow, type PhoneOrDesk } from './helpers/phoneWindow';
  * the title and actions in view, its shades say there is more, and nothing in it is clipped; a long
  * dialog is capped at 80% of a desk's window and fills a phone's or a short window's less the
  * gutter, unless it fits its content on a phone, when it is as tall as a short list; on a browser
- * that draws classic scroll bars no bar reaches it; the tray stays pinned and scrolls inside itself; a footer needs no form; a dialog with nothing to focus opens where the keys
- * scroll it; and every behaviour a dialog had is kept in either scroll. Dialogs close by Escape and
- * by Cancel.
+ * that draws classic scroll bars no bar reaches it; the tray stays pinned and scrolls inside
+ * itself; a footer needs no form; a dialog with nothing to focus opens where the keys scroll it;
+ * and every behaviour a dialog had is kept in either scroll. Dialogs close by Escape and by Cancel.
  */
 
 const SECTIONS = [

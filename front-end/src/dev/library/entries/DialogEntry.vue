@@ -3,7 +3,8 @@
  * The dialog (T200, T217): `AppDialog` in its three widths, the whole-window scroll beside the body
  * scroll on the same 150-person list, the body scroll with a tray, the footer without a form, a
  * read-only list the keys scroll, a short list that fits its content on a phone (T446), and the
- * dialogs that prove every behaviour is kept, each on the fixture's people, applicants and columns. Daniel's choices on it are made, so it asks none.
+ * dialogs that prove every behaviour is kept, each on the fixture's people, applicants and columns.
+ * Daniel's choices on it are made, so it asks none.
  *
  * Every dialog here is the real `AppDialog`, opened from a button the way a screen opens one; the
  * line under each button reads out how it last closed, so a save is seen to land and a close is
