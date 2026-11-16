@@ -557,6 +557,8 @@ export interface SeedZone {
   label: string;
   /** Its top-left corner, its width and its depth, in millimetres. */
   box: [number, number, number, number];
+  /** Its turn in degrees clockwise about its centre; none unless given. */
+  rotation?: number;
 }
 
 /** A row of `count` six-foot tables, touching, from its first table's centre: across the hall, or
@@ -733,6 +735,9 @@ export async function startLayout(
     metresAcross?: number;
     tables?: { section: string | null; at: [number, number]; rotation?: number }[];
     zones?: SeedZone[];
+    /** What each table's id starts with, `table` unless given: a market of two layouts gives each
+     *  its own, since a seat names its table by id alone. */
+    tablePrefix?: string;
   },
 ): Promise<{ id: string; revision: number }> {
   if ((options.tables?.length || options.zones?.length) && !options.metresAcross)
@@ -789,7 +794,7 @@ export async function startLayout(
       const number = table.section ? (numbers.get(table.section) ?? 0) + 1 : null;
       if (table.section && number) numbers.set(table.section, number);
       return {
-        id: `table-${i + 1}`,
+        id: `${options.tablePrefix ?? 'table'}-${i + 1}`,
         sectionId: table.section,
         number,
         tableTypeId: typeId,
@@ -805,6 +810,7 @@ export async function startLayout(
       yMm: zone.box[1],
       widthMm: zone.box[2],
       depthMm: zone.box[3],
+      rotation: zone.rotation ?? 0,
     }));
     const placed = await request.post(`${baseURL}/floorplans/save-to-market`, {
       data: {

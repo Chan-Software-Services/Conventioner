@@ -32,6 +32,7 @@ describes:
   - front-end/e2e/helpers/seeds.ts#seedSettledLayout
   - front-end/e2e/helpers/seeds.ts#recordCheckIns
   - front-end/e2e/helpers/seeds.ts#allocateThenFreeEverySeat
+  - front-end/e2e/helpers/seedMarketDayMap.ts
 verified: 2026-11-12
 sources:
   - E02
@@ -61,6 +62,7 @@ sources:
   - T318
   - T277
   - T316
+  - T422
 ---
 
 # E2E seeds
@@ -255,7 +257,20 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
 
 **`startLayout()`** ([file](../../../front-end/e2e/helpers/seeds.ts))
 
-- Leaves: a location's layout started on a market in Draft as the page starts it, calibrated to `metresAcross` when given, with `tables` (each naming its section by id) and `zones` on it; `seedLayout()` and `seedAssignedMarket({ laidOut })` call it
+- Leaves: a location's layout started on a market in Draft as the page starts it, calibrated to `metresAcross` when given, with `tables` (each naming its section by id) and `zones` (each turned by its `rotation`, none unless given) on it; `seedLayout()` and `seedAssignedMarket({ laidOut })` call it
+- Notes: its tables' ids are `table-1` on, or `tablePrefix` and their place, which a market of two layouts sets for each, since a seat names its table by id alone
+
+**`seedMarketDayMap()`** ([file](../../../front-end/e2e/helpers/seedMarketDayMap.ts))
+
+- Leaves: a `form` market in `market_days`, today its first date and tomorrow its second, for every spec of the day map, the public map and Attendance's map (T422):
+  - East Hall laid out in Draft with Aisle A's four tables in a row and a stage turned 30 degrees, and West Hall with Aisle B's three, each layout's tables with ids of its own
+  - seven vendors seated by hand today on an allocation (`allocateThenFreeEverySeat()`), two of them sharing Aisle A 3 as its left and right halves, and two seated tomorrow
+  - the first vendor checked in today at the door, and an organizer's note on the second
+  - the form's three short text questions, a business name, a website and an Instagram handle, answered by most vendors in the shapes the map cleans, one answering none and one giving an email address as their business name
+- With `publicMap: true`, the map turned on through the Public map card's own write, its three questions chosen
+- Notes:
+  - answers the vendors (`DAY_MAP_VENDORS`), their seats and answers, the halls and their ids, and `personalMarkers`, every name, address and note a public page must never show
+  - every value is a fixture value, none from a real floorplan or export
 
 **A vendor is seeded as an approved application**, which is what the solver reads ([ADR 0003](../../adr/0003-applications-are-the-solvers-only-input.md)).
 `seedApprovedVendor()` writes the essential answers in the shapes `essential_fields.py` validates into (dates and tiers as the plan's own names, the count an integer, the table choice lower-cased).

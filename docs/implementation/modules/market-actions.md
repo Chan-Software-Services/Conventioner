@@ -53,6 +53,7 @@ sources:
   - T274
   - T283
   - T315
+  - T422
 ---
 
 # The market's actions
@@ -349,6 +350,14 @@ Asked by:
   - `GET /markets/:id/discord/roles`
 - the Vendors page's "Check Discord", `POST /markets/:id/discord/check`
 - the Vendors page's "Give roles", `POST /markets/:id/discord/role-run`
+
+### Publish the map (`publish-map`)
+
+Default: Admin.
+
+Asked by:
+
+- the Public map card's write, `PUT /markets/:id/public-map` ([the public map](public-map.md#the-settings))
 
 ### Give and take Editor and Viewer roles (`manage-editors-and-viewers`)
 

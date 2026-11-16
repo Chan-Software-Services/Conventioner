@@ -121,7 +121,9 @@ def _started(plan: SetupObject, floorplan: FloorplanObject) -> FloorplanObject:
         for section in plan.sections
         if section.location is not None and section.location.id == floorplan.location_id
     ]
-    return floorplan.model_copy(update={"starting_counts": counts})
+    # Started in Draft: its tables are the seats, and it never follows the plan, whatever the body
+    # says; one started after Draft is ticket 03's (T422, D21).
+    return floorplan.model_copy(update={"starting_counts": counts, "follows_plan": False})
 
 
 # ── POST /save-to-market ──────────────────────────────────────────────────────
@@ -152,7 +154,8 @@ def save_floorplan_to_market() -> Tuple[Any, int]:
          seat (a table added, removed, renumbered, of another id, section or type), is refused 409
          with the setup-settled sentence (``layout.settled_layout_refusal``); where a table stands,
          the zones, the image, the scale and the sections' colours and labels still change.
-         A layout keeps its location, its starting counts and moves its revision by one;
+         A layout keeps its location, its starting counts and whether it follows the plan
+         (``followsPlan``, whatever the body sends), and moves its revision by one;
          a new one records Section Setup's counts for its location's sections, starts at revision
          1, and gives a market with no table type "Standard 6 ft".
       5. Write it through ``MarketsApi.prepared_plan`` with those floorplans, the plan write's own
@@ -230,7 +233,8 @@ def save_floorplan_to_market() -> Tuple[Any, int]:
             table_types = [TableTypeObject(id=str(uuid.uuid4()), **STANDARD_TABLE_TYPE)]
     else:
         floorplan = floorplan.model_copy(update={
-            "location_id": held.location_id, "starting_counts": held.starting_counts})
+            "location_id": held.location_id, "starting_counts": held.starting_counts,
+            "follows_plan": held.follows_plan})
     # A table of a section not its location's is stored in none, of no number (T257).
     floorplan = Layout.in_its_sections(
         floorplan.model_copy(update={"revision": revision + 1}), proposed)

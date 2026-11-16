@@ -158,6 +158,7 @@ ROW_WRITES = {
     "delete-market": ("delete", "/markets/market-123", None),
     "change-the-table": ("put", "/markets/market-123/permissions/check-in", {"role": "admin"}),
     "connect-discord": ("put", "/markets/market-123/discord", {"inviteLink": ""}),
+    "publish-map": ("put", "/markets/market-123/public-map", {"enabled": False}),
 }
 
 #: A row's other writes, met the same way: resetting one row, or the whole table, is the table's row

@@ -54,6 +54,8 @@ describes:
   - front-end/src/components/layout/LayoutPanelZones.vue
   - front-end/src/components/layout/exportLayoutPng.ts
   - front-end/src/components/layout/LayoutExportDialog.vue
+  - front-end/src/components/daymap/DayMap.vue
+  - front-end/src/components/daymap/dayMap.ts
 verified: 2026-11-14
 sources:
   - bug/38
@@ -69,6 +71,7 @@ sources:
   - T257
   - T282
   - T315
+  - T422
 ---
 
 # A location's layout
@@ -110,13 +113,13 @@ The image is fetched with the session as a blob ([`useFloorplanImage.ts`](../../
 ## The drawing
 
 [`LayoutMap.vue`](../../../front-end/src/components/layout/LayoutMap.vue) is the one drawing of a layout, in SVG, for the page, the editor and [the PNG export](#export-png), and for any later map.
-Its props are the layout, its location's name, the plan's sections, the market's table types, the image as the page fetched it, `mode` (`read`, `edit` or `print`), `showImage` (unless told, the image is drawn in `read` and `edit` and left out of `print`), `view`, `selection`, `guides`, `carried` and `numbers` (unless told, each table carries its number); it emits `activate` with a table's id and `focused` with the id of a table given the focus, and draws its default slot last, over the tables, in its millimetres, handing it the millimetres to a pixel.
-It holds no editing state: its only state is which table has the focus and, in `read`, the part of the hall it was looked round to.
+Its props are the layout, its location's name, the plan's sections, the market's table types, the image as the page fetched it, `mode` (`read`, `edit` or `print`), `showImage` (unless told, the image is drawn in `read` and `edit` and left out of `print`), `imageInGrey` and `imageFaded` (unless told, both: the image in grey and at half strength in `read` and `edit`), `view`, `selection`, `guides`, `carried`, `numbers` (unless told, each table carries its number), `seats` (a day's seats, none unless told) and `marked`; it emits `activate` with a table's id, `activateSeat` with a seat's key, and `focused` with the id of a table given the focus, and draws its default slot last, over the tables, in its millimetres, handing it the millimetres to a pixel.
+It holds no editing state: its only state is which table or half has the focus and, in `read`, the part of the hall it was looked round to.
 
 - **Its units are millimetres** from the floorplan's top-left corner, so a table is its true size at any zoom: `view` is the part of the hall shown (the whole hall when not given, drawn whole inside the map's box), the image is drawn the hall wide, and a table is a rectangle about its centre, moved and turned by its group's `transform`.
 - **What is read in pixels holds its size at every zoom**: edges and outlines by `vector-effect: non-scaling-stroke`, and names, numbers, gaps and the zones' hatch by the scale the map measures its own box at (a `ResizeObserver`).
   100% is 1 px to 25 mm (`PX_PER_MM_AT_100`).
-- **It draws** the floor, the image (at half strength and grey in `read` and `edit`), each no-table zone hatched with its label, each table in its section's colour of [the section palette](../../design-system.md#the-section-palette) with its number, a table whose section is gone or is another location's, or that has no number, in grey with none, and each section's name in a pill.
+- **It draws** the floor, the image (at half strength and grey in `read` and `edit`, unless told otherwise), each no-table zone hatched with its label (a zone with a `rotation` turned about its centre, its label turned back upright), each table in its section's colour of [the section palette](../../design-system.md#the-section-palette) with its number, a table whose section is gone or is another location's, or that has no number, in grey with none, and each section's name in a pill.
   A table's number is 14 px where the table has the room, smaller to fit, and left out of a table too small to carry it at 6 px (`numberSizePx`); it turns with its table and never reads upside down.
 - **A section's name** goes where its style's `labelAt` says, else where `sectionLabelAt` puts it: just outside the section's own tables on the longer side of their box, the side toward the hall's centre, at that side's middle; where that would cover a table or another name, or leave the hall, it slides along the side, then tries the other sides.
   It stands against the section's tables there, not against the box, so the name of an L-shaped section is beside one of its arms.
@@ -129,12 +132,30 @@ It holds no editing state: its only state is which table has the focus and, in `
   A tap is read at `pointerup`, not by its click, since Chromium sends no click for a tap that comes as the last drag's fling would be running; the click that follows a press is its own and reads nothing, so a click with no press before it, a screen reader's, is the one that reads.
   At the whole hall the map's `touch-action` is `pan-y`, so one finger scrolls the page as it would anywhere, and zoomed in it is `none`, so the finger drags the map; a pinch is never the page's, which keeps its zoom.
   A box of another size (a phone turned) keeps the view's middle and its zoom.
+  At a desk (T422, D42) Ctrl and the wheel zoom it about the pointer (`zoomedView`, a notch held to a quarter more or less, as the editor's), a mouse drag pans it once zoomed, as a finger does, and a plain wheel is left to the page, which scrolls; `zoomIn`, `zoomOut` (half again, a third less, about the middle) and `fit` are exposed for a caller's buttons, and `data-zoomed` says when it is zoomed in.
+- **Given `seats`, in `read` or `print`, it is a day's map** (T422, D40, D41): each seat is `{ key, tableId, half, tone, name }`, `half` `whole`, `left` or `right` and `tone` `filled` or `outlined`, and the first seat given each part of a table counts.
+  A table with a whole seat is drawn in its seat's tone (`seatPaint`, [the tones](../../design-system.md#the-section-palette)) and named "Gold row 5, Standard 6 ft, Acme Ceramics"; a table with a left or right seat and no whole one is two halves (`halfTable`), each drawn in its seat's tone with its label ("5L"), each half with a seat a button of its own named "Gold row 5, Standard 6 ft, left half, Acme Ceramics" and carrying `data-seat-key`, left before right, a half with no seat drawn free and no button, and the table itself then no button; a table with no seat is drawn free, still a button, named "Gold row 5, Standard 6 ft, no vendor".
+  A table in no section, which no seat can name, is drawn as it is planned; `edit` draws no seat.
+  The halves join the one Tab stop and the arrow keys as targets of their own, each at its own middle (`data-target`, "<id>#left").
+  A press on a seat, by pointer, Enter, Space or a tap, emits `activateSeat` with its key, then `activate` with the table's id; a press on a free table or half emits `activate` alone, and a tap on the floor beside a shared table reads the half on its side (`halfAt`).
+  `marked` (seat keys or table ids) is outlined as `selection` is, round the table, or round the half a marked seat holds.
+- **The selection's outline hugs the table**: 1.5 px of `--mm-black` (`OUTLINE_WIDTH_PX`), its inner side on the outer side of the table's edge (`OUTLINE_OUT_PX`), in the editor and for the read map's mark.
 - **`edit` draws the selection's outline** and the guides it is given, says each table pressed or not (`aria-pressed`) as it is selected or not, draws the tables it is told were picked up by keyboard (`carried`) lifted, and leaves a press to the editor; `print` is a picture named as the map is, with no button and no stop.
 - **A table's paint is written on its shapes** (`fill="var(--layout-section-1-fill)"`), not in a class, and its sizes are attributes, so the markup carries the drawing wherever it goes; the tokens still resolve from the page's stylesheet.
 - **A focused table draws the app's button border itself**, a shape over its own edge ([the design language](../../design-system.md#the-primitive-layer)), since a CSS outline on an SVG shape is measured in the drawing's units.
 - Each table is a component of its own ([`LayoutMapTable.vue`](../../../front-end/src/components/layout/LayoutMapTable.vue)) whose props are plain values, so a table whose values did not change is not drawn again when another does, and a pan, a change of `view` at the same zoom, changes the `viewBox` and no table.
 
-The geometry is pure, in [`layoutGeometry.ts`](../../../front-end/src/components/layout/layoutGeometry.ts) (a turned table's corners and box, the palette's order, a name's place, the arrow keys' focus, a number's size, and [the editor's](#the-editor)), and what the drawing says, in [`layoutDrawing.ts`](../../../front-end/src/components/layout/layoutDrawing.ts) (`layoutSections`, a location's sections with their colours and tables, which the map and the panel's list both read; a table's code and name; a place in metres to one decimal; a width of words in the app's type).
+The geometry is pure, in [`layoutGeometry.ts`](../../../front-end/src/components/layout/layoutGeometry.ts) (a turned table's corners and box, a shared table's halves, a turned zone's corners and box, `zoneCorners` and `zoneBounds`, the palette's order, a name's place, the arrow keys' focus, a number's size, a read map's view zoomed, and [the editor's](#the-editor)), and what the drawing says, in [`layoutDrawing.ts`](../../../front-end/src/components/layout/layoutDrawing.ts) (`layoutSections`, a location's sections with their colours and tables, which the map and the panel's list both read; a table's code and name; a seat's tone's paint; a place in metres to one decimal; a width of words in the app's type).
+
+### The day map
+
+[`DayMap.vue`](../../../front-end/src/components/daymap/DayMap.vue) is a location's layout drawn on one market date, for the public map page and for Attendance (T422).
+Its props are the locations (each its id, name, layout, the plan's sections of it and its image's address), the table types, the open location's id (`v-model:locationId`), the day's seats, the picked seat's key or table's id, `marked`, and the legend (each a tone and the page's word for it).
+It draws the location switch as [filter toggles](../../design-system.md#the-primitive-layer) for two locations or more, the drawing in `read` with the seats and the picked and marked outlined, Zoom out, Zoom in and Fit on the map's bottom-right corner, and the legend under the map; it emits the location chosen and `pick` with the table pressed and the seat pressed on it, or null.
+Its frame takes the open hall's shape, no taller than 70% of the window; in a box narrower than 30rem (a container query) the zoom stands under the map, at the legend's end, rather than over it.
+It holds no market state and reads no store and no API: each page hands it its own data.
+
+[`dayMap.ts`](../../../front-end/src/components/daymap/dayMap.ts) holds the public map's answer as the server serves it (`PublicMapAnswer`) and turns it and Attendance's roster into what the day map draws, purely: `publicDayLocations` makes each public location a layout the drawing takes, its image at the address the page gives; `publicSeats` gives a date's seats, each taken (`filled`), keyed by its table and half, a seat with no public name named "vendor not listed"; `rosterSeats` gives a date's roster rows as seats, here and here at another table `filled` and expected `outlined`, keyed by the vendor's email, each matched to a table by its code built from its section's name and its number as the server's `table_code_for` builds it, with the rows whose table is on no layout returned apart and a check-in with no seat left out.
 
 ## Export PNG
 
@@ -411,7 +432,7 @@ The route has no blanket `except`, so a refusal `prepared_plan` raises answers i
 It answers 409 "This layout changed elsewhere. Reload to see the latest." when the layout of that id holds another revision, when a new id names a revision but 0, and when a new layout's location already has one, so two tabs that each start a hall's layout cannot both land; the write itself holds what was read (the layout at its place and revision, or no layout of its id or location), so a save landing between this one's read and its write makes this one 409 too.
 **Past draft a save moves tables, never seats** ([the setup settles on leaving draft](../../business/rules/the-setup-settles-on-leaving-draft.md)).
 Once the market has left draft (`setup_lock_reason`), after the revision's 409, a new layout is refused 409 with the setup-settled sentence, and so is a save that `layout.settled_layout_refusal` finds changing the stored plan's seats (each table's id, section, number and type), its table types or its set of layouts; a table moved or turned, the zones, the image, the scale and the section styles save.
-A layout keeps its location and its starting counts whatever the body sends; a new one records `startingCounts`, Section Setup's count for each section of its location as the save found them, and gives a market with no table type "Standard 6 ft" (1830 by 760 mm), through `prepared_plan`'s `table_types`.
+A layout keeps its location, its starting counts and whether it follows the plan (`followsPlan`, false on one started in Draft, [the public map](public-map.md#what-a-layout-stores-for-it)) whatever the body sends; a new one records `startingCounts`, Section Setup's count for each section of its location as the save found them, and gives a market with no table type "Standard 6 ft" (1830 by 760 mm), through `prepared_plan`'s `table_types`.
 An image the layout no longer names is deleted by id once the write has landed.
 The answer is `{floorplan, sections}`, the layout and the plan's sections as stored, so the editor adopts the revision and the derived counts at once.
 
