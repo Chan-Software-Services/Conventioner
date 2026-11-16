@@ -120,7 +120,7 @@ On a pull request, once the shards have run, CI's `e2e` job audits the selection
 python3 scripts/affected-specs.py audit --github --base HEAD^1 --head HEAD <each shard's results.json>
 ```
 
-It takes the pull request's diff from its merge commit's first parent, as `e2e-repeat` does, and the newest map and its minutes as a builder's run does, and names each spec with a failed test in the shards' reports as one of three:
+It takes the pull request's diff from its merge commit's first parent, as `e2e-repeat` does, and the newest map and its minutes as a builder's run does, and names each spec file with a failed test in the shards' reports, a test a helper registers counting under the spec file that calls it, as one of three:
 
 - **ran**: the selection runs it, so a builder's `--run` would have shown the failure;
 - **left to CI**: the selection chose it, but past the cap;

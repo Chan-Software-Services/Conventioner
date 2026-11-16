@@ -618,6 +618,24 @@ class TestTheAudit:
         assert "::warning" not in out
         assert "no failure to audit" in summary.read_text()
 
+    def test_a_test_a_helper_registers_fails_under_the_spec_file_that_calls_it(self, repo, tmp_path):
+        # Playwright's report gives a test the file its `test()` call is in, so the screen sweeps'
+        # tests, registered by `helpers/screenSweeps.ts`, carry the helper's name; the spec file is
+        # the top-level suite's, as `e2e-shards.ts` times it.
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        git(repo, "commit", "-qam", "the change")
+        helper = "helpers/screenSweeps.ts"
+        failed = {"title": "a screen", "file": helper, "tests": [{"status": "unexpected", "results": []}]}
+        report = tmp_path / "pr" / "e2e-results-shard-1" / "results.json"
+        report.parent.mkdir(parents=True)
+        report.write_text(json.dumps({"suites": [{
+            "title": "a.spec.ts", "file": "a.spec.ts", "specs": [],
+            "suites": [{"title": "the sweeps", "file": helper, "specs": [failed]}],
+        }]}))  # fmt: skip
+        out = self.audit(repo, str(report))
+        assert "ran: a.spec.ts" in out
+        assert helper not in out
+
     def test_a_report_it_cannot_read_is_named_and_the_rest_audited(self, repo, tmp_path):
         args = self.three_failures(repo, tmp_path)
         broken = tmp_path / "pr" / "e2e-results-shard-3" / "results.json"

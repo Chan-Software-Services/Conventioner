@@ -550,16 +550,18 @@ FAILED = ("unexpected", "flaky")
 def failed_specs(reports: Sequence[Path]) -> Tuple[Set[str], List[str]]:
     """The spec files with a failed test in Playwright JSON reports, and the reports it could not
     read. A test failed when its outcome is `unexpected`, or `flaky`: it passed only on a retry,
-    which under CI fails its shard (`failOnFlakyTests`)."""
+    which under CI fails its shard (`failOnFlakyTests`). A test is named by its top-level suite's
+    file, the spec file Playwright loaded, never by its own `file`, which is where its `test()`
+    call is: a helper's, for the tests `helpers/screenSweeps.ts` registers."""
     failed: Set[str] = set()
     unread: List[str] = []
 
     def walk(suite: dict, file: str) -> None:
         for spec in suite.get("specs", []):
             if any(test.get("status") in FAILED for test in spec.get("tests", [])):
-                failed.add(spec.get("file") or file)
+                failed.add(file)
         for inner in suite.get("suites", []):
-            walk(inner, inner.get("file") or file)
+            walk(inner, file)
 
     for report in reports:
         try:
