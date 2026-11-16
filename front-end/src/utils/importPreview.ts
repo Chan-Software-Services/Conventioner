@@ -1,7 +1,7 @@
 /**
  * The import preview's headline (E38/F03/S02): what the import will write, and how many of the
- * rows the automatic rejections will reject. A pure function, so the wording and its counting are
- * tested apart from the view that shows it.
+ * rows the automatic rejections will reject; and the line under it, what each row becomes. Pure
+ * functions, so the wording and its counting are tested apart from the view that shows them.
  */
 
 /** How many rows each of the import's lists shows before "Show all N". */
@@ -36,6 +36,8 @@ export interface ImportPreviewCounts {
   newRows: number;
   updatedRows: number;
   unchangedRows: number;
+  /** Updated applications already decided that the import leaves at their verdict. */
+  keptVerdicts: number;
   rejected: number;
 }
 
@@ -73,6 +75,40 @@ export function previewHeadline(counts: ImportPreviewCounts): string {
     if (!rejected) return '';
     return `; ${rejected}${ofThem ? ' of them' : ''} will be rejected by your automatic rejections`;
   }
+}
+
+/**
+ * The line under the headline: how the file lands against what is already here, on a re-import,
+ * then what each row becomes, each clause only when its count is above 0 (T116 rereview 10). An
+ * update to an application already decided keeps its verdict unless the server counts it among
+ * those returning to review or newly rejected, so the line never says every row awaits review.
+ */
+export function previewMergeLine(
+  counts: Pick<
+    ImportPreviewCounts,
+    'newRows' | 'updatedRows' | 'unchangedRows' | 'keptVerdicts' | 'rejected'
+  >,
+): string {
+  const { newRows, updatedRows, unchangedRows, keptVerdicts, rejected } = counts;
+  const merge =
+    updatedRows || unchangedRows
+      ? `${newRows} new, ${updatedRows} updated${unchangedRows ? `, ${unchangedRows} unchanged` : ''}. `
+      : '';
+  const clauses: string[] = [];
+  if (newRows) clauses.push('a new row becomes an application awaiting your review');
+  if (keptVerdicts)
+    clauses.push(
+      keptVerdicts === 1
+        ? 'the 1 updated application already decided keeps its verdict'
+        : `the ${keptVerdicts} updated applications already decided keep their verdict`,
+    );
+  if (rejected)
+    clauses.push(
+      `the ${rejected} listed below ${rejected === 1 ? 'arrives' : 'arrive'} already rejected`,
+    );
+  const becomes = clauses.join('; ');
+  const said = becomes ? `${becomes.charAt(0).toUpperCase()}${becomes.slice(1)}. ` : '';
+  return `${merge}${said}Nothing has been written yet.`;
 }
 
 /**

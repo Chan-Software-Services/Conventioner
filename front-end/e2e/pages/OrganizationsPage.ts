@@ -25,11 +25,15 @@ export class OrganizationsPage {
   readonly createOverlayBackground: Locator;
   readonly createNameInput: Locator;
   readonly createSubmitButton: Locator;
+  /** What the New organization dialog says of a create the server refused. */
+  readonly createError: Locator;
 
   // ── Manage org overlay ──
   readonly manageOverlayBackground: Locator;
   readonly renameInput: Locator;
   readonly renameSaveButton: Locator;
+  /** What the rename row says of a rename the server refused. */
+  readonly renameError: Locator;
   readonly addAdminButton: Locator;
   readonly addAdminInput: Locator;
   readonly addAdminSubmit: Locator;
@@ -107,6 +111,7 @@ export class OrganizationsPage {
     this.createOverlayBackground = page.getByTestId('organizations-overlay-background');
     this.createNameInput = page.getByTestId('organizations-create-name-input');
     this.createSubmitButton = page.getByTestId('organizations-create-submit-button');
+    this.createError = page.getByTestId('organizations-create-error');
 
     // ManageOrgOverlay
     this.manageOverlayBackground = page.getByTestId('manage-org-background');
@@ -115,6 +120,7 @@ export class OrganizationsPage {
     this.manageCloseButton = page.getByTestId('manage-org-close-button');
     this.renameInput = page.getByTestId('manage-org-rename-input');
     this.renameSaveButton = page.getByTestId('manage-org-rename-save-button');
+    this.renameError = page.getByTestId('manage-org-rename-error');
     this.addAdminButton = page.getByTestId('manage-org-add-admin-button');
     this.addAdminInput = page.getByTestId('manage-org-add-admin-input');
     this.addAdminSubmit = page.getByTestId('manage-org-add-admin-submit');

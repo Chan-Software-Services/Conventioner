@@ -76,6 +76,16 @@ function findsAnswer(option: ProposedOption, words: string): boolean {
   return option.value.toLowerCase().includes(words.toLowerCase());
 }
 
+/**
+ * What follows an option: its count, and for one left unticked by default, why and a question.
+ * One that names someone is unticked however many chose it, so it says so (T352).
+ */
+function optionNote(option: ProposedOption): string | number {
+  if (option.namesSomeone) return `names someone, chosen by ${option.count} - keep?`;
+  if (option.rare) return `chosen by ${option.count} - keep?`;
+  return option.count;
+}
+
 /** Keep every option of the row's reading, one-offs included, in one click (bug 4). */
 function keepAll(row: LedgerRow) {
   const choice = props.draft.rows[first(row)];
@@ -405,7 +415,7 @@ function onSettle(kind: string, value: string, choice: string) {
                       v-for="option in options"
                       :key="option.value"
                       class="option"
-                      :class="{ rare: option.rare }"
+                      :class="{ rare: option.rare || option.namesSomeone }"
                       data-list-row
                       tabindex="-1"
                       data-testid="proposal-option"
@@ -420,9 +430,7 @@ function onSettle(kind: string, value: string, choice: string) {
                            two flex items, a long option took the line and pushed it to the far edge. -->
                       <span class="option-text"
                         >{{ option.value }}
-                        <span class="muted">{{
-                          option.rare ? `chosen by ${option.count} - keep?` : option.count
-                        }}</span></span
+                        <span class="muted">{{ optionNote(option) }}</span></span
                       >
                     </label>
                   </div>
@@ -624,6 +632,7 @@ function onSettle(kind: string, value: string, choice: string) {
   gap: var(--space-1) var(--space-3);
 }
 
+/* Rare or naming someone: unticked by default, so quieter than the options kept. */
 .option.rare {
   color: var(--mm-text-muted);
 }

@@ -123,6 +123,8 @@ On a market started from its Google Form's responses, the questions also draw on
 5. "Add from your file" lists the columns the start left out, such as a team's own "Status", and any question since removed; choosing one adds it with its label, type and options, and its key held, so the first import restores its column too.
    It is a select while the file offered 12 such columns or fewer, counting those already questions, and past that a field that finds a column by typing and stands empty for the next, with the focus still in it.
    A Select or Multi-Select the file gives no options to choose from becomes Text, since a choice needs at least one option.
+   The Key of a question the start made or "Add from your file" added is read-only, with "Kept to match its column in your file." under it, so no edit unlinks the question from its column, offers that column again or loses its saved mapping; it still takes the focus and can be copied.
+   A question added by hand keeps an editable Key that follows its label until one is typed; where its label or typed key meets a column's key it stays editable while it is written, and is that column's question, its Key kept, once the saved form is read again.
 6. An option on a Select or Multi-Select made from the file is a field with a list under it: every answer the file gave for that type's reading that is no other option on the question, most chosen first, with no counts ([ADR 0023](../../adr/0023-every-answer-for-an-option-to-offer.md)).
    A click or an arrow key opens it, not Tab; with nothing typed it shows all of them, and typing narrows it.
    Enter or a click takes a row and Escape closes the list.

@@ -314,14 +314,16 @@ class TestEveryOtherModulesRefusals:
         assert_answered_as_raised(response, raised)
         assert response.status_code == 409
 
-    def test_an_organization_that_already_exists(self, client, monkeypatch, organization):
+    def test_an_organization_named_as_one_you_belong_to(self, client, monkeypatch, organization):
         organization()
         raised = refusals_raised_by(monkeypatch, OrgsApi, "create_organization")
 
-        response = client.post("/organizations", json={"name": ORG_NAME})
+        response = client.post("/organizations", json={"name": f"  {ORG_NAME.upper()} "})
 
         assert_answered_as_raised(response, raised)
-        assert response.get_json() == {"error": "Organization already exists"}
+        assert response.status_code == 409
+        assert response.get_json() == {
+            "error": f'You already belong to an organization named "{ORG_NAME}".'}
 
     def test_an_organization_changed_by_someone_not_its_owner(
         self, client, monkeypatch, organization,

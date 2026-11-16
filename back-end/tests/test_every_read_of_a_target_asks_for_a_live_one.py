@@ -59,8 +59,6 @@ EXCEPTIONS: Dict[Tuple[str, str], str] = {
     ("api.markets", "public_address_refusal"): (
         "a market being deleted still holds its public address in the unique slug index until "
         "it is gone, so a new market may not take it yet"),
-    ("api.organizations", "create_organization"): (
-        "an organization being deleted still holds its name until it is gone"),
     ("market_documents", "apply_market_key_migration"): _A_MIGRATION,
     ("market_documents", "ensure_market_slug_index"): (
         "the boot builds the slug index over every market, whatever its state, before anything "

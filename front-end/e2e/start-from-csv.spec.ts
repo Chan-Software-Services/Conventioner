@@ -1,7 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect, TEST_USER, BACKEND_URL, ApplicationFormPage } from './fixtures';
+import type { APIRequestContext, Page, TestInfo } from '@playwright/test';
 import { StartFromCsvPage } from './pages/StartFromCsvPage';
 import { finishStartedPlan, UPCOMING_YEAR } from './helpers/finishStartedPlan';
 import { CsvImportPage } from './pages/CsvImportPage';
@@ -513,5 +514,87 @@ test.describe('Draft this market from a Google Form', () => {
       Object.values(a.formData).some((answer) => Array.isArray(answer) && answer.includes(FIBRE)),
     );
     expect(chose.length).toBeGreaterThan(30);
+  });
+});
+
+test.describe('An answer that names someone', () => {
+  // T352: an answer carrying a link that 3 applicants gave was kept by default, and the start
+  // published it as an option of the market's own form, for every later applicant to read.
+  const QUESTION = 'Where can we see your work?';
+  const LINK = 'Online at https://example.com/prints';
+
+  /** A synthetic export, fixture values only: 24 and 12 plain answers, the link 3 times, a one-off. */
+  function writeExport(testInfo: TestInfo): string {
+    const answers = [
+      ...Array<string>(24).fill('In person'),
+      ...Array<string>(12).fill('Instagram'),
+      ...Array<string>(3).fill(LINK),
+      'Etsy',
+    ];
+    const rows = answers.map(
+      (answer, i) =>
+        `1/${(i % 28) + 1}/2026 9:00:00,vendor${String(i).padStart(3, '0')}@example.com,"${answer}"`,
+    );
+    const path = testInfo.outputPath('names-someone.csv');
+    writeFileSync(path, [`Timestamp,Email Address,${QUESTION}`, ...rows].join('\n') + '\n');
+    return path;
+  }
+
+  /** Start a draft from the export, the link ticked or not, and read the question it published. */
+  async function startFrom(
+    page: Page,
+    request: APIRequestContext,
+    testInfo: TestInfo,
+    keepTheLink: boolean,
+  ): Promise<string[]> {
+    const { marketId } = await seedDraftMarket(
+      request,
+      BACKEND_URL,
+      TEST_USER.email,
+      TEST_USER.password,
+    );
+    const flow = new StartFromCsvPage(page);
+    await flow.open(marketId);
+    await flow.chooseFile(writeExport(testInfo));
+    await expect(flow.ledger).toBeVisible();
+
+    const row = flow.row(QUESTION);
+    const link = flow.answers(row).option(LINK);
+    await expect(link).toContainText('names someone, chosen by 3 - keep?');
+    await expect(link.locator('input')).not.toBeChecked();
+    await expect(flow.answers(row).option('In person').locator('input')).toBeChecked();
+    await expect(
+      row.getByTestId('proposal-check').filter({ hasText: 'Has an option that names someone' }),
+    ).toHaveCount(1);
+    if (keepTheLink) {
+      await link.locator('input').check();
+      await expect(link.locator('input')).toBeChecked();
+    }
+
+    await flow.confirm.click();
+    await expect(page).toHaveURL(marketSetupPath(marketId, 'form'));
+    const res = await request.get(`${BACKEND_URL}/markets/${marketId}`);
+    const { market } = (await res.json()) as {
+      market: { applicationForm: { fields: Array<{ label: string; options: string[] }> } };
+    };
+    return market.applicationForm.fields.find((field) => field.label === QUESTION)!.options;
+  }
+
+  test('is off on the Review step, says so, and the start leaves it out of the form', async ({
+    authenticatedPage: page,
+    request,
+  }, testInfo) => {
+    expect(await startFrom(page, request, testInfo, false)).toEqual(['In person', 'Instagram']);
+  });
+
+  test('ticked, it is published as the organizer chose', async ({
+    authenticatedPage: page,
+    request,
+  }, testInfo) => {
+    expect(await startFrom(page, request, testInfo, true)).toEqual([
+      'In person',
+      'Instagram',
+      LINK,
+    ]);
   });
 });

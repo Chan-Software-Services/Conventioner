@@ -217,15 +217,15 @@ describe('the year', () => {
 describe('the working copy', () => {
   function choiceColumn(index: number, overrides: Partial<ProposedColumn> = {}): ProposedColumn {
     const one = [
-      { value: 'Pottery', count: 9, rare: false, keep: true },
-      { value: 'Pottery, Zines', count: 3, rare: false, keep: true },
-      { value: 'Zines', count: 6, rare: false, keep: true },
-      { value: 'ECVAS', count: 1, rare: true, keep: false },
+      { value: 'Pottery', count: 9, rare: false, namesSomeone: false, keep: true },
+      { value: 'Pottery, Zines', count: 3, rare: false, namesSomeone: false, keep: true },
+      { value: 'Zines', count: 6, rare: false, namesSomeone: false, keep: true },
+      { value: 'ECVAS', count: 1, rare: true, namesSomeone: false, keep: false },
     ];
     const several = [
-      { value: 'Pottery', count: 12, rare: false, keep: true },
-      { value: 'Zines', count: 9, rare: false, keep: true },
-      { value: 'ECVAS', count: 1, rare: true, keep: false },
+      { value: 'Pottery', count: 12, rare: false, namesSomeone: false, keep: true },
+      { value: 'Zines', count: 9, rare: false, namesSomeone: false, keep: true },
+      { value: 'ECVAS', count: 1, rare: true, namesSomeone: false, keep: false },
     ];
     const base = column(index, { check: ['Could allow several answers'], ...overrides });
     return {
@@ -319,6 +319,7 @@ describe('the working copy', () => {
         value,
         count: 1,
         rare: i === 2,
+        namesSomeone: false,
         keep: i !== 2,
       })),
       // Prints only; Prints and plushies; plushies only; nothing at all.

@@ -696,7 +696,9 @@ function handleDeleted() {
               Save
             </button>
           </form>
-          <p v-if="renameError" class="form-error">{{ renameError }}</p>
+          <p v-if="renameError" class="form-error" data-testid="manage-org-rename-error">
+            {{ renameError }}
+          </p>
         </section>
 
         <section v-if="isOwner()" class="section danger-section">

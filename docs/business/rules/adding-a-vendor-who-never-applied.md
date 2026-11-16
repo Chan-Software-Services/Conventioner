@@ -5,10 +5,10 @@ describes:
   - back-end/api/added_vendors.py
   - back-end/api/markets.py#adding_refusal
   - back-end/api/markets.py#needs_a_table
-  - back-end/api/markets.py#count_added_vendors
+  - back-end/api/markets.py#count_outside_vendors_who_need_tables
   - back-end/assignment/vendor_input.py#approved_solver_vendors
   - front-end/src/components/AddVendorDialog.vue
-verified: 2026-11-13
+verified: 2026-11-16
 sources:
   - wayfinding/rejection-visibility/02
   - E36/F03/S01
@@ -41,7 +41,7 @@ An essential choice a group may read, the table choice or the dates, is not aske
 
 **Out of the run, but needing a table like anyone.**
 "In the run" says only who the run places; a vendor added by hand needs a table on every market day, so one without a table is unassigned: listed under the Vendors page's "Unassigned only" (and on each date they hold none, with a date chosen), "Unassigned" beside "Added" on their row, and counted in the Assignments page's "N unassigned" and "N of M approved applicants assigned", so the link and the list agree (bug 10).
-The server says it of each vendor apart from "in the run" (`needs_a_table` and `count_added_vendors` in [`back-end/api/markets.py`](../../../back-end/api/markets.py)); seated on any day, they count as assigned, as the run's vendors do.
+The server says it of each vendor apart from "in the run" (`needs_a_table` and `count_outside_vendors_who_need_tables` in [`back-end/api/markets.py`](../../../back-end/api/markets.py), which counts every vendor outside the run who needs a table); seated on any day, they count as assigned, as the run's vendors do.
 
 ## Who may
 

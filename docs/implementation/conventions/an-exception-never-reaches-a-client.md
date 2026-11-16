@@ -103,7 +103,7 @@ describes:
   - front-end/e2e/a-request-too-large-to-carry.spec.ts
   - back-end/host_limits.py
   - back-end/tests/test_the_hosts_request_limit.py
-verified: 2026-11-13
+verified: 2026-11-16
 sources:
   - T74
   - E41/F01/S01
@@ -183,7 +183,7 @@ Its own types are client errors too:
 
 **Every other module's refusals** are client errors too, each with the status its routes answer today.
 
-- [`back-end/api/organizations.py`](../../../back-end/api/organizations.py) raises `BadRequestError` and `ForbiddenError`, and `NotFoundError` for "Organization not found", which every organization route answers 404; `OrganizationHasLiveMarkets` is a 409 whose `body()` names the blocking markets ([when an organization may be deleted](../../business/rules/when-an-organization-may-be-deleted.md)).
+- [`back-end/api/organizations.py`](../../../back-end/api/organizations.py) raises `BadRequestError` and `ForbiddenError`, and `NotFoundError` for "Organization not found", which every organization route answers 404; `ConflictError`, a 409, for a create or rename onto the name of another of the person's organizations ([an organization's name](../data/organization-document.md#an-organizations-name)); `OrganizationHasLiveMarkets` is a 409 whose `body()` names the blocking markets ([when an organization may be deleted](../../business/rules/when-an-organization-may-be-deleted.md)).
 - [`back-end/organization_people.py`](../../../back-end/organization_people.py), the one writer of an organization's people, raises the table's `BadRequestError`, `ForbiddenError` and `NotFoundError`, and `OrganizationChanged`, a 409 whose `body()` adds `code: "organization_changed"`, for a change that met another ([the organization's people](../modules/organization-people.md)).
 - [Placements](../modules/placements.md): `PlacementError` is a `BadRequestError`, `SeatTakenError` one with status 409, and `AssignPhaseError` a `ConflictError`.
 - [Placements](../modules/placements.md): `VendorIsHere` is a `ConflictError` whose `body()` adds `code: "vendor_is_here"`, a free, a move or a swap of a vendor who has checked in that day, asked first (T318).

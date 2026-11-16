@@ -212,13 +212,19 @@ class TestTheOrganizationsDefault:
         assert world.organizations.writes == []
         assert default_entries(world) == []
 
-    def test_its_history_is_newest_first_and_holds_only_the_defaults_changes(self, world):
+    def test_its_history_is_newest_first_and_holds_only_the_defaults_changes(
+        self, world, monkeypatch,
+    ):
+        monkeypatch.setattr(OrgsApi, "organization_documents_of",
+                            lambda user_id: [world.organizations.doc])
         OrgsApi.set_default_permission(ORG_ID, "check-in", "admin", ORG_ADMIN)
         OrgsApi.update_organization(ORG_ID, ORG_OWNER, "Ember Collective")
         OrgsApi.set_default_permission(ORG_ID, "export-csv", "editor", ORG_OWNER)
 
         entries = OrgsApi.get_default_permission_history(ORG_ID, ORG_MEMBER)
 
+        assert [e["kind"] for e in org_entries(world)
+                if e["action"] == History.CHANGE_ORGANIZATION] == [History.RENAMED]
         assert [(e["actor"], e["subject"]["action"]) for e in entries] == [
             (ORG_OWNER, "export-csv"), (ORG_ADMIN, "check-in")]
         assert "organizationId" not in entries[0]
