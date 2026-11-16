@@ -177,6 +177,7 @@ The applicant's save, an import row and an organizer's update write the answers 
 
 - by the applicant or an import, a person's approval or rejection goes back to `open`, clearing what every move to open clears, marked for the deal by the write; nobody judged the answers as they read now;
 - an added vendor stays approved and becomes an applicant: their origin moves to `applied` or `imported`, so the stored approval reads as `approved(person)`, given by whoever added them, and the run reads them (T277 P7);
+  the origin moves in whatever state the added vendor is, so one whose approval was changed to a rejection goes back to `open` as an applicant and is approved by a person when approved again;
 - a rule's rejection stays, and the caller's rules judge it after the write, returning it to open or rejecting it again by the rule that meets it now;
 - open and follow-up stay; answers saved as they already stand move nothing; an application stored with no status is given the `open` it reads as;
 - an organizer's update keeps every verdict, since they made both, and holds nothing.

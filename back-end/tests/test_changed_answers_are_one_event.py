@@ -5,8 +5,8 @@ their own way: a re-import sent an approval back to review when an answer the so
 the applicant's edit kept every verdict, and nothing said which change undid which. Now one event
 of the review state writes the answers and what they do to the verdict, in one update: a change by
 the applicant or an import sends a person's approval or rejection back to open, marked for the
-deal; an added vendor stays approved and becomes an applicant; a rule's rejection is the rules' to
-judge again; and an organizer's own update keeps every verdict, since they made both.
+deal; an added vendor stays approved, and in any state becomes an applicant; a rule's rejection is
+the rules' to judge again; and an organizer's own update keeps every verdict, since they made both.
 
 The applicant's save now holds the application as it read it, as the import's rows do: a verdict
 landing inside it is read again and the save lands on what is stored then, three times, and then
@@ -133,6 +133,18 @@ class TestTheApplicantsSave:
         assert doc["origin"] == "applied"
         assert ReviewState.state_of(doc) is ReviewState.State.APPROVED_BY_A_PERSON
         assert ApplicantsApi.organizer_view(doc)["origin"] == "applied"
+
+    def test_an_added_vendor_rejected_goes_back_to_open_as_an_applicant(self, world):
+        added = ReviewState.add(MARKET, VENDOR, {"essential_full_name": "Walk-in Wares"}, ADDER)
+        _verdict(added.id, ApplicationStatus.REVIEWER_REJECTED.value)
+
+        assert _save(world).status_code == 200
+
+        doc = _doc(world, added.id)
+        assert doc["status"] == ApplicationStatus.OPEN.value
+        assert doc["origin"] == "applied"
+        _verdict(added.id, ApplicationStatus.REVIEWER_APPROVED.value)
+        assert ReviewState.state_of(_doc(world, added.id)) is ReviewState.State.APPROVED_BY_A_PERSON
 
 
 class TestTheOrganizersUpdate:

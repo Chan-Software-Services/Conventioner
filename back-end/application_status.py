@@ -586,10 +586,11 @@ def _answers_move(doc: Dict[str, Any], state: State, event: AnswersChanged,
     organizers updating different answers at once both land. A change by the applicant or an
     import, held on the status and the verdict's time as read: a person's approval or rejection
     goes back to open, marked for the deal, since nobody judged the answers as they read now; an
-    added vendor stays approved and becomes an applicant (its origin moves, T277 P7); a rule's
-    rejection stays, for the caller's rules to judge again; open and follow-up stay. A save that
-    restates the answers moves nothing. One stored with no status is given the ``open`` it reads
-    as.
+    added vendor stays approved; a rule's rejection stays, for the caller's rules to judge again;
+    open and follow-up stay. Whatever the state, an added vendor whose answers arrive becomes an
+    applicant (its origin moves, T277 P7), so one whose approval was changed to a rejection is
+    approved by a person once approved again. A save that restates the answers moves nothing. One
+    stored with no status is given the ``open`` it reads as.
     """
     if event.source is Source.ORGANIZER:
         return Move(to=state, set={}, unset=(), pins={})
@@ -597,18 +598,18 @@ def _answers_move(doc: Dict[str, Any], state: State, event: AnswersChanged,
     if doc.get("status") in (None, ""):
         sets["status"] = ApplicationStatus.OPEN.value
     changed = event.form_data != (doc.get("form_data") or {})
+    if changed and is_added(doc):
+        sets["origin"] = _ORIGIN_BY_SOURCE[event.source].value
     if changed and state in (State.APPROVED_BY_A_PERSON, State.REJECTED_BY_A_PERSON):
         if event.arrival is None:
             raise ValueError("A return to open is marked for the deal by the write it came by.")
         return Move(
             to=State.OPEN,
-            set={"status": ApplicationStatus.OPEN.value,
+            set={**sets, "status": ApplicationStatus.OPEN.value,
                  ApplicationsApi.ARRIVING_FIELD: event.arrival.stored()},
             unset=(*_VERDICT, "follow_up_owner", "undo_to", *_CLAIM),
             pins=held,
         )
-    if changed and state is State.APPROVED_ADDED:
-        sets["origin"] = _ORIGIN_BY_SOURCE[event.source].value
     return Move(to=state_of({**doc, **sets}), set=sets, unset=(), pins=held)
 
 

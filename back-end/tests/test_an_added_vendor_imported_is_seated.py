@@ -9,8 +9,10 @@ approved application that is not still an added one.
 
 Driven through the routes, as an organizer reaches it.
 """
+from conftest import seen_as_stored
 from test_back_to_review import MARKET, OWNER_EMAIL, _back, _begin, _market, world  # noqa: F401
 
+import application_status as ReviewState
 import assignment.vendor_input as VendorInput
 import essential_fields as EssentialFields
 from datatypes import ApplicationStatus
@@ -87,3 +89,49 @@ class TestAnAddedVendorImported:
 
         assert vendors == []
         assert _application(world)["origin"] == "added"
+
+
+def _verdict(world, status):
+    app_id = _application(world)["id"]
+    response = world.client.put(f"/markets/{MARKET}/applications/{app_id}/review",
+                                json={"status": status, "seen": seen_as_stored(app_id)})
+    assert response.status_code == 200, response.get_json()
+
+
+class TestAnAddedVendorRejectedThenImported:
+    """An added vendor whose approval was changed to a rejection, then imported with their row: the
+    rejection goes back to Open, as any person's does, and their answers make them an applicant, so
+    once approved again they are approved by a person and the run seats them."""
+
+    def _rejected_then_imported(self, world):
+        world.applications.documents = []
+        markets = world.install(_market(intake="csv"))
+        added = world.client.post(f"/markets/{MARKET}/vendors",
+                                  json={"name": "Walk-in Wares", "email": VENDOR})
+        assert added.status_code == 201, added.get_json()
+        assert _back(world.client).status_code == 200
+        _verdict(world, ApplicationStatus.REVIEWER_REJECTED.value)
+        imported = world.client.post(f"/markets/{MARKET}/applications/import",
+                                     json={"csvContent": _csv(ROW), "mapping": MAPPING})
+        assert imported.status_code == 200, imported.get_json()
+        return markets, imported.get_json()
+
+    def test_the_import_returns_them_to_open_as_an_import(self, world):
+        _markets, body = self._rejected_then_imported(world)
+
+        doc = _application(world)
+        assert doc["status"] == ApplicationStatus.OPEN.value
+        assert doc["origin"] == "imported"
+        assert body["returnedToReview"] == 1
+
+    def test_approved_again_they_are_seated_by_the_run(self, world):
+        markets, _body = self._rejected_then_imported(world)
+        _verdict(world, ApplicationStatus.REVIEWER_APPROVED.value)
+        assert ReviewState.state_of(_application(world)) is ReviewState.State.APPROVED_BY_A_PERSON
+        assert _begin(world.client).status_code == 200
+
+        ran = world.client.post(f"/markets/{MARKET}/assignment")
+
+        assert ran.status_code == 200, ran.get_json()
+        seats = markets.doc["assignmentObject"]["vendorAssignments"]
+        assert [(seat["email"], seat["handPlaced"]) for seat in seats] == [(VENDOR, False)]
