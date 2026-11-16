@@ -20,7 +20,7 @@ vi.mock('@/utils/applicantApi', () => ({
   saveApplicantApplication: vi.fn(),
 }));
 
-import { verifyLoginCode } from '@/utils/applicantApi';
+import { requestLoginCode, verifyLoginCode } from '@/utils/applicantApi';
 import { useApplicationStore } from '@/stores/application';
 
 const KEY = 'conventioner.applicantSession';
@@ -77,9 +77,31 @@ describe("a vendor's sign-in", () => {
     });
     const store = freshStore();
 
-    expect(await store.verifyCode('spring-market', 'vendor@example.com', '123456')).toBe(false);
-    expect(store.error).toBeTruthy();
+    expect(await store.verifyCode('spring-market', 'vendor@example.com', '123456')).toEqual({
+      ok: false,
+      sentence: 'Sign-in did not complete. Please request a new code and try again.',
+      codeState: null,
+    });
     expect(sessionStorage.getItem(KEY)).toBeNull();
+  });
+
+  it('answers a code asked for or tried with its own refusal, leaving the shared error as it was (T277 ticket 08)', async () => {
+    vi.mocked(requestLoginCode).mockRejectedValueOnce(new Error('Network Error'));
+    vi.mocked(verifyLoginCode).mockRejectedValueOnce(new Error('401'));
+    const store = freshStore();
+    store.error = 'Your answers could not be saved.';
+
+    expect(await store.requestCode('spring-market', 'vendor@example.com')).toEqual({
+      ok: false,
+      sentence: 'Something went wrong.',
+      codeState: null,
+    });
+    expect(await store.verifyCode('spring-market', 'vendor@example.com', '123456')).toEqual({
+      ok: false,
+      sentence: 'That code no longer works. Send yourself a new code.',
+      codeState: 'spent',
+    });
+    expect(store.error).toBe('Your answers could not be saved.');
   });
 
   it('ignores whatever is stored if it is not a whole sign-in', () => {
@@ -97,7 +119,9 @@ describe("a vendor's sign-in", () => {
     });
     const store = freshStore();
 
-    expect(await store.verifyCode('spring-market', 'vendor@example.com', '123456')).toBe(true);
+    expect(await store.verifyCode('spring-market', 'vendor@example.com', '123456')).toEqual({
+      ok: true,
+    });
     expect(store.isAuthenticatedFor('spring-market')).toBe(true);
   });
 });

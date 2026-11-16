@@ -55,24 +55,41 @@ const marketId = computed(() => String(route.params.marketId ?? ''));
 const { market } = useOpenMarket(marketId);
 const assigned = computed(() => hasAssignment(market.value));
 
-/** The market's vendors, read once and shared with the drawer (E35/F01/S01). */
-const details = useVendorDetails(marketId, market);
+/**
+ * Nobody is signed in: the page says so and reads nothing. Asked again on each market, as the page
+ * reads each, and by Try again.
+ */
+const signedOut = ref(!signedInEmail());
+watch(marketId, () => (signedOut.value = !signedInEmail()), { flush: 'sync' });
+
+/**
+ * The market's vendors, read on arriving at each market and shared with the drawer (E35/F01/S01):
+ * one keyed read, so a move to another market never shows the last one's vendors (T421).
+ */
+const details = useVendorDetails(
+  computed(() => (signedOut.value ? '' : marketId.value)),
+  market,
+  { lazy: false },
+);
 const { tableRows, vendorNames, legalNames, isLoading } = details;
 /** The open vendor and tab, in the address. */
 const drawer = useVendorDrawer();
 
-const signedOut = ref(false);
-const loadError = computed(() =>
-  signedOut.value ? 'You must be signed in.' : details.loadError.value,
-);
+/**
+ * Why the vendors are not as the server has them. Hidden while a read is out, as the drawer hides
+ * its own, so a failed re-read is never said over "Loading vendors…" in place of the rows it kept.
+ */
+const loadError = computed(() => {
+  if (signedOut.value) return 'You must be signed in.';
+  return isLoading.value ? '' : details.loadError.value;
+});
 
-async function loadVendors(): Promise<void> {
+/** The frame's Try again: a sign-in found since reads the market, else the vendors are read again. */
+function readAgain(): void {
+  const wasSignedOut = signedOut.value;
   signedOut.value = !signedInEmail();
-  if (signedOut.value || !marketId.value) return;
-  await details.load();
+  if (signedOut.value === wasSignedOut) void details.load();
 }
-
-watch(marketId, () => void loadVendors(), { immediate: true });
 
 /**
  * Every applicant (E36/F02/S04): anyone may be seated by hand, so anyone may need finding. The
@@ -290,7 +307,7 @@ const assignedVendorCount = computed(() => tableVendors.value.filter((v) => v.is
 
 <template>
   <div class="vendors-view">
-    <MarketFrame :market="market" @retry="loadVendors">
+    <MarketFrame :market="market" @retry="readAgain">
       <!-- The search stays in view with the frame; it used to stick inside the card's own
            scroller, which is gone (E21/F04/S02). -->
       <template #pinned>
@@ -678,6 +695,11 @@ const assignedVendorCount = computed(() => tableVendors.value.filter((v) => v.is
   margin: 0;
   color: var(--mm-red);
   font-size: var(--text-sm);
+}
+
+/* Why the vendors are not as the server has them: two even lines on a phone, never one word alone. */
+.vendors-body > .error-text {
+  text-wrap: balance;
 }
 
 .loading-state {

@@ -288,6 +288,53 @@ describe('the Update info dialog', () => {
     wrapper.unmount();
   });
 
+  it('sends one update for two presses of Save', async () => {
+    held = new Promise(() => {});
+    const wrapper = dialog();
+    await wrapper.get(testid('update-info-input-shop')).setValue('Ember Ceramics');
+
+    await wrapper.get('form').trigger('submit');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(sent).toHaveLength(1);
+    expect(wrapper.get(testid('update-info-submit-button')).text()).toBe('Saving…');
+    expect(wrapper.get(testid('update-info-submit-button')).attributes('disabled')).toBeDefined();
+    wrapper.unmount();
+  });
+
+  it("keeps a save that lands after the drawer moved to the next vendor out of that vendor's opening", async () => {
+    let answer!: (value: unknown) => void;
+    held = new Promise((resolve) => (answer = resolve));
+    const wrapper = dialog();
+    await wrapper.get(testid('update-info-input-shop')).setValue('Ember Ceramics');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    // The drawer moves to another vendor, which closes the dialog, and it is opened on them.
+    const next = application({
+      id: 'app-2',
+      applicantEmail: 'omar@kiln.test',
+      formData: { shop: 'Kiln Works', student: 'Yes' },
+    });
+    await wrapper.setProps({ open: false });
+    await wrapper.setProps({ application: next, open: true });
+    await wrapper.get(testid('update-info-input-shop')).setValue('Kiln Works Studio');
+    expect(wrapper.get(testid('update-info-submit-button')).text()).toBe('Save');
+    expect(wrapper.get(testid('update-info-submit-button')).attributes('disabled')).toBeUndefined();
+
+    const saved = application({ formData: { shop: 'Ember Ceramics', student: 'No' } });
+    answer({ data: { application: saved } });
+    await flushPromises();
+
+    expect(wrapper.emitted('saved')).toBeUndefined();
+    expect(wrapper.emitted('refreshed')).toEqual([[saved]]);
+    expect((wrapper.get(testid('update-info-input-shop')).element as HTMLInputElement).value).toBe(
+      'Kiln Works Studio',
+    );
+    wrapper.unmount();
+  });
+
   it('puts their answer back, and saves that as taking the update away', async () => {
     const wrapper = dialog(
       application({

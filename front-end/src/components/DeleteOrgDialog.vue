@@ -15,10 +15,15 @@
  * It also states the refusal in the same place: while the organization holds a market that is
  * under way, the deletion is refused and those markets are named, so the organizer can act rather
  * than guess which one is in the way.
+ *
+ * The deletion writes through its submission (T411), keyed by the organization the dialog is open
+ * on: the shell holds the dialog while it deletes, a second press sends nothing, and an answer that
+ * lands after the dialog was closed and opened again leaves the new opening alone.
  */
 import { computed, ref, watch } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
 import { api, getApiErrorMessage } from '@/utils/api';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 
 interface MarketSummary {
   id: string;
@@ -34,11 +39,20 @@ const props = defineProps<{ open: boolean; orgId: string; orgName: string }>();
 const emit = defineEmits<{ close: []; deleted: [] }>();
 
 const loading = ref(false);
-const deleting = ref(false);
+/** What the preview read could not read. */
 const errorMessage = ref('');
 const canDelete = ref(false);
 const blocking = ref<MarketSummary[]>([]);
 const doomed = ref<MarketSummary[]>([]);
+
+/** Said under what the deletion would destroy, where the preview's own failure is said. */
+const deletion = useDialogSubmit({
+  opening: () => (props.open ? props.orgId : null),
+  failure: 'Could not delete this organization.',
+  says: 'self',
+});
+const { sentence: deletionSentence } = deletion;
+const shownError = computed(() => deletionSentence.value || errorMessage.value);
 
 watch(
   () => props.open,
@@ -73,29 +87,30 @@ function consequence(market: MarketSummary): string {
   return parts.join(' · ');
 }
 
-const cannotConfirm = computed(() => loading.value || deleting.value || !canDelete.value);
+const cannotConfirm = computed(() => loading.value || !canDelete.value);
 
+/**
+ * One delete however often it is pressed; the dialog holds until it answers. No late answer is
+ * handed on: the dialog cannot be closed while it deletes, and the list behind is read again when
+ * Manage organization closes.
+ */
 async function confirm() {
   if (cannotConfirm.value) return;
-  deleting.value = true;
-  errorMessage.value = '';
-  try {
-    await api.delete(`/organizations/${props.orgId}`);
-    emit('deleted');
-    emit('close');
-  } catch (err: unknown) {
-    const body = (err as { response?: { data?: Record<string, unknown> } })?.response?.data;
-    if (body?.error === 'organization_has_live_markets') {
+  const orgId = props.orgId;
+  await deletion.submit(() => api.delete(`/organizations/${orgId}`), {
+    done: () => {
+      emit('deleted');
+      emit('close');
+    },
+    refused: (err) => {
+      const body = (err as { response?: { data?: Record<string, unknown> } })?.response?.data;
+      if (body?.error !== 'organization_has_live_markets') return;
       // It changed under us: re-state the refusal rather than showing a generic failure.
       canDelete.value = false;
       blocking.value = (body.blockingMarkets ?? []) as MarketSummary[];
-      errorMessage.value = String(body.message ?? '');
-    } else {
-      errorMessage.value = getApiErrorMessage(err, 'Could not delete this organization.');
-    }
-  } finally {
-    deleting.value = false;
-  }
+      return String(body.message ?? '');
+    },
+  });
 }
 </script>
 
@@ -109,6 +124,7 @@ async function confirm() {
     destructive
     confirm-label="Delete it all"
     :confirm-disabled="cannotConfirm"
+    :submission="deletion"
     @close="emit('close')"
     @submit="confirm"
   >
@@ -162,8 +178,8 @@ async function confirm() {
       </template>
     </template>
 
-    <p v-if="errorMessage" class="delete-org-error" data-testid="delete-org-error">
-      {{ errorMessage }}
+    <p v-if="shownError" class="delete-org-error" data-testid="delete-org-error">
+      {{ shownError }}
     </p>
   </AppDialog>
 </template>

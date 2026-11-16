@@ -25,6 +25,13 @@
  * A member opens it too, to read the organization's History (E40/F02/S01) and the default
  * permissions its new markets copy (E39/F02/S01); the people and the controls an owner or an admin
  * manages are theirs alone.
+ *
+ * Each write belongs to the opening it was sent from (T411): its handle (`useDialogSubmit`) is keyed
+ * by the organization Manage organization is open on, or by what its confirmation was opened with,
+ * and handed to the dialog that sent it, so the shell holds that dialog while it writes and a second
+ * press sends nothing. An answer that lands after Manage organization was closed, or opened on
+ * another organization, leaves the dialog the person is in alone, and so does a re-read of the
+ * organization it had been open on; the list behind is still told of a change that landed.
  */
 import { nextTick, ref, watch, type Ref } from 'vue';
 import {
@@ -40,6 +47,8 @@ import {
   organizationRemoval,
   type OrganizationPlace,
 } from '@/utils/organizations';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
+import type { LateAnswer } from '@/utils/useSubmit';
 import AppDialog from '@/components/AppDialog.vue';
 import DeleteOrgDialog from '@/components/DeleteOrgDialog.vue';
 import EmailAddress from '@/components/EmailAddress.vue';
@@ -62,13 +71,10 @@ const emit = defineEmits<{
 const orgData = ref<Organization | null>(null);
 const errorMessage = ref('');
 const renameValue = ref('');
-const renameError = ref('');
 const showAddAdminForm = ref(false);
 const showAddMemberForm = ref(false);
 const newAdminEmail = ref('');
 const newMemberEmail = ref('');
-const addAdminError = ref('');
-const addMemberError = ref('');
 const addAdminErrorLine = ref<HTMLElement | null>(null);
 const addMemberErrorLine = ref<HTMLElement | null>(null);
 const deleteConfirming = ref(false);
@@ -85,8 +91,6 @@ const removing = ref<{
   title: string;
   loses: string;
 } | null>(null);
-const removeError = ref('');
-const removeBusy = ref(false);
 /**
  * The person a "Make member" or "Make admin" is asking about (T283), until it is confirmed or
  * cancelled, with the words taken when it opens, as Remove's are.
@@ -99,8 +103,6 @@ const placing = ref<{
   text: string;
   confirmLabel: string;
 } | null>(null);
-const placeError = ref('');
-const placeBusy = ref(false);
 const adminsList = ref<HTMLElement | null>(null);
 const membersList = ref<HTMLElement | null>(null);
 /** What finds in Admins and in Members, for as long as the dialog is open: never in the address. */
@@ -113,6 +115,45 @@ const findsPerson = (person: OrganizationPerson, words: string) =>
   person.email.toLowerCase().includes(words.toLowerCase());
 const keyOfPerson = (person: OrganizationPerson) => person.userId;
 
+/** The organization Manage organization is open on, or nothing while it is closed. */
+const openOn = () => (props.manageOpen ? (props.org?.id ?? null) : null);
+/** What a confirmation over Manage organization is open on: nothing once it closes. */
+const over =
+  <T,>(asked: () => T) =>
+  () =>
+    props.manageOpen ? asked() : null;
+
+/**
+ * Add admin's, Add member's and Rename's writes, each said beside its row; Manage organization
+ * holds while any one sends.
+ */
+const addAdmin = useDialogSubmit({
+  opening: openOn,
+  failure: 'The admin was not added.',
+  says: 'self',
+});
+const addMember = useDialogSubmit({
+  opening: openOn,
+  failure: 'The member was not added.',
+  says: 'self',
+});
+const rename = useDialogSubmit({
+  opening: openOn,
+  failure: 'The name was not changed.',
+  says: 'self',
+});
+const { sentence: addAdminSentence } = addAdmin;
+const { sentence: addMemberSentence } = addMember;
+const { sentence: renameSentence } = rename;
+/** Each confirmation's write, keyed by what it was opened on; the shell says its refusal. */
+const removal = useDialogSubmit({
+  opening: over(() => removing.value),
+  failure: 'The person was not removed.',
+});
+const placeChange = useDialogSubmit({
+  opening: over(() => placing.value),
+  failure: 'Their place was not changed.',
+});
 watch(
   () => [props.manageOpen, props.org] as const,
   ([open, org]) => {
@@ -123,15 +164,10 @@ watch(
       showAddMemberForm.value = false;
       deleteConfirming.value = false;
       removing.value = null;
-      removeError.value = '';
       placing.value = null;
-      placeError.value = '';
       adminWords.value = '';
       memberWords.value = '';
       errorMessage.value = '';
-      renameError.value = '';
-      addAdminError.value = '';
-      addMemberError.value = '';
     } else {
       orgData.value = null;
     }
@@ -154,37 +190,54 @@ function isOwner(): boolean {
  * A membership change answers with a message and no document, so there is nothing to merge; and
  * guessing the new membership locally would be a second copy of the server's rules about who may
  * hold which role.
+ *
+ * Run inside a write, with its submission's `isCurrent`: once the opening the write was sent from
+ * has gone (Manage organization closed, or opened on another organization), nothing is read, and a
+ * read that lands after it writes nothing.
  */
-async function refreshOrg(failed: string): Promise<void> {
+async function refreshOrg(failed: string, isCurrent: () => boolean): Promise<void> {
   const id = orgData.value?.id;
-  if (!id) return;
+  if (!id || !isCurrent()) return;
   try {
     const mine = await fetchOrganizations();
+    if (!isCurrent()) return;
     const found = mine.find((candidate) => candidate.id === id);
     if (found) orgData.value = found;
   } catch (err) {
+    if (!isCurrent()) return;
     errorMessage.value = getApiErrorMessage(err, failed);
   }
 }
 
-/** Saved: show it here, and tell the list behind. Neither of those is closing. */
-async function saved(): Promise<void> {
-  changesMade.value++;
-  await refreshOrg('Saved, but could not re-read the organization');
+/** Saved, inside the write: the organization read again, so the hold lasts until it shows. */
+const readAfterSaving = (isCurrent: () => boolean) =>
+  refreshOrg('Saved, but could not re-read the organization', isCurrent);
+
+/**
+ * A change landed: its History reads it while the opening it was sent from lasts (`current`), and
+ * the list behind is told either way. Neither of those is closing.
+ */
+function changeLanded(current: boolean): void {
+  if (current) changesMade.value++;
   emit('changed');
+}
+
+/** A write that landed after Manage organization moved on: the list behind still reads it. */
+function lateAnswer(answer: LateAnswer<unknown>): void {
+  if (answer.ok) emit('changed');
 }
 
 /**
  * A change that met someone else's change to the same people (the server's 409
  * `organization_changed`) stored nothing, and its sentence asks the person to check the people as
  * they are now: so the organization is read again behind the sentence, as after a save, and the
- * list behind and the History read the change that did land.
+ * list behind and the History read the change that did land. Inside the write, before its refusal
+ * is said.
  */
-async function readAgainIfChanged(err: unknown): Promise<void> {
+async function readAgainIfChanged(err: unknown, isCurrent: () => boolean): Promise<void> {
   if (!isOrganizationChanged(err)) return;
-  changesMade.value++;
-  await refreshOrg('Could not re-read the organization');
-  emit('changed');
+  await refreshOrg('Could not re-read the organization', isCurrent);
+  changeLanded(isCurrent());
 }
 
 /**
@@ -202,6 +255,8 @@ const addMemberInput = ref<HTMLInputElement | null>(null);
  * where the person is next: the field, and then the button again. Left alone it fell to `<body>`.
  */
 async function openAddAdmin() {
+  // A refusal that landed after the row was cancelled is not this row's.
+  addAdmin.edit();
   showAddAdminForm.value = true;
   await nextTick();
   addAdminInput.value?.focus();
@@ -214,12 +269,13 @@ async function openAddAdmin() {
 async function closeAddAdmin() {
   showAddAdminForm.value = false;
   newAdminEmail.value = '';
-  addAdminError.value = '';
+  addAdmin.edit();
   await nextTick();
   addAdminButton.value?.focus();
 }
 
 async function openAddMember() {
+  addMember.edit();
   showAddMemberForm.value = true;
   await nextTick();
   addMemberInput.value?.focus();
@@ -229,7 +285,7 @@ async function openAddMember() {
 async function closeAddMember() {
   showAddMemberForm.value = false;
   newMemberEmail.value = '';
-  addMemberError.value = '';
+  addMember.edit();
   await nextTick();
   addMemberButton.value?.focus();
 }
@@ -241,19 +297,21 @@ function defaultsChanged(table: PermissionTableRow[]) {
   emit('changed');
 }
 
+/**
+ * The name is written inside the write, and shown here once it lands. A refusal is said under the
+ * field.
+ */
 async function handleRename() {
-  if (!orgData.value || renameValue.value.trim() === orgData.value.name) return;
-  renameError.value = '';
-  try {
-    await api.put(`/organizations/${encodeURIComponent(orgData.value.id)}`, {
-      name: renameValue.value.trim(),
-    });
-    orgData.value = { ...orgData.value, name: renameValue.value.trim() };
-    changesMade.value++;
-    emit('changed');
-  } catch (err) {
-    renameError.value = getApiErrorMessage(err, 'The name was not changed.');
-  }
+  const org = orgData.value;
+  const name = renameValue.value.trim();
+  if (!org || name === org.name) return;
+  await rename.submit(() => api.put(`/organizations/${encodeURIComponent(org.id)}`, { name }), {
+    done: () => {
+      if (orgData.value) orgData.value = { ...orgData.value, name };
+      changeLanded(true);
+    },
+    late: lateAnswer,
+  });
 }
 
 /**
@@ -266,48 +324,58 @@ function findAdded(words: Ref<string>, people: OrganizationPerson[], email: stri
 }
 
 /** A refusal stands under its form, which a short window's body can hold at its very foot. */
-async function showRefusal(line: Ref<HTMLElement | null>) {
-  await nextTick();
-  line.value?.scrollIntoView?.({ block: 'nearest' });
+function showsRefusal(sentence: Ref<string>, line: Ref<HTMLElement | null>) {
+  watch(
+    sentence,
+    (said) => {
+      if (said) line.value?.scrollIntoView?.({ block: 'nearest' });
+    },
+    { flush: 'post' },
+  );
+}
+showsRefusal(addAdminSentence, addAdminErrorLine);
+showsRefusal(addMemberSentence, addMemberErrorLine);
+
+/**
+ * Adds someone to `place` and reads the organization again, both inside the write, so a second
+ * press sends nothing until the list shows them. The form stays open with an empty field: adding
+ * two people in a row is the case this story is named after. A refusal leaves the typed address
+ * exactly where it was.
+ */
+async function addPerson(place: 'admins' | 'members') {
+  const adding = place === 'admins' ? addAdmin : addMember;
+  const field = place === 'admins' ? newAdminEmail : newMemberEmail;
+  const words = place === 'admins' ? adminWords : memberWords;
+  const email = field.value.trim();
+  const org = orgData.value;
+  if (!org || !email) return;
+  await adding.submit(
+    async (isCurrent) => {
+      try {
+        await api.post(`/organizations/${encodeURIComponent(org.id)}/${place}`, {
+          user_email: email,
+        });
+      } catch (err) {
+        await readAgainIfChanged(err, isCurrent);
+        throw err;
+      }
+      await readAfterSaving(isCurrent);
+    },
+    {
+      done: () => {
+        field.value = '';
+        changeLanded(true);
+        const people =
+          place === 'admins' ? orgData.value?.adminPeople : orgData.value?.memberPeople;
+        findAdded(words, people ?? [], email);
+      },
+      late: lateAnswer,
+    },
+  );
 }
 
-async function handleAddAdmin() {
-  const email = newAdminEmail.value.trim();
-  if (!orgData.value || !email) return;
-  addAdminError.value = '';
-  try {
-    await api.post(`/organizations/${encodeURIComponent(orgData.value.id)}/admins`, {
-      user_email: email,
-    });
-    // The form stays open with an empty field: adding two people in a row is the case this story
-    // is named after. A failure leaves the typed address exactly where it was.
-    newAdminEmail.value = '';
-    await saved();
-    findAdded(adminWords, orgData.value?.adminPeople ?? [], email);
-  } catch (err) {
-    addAdminError.value = getApiErrorMessage(err, 'The admin was not added.');
-    await readAgainIfChanged(err);
-    await showRefusal(addAdminErrorLine);
-  }
-}
-
-async function handleAddMember() {
-  const email = newMemberEmail.value.trim();
-  if (!orgData.value || !email) return;
-  addMemberError.value = '';
-  try {
-    await api.post(`/organizations/${encodeURIComponent(orgData.value.id)}/members`, {
-      user_email: email,
-    });
-    newMemberEmail.value = '';
-    await saved();
-    findAdded(memberWords, orgData.value?.memberPeople ?? [], email);
-  } catch (err) {
-    addMemberError.value = getApiErrorMessage(err, 'The member was not added.');
-    await readAgainIfChanged(err);
-    await showRefusal(addMemberErrorLine);
-  }
-}
+const handleAddAdmin = () => addPerson('admins');
+const handleAddMember = () => addPerson('members');
 
 /**
  * Remove asks first (E38/F15/S01): it took someone's access to every market of the organization in
@@ -315,15 +383,12 @@ async function handleAddMember() {
  */
 function askToRemove(userId: string, email: string, place: 'admins' | 'members') {
   if (!orgData.value) return;
-  removeError.value = '';
   removing.value = { userId, place, ...organizationRemoval(orgData.value, userId, email) };
 }
 
 /** Cancel, Escape and the backdrop change nothing; the shell gives focus back to the row's Remove. */
 function cancelRemove() {
-  if (removeBusy.value) return;
   removing.value = null;
-  removeError.value = '';
 }
 
 /**
@@ -335,28 +400,35 @@ function cancelRemove() {
  */
 async function handleRemoveUser() {
   const target = removing.value;
-  if (!orgData.value || !target || removeBusy.value) return;
-  removeError.value = '';
-  removeBusy.value = true;
-  try {
-    await api.delete(
-      `/organizations/${encodeURIComponent(orgData.value.id)}/users/${encodeURIComponent(target.userId)}`,
-    );
-  } catch (err) {
-    if (getApiErrorStatus(err) !== 404) {
-      removeError.value = getApiErrorMessage(err, 'The person was not removed.');
-      await readAgainIfChanged(err);
-      removeBusy.value = false;
-      return;
-    }
-  }
-  // Busy until the confirmation closes: during the re-read its Remove would send a second removal.
-  await saved();
-  removing.value = null;
-  removeBusy.value = false;
-  // Once the confirmation has closed and the page behind it is no longer inert.
-  await nextTick();
-  (target.place === 'admins' ? adminsList : membersList).value?.focus();
+  const org = orgData.value;
+  if (!org || !target) return;
+  await removal.submit(
+    async (isCurrent) => {
+      try {
+        await api.delete(
+          `/organizations/${encodeURIComponent(org.id)}/users/${encodeURIComponent(target.userId)}`,
+        );
+      } catch (err) {
+        if (getApiErrorStatus(err) !== 404) {
+          await readAgainIfChanged(err, isCurrent);
+          throw err;
+        }
+      }
+      // Held until the confirmation closes: during the re-read its Remove would send a second
+      // removal.
+      await readAfterSaving(isCurrent);
+    },
+    {
+      done: async () => {
+        changeLanded(true);
+        removing.value = null;
+        // Once the confirmation has closed and the page behind it is no longer inert.
+        await nextTick();
+        (target.place === 'admins' ? adminsList : membersList).value?.focus();
+      },
+      late: lateAnswer,
+    },
+  );
 }
 
 /**
@@ -366,15 +438,12 @@ async function handleRemoveUser() {
 function askToChangePlace(userId: string, email: string, from: OrganizationPlace) {
   if (!orgData.value) return;
   const to: OrganizationPlace = from === 'admin' ? 'member' : 'admin';
-  placeError.value = '';
   placing.value = { userId, from, to, ...organizationPlaceChange(orgData.value, email, to) };
 }
 
 /** Cancel, Escape and the backdrop change nothing; the shell gives focus back to the row's button. */
 function cancelPlaceChange() {
-  if (placeBusy.value) return;
   placing.value = null;
-  placeError.value = '';
 }
 
 /**
@@ -386,31 +455,39 @@ function cancelPlaceChange() {
  */
 async function handlePlaceChange() {
   const target = placing.value;
-  if (!orgData.value || !target || placeBusy.value) return;
-  placeError.value = '';
-  placeBusy.value = true;
-  let landedIn: OrganizationPlace = target.to;
-  try {
-    await api.put(
-      `/organizations/${encodeURIComponent(orgData.value.id)}/users/${encodeURIComponent(target.userId)}`,
-      { place: target.to },
-    );
-  } catch (err) {
-    if (getApiErrorStatus(err) !== 404) {
-      placeError.value = getApiErrorMessage(err, 'Their place was not changed.');
-      await readAgainIfChanged(err);
-      placeBusy.value = false;
-      return;
-    }
-    landedIn = target.from;
-  }
-  // Busy until the confirmation closes: during the re-read its confirm would send a second change.
-  await saved();
-  placing.value = null;
-  placeBusy.value = false;
-  // Once the confirmation has closed and the page behind it is no longer inert.
-  await nextTick();
-  (landedIn === 'admin' ? adminsList : membersList).value?.focus();
+  const org = orgData.value;
+  if (!org || !target) return;
+  await placeChange.submit(
+    async (isCurrent): Promise<OrganizationPlace> => {
+      let landedIn: OrganizationPlace = target.to;
+      try {
+        await api.put(
+          `/organizations/${encodeURIComponent(org.id)}/users/${encodeURIComponent(target.userId)}`,
+          { place: target.to },
+        );
+      } catch (err) {
+        if (getApiErrorStatus(err) !== 404) {
+          await readAgainIfChanged(err, isCurrent);
+          throw err;
+        }
+        landedIn = target.from;
+      }
+      // Held until the confirmation closes: during the re-read its confirm would send a second
+      // change.
+      await readAfterSaving(isCurrent);
+      return landedIn;
+    },
+    {
+      done: async (landedIn) => {
+        changeLanded(true);
+        placing.value = null;
+        // Once the confirmation has closed and the page behind it is no longer inert.
+        await nextTick();
+        (landedIn === 'admin' ? adminsList : membersList).value?.focus();
+      },
+      late: lateAnswer,
+    },
+  );
 }
 
 function canRemoveUser(userId: string, role: OrganizationRoleType): boolean {
@@ -441,6 +518,7 @@ function handleDeleted() {
     size="wide"
     scroll="body"
     :error="errorMessage"
+    :submission="[addAdmin, addMember, rename]"
     @close="emit('manageClose')"
   >
     <template v-if="orgData">
@@ -553,12 +631,12 @@ function handleDeleted() {
               </button>
             </div>
             <p
-              v-if="addAdminError"
+              v-if="addAdminSentence"
               ref="addAdminErrorLine"
               class="form-error"
               data-testid="manage-org-add-admin-error"
             >
-              {{ addAdminError }}
+              {{ addAdminSentence }}
             </p>
           </form>
         </section>
@@ -655,12 +733,12 @@ function handleDeleted() {
               </button>
             </div>
             <p
-              v-if="addMemberError"
+              v-if="addMemberSentence"
               ref="addMemberErrorLine"
               class="form-error"
               data-testid="manage-org-add-member-error"
             >
-              {{ addMemberError }}
+              {{ addMemberSentence }}
             </p>
           </form>
         </section>
@@ -696,8 +774,8 @@ function handleDeleted() {
               Save
             </button>
           </form>
-          <p v-if="renameError" class="form-error" data-testid="manage-org-rename-error">
-            {{ renameError }}
+          <p v-if="renameSentence" class="form-error" data-testid="manage-org-rename-error">
+            {{ renameSentence }}
           </p>
         </section>
 
@@ -723,8 +801,7 @@ function handleDeleted() {
     testid="manage-org-remove"
     destructive
     confirm-label="Remove"
-    :confirm-disabled="removeBusy"
-    :error="removeError"
+    :submission="removal"
     @close="cancelRemove"
     @submit="handleRemoveUser"
   >
@@ -737,8 +814,7 @@ function handleDeleted() {
     :title="placing?.title ?? ''"
     testid="manage-org-place-change"
     :confirm-label="placing?.confirmLabel ?? ''"
-    :confirm-disabled="placeBusy"
-    :error="placeError"
+    :submission="placeChange"
     @close="cancelPlaceChange"
     @submit="handlePlaceChange"
   >
