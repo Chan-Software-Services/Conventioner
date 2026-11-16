@@ -38,6 +38,7 @@ sources:
   - T224
   - T263
   - T422
+  - T411
 ---
 
 # The vendor drawer
@@ -62,6 +63,7 @@ The open vendor and tab are kept in the address (`?vendor=<email>&vendorTab=assi
    - **Application:** a table-share request that needs attention; then "Discord" ([`VendorDiscordOffer.vue`](../../../front-end/src/components/VendorDiscordOffer.vue)), when the last "Check Discord" asks something about the vendor ([J20](vendors.md#j20-answer-a-possible-discord-match), [possible matches](../../implementation/modules/discord.md#possible-matches)): how many members look alike, then each offered as a possible match, at most five, "Possible match: <their name> @<username>" with "Confirm…" and "Not them" for whoever may update the vendor's info (the row for an answer a price reads too, where a price group reads the username question), and "And 3 more not shown." past five, or, once their username was updated after the check, "Their username was updated after the last check. Check Discord again to see whether they are in the server."; then "Submission", the vendor's answers ("This market asks no questions of its own." when it asks none).
      An answer an organizer updated reads as updated, with "Updated by <address>, <when>; they wrote <their answer>" under it, and "Their answer changed since your update." once a re-import or their own edit changed what they wrote, or "Their answer now matches your update." where what they wrote now is the update itself.
      "Update info", at the end of the Submission heading for whoever the row "Update a vendor's info" allows, opens a dialog of their answers, each in its question's own control, with Save and Cancel: an answer that differs from what they wrote shows it beside it, with "Use their answer"; below them the essential questions, as the form asks them; those the assignment reads, and the market's own questions a price group reads, are read-only to whoever the row "Update info the assignment or price reads" refuses ([an update is kept beside the vendor's answer](../rules/an-update-is-kept-beside-the-vendors-answer.md)).
+     Moving the drawer to another vendor closes Update info and the Discord offer's confirmation, and a save of the last vendor's that lands after it is told to the screen and the answers read again, closing nothing the next vendor has open (T411).
      Escape closes the dialog alone; once it saves, the drawer reads the market's vendors again, which the Vendors list shares, and the review's All view behind it reads its list again.
    - **Assignments:** one card per market date: where they sit, with "Change assignment", or why they were not placed ([J12](vendors.md#j12-find-out-why-a-vendor-was-not-placed)); a placement that overrides their answers or that the plan no longer holds says so.
      Where the market prices its tables, an assigned date says what the table costs that day, "Gold, full table, $35.00", or with the vendor's price group where the card has groups, "Gold, full table, Example College student + club member, $12.00" ([a price follows the table](../rules/a-price-follows-the-table.md)).

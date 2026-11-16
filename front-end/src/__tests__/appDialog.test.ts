@@ -14,6 +14,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { defineComponent, h, ref, type PropType } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
 import SearchPicker from '@/components/SearchPicker.vue';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 
 const byTestId = (id: string) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
 
@@ -283,6 +284,194 @@ describe('with `confirmDisabled` ending', () => {
     await flushPromises();
 
     expect(document.activeElement).toBe(byTestId('over-button'));
+  });
+});
+
+/*
+ * A dialog that writes hands the shell its submission (T411), and the shell derives the hold from
+ * it, with no opt-in: every close refused and the confirm disabled while any one sends, its
+ * refusal said in the error line and gone when a field changes.
+ */
+describe('with a `submission`', () => {
+  interface Writing {
+    open: boolean;
+    closes: number;
+    answers: Array<ReturnType<typeof held>>;
+    press: (index: number) => void;
+  }
+
+  function held() {
+    let resolve!: () => void;
+    let reject!: (err: unknown) => void;
+    const promise = new Promise<void>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  /** A page whose dialog writes through `count` submissions; its confirm sends the first. */
+  const WritingHost = defineComponent({
+    props: {
+      count: { type: Number, default: 1 },
+      says: { type: String as PropType<'dialog' | 'self'>, default: 'dialog' },
+      dialog: { type: Object as PropType<DialogProps>, default: () => ({}) },
+    },
+    setup(props, { expose }) {
+      const open = ref(false);
+      const closes = ref(0);
+      const answers: Array<ReturnType<typeof held>> = [];
+      const submissions = Array.from({ length: props.count }, () =>
+        useDialogSubmit({
+          opening: () => open.value,
+          failure: 'It did not save.',
+          says: props.says,
+        }),
+      );
+      function press(index: number) {
+        const answer = held();
+        answers.push(answer);
+        void submissions[index]!.submit(() => answer.promise);
+      }
+      expose({ open, closes, answers, press });
+      return () =>
+        h('main', [
+          h('button', { 'data-testid': 'opener', onClick: () => (open.value = true) }, 'Open'),
+          h(
+            AppDialog,
+            {
+              open: open.value,
+              title: 'Rename',
+              testid: 'people',
+              confirmLabel: 'Save',
+              submission: props.count === 1 ? submissions[0] : submissions,
+              ...props.dialog,
+              onClose: () => {
+                closes.value++;
+                open.value = false;
+              },
+              onSubmit: () => press(0),
+            },
+            { default: () => h('input', { 'data-testid': 'people-find', class: 'field' }) },
+          ),
+        ]);
+    },
+  });
+
+  async function openWriting(props: Record<string, unknown> = {}) {
+    wrapper = mount(WritingHost, { attachTo: document.body, props });
+    const opener = byTestId('opener')!;
+    opener.focus();
+    opener.click();
+    await flushPromises();
+    return wrapper.vm as unknown as Writing;
+  }
+
+  async function confirm() {
+    byTestId('people-window')!.querySelector('form')!.requestSubmit();
+    await flushPromises();
+  }
+
+  function tryEveryClose() {
+    byTestId('people-background')!.click();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    byTestId('people-close-button')!.click();
+    byTestId('people-cancel-button')!.click();
+  }
+
+  const disabled = (testid: string) => byTestId(testid)!.hasAttribute('disabled');
+
+  it('refuses every close and disables the confirm while it sends, and gives them back after', async () => {
+    const state = await openWriting();
+    await confirm();
+
+    expect(disabled('people-close-button')).toBe(true);
+    expect(disabled('people-cancel-button')).toBe(true);
+    expect(disabled('people-submit-button')).toBe(true);
+    tryEveryClose();
+    await flushPromises();
+    expect(state.closes).toBe(0);
+    expect(state.open).toBe(true);
+
+    state.answers[0]!.reject(new Error('Network Error'));
+    await flushPromises();
+    expect(disabled('people-close-button')).toBe(false);
+    expect(disabled('people-submit-button')).toBe(false);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+    expect(state.closes).toBe(1);
+  });
+
+  it('says its refusal in the error line, and drops it when a field changes', async () => {
+    const state = await openWriting();
+    await confirm();
+    state.answers[0]!.reject(new Error('Network Error'));
+    await flushPromises();
+
+    expect(byTestId('people-error')?.textContent?.trim()).toBe('It did not save.');
+    expect(byTestId('people-error')?.getAttribute('role')).toBe('alert');
+
+    byTestId('people-find')!.dispatchEvent(new Event('input', { bubbles: true }));
+    await flushPromises();
+    expect(byTestId('people-error')).toBeNull();
+  });
+
+  it('says its own `error` over the refusal', async () => {
+    const state = await openWriting({ dialog: { error: 'The amount is too large.' } });
+    await confirm();
+    state.answers[0]!.reject(new Error('Network Error'));
+    await flushPromises();
+
+    expect(byTestId('people-error')?.textContent?.trim()).toBe('The amount is too large.');
+  });
+
+  it("says nothing in the error line under `says: 'self'`", async () => {
+    const state = await openWriting({ says: 'self' });
+    await confirm();
+    state.answers[0]!.reject(new Error('Network Error'));
+    await flushPromises();
+
+    expect(byTestId('people-error')).toBeNull();
+  });
+
+  it('with several, holds while any one sends and says none of their refusals', async () => {
+    const state = await openWriting({ count: 2 });
+    state.press(1);
+    await flushPromises();
+
+    expect(disabled('people-cancel-button')).toBe(true);
+    expect(disabled('people-submit-button')).toBe(true);
+    tryEveryClose();
+    await flushPromises();
+    expect(state.closes).toBe(0);
+
+    state.answers[0]!.reject(new Error('Network Error'));
+    await flushPromises();
+    expect(disabled('people-cancel-button')).toBe(false);
+    expect(byTestId('people-error')).toBeNull();
+  });
+
+  it('keeps a confirm disabled by its own prop once the send is over', async () => {
+    const state = await openWriting({ dialog: { confirmDisabled: true } });
+    state.press(0);
+    await flushPromises();
+    state.answers[0]!.resolve();
+    await flushPromises();
+
+    expect(disabled('people-submit-button')).toBe(true);
+  });
+
+  it('puts the focus back inside the window when its hold ends with a refusal', async () => {
+    const state = await openWriting();
+    await confirm();
+    // A browser drops the focus of the confirm it disables to `<body>`; happy-dom keeps it.
+    (document.activeElement as HTMLElement).blur();
+    expect(document.activeElement).toBe(document.body);
+
+    state.answers[0]!.reject(new Error('Network Error'));
+    await flushPromises();
+
+    expect(document.activeElement).toBe(byTestId('people-find'));
   });
 });
 

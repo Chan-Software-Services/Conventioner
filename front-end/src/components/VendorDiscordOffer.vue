@@ -13,8 +13,13 @@
  *
  * A vendor whose username was updated after the check is told to check again, since the state was
  * read for the answer before.
+ *
+ * The confirmation belongs to the vendor it was opened for (T411): the drawer keeps this section
+ * across a change of vendor, so the change closes it, and an update saved after that is handed on
+ * as `refreshed`, never as the `confirmed` that closes what is open now. Nothing closes it while it
+ * saves.
  */
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { Application, DiscordPossibleMatch, Market } from '@/assets/types/datatypes';
 import AnswerValue from '@/components/AnswerValue.vue';
 import AppDialog from '@/components/AppDialog.vue';
@@ -22,6 +27,7 @@ import { getApiErrorMessage } from '@/utils/api';
 import { theirAnswer, updateVendorInfo } from '@/utils/answerUpdates';
 import { declineMatch, discordAsks, matchNames, type DiscordVendor } from '@/utils/discordCheck';
 import { useMarketStore } from '@/stores/market';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 
 const props = defineProps<{
   market: Market | null | undefined;
@@ -32,7 +38,11 @@ const props = defineProps<{
   canAnswer: boolean;
 }>();
 /** The update saved, with the application as the organizer now reads it. */
-const emit = defineEmits<{ confirmed: [application: Application] }>();
+const emit = defineEmits<{
+  confirmed: [application: Application];
+  /** An update saved after its confirmation had gone: the application as saved. */
+  refreshed: [application: Application];
+}>();
 
 const question = computed(() => props.market?.discord?.usernameQuestion ?? '');
 const serverName = computed(() => props.market?.discord?.guildName || 'the Discord server');
@@ -58,43 +68,57 @@ const alikeSentence = computed(() => {
 });
 
 const confirming = ref<DiscordPossibleMatch | null>(null);
-const busy = ref(false);
-const confirmError = ref('');
+const submission = useDialogSubmit({
+  opening: () => confirming.value,
+  failure: 'The update could not be saved. Try again.',
+});
+const { sending } = submission;
+const declining = ref(false);
 const declineError = ref('');
+/** Neither answer is offered while one is out. */
+const answering = computed(() => sending.value || declining.value);
+
+// Another vendor in the drawer: the confirmation was this one's, so it goes (at once, so no answer
+// can land between the change and the close).
+watch(
+  () => props.application?.id,
+  () => (confirming.value = null),
+  { flush: 'sync' },
+);
 
 function confirm(match: DiscordPossibleMatch): void {
-  confirmError.value = '';
   confirming.value = match;
 }
 
 async function save(): Promise<void> {
   const match = confirming.value;
-  if (!match || !props.application || !props.market?.id || busy.value) return;
-  busy.value = true;
-  confirmError.value = '';
-  try {
-    const saved = await updateVendorInfo(props.market.id, props.application.id, {
-      [question.value]: match.username,
-    });
-    confirming.value = null;
-    emit('confirmed', saved);
-  } catch (err) {
-    confirmError.value = getApiErrorMessage(err, 'The update could not be saved. Try again.');
-  } finally {
-    busy.value = false;
-  }
+  const application = props.application;
+  const marketId = props.market?.id;
+  if (!match || !application || !marketId) return;
+  await submission.submit(
+    () => updateVendorInfo(marketId, application.id, { [question.value]: match.username }),
+    {
+      done: (saved) => {
+        confirming.value = null;
+        emit('confirmed', saved);
+      },
+      late: (answer) => {
+        if (answer.ok) emit('refreshed', answer.answer);
+      },
+    },
+  );
 }
 
 async function decline(match: DiscordPossibleMatch): Promise<void> {
-  if (!props.application || !props.market?.id || busy.value) return;
-  busy.value = true;
+  if (!props.application || !props.market?.id || answering.value) return;
+  declining.value = true;
   declineError.value = '';
   try {
     await declineMatch(props.market.id, props.application.id, match.username);
   } catch (err) {
     declineError.value = getApiErrorMessage(err, 'That could not be saved. Try again.');
   } finally {
-    busy.value = false;
+    declining.value = false;
   }
   // What was declined is the market's, so the market is read again (one market, from the server),
   // after a refusal too: another person may have answered the offer meanwhile.
@@ -128,7 +152,7 @@ async function decline(match: DiscordPossibleMatch): Promise<void> {
             <button
               type="button"
               class="btn btn--secondary btn--compact"
-              :disabled="busy"
+              :disabled="answering"
               data-testid="vendors-detail-discord-confirm"
               @click="confirm(match)"
             >
@@ -137,7 +161,7 @@ async function decline(match: DiscordPossibleMatch): Promise<void> {
             <button
               type="button"
               class="btn btn--secondary btn--compact"
-              :disabled="busy"
+              :disabled="answering"
               data-testid="vendors-detail-discord-decline"
               @click="decline(match)"
             >
@@ -166,10 +190,8 @@ async function decline(match: DiscordPossibleMatch): Promise<void> {
         :open="!!confirming"
         title="Use this Discord username?"
         testid="discord-match-confirm"
-        :confirm-label="busy ? 'Saving…' : 'Save update'"
-        :confirm-disabled="busy"
-        :close-disabled="busy"
-        :error="confirmError"
+        :confirm-label="sending ? 'Saving…' : 'Save update'"
+        :submission="submission"
         @close="confirming = null"
         @submit="save"
       >

@@ -4,6 +4,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
+import ChangeOwedDialog from '@/components/ChangeOwedDialog.vue';
 import VendorPaymentTab from '@/components/VendorPaymentTab.vue';
 import type { VendorAccount } from '@/utils/payments';
 
@@ -375,6 +376,87 @@ describe('the Payment tab', () => {
     );
     expect(wrapper.get('[data-testid="payment-paid"]').text()).toBe('$35.00');
     expect(wrapper.emitted('changed')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('holds a removal while it removes, and sends one for two presses', async () => {
+    let answer!: (value: { data: VendorAccount }) => void;
+    api.delete.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const wrapper = await tab(true, ACCOUNT, { canAdjustPaid: true });
+    await wrapper.get('[data-testid="payment-entry-menu-button"]').trigger('click');
+    await wrapper.get('[data-testid="payment-entry-menu-remove"]').trigger('click');
+    await flushPromises();
+    const form = document.querySelector<HTMLFormElement>(
+      '[data-testid="payment-confirm-window"] form',
+    )!;
+
+    form.requestSubmit();
+    form.requestSubmit();
+    await flushPromises();
+
+    expect(api.delete).toHaveBeenCalledTimes(1);
+    const button = (name: string) =>
+      document.querySelector<HTMLButtonElement>(`[data-testid="payment-confirm-${name}-button"]`)!;
+    expect(button('submit').disabled).toBe(true);
+    expect(button('submit').textContent?.trim()).toBe('Saving…');
+    expect(button('cancel').disabled).toBe(true);
+    button('cancel').click();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+    expect(document.querySelector('[data-testid="payment-confirm-window"]')).not.toBeNull();
+
+    answer({ data: { ...ACCOUNT, payments: [], paidCents: 0 } });
+    await flushPromises();
+    expect(document.querySelector('[data-testid="payment-confirm-window"]')).toBeNull();
+    expect(wrapper.get('[data-testid="payment-paid"]').text()).toBe('$0.00');
+    wrapper.unmount();
+  });
+
+  it('opens a confirmation afresh after a refusal, with no word of it', async () => {
+    const wrapper = await tab(true, ACCOUNT, { canAdjustPaid: true });
+    api.delete.mockRejectedValueOnce(
+      Object.assign(new Error('Request failed with status code 404'), {
+        isAxiosError: true,
+        response: { status: 404, data: { error: 'This market has no such payment standing.' } },
+      }),
+    );
+    const openRemove = async () => {
+      await wrapper.get('[data-testid="payment-entry-menu-button"]').trigger('click');
+      await wrapper.get('[data-testid="payment-entry-menu-remove"]').trigger('click');
+      await flushPromises();
+    };
+    await openRemove();
+    document
+      .querySelector<HTMLFormElement>('[data-testid="payment-confirm-window"] form')!
+      .requestSubmit();
+    await flushPromises();
+    expect(document.querySelector('[data-testid="payment-confirm-error"]')).not.toBeNull();
+
+    document
+      .querySelector<HTMLButtonElement>('[data-testid="payment-confirm-cancel-button"]')!
+      .click();
+    await flushPromises();
+    await openRemove();
+
+    expect(document.querySelector('[data-testid="payment-confirm-error"]')).toBeNull();
+    wrapper.unmount();
+  });
+
+  it("shows an earlier opening's change behind Change the amount owed, which stays open", async () => {
+    const wrapper = await tab(true, ACCOUNT, { canChangeOwed: true });
+    await wrapper.findAll('[data-testid="payment-line-menu-button"]')[0].trigger('click');
+    await wrapper.get('[data-testid="payment-line-menu-owed"]').trigger('click');
+    await flushPromises();
+
+    // The dialog hands on an earlier opening's answer as the account as it stands.
+    wrapper
+      .findComponent(ChangeOwedDialog)
+      .vm.$emit('refreshed', { ...ACCOUNT, owedCents: 3500, balanceState: 'paid' });
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="payment-owed"]').text()).toBe('$35.00');
+    expect(document.querySelector('[data-testid="change-owed-window"]')).not.toBeNull();
+    expect(wrapper.emitted('changed')).toHaveLength(1);
     wrapper.unmount();
   });
 });

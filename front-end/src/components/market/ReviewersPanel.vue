@@ -16,7 +16,6 @@ import AppDialog from '@/components/AppDialog.vue';
 import NameList from '@/components/NameList.vue';
 import ReviewerName from '@/components/market/ReviewerName.vue';
 import ReviewerPicker from '@/components/market/ReviewerPicker.vue';
-import { getApiErrorMessage } from '@/utils/api';
 import { MarketAction, mayTake } from '@/utils/marketActions';
 import {
   NONE_CHOSEN,
@@ -28,6 +27,7 @@ import {
   unansweredWrite,
 } from '@/utils/reviewTeam';
 import { useMarketStore } from '@/stores/market';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 
 /** How many the line names before "and N more". */
 const NAMED = 3;
@@ -61,12 +61,15 @@ const open = ref(false);
 /** The read-only list, for someone who may not choose. */
 const listOpen = ref(false);
 const ticked = ref<string[]>([]);
-const saving = ref(false);
-const error = ref('');
+/** The save, for the dialog's one opening (T411): the shell holds it while the save is out. */
+const submission = useDialogSubmit({
+  opening: () => open.value,
+  failure: 'Could not save the reviewers.',
+});
+const { sending: saving } = submission;
 
 function start() {
   ticked.value = teamToChange(props.market);
-  error.value = '';
   open.value = true;
 }
 
@@ -90,26 +93,27 @@ async function closeDialog() {
 
 /**
  * The dialog goes only once the re-read has answered: until then the panel behind it says the team
- * before this save, and a close would hide a refusal. No close takes it meanwhile (`close-disabled`).
+ * before this save, and a close would hide a refusal. No close takes it meanwhile (its submission).
  */
-async function holdUntilAnswered(write: Promise<number>) {
-  saving.value = true;
-  error.value = '';
-  try {
-    await write;
-    await useMarketStore().refresh();
-    emit('saved');
-    await closeDialog();
-  } catch (err) {
-    error.value = getApiErrorMessage(err, 'Could not save the reviewers.');
-  } finally {
-    saving.value = false;
-  }
+async function holdUntilAnswered(write: () => Promise<number>) {
+  await submission.submit(
+    async () => {
+      await write();
+      await useMarketStore().refresh();
+    },
+    {
+      done: async () => {
+        emit('saved');
+        await closeDialog();
+      },
+    },
+  );
 }
 
 async function save() {
-  if (!props.market || saving.value) return;
-  await holdUntilAnswered(chooseReviewers(props.market.id, ticked.value));
+  const market = props.market;
+  if (!market) return;
+  await holdUntilAnswered(() => chooseReviewers(market.id, ticked.value));
 }
 
 /**
@@ -124,7 +128,7 @@ watch(
     ticked.value = [...left.team];
     open.value = true;
     noOpener = true;
-    void holdUntilAnswered(left.answer);
+    void holdUntilAnswered(() => left.answer);
   },
   { immediate: true },
 );
@@ -172,9 +176,7 @@ watch(
       testid="reviewers-dialog"
       scroll="body"
       :confirm-label="saving ? 'Saving…' : 'Save reviewers'"
-      :confirm-disabled="saving"
-      :close-disabled="saving"
-      :error="error"
+      :submission="submission"
       anchored
       @close="closeDialog"
       @submit="save"

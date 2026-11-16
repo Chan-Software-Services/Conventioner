@@ -9,6 +9,7 @@ import { SESSION_ENDED_MESSAGE } from '@/utils/api';
 import { executeRecaptcha } from '@/utils/captcha';
 import { refusedSignIn, resentLink, type SignInNotice } from '@/utils/signInNotice';
 import { SIGNED_OUT_EVERYWHERE_MESSAGE, safeNext } from '@/utils/signInNext';
+import { useSubmit } from '@/utils/useSubmit';
 
 const hostname = import.meta.env.VITE_FLASK_HOST;
 
@@ -88,6 +89,23 @@ const otpRequested = ref(false);
 /** The code form's one line: "code sent", then a wrong code's in its place, never both. */
 const otpNotice = ref<SignInNotice | null>(null);
 
+/*
+ * Each form's request goes through its own submit (T277 ticket 08): a second press while one is
+ * out sends nothing, and an answer that lands after the person moved on is dropped, so the screen
+ * they moved to says nothing of the one they left. A form's scope is what it is open on: the way
+ * in, and for the code form its step too, so Send code and its Sign in share one, and "Use a
+ * different email" starts another. Each form's line is the page's own (`loginNotice`, `otpNotice`
+ * and Register's two), written from its answer, so no refusal's sentence is said by the submit.
+ */
+const { sending: signingIn, submit: submitSignIn } = useSubmit({ scope: () => mode.value });
+const { sending: creatingAccount, submit: submitRegistration } = useSubmit({
+  scope: () => mode.value,
+});
+const { sending: sendingCode, submit: submitCodeForm } = useSubmit({
+  scope: () => `${mode.value}:${otpRequested.value}`,
+});
+const { sending: resendingLink, submit: submitResend } = useSubmit({ scope: () => mode.value });
+
 /**
  * Start the code form again with another address, saying nothing of the last one. The button goes
  * with the code step, so the focus goes to the address field it gives back.
@@ -102,8 +120,6 @@ async function useADifferentEmail() {
 
 /** The address a sign-in was refused for as unverified, which "Send the link again" sends to. */
 const unverifiedAddress = ref('');
-/** A link on its way, so a double click sends one. */
-const resending = ref(false);
 
 /** Remember the address of a refusal that offers the link again, for the button to send to. */
 function noticeOf(refusal: SignInNotice, address: string): SignInNotice {
@@ -115,22 +131,25 @@ function noticeOf(refusal: SignInNotice, address: string): SignInNotice {
  * "Send the link again" (E38/F14/S02): asks for the verification link for the address that was
  * refused, and then says one link is on its way, whatever the server said of the address.
  */
-async function resendVerification(form: 'login' | 'otp') {
-  if (resending.value) return;
+function resendVerification(form: 'login' | 'otp') {
   const notice = form === 'login' ? loginNotice : otpNotice;
-  resending.value = true;
-  try {
-    await axios.post(
-      `${hostname}/resend-verification`,
-      { email: unverifiedAddress.value },
-      { withCredentials: true, headers: { 'Content-Type': 'application/json' } },
-    );
-    notice.value = resentLink(null);
-  } catch (err: unknown) {
-    notice.value = resentLink(err);
-  } finally {
-    resending.value = false;
-  }
+  return submitResend(
+    () =>
+      axios.post(
+        `${hostname}/resend-verification`,
+        { email: unverifiedAddress.value },
+        { withCredentials: true, headers: { 'Content-Type': 'application/json' } },
+      ),
+    {
+      done: () => {
+        notice.value = resentLink(null);
+      },
+      refused: (err) => {
+        notice.value = resentLink(err);
+        return '';
+      },
+    },
+  );
 }
 
 /**
@@ -143,48 +162,65 @@ const remember = ref(false);
 const REMEMBER_ME_HELP =
   'Keeps you signed in on this device for 30 days. Leave it unticked on a shared one.';
 
-const submitLogin = async () => {
-  loginNotice.value = null;
+/** Signed in: the address is kept for the app bar, and the sign-in goes on to where it was for. */
+function signedIn(response: { status: number; data: { user_data: { email: string } } }) {
+  if (response.status !== 200) return;
+  localStorage.setItem('user', JSON.stringify(response.data.user_data.email));
+  router.push(afterSignIn.value);
+}
+
+const submitLogin = () => {
   const address = email.value;
-
-  try {
-    const response = await axios.post(
-      `${hostname}/login`,
-      {
-        email: email.value,
-        password: password.value,
-        remember: remember.value,
-      },
-      {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json',
+  return submitSignIn(
+    () => {
+      loginNotice.value = null;
+      return axios.post(
+        `${hostname}/login`,
+        {
+          email: email.value,
+          password: password.value,
+          remember: remember.value,
         },
+        {
+          withCredentials: true,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+    },
+    {
+      done: signedIn,
+      refused: (err) => {
+        loginNotice.value = noticeOf(
+          refusedSignIn(err, 'That email and password do not match.', { offersReset: true }),
+          address,
+        );
+        return '';
       },
-    );
-
-    if (response.status === 200) {
-      const user_email = response.data.user_data.email;
-      localStorage.setItem('user', JSON.stringify(user_email));
-      router.push(afterSignIn.value);
-    }
-  } catch (err: unknown) {
-    loginNotice.value = noticeOf(
-      refusedSignIn(err, 'That email and password do not match.', { offersReset: true }),
-      address,
-    );
-  }
+    },
+  );
 };
 
-/**
- * A signup in flight (E32/F03/S04). A double click sent two, and before the server held one
- * account per address that made two accounts and two verification emails. The form's submit is
- * the one way in (Enter and the button alike), so guarding it here guards both.
- */
-const registering = ref(false);
+/** Why a registration did not go through, in the form's words. */
+function registrationRefusal(_e: unknown): string {
+  const error = _e as {
+    response?: { data?: { msg?: string; message?: string }; status?: number };
+    request?: unknown;
+    message?: string;
+  };
+  if (error.response) return error.response.data?.msg || 'Registration failed';
+  if (error.request) return 'Unable to connect to server. Please try again.';
+  return 'An error occurred. Please try again.';
+}
 
-const submitRegister = async () => {
-  if (registering.value) return;
+/**
+ * A signup sends once however often it is pressed (E32/F03/S04). A double click sent two, and
+ * before the server held one account per address that made two accounts and two verification
+ * emails. The form's submit is the one way in (Enter and the button alike), so its submit guards
+ * both.
+ */
+const submitRegister = () => {
   registerErrorMessage.value = '';
   registerSuccessMessage.value = '';
 
@@ -204,55 +240,46 @@ const submitRegister = async () => {
     return;
   }
 
-  registering.value = true;
-  try {
-    // Get CAPTCHA token
-    const captchaToken = await executeRecaptcha('register');
+  return submitRegistration(
+    async () => {
+      // Get CAPTCHA token
+      const captchaToken = await executeRecaptcha('register');
 
-    const response = await axios.post(
-      `${hostname}/register`,
-      {
-        email: registerEmail.value,
-        password: registerPassword.value,
-        captcha_token: captchaToken,
-      },
-      {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json',
+      return axios.post(
+        `${hostname}/register`,
+        {
+          email: registerEmail.value,
+          password: registerPassword.value,
+          captcha_token: captchaToken,
         },
+        {
+          withCredentials: true,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+    },
+    {
+      done: (response) => {
+        if (response.status !== 201) return;
+        registerSuccessMessage.value =
+          response.data.msg ||
+          'Registration successful! Please check your email to verify your account.';
+        // Clear form
+        registerEmail.value = '';
+        registerPassword.value = '';
+        registerPasswordConfirm.value = '';
       },
-    );
-
-    if (response.status === 201) {
-      registerSuccessMessage.value =
-        response.data.msg ||
-        'Registration successful! Please check your email to verify your account.';
-      // Clear form
-      registerEmail.value = '';
-      registerPassword.value = '';
-      registerPasswordConfirm.value = '';
-    }
-  } catch (_e: unknown) {
-    const error = _e as {
-      response?: { data?: { msg?: string; message?: string }; status?: number };
-      request?: unknown;
-      message?: string;
-    };
-    if (error.response) {
-      registerErrorMessage.value = error.response.data?.msg || 'Registration failed';
-    } else if (error.request) {
-      registerErrorMessage.value = 'Unable to connect to server. Please try again.';
-    } else {
-      registerErrorMessage.value = 'An error occurred. Please try again.';
-    }
-  } finally {
-    registering.value = false;
-  }
+      refused: (err) => {
+        registerErrorMessage.value = registrationRefusal(err);
+        return '';
+      },
+    },
+  );
 };
 
-const requestOTP = async () => {
-  otpNotice.value = null;
+const requestOTP = () => {
   const address = otpEmail.value;
 
   if (!address) {
@@ -260,36 +287,43 @@ const requestOTP = async () => {
     return;
   }
 
-  try {
-    const response = await axios.post(
-      `${hostname}/request-otp`,
-      {
-        email: otpEmail.value,
-      },
-      {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json',
+  return submitCodeForm(
+    () => {
+      otpNotice.value = null;
+      return axios.post(
+        `${hostname}/request-otp`,
+        {
+          email: address,
         },
+        {
+          withCredentials: true,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+    },
+    {
+      done: (response) => {
+        if (response.status !== 200) return;
+        otpRequested.value = true;
+        otpNotice.value = {
+          tone: 'success',
+          text: response.data.msg || 'A sign-in code has been sent to your email.',
+        };
       },
-    );
-
-    if (response.status === 200) {
-      otpRequested.value = true;
-      otpNotice.value = {
-        tone: 'success',
-        text: response.data.msg || 'A sign-in code has been sent to your email.',
-      };
-    }
-  } catch (err: unknown) {
-    otpNotice.value = noticeOf(
-      refusedSignIn(err, 'The sign-in code could not be sent. Please try again.'),
-      address,
-    );
-  }
+      refused: (err) => {
+        otpNotice.value = noticeOf(
+          refusedSignIn(err, 'The sign-in code could not be sent. Please try again.'),
+          address,
+        );
+        return '';
+      },
+    },
+  );
 };
 
-const submitOTPLogin = async () => {
+const submitOTPLogin = () => {
   const address = otpEmail.value;
 
   if (!address || !otpCode.value) {
@@ -297,30 +331,30 @@ const submitOTPLogin = async () => {
     return;
   }
 
-  try {
-    const response = await axios.post(
-      `${hostname}/login-otp`,
-      {
-        email: otpEmail.value,
-        otp: otpCode.value,
-        remember: remember.value,
-      },
-      {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json',
+  return submitCodeForm(
+    () =>
+      axios.post(
+        `${hostname}/login-otp`,
+        {
+          email: address,
+          otp: otpCode.value,
+          remember: remember.value,
         },
+        {
+          withCredentials: true,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      ),
+    {
+      done: signedIn,
+      refused: (err) => {
+        otpNotice.value = noticeOf(refusedSignIn(err, 'That code is not right.'), address);
+        return '';
       },
-    );
-
-    if (response.status === 200) {
-      const user_email = response.data.user_data.email;
-      localStorage.setItem('user', JSON.stringify(user_email));
-      router.push(afterSignIn.value);
-    }
-  } catch (err: unknown) {
-    otpNotice.value = noticeOf(refusedSignIn(err, 'That code is not right.'), address);
-  }
+    },
+  );
 };
 </script>
 
@@ -419,7 +453,7 @@ const submitOTPLogin = async () => {
         <SignInMessage
           :notice="loginNotice"
           testid-prefix="login"
-          :sending="resending"
+          :sending="resendingLink"
           @resend="resendVerification('login')"
         />
         <label class="remember-me">
@@ -435,9 +469,10 @@ const submitOTPLogin = async () => {
         <button
           type="submit"
           class="btn btn--primary submit-button"
+          :disabled="signingIn"
           data-testid="login-submit-button"
         >
-          Sign in
+          {{ signingIn ? 'Signing in…' : 'Sign in' }}
         </button>
         <div class="form-links">
           <RouterLink
@@ -532,10 +567,10 @@ const submitOTPLogin = async () => {
         <button
           type="submit"
           class="btn btn--primary submit-button"
-          :disabled="registering"
+          :disabled="creatingAccount"
           data-testid="login-register-submit-button"
         >
-          Create account
+          {{ creatingAccount ? 'Creating account…' : 'Create account' }}
         </button>
         <p class="field-help">
           We will email you a link to verify this address. You cannot sign in until you have
@@ -587,7 +622,7 @@ const submitOTPLogin = async () => {
         <SignInMessage
           :notice="otpNotice"
           testid-prefix="login-otp"
-          :sending="resending"
+          :sending="resendingLink"
           @resend="resendVerification('otp')"
         />
         <template v-if="otpRequested">
@@ -607,9 +642,11 @@ const submitOTPLogin = async () => {
         <button
           type="submit"
           class="btn btn--primary submit-button"
+          :disabled="sendingCode"
           data-testid="login-otp-submit-button"
         >
-          {{ otpRequested ? 'Sign in' : 'Send code' }}
+          <template v-if="otpRequested">{{ sendingCode ? 'Signing in…' : 'Sign in' }}</template>
+          <template v-else>{{ sendingCode ? 'Sending…' : 'Send code' }}</template>
         </button>
         <div v-if="otpRequested" class="form-links">
           <button

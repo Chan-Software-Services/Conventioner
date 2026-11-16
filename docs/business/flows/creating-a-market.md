@@ -13,6 +13,7 @@ sources:
   - T273
   - T263
   - T282
+  - T411
 ---
 
 # Creating a market
@@ -41,12 +42,14 @@ The dialog sends these three answers and the day, and nothing else: everything e
 4. Expect `/markets/<id>/setup` in Draft, with the market bar (Market Setup, Application Form, Applications, Assignment, Attendance, Tools, Stats) and the phase rail.
 
 An empty name, or no answer to how vendors apply, keeps "Create market" disabled.
+While the market is being created nothing closes the dialog and "Create market" is disabled, so a second press makes no second market; a refusal stands under the name until a field changes, and the next opening starts without it (T411).
 On the Google Form path the same dialog ends on the upload step instead; "Cancel" there leaves a Google Form draft on Market Setup to plan by hand, and its form tab reads "Questions" ([P1](the-google-form-path.md#p1-csv-intake-form-built-by-hand)).
 Covered by:
 
 - `dialog-idiom.spec.ts`
 - `market-owner.spec.ts`
 - `new-market-org.spec.ts`
+- `newMarketSendsWhatIsChosen.test.ts` (what it sends, one market for two presses, its closes refused while it creates, and a refusal gone on a change and on the next opening)
 - `where-a-form-starts.spec.ts`
 
 ## D2. Create a market that starts from a Google Form

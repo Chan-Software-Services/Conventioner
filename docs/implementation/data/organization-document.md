@@ -58,6 +58,7 @@ sources:
   - T204
   - T224
   - T217
+  - T411
   - T263
   - T274
   - T283
@@ -152,6 +153,7 @@ A market's owner takes the organization's current default with "Copy the organiz
 Anyone else is refused with "Only the organization's owner or its admins may change its default permissions.", 403, an organization nobody has 404; then an unknown row, a fixed row and a role that is not one of the four, 400, as a market's own writes refuse them.
 Setting the role a row already asks, or resetting a row it does not set, writes and records nothing; a stored field that is not a map is replaced by one holding the row, as Mongo cannot set a key inside it, and a whole reset leaves a row this build cannot read where it is.
 Manage organization's "Default permissions for new markets" ([`OrganizationPermissions.vue`](../../../front-end/src/components/OrganizationPermissions.vue)) is a line in Manage organization and a dialog over it (T217), showing the table with Manage market's rows and changes; a change confirms first and says it reaches only markets created from now on.
+Each confirmation, a row's change and the reset, writes through its own `useDialogSubmit` handle keyed by what it was opened on (T411), so nothing closes it while its write is out, a second press sends nothing, and a late table is shown as a timely one is.
 
 ## The organization's history
 

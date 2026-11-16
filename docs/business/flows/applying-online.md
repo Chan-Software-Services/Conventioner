@@ -14,6 +14,7 @@ sources:
   - E06/F01/S01
   - T202
   - T271
+  - T411
 ---
 
 # Applying online
@@ -49,6 +50,7 @@ Covered by:
 1. The vendor opens the shared link `/<market-slug>`; the page names the market over "Sign in": "Enter your email address. We'll send you a code to sign in with."
 2. They enter their email and "Send code"; the page says "We've sent a code to <email>. Only the newest one works." whatever the address, and the code is sent before the page answers (E32/F03/S02); its email links back to the page, "your page for <market>".
 3. The code arrives; they enter it under "Sign-in code" and choose "Sign in".
+   Each press sends one request, the page moves to the code step on that request's own answer, and "Use a different email" is disabled while one is out, so a late answer never lands on the email step ([dialogs](../../implementation/conventions/dialogs.md), T411).
 4. The page reads "You have not applied to this market yet." with "Apply", which opens the form in its place, on the same page and address: "Apply", the essential questions, then "More questions" (the custom ones); "Save application" and "Cancel".
 5. Saved, the form closes on "Your answers" with "Edit", and the page reads "Submitted" (H3c).
 

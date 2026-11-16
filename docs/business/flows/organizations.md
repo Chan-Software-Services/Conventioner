@@ -26,6 +26,7 @@ sources:
   - T283
   - T315
   - T352
+  - T411
 ---
 
 # Organizations
@@ -55,6 +56,7 @@ Covered by:
 
 A name another of your organizations has, in any capitals and with any spaces around it, is refused in the dialog: "You already belong to an organization named "Harbour Makers"." (T352).
 Only your own organizations are compared, so another organizer may have one of the same name, and nothing says whether anyone does ([an organization's name](../../implementation/data/organization-document.md#an-organizations-name)); [`organization-names.spec.ts`](../../../front-end/e2e/organization-names.spec.ts) walks it.
+While the organization is being made nothing closes the dialog and "Create" is disabled, so a second press makes no second organization; a refusal stands until the name changes, and the next opening starts without it (T411).
 
 Each organization's card says its name, your role in it, how many markets it holds and its owner.
 The cards are a [list frame](../../design-system.md), in the order the organizations were made (T223): a line counts them, "3 organizations", past 12 a field, "Find an organization", finds by any part of a name, capitals and accents aside, as Markets' search does, its words held in the address as `search`, and the list shows 50 at a time, "Showing 50 of 51" and "Show 1 more".
@@ -64,6 +66,7 @@ The count is the organization read's `marketCount`, counted from the markets the
 A person with no organization is told on the Markets list and in the create-market dialog to make one here first ([D4](creating-a-market.md#d4-create-a-market-with-no-organization-yet)).
 Covered by:
 
+- `OrganizationsView.test.ts` for one organization for two presses, its closes refused while it is made, and a refusal gone on a change and on the next opening
 - [`theMarketsAndOrganizationsAtScale.test.ts`](../../../front-end/src/__tests__/theMarketsAndOrganizationsAtScale.test.ts) for the field at 12 and 13 and the first 50 of 51
 - `tier2.spec.ts` ("Organization CRUD")
 
@@ -80,6 +83,9 @@ Covered by:
    An address breaks before its "@" or a dot, never just after a hyphen, drawn by [`EmailAddress.vue`](../../../front-end/src/components/EmailAddress.vue).
 4. Sign in as that person: an admin runs every market of the organization as its Admin (Manage on each market's card, the rail's phase moves, the seats on Assignments), and a member sees every one as a Viewer; each market's Manage market lists them as "Admin, through <organization>" or "Viewer, through <organization>".
 
+Each add belongs to the dialog it was sent from (T411): while "Add" and the list's re-read are out nothing closes Manage organization, and a second press sends nothing.
+An answer that lands after Manage organization was closed, or opened on another organization, writes nothing into the one open, its re-read included; the list behind still reads a change that landed.
+
 Branches: an email with no account, someone already in the organization, an Admin trying Owner-only actions.
 Covered by:
 
@@ -87,7 +93,7 @@ Covered by:
 - [`an-address-breaks-only-before-its-at.spec.ts`](../../../front-end/e2e/an-address-breaks-only-before-its-at.spec.ts) (its rows)
 - `dialog-idiom.spec.ts`
 - [`everyone-with-access.spec.ts`](../../../front-end/e2e/everyone-with-access.spec.ts) (Manage organization from its address)
-- [`manageOrganizationPeople.test.ts`](../../../front-end/src/__tests__/manageOrganizationPeople.test.ts)
+- [`manageOrganizationPeople.test.ts`](../../../front-end/src/__tests__/manageOrganizationPeople.test.ts) (and each add held, sent once, and its answer kept out of Manage organization opened on another organization)
 - `OrganizationsView.test.ts` for the key it opens on and drops
 - [`people-at-scale-organization.spec.ts`](../../../front-end/e2e/people-at-scale-organization.spec.ts) (Admins and Members at 150 people: a page at a time, finding one member, the place kept, someone just added; on a phone at 390 and 320)
 - `screens-match-roles.spec.ts` ("an organization admin with no role on the market")
@@ -105,12 +111,14 @@ It asks first, in a destructive confirmation that opens on Cancel: "Remove walk3
 
 Cancel and Escape change nothing and give focus back to that Remove; "Remove" removes them, the list re-reads in place with the dialog open, keeping the words in its find field and the rows shown, and focus goes to the Admins or Members list they were in; a refusal is said in the confirmation, whose Remove may be pressed again.
 Someone another organizer removed meanwhile is removed all the same: the server answers "They are no longer in this organization.", a 404, and the dialog reads it as done, closing the confirmation and re-reading the list without them (T181).
+While the removal and the re-read after it are out nothing closes the confirmation, Cancel and the close drawn disabled, and a second "Remove" sends nothing (T411).
 Each row's Remove is the destructive intent at secondary weight, red ink on white, not a filled red button on every row ([the design language](../../design-system.md#the-primitive-layer)).
 Covered by:
 
 - `*-sweep.spec.ts`, the sweeps' state "the manage-organization dialog, removing a member"
 - `access-control.spec.ts` ("org membership changes")
 - [`removing-someone-asks-first.spec.ts`](../../../front-end/e2e/removing-someone-asks-first.spec.ts) at 1440 and 390, someone removed in another window included, and at 390 the address in the confirmation's title broken only before its "@" or a dot
+- `removingSomeoneAsksFirst.test.ts` (held while it removes, one removal for two presses, and a refusal not in the next Remove)
 
 ## B3a. Make an admin a member, or a member an admin
 
@@ -123,19 +131,22 @@ Each asks first, in a confirmation that is not destructive, since another change
 
 Cancel and Escape change nothing and give focus back to the row's button; confirming moves them to the other list in place, where they keep their place in the organization's order, with the dialog open and focus on the list they now stand in, and the History says "<owner> changed <email> from Admin to Member" or back.
 Someone removed meanwhile is read as done, the list re-read without them; any other refusal is said in the confirmation, and one that met another change to the same people is read again behind it ([the organization's people](../../implementation/modules/organization-people.md#make-member-and-make-admin)).
+Nothing closes the confirmation while the change and its re-read are out, and a second press sends nothing (T411).
 Typing a member's address into "Add admin" still makes them an admin, listed under Admins alone.
 Covered by:
 
 - [`an-organizations-people-change-place.spec.ts`](../../../front-end/e2e/an-organizations-people-change-place.spec.ts) at 1440 and 390
-- [`changingAPlaceAsksFirst.test.ts`](../../../front-end/src/__tests__/changingAPlaceAsksFirst.test.ts)
+- [`changingAPlaceAsksFirst.test.ts`](../../../front-end/src/__tests__/changingAPlaceAsksFirst.test.ts) (and held while it writes, and a refusal not in the next change)
 
 ## B4. Rename an organization
 
 **Status:** Works (walked live).
 Manage, "Rename organization", edit, "Save"; the owner's alone, so an admin's dialog has no such section.
 A name another of the owner's organizations has is refused under the field, as B1's is; the organization's own name in other capitals is not.
+While the rename is out nothing closes Manage organization and a second "Save" sends nothing; an answer that lands after it was opened on another organization leaves it alone (T411).
 Covered by:
 
+- `manageOrganizationPeople.test.ts` (a rename held, sent once, and its answer kept out of Manage organization opened on another organization)
 - `organization-names.spec.ts`
 - `tier2.spec.ts`
 
@@ -143,8 +154,10 @@ Covered by:
 
 Manage, "Delete organization" opens a preview of what would be destroyed; confirm with "Delete it all".
 A deletion record is written before anything is destroyed.
+While the deletion is out nothing closes the dialog and a second press sends nothing; a refusal is said under what it would destroy, and an answer that lands after the dialog was closed and opened again leaves the new opening alone (T411).
 Covered by:
 
+- `deletingAnOrganization.test.ts`
 - `org-deletion.spec.ts`
 
 The rule it obeys is [when an organization may be deleted](../rules/when-an-organization-may-be-deleted.md).
@@ -201,6 +214,7 @@ Covered by:
 2. The dialog lists the rows of a market's table as [Manage market's Permissions](ending-and-managing-a-market.md#l3a-set-who-may-do-what) does, each with where its role came from ("Built-in default", or "Set for this organization by <address>, <when>"), a "Who may" dropdown for the owner and the admins, the same "Always" for a fixed row, and the same note beside "Give and take Editor and Viewer roles".
 3. Choosing a role asks first: "Change “Check vendors in” for new markets?", the row from its role now to the one chosen and who loses or gains it, and "Markets created from now on start with this. The markets it already holds keep their own.", over the dialog; "Change" saves that row alone and leaves the dialog open, and Cancel, Escape or the backdrop close only the question and put the dropdown back.
 4. "Reset to built-in defaults", pinned at the dialog's foot, lists each row it returns, says the same of what it reaches, opens on Cancel, and resets them all in one write, recorded as one change; its button is disabled once nothing is set, so focus then goes to the dialog's first control.
+   Nothing closes a change's or the reset's confirmation while its write is out, a second press sends nothing, and its refusal is said in it, not in its next opening (T411).
 5. "Changes" lists every change to the default, newest first, in a box of bounded height that shows 25 more as its end scrolls into view: the row, its role before and after, who and when; each is in the organization's History too ([B7](#b7-read-the-organizations-history)).
 6. For a member the dialog is read-only and says "Only the organization's owner and its admins change these.", with no foot, and the arrow keys scroll its body.
 

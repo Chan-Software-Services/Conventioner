@@ -27,6 +27,7 @@ sources:
   - T263
   - T311
   - T422
+  - T411
 ---
 
 # The app bar
@@ -136,7 +137,7 @@ From the sheet, focus goes to the menu button before the sheet closes, so the di
 **[`signOutEverywhere`](../../../front-end/src/utils/sessionEnded.ts) posts `/logout-everywhere` through the app's `api`**, which replaces the account's login id, ends every record of its sign-ins and signs this browser out ([what ends a sign-in](../data/users-and-email.md#a-sign-in-is-kept-on-the-server)).
 Done, it forgets the session (`forgetTheSession`) and goes to `/login?everywhere=1`, where sign-in says "You are signed out on every device." in the place of "Your session has ended" (`loginAddress`'s `everywhere`).
 Unlike `signOut` it goes through `api`, so a 401 is a session already over, which ends as any organizer request's 401 does, saying it ended.
-Any other failure forgets nothing, since every other browser is still signed in: the dialog holds through the request (`closeDisabled`, its confirm reading "Signing out…") and stays open saying "Could not sign out everywhere. Try again.".
+Any other failure forgets nothing, since every other browser is still signed in: the dialog holds through the request (by its submission, T411, its confirm reading "Signing out…") and stays open saying "Could not sign out everywhere. Try again.".
 The dialog closes too when the stored user changes under it, as the sheet does.
 
 ## Sharp edges
