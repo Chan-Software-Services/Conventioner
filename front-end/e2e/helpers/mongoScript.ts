@@ -45,7 +45,11 @@ export function asLoadedFile(script: string): string {
  * `nonce` and how the script ended. It ends when its stdin does, which is when the process that
  * started it exits.
  *
- * Its stdin is read with a blocking `readSync`, so no request is read while one runs.
+ * mongosh leaves its stdin, fd 0, non-blocking, where a read with nothing to read fails at once
+ * with `EAGAIN`, so waiting on it would mean polling. The loop opens `/dev/stdin` again instead,
+ * the same pipe (`docker exec -i` gives a pipe) as a file description of its own, which blocks: an
+ * idle session sleeps in its `readSync` until the next request comes, and no request is read while
+ * one runs.
  */
 export function sessionLoop(nonce: string): string {
   return `
@@ -53,6 +57,7 @@ const fs = require('fs');
 const { StringDecoder } = require('string_decoder');
 const decoder = new StringDecoder('utf8');
 const chunk = Buffer.alloc(1 << 16);
+const input = fs.openSync('/dev/stdin', 'r');
 const file = '/tmp/mongo-eval-' + process.pid + '.js';
 let pending = '';
 function nextLine() {
@@ -63,13 +68,7 @@ function nextLine() {
       pending = pending.slice(at + 1);
       return line;
     }
-    let read;
-    try {
-      read = fs.readSync(0, chunk, 0, chunk.length, null);
-    } catch (e) {
-      if (e.code === 'EAGAIN') { sleep(5); continue; }
-      throw e;
-    }
+    const read = fs.readSync(input, chunk, 0, chunk.length, null);
     if (read === 0) return null;
     pending += decoder.write(chunk.subarray(0, read));
   }

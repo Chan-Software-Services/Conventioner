@@ -2,11 +2,14 @@
  * The E2E suite runs its Mongo scripts in one long-lived mongosh session, each loaded as a file,
  * where `mongosh --eval` once started a fresh mongosh for every one. A spec reads what the script
  * printed and the value of its last expression, as `--eval` printed it, so the file must keep that
- * value, keep each script's names to itself, and the session's answers must be told apart.
+ * value, keep each script's names to itself, and the session's answers must be told apart. An
+ * idle session must wait for its next script without polling, in the very container whose CPU a
+ * loaded runner starves.
  */
+import { spawn } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
-import { asLoadedFile, readAnswer } from '../../e2e/helpers/mongoScript';
+import { asLoadedFile, readAnswer, sessionLoop } from '../../e2e/helpers/mongoScript';
 
 describe('asLoadedFile', () => {
   it('keeps the value of a last expression for the session to print', () => {
@@ -81,4 +84,62 @@ describe('readAnswer', () => {
     expect(first?.answer).toEqual({ ok: true, output: '1' });
     expect(readAnswer(first!.rest, NONCE)?.answer).toEqual({ ok: true, output: '2' });
   });
+});
+
+/**
+ * The session's loop run by plain Node, with mongosh's `print`, `load` and `sleep` stood in for, and
+ * its stdin a pipe left non-blocking, as mongosh leaves it. It is sent one script only after a pause.
+ */
+function runTheLoop(nonce: string, pauseMs: number) {
+  const standIns = `
+    const nodeFs = require('fs');
+    const nodeVm = require('vm');
+    process.stdin; // Node, as mongosh does, makes a piped fd 0 non-blocking
+    globalThis.stdinFlags = nodeFs.readFileSync('/proc/self/fdinfo/0', 'utf8').match(/flags:\\s*(\\d+)/)[1];
+    globalThis.sleeps = 0;
+    globalThis.sleep = (ms) => {
+      sleeps += 1;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+    };
+    globalThis.print = (...values) => nodeFs.writeSync(1, values.join(' ') + '\\n');
+    globalThis.load = (file) => nodeVm.runInThisContext(nodeFs.readFileSync(file, 'utf8'));
+    process.on('exit', () => nodeFs.writeSync(2, JSON.stringify({ stdinFlags, sleeps })));
+  `;
+  // Through `cat`, so the loop's stdin is a pipe, as `docker exec -i` gives mongosh, where Node
+  // would give a child a socket.
+  const child = spawn('sh', [
+    '-c',
+    'cat | "$0" -e "$1"',
+    process.execPath,
+    standIns + sessionLoop(nonce),
+  ]);
+  let printed = '';
+  let said = '';
+  child.stdout.on('data', (text: Buffer) => (printed += text.toString()));
+  child.stderr.on('data', (text: Buffer) => (said += text.toString()));
+  setTimeout(() => {
+    child.stdin.write(`${JSON.stringify({ file: asLoadedFile('40 + 2') })}\n`);
+    child.stdin.end();
+  }, pauseMs);
+  return new Promise<{ code: number | null; printed: string; said: string }>((resolve) =>
+    child.on('close', (code) => resolve({ code, printed, said })),
+  );
+}
+
+describe('sessionLoop', () => {
+  it.runIf(process.platform === 'linux')(
+    'waits for the next script without polling a non-blocking stdin, then answers it',
+    async () => {
+      const nonce = 'n0nce';
+      const { code, printed, said } = await runTheLoop(nonce, 300);
+      expect(code, said).toBe(0);
+      const { stdinFlags, sleeps } = JSON.parse(said) as { stdinFlags: string; sleeps: number };
+      // O_NONBLOCK, octal 04000: the loop was given the stdin mongosh leaves it.
+      expect(parseInt(stdinFlags, 8) & 0o4000).toBe(0o4000);
+      expect(sleeps).toBe(0);
+      const ready = readAnswer(printed, nonce);
+      expect(ready?.answer).toEqual({ ok: true, output: '' });
+      expect(readAnswer(ready!.rest, nonce)?.answer).toEqual({ ok: true, output: '42' });
+    },
+  );
 });
