@@ -4,6 +4,7 @@ minutes; CI's full run on the pull request runs the rest.
 
     python3 scripts/affected-specs.py --run  [options] [-- <playwright arguments>]
     python3 scripts/affected-specs.py --list [options] [--json]
+    python3 scripts/affected-specs.py audit [options] [--github] <playwright json report>...
 
 From the worktree root, on the worktree's stack (`team-stack up`, `team-stack seed`, and
 `eval "$(~/agent-team/bin/team-stack env)"`, so Playwright reaches it). The change is the diff from
@@ -25,9 +26,13 @@ The chosen specs run by score, the shorter first on a tie, until the next would 
 `front-end/scripts/e2e-shard-timings.json`, then the median of those; a spec the change edits runs
 whatever the cap. With no map at all (no `gh`, offline, none made yet) it says so and chooses by
 rule 1 alone, which is what Playwright's own `--only-changed` chooses.
+`audit`, which CI's `e2e` job runs on a pull request, names each spec that failed in the reports
+as ran (the selection runs it), left to CI (it chose it past the cap) or missed (it did not
+choose it); `--github` also writes them to the run's summary and each miss as a warning annotation.
 `docs/implementation/testing/the-test-map.md` says what the map holds.
 
-Exit codes: Playwright's with `--run`, 0 with nothing to run or `--list`, 2 a usage error.
+Exit codes: Playwright's with `--run`, 0 with nothing to run, `--list` or `audit` (whatever it
+finds, or when it cannot audit), 2 a usage error.
 """
 import argparse
 import json
@@ -476,18 +481,228 @@ def count_specs(count: int) -> str:
     return f"{count} spec" + ("" if count == 1 else "s")
 
 
+def reasons(row: dict) -> str:
+    """A row's first three reasons, and how many more."""
+    why = row["why"][:3] + ([f"and {len(row['why']) - 3} more"] if len(row["why"]) > 3 else [])
+    return "; ".join(why)
+
+
 def print_rows(rows: Sequence[dict], absent: Set[str]) -> None:
     for row in rows:
-        why = row["why"][:3] + ([f"and {len(row['why']) - 3} more"] if len(row["why"]) > 3 else [])
         mark = " (not in this tree)" if row["spec"] in absent else ""
         print(
             f"  {row['rank']:>4} {row['minutes']:>6.1f} min  {row['score']:6.3f}  "
-            f"{row['spec']}{mark}: {'; '.join(why)}"
+            f"{row['spec']}{mark}: {reasons(row)}"
         )
+
+
+class Chosen:
+    """What the selection chooses for one diff: the shared work of `--list`, `--run` and `audit`."""
+
+    def __init__(self, args: argparse.Namespace, drop_absent: bool):
+        self.root = Path(git(Path.cwd(), "rev-parse", "--show-toplevel").strip())
+        base = args.base or git(self.root, "merge-base", "origin/dev", "HEAD").strip()
+        self.base = git(self.root, "rev-parse", "--verify", f"{base}^{{commit}}").strip()
+        self.head_rev = (
+            git(self.root, "rev-parse", "--verify", f"{args.head}^{{commit}}").strip()
+            if args.head
+            else None
+        )
+        head, base_tree = Tree(self.root, self.head_rev), Tree(self.root, self.base)
+        if args.map:
+            test_map = json.loads(args.map.read_text())
+            self.source: Optional[dict] = {"file": str(args.map), "commit": test_map.get("commit")}
+            results = args.results
+        else:
+            test_map, self.source, results = newest_map(self.root)
+            results = args.results or results
+        seconds = Seconds(results, head.read(TIMINGS))
+        self.changes = changed_lines(self.root, self.base, self.head_rev)
+        selection, at_head = select(self.changes, head, base_tree, test_map)
+        self.absent = set(selection.score) - at_head
+        if drop_absent:
+            for spec in self.absent:
+                del selection.score[spec]
+        self.run, self.left = ranked(selection, seconds, args.minutes)
+        self.minutes = args.minutes
+        self.base_named = bool(args.base)
+
+    def describe_diff(self) -> str:
+        return (
+            f"{len(self.changes)} files changed from {self.base[:8]} "
+            f"({'--base' if self.base_named else 'the merge-base with origin/dev'}) "
+            f"to {self.head_rev[:8] if self.head_rev else 'the worktree'}"
+        )
+
+
+def selection_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--base", help="the base of the diff (the merge-base with origin/dev)")
+    parser.add_argument("--head", help="the head of the diff, a commit (the worktree)")
+    parser.add_argument("--map", type=Path, help="a test-map.json in place of the newest dev's")
+    parser.add_argument("--results", type=Path, help="Playwright JSON reports for the minutes")
+    parser.add_argument("--minutes", type=float, default=CAP_MINUTES, help="the cap, in CI minutes")
+
+
+def failed_specs(reports: Sequence[Path]) -> Tuple[Set[str], List[str]]:
+    """The spec files with a failed test in Playwright JSON reports, and the reports it could not
+    read. A test failed when its outcome is `unexpected`: a flaky one passed on a retry."""
+    failed: Set[str] = set()
+    unread: List[str] = []
+
+    def walk(suite: dict, file: str) -> None:
+        for spec in suite.get("specs", []):
+            if any(test.get("status") == "unexpected" for test in spec.get("tests", [])):
+                failed.add(spec.get("file") or file)
+        for inner in suite.get("suites", []):
+            walk(inner, inner.get("file") or file)
+
+    for report in reports:
+        try:
+            for suite in json.loads(Path(report).read_text()).get("suites", []):
+                walk(suite, suite.get("file", ""))
+        except (OSError, ValueError, AttributeError, TypeError):
+            unread.append(str(report))
+    return failed, unread
+
+
+def verdicts(failed: Set[str], chosen: Chosen) -> List[Tuple[str, str, str]]:
+    """(spec, verdict, why) for each failed spec: `ran` when the selection runs it, so the builder
+    saw it fail; `left to CI` when it chose it past the cap; `missed` when it did not choose it."""
+    run = {row["spec"]: row for row in chosen.run}
+    left = {row["spec"]: row for row in chosen.left}
+    out = []
+    for spec in sorted(failed):
+        if spec in run:
+            row = run[spec]
+            out.append((spec, "ran", f"rank {row['rank']}: {reasons(row)}"))
+        elif spec in left:
+            row = left[spec]
+            out.append((
+                spec,
+                "left to CI",
+                f"rank {row['rank']}, past the cap of {chosen.minutes:g} CI minutes: "
+                + reasons(row),
+            ))  # fmt: skip
+        elif chosen.source is None:
+            out.append((spec, "missed", "not chosen: with no test map the selection is rule 1 alone"))
+        else:
+            out.append((spec, "missed", "not chosen for this change"))
+    return out
+
+
+def annotation(text: str) -> str:
+    """Text for a GitHub workflow command's message."""
+    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def cell(text: str) -> str:
+    return text.replace("|", "\\|").replace("\n", " ")
+
+
+def some(paths: Sequence[str], at_most: int = 20) -> str:
+    shown = ", ".join(paths[:at_most])
+    return shown + (f" and {len(paths) - at_most} more" if len(paths) > at_most else "")
+
+
+SUMMARY_TITLE = "### E2E selection audit"
+MISS_TITLE = "A miss of the selection"
+
+
+def audit(argv: Sequence[str]) -> int:
+    """Each spec that failed in the reports, as ran, left to CI or missed by the selection for the
+    diff; exits 0 whatever it finds, or when it cannot audit at all."""
+    parser = argparse.ArgumentParser(
+        prog="affected-specs.py audit",
+        description="Each failed spec of Playwright JSON reports, as the selection would have "
+        "treated it: ran, left to CI or missed.",
+    )
+    parser.add_argument("reports", nargs="*", type=Path, help="the run's Playwright JSON reports")
+    selection_options(parser)
+    parser.add_argument(
+        "--github",
+        action="store_true",
+        help="also write the verdicts to $GITHUB_STEP_SUMMARY and each miss as a warning annotation",
+    )
+    args = parser.parse_args(argv)
+    summary: List[str] = [SUMMARY_TITLE, ""]
+    failed, unread = failed_specs(args.reports)
+    try:
+        if not failed:
+            line = (
+                f"no test failed in the {count_reports(len(args.reports) - len(unread))} read: "
+                "no failure to audit"
+            )
+            print(f"affected-specs audit: {line}")
+            summary.append(f"{line[0].upper()}{line[1:]}.")
+        else:
+            chosen = Chosen(args, drop_absent=False)
+            found = verdicts(failed, chosen)
+            changed = sorted(chosen.changes)
+            print(describe_source(chosen.source))
+            print(f"affected-specs: {chosen.describe_diff()}")
+            print(
+                f"affected-specs audit: {failed_count(len(found))}, "
+                f"in {count_reports(len(args.reports) - len(unread))}:"
+            )
+            for spec, verdict, why in found:
+                print(f"  {verdict}: {spec}: {why}")
+                # With no map there is no map to have drifted: the summary lists the spec alone.
+                if verdict == "missed" and args.github and chosen.source is not None:
+                    print(
+                        f"::warning title={MISS_TITLE}::"
+                        + annotation(
+                            f"{spec} failed, and affected-specs.py would not have chosen it "
+                            f"for this change of {len(changed)} files: {some(changed)}"
+                        )
+                    )
+            source = describe_source(chosen.source).replace("affected-specs: ", "", 1)
+            summary += [
+                f"{source[0].upper()}{source[1:]}; {chosen.describe_diff()}.",
+                "",
+                "| Failed spec | Verdict | Why |",
+                "|---|---|---|",
+            ]
+            for spec, verdict, why in found:
+                shown = f"**{verdict}**" if verdict == "missed" else verdict
+                summary.append(f"| `{spec}` | {shown} | {cell(why)} |")
+            summary += [
+                "",
+                "A spec that ran is one `affected-specs.py --run` runs for this change, so its "
+                "builder could have seen it fail; one left to CI was chosen past the cap; a miss "
+                "is one it would not have chosen at all, from a map that drifted or a dependency "
+                "its rules cannot see (`docs/implementation/testing/the-test-map.md`).",
+                "",
+                f"<details><summary>The {len(changed)} changed files</summary>",
+                "",
+                *[f"- `{path}`" for path in changed],
+                "",
+                "</details>",
+            ]
+    except (SystemExit, Exception) as error:  # noqa: BLE001: the audit never fails its job
+        reason = error.code if isinstance(error, SystemExit) else repr(error)
+        print(f"affected-specs audit: could not audit: {reason}")
+        summary.append(f"The audit could not run: `{reason}`.")
+    if unread:
+        print(f"affected-specs audit: could not read {', '.join(unread)}")
+        summary += ["", f"Could not read {', '.join(f'`{path}`' for path in unread)}."]
+    if args.github and os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as out:
+            out.write("\n".join(summary) + "\n")
+    return 0
+
+
+def count_reports(count: int) -> str:
+    return f"{count} report" + ("" if count == 1 else "s")
+
+
+def failed_count(count: int) -> str:
+    return f"{count} failed spec" + ("" if count == 1 else "s")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["audit"]:
+        return audit(argv[1:])
     playwright_args: List[str] = []
     if "--" in argv:
         at = argv.index("--")
@@ -496,53 +711,27 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     what = parser.add_mutually_exclusive_group(required=True)
     what.add_argument("--run", action="store_true", help="run the chosen specs with Playwright")
     what.add_argument("--list", action="store_true", help="print the chosen specs, running none")
-    parser.add_argument("--base", help="the base of the diff (the merge-base with origin/dev)")
-    parser.add_argument("--head", help="the head of the diff, a commit (the worktree); --list only")
-    parser.add_argument("--map", type=Path, help="a test-map.json in place of the newest dev's")
-    parser.add_argument("--results", type=Path, help="Playwright JSON reports for the minutes")
-    parser.add_argument("--minutes", type=float, default=CAP_MINUTES, help="the cap, in CI minutes")
+    selection_options(parser)
     parser.add_argument("--json", action="store_true", help="--list as JSON")
     args = parser.parse_args(argv)
     if args.head and args.run:
         parser.error("--head is for --list: --run runs the worktree's own specs")
 
-    root = Path(git(Path.cwd(), "rev-parse", "--show-toplevel").strip())
-    base = args.base or git(root, "merge-base", "origin/dev", "HEAD").strip()
-    base = git(root, "rev-parse", "--verify", f"{base}^{{commit}}").strip()
-    head_rev = git(root, "rev-parse", "--verify", f"{args.head}^{{commit}}").strip() if args.head else None
-    head, base_tree = Tree(root, head_rev), Tree(root, base)
-
-    if args.map:
-        test_map = json.loads(args.map.read_text())
-        source: Optional[dict] = {"file": str(args.map), "commit": test_map.get("commit")}
-        results = args.results
-    else:
-        test_map, source, results = newest_map(root)
-        results = args.results or results
-    seconds = Seconds(results, head.read(TIMINGS))
-    changes = changed_lines(root, base, head_rev)
-    selection, at_head = select(changes, head, base_tree, test_map)
-    absent = set(selection.score) - at_head
-    if args.run:
-        for spec in absent:
-            del selection.score[spec]
-    run, left = ranked(selection, seconds, args.minutes)
+    chosen = Chosen(args, drop_absent=args.run)
+    run, left, absent = chosen.run, chosen.left, chosen.absent
 
     if args.json:
         print(json.dumps({
-            "base": base, "head": head_rev, "map": source, "changed": sorted(changes),
+            "base": chosen.base, "head": chosen.head_rev, "map": chosen.source,
+            "changed": sorted(chosen.changes),
             "run": run, "left": left, "absent": sorted(absent),
             "minutes_run": sum(r["minutes"] for r in run),
             "minutes_left": sum(r["minutes"] for r in left),
         }, indent=1))  # fmt: skip
         return 0
 
-    print(describe_source(source))
-    print(
-        f"affected-specs: {len(changes)} files changed from {base[:8]} "
-        f"({'--base' if args.base else 'the merge-base with origin/dev'}) "
-        f"to {head_rev[:8] if head_rev else 'the worktree'}"
-    )
+    print(describe_source(chosen.source))
+    print(f"affected-specs: {chosen.describe_diff()}")
     minutes_run = sum(r["minutes"] for r in run)
     if not run and not left:
         print("affected-specs: the change reaches no spec: nothing to run")
@@ -568,11 +757,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         )
     if not args.run or not run:
         return 0
-    e2e = (root / E2E).resolve()
+    e2e = (chosen.root / E2E).resolve()
     filters = ["/^" + escape(f"{e2e}/{row['spec']}") + "$/" for row in run]
     print(f"affected-specs: npx playwright test <the {count_specs(len(run))} above>", flush=True)
     return subprocess.run(
-        ["npx", "playwright", "test", *filters, *playwright_args], cwd=root / "front-end"
+        ["npx", "playwright", "test", *filters, *playwright_args], cwd=chosen.root / "front-end"
     ).returncode
 
 

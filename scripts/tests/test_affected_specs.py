@@ -513,3 +513,140 @@ class TestTheRun:
         assert done.returncode == 0
         assert not args.exists()
         assert "nothing to run" in done.stdout
+
+
+def pr_report(tmp_path, shard, outcomes):
+    """One shard's Playwright JSON report on the pull request, as the e2e job downloads it:
+    `outcomes` maps a spec file to its tests' statuses, the first test inside a describe block."""
+    tests = []
+    for spec_file, statuses in outcomes.items():
+        specs = [
+            {"title": f"test {n}", "file": spec_file, "tests": [{"status": status, "results": []}]}
+            for n, status in enumerate(statuses, start=1)
+        ]
+        tests.append(
+            {
+                "title": spec_file,
+                "file": spec_file,
+                "specs": specs[1:],
+                "suites": [{"title": "a describe", "file": spec_file, "specs": specs[:1]}],
+            }
+        )
+    report = tmp_path / "pr" / f"e2e-results-shard-{shard}" / "results.json"
+    report.parent.mkdir(parents=True)
+    report.write_text(json.dumps({"suites": tests}))
+    return report
+
+
+class TestTheAudit:
+    """CI's e2e job on a pull request: each spec that failed in the shards, against what the
+    selection would have chosen for the pull request's diff."""
+
+    def audit(self, repo, *args, env=None):
+        done = subprocess.run(
+            [sys.executable, str(SCRIPT), "audit", "--base", "origin/dev", "--head", "HEAD",
+             "--map", str(repo.parent / "test-map.json"), *args],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            env={**os.environ, **(env or {})},
+        )  # fmt: skip
+        assert done.returncode == 0, done.stdout + done.stderr
+        return done.stdout
+
+    def three_failures(self, repo, tmp_path):
+        """a.spec ran (Door.vue, 10 minutes); b.spec was chosen but left to CI past the cap
+        (check_in, 25 minutes after a.spec's 10); c.spec was not chosen at all."""
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        write(repo, {"back-end/api/door.py": DOOR_PY.replace('vendor["here"] = True', 'vendor["here"] = 1')})
+        git(repo, "commit", "-qam", "the change")
+        results = seconds_file(tmp_path, {"a.spec.ts": 10 * 60, "b.spec.ts": 25 * 60, "c.spec.ts": 60})
+        reports = [
+            pr_report(tmp_path, 1, {"a.spec.ts": ["passed", "unexpected"], "b.spec.ts": ["unexpected"]}),
+            pr_report(tmp_path, 2, {"c.spec.ts": ["expected", "unexpected", "unexpected"]}),
+        ]
+        return ["--results", str(results), *map(str, reports)]
+
+    def test_each_failed_spec_is_ran_left_to_ci_or_missed(self, repo, tmp_path):
+        out = self.audit(repo, *self.three_failures(repo, tmp_path))
+        lines = [line.strip() for line in out.splitlines()]
+        assert any(line.startswith("ran: a.spec.ts") for line in lines), out
+        assert any(line.startswith("left to CI: b.spec.ts") for line in lines), out
+        assert any(line.startswith("missed: c.spec.ts") for line in lines), out
+        assert "3 failed specs" in out
+        assert "loads front-end/src/views/Door.vue" in out
+        assert "back-end/api/door.py:check_in" in out
+
+    def test_a_passing_or_flaky_spec_is_not_audited(self, repo, tmp_path):
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        git(repo, "commit", "-qam", "the change")
+        report = pr_report(tmp_path, 1, {"b.spec.ts": ["expected", "flaky"], "c.spec.ts": ["skipped"]})
+        out = self.audit(repo, str(report))
+        assert "no failure to audit" in out
+        assert "b.spec.ts" not in out and "c.spec.ts" not in out
+
+    def test_with_github_a_miss_is_an_annotation_naming_the_changed_files(self, repo, tmp_path):
+        summary = tmp_path / "summary.md"
+        out = self.audit(
+            repo, "--github", *self.three_failures(repo, tmp_path),
+            env={"GITHUB_STEP_SUMMARY": str(summary)},
+        )  # fmt: skip
+        warnings = [line for line in out.splitlines() if line.startswith("::warning")]
+        assert len(warnings) == 1, out
+        assert warnings[0].startswith("::warning title=A miss of the selection::c.spec.ts ")
+        assert "back-end/api/door.py" in warnings[0]
+        assert "front-end/src/views/Door.vue" in warnings[0]
+        written = summary.read_text()
+        assert "### E2E selection audit" in written
+        assert "| `a.spec.ts` | ran |" in written
+        assert "| `b.spec.ts` | left to CI |" in written
+        assert "| `c.spec.ts` | **missed** |" in written
+
+    def test_with_github_no_failure_says_so_in_the_summary(self, repo, tmp_path):
+        summary = tmp_path / "summary.md"
+        report = pr_report(tmp_path, 1, {"a.spec.ts": ["expected"]})
+        out = self.audit(repo, "--github", str(report), env={"GITHUB_STEP_SUMMARY": str(summary)})
+        assert "::warning" not in out
+        assert "no failure to audit" in summary.read_text()
+
+    def test_a_report_it_cannot_read_is_named_and_the_rest_audited(self, repo, tmp_path):
+        args = self.three_failures(repo, tmp_path)
+        broken = tmp_path / "pr" / "e2e-results-shard-3" / "results.json"
+        broken.parent.mkdir(parents=True)
+        broken.write_text("{ not json")
+        out = self.audit(repo, *args, str(broken), str(tmp_path / "no-such.json"))
+        assert "could not read" in out and str(broken) in out and "no-such.json" in out
+        assert "missed: c.spec.ts" in out
+
+    def test_an_audit_that_cannot_run_still_exits_zero(self, repo, tmp_path):
+        summary = tmp_path / "summary.md"
+        report = pr_report(tmp_path, 1, {"a.spec.ts": ["unexpected"]})
+        done = subprocess.run(
+            [sys.executable, str(SCRIPT), "audit", "--github", "--base", "no-such-commit",
+             "--map", str(repo.parent / "test-map.json"), str(report)],
+            cwd=repo, capture_output=True, text=True,
+            env={**os.environ, "GITHUB_STEP_SUMMARY": str(summary)},
+        )  # fmt: skip
+        assert done.returncode == 0, done.stdout + done.stderr
+        assert "could not audit" in done.stdout
+        assert "no-such-commit" in summary.read_text()
+
+    def test_with_no_map_a_spec_outside_rule_one_is_missed_but_not_annotated(self, repo, tmp_path):
+        # Before any push to dev has made a map, the selection is rule 1 alone, so a spec outside
+        # it is listed, but is no sign of a drifted map or of a rule that cannot see a dependency.
+        env = TestWhereTheMapComesFrom().fake_gh(tmp_path, "import sys\nsys.exit(1)\n")
+        write(repo, {"front-end/e2e/c.spec.ts": "// edit\n", "front-end/src/views/Door.vue": "<p />\n"})
+        git(repo, "commit", "-qam", "the change")
+        summary = tmp_path / "summary.md"
+        report = pr_report(tmp_path, 1, {"a.spec.ts": ["unexpected"], "c.spec.ts": ["unexpected"]})
+        done = subprocess.run(
+            [sys.executable, str(SCRIPT), "audit", "--github", "--base", "origin/dev", "--head", "HEAD",
+             str(report)],
+            cwd=repo, capture_output=True, text=True,
+            env={**os.environ, **env, "GITHUB_STEP_SUMMARY": str(summary)},
+        )  # fmt: skip
+        assert done.returncode == 0, done.stdout + done.stderr
+        assert "ran: c.spec.ts" in done.stdout
+        assert "missed: a.spec.ts: not chosen: with no test map" in done.stdout
+        assert "::warning" not in done.stdout
+        assert "| `a.spec.ts` | **missed** |" in summary.read_text()
