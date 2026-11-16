@@ -40,7 +40,7 @@ The table row by row, the interface and every screen on it: [reads keyed by mark
 - A change to what an event does in a phase is one row of one table, and a test per row (`aReadBelongsToItsKey.test.ts`) sees it.
 - A failed re-read keeps the data as last read and says so, where several screens emptied themselves; the frame says a failed re-read of the market once, for every market screen.
 - A screen that needs to forget what it showed on a move (a fold, a refusal) watches its read's `key`, a reset and never a read.
-- The vendor page's store holds one signed-in vendor rather than a market read, so it keeps no keyed read: its sign-in is one `session`, and an epoch moved only when the sign-in ends (`clearSession`, on a sign-out or an ended sign-in) keeps a late answer from landing.
+- The vendor page's store holds one signed-in vendor rather than a market read, so it keeps no keyed read: its sign-in is one `session`, and an epoch moved when this tab's vendor stops being the one signed in (`clearSession`, on a sign-out or an ended sign-in, or another vendor's sign-in held in its place) keeps a late answer from landing.
 
 ## Considered and rejected
 

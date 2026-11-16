@@ -118,7 +118,7 @@ function expectNobodySignedIn(store: ReturnType<typeof useApplicationStore>) {
 
 beforeEach(() => {
   sessionStorage.clear();
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   applicantApi.endRememberedSignIn.mockResolvedValue(undefined);
   // No remembered sign-in once signed out.
   applicantApi.resumeSignIn.mockRejectedValue(unauthorized());
@@ -313,6 +313,77 @@ describe('a sign-in renewed from a remembered device', () => {
       'spring-market',
       'ana-renewed',
     );
+  });
+
+  // The device's remembered sign-in is the market's, not this tab's: another tab that signed Ben in
+  // with "Remember me" made it his, so Ana's ended sign-in would come back as Ben's.
+  it("never sends a save again with another vendor's remembered sign-in", async () => {
+    const store = anaSignedIn();
+    applicantApi.saveApplicantApplication.mockImplementation((_slug: string, token: string) =>
+      token === 'ben-remembered'
+        ? Promise.resolve(application(BEN.applicantEmail))
+        : Promise.reject(unauthorized()),
+    );
+    applicantApi.resumeSignIn.mockResolvedValue({ ...BEN, token: 'ben-remembered' });
+
+    expect(await store.saveApplication({ business_name: "Ana's answers" })).toBeNull();
+
+    expect(applicantApi.saveApplicantApplication).toHaveBeenCalledTimes(1);
+    expect(applicantApi.saveApplicantApplication).not.toHaveBeenCalledWith(
+      'spring-market',
+      'ben-remembered',
+      expect.anything(),
+    );
+    expect(store.token).toBeNull();
+    expect(store.applicantEmail).toBeNull();
+    expect(sessionStorage.getItem(SESSION_KEY)).toBeNull();
+    // Ana's answers wait for Ana's next sign-in, as after any sign-in that could not be renewed.
+    expect(store.draftFor('spring-market', ANA.applicantEmail)?.saveAfterSignIn).toBe(true);
+    expect(store.draftFor('spring-market', BEN.applicantEmail)).toBeNull();
+    expect(store.error).toBe(
+      'Your session has expired. Sign in again, and your answers will be saved.',
+    );
+  });
+
+  it("never shows another vendor's application on a read renewed into their sign-in", async () => {
+    const store = anaSignedIn();
+    // Ben's application, were the read sent again with his sign-in.
+    applicantApi.fetchApplicantApplication.mockImplementation((_slug: string, token: string) =>
+      token === 'ben-remembered'
+        ? Promise.resolve(application(BEN.applicantEmail))
+        : Promise.reject(unauthorized()),
+    );
+    applicantApi.resumeSignIn.mockResolvedValue({ ...BEN, token: 'ben-remembered' });
+
+    expect(await store.fetchApplication()).toEqual({ application: null, failed: false });
+
+    expect(applicantApi.fetchApplicantApplication).toHaveBeenCalledTimes(1);
+    expect(store.application).toBeNull();
+    expect(store.token).toBeNull();
+    expect(store.applicantEmail).toBeNull();
+  });
+});
+
+describe('a sign-in that replaces another vendor in this tab', () => {
+  it("lands nothing of the vendor it replaced, on the next one's page", async () => {
+    const store = anaSignedIn();
+    const anasSave = held<Application>();
+    applicantApi.saveApplicantApplication.mockReturnValueOnce(anasSave.promise);
+
+    const saving = store.saveApplication({ business_name: "Ana's answers" });
+    // Ben signs in on another market's page in this tab, with no sign-out between.
+    applicantApi.verifyLoginCode.mockResolvedValue({
+      ...BEN,
+      marketId: 'market-2',
+      token: 'ben-token',
+    });
+    await store.verifyCode('autumn-market', BEN.applicantEmail, '123456');
+    anasSave.settle(application(ANA.applicantEmail));
+
+    expect(await saving).toBeNull();
+    expect(store.application).toBeNull();
+    expect(store.applicantEmail).toBe(BEN.applicantEmail);
+    expect(store.token).toBe('ben-token');
   });
 });
 

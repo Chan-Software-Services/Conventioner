@@ -200,10 +200,12 @@ export const useApplicationStore = defineStore('application', () => {
   const applicantEmail = computed(() => session.value?.applicantEmail ?? null);
   const token = computed(() => session.value?.token ?? null);
   /**
-   * Moved on by `clearSession` alone. Each signed-in request notes it as it starts, and one that
-   * answers after it moved writes nothing: on a shared door device the vendor who asked has signed
-   * out, and the next person sees nothing of theirs. A renewal (`resume`) signs the same vendor in
-   * again and leaves it, so the request it renews still lands.
+   * Moved on when this tab's vendor stops being the one signed in: by `clearSession`, and by
+   * `holdSignIn` holding another vendor, or another market's page, over a sign-in it did not end.
+   * Each signed-in request notes it as it starts, and one that answers after it moved writes
+   * nothing: on a shared door device the vendor who asked has gone, and the next person sees
+   * nothing of theirs. A renewal (`resume`) signs the same vendor in again and leaves it, so the
+   * request it renews still lands.
    */
   let epoch = 0;
   const application = ref<Application | null>(null);
@@ -310,6 +312,12 @@ export const useApplicationStore = defineStore('application', () => {
     if (held && held.marketSlug === slug && held.applicantEmail !== result.applicantEmail) {
       dropDraft();
     }
+    // Another vendor, or another market's page, in place of one still signed in: nothing asked for
+    // the one replaced lands on the next one's page.
+    const before = session.value;
+    if (before && (before.marketSlug !== slug || before.applicantEmail !== result.applicantEmail)) {
+      epoch += 1;
+    }
     session.value = {
       marketId: result.marketId,
       marketSlug: slug,
@@ -351,11 +359,17 @@ export const useApplicationStore = defineStore('application', () => {
    * signed-in request that finds this tab's sign-in ended (`withRenewal`). Anything but a live
    * remembered sign-in - none, one that has ended, or no answer at all - is false, and says
    * nothing: the page simply asks for a code, as it would have.
+   *
+   * A renewal names the vendor it renews (`renewing`), and a remembered sign-in of anyone else is
+   * false and held nowhere: the device remembers one vendor per market, not per tab, so another
+   * tab signing Ben in with "Remember me" makes it his, and renewing Ana's sign-in into it would
+   * send her answers as his.
    */
-  async function resume(slug: string): Promise<boolean> {
+  async function resume(slug: string, renewing: string | null = null): Promise<boolean> {
     try {
       const result = await resumeSignIn(slug);
       if (!result.token) return false;
+      if (renewing !== null && result.applicantEmail !== renewing) return false;
       holdSignIn(slug, { ...result, token: result.token });
       return true;
     } catch {
@@ -371,18 +385,20 @@ export const useApplicationStore = defineStore('application', () => {
    *
    * A sign-in that ended here meanwhile (`asked`, the epoch the request was made in) is never
    * renewed: the remembered device may be the next vendor's by then, and the request is not theirs.
+   * Nor is one renewed into another vendor's remembered sign-in (`resume`'s `renewing`).
    */
   async function withRenewal<T>(
     asked: number,
     call: (slug: string, token: string) => Promise<T>,
   ): Promise<T> {
     const slug = marketSlug.value;
-    if (!slug || !token.value) throw new Error('Not signed in');
+    const email = applicantEmail.value;
+    if (!slug || !email || !token.value) throw new Error('Not signed in');
     try {
       return await call(slug, token.value);
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
-      if (status !== 401 || epoch !== asked || !(await resume(slug))) throw err;
+      if (status !== 401 || epoch !== asked || !(await resume(slug, email))) throw err;
       if (epoch !== asked || !token.value) throw err;
       return call(slug, token.value);
     }
