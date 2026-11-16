@@ -97,7 +97,7 @@ A spec is chosen by five rules:
    The back end's own tests reach no spec.
 4. **Every spec, for a file the whole suite stands on**: `e2e/fixtures.ts`, `e2e/global-setup.ts`, `playwright.config.ts`, `package-lock.json`, `vite.config.ts` and `index.html` in `front-end/`, a compose file, a Dockerfile, a back-end lock or `scripts/seed_fixture.sh`.
 5. **Every spec, for a file under `front-end/` or `back-end/` that no rule places**: not a spec, not imported by one at the head or the base, in no spec's modules and no endpoint's files.
-   Such a file can drive any spec: a stylesheet `main.css` pulls in by `@import`, which Vite inlines so no page requests it, a back-end module no endpoint ran in the suite, such as `utils/cors.py`, or a file no rule reads, such as `back-end/docker-entrypoint.sh` or `front-end/tsconfig.app.json`.
+   Such a file can drive any spec: a stylesheet `main.css` pulls in by `@import`, which Vite inlines so no page requests it, a back-end module no endpoint ran in the suite, or a file no rule reads, such as `back-end/docker-entrypoint.sh` or `front-end/tsconfig.app.json`.
    Its reason is "`<path>` is not in the map".
    The docs, any Markdown, `back-end/tests/`, `front-end/src/__tests__/`, a `*.test.ts` and `scripts/tests/` drive no spec and choose nothing.
 
