@@ -27,7 +27,7 @@ import { tableCode } from '@/components/layout/layoutDrawing';
 import { useFloorplanImage } from '@/components/layout/useFloorplanImage';
 import { layoutPath } from '@/utils/market';
 import { MarketAction, mayTake } from '@/utils/marketActions';
-import { dayInWords } from '@/utils/publicMap';
+import { getShortDate } from '@/utils/utils';
 
 const props = defineProps<{
   market: Market | null;
@@ -116,10 +116,11 @@ const legend = computed<DayMapLegendItem[]>(() => [
   { tone: 'free', label: 'No vendor' },
 ]);
 
-/** A table with no vendor pressed, which the note under the map names; none once a vendor opens. */
+/** A table with no vendor pressed, which the note under the map names; none once a vendor opens,
+ *  or the search marks what it finds. */
 const freeTable = ref<string | null>(null);
 watch(
-  () => [props.date, openId.value, props.openVendor],
+  () => [props.date, openId.value, props.openVendor, props.found.join('\n')],
   () => (freeTable.value = null),
 );
 
@@ -133,7 +134,8 @@ const marked = computed(() =>
   props.found.map(seatKeyOf).filter((key): key is string => key !== null),
 );
 
-/** "Table Aisle A 4: no vendor on Wed 18 Nov.", for the table pressed with nobody at it. */
+/** "Table Aisle A 4: no vendor on Nov 18, 2026.", for the table pressed with nobody at it, the day
+ *  spelled as the page's own date buttons spell it. */
 const freeNote = computed(() => {
   if (!freeTable.value) return '';
   for (const { layout, sections } of laidOut.value) {
@@ -143,7 +145,7 @@ const freeNote = computed(() => {
       table,
       sections.find((section) => section.id === table.sectionId),
     );
-    return code ? `Table ${code}: no vendor on ${dayInWords(props.date)}.` : '';
+    return code ? `Table ${code}: no vendor on ${getShortDate(props.date)}.` : '';
   }
   return '';
 });

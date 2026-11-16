@@ -14,7 +14,7 @@ import AttendanceStatusView, { REREAD_MS } from '@/views/AttendanceStatusView.vu
 import { MarketPhase, type FloorplanTable, type Market } from '@/assets/types/datatypes';
 import { MarketAction } from '@/utils/marketActions';
 import { calendarToday } from '@/utils/marketGuide';
-import { dayInWords } from '@/utils/publicMap';
+import { getShortDate } from '@/utils/utils';
 import { answersRefusing, VIEWER_ANSWERS } from './support/servedAnswers';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
@@ -378,9 +378,14 @@ describe('a press on the map', () => {
     const wrapper = await openOnMap();
     await tableOf(wrapper, 't4').trigger('click');
     expect(wrapper.get(testid('attendance-map-note')).text()).toBe(
-      `Table Aisle A 4: no vendor on ${dayInWords(TODAY)}.`,
+      `Table Aisle A 4: no vendor on ${getShortDate(TODAY)}.`,
     );
     expect(router.push).not.toHaveBeenCalled();
+    expect(marks(wrapper)).toHaveLength(1);
+
+    // A search marks what it finds in its place.
+    await wrapper.get(testid('attendance-search')).setValue('Ben');
+    expect(wrapper.find(testid('attendance-map-note')).exists()).toBe(false);
     expect(marks(wrapper)).toHaveLength(1);
   });
 });

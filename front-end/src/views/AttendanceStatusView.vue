@@ -745,6 +745,11 @@ watch(marketId, openMarket, { immediate: true });
   margin-inline-start: auto;
 }
 
+/* List and Map, a step apart from the time and Refresh after them, as Print roster is. */
+.door-view {
+  margin-inline-end: var(--space-2);
+}
+
 /* The time, Refresh and a failed read's line are the group's own items, so that line goes under
    the row, whole, rather than between Refresh and the buttons after it, where on a phone it pushed
    Door code onto a line of its own. */

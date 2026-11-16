@@ -24,6 +24,7 @@ sources:
   - T318
   - T277
   - T316
+  - T422
 ---
 
 # Publishing, and the door on market day
@@ -125,6 +126,12 @@ Covered by:
    Taps on several rows' Check in go through at once, each row showing its check-in as soon as the server answers.
 8. "Print roster", in the dates' row for anyone who reads Attendance, prints the chosen date's roster on paper, the door's fallback when the venue's network or the app fails: the market's name, the date in words, "<N> vendors", "Printed <date> at <time>", then every vendor of the date by table, their name with their address under it, and when they came or an empty box to tick, whatever "Show" and "Find a vendor" leave on screen; vendors checked in with no table that day print under their own heading.
    In Market Days, on today or a date to come, a note over the roster asks for it: "If the venue's network fails, a printed roster still works. Print this day's roster before the doors open."
+9. "List" and "Map", first in the dates' row, show the day as its rows or as a map of the venue's layouts (T422); the map is kept across a change of day and a reload.
+   Each table is drawn by its vendor: filled once they are here, outlined while they are expected, and a grey dashed outline with nobody at it, as its legend says ("Here", "Expected" or "Did not come", "No vendor"); a shared table is two halves, each its own vendor's.
+   A press on a vendor's table opens their drawer, as their name on the list does, and Back closes it on the map; a press on a table with nobody says "Table Aisle A 4: no vendor on Nov 17, 2026." under the map.
+   "Find a vendor" outlines the tables of the vendors it finds, and the map changes as the roster reads itself again.
+   Under the map, "<n> here with no table" and "<n> vendors are at tables not on a layout." count the vendors it cannot draw, each with "Show in the list"; with no location laid out it says "No location has a layout yet.", with "Open the layout" for whoever may change the setup.
+   Check in and Undo stay on the list: the map and the drawer check nobody in, so a Viewer reads the map as an Editor does.
 
 It lists everyone expected on the day, so it shows who is missing; "Nobody is assigned on this date." on a date with nobody.
 It works at a phone's width, as only the other organizer screens that fit a phone do ([attendance and the door](../../implementation/modules/attendance-and-door.md#sharp-edges)), and there its rows keep a gutter at both sides rather than running to the card's edges (T15).
@@ -133,6 +140,7 @@ Covered by:
 - `a-seat-and-an-entry-open-the-drawer.spec.ts`
 - `a-viewer-at-the-door-reads-why.spec.ts`
 - `checkin.spec.ts`
+- `the-door-as-a-map.spec.ts`
 - `the-door-code.spec.ts`
 - `the-door-keeps-its-own-day.spec.ts`
 - `the-door-on-market-day.spec.ts`
