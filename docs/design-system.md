@@ -106,6 +106,7 @@ sources:
   - T263
   - T201
   - T315
+  - T422
 ---
 
 # Conventioner's design language
@@ -167,6 +168,12 @@ Six steps. Adjacent 1px steps are not distinguishable, so they carry no meaning 
 
 Nothing below 12px, which is the readable minimum.
 No `font-size` in `front-end/src` is smaller.
+
+### Line height
+
+`--leading` is running text's line height, 1.6 times the size, which `body` sets and every line box inherits.
+A box placed on a line's middle is placed by it, never by a pixel written by hand: a dialog's close stands half of `--text-lg` times `--leading` below the title's top, on its first line ([dialogs](implementation/conventions/dialogs.md)), and the vendor drawer's close on its name's line the same way (T422).
+Such a line sets `line-height: var(--leading)` itself, so a parent's line height cannot move it from under the box.
 
 ### Weight
 
