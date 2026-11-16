@@ -4,7 +4,7 @@ kind: module
 describes:
   - front-end/src/utils/useAutosave.ts
   - front-end/src/views/MarketSetupView.vue
-verified: 2026-11-14
+verified: 2026-11-16
 sources:
   - T271
   - T244
@@ -14,15 +14,36 @@ sources:
   - bug/25
   - bug/30
   - T274
+  - T420
 ---
 
-# The plan's autosave
+# The autosave of the plan, a layout, the review lists and the form tab
 
 Market Setup's plan saves itself as it is edited ([planning the market](../../business/flows/planning.md)).
 [`front-end/src/utils/useAutosave.ts`](../../../front-end/src/utils/useAutosave.ts) owns the order of the saves of one working copy, and knows nothing of markets.
+It serves the plan, a location's layout ([its editor](floorplan-placement.md#the-editor)), the review lists saved a click at a time, and the form tab's saves, each giving it its own write; this node describes it through the plan, its first screen.
 [`front-end/src/views/MarketSetupView.vue`](../../../front-end/src/views/MarketSetupView.vue) gives it the write (`PUT /markets/<id>/plan` with `setupObject`, `intakeMode` and `planRevision`), the same write as a keepalive request for the way out of the page, the re-read after it (the [market store](market-store.md)'s `refresh`), and who may write (`mayTake(market, MarketAction.ChangeSetup)`).
 
 ## The queue
+
+**The state is one phase, moved only by one table** ([ADR 0033](../../adr/0033-an-autosave-is-one-transition-table.md)).
+The phases are `clean` (nothing unsaved and nothing out, with `saved` while "Plan saved" shows), `pausing` (an edit waits for its pause), `held` (an edit waits for the hold to end), `sending` (a save is out), `failed` and `refused`.
+A `sending` phase says what follows the save out (`after`: `none`, no edit since it went; `pausing`, an edit since, its pause running; `wanted`, an edit since, whose pause ended or which the hold keeps), and `drop`, set once the person may no longer write, so its answer drops everything.
+The hold is a flag beside the phase, not a phase, since the Pricing card's hold outlives a failure, a refusal and a dropped edit; `held` is an edit waiting for it.
+`transition(state, event)` is a pure function answering the next state and whether to start a save; for a pair not in the table it answers the same state object and no send, so a pair nobody designed changes nothing.
+The status, its sentence and `unsaved` are read from the phase (`statusOf`, `messageOf`, `unsavedIn`), never stored beside it.
+The composable around the table holds the state, the save out's promise, the pause and the 2 s timer of "Plan saved", and feeds it events: it runs the pause a state asks for, starts a save when the step says so, and asks who may write where a send would go, feeding `lost` when the person no longer may.
+
+In the table, `H` is the hold on, `-` a pair not in the table, and "send" starts a save of the working copy as it stands:
+
+| From    | edit                                                                          | pauseEnds             | ok                                                                                                                            | failed                                                                       | refused                             | lost                            | holdOn                          | holdOff                            | flush                       | forget                   | savedEnds                     |
+| ------- | ----------------------------------------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------- | ------------------------------- | ------------------------------- | ---------------------------------- | --------------------------- | ------------------------ | ----------------------------- |
+| clean   | pausing (H: held)                                                             | -                     | -                                                                                                                             | -                                                                            | -                                   | -                               | clean, H                        | clean, no H                        | -                           | -                        | clean, not saved (when saved) |
+| pausing | pausing, pause restarts                                                       | sending, send         | -                                                                                                                             | -                                                                            | -                                   | clean                           | held, H                         | -                                  | sending, send               | clean                    | -                             |
+| held    | -                                                                             | -                     | -                                                                                                                             | -                                                                            | -                                   | clean                           | -                               | pausing, no H                      | sending, send (H stays)     | clean                    | -                             |
+| sending | after none or pausing: pausing, pause restarts (H: wanted); wanted or drop: - | after pausing: wanted | drop: clean (saved when after none); none: clean, saved; pausing: pausing, its pause runs on; wanted: sending, send (H: held) | drop: clean; none: failed; pausing: pausing; wanted: sending, send (H: held) | refused, kept when keep and no drop | drop set (- when set)           | H, after pausing becomes wanted | no H, after wanted becomes pausing | after pausing: wanted       | after none (- when none) | -                             |
+| failed  | pausing (H: held)                                                             | -                     | -                                                                                                                             | -                                                                            | -                                   | clean                           | failed, H                       | failed, no H                       | sending, send               | clean                    | -                             |
+| refused | pausing (H: held)                                                             | -                     | -                                                                                                                             | -                                                                            | -                                   | kept: refused, not kept; else - | refused, H                      | refused, no H                      | kept: sending, send; else - | clean                    | -                             |
 
 **One save is out at a time.**
 An edit starts a 600 ms pause; when it ends with no save out, the working copy is sent as it stands at that moment.
@@ -30,8 +51,7 @@ A pause that ends while a save is out marks a save as wanted, and when the save 
 An edit whose pause is still running when the answer comes is sent by its pause.
 The plan used to send a save at every pause whether or not one was out, and answers are not promised in order: a slow first save reaching the server last stored the older plan, and its re-read put that plan back on screen beside "Plan saved" (T271, `the-plan-saves-one-at-a-time.spec.ts`).
 
-**Edits are counted, and an answered save marks stored only the edits it carried.**
-`unsaved` is true while an edit is not yet stored or a save is out.
+**`unsaved` is read from the phase**: true while an edit waits (`pausing`, `held`), a save is out, or a failure keeps the edits, and after a refusal only when the screen keeps its copy.
 The status is `saving` only while a save is out, and `saved` ("Plan saved") only when an answer leaves no edit unsaved, for 2 s; the next edit hides it.
 An answer that leaves an edit unsaved with no save sent after it (the edit's pause still running, or the plan held) sets the status back to `idle`, as an edit waiting before any save is; it used to leave "Saving…" with nothing out, for good once the screen dropped that edit (T271 round 2).
 A wanted save is sent before the re-read of the answer that freed it, so that re-read lands while an edit is unsaved, and the view ignores it.
@@ -49,15 +69,18 @@ Nothing is unsaved after it, so later re-reads reach the screen again; until T27
 
 **A failure keeps the edits unsaved** and shows its sentence (`market-setup-plan-save-error`): the app's offline sentence for no answer, the server-fault sentence for a 5xx, and "The plan was not saved." for a failure with no sentence of its own.
 A "Retry" button beside it (`market-setup-plan-retry-button`, `retry`) sends the whole working copy again; so do the next edit and a flush, and nothing retries on a timer.
+The next edit hides the failed line, as it hides a refused one: that edit is sent within its pause, with every edit the failed save carried, and the line comes back if that save fails too (T420; the line used to stand through the edit's pause).
+A failure of a save with an edit behind it sends a wanted edit at once, and lets a running pause run on, so the line shows only when nothing is left to send.
 A 401 also ends the session through the app's interceptor.
 
-**A person who may not write sends nothing, and their edits are not counted**, so nothing stays unsaved for them and the server's re-reads still reach their screen (bug 30: a plan that cannot change is never sent).
+**A person who may not write sends nothing, and their edits are not fed to the table**, so nothing stays unsaved for them and the server's re-reads still reach their screen (bug 30: a plan that cannot change is never sent).
 An edit counted while they could write, which comes to be sent after a re-read says they no longer can (another person archived the market or took their role), is dropped as a refusal drops it, by the pause, the answer of the save out or a flush, and a failed line goes with it.
 The view's market watch takes such a re-read even with the edit unsaved, so the screen shows the plan as the server holds it; the edit used to stay unsaved for good, the page skipping every later re-read and the browser asking at every reload (T271 review).
 That watch also calls `forgetUnsendable`, for an edit no send is coming for: one a failed save left, whose failed line and Retry stood beside the server's plan, or one the hold keeps; with a save out it waits, and that save's answer drops what is still unsaved (T271 re-review).
 
 **The hold** (`hold`): the Pricing card holds the autosave while a price or the half table's share shows text that is not a value, or a group's name is missing or another's ([a price follows the table](../../business/rules/a-price-follows-the-table.md), E43/F01/S01), so "Plan saved" never stands beside text that was not kept.
 While held no pause runs; an edit made meanwhile, or a save wanted when an answer finds the plan held, waits, and is sent a pause after the hold ends.
+A failed or refused line stays under the hold, since the plan is still not saved, and the hold ending sends nothing for a failure: only the next edit, Retry or a flush does.
 
 **The flush** (`flush`) stops the pause, waits for a save out, and sends while anything is unsaved, a held edit as kept: the working copy holds the value from before the text that is not one.
 It answers null once the server holds the last edit, or the sentence of the failure or refusal that stopped it, a save out it waited for included (a refusal's own sentence, without "The plan is back as it was last saved."); with nothing unsaved it answers null at once, sending nothing.
@@ -66,6 +89,10 @@ the move posts nothing and the [phase rail](phase-rail.md) says "The market did 
 Before that, as it is pressed and before any of its dialogs opens, a phase move refuses while the form tab reports questions not yet saved (the frame's `refuseMove`), and sends nothing of the plan ([building the application form](../../business/flows/form-tab.md#leaving-with-questions-not-yet-saved)).
 The intake mode is saved at once, an edit and a flush, so it goes through the same queue.
 Allocate tables sends the plan only when an edit is unsaved: the server already holds the working copy otherwise.
+
+**Two options serve screens that save a click at a time.**
+`delay: 0` is no pause: an edit ends its pause in the same call, so it is sent at once, or, while a save is out, marks a save wanted, which goes when that save answers with the copy as it then stands; nothing passes 0 for the plan or a layout.
+`takesBackOnFailure` (default false) reads every answer that is not ok as a refusal, for a screen with no Retry: `afterRefusal` runs with the sentence, the screen takes the server's copy back, and nothing is kept for a button the screen does not have; with `keepOnRefusal` the copy is kept as on a refusal.
 
 **Leaving the view flushes without waiting**, on the view's unmount, and a save out when it unmounts still sends a later edit once it answers; when that save fails or is refused, the flush stops there and the later edit is not sent.
 
