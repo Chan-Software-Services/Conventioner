@@ -535,9 +535,10 @@ def setup_part(plan: Optional[SetupObject]) -> Dict[str, Any]:
     """The part of a plan that is the setup, in one comparable shape (E31/F01/S02).
 
     Everything on Market Setup: the dates, tiers, locations, sections and their tables, the
-    prices (E43/F01/S01), and of the layouts what settles: each floorplan's seats and the
-    market's table types (``layout.settled_part``), never where a table stands, which a layout's
-    save still changes past draft (``layout.settled_layout_refusal``). Not the assignment rules
+    prices (E43/F01/S01), and of the layouts what settles: the seats of each floorplan started in
+    Draft and the market's table types (``layout.settled_part``), never where a table stands, nor
+    the tables of a layout that follows the plan, which a layout's save still changes past draft
+    (``layout.settled_layout_refusal``). Not the assignment rules
     (``made_from.assignment_rules``), which ride in the same object and keep a lock of their own.
     """
     if plan is None:

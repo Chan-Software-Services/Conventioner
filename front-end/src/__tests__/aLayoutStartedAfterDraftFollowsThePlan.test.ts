@@ -172,6 +172,12 @@ describe('following: a number is its seat, past Draft and in it', () => {
     );
   });
 
+  it('says a section with no table in the plan has none, rather than all of none placed', () => {
+    expect(saidHeldBack({ sectionId: 'gold', count: 0, placed: 0 }, 'Gold row')).toBe(
+      'Gold row has no tables in the plan.',
+    );
+  });
+
   it('forgets what it held back once an add fits', () => {
     const { editor } = anEditor();
     editor.addTables(gold(4));

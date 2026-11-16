@@ -492,6 +492,12 @@ class TestALayoutThatFollowsThePlan:
         assert Layout.layout_refusal(floorplan, _plan([floorplan], gold_count=9)) == (
             "Gold row's tables are numbered 1 to 9, each number once.")
 
+    def test_a_section_with_no_table_in_the_plan_says_so(self):
+        floorplan = _following([_table("g-1", GOLD, 1)])
+
+        assert Layout.layout_refusal(floorplan, _plan([floorplan], gold_count=0)) == (
+            "Gold row has no tables in the plan.")
+
     def test_a_table_of_no_section_has_no_number(self):
         floorplan = _following([_table("loose", None, 3)])
 

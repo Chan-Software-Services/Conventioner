@@ -35,7 +35,10 @@ NUMBERING = "Each section's tables are numbered 1 to N."
 
 
 def numbered_to_its_count(section: str, count: int) -> str:
-    """Why a layout that follows the plan is refused for a section's numbering (T422, D22)."""
+    """Why a layout that follows the plan is refused for a section's numbering (T422, D22): a
+    section the plan gives no table holds none on it."""
+    if count <= 0:
+        return f"{section} has no tables in the plan."
     return f"{section}'s tables are numbered 1 to {count}, each number once."
 
 
@@ -261,13 +264,36 @@ def settled_layout_refusal(
 ) -> Optional[str]:
     """``settled``, the setup-settled sentence, when the proposed plan changes a seat of a layout
     started in Draft, a table type or the set of those layouts the stored one holds; else None, so a
-    table moved or turned saves, and so does every change of a layout that follows the plan.
+    table moved or turned saves, and so does every change of a layout that follows the plan but a
+    kept table's type.
+
+    A table kept on a layout that follows the plan keeps its type too, as the page holds it: the
+    types settle with the market (T422, D23).
 
     ``save_floorplan_to_market`` asks it of every save past draft, answering 409 with the sentence.
     """
     if settled_part(stored) != settled_part(proposed):
         return settled
+    if _retyped_on_a_following_layout(stored, proposed):
+        return settled
     return None
+
+
+def _retyped_on_a_following_layout(stored: Optional[SetupObject], proposed: SetupObject) -> bool:
+    """Whether a table a stored layout that follows the plan holds is of another type in the
+    proposed plan's same layout."""
+    if stored is None:
+        return False
+    proposed_layouts = {floorplan.id: floorplan for floorplan in proposed.floorplans or []}
+    for floorplan in stored.floorplans or []:
+        after = proposed_layouts.get(floorplan.id)
+        if not floorplan.follows_plan or after is None:
+            continue
+        types = {table.id: table.table_type_id for table in after.tables}
+        if any(table.id in types and types[table.id] != table.table_type_id
+               for table in floorplan.tables):
+            return True
+    return False
 
 
 def _section_name(plan: SetupObject, section_id: Optional[str]) -> str:

@@ -127,8 +127,10 @@ export interface HeldBack {
 }
 
 /** What the status line says of tables held back: "Gold row has 13 tables in the plan; 4 were
- *  placed.", or with none placed, "Gold row's 13 tables are all on the layout." */
+ *  placed.", with none placed "Gold row's 13 tables are all on the layout.", and for a section
+ *  the plan gives none "Gold row has no tables in the plan." */
 export function saidHeldBack(held: HeldBack, sectionName: string): string {
+  if (held.count <= 0) return `${sectionName} has no tables in the plan.`;
   if (held.placed === 0) {
     return held.count === 1
       ? `${sectionName}'s 1 table is on the layout.`

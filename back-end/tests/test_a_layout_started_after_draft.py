@@ -248,6 +248,23 @@ class TestPastDraftItsSeatsChange:
         assert response.get_json()["floorplan"]["tables"] == tables
         assert _counts(market) == {"Gold row": 13, "Blue row": 7, "Silver aisle": 4}
 
+    def test_a_tables_type_is_still_held(self, client, market):
+        """As the page holds it (the Table type field stays settled): a table kept on the layout
+        keeps its type past Draft, while the market's types settle (D23)."""
+        _past_draft(market)
+        _stored(market)["tableTypes"].append(
+            {"id": "tt-four", "name": "Round 4 ft", "widthMm": 1220, "depthMm": 1220})
+        held = _start(client, market, [_gold("g-1", 1), _gold("g-2", 2, x=3000.0)])
+        tables = copy.deepcopy(held["tables"])
+        tables[0]["tableTypeId"] = "tt-four"
+
+        response = _save(client, {**held, "tables": tables}, held["revision"])
+
+        assert response.status_code == 409
+        assert "settled" in response.get_json()["error"]
+        assert [table["tableTypeId"] for table in _stored(market)["floorplans"][0]["tables"]] == [
+            "tt-six", "tt-six"]
+
     def test_the_table_types_write_is_still_refused(self, client, market):
         _past_draft(market)
         _start(client, market)
@@ -258,7 +275,12 @@ class TestPastDraftItsSeatsChange:
         assert response.status_code == 409
         assert "settled" in response.get_json()["error"]
 
-    def test_a_layout_started_in_draft_beside_it_still_keeps_its_seats(self, client, market):
+    @pytest.mark.parametrize("claim", [{}, {"followsPlan": True}],
+                             ids=["as-stored", "claiming-to-follow-the-plan"])
+    def test_a_layout_started_in_draft_beside_it_still_keeps_its_seats(
+            self, client, market, claim):
+        """Its seats stay settled whatever the body says of the layout's kind: the stored
+        ``followsPlan`` is the one read, so sending ``true`` opens no seat."""
         lower = {**_layout(0, location="loc-lower", floorplan_id="fp-lower", image=None),
                  "tables": [_gold("b-1", 1, section="sec-blue")]}
         sections = _plan()["sections"]
@@ -266,7 +288,7 @@ class TestPastDraftItsSeatsChange:
         _past_draft(market, floorplans=[lower], sections=sections)
         _start(client, market, [_gold("g-1", 1)])
 
-        response = _save(client, {**lower, "tables": [
+        response = _save(client, {**lower, **claim, "tables": [
             _gold("b-1", 1, section="sec-blue"), _gold("b-2", 2, x=3000.0, section="sec-blue")]},
             lower["revision"])
 
