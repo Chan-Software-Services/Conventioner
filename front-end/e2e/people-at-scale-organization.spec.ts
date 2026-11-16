@@ -38,6 +38,9 @@ test.describe('Manage organization at 150 people', () => {
     authenticatedPage: page,
   }) => {
     const seededIds = new Set(seed.people.map((person) => person.id));
+    // Signing in lands on Markets, which makes the same organizations read; its list shows once that
+    // read has answered, so the profiler, started after it, counts the opening's read alone.
+    await expect(page.getByTestId('markets-result-count')).toBeVisible();
 
     const reads = await usersReadsWhile(async () => {
       await requestsWhile(page, {}, async () => {
