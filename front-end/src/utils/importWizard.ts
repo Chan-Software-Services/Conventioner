@@ -245,7 +245,10 @@ export function mayGoBack(step: ImportStep): boolean {
   return (step.kind === 'mapping' && !step.reading) || step.kind === 'preview';
 }
 
-/** The values check may be sent: Map columns with nothing out. */
+/**
+ * Map columns with nothing out: the values check may be sent, and so may the amend dialog's form
+ * read, whose answer would otherwise land inside a step whose own request is still out.
+ */
 export function mayCheck(step: ImportStep): boolean {
   return step.kind === 'mapping' && !step.reading;
 }

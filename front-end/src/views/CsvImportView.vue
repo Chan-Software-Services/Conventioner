@@ -765,6 +765,7 @@ async function readAmendForm(): Promise<boolean> {
 }
 
 async function openAmend(options: { fieldLabel?: string; unasked?: string }) {
+  if (!mayCheck(wizard.value.step)) return;
   amendFieldLabel.value = options.fieldLabel ?? '';
   amendUnasked.value = options.unasked ?? '';
   if (await readAmendForm()) amendOpen.value = true;
@@ -1193,6 +1194,7 @@ watch(marketId, () => {
                         type="button"
                         class="btn btn--compact btn--primary"
                         data-testid="import-add-a-field-button"
+                        :disabled="!mayCheck(wizard.step)"
                         @click="openAmend({ fieldLabel: headers[row.index] })"
                       >
                         Add a question for it
@@ -1308,6 +1310,7 @@ watch(marketId, () => {
               type="button"
               class="btn btn--compact btn--primary"
               :data-testid="`import-stop-asking-${target.key}`"
+              :disabled="!mayCheck(wizard.step)"
               @click="openAmend({ unasked: target.key })"
             >
               Stop asking it

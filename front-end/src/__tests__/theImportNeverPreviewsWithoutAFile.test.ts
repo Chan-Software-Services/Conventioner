@@ -225,6 +225,127 @@ describe('the steps carry their data', () => {
     expect(checkBodies().at(-1)?.mapping).toEqual({ applicant_email: 0, notes: 1 });
   });
 
+  describe("the amend dialog's form read never ends the step's own request", () => {
+    /** Two columns, "Notes" optional, so a check can go out with it at "nowhere to go". */
+    function servesANotesColumn(extraTargets: unknown[] = []) {
+      const served = api.post.getMockImplementation()!;
+      api.post.mockImplementation(async (url: string, body: unknown) =>
+        url.endsWith('/import/inspect')
+          ? {
+              data: {
+                headers: ['Email Address', 'Notes'],
+                sampleValues: [['ana-vendor@example.com'], ['Corner table']],
+                rowCount: 1,
+                targets: [
+                  { key: 'applicant_email', label: 'Email', required: true, kind: 'identity' },
+                  ...extraTargets,
+                ],
+                groups: [],
+                suggestedMapping: { applicant_email: 0 },
+              },
+            }
+          : served(url, body),
+      );
+    }
+
+    async function nowhereToGo(view: VueWrapper) {
+      const select = view.get<HTMLSelectElement>('[data-testid="import-target-select-1"]');
+      select.element.value = '__needs_a_field__';
+      await select.trigger('change');
+      await flushPromises();
+    }
+
+    /** "Add a question for it" pressed as a person would: a disabled button does nothing. */
+    async function addAQuestionIfOffered(view: VueWrapper) {
+      const add = view.get<HTMLButtonElement>('[data-testid="import-add-a-field-button"]');
+      if (!add.element.disabled) await press(view, 'import-add-a-field-button');
+    }
+
+    it('a form read refused during the values check leaves the check to answer', async () => {
+      servesANotesColumn();
+      const view = await onMapColumns();
+      await nowhereToGo(view);
+      api.get.mockImplementation(async (url: string) => {
+        if (url.endsWith('/application-form')) throw new Error('Network Error');
+        return { data: {} };
+      });
+      await press(view, 'import-preview-button');
+      await addAQuestionIfOffered(view);
+      valuesCheck.resolve({ data: { validRows: 1, newRows: 1 } });
+      await flushPromises();
+      expect(view.find('[data-testid="import-preview"]').exists()).toBe(true);
+    });
+
+    it('a form read answered during the values check opens no dialog over it', async () => {
+      servesANotesColumn();
+      const view = await onMapColumns();
+      await nowhereToGo(view);
+      api.get.mockImplementation(async (url: string) =>
+        url.endsWith('/application-form')
+          ? { data: { application_form: { fields: [] }, formRevision: 1 } }
+          : { data: {} },
+      );
+      await press(view, 'import-preview-button');
+      await addAQuestionIfOffered(view);
+      const dialog = view.findComponent({ name: 'AmendFormDialog' });
+      expect(dialog.props('open')).toBe(false);
+      valuesCheck.resolve({ data: { validRows: 1, newRows: 1 } });
+      await flushPromises();
+      expect(view.find('[data-testid="import-preview"]').exists()).toBe(true);
+      expect(dialog.props('open')).toBe(false);
+    });
+
+    it("a form read refused during a re-read leaves the re-read's answer to land", async () => {
+      servesANotesColumn();
+      const view = await onMapColumns();
+      await nowhereToGo(view);
+      api.get.mockImplementation(async (url: string) =>
+        url.endsWith('/application-form')
+          ? { data: { application_form: { fields: [] }, formRevision: 1 } }
+          : { data: {} },
+      );
+      await press(view, 'import-add-a-field-button');
+      const dialog = view.findComponent({ name: 'AmendFormDialog' });
+      expect(dialog.props('open')).toBe(true);
+
+      // The question is saved: the form now has a Notes target, read again with the file.
+      const reread = Promise.withResolvers<unknown>();
+      const served = api.post.getMockImplementation()!;
+      api.post.mockImplementation(async (url: string, body: unknown) =>
+        url.endsWith('/import/inspect') ? reread.promise : served(url, body),
+      );
+      dialog.vm.$emit('close');
+      dialog.vm.$emit('amended');
+      await flushPromises();
+      api.get.mockImplementation(async (url: string) => {
+        if (url.endsWith('/application-form')) throw new Error('Network Error');
+        return { data: {} };
+      });
+      await addAQuestionIfOffered(view);
+      reread.resolve({
+        data: {
+          headers: ['Email Address', 'Notes'],
+          sampleValues: [['ana-vendor@example.com'], ['Corner table']],
+          rowCount: 1,
+          targets: [
+            { key: 'applicant_email', label: 'Email', required: true, kind: 'identity' },
+            { key: 'notes', label: 'Notes', required: false, kind: 'custom' },
+          ],
+          groups: [],
+          suggestedMapping: { applicant_email: 0, notes: 1 },
+        },
+      });
+      // The values read beside the re-read answers too.
+      valuesCheck.resolve({ data: {} });
+      await flushPromises();
+      const options = view
+        .get<HTMLSelectElement>('[data-testid="import-target-select-1"]')
+        .findAll('option')
+        .map((option) => option.element.value);
+      expect(options).toContain('notes');
+    });
+  });
+
   it('a file the server could not read leaves Upload naming no file', async () => {
     api.post.mockRejectedValue(new Error('Network Error'));
     wrapper = mount(CsvImportView, {

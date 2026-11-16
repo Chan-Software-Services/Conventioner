@@ -159,6 +159,7 @@ A custom question can be made optional on Market Setup's form while the market i
 
 Refused when it would leave the form asking nothing, which could not enter Review.
 Refused, too, when the form was saved elsewhere since the dialog read it: the dialog stays open on [the market write's one sentence](../../implementation/modules/market-write.md#what-it-answers) and shows the questions as they now stand.
+"Add a question for it" and "Stop asking it" wait, disabled, while the values are checked or the questions are read again, so the dialog never opens over a request still out.
 Once anything is imported the questions are fixed, and the dead end says so in the lock's own words ("The questions are fixed: …") instead of offering the dialog.
 How it works is [the form amendment](../../implementation/modules/form-amendment.md).
 Covered by:
