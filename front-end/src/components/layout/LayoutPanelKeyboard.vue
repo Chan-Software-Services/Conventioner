@@ -41,7 +41,7 @@ const GROUPS: readonly {
   {
     title: 'On the map',
     keys: [
-      [['Arrow keys'], 'Move to the nearest table that way'],
+      [['Arrow keys'], 'With nothing selected, move to the nearest table that way'],
       [['Enter', 'Space'], 'Pick up the table, or the selection it is in'],
       [['Shift+Enter'], 'Select the table, or take it out'],
     ],
@@ -58,7 +58,10 @@ const GROUPS: readonly {
   {
     title: 'The selection',
     keys: [
+      [['Arrow keys'], 'Move it 10 cm, or 1 m with Shift'],
+      [['Alt+Arrow keys'], 'Move to the nearest table that way'],
       [['R'], 'Turn it 90°, or 15° with Shift'],
+      [['Shift+drag a corner'], 'Turn it by the degree, not in 15° steps'],
       [['Delete', 'Backspace'], 'Remove it', 'seats'],
       [['Ctrl+D'], 'Duplicate it', 'seats'],
       [['Ctrl+A'], 'Select every table'],

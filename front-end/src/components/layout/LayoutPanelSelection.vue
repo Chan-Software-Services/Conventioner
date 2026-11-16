@@ -2,7 +2,7 @@
 /**
  * The layout page's selection card (T257): nothing selected, "Select tables to change them."; one
  * table, its code and where its centre stands, in metres from the floorplan's top-left corner;
- * several, how many and their codes, the first ten of them. Its fields put the selection in a
+ * several, how many and how many of them are in each section. Its fields put the selection in a
  * section or give it a table type, each reading "Mixed" while the selected tables differ; its
  * buttons turn the selection a quarter, duplicate it, line it up or space it evenly (the Align
  * menu) and remove it, with no question asked first, since Undo takes a removal back. For one
@@ -101,8 +101,6 @@ watch(
 );
 
 const NO_SECTION = 'Table in no section';
-/** How many codes the card names before it counts the rest. */
-const CODES_SHOWN = 10;
 /** The value a field holds while the selected tables differ. */
 const MIXED = '\u0000mixed';
 
@@ -111,10 +109,20 @@ function sectionOf(table: FloorplanTable) {
   return props.sections.find(({ section }) => section.id === table.sectionId)?.section ?? null;
 }
 
-const codes = computed(() => {
-  const all = props.tables.map((table) => tableCode(table, sectionOf(table)) ?? NO_SECTION);
-  const more = all.length - CODES_SHOWN;
-  return more > 0 ? `${all.slice(0, CODES_SHOWN).join(', ')} and ${more} more` : all.join(', ');
+/** Several tables, counted by section in the sections' order, no section last: "15 in B, 12 in
+ *  no section" (the QC walk of 2026-11-16). A list of every table's code said one name many
+ *  times over and the rest as "and 17 more", which told nothing a count does not. */
+const counts = computed(() => {
+  const counted = new Map<string | null, number>();
+  for (const table of props.tables) {
+    const id = sectionOf(table)?.id ?? null;
+    counted.set(id, (counted.get(id) ?? 0) + 1);
+  }
+  const parts = props.sections
+    .filter(({ section }) => counted.has(section.id))
+    .map(({ section }) => `${counted.get(section.id)} in ${section.name}`);
+  if (counted.has(null)) parts.push(`${counted.get(null)} in no section`);
+  return parts.join(', ');
 });
 
 /** Whether a table's type may change here. */
@@ -206,7 +214,7 @@ const ARRANGEMENTS: readonly { id: Arrangement; label: string }[] = [
       Select tables to change them.
     </p>
     <template v-else>
-      <p v-if="!one" class="selection-text" data-testid="layout-selection-codes">{{ codes }}</p>
+      <p v-if="!one" class="selection-text" data-testid="layout-selection-counts">{{ counts }}</p>
       <div class="selection-fields">
         <label class="selection-field-name" :for="sectionFieldId">Section</label>
         <select

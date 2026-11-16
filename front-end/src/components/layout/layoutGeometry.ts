@@ -895,18 +895,23 @@ export function boxBetween(a: PointMm, b: PointMm): Bounds {
   };
 }
 
-/** The tables a box drawn on the floor selects: those whose centre is in it, its edge included. */
-export function tablesInBox<T extends PointMm & { id: string }>(
+/** The tables a box drawn on the floor selects: those wholly in it, every corner of the table as
+ *  turned, its edge included. A table the box only partly covers is left, so a few tables are
+ *  picked out of a dense block by the box drawn round them (the QC walk of 2026-11-16). */
+export function tablesInBox<T extends PointMm & { id: string; rotation: number }>(
   tables: readonly T[],
   box: Bounds,
+  sizeOf: (table: T) => SizeMm,
 ): string[] {
   return tables
-    .filter(
-      (table) =>
-        table.xMm >= box.left &&
-        table.xMm <= box.right &&
-        table.yMm >= box.top &&
-        table.yMm <= box.bottom,
+    .filter((table) =>
+      tableCorners(table, sizeOf(table)).every(
+        (corner) =>
+          corner.xMm >= box.left &&
+          corner.xMm <= box.right &&
+          corner.yMm >= box.top &&
+          corner.yMm <= box.bottom,
+      ),
     )
     .map((table) => table.id);
 }

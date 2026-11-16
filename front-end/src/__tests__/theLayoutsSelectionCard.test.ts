@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 /**
  * The layout page's selection card (T257 tickets 04 and 05): nothing selected, one table read
- * whole, or several counted and named, with the fields that change the selection's section and
+ * whole, or several counted by section (T422), with the fields that change the selection's section and
  * type and the buttons that turn, duplicate, line up and remove it; and the map in its `edit` mode
  * saying each table pressed or not, with room for what the editor draws over it.
  */
@@ -85,29 +85,33 @@ describe("the layout's selection card", () => {
     expect(reads(wrapper, 'layout-selection-type')).toBe('Unknown type');
   });
 
-  it('counts several and names them', () => {
-    const wrapper = card(TABLES);
-    expect(text(wrapper, 'layout-selection-title')).toBe('3 tables selected');
-    expect(text(wrapper, 'layout-selection-codes')).toBe(
-      'Gold row 1, Gold row 2, Table in no section',
+  it("counts several, and how many are in each section, in the sections' order, no section last", () => {
+    const wrapper = card([
+      table('loose', null, null),
+      table('s1', 'sec-silver', 1),
+      table('g1', 'sec-gold', 1),
+      table('g2', 'sec-gold', 2),
+    ]);
+    expect(text(wrapper, 'layout-selection-title')).toBe('4 tables selected');
+    expect(text(wrapper, 'layout-selection-counts')).toBe(
+      '2 in Gold row, 1 in Silver aisle, 1 in no section',
     );
+    expect(wrapper.find('[data-testid="layout-selection-codes"]').exists()).toBe(false);
   });
 
-  it('names the first ten of many, and counts the rest', () => {
+  it('counts many in one section once, never naming each', () => {
     const many = Array.from({ length: 13 }, (_, index) =>
       table(`g${index + 1}`, 'sec-gold', index + 1),
     );
+    const loose = Array.from({ length: 12 }, (_, index) => table(`l${index + 1}`, null, null));
     const wrapper = mount(LayoutPanelSelection, {
       props: {
-        tables: many,
-        sections: layoutSections({ ...LAYOUT, tables: many }, SECTIONS),
+        tables: [...many, ...loose],
+        sections: layoutSections({ ...LAYOUT, tables: [...many, ...loose] }, SECTIONS),
         tableTypes: TYPES,
       },
     });
-    expect(text(wrapper, 'layout-selection-codes')).toBe(
-      'Gold row 1, Gold row 2, Gold row 3, Gold row 4, Gold row 5, Gold row 6, Gold row 7, ' +
-        'Gold row 8, Gold row 9, Gold row 10 and 3 more',
-    );
+    expect(text(wrapper, 'layout-selection-counts')).toBe('13 in Gold row, 12 in no section');
   });
 
   it('reads the section and the type several share, and "Mixed" where they differ', () => {

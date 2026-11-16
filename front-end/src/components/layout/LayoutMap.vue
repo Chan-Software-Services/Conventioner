@@ -650,17 +650,7 @@ const labels = computed<DrawnLabel[]>(() => {
   return drawn;
 });
 
-/** Where each section's name stands, in millimetres, for what the editor draws over the map
- *  (its turn handle) to keep off. */
-const labelBounds = computed<Bounds[]>(() =>
-  labels.value.map((label) => ({
-    left: label.x,
-    top: label.y,
-    right: label.x + label.width,
-    bottom: label.y + label.height,
-  })),
-);
-defineExpose({ labelBounds, zoomIn, zoomOut, fit, zoomedIn });
+defineExpose({ zoomIn, zoomOut, fit, zoomedIn });
 
 // ── The no-table zones ───────────────────────────────────────────────────────
 
@@ -750,7 +740,10 @@ const ARROWS: Record<string, Direction> = {
 function onKeydown(event: KeyboardEvent) {
   // The editor round the map may take a key first, as it does while a table is picked up: on the
   // table or in the capture phase, since a listener of its own round the map hears the key after.
-  if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (event.defaultPrevented || event.ctrlKey || event.metaKey) return;
+  // In the editor, whose selection takes the plain arrows, Alt and an arrow moves between tables
+  // too (T422). A read map leaves Alt alone: Alt and an arrow is the browser's back and forward.
+  if (event.altKey && (props.mode !== 'edit' || !ARROWS[event.key])) return;
   const id = tableOf(event);
   if (!id) return;
   if ((event.key === 'Enter' || event.key === ' ') && props.mode === 'read') {

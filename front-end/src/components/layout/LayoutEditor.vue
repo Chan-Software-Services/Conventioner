@@ -8,9 +8,12 @@
  * Select: a press on a table selects it (Shift or Ctrl adds it or takes it out), a drag moves the
  * selection, snapping to the edges and centres of the tables that stand still within 8 px, with a
  * guide drawn, and freely with Alt; a press on the floor selects nothing, and a drag on it draws a
- * box that selects every table whose centre is in it (with Shift or Ctrl, beside those selected
- * already). Ctrl+A selects every table and Escape none. The handle beside the selection turns it
- * about its middle in 15° steps (Alt: freely); R turns it a quarter. A section's name is dragged
+ * box that selects every table wholly in it, as turned (with Shift or Ctrl, beside those selected
+ * already). Ctrl+A selects every table and Escape none. The selection stands in a frame, one
+ * table's hugging it and turned with it, several's square to the page, and a knob on each of the
+ * frame's corners turns it about its middle in 15° steps (Shift: by the degree); R turns it a
+ * quarter. With tables selected the arrow keys move them 10 cm, or 1 m with Shift, a key held
+ * down being one change. A section's name is dragged
  * to where it should stand. Add table: a click places a table of the options strip's section and
  * type at the point, and the tool stays on. A drag or a turn is one change, and Escape puts it
  * back.
@@ -109,6 +112,7 @@ import {
   angleFrom,
   boxBetween,
   cameraShowing,
+  clampMove,
   clampToHall,
   clearPlace,
   cornersOf,
@@ -367,11 +371,17 @@ const hint = computed(() => {
     }
     return tool.value === 'add'
       ? 'Enter places a table at the middle of the view. The arrow keys move between tables.'
-      : props.settled
-        ? 'The arrow keys move between tables. Enter picks a table up to move it, and Shift and ' +
-          'Enter selects it.'
-        : 'The arrow keys move between tables. Enter picks a table up to move it, ' +
-          'Shift and Enter selects it, and Delete removes the selection.';
+      : selection.value.length
+        ? 'The arrow keys move the selection 10 cm, or 1 m with Shift, and Alt and an arrow ' +
+          (props.settled
+            ? 'moves between tables. Shift and Enter selects a table or takes it out.'
+            : 'moves between tables. Shift and Enter selects a table or takes it out, and Delete ' +
+              'removes the selection.')
+        : props.settled
+          ? 'The arrow keys move between tables. Enter picks a table up to move it, and Shift and ' +
+            'Enter selects it.'
+          : 'The arrow keys move between tables. Enter picks a table up to move it, ' +
+            'Shift and Enter selects it, and Delete removes the selection.';
   }
   if (tool.value === 'row') {
     if (row.stroking.value) {
@@ -407,7 +417,8 @@ const hint = computed(() => {
   return tool.value === 'add'
     ? 'Click the floor to place a table. Ctrl and the wheel zoom, and Space and a drag move the view.'
     : 'Drag a table to move it; Alt places it freely. Drag on the floor, or Shift and click, ' +
-        "to select several. Drag the selection's handle, or press R, to turn it.";
+        'to select several. Drag a corner of the selection to turn it in 15° steps, with Shift ' +
+        'by the degree, or press R.';
 });
 
 /** The map's description, for a screen reader that reads a group's: its keys, as the tool on has
@@ -425,7 +436,8 @@ const mapKeys = computed(() =>
       : tool.value === 'add'
         ? 'The arrow keys move between tables. Enter places a table at the middle of the view.'
         : 'The arrow keys move between tables. Enter picks a table up; then the arrow keys move it, ' +
-          'R turns it, Enter drops it and Escape puts it back.',
+          'R turns it, Enter drops it and Escape puts it back. With tables selected the arrow ' +
+          'keys move them, and Alt and an arrow moves between tables.',
 );
 
 // ── The stage and its camera ─────────────────────────────────────────────────
@@ -626,7 +638,7 @@ type Gesture =
       centre: PointMm;
       fromAngle: number;
       begun: boolean;
-      /** How far the handle has turned them, in degrees. */
+      /** How far the knob has turned them, in degrees. */
       by: number;
     }
   | { kind: 'pinch'; distance: number; middle: { xPx: number; yPx: number }; camera: Camera };
@@ -888,9 +900,10 @@ function onPointerDown(event: PointerEvent) {
   } else if (event.target instanceof Element && event.target.closest('[data-turn-handle]')) {
     const box = selectionBounds(layout.value, selection.value, props.tableTypes);
     if (!box) return;
-    // The handle is no stop of the keyboard's: the press leaves the focus where it was.
+    // A knob is no stop of the keyboard's: the press leaves the focus where it was.
     event.preventDefault();
     const centre = centreOf(box);
+    if (restingFrame.value) turning.value = { frame: restingFrame.value, by: 0 };
     gesture = {
       kind: 'turn',
       ids: [...selection.value],
@@ -1057,7 +1070,7 @@ function onPointerMove(event: PointerEvent) {
     const drawn = boxBetween(gesture.fromMm, toMm(event));
     selectBox.value = drawn;
     // Selected as the box is drawn, so what it will take is seen before it is let go.
-    const inside = tablesInBox(layout.value.tables, drawn);
+    const inside = tablesInBox(layout.value.tables, drawn, sizeOf);
     const kept = gesture.keep ? gesture.base.filter((id) => !inside.includes(id)) : [];
     props.editor.select([...kept, ...inside]);
   } else if (gesture.kind === 'label') {
@@ -1076,7 +1089,8 @@ function onPointerMove(event: PointerEvent) {
   } else if (gesture.kind === 'turn') {
     let by = angleFrom(gesture.centre, toMm(event)) - gesture.fromAngle;
     by = ((((by + 180) % 360) + 360) % 360) - 180;
-    if (!event.altKey) by = snapAngle(by, TURN_STEP);
+    // 15° steps; with Shift, whole degrees, for a fine turn.
+    by = snapAngle(by, event.shiftKey ? 1 : TURN_STEP);
     if (!gesture.begun) {
       if (by === 0) return;
       gesture.begun = true;
@@ -1084,6 +1098,7 @@ function onPointerMove(event: PointerEvent) {
       props.editor.begin();
     }
     gesture.by = ((by % 360) + 360) % 360;
+    if (turning.value) turning.value = { ...turning.value, by };
     props.editor.turnTables(gesture.ids, by, gesture.centre);
   }
 }
@@ -1096,6 +1111,7 @@ function endGesture(event: PointerEvent, cancelled: boolean) {
   // A pinch lasts while two fingers are down; the one left does nothing more.
   gesture = null;
   gesturePointer = null;
+  turning.value = null;
   guides.value = [];
   selectBox.value = null;
   zoneBox.value = null;
@@ -1253,6 +1269,7 @@ function addZone(box: Bounds) {
 function abandon() {
   const done = gesture;
   gesture = null;
+  turning.value = null;
   guides.value = [];
   selectBox.value = null;
   zoneBox.value = null;
@@ -1680,6 +1697,7 @@ function onStageKeydown(event: KeyboardEvent) {
     carriedKey(event, id);
     return;
   }
+  if (nudgeKey(event)) return;
   if (tool.value === 'row' || tool.value === 'fill') {
     // The tool's keys, before the map hears them; no table is picked up while it is on.
     if (tool.value === 'row' ? rowKey(event, true) : fillKey(event, true)) event.preventDefault();
@@ -1712,6 +1730,46 @@ function onStageKeydown(event: KeyboardEvent) {
   if (props.editor.pickUp(selection.value)) {
     say(saidPickedUp(tablesOf(pickedUp.value), drawnSections.value));
   }
+}
+
+/** An arrow held now that is moving the selection: one step of undo from its first press to its
+ *  letting go. The selection's centres at that first press, and how far it has moved since: within
+ *  one change each move is reckoned from where it began, as a drag's frames are. */
+let nudging: { from: PointMm[]; by: { dxMm: number; dyMm: number } } | null = null;
+
+/**
+ * An arrow on the map with tables selected, under Select: the selection moves 10 cm that way, or
+ * 1 m with Shift, as a picked-up table does, with no Enter first (the QC walk of 2026-11-16). A
+ * key held down is one change, said once as it is let go (`onStageKeyup`). The move counts no
+ * further than the floorplan's edge lets the selection go (D12), so a press back moves at once.
+ * Alt and an arrow is left to the map, which moves the focus between tables.
+ */
+function nudgeKey(event: KeyboardEvent): boolean {
+  const nudge = NUDGES[event.key];
+  if (!nudge || tool.value !== 'select' || !selection.value.length || gesture) return false;
+  if (event.ctrlKey || event.metaKey || event.altKey) return false;
+  event.preventDefault();
+  event.stopPropagation();
+  if (!nudging) {
+    nudging = { from: tablesOf(selection.value), by: { dxMm: 0, dyMm: 0 } };
+    props.editor.begin();
+  }
+  const step = event.shiftKey ? LONG_NUDGE_MM : NUDGE_MM;
+  nudging.by = clampMove(
+    nudging.from,
+    { dxMm: nudging.by.dxMm + nudge[0] * step, dyMm: nudging.by.dyMm + nudge[1] * step },
+    hall.value,
+  );
+  props.editor.moveTables(selection.value, nudging.by.dxMm, nudging.by.dyMm);
+  show(tablesOf(selection.value));
+  return true;
+}
+
+/** End the change an arrow held began; whether it moved anything. */
+function endNudge(): boolean {
+  if (!nudging) return false;
+  nudging = null;
+  return props.editor.end();
 }
 
 /** A key while tables are picked up: an arrow moves them, R turns them, Enter or Space drops them
@@ -1756,6 +1814,14 @@ function carriedKey(event: KeyboardEvent, focused: string | null) {
 let unsaidMove = false;
 
 function onStageKeyup(event: KeyboardEvent) {
+  if (nudging && NUDGES[event.key]) {
+    const tables = tablesOf(selection.value);
+    const lead = tableOf(tableAt(event)) ?? tables[0];
+    if (endNudge()) {
+      if (lead) say(saidMoved(tables, lead, drawnSections.value));
+    } else say(AT_THE_EDGE);
+    return;
+  }
   if (!unsaidMove || !NUDGES[event.key]) return;
   unsaidMove = false;
   if (pointTool.value) {
@@ -1833,6 +1899,8 @@ function onStageFocusIn(event: FocusEvent) {
 function onStageFocusOut(event: FocusEvent) {
   const to = event.relatedTarget;
   if (to instanceof Node && stage.value?.contains(to)) return;
+  // An arrow held as the focus leaves is let go here: its move is one change, ended.
+  endNudge();
   if (!document.hasFocus()) return;
   keysOnMap.value = false;
   dropWhatIsPickedUp(tableAt(event));
@@ -1921,61 +1989,69 @@ watch([canUndo, canRedo], async ([undoable, redoable]) => {
   toolbar.value?.querySelector<HTMLButtonElement>(`[data-tool="${next}"]`)?.focus();
 });
 
-// ── The turn handle ──────────────────────────────────────────────────────────
+// ── The selection's frame ────────────────────────────────────────────────────
 
-/** How far out from the selection's box the handle reaches, and how wide it stands, in screen
- *  pixels: its stem from 5 px, its knob 24 px out with a thumb's reach of 14 px round it. */
-const HANDLE_REACH_PX = 38;
-const HANDLE_WIDTH_PX = 28;
+/** How far outside the selected tables' edges their frame is drawn, in screen pixels: clear of
+ *  each table's outline. */
+const FRAME_OUT_PX = 6;
+/** The corners of the frame a knob stands on, as signs of its half width and half depth. */
+const FRAME_CORNERS = [
+  [-1, -1],
+  [1, -1],
+  [1, 1],
+  [-1, 1],
+] as const;
 
-/** The map, for where it draws each section's name. */
-const map = ref<InstanceType<typeof LayoutMap> | null>(null);
+/** A frame about the selection: a rectangle about its centre, turned. */
+interface Frame {
+  xMm: number;
+  yMm: number;
+  widthMm: number;
+  depthMm: number;
+  rotation: number;
+}
 
 /**
- * Where the handle stands: on the middle of an edge of the selection's box (`xMm`, `yMm`) and
- * pointing out of it (`dx`, `dy`). Over the box where that covers no other table and no section's
- * name, as on a table standing alone; else under it, then right of it, then left, the first side
- * that covers none, so it never hides a neighbour's number or a name; over it when every side
- * covers one.
+ * The frame at rest. One table's frame hugs it and turns with it; several stand in a box square
+ * to the page. Its four corners hold the turn knobs, so they stand where the frame does, always
+ * all four, and never move to another side (the QC walk of 2026-11-16: a handle that searched for
+ * a side clear of the neighbours jumped as the tables moved).
  */
-const handle = computed(() => {
+const restingFrame = computed<Frame | null>(() => {
   if (tool.value !== 'select') return null;
-  const box = selectionBounds(layout.value, selection.value, props.tableTypes);
-  const cam = camera.value;
-  if (!box) return null;
-  const middle = { xMm: (box.left + box.right) / 2, yMm: (box.top + box.bottom) / 2 };
-  const sides = [
-    { xMm: middle.xMm, yMm: box.top, dx: 0, dy: -1 },
-    { xMm: middle.xMm, yMm: box.bottom, dx: 0, dy: 1 },
-    { xMm: box.right, yMm: middle.yMm, dx: 1, dy: 0 },
-    { xMm: box.left, yMm: middle.yMm, dx: -1, dy: 0 },
-  ];
-  if (!cam) return sides[0];
-  const reach = HANDLE_REACH_PX / cam.pxPerMm;
-  const half = HANDLE_WIDTH_PX / 2 / cam.pxPerMm;
-  const chosen = new Set(selection.value);
-  const others = [
-    ...layout.value.tables.filter((table) => !chosen.has(table.id)).map(boundsOf),
-    ...(map.value?.labelBounds ?? []),
-  ];
-  const clear = (side: (typeof sides)[number]) => {
-    const far = { xMm: side.xMm + side.dx * reach, yMm: side.yMm + side.dy * reach };
-    const room: Bounds = {
-      left: Math.min(side.xMm, far.xMm) - (side.dy ? half : 0),
-      right: Math.max(side.xMm, far.xMm) + (side.dy ? half : 0),
-      top: Math.min(side.yMm, far.yMm) - (side.dx ? half : 0),
-      bottom: Math.max(side.yMm, far.yMm) + (side.dx ? half : 0),
+  const chosen = tablesOf(selection.value);
+  if (!chosen.length) return null;
+  if (chosen.length === 1) {
+    const [table] = chosen;
+    const size = sizeOf(table);
+    return {
+      xMm: table.xMm,
+      yMm: table.yMm,
+      widthMm: size.widthMm,
+      depthMm: size.depthMm,
+      rotation: table.rotation,
     };
-    return !others.some(
-      (other) =>
-        other.left < room.right &&
-        other.right > room.left &&
-        other.top < room.bottom &&
-        other.bottom > room.top,
-    );
+  }
+  const box = selectionBounds(layout.value, selection.value, props.tableTypes);
+  if (!box) return null;
+  return {
+    ...centreOf(box),
+    widthMm: box.right - box.left,
+    depthMm: box.bottom - box.top,
+    rotation: 0,
   };
-  return sides.find(clear) ?? sides[0];
 });
+
+/** A drag on a knob: the frame as it stood when the drag began, and how far it has turned. While
+ *  it lasts the frame turns whole with the tables, so the knob held stays under the pointer; it
+ *  stands square again when the drag ends. */
+const turning = shallowRef<{ frame: Frame; by: number } | null>(null);
+
+const frame = computed<Frame | null>(() =>
+  turning.value
+    ? { ...turning.value.frame, rotation: turning.value.frame.rotation + turning.value.by }
+    : restingFrame.value,
+);
 
 onMounted(() => {
   measure();
@@ -2021,7 +2097,17 @@ watch(
 
 // The tool's card is the page's, beside the editor: what its buttons do, and what it shows of the
 // row being drawn, are the editor's.
+/** Give the focus to the selection's first table, so the arrow keys move it at once (D13): a
+ *  selection made from the panel left the focus on the panel's button. */
+async function focusSelection() {
+  const [first] = tablesOf(selection.value);
+  if (!first) return;
+  show([first]);
+  await focusTable(first.id);
+}
+
 defineExpose({
+  focusSelection,
   /** Swap the side of the line a row's tables stand on. */
   flipRow,
   /** Fill what the map shows of the floorplan. */
@@ -2174,7 +2260,6 @@ defineExpose({
         @focusout="onStageFocusOut"
       >
         <LayoutMap
-          ref="map"
           :layout="layout"
           :locationName="locationName"
           :sections="sections"
@@ -2250,38 +2335,48 @@ defineExpose({
               :mmPerPx="mmPerPx"
             />
             <g
-              v-if="handle"
-              class="layout-turn-handle"
-              data-turn-handle
-              data-testid="layout-turn-handle"
+              v-if="frame"
+              class="layout-selection-frame"
+              data-testid="layout-selection-frame"
+              :transform="`translate(${frame.xMm} ${frame.yMm}) rotate(${frame.rotation})`"
               aria-hidden="true"
             >
-              <line
-                :x1="handle.xMm + handle.dx * 5 * mmPerPx"
-                :y1="handle.yMm + handle.dy * 5 * mmPerPx"
-                :x2="handle.xMm + handle.dx * 17 * mmPerPx"
-                :y2="handle.yMm + handle.dy * 17 * mmPerPx"
+              <rect
+                :x="-frame.widthMm / 2 - FRAME_OUT_PX * mmPerPx"
+                :y="-frame.depthMm / 2 - FRAME_OUT_PX * mmPerPx"
+                :width="frame.widthMm + 2 * FRAME_OUT_PX * mmPerPx"
+                :height="frame.depthMm + 2 * FRAME_OUT_PX * mmPerPx"
+                fill="none"
                 stroke="var(--mm-black)"
-                stroke-width="1.5"
+                stroke-width="1"
                 vector-effect="non-scaling-stroke"
+                pointer-events="none"
               />
-              <!-- A thumb's reach round a 14 px knob. -->
-              <circle
-                :cx="handle.xMm + handle.dx * 24 * mmPerPx"
-                :cy="handle.yMm + handle.dy * 24 * mmPerPx"
-                :r="14 * mmPerPx"
-                fill="transparent"
-              />
-              <circle
-                :cx="handle.xMm + handle.dx * 24 * mmPerPx"
-                :cy="handle.yMm + handle.dy * 24 * mmPerPx"
-                :r="7 * mmPerPx"
-                fill="white"
-                stroke="var(--mm-black)"
-                stroke-width="1.5"
-                vector-effect="non-scaling-stroke"
-                data-testid="layout-turn-knob"
-              />
+              <g
+                v-for="[sx, sy] in FRAME_CORNERS"
+                :key="`${sx} ${sy}`"
+                class="layout-turn-handle"
+                data-turn-handle
+                data-testid="layout-turn-handle"
+              >
+                <!-- A thumb's reach round the knob. -->
+                <circle
+                  :cx="sx * (frame.widthMm / 2 + FRAME_OUT_PX * mmPerPx)"
+                  :cy="sy * (frame.depthMm / 2 + FRAME_OUT_PX * mmPerPx)"
+                  :r="14 * mmPerPx"
+                  fill="transparent"
+                />
+                <circle
+                  :cx="sx * (frame.widthMm / 2 + FRAME_OUT_PX * mmPerPx)"
+                  :cy="sy * (frame.depthMm / 2 + FRAME_OUT_PX * mmPerPx)"
+                  :r="5 * mmPerPx"
+                  fill="white"
+                  stroke="var(--mm-black)"
+                  stroke-width="1.5"
+                  vector-effect="non-scaling-stroke"
+                  data-testid="layout-turn-knob"
+                />
+              </g>
             </g>
           </template>
         </LayoutMap>
@@ -2603,8 +2698,13 @@ defineExpose({
   cursor: grabbing;
 }
 
+/* A turning arrow, as a drawing tool's turn corner shows; grab where a custom cursor is not drawn
+   (D20: an inline image, not an icon of the app's set, since a cursor is no component). */
 .layout-turn-handle {
-  cursor: grab;
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M5 12a7 7 0 1 1 2.05 4.95' fill='none' stroke='white' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M5 12a7 7 0 1 1 2.05 4.95' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3Cpath d='M2 9l3 4 3-4z' fill='black' stroke='white' stroke-width='0.8'/%3E%3C/svg%3E")
+      12 12,
+    grab;
 }
 
 .layout-hint {

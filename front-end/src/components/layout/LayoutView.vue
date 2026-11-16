@@ -117,6 +117,13 @@ const toolSectionId = ref<string | null>(null);
 const toolTypeId = ref('');
 const editorView = ref<InstanceType<typeof LayoutEditor> | null>(null);
 
+/** "Select them" on the Sections card: the tables in no section are selected and the map takes the
+ *  focus, so the arrow keys move them at once (D13). */
+function selectUnsectioned() {
+  editor.select(unsectioned.value.map((table) => table.id));
+  void editorView.value?.focusSelection();
+}
+
 /** The locations a layout can be opened for: named, and with the id a layout names. */
 const locations = computed<(LocationObject & { id: string })[]>(() =>
   (market.value?.setupObject?.locations ?? []).filter(
@@ -1000,7 +1007,7 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
               :followsPlan="followsPlan"
               @color="(sectionId, color) => editor.setSectionStyle(sectionId, { color })"
               @renumber="editor.renumber($event)"
-              @selectUnsectioned="editor.select(unsectioned.map((table) => table.id))"
+              @selectUnsectioned="selectUnsectioned"
             />
             <p
               v-if="editing && status"
