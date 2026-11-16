@@ -56,9 +56,11 @@ MOSTLY_DIFFERENT_FROM = 20
 CHECK_SEVERAL_ANSWERS = "Could allow several answers"
 CHECK_ORGANIZER = "Read as a column your team added"
 CHECK_RARE_OPTIONS = "Has options few applicants chose"
+CHECK_NAMES_SOMEONE = "Has an option that names someone"
 CHECK_UPLOAD = "A file upload in your Google Form: applicants here paste a link instead"
 CHECK_MAYBE_TEAM = "Could be a column your team added"
-CHECK_CEILING_UNSURE = "A heading mentions a number of days: check whether it limits days per vendor"
+CHECK_CEILING_UNSURE = (
+    "A heading mentions a number of days: check whether it limits days per vendor")
 CHECK_UNREACHABLE = "Couldn't reach TypeSafe"
 
 # TypeSafe's answer is taken at this probability or above, and never below (ticket 04).
@@ -165,9 +167,10 @@ def _names_someone(value: str) -> bool:
 
     It catches every phone number ``_identifying`` does but a run of digits that is only clock
     times, years and dates ("9.30 - 4.30", "2023 - 2024") or a range of numbers around a dash, each
-    end within one of round ("500-1000"), which a question offers. What no pattern sees, such as a bare name, a shop's name, a handle with no @
-    or a postal code, only SHARED_BY guards in ``kept_readings``, and in ``every_reading`` only its
-    rule on a column of mostly different answers (ADR 0023).
+    end within one of round ("500-1000"), which a question offers. What no pattern sees, such as a
+    bare name, a shop's name, a handle with no @ or a postal code, only SHARED_BY guards in
+    ``kept_readings``, and in ``every_reading`` only its rule on a column of mostly different
+    answers (ADR 0023).
     """
     if any(pattern.search(value) for pattern in (EMAIL, SPELLED_EMAIL, URL, DOMAIN, ANY_HANDLE,
                                                   STREET)):
@@ -253,7 +256,8 @@ class _Column:
             if count >= SHARED_BY and not _identifying(option))[:VIEW_OPTIONS]
 
         def share(test) -> float:
-            return round(sum(1 for value in filled if test(value)) / self.filled, 2) if filled else 0
+            return (round(sum(1 for value in filled if test(value)) / self.filled, 2)
+                    if filled else 0)
 
         self.distinct = len(set(filled))
         self.email = share(EMAIL.fullmatch)
@@ -441,6 +445,9 @@ def _options(counts: Dict[str, int], filled: int, share_floor: float) -> List[Di
 
     One few applicants chose - fewer than 3, or for a checkbox question under OPTION_SHARE of its
     answers - is rare and off by default, with its count: the organizer decides whether to keep it.
+    So is one that names someone (``_names_someone``, the start's own filter, ADR 0018), however
+    many chose it: kept, it would be published as an option of the market's form (T352).
+    The options kept by default come first, then the rest, each run most chosen first.
     All of them are listed, one-offs included: an answer that could not be listed could not be
     kept, so an applicant who gave only such answers lost their application (bug 4). How many to
     show at first is the ledger's business.
@@ -448,13 +455,15 @@ def _options(counts: Dict[str, int], filled: int, share_floor: float) -> List[Di
     def rare(count: int) -> bool:
         return count < SHARED_BY or count / filled < share_floor
 
-    ordered = _most_common(counts.items())
-    listed = ([(value, count) for value, count in ordered if not rare(count)]
-              + [(value, count) for value, count in ordered if rare(count)])
-    return [
-        {"value": value, "count": count, "rare": rare(count), "keep": not rare(count)}
-        for value, count in listed
+    options = [
+        {"value": value, "count": count, "rare": rare(count),
+         "namesSomeone": _names_someone(value)}
+        for value, count in _most_common(counts.items())
     ]
+    for option in options:
+        option["keep"] = not option["rare"] and not option["namesSomeone"]
+    return ([option for option in options if option["keep"]]
+            + [option for option in options if not option["keep"]])
 
 
 def kept_readings(field: Dict[str, Any]) -> Dict[str, List[str]]:
@@ -894,7 +903,8 @@ def proposal(headers: Sequence[str], rows: Sequence[Sequence[str]],
     decisions = _classify(columns)
     # The organizer's own questions take their keys first: only theirs are ever stored, so a
     # "Notes" column left out must not push a question called "Notes" to ``notes_2``. The import's
-    # own targets are taken from the start: a column called "Applicant email" is ``applicant_email_2``.
+    # own targets are taken from the start: a column called "Applicant email" is
+    # ``applicant_email_2``.
     taken_keys: Set[str] = set(RESERVED_TARGETS)
     order = sorted(range(len(columns)), key=lambda i: decisions[i]["fate"] != FATE_CUSTOM)
     fields = {i: _field(columns[i], taken_keys) if columns[i].filled else None for i in order}
@@ -911,6 +921,8 @@ def proposal(headers: Sequence[str], rows: Sequence[Sequence[str]],
                 check.append(CHECK_SEVERAL_ANSWERS)
             if any(option["rare"] for option in field["options"]):
                 check.append(CHECK_RARE_OPTIONS)
+            if any(option["namesSomeone"] for option in field["options"]):
+                check.append(CHECK_NAMES_SOMEONE)
         proposed.append({
             "index": index,
             "header": column.header,

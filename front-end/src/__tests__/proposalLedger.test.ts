@@ -13,8 +13,8 @@ import {
 } from '@/utils/csvProposal';
 
 const OPTIONS = [
-  { value: 'Yes', count: 8, rare: false, keep: true },
-  { value: 'Maybe', count: 2, rare: true, keep: false },
+  { value: 'Yes', count: 8, rare: false, namesSomeone: false, keep: true },
+  { value: 'Maybe', count: 2, rare: true, namesSomeone: false, keep: false },
 ];
 
 function column(index: number, overrides: Partial<ProposedColumn> = {}): ProposedColumn {
@@ -99,6 +99,7 @@ const answers = (count: number, word = 'Answer'): ProposedOption[] =>
     value: `${word} ${at}`,
     count: 10,
     rare: at % 3 === 2,
+    namesSomeone: false,
     keep: at % 3 !== 2,
   }));
 
@@ -124,7 +125,13 @@ function proposalOf(options: ProposedOption[], second: ProposedOption[] = []): P
   };
 }
 
-const rareSoap: ProposedOption = { value: 'Goat soap', count: 2, rare: true, keep: false };
+const rareSoap: ProposedOption = {
+  value: 'Goat soap',
+  count: 2,
+  rare: true,
+  namesSomeone: false,
+  keep: false,
+};
 
 const rowAt = (wrapper: VueWrapper, at = 0) => wrapper.findAll('[data-testid="proposal-row"]')[at];
 const optionsOf = (row: ReturnType<typeof rowAt>) => row.findAll('[data-testid="proposal-option"]');
@@ -155,6 +162,29 @@ describe('the proposal ledger', () => {
     expect((rare.find('input').element as HTMLInputElement).checked).toBe(false);
     await rare.find('input').setValue(true);
     expect(wrapper.emitted('toggle')?.[0]).toEqual([0, 'Maybe']);
+  });
+
+  it('shows an option that names someone unticked and muted, says so, and asks to keep it', async () => {
+    const shop: ProposedOption = {
+      value: 'Online at example.org/shop',
+      count: 4,
+      rare: false,
+      namesSomeone: true,
+      keep: false,
+    };
+    const wrapper = ledger(proposalOf([...OPTIONS, shop]));
+    const named = optionsOf(rowAt(wrapper))[2];
+    expect(named.text()).toContain('names someone, chosen by 4 - keep?');
+    expect(named.classes()).toContain('rare');
+    expect((named.find('input').element as HTMLInputElement).checked).toBe(false);
+    await named.find('input').setValue(true);
+    expect(wrapper.emitted('toggle')?.[0]).toEqual([0, 'Online at example.org/shop']);
+  });
+
+  it('mutes neither the words nor the row of an option kept by default', () => {
+    const kept = optionsOf(rowAt(ledger()))[0];
+    expect(kept.find('.muted').text()).toBe('8');
+    expect(kept.classes()).not.toContain('rare');
   });
 
   it("settles a tier the plan does not have with the import's own fix", async () => {
