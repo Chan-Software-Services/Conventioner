@@ -143,7 +143,7 @@ class TestRecordApplicationAnswers:
     def test_changed_answers_send_a_persons_approval_back_to_open(
         self, markets, applications, imported,
     ):
-        """Decision 9.1: answers nobody judged carry no verdict, whoever changed them."""
+        """Decision 9.1 of T277: answers nobody judged carry no verdict, whoever changed them."""
         approved = _app_doc(status=ApplicationStatus.REVIEWER_APPROVED.value,
                             verdict_by={"kind": "person", "email": "alex@market.test"},
                             verdict_at="2026-07-01T10:00:00+00:00")

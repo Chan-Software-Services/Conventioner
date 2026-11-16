@@ -149,7 +149,7 @@ def _write_updates(
     Either moves ``updated_at``, the answers' version, in the same update: what every reader reads
     as the answers changed, so a verdict on a card opened before is refused (T270). Written as the
     review state's event for an organizer's update, which keeps every verdict, since the organizer
-    made both (decision 9.1). With nothing to store or take away it writes nothing."""
+    made both (decision 9.1 of T277). With nothing to store or take away it writes nothing."""
     field = ApplicationsApi.ANSWER_UPDATES_FIELD
     stored = {f"{field}.{key}": value.model_dump() for key, value in updates.items()}
     gone = [f"{field}.{key}" for key in cleared]

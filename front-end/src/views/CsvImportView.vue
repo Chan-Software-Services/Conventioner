@@ -1323,8 +1323,8 @@ watch(marketId, () => {
         <p class="import-help" data-testid="import-preview-merge">{{ previewMergeLine }}</p>
 
         <!-- A person's verdict the import would invalidate, an approval or a rejection (decision
-           9.1). Said before it happens, because silently undoing what the organizer already
-           decided is not acceptable either way. -->
+           9.1 of T277). Said before it happens, because silently undoing what the organizer
+           already decided is not acceptable either way. -->
         <p v-if="returningToReview" class="import-note warn" data-testid="import-returning-note">
           {{ returningToReview }} decided application{{ returningToReview === 1 ? '' : 's' }} will
           return to review because

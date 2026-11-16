@@ -1611,8 +1611,8 @@ _PREVIEWED = ReviewState.Arrival(None, Actions.IMPORT_APPLICATIONS.id)
 
 def _row_move(existing: Dict[str, Any], stored: Dict[str, Any]) -> ReviewState.Move:
     """What writing a row's answers, as they would be stored, does to an application already here:
-    the review state's own move for an import (decision 9.1), the one the write then writes. A
-    preview reads it; so does the count of the applications it sends back to open."""
+    the review state's own move for an import (decision 9.1 of T277), the one the write then
+    writes. A preview reads it; so does the count of the applications it sends back to open."""
     moved = ReviewState.move(existing, ReviewState.AnswersChanged(
         ReviewState.Source.IMPORT, stored, _PREVIEWED))
     if not isinstance(moved, ReviewState.Move):  # no state refuses changed answers

@@ -79,9 +79,10 @@ ANSWERS = {
 
 
 class TestAVerdictLandingInsideAnApplicantsSave:
-    """The applicant's save holds the application as it read it (decision 9.1): a verdict landing
-    between its read and its write makes the write match nothing on the server, and the save is
-    written again on what is stored then, so the changed answers send that verdict back to open."""
+    """The applicant's save holds the application as it read it (decision 9.1 of T277): a verdict
+    landing between its read and its write makes the write match nothing on the server, and the
+    save is written again on what is stored then, so the changed answers send that verdict back to
+    open."""
 
     @pytest.fixture
     def applied(self, boot_indexes, signed_in, market_in, monkeypatch):

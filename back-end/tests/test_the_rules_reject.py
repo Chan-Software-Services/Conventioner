@@ -377,8 +377,8 @@ class TestThePreviewSaysWhoTheyWillReject:
     @pytest.mark.parametrize("status", [ApplicationStatus.REVIEWER_APPROVED,
                                         ApplicationStatus.REVIEWER_REJECTED])
     def test_a_persons_verdict_on_changed_answers_is_judged_again(self, applications, status):
-        """Changed answers send a person's verdict back to open (decision 9.1), so the rules judge
-        it as the import lands, and the preview lists what they will reject."""
+        """Changed answers send a person's verdict back to open (decision 9.1 of T277), so the
+        rules judge it as the import lands, and the preview lists what they will reject."""
         import csv_import as CsvImport
         from test_csv_import import GOOD_ROW, MAPPING, _csv
         markets = self._markets([])

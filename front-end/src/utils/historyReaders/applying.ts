@@ -21,8 +21,8 @@ export const readers: HistoryReaders = {
   'apply/edited': {
     parts(entry, context) {
       const { text, vendor } = sentence(entry, context);
-      // Their changed answers sent a verdict back to Open (decision 9.1): said here, so the
-      // organizer reads why an approved vendor is open again.
+      // Their changed answers sent a verdict back to Open (decision 9.1 of T277): said here, so
+      // the organizer reads why an approved vendor is open again.
       const returned = asDetail(entry.detail).returned_to_review === true;
       return [
         vendor,

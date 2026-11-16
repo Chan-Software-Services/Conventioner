@@ -13,9 +13,10 @@ intention, all of them easy to leave out of a second implementation:
   2. Answers are normalised through the shared validators into their stored shapes - dates as ISO
      strings in plan order, max dates as an int, rankings best-first, accepted sets in plan order.
   3. The answers are written with what they do to the verdict, by the review state's own event
-     (``application_status.answers_changed``, decision 9.1), held on the application as read: an
-     applicant's or an import's change sends a person's verdict back to open, and an application
-     with no status yet becomes ``open``, which is what puts it in front of a reviewer.
+     (``application_status.answers_changed``, decision 9.1 of T277), held on the application as
+     read: an applicant's or an import's change sends a person's verdict back to open, and an
+     application with no status yet becomes ``open``, which is what puts it in front of a
+     reviewer.
 
 So this module owns the sequence, and every caller gets all three. It deliberately takes plain
 documents rather than a request or a session: the CSV importer has neither.
@@ -68,7 +69,7 @@ ANSWER_TRIES = 3
 
 class Recorded(NamedTuple):
     """What recording answers did: the refusal, with nothing written; else the application as
-    stored, and whether the answers sent a verdict back to open (decision 9.1)."""
+    stored, and whether the answers sent a verdict back to open (decision 9.1 of T277)."""
     error: Optional[str]
     application: Optional[Application]
     returned: bool = False
