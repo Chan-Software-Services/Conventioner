@@ -334,6 +334,11 @@ const mineOnly = computed(() => sharing.value && !helping.value);
 /** What the reviewer walks now: their share, or the whole queue. */
 const walked = computed(() => (mineOnly.value ? share.value : undecided.value));
 /**
+ * Whether Next has a card to move on to: one in what the reviewer walks besides the card up. The card
+ * up may be outside it, as a verdict they undid comes back up dealt to another reviewer.
+ */
+const anotherToWalk = computed(() => walked.value.some((app) => app.id !== current.value?.id));
+/**
  * Their share has nothing left to decide and the rest of the queue, outside their share, has: said
  * so, with the offer to help.
  */
@@ -1174,7 +1179,7 @@ function submittedOn(app: Application): string {
           </button>
           <button
             class="btn btn--secondary"
-            :disabled="saving || (!refusedOn && walked.length < 2)"
+            :disabled="saving || (!refusedOn && !anotherToWalk)"
             @click="next"
             data-testid="app-monitor-next-button"
           >
