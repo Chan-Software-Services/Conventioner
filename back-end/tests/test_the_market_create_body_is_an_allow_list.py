@@ -61,6 +61,7 @@ EVERY_FIELD = {
     "phase_history": [{"phase": "archived"}],
     "permissions": {"check-in": {"role": "viewer", "source": "market"}},
     "discord": {"guild_id": "1234", "guild_name": "Spring Fair"},
+    "public_map": {"enabled": True, "name_question": "booth_theme"},
     "form_revision": 7,
     "plan_revision": 5,
 }

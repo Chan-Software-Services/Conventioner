@@ -132,6 +132,10 @@ DISCORD_CHECKED = "discord_checked"
 #: entry a run.
 DISCORD_ROLES_GIVEN = "discord_roles_given"
 
+# The public map
+#: The Public map card's settings changed (T422): whether it is on, and which questions it shows.
+PUBLIC_MAP = "public_map"
+
 # People
 ROLE_GIVEN = "role_given"
 ROLE_CHANGED = "role_changed"

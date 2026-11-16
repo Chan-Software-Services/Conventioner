@@ -479,6 +479,34 @@ def vendor_page_market_by_slug(
     return None
 
 
+def public_map_market_by_slug(collection: Any, market_slug: str) -> Optional[Market]:
+    """The market whose public map is at this slug, or ``None`` (T422, D30, ADR 0032).
+
+    The public map, ``/<slug>/map``, shows anyone each market day's tables and the vendors' chosen
+    answers at them. A market has one while all of these hold: the vendor page finds it
+    (``vendor_page_market_by_slug``), its results are out (``results_are_out``), since a seat is
+    never public before its vendor is told, it is not archived, since an archived market can no
+    longer be written and so its switch could never be turned off, and its own settings open it
+    (``public_map.is_open``: the switch on, a name question the form still asks, a location laid
+    out). ``None`` is the answer for everything else, the same answer a slug that names nothing
+    gets, so a stranger learns nothing of a market whose map is closed.
+
+    The whole document is read, since the answer draws its plan, its form and its seats.
+    """
+    market_doc = vendor_page_market_by_slug(collection, market_slug)
+    if market_doc is None or not results_are_out(market_doc):
+        return None
+    if phase_from_market_document(market_doc) is MarketPhase.ARCHIVED:
+        return None
+    try:
+        market = market_from_document(market_doc)
+    except Exception:
+        return None
+    # Imported here rather than at the top: ``public_map`` imports this module.
+    import public_map as PublicMap
+    return market if PublicMap.is_open(market) else None
+
+
 def results_are_out(market_doc: Dict[str, Any]) -> bool:
     """May this market's vendors read their results: published, or it reached its market days?
 
