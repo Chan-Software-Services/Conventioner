@@ -86,6 +86,13 @@ const props = withDefaults(
      */
     scroll?: 'window' | 'body';
     /**
+     * With `scroll="body"`, at 640px wide or tall or less: as tall as its content needs, up to the
+     * window less the gutter, where every other such dialog is that tall whatever it holds (Daniel's
+     * choice 22). Its title and actions stay pinned and its body scrolls between them past the cap.
+     * For a long dialog whose list is usually short, as "Choose what leads the card" (T446).
+     */
+    fitsContentOnAPhone?: boolean;
+    /**
      * A dialog whose body grows as it is used (a field's error appearing as a key is typed) holds
      * its top where it opened, rather than its centre, so nothing under the pointer moves.
      */
@@ -293,6 +300,7 @@ watch(
         'dialog-window--wide': size === 'wide',
         'dialog-window--broad': size === 'broad',
         'dialog-window--body': pinned,
+        'dialog-window--fits': pinned && fitsContentOnAPhone,
       }"
       role="dialog"
       aria-modal="true"
@@ -597,6 +605,12 @@ watch(
   .dialog-container--anchored .dialog-window--body {
     height: calc(100dvh - var(--space-12) - var(--space-6));
     max-height: calc(100dvh - var(--space-12) - var(--space-6));
+  }
+
+  /* `fitsContentOnAPhone`: as tall as its content needs, up to the same cap, the body giving way
+     past it, so a short list leaves no band of white above the actions. */
+  .dialog-window--body.dialog-window--fits {
+    height: auto;
   }
 }
 
