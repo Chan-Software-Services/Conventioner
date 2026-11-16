@@ -1588,13 +1588,10 @@ def counted_assignment(market: Market) -> Optional[CountedAssignment]:
 
     rows = derive_market_table_rows(assigned_market)
     stats.unassigned_tables = derive_unassigned_tables_from_rows(rows)
-    # Everyone the run does not read, read once: the vendors added by hand are counted below, and
+    # Everyone the run does not read, read once: the ones who need a table are counted below, and
     # the applicants the review did not approve are marked where a seat overrides them.
-    outside = outside_solver_vendors(
-        market.id, EssentialFields.effective_essential_options_for_market(market),
-        {vendor.email for vendor in vendors},
-    )
-    count_added_vendors(
+    outside = outside_the_run(market, {vendor.email for vendor in vendors})
+    count_outside_vendors_who_need_tables(
         stats, [vendor.email for vendor, application in outside if needs_a_table(application)],
         assigned_market.assignment_object.vendor_assignments or [],
     )
@@ -1825,10 +1822,15 @@ def get_assignment_csv(market_id: str, requesting_user: Optional[str] = None) ->
     return {"csv_content": csv_content, "filename": filename, "market_id": market_id}, 200
 
 
+def is_approved(application: Application) -> bool:
+    """Whether the review approved this applicant (E36/F02/S02). A vendor added by hand is
+    approved by the adding, and outside the run for another reason."""
+    return application.status is ApplicationStatus.REVIEWER_APPROVED
+
+
 def is_not_approved(application: Application) -> bool:
-    """Whether the review left this applicant out (E36/F02/S02): any status but approved. A vendor
-    added by hand is approved, and outside the run for another reason."""
-    return application.status is not ApplicationStatus.REVIEWER_APPROVED
+    """Whether the review left this applicant out (E36/F02/S02): any status but approved."""
+    return not is_approved(application)
 
 
 def needs_a_table(outside: Optional[Application]) -> bool:
@@ -1838,21 +1840,25 @@ def needs_a_table(outside: Optional[Application]) -> bool:
     Said apart from "in the run", which is only who the run places: an added vendor stays out of
     the run, whose answers they may not have, and is still unassigned like anyone until seated. A
     rejected or undecided applicant needs none, seated by hand or not (bug 10)."""
-    return outside is None or not is_not_approved(outside)
+    return outside is None or is_approved(outside)
 
 
-def count_added_vendors(
-    stats: AssignmentStatistics, added: Iterable[str], placements: Iterable[VendorAssignmentResult],
+def count_outside_vendors_who_need_tables(
+    stats: AssignmentStatistics,
+    need_tables: Iterable[str],
+    placements: Iterable[VendorAssignmentResult],
 ) -> None:
-    """Count the vendors added by hand in the statistics' vendors (E38/F08/S02), beside the run's.
+    """Count every vendor outside the run who needs a table in the statistics' vendors
+    (E38/F08/S02), beside the run's. Today that is a vendor added by hand: the stored assignment's
+    read is lenient (``vendors_to_show``), so it leaves out no other approved applicant.
 
     The run counts only the vendors it reads, so a vendor added without a table was missing from
     "N unassigned" while Vendors' "Unassigned only" listed them, and the link led to a list longer
-    than its number. An added vendor needs a table on every market day, and holds one when seated
-    on any, as the run's vendors do; satisfaction stays the run's, measured against their answers.
+    than its number. Such a vendor needs a table on every market day, and holds one when seated on
+    any, as the run's vendors do; satisfaction stays the run's, measured against their answers.
     """
     seated = {placement.email for placement in placements}
-    for email in sorted(set(added)):
+    for email in sorted(set(need_tables)):
         stats.total_vendors += 1
         if email in seated:
             stats.total_assigned_vendors += 1
@@ -1864,11 +1870,20 @@ def not_approved_vendors(market: Market, in_the_run: Iterable[str]) -> List[Solv
     """The applicants outside the run whom the review did not approve (E36/F02/S03): a seat given
     to one by hand is marked "not approved" wherever the other overrides show."""
     return [
-        vendor
-        for vendor, application in outside_solver_vendors(
-            market.id, EssentialFields.effective_essential_options_for_market(market), in_the_run)
+        vendor for vendor, application in outside_the_run(market, in_the_run)
         if is_not_approved(application)
     ]
+
+
+def outside_the_run(
+    market: Market, in_the_run: Iterable[str],
+) -> List[Tuple[SolverVendor, Application]]:
+    """Every applicant outside the run, with their application: the one read of them that the
+    statistics, the not-approved marks and the place dialog share, so the three cannot drift.
+
+    Called through this module's own name for ``outside_solver_vendors``, which the tests patch."""
+    return outside_solver_vendors(
+        market.id, EssentialFields.effective_essential_options_for_market(market), in_the_run)
 
 
 def _placeable(vendor: SolverVendor, outside: Optional[Application]) -> Dict[str, Any]:
@@ -1939,11 +1954,7 @@ def get_market_tables(market_id: str, requesting_user: Optional[str] = None) -> 
     # (E36/F02/S02): an organizer may seat anyone by hand, warned, and the run's own come first.
     placeable = [_placeable(vendor, None) for vendor in vendors] + [
         _placeable(vendor, application)
-        for vendor, application in outside_solver_vendors(
-            market_id,
-            EssentialFields.effective_essential_options_for_market(market),
-            {vendor.email for vendor in vendors},
-        )
+        for vendor, application in outside_the_run(market, {vendor.email for vendor in vendors})
     ]
     return {
         # Each occupant's price and the card's row that set it ride on their row, for the
