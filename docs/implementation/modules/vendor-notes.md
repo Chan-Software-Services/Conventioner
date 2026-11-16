@@ -51,7 +51,7 @@ Applicant endpoints return the application, and a field on it would leak by bein
 `csv_import.py` maps an organizer's own column to the `sheet_note` target, "From your sheet (your own notes)", and after the rows are written calls `replace_sheet_notes` with each imported vendor's latest line ([the CSV import](csv-import.md)).
 
 **A page that cannot read the notes still does its job.**
-Notes are beside a page's work, never its subject, so a failed read shows the page without them.
+Notes are beside a page's work, never its subject, so a failed first read shows the page without them, and a failed re-read keeps the notes last read.
 
 `back-end/tests/test_vendor_notes.py` pins the writes, the roles, the archive and the deletion; `front-end/e2e/vendor-notes.spec.ts` walks a request and a note from Vendors to the door, where it is handled.
 

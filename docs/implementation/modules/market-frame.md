@@ -89,7 +89,6 @@ It is `--mm-red` at `--text-sm` with `role="alert"`, Try again a `btn btn--secon
 It is inset as the read-only note is, the phone's `--space-4` only on a screen that fits a phone, and not pinned, so on a phone it scrolls with the page.
 Try again is the arrival's `retry`: it re-reads the market and emits `retry` to the screen.
 A market that failed to arrive, or is missing, says only the arrival's words, never this line; `aFailedMarketRereadIsSaidOnce.test.ts` holds each case.
-Until T421 nothing on screen said a re-read had failed, so an organizer on a dropped connection read an old market as the server's.
 A screen that pads itself or renders its own arrival is how one market's pages came to put the frame in four different places.
 A page inside the card insets its content `--space-6`, the rail's inset, so what the frame says above a page (`market-read-only`) lines up with it; Market Setup's tabs were 40px in until T15, and [the import](../../business/flows/import.md) 32px until T181.
 
