@@ -3,6 +3,7 @@ import type { APIRequestContext, Locator } from '@playwright/test';
 import { ensureTestOrg } from './helpers/seeds';
 import { seedApplicationWithStatus } from './helpers/seedPhaseMarket';
 import { seedApplicantMarket, planSetupObject, PLAN_TIERS } from './helpers/seedApplicantMarket';
+import { putVerdict } from './helpers/putVerdict';
 
 /**
  * Importing vendors from the CSV a Google Form produced (E01/F02/S02).
@@ -620,10 +621,9 @@ test.describe('CSV vendor import', () => {
     const imported = (await listApplications(request, seed.marketId)).find(
       (a) => a.applicantEmail === 'nadia@ember.test',
     )!;
-    const reviewRes = await request.put(
-      `${BACKEND_URL}/markets/${seed.marketId}/applications/${imported.id}/review`,
-      { data: { status: 'reviewer_approved' } },
-    );
+    const reviewRes = await putVerdict(request, BACKEND_URL, seed.marketId, imported.id, {
+      status: 'reviewer_approved',
+    });
     expect(reviewRes.ok()).toBeTruthy();
 
     // The form is re-exported with their availability narrowed - an answer the solver reads.
@@ -666,10 +666,9 @@ test.describe('CSV vendor import', () => {
     const imported = (await listApplications(request, seed.marketId)).find(
       (a) => a.applicantEmail === 'nadia@ember.test',
     )!;
-    const reviewRes = await request.put(
-      `${BACKEND_URL}/markets/${seed.marketId}/applications/${imported.id}/review`,
-      { data: { status: 'reviewer_approved' } },
-    );
+    const reviewRes = await putVerdict(request, BACKEND_URL, seed.marketId, imported.id, {
+      status: 'reviewer_approved',
+    });
     expect(reviewRes.ok()).toBeTruthy();
 
     // A corrected business name moves nothing the solver reads, so the approval stands - and the
@@ -1133,10 +1132,9 @@ test.describe('CSV vendor import', () => {
 
     // The organizer approves everyone, then imports the same export again.
     for (const application of applications) {
-      const res = await request.put(
-        `${BACKEND_URL}/markets/${seed.marketId}/applications/${application.id}/review`,
-        { data: { status: 'reviewer_approved' } },
-      );
+      const res = await putVerdict(request, BACKEND_URL, seed.marketId, application.id, {
+        status: 'reviewer_approved',
+      });
       expect(res.ok()).toBeTruthy();
     }
 
