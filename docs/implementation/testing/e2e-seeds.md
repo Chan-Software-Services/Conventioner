@@ -228,6 +228,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
   - settled rules, on a priced market, so Payments draws the market's money and its tables by tier and by date (T180)
   - a section of 24 tables on a market in Assignment, past the Assignments page's fold of 20, so a sweep walks a section unfolded (T223)
   - a market connected to Discord with a long last run written on it, in every group of the role report and naming a vendor no longer listed, of its own since a connection changes the Vendors page and the Tools tab the others are walked on (T217)
+  - a market on its days with both halls laid out and its public map on (`seedMarketDayMap()`), for the public map, Attendance's map and the Public map card turned on (T422)
   - an archive
   - the CSV markets the import screens serve: one taking applications, whose saved `importMapping` the `LATER_IMPORT` export reads, so Map columns opens with values waiting, a draft with no plan, and a draft with a plan and the Viewer on it, whose first import's preview offers the reviewers
   - an organization of the organizer's own:
@@ -268,6 +269,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
   - the first vendor checked in today at the door, and an organizer's note on the second
   - the form's three short text questions, a business name, a website and an Instagram handle, answered by most vendors in the shapes the map cleans, one answering none and one giving an email address as their business name
 - With `publicMap: true`, the map turned on through the Public map card's own write, its three questions chosen
+- With `inAssignment: true`, it stops in `assignment` once today's and tomorrow's seats are given: no location laid out, its sections' counts as Section Setup typed them, its results not out and nobody checked in, so a spec starts a layout past Draft and publishes itself (the phase's journey, `a-market-past-draft-gets-a-public-map.spec.ts`)
 - Notes:
   - answers the vendors (`DAY_MAP_VENDORS`), their seats and answers, the halls and their ids, and `personalMarkers`, every name, address and note a public page must never show
   - every value is a fixture value, none from a real floorplan or export

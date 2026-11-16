@@ -829,7 +829,10 @@ The list holds these states, one a line, each beside the state it is most like, 
 - a location's layout past draft, at its upload step and calibrating
 - a location's layout past Draft in its editor, a table selected, what would change a seat disabled
 - a location's layout drawn as its map, with 20 tables
+- Attendance as a map, a shared table in halves, at the door's three sizes (T422)
+- the Public map card turned on, its address shown (T422)
 - the signed-out pages
+- the public map signed out, before a pick and with a shared table picked, at a desk and on a phone (T422)
 
 They are walked over a stress seed ([`e2e/helpers/seedTheScreens.ts`](../front-end/e2e/helpers/seedTheScreens.ts)) of long names, 40 applications in every review state, a review divided between two reviewers and 36 vendors over four dates and three sections, since a layout that holds on three short names breaks on a real market.
 Contrast and axe measure each state at its first size, focus at its first size and a phone's width, and the layout sweep at every size.
