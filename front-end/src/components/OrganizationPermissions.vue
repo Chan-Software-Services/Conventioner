@@ -8,10 +8,16 @@
  * reaches only markets created from now on; its members read it. The rows and the changes are
  * Manage market's Permissions' (`PermissionRows`, `PermissionChanges`), and the words
  * `utils/permissionTable.ts`'s.
+ *
+ * Each confirmation writes through its own submission (T411), keyed by what it was opened on, so
+ * the shell holds it while its write is out, a second press sends nothing, and its refusal is said
+ * in the opening it was sent from.
  */
 import { computed, ref } from 'vue';
 import { MarketRole, type Organization, type PermissionTableRow } from '@/assets/types/datatypes';
 import { api, getApiErrorMessage } from '@/utils/api';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
+import type { LateAnswer } from '@/utils/useSubmit';
 import AppDialog from '@/components/AppDialog.vue';
 import PermissionChanges from '@/components/PermissionChanges.vue';
 import PermissionRows from '@/components/PermissionRows.vue';
@@ -45,8 +51,15 @@ const pendingChange = ref<{
   select: HTMLSelectElement;
 } | null>(null);
 const resetConfirming = ref(false);
-/** A refused change to the table, said in the confirmation that sent it. */
-const writeError = ref('');
+/** Each confirmation's write: its refusal is said in it, by the shell. */
+const change = useDialogSubmit({
+  opening: () => pendingChange.value,
+  failure: 'Who may do this was not changed.',
+});
+const reset = useDialogSubmit({
+  opening: () => resetConfirming.value,
+  failure: 'The defaults were not reset.',
+});
 
 const table = computed(() => props.org.defaultPermissionTable ?? []);
 const held = computed(() => heldRows(table.value));
@@ -90,7 +103,6 @@ async function fetchHistory() {
 
 /** A choice is asked about before it is sent. */
 function askChange(row: PermissionTableRow, role: MarketRole, select: HTMLSelectElement) {
-  writeError.value = '';
   pendingChange.value = { row, role, select };
 }
 
@@ -98,42 +110,50 @@ function askChange(row: PermissionTableRow, role: MarketRole, select: HTMLSelect
 function cancelChange() {
   if (pendingChange.value) pendingChange.value.select.value = pendingChange.value.row.role;
   pendingChange.value = null;
-  writeError.value = '';
+}
+
+/** What a table write answers: the table as it now stands. */
+type TableAnswer = { data: { permissionTable?: PermissionTableRow[] } };
+
+/** A write that landed after its confirmation had gone: what it wrote is still shown. */
+function lateAnswer(answer: LateAnswer<TableAnswer>): void {
+  if (answer.ok) void afterWrite(answer.answer.data.permissionTable);
 }
 
 async function confirmChange() {
   const pending = pendingChange.value;
   if (!pending) return;
-  writeError.value = '';
-  try {
-    const response = await api.put(
-      `${orgPath()}/default-permissions/${encodeURIComponent(pending.row.id)}`,
-      { role: pending.role },
-    );
-    pendingChange.value = null;
-    await afterWrite(response.data.permissionTable);
-  } catch (err) {
-    writeError.value = getApiErrorMessage(err, 'Who may do this was not changed.');
-  }
+  await change.submit(
+    (): Promise<TableAnswer> =>
+      api.put(`${orgPath()}/default-permissions/${encodeURIComponent(pending.row.id)}`, {
+        role: pending.role,
+      }),
+    {
+      done: async (response) => {
+        pendingChange.value = null;
+        await afterWrite(response.data.permissionTable);
+      },
+      late: lateAnswer,
+    },
+  );
 }
 
 function cancelReset() {
   resetConfirming.value = false;
-  writeError.value = '';
 }
 
 async function confirmReset() {
-  writeError.value = '';
-  try {
-    const response = await api.delete(`${orgPath()}/default-permissions`);
-    resetConfirming.value = false;
-    await afterWrite(response.data.permissionTable);
-    // The confirmation gives focus back to "Reset to built-in defaults", which is disabled now that
-    // nothing is set, and focusing a disabled control does nothing: the dialog takes it in again.
-    if (document.activeElement === document.body) await dialog.value?.focusInside();
-  } catch (err) {
-    writeError.value = getApiErrorMessage(err, 'The defaults were not reset.');
-  }
+  await reset.submit((): Promise<TableAnswer> => api.delete(`${orgPath()}/default-permissions`), {
+    done: async (response) => {
+      resetConfirming.value = false;
+      await afterWrite(response.data.permissionTable);
+      // The confirmation gives focus back to "Reset to built-in defaults", which is disabled now
+      // that nothing is set, and focusing a disabled control does nothing: the dialog takes it in
+      // again.
+      if (document.activeElement === document.body) await dialog.value?.focusInside();
+    },
+    late: lateAnswer,
+  });
 }
 
 /** The write answers the table, which the dialog shows at once; the changes are read again. */
@@ -217,7 +237,7 @@ async function afterWrite(answered: PermissionTableRow[] | undefined) {
       :title="pendingChange ? defaultChangeQuestion(pendingChange.row) : ''"
       testid="manage-org-permission-confirm"
       confirm-label="Change"
-      :error="writeError"
+      :submission="change"
       @close="cancelChange"
       @submit="confirmChange"
     >
@@ -248,7 +268,7 @@ async function afterWrite(answered: PermissionTableRow[] | undefined) {
       scroll="body"
       destructive
       confirm-label="Reset"
-      :error="writeError"
+      :submission="reset"
       @close="cancelReset"
       @submit="confirmReset"
     >

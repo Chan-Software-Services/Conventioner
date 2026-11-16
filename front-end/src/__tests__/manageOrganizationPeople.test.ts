@@ -372,3 +372,207 @@ describe('Manage organization, the two sections', () => {
     expect(owner.querySelectorAll('.email-address-held').length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * Manage organization's own writes, Add admin, Add member and Rename, belong to the opening they
+ * were sent from (T411): a press while one is out sends nothing, nothing closes Manage organization
+ * while one is out, and an answer that lands after it was opened on another organization leaves
+ * that organization's dialog alone, though the list behind is still told of a change that landed.
+ */
+describe("Manage organization's writes belong to their opening", () => {
+  function held<T = unknown>() {
+    let resolve!: (value: T) => void;
+    let reject!: (err: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  const refused = (sentence: string) =>
+    Object.assign(new Error('refused'), {
+      isAxiosError: true,
+      response: { status: 400, data: { error: sentence } },
+    });
+
+  const FIRST = org();
+  const OTHER = org({ id: 'org-2', name: 'Lakeside Collective' });
+
+  function openOn(first: Organization) {
+    api.get.mockImplementation(async (url: string) =>
+      url === '/organizations'
+        ? { data: { organizations: [FIRST, OTHER] } }
+        : { data: { entries: [], next: null } },
+    );
+    return mount(ManageOrgOverlay, {
+      props: { manageOpen: true, org: first },
+      attachTo: document.body,
+    });
+  }
+
+  /** Every way a person closes Manage organization, which has no Cancel of its own. */
+  async function tryToCloseManageOrganization() {
+    byTestId('manage-org-close-button')!.click();
+    byTestId('manage-org-background')!.click();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+  }
+
+  async function typeAnAddress(wrapper: VueWrapper, row: 'admin' | 'member', email: string) {
+    await wrapper.get(`[data-testid="manage-org-add-${row}-button"]`).trigger('click');
+    await flushPromises();
+    await wrapper.get(`[data-testid="manage-org-add-${row}-input"]`).setValue(email);
+  }
+
+  const addForm = (wrapper: VueWrapper, row: 'admin' | 'member') =>
+    wrapper.get(`[data-testid="manage-org-add-${row}-input"]`).element.closest('form')!;
+
+  async function reopenOnTheOther(wrapper: VueWrapper) {
+    await wrapper.setProps({ org: OTHER });
+    await flushPromises();
+  }
+
+  it.each(['admin', 'member'] as const)(
+    'Add %s sends once for two presses and holds Manage organization until it lands',
+    async (row) => {
+      const wrapper = openOn(FIRST);
+      await flushPromises();
+      await typeAnAddress(wrapper, row, 'newcomer@example.com');
+      const answer = held();
+      api.post.mockReturnValue(answer.promise);
+
+      addForm(wrapper, row).requestSubmit();
+      addForm(wrapper, row).requestSubmit();
+      await flushPromises();
+      await tryToCloseManageOrganization();
+
+      expect(api.post).toHaveBeenCalledTimes(1);
+      expect(wrapper.emitted('manageClose')).toBeUndefined();
+      expect(byTestId('manage-org-close-button')!.hasAttribute('disabled')).toBe(true);
+
+      answer.resolve({ data: {} });
+      await flushPromises();
+      expect(wrapper.emitted('changed')).toHaveLength(1);
+      await tryToCloseManageOrganization();
+      expect(wrapper.emitted('manageClose')).not.toBeUndefined();
+    },
+  );
+
+  it.each(['admin', 'member'] as const)(
+    "keeps an add %s's refusal out of Manage organization opened on another organization",
+    async (row) => {
+      const wrapper = openOn(FIRST);
+      await flushPromises();
+      await typeAnAddress(wrapper, row, 'newcomer@example.com');
+      const answer = held();
+      api.post.mockReturnValue(answer.promise);
+      addForm(wrapper, row).requestSubmit();
+      await flushPromises();
+
+      await reopenOnTheOther(wrapper);
+      await typeAnAddress(wrapper, row, 'typed-here@example.com');
+      answer.reject(refused('User not found'));
+      await flushPromises();
+
+      expect(byTestId(`manage-org-add-${row}-error`)).toBeNull();
+      expect(wrapper.text()).not.toContain('User not found');
+      expect(wrapper.get('.org-name').text()).toBe('Lakeside Collective');
+    },
+  );
+
+  it("keeps an add's success and its re-read out of Manage organization opened on another, and still tells the list", async () => {
+    const wrapper = openOn(FIRST);
+    await flushPromises();
+    await typeAnAddress(wrapper, 'admin', 'newcomer@example.com');
+    const answer = held();
+    api.post.mockReturnValue(answer.promise);
+    addForm(wrapper, 'admin').requestSubmit();
+    await flushPromises();
+
+    await reopenOnTheOther(wrapper);
+    await typeAnAddress(wrapper, 'admin', 'typed-here@example.com');
+    const reads = api.get.mock.calls.length;
+    answer.resolve({ data: {} });
+    await flushPromises();
+
+    expect(api.get.mock.calls.length).toBe(reads);
+    expect(
+      (wrapper.get('[data-testid="manage-org-add-admin-input"]').element as HTMLInputElement).value,
+    ).toBe('typed-here@example.com');
+    expect(wrapper.get('.org-name').text()).toBe('Lakeside Collective');
+    expect(wrapper.emitted('changed')).toHaveLength(1);
+  });
+
+  it('drops a re-read of the organization it was open on once it is open on another', async () => {
+    const wrapper = openOn(FIRST);
+    await flushPromises();
+    const reread = held<unknown[]>();
+    api.get.mockImplementation(async (url: string) =>
+      url === '/organizations'
+        ? { data: { organizations: await reread.promise } }
+        : { data: { entries: [], next: null } },
+    );
+    await typeAnAddress(wrapper, 'member', 'newcomer@example.com');
+    api.post.mockResolvedValue({ data: {} });
+    addForm(wrapper, 'member').requestSubmit();
+    await flushPromises();
+
+    await reopenOnTheOther(wrapper);
+    reread.resolve([{ ...FIRST, memberPeople: [person(1)] }, OTHER]);
+    await flushPromises();
+
+    expect(wrapper.get('.org-name').text()).toBe('Lakeside Collective');
+    expect(allByTestId('manage-org-member-email')).toHaveLength(0);
+  });
+
+  it('Rename sends once for two presses and holds Manage organization until it lands', async () => {
+    const wrapper = openOn(FIRST);
+    await flushPromises();
+    await wrapper.get('[data-testid="manage-org-rename-input"]').setValue('Autumn Makers');
+    const answer = held();
+    api.put.mockReturnValue(answer.promise);
+
+    await wrapper.get('.rename-row').trigger('submit');
+    await wrapper.get('.rename-row').trigger('submit');
+    await flushPromises();
+    await tryToCloseManageOrganization();
+
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(wrapper.emitted('manageClose')).toBeUndefined();
+
+    answer.reject(refused('An organization with this name already exists.'));
+    await flushPromises();
+    expect(wrapper.get('[data-testid="manage-org-rename-error"]').text()).toBe(
+      'An organization with this name already exists.',
+    );
+    await tryToCloseManageOrganization();
+    expect(wrapper.emitted('manageClose')).not.toBeUndefined();
+  });
+
+  it.each([
+    ['refusal', (answer: ReturnType<typeof held>) => answer.reject(refused('Name taken.'))],
+    ['success', (answer: ReturnType<typeof held>) => answer.resolve({ data: {} })],
+  ])(
+    "keeps a rename's %s out of Manage organization opened on another organization",
+    async (_, land) => {
+      const wrapper = openOn(FIRST);
+      await flushPromises();
+      await wrapper.get('[data-testid="manage-org-rename-input"]').setValue('Autumn Makers');
+      const answer = held();
+      api.put.mockReturnValue(answer.promise);
+      await wrapper.get('.rename-row').trigger('submit');
+      await flushPromises();
+
+      await reopenOnTheOther(wrapper);
+      land(answer);
+      await flushPromises();
+
+      expect(byTestId('manage-org-rename-error')).toBeNull();
+      expect(
+        (wrapper.get('[data-testid="manage-org-rename-input"]').element as HTMLInputElement).value,
+      ).toBe('Lakeside Collective');
+      expect(wrapper.get('.org-name').text()).toBe('Lakeside Collective');
+    },
+  );
+});
