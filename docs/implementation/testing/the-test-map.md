@@ -131,7 +131,7 @@ It takes the pull request's diff from its merge commit's first parent, as `e2e-r
 - **missed**: the selection did not choose it at all.
 
 A test failed when it failed every attempt, or passed only on a retry, which under `failOnFlakyTests` fails its shard too.
-The job's summary lists the specs under "E2E selection audit", a chosen one with its rank and reasons, or says "no failure to audit" when no test failed.
+The job's summary lists the specs under "E2E selection audit", a chosen one with its rank and reasons, or says "no failure to audit" when no test failed, and "nothing to audit" when it read no shard report, as when the reports' download failed.
 Each miss is also a warning annotation on the run, "A miss of the selection", naming the spec and the changed files, so a map that drifted, or a dependency the rules cannot see, shows on the first pull request it costs.
 With no map, the selection is rule 1 alone: a failure outside it is listed as missed, with no annotation, since there is no map to have drifted.
 

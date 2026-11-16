@@ -665,11 +665,15 @@ def audit(argv: Sequence[str]) -> int:
     args = parser.parse_args(argv)
     summary: List[str] = [SUMMARY_TITLE, ""]
     failed, unread = failed_specs(args.reports)
+    read = len(args.reports) - len(unread)
     try:
         if not failed:
+            # No report read is no sign that nothing failed: the results' download failed, or
+            # every shard stopped before Playwright wrote its report.
             line = (
-                f"no test failed in the {count_reports(len(args.reports) - len(unread))} read: "
-                "no failure to audit"
+                "no shard report was read: nothing to audit"
+                if read == 0
+                else f"no test failed in the {count_reports(read)} read: no failure to audit"
             )
             print(f"affected-specs audit: {line}")
             summary.append(f"{line[0].upper()}{line[1:]}.")
@@ -682,7 +686,7 @@ def audit(argv: Sequence[str]) -> int:
             print(f"affected-specs: {chosen.describe_diff()}")
             print(
                 f"affected-specs audit: {failed_count(len(found))}, "
-                f"in {count_reports(len(args.reports) - len(unread))}:"
+                f"in {count_reports(read)}:"
             )
             for spec, verdict, why in found:
                 print(f"  {verdict}: {spec}: {why}")

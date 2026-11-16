@@ -672,6 +672,20 @@ class TestTheAudit:
         assert "::warning" not in out
         assert "no failure to audit" in summary.read_text()
 
+    @pytest.mark.parametrize("reports", [[], ["no-such.json", "broken.json"]])
+    def test_with_no_report_read_it_says_there_was_nothing_to_audit(self, repo, tmp_path, reports):
+        # The results' download failed, or every shard died before writing its report: that is
+        # no sign that nothing failed.
+        (tmp_path / "broken.json").write_text("{ not json")
+        summary = tmp_path / "summary.md"
+        out = self.audit(
+            repo, "--github", *(str(tmp_path / r) for r in reports),
+            env={"GITHUB_STEP_SUMMARY": str(summary)},
+        )  # fmt: skip
+        assert "no shard report was read: nothing to audit" in out
+        assert "no failure to audit" not in out
+        assert "No shard report was read: nothing to audit." in summary.read_text()
+
     def test_a_test_a_helper_registers_fails_under_the_spec_file_that_calls_it(self, repo, tmp_path):
         # Playwright's report gives a test the file its `test()` call is in, so the screen sweeps'
         # tests, registered by `helpers/screenSweeps.ts`, carry the helper's name; the spec file is
