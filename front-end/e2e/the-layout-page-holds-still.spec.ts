@@ -101,6 +101,10 @@ for (const size of [
       expect((await box(layout.toolbar)).y).toBeGreaterThan(headBox.y + headBox.height);
       const hint = await box(layout.hint);
       expect(hint.y + hint.height).toBeLessThanOrEqual(size.height);
+      // The stage's height is counted so the whole page fits the window: nothing scrolls.
+      expect(
+        await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight),
+      ).toBeLessThanOrEqual(0);
     });
 
     test("a section's colours open in a bubble, the card keeping its height, closed by a press outside", async ({

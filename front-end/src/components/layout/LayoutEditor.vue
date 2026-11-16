@@ -2531,14 +2531,16 @@ defineExpose({
 }
 
 /* The stage is a window onto the hall, at the floorplan's shape and never taller than leaves the
-   toolbar and the hint on the screen with it (the bars, the head row and the toolbar above it and
-   the hint under it take 23.5rem between them): the hall is moved inside it, so nothing is cut off
-   that a pan does not reach. `touch-action: none`: a finger on the map moves the map. */
+   toolbar and the hint on the screen with it (T422's recount: the app bar, the market's bar and
+   rail, the head's bar with its rule, the toolbar above it, and the hint and the page's and the
+   frame's foot under it take 24rem between them, so the page fits the window whole, whatever the
+   tool, at a desk): the hall is moved inside it, so nothing is cut off that a pan does not reach.
+   `touch-action: none`: a finger on the map moves the map. */
 .layout-stage {
   position: relative;
   width: 100%;
   min-height: 20rem;
-  max-height: max(20rem, calc(100vh - 23.5rem));
+  max-height: max(20rem, calc(100vh - 24rem));
   overflow: hidden;
   background: var(--mm-beige);
   border: 1px solid var(--mm-border);
