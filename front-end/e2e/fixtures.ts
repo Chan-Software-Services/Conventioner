@@ -46,10 +46,10 @@ async function login(page: Page, email: string, password: string) {
 /**
  * What axe checks: every WCAG 2.0, 2.1 and 2.2 rule at levels A and AA (axe tags no 2.2 rule at A).
  *
- * `color-contrast` is off because `contrast-sweep.spec.ts` owns contrast, measuring every text node
- * on the ground it is composited onto, so one defect fails one check rather than two. The two
- * `main` landmark rules are axe best practices, not WCAG, and are on because the app shell keeps
- * exactly one `<main>` on every route.
+ * `color-contrast` is off because the screen sweeps' contrast check (`helpers/screenSweeps.ts`)
+ * owns contrast, measuring every text node on the ground it is composited onto, so one defect fails
+ * one check rather than two. The two `main` landmark rules are axe best practices, not WCAG, and
+ * are on because the app shell keeps exactly one `<main>` on every route.
  */
 const AXE_OPTIONS = {
   runOnly: {
@@ -66,11 +66,12 @@ const AXE_OPTIONS = {
 /**
  * Fails on any violation axe finds on the page as it stands, one line per element:
  * `rule (impact) target`, never the whole result, so a failure reads as what to fix and where.
+ * `soft` fails the test and lets it go on, as the screen sweeps' other checks of the state do.
  */
-async function expectAccessible(page: Page, state: string): Promise<void> {
+async function expectAccessible(page: Page, state: string, { soft = false } = {}): Promise<void> {
   await settle(page);
   const { violations } = await new AxeBuilder({ page }).options(AXE_OPTIONS).analyze();
-  expect(
+  (soft ? expect.soft : expect)(
     violations.flatMap((v) =>
       v.nodes.map((node) => `${v.id} (${v.impact}) ${node.target.join(' ')}`),
     ),
@@ -80,7 +81,7 @@ async function expectAccessible(page: Page, state: string): Promise<void> {
 
 export const test = base.extend<{
   authenticatedPage: Page;
-  expectAccessible: (state: string) => Promise<void>;
+  expectAccessible: (state: string, options?: { soft?: boolean }) => Promise<void>;
 }>({
   page: async ({ page }, use, testInfo) => {
     await hideDevToolsPanel(page.context());
@@ -97,7 +98,7 @@ export const test = base.extend<{
     await use(page);
   },
   expectAccessible: async ({ page }, use) => {
-    await use((state) => expectAccessible(page, state));
+    await use((state, options) => expectAccessible(page, state, options));
   },
 });
 

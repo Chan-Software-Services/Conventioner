@@ -230,7 +230,7 @@ How each part of the code works is in the implementation layer of the [knowledge
   - Page Object Model + fixtures under `front-end/e2e/`; selectors use
     `data-testid` attributes (see `docs/TESTING.md`)
 - **@axe-core/playwright 4.14** (axe-core, MPL-2.0) - Accessibility checks inside the Playwright suite
-  - The `expectAccessible` fixture in `front-end/e2e/fixtures.ts`, walked by `e2e/accessibility-sweep.spec.ts` ([the design language](design-system.md#what-keeps-this-true))
+  - The `expectAccessible` fixture in `front-end/e2e/fixtures.ts`, walked by the screen sweeps' accessibility check, `e2e/helpers/screenSweeps.ts` ([the design language](design-system.md#what-keeps-this-true))
 
 ## Infrastructure & DevOps
 
