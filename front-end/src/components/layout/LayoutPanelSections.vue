@@ -398,10 +398,12 @@ const short = computed(() =>
   overflow-wrap: anywhere;
 }
 
+/* The card stands on the page's beige, as information (T422), so its quiet lines take the muted
+   ink made for beige, which keeps AA there. */
 .sections-tier {
   display: block;
   font-size: var(--text-xs);
-  color: var(--mm-text-muted);
+  color: var(--mm-text-muted-on-beige);
 }
 
 .sections-count {
@@ -437,6 +439,6 @@ const short = computed(() =>
   padding: 0;
   list-style: none;
   font-size: var(--text-xs);
-  color: var(--mm-text-muted);
+  color: var(--mm-text-muted-on-beige);
 }
 </style>

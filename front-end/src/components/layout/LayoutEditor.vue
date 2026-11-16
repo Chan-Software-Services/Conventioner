@@ -2405,9 +2405,26 @@ defineExpose({
   color: white;
 }
 
+/* Its fill deepens a step under the pointer and another held down, keeping its white ink (5.23
+   and 5.91 to 1), where the toggles' tint would take it. */
+.layout-tool[aria-pressed='true']:hover:not(:disabled) {
+  background: var(--mm-green-hover);
+  border-color: var(--mm-green-hover);
+}
+
+.layout-tool[aria-pressed='true']:active:not(:disabled) {
+  background: var(--mm-green-pressed);
+  border-color: var(--mm-green-pressed);
+}
+
+/* The key in white on the green, as its name is: anything fainter falls under AA. */
 .layout-tool[aria-pressed='true'] .layout-tool__key {
   color: white;
-  opacity: 0.8;
+}
+
+/* A tool that cannot be used keeps its key in the one disabled ink. */
+.layout-tool:disabled .layout-tool__key {
+  color: inherit;
 }
 
 .layout-shortcuts-toggle {

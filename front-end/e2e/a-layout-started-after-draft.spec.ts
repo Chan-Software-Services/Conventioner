@@ -48,7 +48,11 @@ test.describe('A layout started after Draft', () => {
     await expect(layout.toolAdd).toBeEnabled();
     await expect(layout.toolRow).toBeEnabled();
     await expect(layout.toolFill).toBeEnabled();
+    // The market's types stay settled, in Layout settings.
+    await layout.openSettings();
     await expect(layout.typesAdd).toBeDisabled();
+    await layout.settingsClose.click();
+    await expect(layout.settings).toBeHidden();
     await expect(layout.sectionCounts).toHaveText('0 of 6');
 
     // A straight row drawn long enough for eight places the plan's six, and says so.

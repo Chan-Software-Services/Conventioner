@@ -75,8 +75,9 @@ test.describe('A table moves by keyboard', () => {
     await layout.toolSelect.focus();
     await page.keyboard.press('ArrowRight');
     await expect(layout.toolAdd).toBeFocused();
+    // The last that can be pressed: with nothing to undo or redo, the keyboard button.
     await page.keyboard.press('End');
-    await expect(layout.fit).toBeFocused();
+    await expect(layout.shortcutsToggle).toBeFocused();
     await page.keyboard.press('Home');
     await expect(layout.toolSelect).toBeFocused();
 
@@ -104,7 +105,14 @@ test.describe('A table moves by keyboard', () => {
     await expect(layout.table(GOLD_1)).toBeFocused();
     await expect(layout.announcement).toHaveText('');
 
-    // Another Tab leaves the map, for the panel.
+    // Another Tab leaves the map, for the zoom bar on its corner, each of its buttons a stop, then
+    // the panel.
+    await page.keyboard.press('Tab');
+    await expect(layout.viewMenuButton).toBeFocused();
+    for (const next of [layout.zoomOut, layout.zoomIn, layout.fit]) {
+      await page.keyboard.press('Tab');
+      await expect(next).toBeFocused();
+    }
     await page.keyboard.press('Tab');
     await expect(layout.sectionColour('Gold row')).toBeFocused();
 
@@ -529,16 +537,31 @@ test.describe('A table moves by keyboard', () => {
     ]);
   });
 
-  test('the panel lists the keys under "Keyboard", opened by keyboard', async ({
+  test('the keyboard button and ? show the keys, the tools first, as the person left them', async ({
     authenticatedPage: page,
     request,
   }) => {
     const { layout } = await open(page, request, HALL);
 
-    await expect(layout.keyboard.getByText('Put them back')).toBeHidden();
-    await layout.keyboardSummary.focus();
+    await expect(layout.shortcuts).toHaveCount(0);
+    await expect(layout.shortcutsToggle).toHaveAccessibleName('Keyboard shortcuts');
+    await expect(layout.shortcutsToggle).toHaveAttribute('aria-pressed', 'false');
+    // By keyboard: the button is a stop of the toolbar's, right after No-table zone.
+    await layout.toolZone.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(layout.shortcutsToggle).toBeFocused();
     await page.keyboard.press('Enter');
+    await expect(layout.shortcuts).toBeVisible();
+    await expect(layout.shortcutsToggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(layout.keyboard.locator('h3').first()).toHaveText('Tools');
     for (const line of [
+      'Select',
+      'Add table',
+      'Row of tables',
+      'Fill an area',
+      'No-table zone',
+      'Back to Select, with nothing being drawn',
+      'Show or hide these shortcuts',
       'Move to the nearest table that way',
       'Pick up the table, or the selection it is in',
       'Select the table, or take it out',
@@ -558,5 +581,21 @@ test.describe('A table moves by keyboard', () => {
     ]) {
       await expect(layout.keyboard.getByText(line, { exact: true })).toBeVisible();
     }
+
+    // ? hides them, and shows them again; a reload shows them as they were left.
+    await layout.table(GOLD_1).focus();
+    await page.keyboard.press('?');
+    await expect(layout.shortcuts).toHaveCount(0);
+    await page.keyboard.press('?');
+    await expect(layout.shortcuts).toBeVisible();
+    await page.reload();
+    await expect(layout.tables).toHaveCount(HALL.length);
+    await expect(layout.shortcuts).toBeVisible();
+    await layout.shortcutsClose.click();
+    await expect(layout.shortcuts).toHaveCount(0);
+    await expect(layout.shortcutsToggle).toHaveAttribute('aria-pressed', 'false');
+    await page.reload();
+    await expect(layout.tables).toHaveCount(HALL.length);
+    await expect(layout.shortcuts).toHaveCount(0);
   });
 });

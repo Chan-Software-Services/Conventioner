@@ -298,23 +298,31 @@ test.describe('Rows fill a hall', () => {
     await expect(layout.tables).toHaveCount(0);
 
     await layout.rowGap.fill('0');
-    await layout.rowAisle.fill('abc');
     await expect(gapError).toHaveCount(0);
     await expect(layout.rowGap).toHaveAttribute('aria-invalid', 'false');
-    await expect(aisleError).toHaveText("Type the aisle's width in centimetres, 0 to 1,000.");
-    // One row reads no aisle, so the field is marked but the row stands; two rows refuse.
+    // One row has no aisle, so the card shows no Aisle.
+    await expect(layout.rowAisle).toHaveCount(0);
     await expect(layout.rowTables).toHaveCount(10);
     await expect(layout.rowCount).toHaveText('10 tables');
+    // Two rows refuse an aisle that is no length.
     await layout.rowRows.fill('2');
+    await layout.rowAisle.fill('abc');
+    await expect(aisleError).toHaveText("Type the aisle's width in centimetres, 0 to 1,000.");
     await expect(layout.rowTables).toHaveCount(0);
     await expect(layout.rowCount).toHaveCount(0);
+    // Back to one row, the Aisle and what it said go, and the row stands.
     await layout.rowRows.fill('1');
-
-    await layout.rowAisle.fill('120');
+    await expect(layout.rowAisle).toHaveCount(0);
     await expect(aisleError).toHaveCount(0);
     await expect(layout.rowTables).toHaveCount(10);
+
+    await layout.rowRows.fill('2');
+    await layout.rowAisle.fill('120');
+    await expect(aisleError).toHaveCount(0);
+    await layout.rowRows.fill('1');
+    await expect(layout.rowTables).toHaveCount(10);
     // Enter from the page, as after the clicks, places the path that waited.
-    await layout.rowAisle.blur();
+    await layout.rowRows.blur();
     await layout.saved(() => page.keyboard.press('Enter'));
     await expect(layout.announcement).toHaveText('Added Gold row 1 to 10.');
     const placed = await stored(request, seeded.marketId);
@@ -362,8 +370,9 @@ test.describe('Rows fill a hall', () => {
     expect(tables).toHaveLength(4);
     for (const table of tables) expect(Math.abs(table.yMm - 8380)).toBeLessThan(2 * A_PIXEL_MM);
 
-    await layout.rowStand.selectOption({ label: 'Centred on the line' });
-    await expect(layout.rowFlip).toBeDisabled();
+    await layout.rowStand.getByRole('radio', { name: 'Centred on the line' }).check();
+    // Centred, the tables stand on no side, and Flip side goes.
+    await expect(layout.rowFlip).toHaveCount(0);
     await layout.saved(() => layout.drag([3000, 12_000], [11_000, 12_000]));
     tables = (await stored(request, seeded.marketId)).slice(8);
     expect(tables).toHaveLength(4);
@@ -414,6 +423,8 @@ test.describe('Rows fill a hall', () => {
     // Drawn from the east: the first of the row is its easternmost.
     await layout.saved(() => layout.drag([22_000, 3000], [2000, 3000]));
     await expect(layout.announcement).toHaveText('Added Gold row 3 to 12.');
+    // V for Select, whose card, in the tool's place, reads what was placed, selected.
+    await page.keyboard.press('v');
     await expect(layout.selectionTitle).toHaveText('10 tables selected');
     await expect(layout.selectionCodes).toHaveText(
       'Gold row 3, Gold row 4, Gold row 5, Gold row 6, Gold row 7, Gold row 8, Gold row 9, ' +
@@ -431,9 +442,11 @@ test.describe('Rows fill a hall', () => {
 
     // Backspace is the path's key while Row of tables is on: with no point to take it takes
     // nothing, and never the row just placed, selected as it is.
+    await page.keyboard.press('w');
     await layout.hoverAt([12_000, 9000]);
     await page.keyboard.press('Backspace');
     await expect(layout.tables).toHaveCount(12);
+    await page.keyboard.press('v');
     await expect(layout.selectionTitle).toHaveText('10 tables selected');
 
     await layout.saved(() => layout.undo.click());
@@ -536,8 +549,12 @@ test.describe('Rows fill a hall', () => {
     await layout.saved(() => page.keyboard.press('Control+Enter'));
     await expect(layout.announcement).toHaveText('Added Gold row 1 to 4.');
     await expect(layout.tables).toHaveCount(4);
-    await expect(layout.selectionTitle).toHaveText('4 tables selected');
     // The map had no table to stop on; now the focus is on the row's first.
+    await expect(layout.table('Gold row 1, Standard 6 ft')).toBeFocused();
+    // V for Select, whose card reads the row placed, selected; the focus stays.
+    await page.keyboard.press('v');
+    await expect(layout.selectionTitle).toHaveText('4 tables selected');
+    await page.keyboard.press('w');
     await expect(layout.table('Gold row 1, Standard 6 ft')).toBeFocused();
 
     // The row a pointer would have placed through the same three points: two along the first
@@ -613,6 +630,8 @@ test.describe('Rows fill a hall', () => {
     await expect(layout.announcement).toHaveText('Added Gold row 1 to 10.');
     await expect(layout.rowPreview).toHaveCount(0);
     await expect(layout.tables).toHaveCount(10);
+    // V for Select, whose card, in the tool's place, reads what was placed, selected.
+    await page.keyboard.press('v');
     await expect(layout.selectionTitle).toHaveText('10 tables selected');
 
     const tables = await stored(request, seeded.marketId);
@@ -656,10 +675,11 @@ test.describe('Rows fill a hall', () => {
   }) => {
     const { layout, seeded } = await open(page, request);
     await expect(layout.rowRows).toHaveValue('1');
-    await expect(layout.rowAisle).toHaveValue('120');
+    await expect(layout.rowAisle).toHaveCount(0);
     await expect(layout.rowSpread).not.toBeChecked();
 
     await layout.rowRows.fill('2');
+    await expect(layout.rowAisle).toHaveValue('120');
     await layout.saved(() =>
       layout.drag([2000, 3000], [22_000, 3000], {
         hold: async () => {
@@ -990,6 +1010,8 @@ test.describe('A row is drawn by hand', () => {
     await expect(layout.rowPreview).toHaveCount(0);
     await expect(layout.announcement).toHaveText('Added Gold row 1 to 3.');
     await expect(layout.hint).toHaveText(HINT_NOTHING_PENDING);
+    // V for Select, whose card, in the tool's place, reads what was placed, selected.
+    await page.keyboard.press('v');
     await expect(layout.selectionTitle).toHaveText('3 tables selected');
 
     const tables = await stored(request, seeded.marketId);
@@ -1376,6 +1398,8 @@ test.describe('Areas fill a hall', () => {
     await expect(layout.announcement).toHaveText('Placed 30.');
     await expect(layout.tables).toHaveCount(30);
     await expect(layout.fillPreview).toHaveCount(0);
+    // V for Select, whose card, in the tool's place, reads what was placed, selected.
+    await page.keyboard.press('v');
     await expect(layout.selectionTitle).toHaveText('30 tables selected');
 
     const tables = await stored(request, seeded.marketId);
@@ -1782,6 +1806,8 @@ test.describe('Types and zones shape a hall', () => {
     const layout = new LayoutPage(page);
     await layout.goto(seeded.marketId, seeded.upper.id);
     await expect(layout.tables).toHaveCount(12);
+    // The market's types are set in Layout settings, its dialogs over it.
+    await layout.openSettings();
     await expect(layout.typeRow('Standard 6 ft')).toContainText('183 x 76 cm');
     await expect(layout.typeRow('Standard 6 ft')).toContainText('12 tables');
 
@@ -1792,8 +1818,10 @@ test.describe('Types and zones shape a hall', () => {
     await expect(layout.typeRow('Square 4 ft')).toContainText('122 x 122 cm');
     await expect(layout.typeRow('Square 4 ft')).toContainText('0 tables');
     await expect(layout.typesSaid).toHaveText('Added Square 4 ft.');
+    await layout.settingsClose.click();
+    await expect(layout.settings).toBeHidden();
 
-    // Offered in the options strip and in the selection card.
+    // Offered on the tool's card and in the selection card.
     await layout.toolAdd.click();
     await expect(layout.addType.locator('option', { hasText: 'Square 4 ft' })).toHaveCount(1);
     await layout.toolSelect.click();
@@ -1804,8 +1832,9 @@ test.describe('Types and zones shape a hall', () => {
       await layout.selectionType.selectOption({ label: 'Square 4 ft' });
     });
     await expect(layout.table('Gold row 1, Square 4 ft')).toBeVisible();
-    await expect(layout.typeRow('Square 4 ft')).toContainText('12 tables');
     expect(await layout.tableTop('Gold row 1, Square 4 ft').getAttribute('width')).toBe('1220');
+    await layout.openSettings();
+    await expect(layout.typeRow('Square 4 ft')).toContainText('12 tables');
 
     // A type resized redraws its tables at the new size.
     await layout.chooseForType('Square 4 ft', 'Edit');
@@ -1842,6 +1871,7 @@ test.describe('Types and zones shape a hall', () => {
       metresAcross: 30,
     });
     await layout.goto(other.marketId, other.upper.id);
+    await layout.openSettings();
     await expect(layout.typeRows).toHaveCount(1);
     await layout.typesUseSaved.click();
     await expect(layout.savedTypesDialog).toHaveAccessibleName('Use saved types');
@@ -1873,10 +1903,12 @@ test.describe('Types and zones shape a hall', () => {
     const layout = new LayoutPage(page);
     await layout.goto(seeded.marketId, seeded.upper.id);
     await expect(layout.tables).toHaveCount(1);
-    await expect(layout.noZones).toBeVisible();
+    // The zones are the No-table zone tool's card, shown with it on.
+    await expect(layout.zonesCard).toHaveCount(0);
 
     await layout.toolZone.click();
     await expect(layout.toolZone).toHaveAttribute('aria-pressed', 'true');
+    await expect(layout.noZones).toBeVisible();
     await layout.saved(() =>
       layout.drag([10_000, 8000], [16_000, 12_000], {
         hold: async () => expect(layout.zoneBox).toBeVisible(),
@@ -1896,6 +1928,7 @@ test.describe('Types and zones shape a hall', () => {
 
     await page.reload();
     await expect(layout.zone('No-table zone: Stage')).toBeVisible();
+    await page.keyboard.press('z');
     await expect(layout.zoneLabels.first()).toHaveValue('Stage');
     let [stored] = (await storedPlan(request, seeded.marketId)).floorplans[0].zones;
     expect(stored.label).toBe('Stage');
@@ -1903,6 +1936,7 @@ test.describe('Types and zones shape a hall', () => {
     expect(Math.abs(stored.widthMm - 6000)).toBeLessThan(2 * A_PIXEL_MM);
 
     // Dragged onto the middle of the stage, the table is pushed to its nearest edge, off it.
+    await page.keyboard.press('v');
     await layout.saved(() => layout.drag([4000, 4000], [13_000, 9_000]));
     const [table] = await storedLayoutTables(request, BACKEND_URL, seeded.marketId);
     [stored] = (await storedPlan(request, seeded.marketId)).floorplans[0].zones;
@@ -1921,6 +1955,7 @@ test.describe('Types and zones shape a hall', () => {
     expect(Math.abs(table.xMm - 13_000)).toBeLessThan(A_PIXEL_MM);
 
     // Removed, from its row, and the table may stand there again.
+    await page.keyboard.press('z');
     await layout.saved(() =>
       layout.zonesCard.getByRole('button', { name: 'Remove Stage', exact: true }).click(),
     );
@@ -1928,7 +1963,7 @@ test.describe('Types and zones shape a hall', () => {
     await expect(layout.announcement).toHaveText('Removed the no-table zone Stage');
   });
 
-  test('"Show the floorplan" hides and shows the image; a replaced image keeps every table where it was in metres and its old file is deleted', async ({
+  test('the Floorplan menu hides and shows the image; a replaced image keeps every table where it was in metres and its old file is deleted', async ({
     authenticatedPage: page,
     request,
   }) => {
@@ -1939,20 +1974,27 @@ test.describe('Types and zones shape a hall', () => {
     const layout = new LayoutPage(page);
     await layout.goto(seeded.marketId, seeded.upper.id);
     await expect(layout.mapImage).toBeVisible();
-    await layout.showImage.uncheck();
+    await layout.openViewMenu();
+    await layout.viewShowImage.click();
+    await expect(layout.viewShowImage).toHaveAttribute('aria-checked', 'false');
     await expect(layout.mapImage).toHaveCount(0);
-    await layout.showImage.check();
+    await layout.viewShowImage.click();
     await expect(layout.mapImage).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(layout.viewMenu).toHaveCount(0);
 
     const before = (await storedPlan(request, seeded.marketId)).floorplans[0];
     // Given up after its upload, the new image is deleted and the layout keeps the old one.
+    await layout.openSettings();
     await layout.replaceImage.click();
+    await expect(layout.settings).toBeHidden();
     await expect(layout.editor).toHaveCount(0);
     await layout.replaceCancel.click();
     await expect(layout.stage).toBeVisible();
 
     // Refused as it is taken, the layout stays on its old image and says why; given up then, the
     // new image is deleted and nothing is left unsaved.
+    await layout.openSettings();
     await layout.replaceImage.click();
     const refusedUpload = page.waitForResponse((r) => r.url().includes('/floorplans/upload'));
     await layout.uploadFileInput.setInputFiles(LAYOUT_FLOORPLAN_PATH);
@@ -1984,6 +2026,7 @@ test.describe('Types and zones shape a hall', () => {
       before.imageGridfsId,
     );
 
+    await layout.openSettings();
     await layout.replaceImage.click();
     await layout.uploadFileInput.setInputFiles(LAYOUT_FLOORPLAN_PATH);
     await expect(layout.calibration).toBeVisible();

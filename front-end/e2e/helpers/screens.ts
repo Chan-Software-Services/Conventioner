@@ -257,11 +257,13 @@ const FORM_STEPS = ['essentials', 'questions', 'preview', 'review'] as const;
  * over the faded floorplan with the panel's list of sections: the editor at a desk and the map read
  * on a phone, and on a phone with Silver aisle 1 tapped and read under the map; then, at a desk,
  * with a table selected, with every table selected, with a section's
- * colours open, with Add table's options open, with a table picked up by keyboard, with the
- * panel's list of keys open, with a row being drawn by the crosshair, with a curve drawn by hand
+ * colours open, with Add table's card, with a table picked up by keyboard, with the
+ * keyboard shortcuts shown, with a row being drawn by the crosshair, with a curve drawn by hand
  * waiting with its points, with an L-shaped area's
  * corners clicked for Fill an area, with that area closed and its dialog open, with a table type's
- * dialog open, and with the image being replaced; with Export PNG's dialog open, at a desk and
+ * dialog open over Layout settings, with Layout settings open, with the map's Floorplan menu open,
+ * with the No-table zone tool's card of zones, and with the image being replaced; with Export
+ * PNG's dialog open, at a desk and
  * on a phone; and the settled seed's Upper Hall past Draft,
  * a table selected under the setup-settled sentence, with what would change a seat disabled.
  * Nothing is saved, so each walk finds them as seeded.
@@ -285,6 +287,9 @@ function layoutAt(
     | 'typeDialog'
     | 'exportDialog'
     | 'replacing'
+    | 'settings'
+    | 'viewMenu'
+    | 'zones'
     | 'settled',
 ) {
   return async (page: Page, seed: TheScreensSeed) => {
@@ -396,7 +401,9 @@ function layoutAt(
         }
       }
       if (stage === 'typeDialog') {
-        // Standard 6 ft's dialog, opened from its row's menu of the Table types card.
+        // Standard 6 ft's dialog, opened from its row's menu of Layout settings' Table types, over
+        // the settings.
+        await layout.openSettings();
         await layout.chooseForType('Standard 6 ft', 'Edit');
         await expect(layout.typeDialog).toBeVisible();
         await expect(layout.typeName).toBeFocused();
@@ -408,14 +415,33 @@ function layoutAt(
         await expect(layout.exportNumbers).toBeChecked();
       }
       if (stage === 'replacing') {
-        // "Replace the image": the upload's drop zone in the map's place, and the way back.
+        // "Replace the image", from Layout settings: the upload's drop zone in the map's place,
+        // and the way back.
+        await layout.openSettings();
         await layout.replaceImage.click();
         await expect(layout.uploadDropzone).toBeVisible();
         await expect(layout.replaceCancel).toBeVisible();
       }
       if (stage === 'keys') {
-        await layout.keyboardSummary.click();
-        await expect(layout.keyboard.getByText('Put them back')).toBeVisible();
+        // The keyboard shortcuts, shown by the toolbar's button: beside the page where the window
+        // has room, else over the map's corner.
+        await layout.showShortcuts();
+        await expect(layout.keyboard.getByText('Show or hide these shortcuts')).toBeVisible();
+      }
+      if (stage === 'settings') {
+        // Layout settings: the table types and the floorplan's image.
+        await layout.openSettings();
+        await expect(layout.typesCard).toBeVisible();
+      }
+      if (stage === 'viewMenu') {
+        // The map's Floorplan menu, open over the map above its zoom bar.
+        await layout.openViewMenu();
+        await expect(layout.viewShowImage).toBeFocused();
+      }
+      if (stage === 'zones') {
+        // The No-table zone tool on, its card the list of the layout's zones.
+        await layout.toolZone.click();
+        await expect(layout.zonesCard).toBeVisible();
       }
       return;
     }
@@ -1478,7 +1504,7 @@ export const SCREENS: Screen[] = [
     open: layoutAt('pickedUp'),
   },
   {
-    name: 'the layout, its keys listed',
+    name: 'the layout, its keyboard shortcuts shown',
     who: 'organizer',
     sizes: ORGANIZER,
     deskOnly: true,
@@ -1528,6 +1554,28 @@ export const SCREENS: Screen[] = [
     who: 'organizer',
     sizes: FITS_A_PHONE,
     open: layoutAt('exportDialog'),
+  },
+  // The layout's frame (T422): Layout settings, the Floorplan menu and the zones' card.
+  {
+    name: 'the layout, Layout settings',
+    who: 'organizer',
+    sizes: ORGANIZER,
+    deskOnly: true,
+    open: layoutAt('settings'),
+  },
+  {
+    name: "the layout, the map's Floorplan menu",
+    who: 'organizer',
+    sizes: ORGANIZER,
+    deskOnly: true,
+    open: layoutAt('viewMenu'),
+  },
+  {
+    name: 'the layout, the No-table zone tool',
+    who: 'organizer',
+    sizes: ORGANIZER,
+    deskOnly: true,
+    open: layoutAt('zones'),
   },
   {
     name: 'the layout, its image being replaced',

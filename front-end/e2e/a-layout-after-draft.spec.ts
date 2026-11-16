@@ -44,6 +44,7 @@ async function readsOnly(layout: LayoutPage) {
   await expect(layout.toolbar).toHaveCount(0);
   await expect(layout.editor).toHaveCount(0);
   await expect(layout.selection).toHaveCount(0);
+  await expect(layout.settingsOpen).toHaveCount(0);
   await expect(layout.typesCard).toHaveCount(0);
   await expect(layout.zonesCard).toHaveCount(0);
   await expect(layout.replaceImage).toHaveCount(0);
@@ -79,14 +80,22 @@ test.describe('A layout after Draft', () => {
     await expect(layout.selectionTurn).toBeEnabled();
     // Renumber, in each section's menu, and the market's types.
     await expect(page.getByTestId('layout-panel-section-menu-sec-gold-button')).toBeDisabled();
+    await layout.openSettings();
     await expect(layout.typesAdd).toBeDisabled();
     await expect(layout.typesUseSaved).toBeDisabled();
     await expect(layout.typeRows.getByRole('button', { name: /Edit or remove/ })).toBeDisabled();
     await expect(layout.typesSave).toBeEnabled();
+    // The image and its scale still change past Draft.
+    await expect(layout.replaceImage).toBeEnabled();
+    await expect(layout.recalibrate).toBeEnabled();
+    await layout.settingsClose.click();
+    await expect(layout.settings).toBeHidden();
     // The keys that would add or remove a table do nothing, and are not listed.
-    await layout.keyboardSummary.click();
+    await layout.showShortcuts();
     await expect(layout.keyboard).not.toContainText('Remove it');
     await expect(layout.keyboard).not.toContainText('With Row of tables on');
+    // Over the map's corner at this width, where Gold row 1 stands: put away for the drag below.
+    await layout.shortcutsClose.click();
     await layout.table(GOLD_1).focus();
     await page.keyboard.press('Delete');
     await page.keyboard.press('Control+d');

@@ -143,6 +143,63 @@ test.describe('A calibrated layout draws as a map', () => {
     );
   });
 
+  test("the Floorplan menu's Greyscale and Faded draw the image in its own colours and whole, kept after a reload", async ({
+    authenticatedPage: page,
+  }) => {
+    const layout = new LayoutPage(page);
+    await layout.goto(seeded.marketId, seeded.upper.id);
+    const image = layout.mapImage;
+    await expect(image).toHaveAttribute('href', /^blob:/);
+
+    // A menu on the zoom bar, all three ticked on a first visit.
+    await layout.viewMenuButton.focus();
+    await page.keyboard.press('Enter');
+    await expect(layout.viewMenu).toBeVisible();
+    await expect(layout.viewShowImage).toBeFocused();
+    for (const tick of [layout.viewShowImage, layout.viewGrey, layout.viewFaded]) {
+      await expect(tick).toHaveAttribute('aria-checked', 'true');
+    }
+    // Greyscale off by the keys: the menu stays open on it.
+    await page.keyboard.press('ArrowDown');
+    await expect(layout.viewGrey).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(layout.viewGrey).toHaveAttribute('aria-checked', 'false');
+    await expect(image).toHaveCSS('filter', 'none');
+    await expect(image).toHaveCSS('opacity', '0.5');
+    // Faded off by the pointer: whole.
+    await layout.viewFaded.click();
+    await expect(image).toHaveCSS('opacity', '1');
+    // Escape closes it, the focus back on its button, the tool still Select.
+    await page.keyboard.press('Escape');
+    await expect(layout.viewMenu).toHaveCount(0);
+    await expect(layout.viewMenuButton).toBeFocused();
+    await expect(layout.toolSelect).toHaveAttribute('aria-pressed', 'true');
+
+    // Kept in the browser: a reload draws it as it was left, and so does a reader's map.
+    await page.reload();
+    await expect(image).toHaveAttribute('href', /^blob:/);
+    await expect(image).toHaveCSS('filter', 'none');
+    await expect(image).toHaveCSS('opacity', '1');
+
+    // The floorplan hidden, Greyscale and Faded do nothing; a press outside closes the menu.
+    await layout.openViewMenu();
+    await layout.viewShowImage.click();
+    await expect(image).toHaveCount(0);
+    await expect(layout.viewGrey).toHaveAttribute('aria-disabled', 'true');
+    // A press on it does nothing (Playwright waits for an aria-disabled item to be enabled, so the
+    // click is sent as it would land).
+    await layout.viewGrey.dispatchEvent('click');
+    await expect(layout.viewGrey).toHaveAttribute('aria-checked', 'false');
+    await page.getByRole('heading', { name: 'Layout', exact: true }).click();
+    await expect(layout.viewMenu).toHaveCount(0);
+    await layout.openViewMenu();
+    await layout.viewShowImage.click();
+    await layout.viewGrey.click();
+    await layout.viewFaded.click();
+    await expect(image).toHaveCSS('filter', 'grayscale(1)');
+    await expect(image).toHaveCSS('opacity', '0.5');
+  });
+
   test('the floorplan lies faded under the tables, and the zones are hatched', async ({
     authenticatedPage: page,
   }) => {
@@ -158,8 +215,10 @@ test.describe('A calibrated layout draws as a map', () => {
     const imageBox = (await image.boundingBox())!;
     expect(imageBox.width).toBeCloseTo(HALL_MM.width * hall.scale, 0);
     expect(imageBox.height).toBeCloseTo(HALL_MM.height * hall.scale, 0);
-    // Shown unless the Floorplan card's tick is taken off (rows-and-areas-fill-a-hall.spec.ts).
-    await expect(page.getByRole('checkbox', { name: 'Show the floorplan' })).toBeChecked();
+    // Shown unless the Floorplan menu's tick is taken off (rows-and-areas-fill-a-hall.spec.ts).
+    await layout.openViewMenu();
+    await expect(layout.viewShowImage).toHaveAttribute('aria-checked', 'true');
+    await page.keyboard.press('Escape');
 
     await expect(layout.zones).toHaveCount(2);
     const stage = layout.zone('No-table zone: Stage');
@@ -206,11 +265,15 @@ test.describe('A calibrated layout draws as a map', () => {
     // The focused table draws its ring.
     await expect(layout.tableFocusBorder('Gold row 1, Standard 6 ft')).toBeVisible();
 
-    // One stop: the next Tab leaves the map for the panel, whose first control is Gold row's
-    // colour, with nothing selected.
+    // One stop: the next Tab leaves the map for the zoom bar on its corner, and after it the
+    // panel, whose first control is Gold row's colour, with nothing selected.
+    await page.keyboard.press('Tab');
+    await expect(layout.viewMenuButton).toBeFocused();
+    for (let press = 0; press < 3; press += 1) await page.keyboard.press('Tab');
+    await expect(layout.fit).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(layout.sectionColour('Gold row')).toBeFocused();
-    await page.keyboard.press('Shift+Tab');
+    for (let press = 0; press < 5; press += 1) await page.keyboard.press('Shift+Tab');
     await expect(layout.table('Gold row 1, Standard 6 ft')).toBeFocused();
 
     // Down the west wall, then back up, and across to the row along the top.
@@ -224,7 +287,7 @@ test.describe('A calibrated layout draws as a map', () => {
 
     // The stop follows the focus: leaving and coming back lands where it was left.
     await page.keyboard.press('Tab');
-    await expect(layout.sectionColour('Gold row')).toBeFocused();
+    await expect(layout.viewMenuButton).toBeFocused();
     await page.keyboard.press('Shift+Tab');
     await expect(layout.table('Gold row 11, Standard 6 ft')).toBeFocused();
   });

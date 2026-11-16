@@ -63,6 +63,12 @@ test.describe('A table moves by pointer', () => {
       await layout.clickAt([12_000, 9000]);
       await expect(layout.table(GOLD_2)).toBeVisible();
     });
+    // The tool's card stands in the selection's place while it is on; Escape goes back to Select,
+    // with the table just placed selected.
+    await expect(layout.selection).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(layout.toolSelect).toHaveAttribute('aria-pressed', 'true');
+    await expect(layout.toolCard).toHaveCount(0);
     await expect(layout.selectionTitle).toHaveText('Gold row 2');
     await expect(layout.selectionSection.locator('option:checked')).toHaveText('Gold row');
     await expect(layout.selectionType.locator('option:checked')).toHaveText('Standard 6 ft');
@@ -83,7 +89,9 @@ test.describe('A table moves by pointer', () => {
     expect(Math.abs(second.xMm - 12_000)).toBeLessThan(pixel);
     expect(Math.abs(second.yMm - 9000)).toBeLessThan(pixel);
 
-    // Silver aisle's first table is numbered on its own.
+    // Silver aisle's first table is numbered on its own, T taking Add table back up.
+    await page.keyboard.press('t');
+    await expect(layout.addSection).toHaveValue('sec-gold');
     await layout.addSection.selectOption({ label: 'Silver aisle' });
     await layout.saved(async () => {
       await layout.clickAt([20_000, 15_000]);
@@ -98,6 +106,7 @@ test.describe('A table moves by pointer', () => {
       await layout.clickAt([24_000, 8000]);
     });
     await expect(layout.table('Table in no section, Standard 6 ft')).toHaveCount(2);
+    await page.keyboard.press('v');
     await expect(layout.selectionTitle).toHaveText('Table in no section');
 
     await page.reload();

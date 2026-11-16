@@ -219,6 +219,7 @@ test.describe("A location's floorplan", () => {
 
     await expect(layout.scale).toHaveText('30.0 m across');
     await expect(layout.map).toBeVisible();
+    await layout.openSettings();
     await expect(page.getByTestId('layout-panel-floorplan')).toContainText(
       "Upper Hall's floorplan reads 30.0 m across.",
     );
@@ -226,7 +227,9 @@ test.describe("A location's floorplan", () => {
     await page.reload();
     await expect(layout.scale).toHaveText('30.0 m across');
 
+    await layout.openSettings();
     await layout.recalibrate.click();
+    await expect(layout.settings).toBeHidden();
     // The stored line, from edge to edge (a level line has no height, so it is read, not seen).
     await expect(layout.calibrationLine).toHaveAttribute('x2', '800');
     await expect(layout.length).toHaveValue('30');

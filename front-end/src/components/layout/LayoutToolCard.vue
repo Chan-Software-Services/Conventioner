@@ -14,7 +14,7 @@
  */
 import { computed, useId } from 'vue';
 import type { SectionObject, TableTypeObject } from '@/assets/types/datatypes';
-import { rowChoices, rowFieldErrors } from './layoutRow';
+import { rowChoices, rowFieldErrors, rowsOf } from './layoutRow';
 import { TOOL_NAMES, type AddingTool } from './layoutTools';
 
 defineProps<{
@@ -40,6 +40,8 @@ const emit = defineEmits<{
 const toolCardTitleId = useId();
 /** What Gap and Aisle say of a value that is no length, each under its own id. */
 const rowErrors = computed(rowFieldErrors);
+/** The Aisle's sentence, only while the field stands: one row has no aisle. */
+const aisleError = computed(() => (rowsOf(rowChoices.rows) > 1 ? rowErrors.value.aisle : ''));
 </script>
 
 <template>
@@ -124,7 +126,7 @@ const rowErrors = computed(rowFieldErrors);
           autocomplete="off"
           data-testid="layout-row-rows"
         />
-        <template v-if="Number(rowChoices.rows) > 1">
+        <template v-if="rowsOf(rowChoices.rows) > 1">
           <label class="layout-tool-card__name" :for="`${toolCardTitleId}-aisle`">Aisle</label>
           <span class="layout-tool-card__unit">
             <input
@@ -150,7 +152,7 @@ const rowErrors = computed(rowFieldErrors);
           />
           Spread evenly to the ends
         </label>
-        <p v-if="rowErrors.gap || rowErrors.aisle" class="layout-tool-card__error">
+        <p v-if="rowErrors.gap || aisleError" class="layout-tool-card__error">
           <span
             v-if="rowErrors.gap"
             id="layout-row-gap-error"
@@ -159,11 +161,11 @@ const rowErrors = computed(rowFieldErrors);
             >{{ rowErrors.gap }}</span
           >
           <span
-            v-if="rowErrors.aisle"
+            v-if="aisleError"
             id="layout-row-aisle-error"
             role="alert"
             data-testid="layout-row-aisle-error"
-            >{{ rowErrors.aisle }}</span
+            >{{ aisleError }}</span
           >
         </p>
       </template>

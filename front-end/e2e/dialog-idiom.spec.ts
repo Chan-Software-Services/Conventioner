@@ -614,7 +614,7 @@ test.describe("Fill an area's dialog is the dialog idiom", () => {
 });
 
 test.describe("A layout's table type dialogs are the dialog idiom", () => {
-  /** Upper Hall, calibrated and empty, with its Table types card. */
+  /** Upper Hall, calibrated and empty, with Layout settings open on its Table types. */
   async function openTheLayout(
     page: import('@playwright/test').Page,
     request: import('@playwright/test').APIRequestContext,
@@ -624,6 +624,7 @@ test.describe("A layout's table type dialogs are the dialog idiom", () => {
     });
     const layout = new LayoutPage(page);
     await layout.goto(seeded.marketId, seeded.upper.id);
+    await layout.openSettings();
     await expect(layout.typesCard).toBeVisible();
     return layout;
   }
@@ -845,6 +846,7 @@ test.describe("Every dialog's close stands on its title's line", () => {
     });
     const layout = new LayoutPage(page);
     await layout.goto(seeded.marketId, seeded.upper.id);
+    await layout.openSettings();
     await expect(layout.typesCard).toBeVisible();
 
     // Add a table type: the title and the body scroll together.

@@ -75,7 +75,7 @@ export class LayoutPage {
   readonly rowLines: Locator;
   readonly rowCrosshair: Locator;
   readonly toolFill: Locator;
-  /** "Fill what is in view", in Fill an area's options strip. */
+  /** "Fill what is in view", on Fill an area's card. */
   readonly fillView: Locator;
   readonly fillPreview: Locator;
   /** The box in hand, or the area closed, shaded. */
@@ -129,8 +129,27 @@ export class LayoutPage {
   readonly saveRetry: Locator;
   readonly saveReload: Locator;
   readonly announcement: Locator;
+  /** The keyboard shortcuts' list, in the panel the toolbar's keyboard button shows. */
   readonly keyboard: Locator;
-  readonly keyboardSummary: Locator;
+  readonly shortcuts: Locator;
+  readonly shortcutsToggle: Locator;
+  readonly shortcutsClose: Locator;
+  /** The tool's card at the panel's head, while an adding tool is on. */
+  readonly toolCard: Locator;
+  /** The zoom bar on the map's corner, and its Floorplan menu of how the image is drawn. */
+  readonly zoomControls: Locator;
+  readonly viewMenuButton: Locator;
+  readonly viewMenu: Locator;
+  readonly viewShowImage: Locator;
+  readonly viewGrey: Locator;
+  readonly viewFaded: Locator;
+  /** Layout settings, from the head: the table types and the floorplan's image. */
+  readonly settingsOpen: Locator;
+  readonly settings: Locator;
+  readonly settingsClose: Locator;
+  /** A reader's Floorplan card's ticks. */
+  readonly imageGrey: Locator;
+  readonly imageFaded: Locator;
   readonly toolZone: Locator;
   readonly zoneBox: Locator;
   readonly zonesCard: Locator;
@@ -207,9 +226,19 @@ export class LayoutPage {
     this.toolRow = this.toolbar.getByRole('button', { name: 'Row of tables', exact: true });
     this.undo = this.toolbar.getByRole('button', { name: 'Undo', exact: true });
     this.redo = this.toolbar.getByRole('button', { name: 'Redo', exact: true });
-    this.zoomOut = this.toolbar.getByRole('button', { name: 'Zoom out', exact: true });
-    this.zoomIn = this.toolbar.getByRole('button', { name: 'Zoom in', exact: true });
-    this.fit = this.toolbar.getByRole('button', { name: 'Fit', exact: true });
+    this.zoomControls = page.getByRole('group', { name: 'Zoom', exact: true });
+    this.zoomOut = this.zoomControls.getByRole('button', { name: 'Zoom out', exact: true });
+    this.zoomIn = this.zoomControls.getByRole('button', { name: 'Zoom in', exact: true });
+    this.fit = this.zoomControls.getByRole('button', { name: 'Fit', exact: true });
+    this.viewMenuButton = page.getByTestId('layout-view-menu-button');
+    this.viewMenu = page.getByRole('menu', { name: 'Floorplan', exact: true });
+    this.viewShowImage = this.viewMenu.getByRole('menuitemcheckbox', {
+      name: 'Show the floorplan',
+      exact: true,
+    });
+    this.viewGrey = this.viewMenu.getByRole('menuitemcheckbox', { name: 'Greyscale', exact: true });
+    this.viewFaded = this.viewMenu.getByRole('menuitemcheckbox', { name: 'Faded', exact: true });
+    this.toolCard = page.getByTestId('layout-add-options');
     this.zoom = page.getByTestId('layout-zoom');
     this.addSection = page.getByTestId('layout-add-section');
     this.addType = page.getByTestId('layout-add-type');
@@ -277,7 +306,12 @@ export class LayoutPage {
     this.saveReload = page.getByTestId('layout-save-reload');
     this.announcement = page.getByTestId('layout-announcement');
     this.keyboard = page.getByTestId('layout-panel-keyboard');
-    this.keyboardSummary = page.getByTestId('layout-keyboard-summary');
+    this.shortcuts = page.getByTestId('layout-shortcuts');
+    this.shortcutsToggle = page.getByTestId('layout-shortcuts-toggle');
+    this.shortcutsClose = page.getByTestId('layout-shortcuts-close');
+    this.settingsOpen = page.getByTestId('layout-settings-open');
+    this.settings = page.getByTestId('layout-settings-window');
+    this.settingsClose = page.getByTestId('layout-settings-close-button');
     this.toolZone = this.toolbar.getByRole('button', { name: 'No-table zone', exact: true });
     this.zoneBox = this.map.getByTestId('layout-zone-box');
     this.zonesCard = page.getByTestId('layout-panel-zones');
@@ -304,6 +338,8 @@ export class LayoutPage {
     this.saveTypesName = page.getByTestId('layout-save-types-name');
     this.saveTypesSubmit = page.getByTestId('layout-save-types-submit-button');
     this.showImage = page.getByTestId('layout-show-image');
+    this.imageGrey = page.getByTestId('layout-image-grey');
+    this.imageFaded = page.getByTestId('layout-image-faded');
     this.replaceImage = page.getByTestId('layout-replace-image');
     this.replaceCancel = page.getByTestId('layout-replace-cancel');
     this.calibrationCancel = page.getByTestId('layout-calibration-cancel');
@@ -343,6 +379,28 @@ export class LayoutPage {
     const path = `/markets/${encodeURIComponent(marketId)}/layout`;
     await this.page.goto(locationId ? `${path}/${encodeURIComponent(locationId)}` : path);
     await expect(this.root).toBeVisible({ timeout: 15000 });
+  }
+
+  /** Open Layout settings from the page's head, where the table types and the image are set. */
+  async openSettings(): Promise<void> {
+    await this.settingsOpen.click();
+    await expect(this.settings).toBeVisible();
+  }
+
+  /** Show the keyboard shortcuts by the toolbar's button, unless they are shown. */
+  async showShortcuts(): Promise<void> {
+    if ((await this.shortcutsToggle.getAttribute('aria-pressed')) !== 'true') {
+      await this.shortcutsToggle.click();
+    }
+    await expect(this.shortcuts).toBeVisible();
+  }
+
+  /** Open the map's Floorplan menu. */
+  async openViewMenu(): Promise<void> {
+    if ((await this.viewMenuButton.getAttribute('aria-expanded')) !== 'true') {
+      await this.viewMenuButton.click();
+    }
+    await expect(this.viewMenu).toBeVisible();
   }
 
   /** The location link of the switch named `name`. */
@@ -394,8 +452,8 @@ export class LayoutPage {
 
   /**
    * Put the focus on the map by keyboard, as a person does from the toolbar: on the table Tab
-   * stops on, or on the map itself while it has no table. With a drawing tool on, the fields of
-   * its options strip stand between the toolbar and the map, and Tab passes each.
+   * stops on, or on the map itself while it has no table. The tool's options stand in the panel,
+   * so the map is the first stop after the toolbar.
    */
   async tabToTheMap(): Promise<void> {
     await this.toolbar.locator('[tabindex="0"]').focus();
