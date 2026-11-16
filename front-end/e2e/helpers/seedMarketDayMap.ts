@@ -26,7 +26,7 @@ export interface SeededMarketDayMap {
   west: typeof WEST_HALL;
   /** Every vendor seeded, in the order of `DAY_MAP_VENDORS`. */
   vendors: DayMapVendor[];
-  /** The vendor checked in today. */
+  /** The vendor checked in today; nobody is, `inAssignment`. */
   checkedIn: DayMapVendor;
   /** The texts no public page may ever show: names, addresses, the note. */
   personalMarkers: string[];
@@ -163,14 +163,16 @@ async function ok(response: Awaited<ReturnType<APIRequestContext['get']>>, what:
  * must never find.
  *
  * With `publicMap`, the map is turned on too, through the Public map card's own write, its three
- * questions chosen. Every value is a fixture value.
+ * questions chosen. With `inAssignment`, it stops in Assignment once the seats are given, with no
+ * location laid out, its results not out and nobody checked in, so a spec starts a layout past
+ * Draft and publishes itself. Every value is a fixture value.
  */
 export async function seedMarketDayMap(
   request: APIRequestContext,
   baseURL: string,
   email: string,
   password: string,
-  options: { publicMap?: boolean; name?: string } = {},
+  options: { publicMap?: boolean; name?: string; inAssignment?: boolean } = {},
 ): Promise<SeededMarketDayMap> {
   const today = calendarToday();
   const tomorrow = inDays(1);
@@ -222,19 +224,21 @@ export async function seedMarketDayMap(
       section,
       at: [4000 + i * 2400, y] as [number, number],
     }));
-  await startLayout(request, baseURL, marketId, {
-    locationId: EAST_HALL.id,
-    metresAcross: 30,
-    tables: row(AISLE_A.id, 4, 6000),
-    tablePrefix: 'east-table',
-    zones: [{ label: 'Stage', box: [17_000, 11_000, 6000, 3000], rotation: 30 }],
-  });
-  await startLayout(request, baseURL, marketId, {
-    locationId: WEST_HALL.id,
-    metresAcross: 30,
-    tables: row(AISLE_B.id, 3, 9000),
-    tablePrefix: 'west-table',
-  });
+  if (!options.inAssignment) {
+    await startLayout(request, baseURL, marketId, {
+      locationId: EAST_HALL.id,
+      metresAcross: 30,
+      tables: row(AISLE_A.id, 4, 6000),
+      tablePrefix: 'east-table',
+      zones: [{ label: 'Stage', box: [17_000, 11_000, 6000, 3000], rotation: 30 }],
+    });
+    await startLayout(request, baseURL, marketId, {
+      locationId: WEST_HALL.id,
+      metresAcross: 30,
+      tables: row(AISLE_B.id, 3, 9000),
+      tablePrefix: 'west-table',
+    });
+  }
 
   insertApplications(
     DAY_MAP_VENDORS.map((vendor) =>
@@ -292,10 +296,29 @@ export async function seedMarketDayMap(
       );
     }
   }
+  const [checkedIn] = DAY_MAP_VENDORS;
+  const seeded: SeededMarketDayMap = {
+    marketId,
+    marketName,
+    slug: marketNameToSlug(marketName),
+    orgId,
+    today,
+    tomorrow,
+    east: EAST_HALL,
+    west: WEST_HALL,
+    vendors: DAY_MAP_VENDORS,
+    checkedIn,
+    personalMarkers: [
+      ...DAY_MAP_VENDORS.flatMap((vendor) => [vendor.email, vendor.fullName, vendor.preferredName]),
+      'orders@sweet-thread.test',
+      NOTE,
+    ],
+  };
+  if (options.inAssignment) return seeded;
+
   await publishResults(request, baseURL, email, marketId);
   await move('market_days');
 
-  const [checkedIn] = DAY_MAP_VENDORS;
   await ok(
     await request.post(`${baseURL}/markets/${marketId}/attendance`, {
       data: { vendorEmail: checkedIn.email, date: today },
@@ -324,21 +347,5 @@ export async function seedMarketDayMap(
     );
   }
 
-  return {
-    marketId,
-    marketName,
-    slug: marketNameToSlug(marketName),
-    orgId,
-    today,
-    tomorrow,
-    east: EAST_HALL,
-    west: WEST_HALL,
-    vendors: DAY_MAP_VENDORS,
-    checkedIn,
-    personalMarkers: [
-      ...DAY_MAP_VENDORS.flatMap((vendor) => [vendor.email, vendor.fullName, vendor.preferredName]),
-      'orders@sweet-thread.test',
-      NOTE,
-    ],
-  };
+  return seeded;
 }

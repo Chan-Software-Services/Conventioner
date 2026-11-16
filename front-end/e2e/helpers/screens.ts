@@ -451,6 +451,21 @@ function layoutAt(
   };
 }
 
+/**
+ * The day map market's public map (T422), with the table `table` picked from the address when
+ * given, once its floorplan has drawn and `shows` is on the card.
+ */
+function publicMapAt(table?: string, shows = 'public-map-card') {
+  return async (page: Page, seed: TheScreensSeed) => {
+    await page.goto(`/${seed.dayMap.slug}/map${table ? `?table=${table}` : ''}`);
+    await expect(page.getByTestId('layout-map-image')).toHaveAttribute('href', /^blob:/, {
+      timeout: 15000,
+    });
+    await visible(page, shows);
+    await visible(page, 'public-map-vendor');
+  };
+}
+
 export const SCREENS: Screen[] = [
   // The organizer's own pages.
   {
@@ -1276,6 +1291,20 @@ export const SCREENS: Screen[] = [
     open: at(screen('big', 'attendance'), 'attendance-row'),
   },
   {
+    // Attendance as a map (T422): today's East Hall drawn by who is here and who is expected, a
+    // shared table in halves, the legend under it, at the door on a phone as at a desk.
+    name: "the attendance's map",
+    who: 'organizer',
+    sizes: FITS_A_PHONE,
+    open: async (page, seed) => {
+      await page.goto(`${screen('dayMap', 'attendance')(seed)}?view=map`);
+      await expect(
+        page.getByTestId('attendance-map').getByTestId('layout-map-image'),
+      ).toHaveAttribute('href', /^blob:/, { timeout: 15000 });
+      await visible(page, 'day-map-legend-item');
+    },
+  },
+  {
     // The strip, who applied - a column a day over the 19 days its applications span, and
     // the review's split bar (T201) - the room, how full each section is each day (T201), and a
     // chart per choice question, as ledgers of bars (E45/F01/S01 to S03); it fits a phone (T180).
@@ -1313,6 +1342,14 @@ export const SCREENS: Screen[] = [
     who: 'organizer',
     sizes: FITS_A_PHONE,
     open: at(screen('big', 'tools'), 'plan-card-discord'),
+  },
+  {
+    // The Public map card turned on (T422): its three questions chosen, the switch on, and the
+    // map's address with Copy link and Open the map.
+    name: 'the tools, the public map on',
+    who: 'organizer',
+    sizes: FITS_A_PHONE,
+    open: at(screen('dayMap', 'tools'), 'public-map-address'),
   },
   // The door code over the attendance (ADR 0022), on the tablet or laptop at the entrance or the
   // phone in the organizer's hand: before one is made, full screen, and New code's confirmation.
@@ -1763,6 +1800,23 @@ export const SCREENS: Screen[] = [
     who: 'organizer',
     sizes: PUBLIC,
     open: at(fixed('/no/such/page'), 'page-not-found'),
+  },
+  {
+    // A market's public map, signed out (T422): the day buttons, East Hall's map with its location
+    // switch, zoom and legend, the card waiting for a press, and the day's vendors under "Find a
+    // vendor"; at a desk in two columns, on a phone one.
+    name: 'the public map',
+    who: 'nobody',
+    sizes: PUBLIC,
+    open: publicMapAt(),
+  },
+  {
+    // The public map with a shared table picked from the address, as a shared link opens it: the
+    // card lists both halves, and the list edges the two vendors at it.
+    name: 'the public map, a shared table picked',
+    who: 'nobody',
+    sizes: PUBLIC,
+    open: publicMapAt('east-table-3', 'public-map-card-half'),
   },
   {
     // A market's vendor page, signed out (ADR 0022): its name and the email step.
