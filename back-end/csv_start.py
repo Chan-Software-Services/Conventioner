@@ -347,6 +347,12 @@ def confirmed_update(market_doc: Dict[str, Any], csv_content: str,
     )
 
 
+#: Why the layouts a start's plan drops are recorded with no request asking Market Setup's row.
+START_RELEASES_UNASKED = (
+    "a start writes the plan let in by the import's row, and a layout of a location its plan "
+    "lacks is released as the plan write releases it")
+
+
 def confirm(
     market_doc: Dict[str, Any], body: Dict[str, Any], by: str,
     organization: Optional[Organization],
@@ -378,5 +384,7 @@ def confirm(
     # it made, not the plan and the form it wrote whole.
     History.record(market_doc["id"], by, Actions.IMPORT_APPLICATIONS, kind=History.STARTED,
                    detail=confirmed.counts)
-    MarketsApi.release_removed_floorplans(confirmed.market, confirmed.removed_floorplans, by)
+    MarketsApi.release_removed_floorplans(
+        confirmed.market, confirmed.removed_floorplans,
+        History.unasked(market_doc["id"], by, Actions.CHANGE_SETUP, because=START_RELEASES_UNASKED))
     return {"written": True}, 200

@@ -16,7 +16,7 @@ import api.applicants as ApplicantsApi  # noqa: E402
 import api.applications as ApplicationsApi  # noqa: E402
 import market_write as MarketWrite  # noqa: E402
 import rejection_rules as Rules  # noqa: E402
-from conftest import FakeApplicationsCollection, client_market, complete_setup  # noqa: E402
+from conftest import FakeApplicationsCollection, a_change_of, client_market, complete_setup  # noqa: E402
 from datatypes import (  # noqa: E402
     Application, ApplicationForm, ApplicationStatus, MarketPhase, RejectionRule, VerdictGiver)
 
@@ -191,7 +191,7 @@ class TestTheyApplyWhen:
         import api.markets as MarketsApi
 
         stored.append(_app("a", affiliation=OUTSIDER))
-        monkeypatch.setattr(MarketsApi, "_load_market_to_change", lambda *_a: _market())
+        monkeypatch.setattr(MarketsApi, "_market_change", a_change_of(_market))
         monkeypatch.setattr(MarketsApi, "write_market", lambda *_a, **_k: None)
 
         MarketsApi.save_rejection_rules(
@@ -245,7 +245,7 @@ class TestTheyApplyWhen:
         Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123")
         without_it = _market(NO_SHOW_RULE).model_copy(update={"application_form": ApplicationForm(
             fields=[f for f in FIELDS if f["key"] != "no_shows"])})
-        monkeypatch.setattr(MarketsApi, "_load_market_to_change", lambda *_a: without_it)
+        monkeypatch.setattr(MarketsApi, "_market_change", a_change_of(without_it))
         monkeypatch.setattr(MarketsApi, "prepared_application_form", lambda *_a: EMPTY_FORM)
         monkeypatch.setattr(MarketsApi, "write_market", _form_written)
         monkeypatch.setattr(MarketsApi, "load_market_context",

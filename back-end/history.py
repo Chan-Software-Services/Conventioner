@@ -40,7 +40,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
-from api.market_actions import ASSIGN, CHANGE_THE_TABLE, Action
+from api.market_actions import ASSIGN, CHANGE_THE_TABLE, Action, Asked
 from db_config import get_database
 from utils.email_address import normalized_email
 
@@ -208,6 +208,11 @@ def unasked(market_id: str, actor: Optional[str], row: Action, *, because: str) 
     records no request asks are listed with their reasons in ``tests/test_every_write_records.py``
     (``UNASKED``)."""
     return UnaskedRecorder(market_id, actor, row, because)
+
+
+#: What a helper that records for its caller's check takes (T105-9): the caller's asking, or the
+#: unasked door's recorder. Both record under their row as their actor, and hold the two.
+Recorder = Union[Asked, UnaskedRecorder]
 
 
 def record_applicant(

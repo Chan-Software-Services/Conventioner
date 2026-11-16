@@ -23,7 +23,8 @@ import market_write as MarketWrite  # noqa: E402
 import api.permissions as PermissionsApi  # noqa: E402
 import api.users as UsersApi  # noqa: E402
 import rejection_rules as Rules  # noqa: E402
-from conftest import client_market, complete_setup, sessions_load_through_get_user, stored_market  # noqa: E402
+from conftest import (  # noqa: E402
+    a_change_of, client_market, complete_setup, sessions_load_through_get_user, stored_market)
 from datatypes import (  # noqa: E402
     ApplicationForm, ApplicationStatus, MarketPhase, MarketRole, RejectionRule, VerdictGiver)
 
@@ -398,8 +399,8 @@ class TestAWriteThatJudgesAgain:
 
     @pytest.fixture(autouse=True)
     def market(self, monkeypatch):
-        monkeypatch.setattr(MarketsApi, "_load_market_to_change",
-                            lambda *_a: _rules_market(NO_SHOW_RULE))
+        monkeypatch.setattr(MarketsApi, "_market_change",
+                            a_change_of(lambda: _rules_market(NO_SHOW_RULE)))
         # The rules' own write: a market built here has no stored document to hold.
         monkeypatch.setattr(MarketsApi, "write_market", lambda *_a, **_k: None)
 
@@ -416,7 +417,7 @@ class TestAWriteThatJudgesAgain:
     def test_the_form_save(self, ruled_out, holding, monkeypatch, role, status):
         without_it = _rules_market(NO_SHOW_RULE).model_copy(
             update={"application_form": ApplicationForm(fields=[])})
-        monkeypatch.setattr(MarketsApi, "_load_market_to_change", lambda *_a: without_it)
+        monkeypatch.setattr(MarketsApi, "_market_change", a_change_of(without_it))
         monkeypatch.setattr(MarketsApi, "prepared_application_form", lambda *_a: EMPTY_FORM)
         monkeypatch.setattr(MarketsApi, "write_market", _form_written)
         monkeypatch.setattr(MarketsApi, "load_market_context",
@@ -454,11 +455,11 @@ class TestAWriteThatJudgesAgain:
 
         assert MarketsApi.may_overturn("someone@market.test", market) is False
         if write == "rules":
-            monkeypatch.setattr(MarketsApi, "_load_market_to_change", lambda *_a: market)
+            monkeypatch.setattr(MarketsApi, "_market_change", a_change_of(market))
             MarketsApi.save_rejection_rules("market-1", [], "someone@market.test")
         elif write == "form":
             without_it = market.model_copy(update={"application_form": ApplicationForm(fields=[])})
-            monkeypatch.setattr(MarketsApi, "_load_market_to_change", lambda *_a: without_it)
+            monkeypatch.setattr(MarketsApi, "_market_change", a_change_of(without_it))
             monkeypatch.setattr(MarketsApi, "prepared_application_form", lambda *_a: EMPTY_FORM)
             monkeypatch.setattr(MarketsApi, "write_market", _form_written)
             monkeypatch.setattr(MarketsApi, "load_market_context",

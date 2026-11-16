@@ -1474,12 +1474,12 @@ def transition_market(market_id: str) -> Response:
 
     market = context.market
 
-    refused = Actions.refusal(Actions.MOVE_PHASE, user_email, market, context.organization)
-    if refused:
-        return jsonify({"error": refused}), 403
+    asked = Actions.ask(Actions.MOVE_PHASE, user_email, market, context.organization)
+    if asked.refused:
+        return jsonify({"error": asked.refused}), 403
 
     from_phase = market.phase.value
-    blockers = MarketsApi.take_move(context, to_phase.value, by=user_email)
+    blockers = MarketsApi.take_move(context, to_phase.value, asked)
     if blockers:
         return jsonify(convert_keys_to_camel_case({
             "error": "preconditions_not_met",

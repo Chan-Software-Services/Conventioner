@@ -140,7 +140,7 @@ class TestInterleave:
             seen_between.append(real_db["markets"].find_one({"id": market["id"]})["name"])
             real_db["interleaved"].insert_one({"market": market["id"]})
 
-        interleave("api.markets._load_market_to_change", then)
+        interleave("api.markets._market_change", then)
         response = client.put(f"/markets/{market['id']}/name", json={"name": "Fixture New Name"})
 
         assert response.status_code == 200, response.get_json()

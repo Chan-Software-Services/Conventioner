@@ -422,7 +422,7 @@ class TestAPermissionRow:
             self, signed_in, market_in, interleave, real_db, market_records):
         client = signed_in(ORGANIZER)
         market = market_in(MarketPhase.APPLICATIONS, permissions={ROW: _owners_row("owner")})
-        interleave("api.markets._load_market_to_change", lambda: MarketsApi.set_permission(
+        interleave("api.markets._market_change", lambda: MarketsApi.set_permission(
             market["id"], ROW, "editor", ORGANIZER))
 
         response = client.delete(f"/markets/{market['id']}/permissions")
@@ -438,7 +438,7 @@ class TestAPermissionRow:
         org_id = OrgsApi.create_organization(ORGANIZER, "Fixture Organization")
         OrgsApi.set_default_permission(org_id, ROW, "editor", ORGANIZER)
         market = market_in(MarketPhase.APPLICATIONS, organizationId=org_id)
-        interleave("api.markets._load_market_to_change", lambda: MarketsApi.set_permission(
+        interleave("api.markets._market_change", lambda: MarketsApi.set_permission(
             market["id"], ROW, "owner", ORGANIZER))
 
         response = client.post(f"/markets/{market['id']}/permissions/organization-default")

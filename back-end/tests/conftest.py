@@ -1096,6 +1096,19 @@ def client_market(**overrides) -> Market:
     return Market(**kwargs)
 
 
+def a_change_of(market, organization=None):
+    """A stand-in for ``MarketsApi._market_change`` that loads ``market`` (or what calling it
+    returns, a fresh copy each load) and lets the asker in on the row the write asks, for a test of
+    what a write does once it is let in: its entry is recorded under that row, as the real load's."""
+    import api.market_actions as Actions
+    import api.markets as MarketsApi
+
+    def change(_market_id, user, row):
+        loaded = market() if callable(market) else market
+        return MarketsApi.MarketChange(loaded, organization, Actions.Asked(row, loaded.id, user, None))
+    return change
+
+
 class _SortableCursor:
     """A fake ``find``'s cursor: it sorts, limits and projects when it is read, as the driver's
     does, whatever order ``sort`` and ``limit`` were called in, and hands back copies."""

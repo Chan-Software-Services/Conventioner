@@ -113,6 +113,7 @@ The endpoint's 409 stays, for a market that changed between the read and the cli
 `POST /markets` creates through the one and the transition endpoint moves through the other, and the operator's seeder ([`back-end/seed_test_markets.py`](../../../back-end/seed_test_markets.py)) calls both, so nothing makes a market someone else owns or takes a move unjudged.
 A Google Form market's first import moves it through `take_move` too (`csv_import.enter_review`).
 `take_move` asks nothing about who is moving the market: the endpoint, and the seeder, ask the table's Move the phase row first, and the import's endpoints its Import applications row ([the market's actions](market-actions.md)).
+It records the move through the recorder its caller passes: the endpoint's asking of Move the phase, or the unasked recorder the first import and the seeder open, each with its reason ([the market's history](../data/history.md)).
 
 **A rule about phases that is not about a move does not belong here.**
 The registry is validated against the transition table and is for transitions, so the phases an organization cannot be deleted in are `BLOCKING_PHASES` in `api/organizations.py` ([when an organization may be deleted](../../business/rules/when-an-organization-may-be-deleted.md)), and the phases the import runs in are `IMPORT_PHASES` in [the CSV import](csv-import.md).
@@ -138,7 +139,7 @@ With no row where a run is refused, once results are out or in a market left in 
 Its words and remedy are the lifecycle owner's (`assignment/lifecycle.py#unallocated_refusal`), which reads the phase so that no guard does; its verdict is the same in every phase.
 The three entry invariants on `market_days` about the assignment (`assignment_computed`, `assignment_after_review`, `results_published`) stay one guard per condition, so the rail names the one that stands; together they pass exactly when the owner's `may_go_live` holds, which `back-end/tests/test_the_allocation_table.py` checks over every allocation.
 
-**`take_move` records the move in [the market's history](../data/history.md)** once it is taken (`move-phase`, the phase before and after, by whoever made it); the phase history stays the state the guards read.
+**`take_move` records the move in [the market's history](../data/history.md)** once it is taken (`move-phase`, the phase before and after, by its recorder's actor); the phase history stays the state the guards read.
 
 ## Why
 

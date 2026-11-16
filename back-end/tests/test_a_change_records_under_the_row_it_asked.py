@@ -8,6 +8,9 @@ only when they change (``Actions.ask_assign_if_the_rules_change``).
 
 The records no request asked have their own door, ``History.unasked``, tested with the history.
 """
+import ast
+from pathlib import Path
+
 import pytest
 
 from conftest import COMPLETE_PLAN, FakeMarketsCollection, client_market, stored_market
@@ -15,6 +18,7 @@ from test_the_history import history  # noqa: F401 - the fixture
 import api.market_actions as Actions
 import api.markets as MarketsApi
 import api.permissions as PermissionsApi
+import history as History
 from client_errors import BadRequestError, ForbiddenError
 from datatypes import AssignmentOptionObject, MarketPhase, MarketRole
 
@@ -263,3 +267,69 @@ class TestTheRulesAskAssignWhenTheyChange:
             Actions.ask_assign_if_the_rules_change(market, self._changed(market), ASKER, None)
 
         assert str(refused.value) == Actions.refusal_sentence(Actions.ASSIGN)
+
+
+def _calls_in(module) -> list:
+    """Each call in ``module``'s source by the name it calls, dotted as written, with its line."""
+    tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+    calls = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            calls.append((ast.unparse(node.func), node.lineno))
+    return calls
+
+
+class TestTheMarketsModuleRecordsWhatItAsked:
+    """The first batch of T105-9's migration: every write in the markets module records through
+    the asking its own check returned, or a recorder its caller gave, so no entry of its names a
+    row by hand. Ticket 14's guard holds every module to it."""
+
+    def test_it_records_no_entry_by_hand(self):
+        assert [line for name, line in _calls_in(MarketsApi) if name == "History.record"] == []
+
+    def test_its_writes_load_through_the_asking_not_the_old_loaders(self):
+        old = {"_load_market_to_change", "_load_market_and_organization_to_change"}
+        assert [line for name, line in _calls_in(MarketsApi) if name in old] == []
+
+    def test_it_opens_no_door_for_a_record_nothing_asked(self):
+        """Its callers do, with their reasons: the import, the start and the seeder."""
+        assert [line for name, line in _calls_in(MarketsApi) if name == "History.unasked"] == []
+
+
+class TestAMoveRecordsThroughItsCallersRecorder:
+    @pytest.fixture
+    def moving(self, monkeypatch):
+        moved = []
+        monkeypatch.setattr(MarketsApi, "evaluate_transition", lambda *_a, **_k: [])
+        monkeypatch.setattr(MarketsApi, "apply_phase_transition",
+                            lambda _document, to_phase, by=None: moved.append((to_phase, by)))
+        return moved
+
+    def _context(self):
+        market = client_market(phase=MarketPhase.DRAFT)
+        return MarketsApi.MarketContext(
+            document={"id": market.id}, market=market, organization=None, organization_dict=None)
+
+    def test_the_move_is_recorded_under_the_recorders_row_as_its_actor(self, moving, history):
+        recorder = History.unasked("market-123", ASKER, Actions.MOVE_PHASE, because="a test's move")
+
+        assert MarketsApi.take_move(
+            self._context(), MarketPhase.APPLICATIONS.value, recorder) == []
+
+        assert moving == [(MarketPhase.APPLICATIONS.value, ASKER)]
+        [entry] = history.docs
+        assert entry["action"] == Actions.MOVE_PHASE.id
+        assert entry["actor"] == ASKER
+        assert entry["detail"] == History.changes(
+            {"phase": MarketPhase.DRAFT.value}, {"phase": MarketPhase.APPLICATIONS.value})
+
+    def test_the_move_a_request_asked_is_recorded_through_that_asking(self, moving, history, holding):
+        holding(MarketRole.OWNER)
+        context = self._context()
+        asked = Actions.ask(Actions.MOVE_PHASE, ASKER, context.market, None)
+        assert asked.refused is None
+
+        MarketsApi.take_move(context, MarketPhase.APPLICATIONS.value, asked)
+
+        [entry] = history.docs
+        assert (entry["action"], entry["actor"]) == (Actions.MOVE_PHASE.id, ASKER)
