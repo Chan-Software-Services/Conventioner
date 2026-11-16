@@ -177,7 +177,7 @@ An owed day's first record is an insert, whose refusal does come back, and the o
 
 ## A payment entry holds what it read
 
-An edit or a removal of a payment entry lands only on the entry as its request read it, standing and with as many lines in its own history ([payments](../data/payments.md#the-amount-paid)).
+An edit or a removal of a payment entry lands only on the entry as its request read it: still standing, with as many lines in its own history as it read ([payments](../data/payments.md#the-amount-paid)).
 [`real_mongo/test_a_payment_entry_holds_what_it_read.py`](../../../back-end/tests/real_mongo/test_a_payment_entry_holds_what_it_read.py) races two edits of one entry, 20 rounds each on an entry of its own, each request's first read waiting on a barrier so both stand on one read, released at once by `race`: exactly one lands and the other is refused, 409, with the edit's sentence and the account showing the winner's edit; the entry's `changes` holds one line, whose `before` is the entry as first recorded, and the history one `payment_edited` entry.
 
 ## An organization's people
