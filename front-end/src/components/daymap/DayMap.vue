@@ -35,7 +35,8 @@ const props = withDefaults(
     seats: readonly MapSeat[];
     /** The map takes its box whole, as the public map's hall: no shape of its own, no edge, no
      *  location switch and no legend list (the caller draws the choice and fills the `legend`
-     *  slot), and the zoom a floating pill (T465). */
+     *  slot), and the zoom a floating pill (T465). False unless given, as Vue casts an absent
+     *  boolean. */
     fills?: boolean;
     /** The seat's key or the table's id picked, outlined on the map. */
     picked: string | null;
@@ -43,7 +44,7 @@ const props = withDefaults(
     marked?: readonly string[];
     legend: readonly DayMapLegendItem[];
   }>(),
-  { marked: () => [], fills: false },
+  { marked: () => [] },
 );
 
 const locationId = defineModel<string>('locationId', { required: true });
