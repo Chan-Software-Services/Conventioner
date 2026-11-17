@@ -20,7 +20,7 @@ import {
   saidSide,
 } from '@/components/layout/layoutAnnouncements';
 import { layoutSections } from '@/components/layout/layoutDrawing';
-import { separation, tableCorners } from '@/components/layout/layoutGeometry';
+import { separation, tableCorners, type PathPose } from '@/components/layout/layoutGeometry';
 import {
   MAX_LAYOUT_TABLES,
   ROW_CHOICES_AT_FIRST,
@@ -152,6 +152,61 @@ describe('a path being drawn', () => {
       expect(its).toHaveLength(4);
       for (const ghost of its) expect(ghost.xMm).toBeGreaterThan(lastOfTheRow);
     }
+  });
+
+  it('spread to its ends, shows as ghosts the row a point at the pointer lays, spread whole again', () => {
+    const { row } = aTool();
+    rowChoices.spread = true;
+    row.addPoint(p(2000, 3000));
+    row.addPoint(p(12_000, 3000));
+    row.hoverAt(p(17_000, 3000));
+    const laid = row.poses.value;
+    const ghosts = row.ghosts.value;
+    expect(laid).toHaveLength(5);
+    expect(row.withAPoint.value).toBe(8);
+
+    row.addPoint(p(17_000, 3000));
+    const after = row.poses.value;
+    expect(after).toHaveLength(8);
+    // Each table the point lays is drawn now: as a ghost, or as the row's table where it stays.
+    const same = (a: { xMm: number; yMm: number }, b: { xMm: number; yMm: number }) =>
+      Math.hypot(a.xMm - b.xMm, a.yMm - b.yMm) < 0.01;
+    const kept = after.filter((pose, i) => laid[i] && same(pose, laid[i]));
+    expect(kept.length).toBeGreaterThan(0);
+    expect([...kept, ...ghosts].sort((a, b) => a.xMm - b.xMm)).toEqual(after);
+    // No ghost stands on a table the row keeps.
+    for (const ghost of ghosts) for (const one of kept) expect(same(ghost, one)).toBe(false);
+  });
+
+  it('bent at its last point, shows as ghosts the tables a point at the pointer moves as it smooths the bend', () => {
+    const { row } = aTool();
+    // 7 m at 15° down the page, then on square to the page: the bend is smoothed, no corner.
+    const turn = (15 * Math.PI) / 180;
+    const bend = p(2000 + 7000 * Math.cos(turn), 3000 + 7000 * Math.sin(turn));
+    row.addPoint(p(2000, 3000));
+    row.addPoint(bend);
+    row.hoverAt(p(bend.xMm + 9000, bend.yMm));
+    const laid = row.poses.value;
+    const ghosts = row.ghosts.value;
+    const counted = row.withAPoint.value;
+
+    row.addPoint(p(bend.xMm + 9000, bend.yMm));
+    const after = row.poses.value;
+    expect(after).toHaveLength(counted);
+    expect(after.length).toBeGreaterThan(laid.length);
+    const same = (a: PathPose, b: PathPose) =>
+      Math.hypot(a.xMm - b.xMm, a.yMm - b.yMm) < 0.01 && Math.abs(a.rotation - b.rotation) < 1e-6;
+    const kept = after.filter((pose, i) => laid[i] && same(pose, laid[i]));
+    // The point moves tables of the row: more ghosts than the stretch past the bend adds.
+    expect(kept.length).toBeLessThan(laid.length);
+    expect(ghosts.length).toBeGreaterThan(after.length - laid.length);
+    // Each table the point lays was drawn, as a ghost or as the row's table where it stays, and
+    // each ghost is one of them.
+    for (const pose of after) {
+      expect(ghosts.some((ghost) => same(ghost, pose)) || kept.includes(pose)).toBe(true);
+    }
+    for (const ghost of ghosts) expect(after.some((pose) => same(pose, ghost))).toBe(true);
+    expect(kept.length + ghosts.length).toBe(after.length);
   });
 
   it('shows no ghost once the pointer has left, or rests on the last point', () => {

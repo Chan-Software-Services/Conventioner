@@ -1,4 +1,4 @@
-import type { APIRequestContext, Page } from '@playwright/test';
+import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
 import { LayoutPage } from './pages/LayoutPage';
 import {
@@ -234,12 +234,16 @@ test.describe('Rows fill a hall', () => {
     await layout.clickAt(onWall(45));
     await layout.hoverAt(onWall(90));
     await expect(layout.rowLines).toHaveCount(1);
-    // The row along the two points, and past it the ghosts a point at the pointer would add.
+    // The row along the two points, and the ghosts of the row a point at the pointer would lay:
+    // those past the second point, and those of the row it moves, as the curve through three
+    // points is not the curve through two.
     const [laid, shown] = (await layout.rowCount.textContent())!.match(/\d+/g)!.map(Number);
     expect(laid).toBeGreaterThanOrEqual(1);
     expect(shown).toBeGreaterThan(laid);
     await expect(layout.rowTables).toHaveCount(laid);
-    await expect(layout.rowGhosts).toHaveCount(shown - laid);
+    const ghosts = await layout.rowGhosts.count();
+    expect(ghosts).toBeGreaterThanOrEqual(shown - laid);
+    expect(ghosts).toBeLessThanOrEqual(shown);
 
     // Nothing of the path is the layout's until it is placed.
     await expect(layout.tables).toHaveCount(0);
@@ -1880,6 +1884,24 @@ async function lineThrough(layout: LayoutPage): Promise<{ xMm: number; yMm: numb
     });
 }
 
+/** Where the preview draws a row's tables or its ghosts, in the hall's millimetres. */
+interface ShownPose {
+  xMm: number;
+  yMm: number;
+  rotation: number;
+}
+async function shownAt(drawn: Locator): Promise<ShownPose[]> {
+  const transforms = await drawn.evaluateAll((all) =>
+    all.map((one) => one.getAttribute('transform') ?? ''),
+  );
+  return transforms.map((transform) => {
+    const [, x, y, rotation] = transform.match(
+      /translate\(([-\d.e]+) ([-\d.e]+)\) rotate\(([-\d.e]+)\)/,
+    )!;
+    return { xMm: Number(x), yMm: Number(y), rotation: Number(rotation) };
+  });
+}
+
 /** The angle of a line from one place to another, in degrees clockwise from the page's right. */
 const angleOf = (from: { xMm: number; yMm: number }, to: { xMm: number; yMm: number }) =>
   (Math.atan2(to.yMm - from.yMm, to.xMm - from.xMm) * 180) / Math.PI;
@@ -2008,7 +2030,11 @@ test.describe('Rows and areas in groups, steps and a right-click', () => {
     const [laid, withAPoint] = (await layout.rowCount.textContent())!.match(/\d+/g)!.map(Number);
     expect(withAPoint).toBeGreaterThan(laid);
     await expect(layout.rowTables).toHaveCount(laid);
-    await expect(layout.rowGhosts).toHaveCount(withAPoint - laid);
+    // The ghosts are the tables a point there lays where the row has none: those past the second
+    // point, and those of the row it moves, since the bend there is smoothed once it is no end.
+    const ghosts = await layout.rowGhosts.count();
+    expect(ghosts).toBeGreaterThanOrEqual(withAPoint - laid);
+    expect(ghosts).toBeLessThanOrEqual(withAPoint);
 
     await layout.saved(() => page.keyboard.press('Enter'));
     await expect(layout.announcement).toHaveText(`Added Gold row 1 to ${laid}.`);
@@ -2021,6 +2047,41 @@ test.describe('Rows and areas in groups, steps and a right-click', () => {
       { xMm: tables.at(-1)!.xMm, yMm: tables.at(-1)!.yMm },
     ];
     expect(Math.hypot(to.xMm - from.xMm, to.yMm - from.yMm)).toBeLessThan(Math.hypot(8000, 1600));
+  });
+
+  test('with "Spread evenly to the ends", the ghosts past an open row are the row a point there lays, spread whole again, and the click lays them', async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    const { layout } = await open(page, request);
+    await layout.rowSpread.check();
+    await layout.rowSpread.blur();
+    // 10 m between two points: five tables, spread to both ends.
+    await layout.clickAt([2000, 6000]);
+    await layout.clickAt([12_000, 6000]);
+    await expect(layout.rowTables).toHaveCount(5);
+    // The pointer 5 m on: a point there spreads eight tables over the 15 m.
+    await layout.hoverAt([17_000, 6000]);
+    await expect(layout.rowCount).toHaveText('5 tables (8 with a point here)');
+    const laid = await shownAt(layout.rowTables);
+    const ghosts = await shownAt(layout.rowGhosts);
+
+    await layout.clickAt([17_000, 6000]);
+    await expect(layout.rowPoints).toHaveCount(3);
+    await layout.hoverAt([17_000, 6000]);
+    await expect(layout.rowCount).toHaveText('8 tables');
+    const after = await shownAt(layout.rowTables);
+    // What was drawn is what the click laid: each table is a ghost, or a table of the row that
+    // stays where it was, and each ghost is a table.
+    const near = (a: ShownPose, b: ShownPose) =>
+      Math.hypot(a.xMm - b.xMm, a.yMm - b.yMm) < 1 && Math.abs(a.rotation - b.rotation) < 0.01;
+    for (const table of after) {
+      expect(
+        ghosts.some((ghost) => near(ghost, table)) || laid.some((was) => near(was, table)),
+      ).toBe(true);
+    }
+    for (const ghost of ghosts) expect(after.some((table) => near(table, ghost))).toBe(true);
+    expect(ghosts.length + laid.filter((was) => after.some((t) => near(t, was))).length).toBe(8);
   });
 
   test('a right-click drops a row or an area in hand and keeps its tool, and with nothing in hand puts Select back on, with no browser menu', async ({
@@ -2351,6 +2412,50 @@ test.describe('Types and zones shape a hall', () => {
     await expect(layout.zones).toHaveCount(1);
     await layout.rightClickAt([24_000, 16_500]);
     await expect(layout.toolSelect).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('a turned zone draft carried off the floorplan is kept by Enter, with what to do, and added once moved back on', async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    const seeded = await seedLayout(request, BACKEND_URL, TEST_USER.email, TEST_USER.password, {
+      metresAcross: 30,
+    });
+    const layout = new LayoutPage(page);
+    await layout.goto(seeded.marketId, seeded.upper.id);
+    await layout.toolZone.click();
+    await layout.drag([6000, 6000], [10_000, 8000]);
+    await expect(layout.zoneDraft).toBeVisible();
+    let draft = (await layout.zoneDraftNow())!;
+    // Its knob turned to 45°, about its centre.
+    const centre = { x: draft.cxMm, y: draft.cyMm };
+    const turn = (-45 * Math.PI) / 180;
+    await layout.dragFrom(layout.zoneTurn, [
+      centre.x + 5000 * Math.cos(turn),
+      centre.y + 5000 * Math.sin(turn),
+    ]);
+    expect((await layout.zoneDraftNow())!.rotation).toBe(45);
+
+    // Carried by its middle over the hall's left edge until none of its turned shape is on it.
+    await layout.dragFrom(layout.zoneDraftBody, [-3000, 7000]);
+    draft = (await layout.zoneDraftNow())!;
+    expect(draft.cxMm).toBeLessThan(-2200);
+    await page.keyboard.press('Enter');
+    await expect(layout.status).toHaveText(
+      'Too little of the zone is on the floorplan. Move it further on, then press Enter to add it.',
+    );
+    await expect(layout.zoneDraft).toBeVisible();
+    await expect(layout.zones).toHaveCount(0);
+    expect((await layout.zoneDraftNow())!.rotation).toBe(45);
+
+    // Moved back on, Enter adds it as it stands turned.
+    await layout.dragFrom(layout.zoneDraftBody, [8000, 7000]);
+    await layout.saved(() => page.keyboard.press('Enter'));
+    await expect(layout.zoneDraft).toHaveCount(0);
+    await expect(layout.zones).toHaveCount(1);
+    await expect(layout.zones.first()).toHaveAttribute('transform', /^rotate\(45 /);
+    const [stored] = (await storedPlan(request, seeded.marketId)).floorplans[0].zones;
+    expect(stored.rotation).toBe(45);
   });
 
   test('the Floorplan menu hides and shows the image; a replaced image keeps every table where it was in metres and its old file is deleted', async ({

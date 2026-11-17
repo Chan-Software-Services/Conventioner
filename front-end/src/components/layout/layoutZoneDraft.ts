@@ -15,6 +15,7 @@ import {
   roundTurn,
   snapAngle,
   zoneBounds,
+  zoneCorners,
   type Bounds,
   type Hall,
   type PointMm,
@@ -86,13 +87,56 @@ export function zoneHandleNamed(
 }
 
 /**
- * Whether enough of a draft is on the floorplan to be added: held inside the hall as it stands
- * (`heldInHall`), both its sides still a zone's least. An unturned draft is cut at the hall's
- * edges, so one carried mostly off it keeps too little.
+ * Whether enough of a draft is on the floorplan to be added: the part of its shape inside the
+ * hall, as it stands turned, reaches a zone's least along each of its own sides. Unturned, that
+ * part is its box cut at the hall's edges, as an unturned zone is held; a turned draft is then
+ * held by being moved in whole (`heldInHall`), but one carried so far off that too little of it
+ * is left on is kept, as an unturned one is.
  */
 export function draftOnTheFloorplan(draft: ZoneDraft, hall: Hall | null): boolean {
-  const held = heldInHall(shapeOfDraft(draft), hall);
-  return held.widthMm >= MIN_ZONE_SIDE_MM && held.depthMm >= MIN_ZONE_SIDE_MM;
+  if (!hall) return true;
+  const on = clippedToTheHall(zoneCorners(shapeOfDraft(draft)), hall);
+  const turn = (draft.rotation * Math.PI) / 180;
+  const along = (ux: number, uy: number) => {
+    const reach = on.map((point) => point.xMm * ux + point.yMm * uy);
+    return reach.length ? Math.max(...reach) - Math.min(...reach) : 0;
+  };
+  // A thousandth of a millimetre of rounding never keeps a draft that is a zone's least.
+  const least = MIN_ZONE_SIDE_MM - 1e-3;
+  return (
+    along(Math.cos(turn), Math.sin(turn)) >= least &&
+    along(-Math.sin(turn), Math.cos(turn)) >= least
+  );
+}
+
+/** A convex shape cut at the hall's four edges, its corners in order: none left when it lies wholly
+ *  off the hall. */
+function clippedToTheHall(corners: readonly PointMm[], hall: Hall): PointMm[] {
+  /** How far a point stands inside each edge: less than nothing outside it. */
+  const edges: ((point: PointMm) => number)[] = [
+    (point) => point.xMm,
+    (point) => hall.widthMm - point.xMm,
+    (point) => point.yMm,
+    (point) => hall.heightMm - point.yMm,
+  ];
+  let shape = [...corners];
+  for (const inside of edges) {
+    const kept: PointMm[] = [];
+    shape.forEach((point, i) => {
+      const next = shape[(i + 1) % shape.length];
+      const [a, b] = [inside(point), inside(next)];
+      if (a >= 0) kept.push(point);
+      if (a >= 0 !== b >= 0) {
+        const t = a / (a - b);
+        kept.push({
+          xMm: point.xMm + (next.xMm - point.xMm) * t,
+          yMm: point.yMm + (next.yMm - point.yMm) * t,
+        });
+      }
+    });
+    shape = kept;
+  }
+  return shape;
 }
 
 /** A box dragged, as a draft square to the page. */

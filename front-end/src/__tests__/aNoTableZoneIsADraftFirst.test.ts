@@ -26,6 +26,7 @@ import {
   ZONE_DROPPED,
   ZONE_OFF_THE_FLOORPLAN,
   draftOfBox,
+  draftOnTheFloorplan,
   handleCursor,
   heldInHall,
   movedDraft,
@@ -185,6 +186,42 @@ describe('a turned zone held inside the hall', () => {
   it('is cut at the hall, unturned, as a box always was', () => {
     expect(heldInHall(zone(-2000, 1000, 6000, 3000, 0), HALL)).toEqual(
       zone(0, 1000, 4000, 3000, 0),
+    );
+  });
+});
+
+describe('a zone draft on the floorplan', () => {
+  /** DRAFT turned 45°, its centre at `cxMm`: its turned shape reaches 2121.3 mm either side. */
+  const turnedAt = (cxMm: number): ZoneDraft => ({ ...DRAFT, cxMm, rotation: 45 });
+  /** How far its turned shape's rightmost corner reaches past `cxMm`. */
+  const REACH = 3000 * Math.SQRT1_2;
+
+  it('is on while a zone’s least of it stands on, along each of its sides, unturned', () => {
+    // 10 cm left on: both sides a zone's least.
+    expect(draftOnTheFloorplan({ ...DRAFT, cxMm: -1900 }, HALL)).toBe(true);
+    expect(draftOnTheFloorplan({ ...DRAFT, cxMm: -1950 }, HALL)).toBe(false);
+    expect(draftOnTheFloorplan(DRAFT, null)).toBe(true);
+  });
+
+  it('is off, turned, when none of its turned shape is on the floorplan', () => {
+    expect(draftOnTheFloorplan(turnedAt(-3000), HALL)).toBe(false);
+  });
+
+  it('is off, turned, when the corner left on is less than a zone’s least along its sides', () => {
+    // 50 mm of its corner on: 70.7 mm along each side from that corner.
+    expect(draftOnTheFloorplan(turnedAt(50 - REACH), HALL)).toBe(false);
+    // 80 mm of it on: 113 mm along each side, a zone's least.
+    expect(draftOnTheFloorplan(turnedAt(80 - REACH), HALL)).toBe(true);
+  });
+
+  it('is on, turned, wherever enough stands on, at any edge', () => {
+    expect(draftOnTheFloorplan(turnedAt(10_000), HALL)).toBe(true);
+    expect(draftOnTheFloorplan({ ...turnedAt(15_000), cyMm: 22_500 + REACH - 50 }, HALL)).toBe(
+      false,
+    );
+    expect(draftOnTheFloorplan({ ...turnedAt(15_000), cyMm: 22_500 }, HALL)).toBe(true);
+    expect(draftOnTheFloorplan({ ...turnedAt(30_000 + REACH - 50), cyMm: 10_000 }, HALL)).toBe(
+      false,
     );
   });
 });
