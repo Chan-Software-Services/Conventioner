@@ -10,6 +10,7 @@ import { mount, type VueWrapper } from '@vue/test-utils';
 import { readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import type { TableTypeObject } from '@/assets/types/datatypes';
+import { stylesOf, valueOf } from './support/sfcStyles';
 import DayMap from '@/components/daymap/DayMap.vue';
 import {
   UNNAMED_SEAT,
@@ -407,44 +408,34 @@ describe('the day map', () => {
   });
 
   it("stands the note at the legend row's end, 4px under the map, small and muted, and under the legend in a phone's box", () => {
-    const source = readFileSync(
-      resolvePath(process.cwd(), 'src/components/daymap/DayMap.vue'),
-      'utf8',
-    );
-    const style = source.slice(source.indexOf('<style'));
-    const rule = (selector: string, from = 0) => {
-      const at = style.indexOf(`${selector} {`, from);
-      expect(at, selector).toBeGreaterThan(-1);
-      return style.slice(at, style.indexOf('}', at)).replace(/\s+/g, ' ');
-    };
+    const styles = stylesOf('daymap/DayMap.vue');
+    const PHONE = '(width < 30rem)';
+    const areas = (selector: string, query = '') =>
+      valueOf(styles, selector, 'grid-template-areas', query)?.replace(/\s+/g, ' ');
     // With no note the legend keeps the whole row, and a phone's box adds no row for it.
-    expect(rule('.day-map__grid')).toContain("grid-template-areas: 'map map' 'legend legend';");
-    expect(rule('.day-map__grid:has(> .day-map__note)')).toContain(
-      "grid-template-areas: 'map map' 'legend note';",
-    );
-    const phone = style.indexOf('@container (width < 30rem)');
-    expect(rule('.day-map__grid', phone)).toContain(
-      "grid-template-areas: 'map map' 'legend zoom';",
-    );
-    expect(rule('.day-map__grid:has(> .day-map__note)', phone)).toContain(
-      "grid-template-areas: 'map map' 'legend zoom' 'note note';",
+    expect(areas('.day-map__grid')).toBe("'map map' 'legend legend'");
+    expect(areas('.day-map__grid:has(> .day-map__note)')).toBe("'map map' 'legend note'");
+    expect(areas('.day-map__grid', PHONE)).toBe("'map map' 'legend zoom'");
+    expect(areas('.day-map__grid:has(> .day-map__note)', PHONE)).toBe(
+      "'map map' 'legend zoom' 'note note'",
     );
     // The switch stands over the grid, its gap's 12px its own, so a map with no switch keeps no
     // empty row and no gap over the map (T466).
-    expect(style).not.toContain("'switch");
-    expect(rule('.day-map__locations')).toContain('margin-block-end: var(--space-3);');
-    const note = rule('.day-map__note');
-    for (const declaration of [
-      'grid-area: note;',
-      'align-self: start;',
-      // The grid's 12px gap less 8px leaves the note 4px under the map.
-      'margin: calc(-1 * var(--space-2)) 0 0;',
-      'text-align: end;',
-      'font-size: var(--text-xs);',
-      'color: var(--mm-text-muted);',
-    ]) {
-      expect(note).toContain(declaration);
-    }
+    const everyArea: string[] = [];
+    styles.walkDecls('grid-template-areas', (decl) => {
+      everyArea.push(decl.value);
+    });
+    expect(everyArea).toHaveLength(4);
+    for (const value of everyArea) expect(value).not.toContain("'switch");
+    expect(valueOf(styles, '.day-map__locations', 'margin-block-end')).toBe('var(--space-3)');
+    const note = (property: string) => valueOf(styles, '.day-map__note', property);
+    expect(note('grid-area')).toBe('note');
+    expect(note('align-self')).toBe('start');
+    // The grid's 12px gap less 8px leaves the note 4px under the map.
+    expect(note('margin')).toBe('calc(-1 * var(--space-2)) 0 0');
+    expect(note('text-align')).toBe('end');
+    expect(note('font-size')).toBe('var(--text-xs)');
+    expect(note('color')).toBe('var(--mm-text-muted)');
   });
 
   it('reads no store and no API: its data is all handed to it', () => {
