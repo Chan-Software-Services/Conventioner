@@ -139,7 +139,8 @@ Covered by:
    The no-table zones, the stage or the entrance, stay drawn and named on the map, with no legend item.
    A shared table is two halves, each its own vendor's.
    A press on a vendor's table opens their drawer, as their name on the list does, and Back closes it on the map; a press on a table with nobody says "Table Aisle A 4: no vendor on Nov 17, 2026." under the map.
-   "Find a vendor" outlines the tables of the vendors it finds, and the map changes as the roster reads itself again.
+   On the map, "Find a vendor" is a search with a dropdown of the day's vendors, found by name, address or table, each row saying where they sit; picking one opens their drawer and outlines their table, switching the map to their location when it is the other one, and closing the drawer clears the outline; typing alone outlines nothing (T466).
+   The map changes as the roster reads itself again, and the dropdown keeps its words and stays open through a re-read.
    Under the map, "<n> here with no table" and "<n> vendors are at tables not on a layout." count the vendors it cannot draw, each with "Show in the list", which opens the list showing all; with no location laid out it says "No location has a layout yet." alone, with "Open the layout" for whoever may change the setup.
    Check in and Undo stay on the list: the map and the drawer check nobody in, so a Viewer reads the map as an Editor does.
 

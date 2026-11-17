@@ -65,7 +65,8 @@ The app owns its components and its icons, and depends on no component library o
   - `disabled`, a field and chips that take nothing;
   - an option's `address`, a label and chip that break only before an address's "@" or a dot;
   - `describedBy`, words beside it that describe its field;
-  - `listOver`, a list that lies over what follows it, rather than pushing it down.
+  - `listOver`, a list that lies over what follows it, rather than pushing it down;
+  - `compact`, a field as tall as the compact controls beside it in a toolbar's row.
 
 ## Consequences
 

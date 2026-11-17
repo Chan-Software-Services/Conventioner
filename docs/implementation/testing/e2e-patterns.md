@@ -78,6 +78,7 @@ A new page follows the existing ones (`LoginPage`, `MarketsPage`, `NewMarketPage
 Its `decideOnReviewSetup` follows the rail's "Decide what reviewers read first" to Review setup and chooses "Nothing leads the card" and "No automatic rejections", so a walk that opens Review through the screens decides as an organizer does ([review waits on the review setup](../../business/rules/review-waits-on-the-review-setup.md)).
 On a form of essential questions alone the rail offers the form first (T260), so `decideOnReviewSetupAskingNothingOfTheirOwn` waits for that offer by its name, opens Review setup as the form tab's last step and decides the same way.
 A dialog that more than one screen opens has an object of its own (`FollowUpDialog`, opened from One by one's card and from the All view's drawer), so a test id renamed in it is one line to change for every spec that drives the dialog through the object.
+A picker of people is one too: [`PersonChooser`](../../../front-end/e2e/pages/PersonChooser.ts) wraps a `SearchPicker` by its test id, its rows found by address, and `AttendanceStatusPage.mapSearch` is one, Attendance's map search (T466).
 
 **The Application Form tab is a sequence of steps** (E33/F01): the builder, the preview and the highlights are never all on screen.
 A spec opens the step it asserts on, with `ApplicationFormPage.openStep(step)`, whose header is `form-step-<step>` and whose body is `form-step-body-<step>`.
