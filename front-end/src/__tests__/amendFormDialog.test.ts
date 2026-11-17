@@ -74,7 +74,15 @@ describe('AmendFormDialog', () => {
 
   /** Mounted to add a question for a column with nowhere to go, then saved. */
   async function saveANewQuestion() {
-    const wrapper = mount(AmendFormDialog, {
+    const wrapper = mountTheDialog();
+    await wrapper.vm.$nextTick();
+    await wrapper.get('[data-testid="amend-form-submit-button"]').trigger('submit');
+    await flushPromises();
+    return wrapper;
+  }
+
+  function mountTheDialog() {
+    return mount(AmendFormDialog, {
       props: {
         open: true,
         marketId: 'market-1',
@@ -85,11 +93,57 @@ describe('AmendFormDialog', () => {
       },
       global: { stubs: { teleport: true } },
     });
-    await wrapper.vm.$nextTick();
-    await wrapper.get('[data-testid="amend-form-submit-button"]').trigger('submit');
-    await flushPromises();
-    return wrapper;
   }
+
+  it('holds while it saves, and saves once however often it is pressed (T411)', async () => {
+    const saved = Promise.withResolvers<unknown>();
+    api.put.mockReturnValue(saved.promise);
+    const wrapper = mountTheDialog();
+    await wrapper.vm.$nextTick();
+
+    await wrapper.get('form').trigger('submit');
+    await wrapper.get('form').trigger('submit');
+    await wrapper.get('[data-testid="amend-form-cancel-button"]').trigger('click');
+    await wrapper.get('[data-testid="amend-form-close-button"]').trigger('click');
+    await wrapper.get('[data-testid="amend-form-background"]').trigger('click');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+
+    expect(wrapper.emitted('close')).toBeUndefined();
+    expect(
+      wrapper.get('[data-testid="amend-form-submit-button"]').attributes('disabled'),
+    ).toBeDefined();
+    expect(api.put).toHaveBeenCalledTimes(1);
+
+    saved.resolve({ data: { application_form: { fields: [SHOP] } } });
+    await flushPromises();
+    expect(wrapper.emitted('close')).toHaveLength(1);
+  });
+
+  it('keeps a save answered after a close and a new opening out of that opening (T411)', async () => {
+    const saved = Promise.withResolvers<unknown>();
+    api.put.mockReturnValue(saved.promise);
+    const wrapper = mountTheDialog();
+    await wrapper.vm.$nextTick();
+    await wrapper.get('form').trigger('submit');
+
+    // The import closes it on another market, and opens it there.
+    await wrapper.setProps({ open: false, marketId: 'market-2' });
+    await wrapper.setProps({ open: true });
+    saved.reject(
+      Object.assign(new AxiosError('refused'), {
+        response: { status: 409, data: { error: SENTENCE, code: MARKET_CHANGED_CODE } },
+      }),
+    );
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="amend-form-error"]').exists()).toBe(false);
+    expect(wrapper.emitted('changed')).toBeUndefined();
+    expect(wrapper.emitted('close')).toBeUndefined();
+    expect(
+      wrapper.get('[data-testid="amend-form-submit-button"]').attributes('disabled'),
+    ).toBeUndefined();
+  });
 
   it('sends the revision of the form it read with its save (ADR 0024)', async () => {
     api.put.mockResolvedValue({ data: { application_form: { fields: [SHOP] }, formRevision: 4 } });

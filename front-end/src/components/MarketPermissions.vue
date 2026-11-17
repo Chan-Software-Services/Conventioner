@@ -8,6 +8,10 @@
  * copies its organization's default again (E39/F02/S01); everyone else who may read the market
  * reads it, with the owner-only line. The words are `utils/permissionTable.ts`'s, and the rows and
  * changes `PermissionRows`' and `PermissionChanges`'.
+ *
+ * Each confirmation writes through its own submission (T411), keyed by what it was opened on, so
+ * the shell holds it while its write is out, a second press sends nothing, and its refusal is said
+ * in the opening it was sent from.
  */
 import { computed, nextTick, ref, watch } from 'vue';
 import {
@@ -18,6 +22,8 @@ import {
 } from '@/assets/types/datatypes';
 import { api, getApiErrorMessage, isMarketChanged } from '@/utils/api';
 import { useMarketStore } from '@/stores/market';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
+import type { LateAnswer } from '@/utils/useSubmit';
 import AppDialog from '@/components/AppDialog.vue';
 import PermissionChanges from '@/components/PermissionChanges.vue';
 import PermissionRows from '@/components/PermissionRows.vue';
@@ -57,8 +63,19 @@ const pendingChange = ref<{
 } | null>(null);
 const resetConfirming = ref(false);
 const copyConfirming = ref(false);
-/** A refused change to the table, said in the confirmation that sent it. */
-const writeError = ref('');
+/** Each confirmation's write: its refusal is said in it, by the shell. */
+const change = useDialogSubmit({
+  opening: () => pendingChange.value,
+  failure: 'Who may do this was not changed.',
+});
+const reset = useDialogSubmit({
+  opening: () => resetConfirming.value,
+  failure: 'The table was not reset.',
+});
+const copy = useDialogSubmit({
+  opening: () => copyConfirming.value,
+  failure: "The organization's defaults were not copied.",
+});
 /**
  * A refusal said in the Permissions dialog itself: the confirmation that met it closed, since the
  * market read again left it nothing to change. The next change asked for ends it.
@@ -119,15 +136,19 @@ watch(table, (rows) => {
   const pending = pendingChange.value;
   if (pending) {
     const now = rows.find((row) => row.id === pending.row.id);
-    if (!now || now.role === pending.role) void closeWithNothingToChange();
-    else if (now.role !== pending.row.role) pendingChange.value = { ...pending, row: now };
+    if (!now || now.role === pending.role) void closeWithNothingToChange(change.sentence.value);
+    else if (now.role !== pending.row.role) {
+      // The same opening, asking about the row as it now stands: its refusal stays said.
+      pending.row = now;
+    }
   }
-  if (resetConfirming.value && !resetChanges.value.length) void closeWithNothingToChange();
+  if (resetConfirming.value && !resetChanges.value.length) {
+    void closeWithNothingToChange(reset.sentence.value);
+  }
 });
 
-async function closeWithNothingToChange() {
-  tableError.value = writeError.value;
-  writeError.value = '';
+async function closeWithNothingToChange(refusal: string) {
+  tableError.value = refusal;
   pendingChange.value = null;
   resetConfirming.value = false;
   // Focus goes back to what opened the confirmation, but Reset is disabled now that nothing is held,
@@ -172,7 +193,6 @@ async function fetchHistory() {
 
 /** A choice is asked about before it is sent. */
 function askChange(row: PermissionTableRow, role: MarketRole, select: HTMLSelectElement) {
-  writeError.value = '';
   tableError.value = '';
   pendingChange.value = { row, role, select };
 }
@@ -181,61 +201,82 @@ function askChange(row: PermissionTableRow, role: MarketRole, select: HTMLSelect
 function cancelChange() {
   if (pendingChange.value) pendingChange.value.select.value = pendingChange.value.row.role;
   pendingChange.value = null;
-  writeError.value = '';
+}
+
+/** What a table write answers: the table as it now stands. */
+type TableAnswer = { data: { permissionTable?: PermissionTableRow[] } };
+
+/**
+ * A write refused because the market changed since this copy was read: the copy is read again,
+ * and an open confirmation follows the table it answers (above).
+ */
+function refusedOnAChangedMarket(err: unknown): void {
+  if (isMarketChanged(err)) emit('marketChanged');
+}
+
+/**
+ * An answer that landed after its confirmation had gone, closed by the table it follows: what it
+ * wrote is still shown, and a refusal on a changed market still reads the market again.
+ */
+function lateAnswer(answer: LateAnswer<TableAnswer>): void {
+  if (answer.ok) void afterWrite(answer.answer.data.permissionTable);
+  else refusedOnAChangedMarket(answer.error);
 }
 
 async function confirmChange() {
   const pending = pendingChange.value;
   if (!pending) return;
-  writeError.value = '';
-  try {
-    const response = await api.put(
-      `${marketPath()}/permissions/${encodeURIComponent(pending.row.id)}`,
-      { role: pending.role },
-    );
-    pendingChange.value = null;
-    await afterWrite(response.data.permissionTable);
-  } catch (err) {
-    writeError.value = getApiErrorMessage(err, 'Who may do this was not changed.');
-    if (isMarketChanged(err)) emit('marketChanged');
-  }
+  await change.submit(
+    (): Promise<TableAnswer> =>
+      api.put(`${marketPath()}/permissions/${encodeURIComponent(pending.row.id)}`, {
+        role: pending.role,
+      }),
+    {
+      done: async (response) => {
+        pendingChange.value = null;
+        await afterWrite(response.data.permissionTable);
+      },
+      refused: refusedOnAChangedMarket,
+      late: lateAnswer,
+    },
+  );
 }
 
 function cancelReset() {
   resetConfirming.value = false;
-  writeError.value = '';
 }
 
 async function confirmReset() {
-  writeError.value = '';
-  try {
-    const response = await api.delete(`${marketPath()}/permissions`);
-    resetConfirming.value = false;
-    await afterWrite(response.data.permissionTable);
-    // The confirmation gives focus back to "Reset to built-in defaults", which is disabled now that
-    // nothing is held, and focusing a disabled control does nothing: the dialog takes it in again.
-    if (document.activeElement === document.body) await dialog.value?.focusInside();
-  } catch (err) {
-    writeError.value = getApiErrorMessage(err, 'The table was not reset.');
-    if (isMarketChanged(err)) emit('marketChanged');
-  }
+  await reset.submit((): Promise<TableAnswer> => api.delete(`${marketPath()}/permissions`), {
+    done: async (response) => {
+      resetConfirming.value = false;
+      await afterWrite(response.data.permissionTable);
+      // The confirmation gives focus back to "Reset to built-in defaults", which is disabled now
+      // that nothing is held, and focusing a disabled control does nothing: the dialog takes it in
+      // again.
+      if (document.activeElement === document.body) await dialog.value?.focusInside();
+    },
+    refused: refusedOnAChangedMarket,
+    late: lateAnswer,
+  });
 }
 
 function cancelCopy() {
   copyConfirming.value = false;
-  writeError.value = '';
 }
 
 async function confirmCopy() {
-  writeError.value = '';
-  try {
-    const response = await api.post(`${marketPath()}/permissions/organization-default`);
-    copyConfirming.value = false;
-    await afterWrite(response.data.permissionTable);
-  } catch (err) {
-    writeError.value = getApiErrorMessage(err, "The organization's defaults were not copied.");
-    if (isMarketChanged(err)) emit('marketChanged');
-  }
+  await copy.submit(
+    (): Promise<TableAnswer> => api.post(`${marketPath()}/permissions/organization-default`),
+    {
+      done: async (response) => {
+        copyConfirming.value = false;
+        await afterWrite(response.data.permissionTable);
+      },
+      refused: refusedOnAChangedMarket,
+      late: lateAnswer,
+    },
+  );
 }
 
 /**
@@ -336,7 +377,7 @@ async function afterWrite(answered: PermissionTableRow[] | undefined) {
       :title="pendingChange ? changeQuestion(pendingChange.row, pendingChange.role) : ''"
       testid="manage-market-permission-confirm"
       confirm-label="Change"
-      :error="writeError"
+      :submission="change"
       @close="cancelChange"
       @submit="confirmChange"
     >
@@ -364,7 +405,7 @@ async function afterWrite(answered: PermissionTableRow[] | undefined) {
       scroll="body"
       destructive
       confirm-label="Reset"
-      :error="writeError"
+      :submission="reset"
       @close="cancelReset"
       @submit="confirmReset"
     >
@@ -380,7 +421,7 @@ async function afterWrite(answered: PermissionTableRow[] | undefined) {
       testid="manage-market-permissions-copy-confirm"
       destructive
       confirm-label="Copy"
-      :error="writeError"
+      :submission="copy"
       @close="cancelCopy"
       @submit="confirmCopy"
     >

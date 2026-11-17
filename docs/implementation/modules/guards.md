@@ -35,6 +35,7 @@ sources:
   - T277
   - T316
   - T315
+  - T422
 ---
 
 # The guards and the phase move
@@ -69,6 +70,7 @@ A guard that sets a `resolution_link` sets the `resolution_action` its remedy ta
 | Remedy                                                                                                        | Page                   | Action                |
 | ------------------------------------------------------------------------------------------------------------- | ---------------------- | --------------------- |
 | Pick market dates, Change the dates, Add a location, Add tables, Give every tier tables, Fix the price groups | `setup`                | `change-setup`        |
+| Add sections                                                                                                  | `setup`                | `change-setup`        |
 | Open the layout                                                                                               | `layout/<location id>` | `change-setup`        |
 | Allocate tables (`AssignmentComputedGuard`, `AssignmentNotBeforeReviewGuard`, `NoApprovedApplicationsGuard`)  | `settings`             | `assign`              |
 | Assign tables (`AssignmentComputedGuard`, nobody seated where a run is refused)                               | `assignments`          | `assign`              |
@@ -80,6 +82,14 @@ A guard that sets a `resolution_link` sets the `resolution_action` its remedy ta
 
 "Open the layout" is the one link that names which of a market's pages of a kind it leads to: the layout of the location whose tables are in no section (`LayoutTablesHaveSectionsGuard`), or of the location holding a section of a tier without tables (`EveryTierHasTablesGuard`), never the market's bare `layout`, which redirects to its first location's.
 A laid-out location's sections count its layout's tables, and Market Setup shows their counts read-only, so when the plan's first tier without tables has a section there, `EveryTierHasTablesGuard` says that tier alone, naming its first such section and its location, and leads to that layout (T315); otherwise its Market Setup line, "Give every tier tables", names only the tiers with no section in a laid-out location, the others said once those are fixed; and a market with no tables at all whose sections lie in one is sent to the first such section's layout too.
+A market none of whose sections has a table is told one of three things (T422):
+
+- when a layout holds tables and the plan has a section on such a layout, "No table is in a section yet. Put the <location> layout's tables in its sections.", leading to the layout of the plan's first such section;
+- when layouts hold tables but no section is on any of them, "This market's tables are in no section yet. Add sections on Market Setup's Section Setup, then put the tables in them on the layout.", its remedy "Add sections" leading to Market Setup;
+- when no layout holds a table, "This market has no tables yet.", leading to the layout of its first section in a laid-out location as above, else "Add tables" on Market Setup.
+
+A layout that follows the plan, started after Draft, is no laid-out location to `EveryTierHasTablesGuard` (T422): its sections keep the counts typed on Section Setup, so on a market back in Draft its tiers, and its tables, are sent to Market Setup, never to that layout.
+
 A link without an action, or an action without a link, is refused at construction.
 That the action is a row of the table is held by `TestEveryRemedyNamesTheActionItTakes` in [`back-end/tests/test_guards.py`](../../../back-end/tests/test_guards.py), not at construction, so a renamed row fails the build rather than answering the organizer with a 500.
 

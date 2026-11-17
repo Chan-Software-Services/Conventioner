@@ -20,6 +20,7 @@ const ENTRIES = [
   'proposals',
   'export-vendors',
   'layout-map',
+  'day-map',
   'charts',
 ];
 

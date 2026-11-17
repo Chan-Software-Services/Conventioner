@@ -166,3 +166,91 @@ describe('Manage organization from its address', () => {
     expect(router.currentRoute.value.query).toEqual({});
   });
 });
+
+/**
+ * New organization writes through its submission (T411): one organization however often Create is
+ * pressed, the dialog held until it answers, and a refusal said in the opening it was sent from.
+ */
+describe('New organization', () => {
+  const refused = (sentence: string) =>
+    Object.assign(new Error('refused'), {
+      isAxiosError: true,
+      response: { status: 400, data: { error: sentence } },
+    });
+
+  async function openNew(wrapper: ReturnType<typeof mount>, name: string) {
+    await wrapper.get('[data-testid="organizations-create-button"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="organizations-create-name-input"]').setValue(name);
+  }
+
+  const pressCreate = (wrapper: ReturnType<typeof mount>) =>
+    (
+      wrapper.get('[data-testid="organizations-create-window"] form').element as HTMLFormElement
+    ).requestSubmit();
+  const dialog = (wrapper: ReturnType<typeof mount>) =>
+    wrapper.find('[data-testid="organizations-create-window"]');
+
+  /** Every way a person closes the dialog. */
+  async function tryEveryClose(wrapper: ReturnType<typeof mount>) {
+    for (const part of ['close-button', 'cancel-button', 'background']) {
+      await wrapper.get(`[data-testid="organizations-create-${part}"]`).trigger('click');
+    }
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+  }
+
+  it('makes one organization for two presses, and nothing closes it until it lands', async () => {
+    fetchOrganizations.mockResolvedValue([OLD]);
+    const answer = deferred<unknown>();
+    post.mockReset().mockReturnValue(answer.promise);
+    const { wrapper } = await mountAt();
+    await flushPromises();
+    await openNew(wrapper, 'Harbour Collective');
+
+    pressCreate(wrapper);
+    pressCreate(wrapper);
+    await flushPromises();
+
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledWith('/organizations', { name: 'Harbour Collective' });
+    expect(
+      wrapper.get('[data-testid="organizations-create-submit-button"]').attributes('disabled'),
+    ).toBeDefined();
+    await tryEveryClose(wrapper);
+    expect(dialog(wrapper).exists()).toBe(true);
+
+    fetchOrganizations.mockResolvedValue([OLD, NEW]);
+    answer.resolve({ data: {} });
+    await flushPromises();
+    expect(dialog(wrapper).exists()).toBe(false);
+    expect(wrapper.text()).toContain('Harbour Collective');
+    wrapper.unmount();
+  });
+
+  it('says a refusal until the name changes, and not in its next opening', async () => {
+    fetchOrganizations.mockResolvedValue([OLD]);
+    post.mockReset().mockRejectedValue(refused('That name is taken.'));
+    const { wrapper } = await mountAt();
+    await flushPromises();
+    await openNew(wrapper, 'Riverside Makers');
+
+    pressCreate(wrapper);
+    await flushPromises();
+    const error = () => wrapper.find('[data-testid="organizations-create-error"]');
+    expect(error().text()).toBe('That name is taken.');
+
+    await wrapper.get('[data-testid="organizations-create-name-input"]').setValue('Riverside Two');
+    expect(error().exists()).toBe(false);
+
+    pressCreate(wrapper);
+    await flushPromises();
+    expect(error().text()).toBe('That name is taken.');
+    await wrapper.get('[data-testid="organizations-create-cancel-button"]').trigger('click');
+    await flushPromises();
+    await openNew(wrapper, 'Harbour Collective');
+
+    expect(error().exists()).toBe(false);
+    wrapper.unmount();
+  });
+});

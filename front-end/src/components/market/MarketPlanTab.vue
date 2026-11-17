@@ -92,8 +92,9 @@ const locked = computed(() => props.readOnly || Boolean(props.setupLockReason));
 /**
  * Each named location's layout, offered under Section Setup's rows (T257): "Lay out Upper Hall",
  * or "Open Upper Hall's layout · 49 tables" once it has one. A location with no name, or no id (a
- * market stored before ids, until its next write), offers nothing. A plan that cannot change offers
- * only the layouts it has, to read.
+ * market stored before ids, until its next write), offers nothing. A person who may not change the
+ * setup is offered only the layouts it has, to read; past Draft a person who may is offered the
+ * rest too, since a layout started then follows the plan (T422, ADR 0034).
  */
 const layoutEntries = computed(() =>
   props.setupObject.locations
@@ -108,7 +109,7 @@ const layoutEntries = computed(() =>
         tables: layout ? layout.tables.length : null,
       };
     })
-    .filter((entry) => entry.tables !== null || !locked.value),
+    .filter((entry) => entry.tables !== null || !props.readOnly),
 );
 
 function layoutLabel(entry: { name: string; tables: number | null }): string {
@@ -179,16 +180,17 @@ const intakeEditable = computed(() => props.intakeEditable);
           :setupObject="setupObject"
           @update:setupObject="(value) => emit('update:setupObject', value)"
         />
-        <!-- Each location's layout, under the rows that name its sections (T257). Opening one is a
-             link, which a plan that cannot change still offers; starting one waits for the plan's
-             pending edits, so the location is the server's when its layout begins. -->
+        <!-- Each location's layout, under the rows that name its sections (T257). A plan that
+             cannot change offers each as a link, starting one past Draft included (T422); while it
+             can, starting one waits for the plan's pending edits, so the location is the server's
+             when its layout begins. -->
         <ul v-if="layoutEntries.length" class="layout-entries" data-testid="plan-layouts">
           <li v-for="entry in layoutEntries" :key="entry.id">
             <RouterLink
               v-if="locked"
               :to="layoutPath(marketId, entry.id)"
               class="btn btn--secondary"
-              :data-testid="`plan-layout-open-${entry.id}`"
+              :data-testid="`plan-layout-${entry.tables === null ? 'start' : 'open'}-${entry.id}`"
             >
               {{ layoutLabel(entry) }}
             </RouterLink>

@@ -399,12 +399,20 @@ export async function installTheSweep(page: Page): Promise<void> {
 /**
  * Marks every field and the two boxes around it with how they look with nothing focused, and
  * every button with its size, and says how many keyboard stops the state draws.
+ *
+ * It measures two frames after the focus left, once the page has drawn what losing the focus did:
+ * the layout editor puts down a table the keys picked up as the focus leaves the map, and Vue
+ * draws it put down a microtask later, so a size read at once was the lifted table's, and the walk
+ * that came round to it again read its own size as a resize by focus (T422).
  */
 export async function rememberFieldsAtRest(page: Page): Promise<number> {
   await installTheSweep(page);
-  return page.evaluate((buttons) => {
+  return page.evaluate(async (buttons) => {
     const sweep = window as unknown as SweepInPage;
     (document.activeElement as HTMLElement | null)?.blur();
+    await new Promise<void>((drawn) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => drawn())),
+    );
     for (const button of document.querySelectorAll<HTMLElement>(buttons)) {
       const box = button.getBoundingClientRect();
       button.dataset.sizeAtRest = `${Math.round(box.width)}x${Math.round(box.height)}`;

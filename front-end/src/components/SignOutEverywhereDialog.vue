@@ -9,36 +9,28 @@
  * (a session already over, which ends as any request's 401 does), it closes, and the page moves to
  * sign in.
  */
-import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import AppDialog from '@/components/AppDialog.vue';
 import { signOutEverywhere } from '@/utils/sessionEnded';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 
+const FAILED = 'Could not sign out everywhere. Try again.';
+
 const router = useRouter();
-const busy = ref(false);
-const error = ref('');
+const submission = useDialogSubmit({ opening: () => props.open, failure: FAILED });
+const { sending } = submission;
 
-watch(
-  () => props.open,
-  (opened) => {
-    if (opened) error.value = '';
-  },
-);
-
+/** `signOutEverywhere` answers rather than throws: a failure is this dialog's refusal. */
 async function confirm() {
-  if (busy.value) return;
-  busy.value = true;
-  error.value = '';
-  const outcome = await signOutEverywhere(router);
-  busy.value = false;
-  if (outcome === 'failed') {
-    error.value = 'Could not sign out everywhere. Try again.';
-    return;
-  }
-  emit('close');
+  await submission.submit(
+    async () => {
+      if ((await signOutEverywhere(router)) === 'failed') throw new Error(FAILED);
+    },
+    { done: () => emit('close'), refused: () => FAILED },
+  );
 }
 </script>
 
@@ -48,10 +40,8 @@ async function confirm() {
     title="Sign out everywhere?"
     testid="sign-out-everywhere"
     destructive
-    :confirm-label="busy ? 'Signing out…' : 'Sign out everywhere'"
-    :confirm-disabled="busy"
-    :close-disabled="busy"
-    :error="error"
+    :confirm-label="sending ? 'Signing out…' : 'Sign out everywhere'"
+    :submission="submission"
     @close="emit('close')"
     @submit="confirm"
   >

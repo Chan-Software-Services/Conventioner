@@ -4,9 +4,9 @@ kind: rule
 describes:
   - back-end/api/markets.py#archived_refusal
   - back-end/api/markets.py#MarketArchivedError
-  - back-end/api/markets.py#_market_change
   - back-end/tests/test_an_archive_is_read_only.py
-verified: 2026-11-16
+  - back-end/api/markets.py#_market_change
+verified: 2026-11-17
 sources:
   - E26/F06/S01
   - bug/30
@@ -19,6 +19,7 @@ sources:
   - T283
   - T315
   - T352
+  - T422
 ---
 
 # An archived market is read-only

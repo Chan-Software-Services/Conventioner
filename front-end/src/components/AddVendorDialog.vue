@@ -8,13 +8,16 @@
  * They are asked every question of the form's own that a price group reads, each required though the
  * form may leave it optional, so they are priced like any other (E43/F01/S03); a market whose card
  * has no group asks nothing more.
+ *
+ * Its write belongs to its opening (T411): the shell holds it while it adds.
  */
 import { computed, ref, watch } from 'vue';
 import type { ApplicationForm, FormField } from '@/assets/types/datatypes';
 import AppDialog from '@/components/AppDialog.vue';
 import ApplicationFormFields from '@/components/application/ApplicationFormFields.vue';
-import { api, getApiErrorMessage } from '@/utils/api';
+import { api } from '@/utils/api';
 import { sortedFormFields } from '@/utils/applicationForm';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 
 const props = defineProps<{
   open: boolean;
@@ -28,8 +31,11 @@ const emit = defineEmits<{ close: []; added: [email: string] }>();
 const name = ref('');
 const email = ref('');
 const answers = ref<Record<string, unknown>>({});
-const error = ref('');
-const busy = ref(false);
+const submission = useDialogSubmit({
+  opening: () => props.open,
+  failure: 'The vendor could not be added.',
+});
+const { sending } = submission;
 
 /** The form's own questions a price group reads, in the form's order; a checkbox left unticked
  *  is its "not ticked" answer, so only it is not required. */
@@ -57,34 +63,29 @@ watch(
     name.value = '';
     email.value = '';
     answers.value = {};
-    error.value = '';
   },
 );
 
 async function add(): Promise<void> {
-  if (busy.value || !ready.value) return;
-  busy.value = true;
-  error.value = '';
-  try {
-    const response = await api.post<{ application: { applicantEmail: string } }>(
-      `/markets/${encodeURIComponent(props.marketId)}/vendors`,
-      {
-        name: name.value,
-        email: email.value,
-        answers: Object.fromEntries(
-          asked.value.map((field) => [
-            field.key,
-            answers.value[field.key] ?? (field.type === 'checkbox' ? false : undefined),
-          ]),
-        ),
-      },
-    );
-    emit('added', response.data.application.applicantEmail);
-  } catch (err: unknown) {
-    error.value = getApiErrorMessage(err, 'The vendor could not be added.');
-  } finally {
-    busy.value = false;
-  }
+  if (!ready.value) return;
+  const body = {
+    name: name.value,
+    email: email.value,
+    answers: Object.fromEntries(
+      asked.value.map((field) => [
+        field.key,
+        answers.value[field.key] ?? (field.type === 'checkbox' ? false : undefined),
+      ]),
+    ),
+  };
+  await submission.submit(
+    () =>
+      api.post<{ application: { applicantEmail: string } }>(
+        `/markets/${encodeURIComponent(props.marketId)}/vendors`,
+        body,
+      ),
+    { done: (response) => emit('added', response.data.application.applicantEmail) },
+  );
 }
 </script>
 
@@ -93,10 +94,9 @@ async function add(): Promise<void> {
     :open="open"
     title="Add a vendor"
     testid="add-vendor"
-    :confirm-label="busy ? 'Adding…' : 'Add vendor'"
-    :confirm-disabled="busy || !ready"
-    :close-disabled="busy"
-    :error="error"
+    :confirm-label="sending ? 'Adding…' : 'Add vendor'"
+    :confirm-disabled="!ready"
+    :submission="submission"
     @close="emit('close')"
     @submit="add"
   >

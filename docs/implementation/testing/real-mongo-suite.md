@@ -17,16 +17,17 @@ describes:
   - back-end/tests/conftest.py#FakeSlugMarketsCollection
   - back-end/db_config.py#uri_targets
   - scripts/real-mongo-test.sh
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - T244
   - T274
   - T283
   - T309
-  - T318
   - T311
   - T315
   - T335
+  - T318
+  - T422
 ---
 
 # The real-MongoDB suite

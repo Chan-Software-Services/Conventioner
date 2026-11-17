@@ -55,8 +55,9 @@ sources:
   - T201
   - T277
   - T316
-  - T318
   - T335
+  - T318
+  - T411
 ---
 
 # Placements
@@ -106,6 +107,8 @@ Each dropped day takes `dropped_by_run`, and an amount an Admin set for it goes 
 Each loads its market through `_market_change`, so an archived market is refused, and records through the Assign asking it returned: the history's placement writers and `assignment_written` are handed it, and a free's deduction is recorded through the free's own asking of "Change the amount owed".
 A placement that names no seat the plan has is a `PlacementError` (400); a seat someone else holds is a `SeatTakenError` (409), naming the occupant, the seat and the day as the screens say it (`_said_day`, "May 1, 2099"), and offering another seat or the swap; a run outside its phase is an `AssignPhaseError` (409); a free, a move or a swap of a vendor who has checked in that day is a `VendorIsHere` (409), below; a change that would land over another, or on a market that changed since the change read it, is a `MarketChanged` (409), below.
 After a 409 from a change, the Assignments page (`runPlacementChange` in [`ResultView.vue`](../../../front-end/src/views/ResultView.vue)) keeps the dialog open on the refusal and reads the tables again, so a seat taken meanwhile leaves the dialog's choices ([J19](../../business/flows/placing-by-hand.md#j19-move-a-vendor-to-an-empty-seat)); a `VendorIsHere` it asks about instead, and reads nothing again.
+Each change goes through the seat dialog's submission (`useDialogSubmit`, [dialogs](../conventions/dialogs.md), T411), opened on the seat the dialog was opened for, so the dialog holds until the answer lands, its Cancel, "View vendor" and other changes disabled with the shell's closes, and a second press sends nothing; a 409's re-read is inside the hold, while a success closes the dialog before its re-read.
+An answer that lands after the dialog was opened on another seat never closes or speaks in it: a late success reads the tables and the market again, and a late refusal is dropped.
 Each is a [client error](../conventions/an-exception-never-reaches-a-client.md) carrying that status.
 The routes catch nothing: each refusal reaches the handler with its own status and copy, and anything else answers the generic 500.
 Each reads its body with `json_object` ([a body that is not an object is refused in words](../conventions/an-exception-never-reaches-a-client.md)): a body that is not a JSON object answers `A JSON object is required`, 400, a placement with no body or an empty one `No data provided`, 400, and a swap or a freed seat with none is read as empty and refused by the API in its own words; a swap whose `emails` is not a list names no vendor, and is refused as such.

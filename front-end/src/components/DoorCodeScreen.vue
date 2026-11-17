@@ -12,7 +12,8 @@
  * it holds the page behind inert, takes Escape while it is on top, and gives focus back to what
  * opened it, as every modal here does ([dialogs](docs/implementation/conventions/dialogs.md)). Its
  * one confirmation is an `AppDialog`, teleported beside it, so it is a sibling and not a window
- * inside a window.
+ * inside a window. Nothing closes the confirmation while the new code is being made, and each opening
+ * starts fresh (T411).
  */
 import { computed, nextTick, onMounted, ref } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
@@ -26,6 +27,7 @@ import { signedInEmail } from '@/utils/signedIn';
 import { useEscapeToClose } from '@/utils/useEscapeToClose';
 import { useFocusGoesBack } from '@/utils/useFocusGoesBack';
 import { useModalRoot } from '@/utils/useModalRoot';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import { getFormattedTimestamp } from '@/utils/utils';
 
 const props = defineProps<{ marketId: string; marketName: string }>();
@@ -33,9 +35,14 @@ const emit = defineEmits<{ close: [] }>();
 
 const door = ref<DoorCode | null>(null);
 const readError = ref('');
+/** The first code's making, from the empty state; a new code's is the confirmation's own. */
 const makeError = ref('');
 const making = ref(false);
 const confirming = ref(false);
+const newCode = useDialogSubmit({
+  opening: () => confirming.value,
+  failure: 'No new door code was made.',
+});
 
 const closeButton = ref<HTMLButtonElement | null>(null);
 const printButton = ref<HTMLButtonElement | null>(null);
@@ -64,35 +71,37 @@ async function load(): Promise<void> {
   }
 }
 
-/** The first code, or a new one that ends the old. The view shows what the server answered. */
-async function make(): Promise<boolean> {
+/** The first code. The view shows what the server answered. */
+async function makeFirst(): Promise<void> {
+  if (making.value) return;
   making.value = true;
   makeError.value = '';
   try {
     door.value = await makeDoorCode(props.marketId);
-    return true;
   } catch (err: unknown) {
     makeError.value = getApiErrorMessage(err, 'No new door code was made.');
-    return false;
+    return;
   } finally {
     making.value = false;
   }
-}
-
-async function makeFirst(): Promise<void> {
-  if (!(await make())) return;
   // The button pressed is gone with the empty state, so focus goes to what comes next.
   await nextTick();
   printButton.value?.focus();
 }
 
+/** A new code, which ends the old. The view shows what the server answered. */
 async function confirmNew(): Promise<void> {
-  if (await make()) confirming.value = false;
+  await newCode.submit(() => makeDoorCode(props.marketId), {
+    done: (made) => {
+      door.value = made;
+      confirming.value = false;
+    },
+  });
 }
 
-function cancelNew(): void {
-  confirming.value = false;
+function askForANewCode(): void {
   makeError.value = '';
+  confirming.value = true;
 }
 
 function print(): void {
@@ -142,7 +151,7 @@ onMounted(async () => {
                 type="button"
                 class="btn btn--secondary"
                 data-testid="door-code-new"
-                @click="confirming = true"
+                @click="askForANewCode"
               >
                 New code
               </button>
@@ -192,7 +201,7 @@ onMounted(async () => {
                 Make a door code
               </button>
             </template>
-            <p v-if="makeError && !confirming" class="door-code-error" role="alert">
+            <p v-if="makeError" class="door-code-error" role="alert">
               {{ makeError }}
             </p>
           </div>
@@ -205,10 +214,9 @@ onMounted(async () => {
       title="Make a new door code?"
       testid="door-code-new-confirm"
       confirmLabel="Make a new code"
-      :confirmDisabled="making"
       destructive
-      :error="makeError"
-      @close="cancelNew"
+      :submission="newCode"
+      @close="confirming = false"
       @submit="confirmNew"
     >
       <p class="door-code-confirm">The current code and every printed poster of it stop working.</p>

@@ -37,6 +37,7 @@ sources:
   - T277
   - T316
   - T318
+  - T411
 ---
 
 # Placing by hand
@@ -126,6 +127,7 @@ The vendor sits at the new table and their old seat is free, through the one wri
 A seat taken by someone else meanwhile is refused with the server's reason in the dialog, which stays open to choose again: the page reads the tables again, so the refused seat leaves "Move them to" and is no longer chosen.
 Any change to the tables, a placement, a move, a swap, a free or a run, that lands while someone else's change to them is being saved, or after the market moved on (archived, or, for a run, its results published), is refused with [the market write's one sentence](../../implementation/modules/market-write.md#what-it-answers), and none of it is saved ([placements](../../implementation/modules/placements.md)).
 After either refusal the page reads the tables and the market again, and the seat's dialog stays open with the sentence, showing who sits where now.
+While any change is being saved the dialog stays as it is: Cancel, its close control, Escape, the backdrop, "View vendor" and its other changes do nothing, and a second press saves nothing; an answer that comes back after the dialog was opened on another seat never closes it or speaks in it.
 A move or a swap of a vendor who has checked in that day asks first, as a free does ([J8](#j8-free-a-seat)), with "Move anyway" or "Swap anyway"; a swap with both vendors here names both, "Alice checked in at table A3 and Bob at table A4 for May 1, 2099. Their check-ins stay recorded there." (T318).
 Seating a vendor who holds no table that day asks nothing, one freed while here included.
 Covered by:

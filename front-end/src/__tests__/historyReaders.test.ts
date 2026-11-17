@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 // `shared.ts` first, so this file loads the areas by the way an area's helper would.
 import { fieldValue } from '@/utils/historyReaders/shared';
 import { entryChanges, entryParts, type MarketHistoryEntry } from '@/utils/marketHistory';
+import type { FormField } from '@/assets/types/datatypes';
 import {
   HISTORY_READERS,
   NAMED_VALUES,
@@ -24,6 +25,7 @@ import * as lifecycle from '@/utils/historyReaders/lifecycle';
 import * as organization from '@/utils/historyReaders/organization';
 import * as payments from '@/utils/historyReaders/payments';
 import * as people from '@/utils/historyReaders/people';
+import * as publicMap from '@/utils/historyReaders/publicMap';
 import * as setup from '@/utils/historyReaders/setup';
 import * as vendors from '@/utils/historyReaders/vendors';
 
@@ -37,6 +39,7 @@ const AREAS = [
   organization,
   payments,
   people,
+  publicMap,
   setup,
   vendors,
 ];
@@ -122,6 +125,7 @@ const SENTENCES = [
   'manage-organization-members/role_given',
   'manage-organization-members/role_taken',
   'move-phase/',
+  'publish-map/public_map',
   'publish-results/',
   'record-payment/',
   'stop-applications/',
@@ -155,6 +159,7 @@ const ROWS = [
   'connect-discord/*',
   'connect-discord/discord_checked',
   'connect-discord/discord_roles_given',
+  'publish-map/public_map',
   'record-payment/*',
   'update-vendor-info/*',
   'update-vendor-info/discord_match_declined',
@@ -410,6 +415,103 @@ describe('a placement after results were published', () => {
       says(kind, vendors, { ...detail, after_results: false }),
     );
     expect(says(kind, vendors, detail)).toMatch(new RegExp(`${ON_THE_DAY}$`));
+  });
+});
+
+/** The Public map card's changes, each in words (T422). */
+describe('a change to the public map', () => {
+  const FORM = [
+    { key: 'shop', label: 'Shop name', type: 'text', required: true, options: [], order: 0 },
+  ] as FormField[];
+
+  function aChange(before: Record<string, unknown>, after: Record<string, unknown>) {
+    return {
+      id: 'e1',
+      actor: 'dana@ember.test',
+      at: '2026-11-17T10:00:00+00:00',
+      action: 'publish-map',
+      kind: 'public_map',
+      vendors: [],
+      subject: {},
+      detail: { before, after },
+    } as MarketHistoryEntry;
+  }
+
+  const said = (entry: MarketHistoryEntry) =>
+    entryParts(entry, { fields: FORM })
+      .map((part) => (part.kind === 'text' ? part.text : `[${part.kind}]`))
+      .join('');
+
+  it.each([
+    ['turned on', { enabled: false }, { enabled: true }, 'turned the public map on'],
+    ['turned off', { enabled: true }, { enabled: false }, 'turned the public map off'],
+    [
+      'its name chosen',
+      { name_question: null, name_question_label: null },
+      { name_question: 'shop', name_question_label: 'Shop name' },
+      'set the public map’s name to “Shop name”',
+    ],
+    [
+      'its website chosen',
+      { website_question: null, website_question_label: null },
+      { website_question: 'site', website_question_label: 'Your website' },
+      'set the public map’s website to “Your website”',
+    ],
+    [
+      'its Instagram chosen',
+      { instagram_question: 'site', instagram_question_label: 'Your website' },
+      { instagram_question: 'insta', instagram_question_label: 'Instagram handle' },
+      'set the public map’s Instagram to “Instagram handle”',
+    ],
+    [
+      'its website no longer shown',
+      { website_question: 'site', website_question_label: 'Your website' },
+      { website_question: null, website_question_label: null },
+      'stopped showing the website on the public map',
+    ],
+    [
+      'its Instagram no longer shown',
+      { instagram_question: 'insta', instagram_question_label: 'Instagram handle' },
+      { instagram_question: null, instagram_question_label: null },
+      'stopped showing Instagram on the public map',
+    ],
+    [
+      'its name no longer chosen',
+      { name_question: 'shop', name_question_label: 'Shop name' },
+      { name_question: null, name_question_label: null },
+      'stopped showing names on the public map',
+    ],
+    [
+      'two changes at once',
+      { enabled: false, name_question: null, name_question_label: null },
+      { enabled: true, name_question: 'shop', name_question_label: 'Shop name' },
+      'turned the public map on and set the public map’s name to “Shop name”',
+    ],
+  ])('says %s', (_name, before, after, words) => {
+    expect(said(aChange(before, after))).toBe(`dana@ember.test ${words}`);
+  });
+
+  it('names a question recorded with no label by the form, or as gone from it', () => {
+    expect(said(aChange({ name_question: null }, { name_question: 'shop' }))).toBe(
+      'dana@ember.test set the public map’s name to “Shop name”',
+    );
+    expect(said(aChange({ name_question: null }, { name_question: 'gone' }))).toBe(
+      'dana@ember.test set the public map’s name to “gone” (no longer on the form)',
+    );
+  });
+
+  it('opens to each setting before and after, by its name on the card, never a key', () => {
+    const entry = aChange(
+      { enabled: false, name_question: null, name_question_label: null },
+      { enabled: true, name_question: 'shop', name_question_label: 'Shop name' },
+    );
+    expect(entryChanges(entry, { fields: FORM })).toEqual({
+      changed: [
+        { field: 'Show the public map', before: 'Off', after: 'On' },
+        { field: 'Public name', before: 'Not shown', after: 'Shop name' },
+      ],
+      recorded: [],
+    });
   });
 });
 

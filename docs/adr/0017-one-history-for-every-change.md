@@ -4,7 +4,7 @@ kind: adr
 describes:
   - back-end/history.py
   - back-end/migrations/migrate_placement_history.py
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - E40/F01/S01
   - E40/F02/S01
@@ -13,6 +13,7 @@ sources:
   - T283
   - T316
   - T318
+  - T422
 status: accepted
 ---
 

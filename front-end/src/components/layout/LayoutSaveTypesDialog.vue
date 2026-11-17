@@ -1,21 +1,25 @@
 <script setup lang="ts">
 /**
  * "Save these types" (T257): the market's table types saved under a name, for "Use saved types"
- * in another market.
+ * in another market. The card saves them through the `submission` it hands here (T411), which
+ * holds the dialog while it sends and says its refusal.
  */
 import { computed, ref, watch } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
+import type { DialogSubmission } from '@/utils/useDialogSubmit';
 import { plural } from '@/utils/utils';
 
 const props = defineProps<{
   open: boolean;
   /** How many types are saved. */
   count: number;
-  busy?: boolean;
-  error?: string;
+  /** The card's write of the saved types, which holds the dialog while it sends. */
+  submission: DialogSubmission;
 }>();
 
 const emit = defineEmits<{ close: []; save: [name: string] }>();
+
+const sending = computed(() => props.submission.sending.value);
 
 const name = ref('');
 const tried = ref(false);
@@ -35,7 +39,7 @@ const nameError = computed(() =>
 
 function save() {
   tried.value = true;
-  if (props.busy || !name.value.trim()) return;
+  if (sending.value || !name.value.trim()) return;
   emit('save', name.value.trim());
 }
 </script>
@@ -45,10 +49,8 @@ function save() {
     :open="open"
     title="Save these types"
     testid="layout-save-types"
-    :confirm-label="busy ? 'Saving…' : 'Save'"
-    :confirm-disabled="busy"
-    :close-disabled="busy"
-    :error="error"
+    :confirm-label="sending ? 'Saving…' : 'Save'"
+    :submission="submission"
     @close="emit('close')"
     @submit="save"
   >
@@ -64,7 +66,7 @@ function save() {
           type="text"
           autocomplete="off"
           maxlength="100"
-          :disabled="busy"
+          :disabled="sending"
           :aria-invalid="!!nameError"
           :aria-describedby="nameError ? 'layout-save-types-name-error' : undefined"
           data-testid="layout-save-types-name"

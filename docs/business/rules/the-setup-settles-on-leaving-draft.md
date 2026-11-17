@@ -12,6 +12,7 @@ describes:
   - back-end/guards.py#_earliest_calendar_day
   - back-end/guards.py#LayoutTablesHaveSectionsGuard
   - back-end/api/floorplans_save.py#save_floorplan_to_market
+  - back-end/layout.py#count_refusal
 verified: 2026-11-16
 sources:
   - wayfinding/the-order-of-the-work/03
@@ -28,12 +29,14 @@ sources:
   - T274
   - T257
   - T315
+  - T422
 ---
 
 # The setup settles on leaving draft
 
 Everything on Market Setup (the dates, the locations, the tiers, the sections and their tables, each location layout's seats and the market's table types, the prices, and how vendors reach the market) is settled once the market leaves draft, and may change again only if it goes back.
-Where a layout's tables stand is not: until the market is archived its tables still move and turn, and its no-table zones, its image, its scale and its sections' colours and labels still change, while no table is added, removed, renumbered or given another section or type, and no layout starts.
+Where a layout's tables stand is not: until the market is archived its tables still move and turn, and its no-table zones, its image, its scale and its sections' colours and labels still change, while no table of a layout started in Draft is added, removed, renumbered or given another section or type.
+A location with no layout may still be given one past draft, and that layout follows the plan ([ADR 0034](../../adr/0034-a-layout-started-after-draft-follows-the-plan.md)): it draws the seats Section Setup settled, its sections keep their typed counts, and its tables are placed, removed and numbered up to each count, since they move no seat; only the market's table types stay settled for it.
 So leaving draft requires a complete setup: dates none of which has passed, a location, and tables at every tier, each its own blocker line.
 A tier whose section is in a location with a layout gets its tables from that layout, so its line sends the organizer there rather than to Market Setup, where that section's count cannot be typed, one such tier at a time.
 
@@ -69,12 +72,15 @@ A Google Form market settles when its first import is written, which is when it 
 - `setup_lock_reason` in [`back-end/api/markets.py`](../../../back-end/api/markets.py) says the lock, served on the market as `setupLockReason` so Market Setup reads as settled.
   The plan write (`prepared_plan`) and the floorplan save ([`back-end/api/floorplans_save.py`](../../../back-end/api/floorplans_save.py), [a location's layout](../../implementation/modules/floorplan-placement.md)) refuse a change after draft; restating the stored setup is not a change (`setup_part` compares the two), because the plan saves itself in every phase.
   Of a layout, `setup_part` compares its seats (each table's id, section, number and type) and the market's table types (`layout.settled_part`, T257), never where a table stands; the plan write keeps the stored layouts whatever it carries.
-  Past draft the floorplan save takes a layout whose seats, types and set of layouts are unchanged, and refuses any other, a new layout among them, 409 with the lock's words (`layout.settled_layout_refusal`); the table types' write is refused whole.
-  The layout page keeps its editor past draft, under the same words, with what would change a seat disabled ([a location's layout](../../implementation/modules/floorplan-placement.md)).
+  Past draft the floorplan save takes a layout started in Draft whose seats, types and set of layouts are unchanged, and refuses any other 409 with the lock's words (`layout.settled_layout_refusal`); a new layout starts, following the plan, and its tables change freely within its sections' counts; the table types' write is refused whole.
+  A plan write, in Draft after a return to it, that would leave a section's count below a number its layout that follows the plan holds is refused with "<Section>'s layout holds table <n>. Remove it from the layout first." (`count_refusal` in [`back-end/layout.py`](../../../back-end/layout.py)).
+  The layout page keeps its editor past draft, under the same words, with what would change a seat disabled; a layout that follows the plan is edited under its own sentence, its table types alone settled ([a location's layout](../../implementation/modules/floorplan-placement.md)).
   The intake mode is refused separately by the same write, and the assignment rules that ride in the same plan keep [their own lock](the-assignment-rules-close-with-the-assignment.md).
   Each writes through [the market write](../../implementation/modules/market-write.md#the-plans-revision), holding the phase it judged, so an edit judged in draft that lands after Open applications, a move in flight beside it, is refused instead of stored; and Open applications holds the plan's revision, so a plan saved inside the move's window refuses the move instead of leaving draft on a setup its guards never read.
 - The three guards (`SetupHasDatesGuard`, `SetupHasALocationGuard`, `EveryTierHasTablesGuard`) are in [`back-end/guards.py`](../../../back-end/guards.py), on `draft -> applications`, kept by [the guards](../../implementation/modules/guards.md).
   `EveryTierHasTablesGuard` leads to a location's layout ("Open the layout") when the plan's first tier without tables has a section there, and for a market with no tables whose sections lie in one (T315).
+  A market whose layouts hold tables but none of whose sections has one is told its tables need a section, not that it has none (T422): it is led to the layout of the plan's first section on a layout holding tables, else to Market Setup ("Add sections"), as [the guards](../../implementation/modules/guards.md) say.
+  A layout that follows the plan leads nowhere there: its counts are typed, so its tiers are sent to Market Setup.
   `LayoutTablesHaveSectionsGuard` stands beside them (T257): a layout's table in no section is counted by no section, and its section could not be given once the setup settles, so the market stays a draft until each is put in a section or removed.
   Beside them, a price group with a condition the form no longer has is its own line (`PriceGroupsStandGuard`, [a price follows the table](a-price-follows-the-table.md#price-groups)): the prices and the form settle together, so draft is where it is fixed.
 - `back-end/tests/test_the_setup_settles_on_leaving_draft.py` and `test_the_setup_is_complete_before_it_settles.py` pin both halves; `test_a_floorplan_save_keeps_the_market_readable.py` (`TestALayoutAfterDraft`) and `a-layout-after-draft.spec.ts` pin the layout's.

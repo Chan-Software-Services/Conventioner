@@ -31,6 +31,7 @@ sources:
   - T223
   - T263
   - T274
+  - T411
 ---
 
 # The Discord connection
@@ -120,6 +121,7 @@ Discord's OAuth2 page describes the bot-only flow without the setting as needing
 
 Connecting again to the same server keeps the role and the invite link; connecting to another server forgets them.
 **Disconnecting** (`DELETE /markets/:id/discord/connection`, after a confirmation) forgets the server, its role and its invite link, and keeps the username question, which is about the form; the bot stays in the server until someone removes it there, since another market may use it.
+The confirmation writes through `useDialogSubmit` (T411): held while it disconnects, one request however often Disconnect is pressed, and a refusal said in it until it is pressed again or opened again.
 
 ## Who is in the server
 
@@ -165,6 +167,7 @@ In the vendor's drawer ([`VendorDiscordOffer.vue`](../../../front-end/src/compon
 
 - **"Confirm…"** opens a dialog of what the vendor wrote and the member's username, and "Save update" sends it as the ordinary update of the vendor's answer, `PUT /markets/:id/applications/:applicationId/answers` ([the application document](../data/application-document.md#an-organizers-update-of-an-answer)): who, when, and their own answer kept beside it, recorded as every update is; the row is "Update a vendor's info" (Editor by default), and "Update info the assignment or price reads" too where a price group reads the username question, as for any update.
   The vendor's state then reads "Check again", and the next check reads the update, so it matches them.
+  The confirmation is held while it saves and belongs to the vendor it was opened for (T411): the drawer keeps the section across a change of vendor, so the change closes it, and an update that lands after that is handed on as `refreshed`, never as the `confirmed` that closes what is open.
 - **"Not them"** declines the member, `POST /markets/:id/discord/possible-matches/:applicationId/declined` with the `username` (`decline_match`): the member's username joins that vendor's list in `declinedMatches` (`$addToSet`, written only while the market is still connected to the server it was loaded with, else the one 409), which a check never writes and reads to leave the member out of that vendor's offers; the vendor stays "Not found".
   It asks the rows confirming asks (`assert_may_update_what_the_assignment_or_prices_read`, shared with the update), the price-read row too where a price group reads the username question, since answering an offer is about the vendor's info, not the check; only a member the last check offered that vendor may be declined, else it answers 400; an archived market refuses it.
   A price group reads only a choice question and the username question is a text one, so that row is asked only once the question stopped being text.

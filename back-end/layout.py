@@ -5,16 +5,22 @@ scale and the tables over it, each a real table of the plan, of a section and a 
 its number. The word "layout" is what an organizer reads; the code and the routes say floorplan.
 
 - ``derive_counts``: a laid-out location's sections count its tables, so the solver and every
-  reader read true counts; ``prepared_plan`` runs it on every write of the plan.
+  reader read true counts; ``prepared_plan`` runs it on every write of the plan. A layout that
+  follows the plan (``follows_plan``, one started after Draft: T422, ADR 0034) is never counted:
+  its sections keep the counts typed on Section Setup.
 - ``tables_in_no_section``: the tables of a layout no section counts, which keep a market in draft
   (``guards.LayoutTablesHaveSectionsGuard``).
 - ``in_its_sections``: a layout whose tables of a section not its location's are in none, as a
   save stores them.
 - ``layout_refusal``: the rules a saved layout keeps (its location, its tables' ids, its numbering,
-  its types, its tables inside the floorplan).
+  its types, its tables inside the floorplan). A layout started in Draft numbers each section's
+  tables 1 to N; one that follows the plan numbers them once each from 1 to the section's count.
+- ``count_refusal``: a plan write may not leave a section's count below a number a table of a
+  layout that follows the plan holds.
 - ``layout_seats`` and ``settled_layout_refusal``: what of a layout settles on leaving draft, the
-  seats and the types; past draft ``save_floorplan_to_market`` saves a layout whose seats, types
-  and set of layouts are unchanged, so a table still moves and turns.
+  seats of the layouts started in Draft and the types; past draft ``save_floorplan_to_market``
+  saves a layout whose seats, types and set of layouts are unchanged, so a table still moves and
+  turns, and a layout that follows the plan, whose seats are the plan's and do not settle.
 - ``describe_change``: what a save changed, as the ``floorplan`` history entry records it.
 
 Matched by id throughout: a table names its section and a floorplan its location by id, because
@@ -26,6 +32,21 @@ from datatypes import FloorplanObject, FloorplanTable, SectionObject, SetupObjec
 
 UNKNOWN_LOCATION = "This layout's location is not one of the market's locations."
 NUMBERING = "Each section's tables are numbered 1 to N."
+
+
+def numbered_to_its_count(section: str, count: int) -> str:
+    """Why a layout that follows the plan is refused for a section's numbering (T422, D22): a
+    section the plan gives no table holds none on it."""
+    if count <= 0:
+        return f"{section} has no tables in the plan."
+    return f"{section}'s tables are numbered 1 to {count}, each number once."
+
+
+def holds_a_table_past(section: str, number: int) -> str:
+    """Why a plan write is refused that would leave a section's count below a number a table of
+    a layout that follows the plan holds (T422, D21)."""
+    return f"{section}'s layout holds table {number}. Remove it from the layout first."
+
 TABLE_IDS = "Every table must have an id of its own."
 UNKNOWN_TABLE_TYPE = "Every table must be of one of the market's table types."
 OUTSIDE_THE_FLOORPLAN = "Every table must stand inside the floorplan."
@@ -66,11 +87,13 @@ def laid_out(plan: SetupObject) -> List[FloorplanObject]:
 def derive_counts(plan: SetupObject) -> SetupObject:
     """The plan with every section of a laid-out location counting that layout's tables in it.
 
-    A section of a location with no layout keeps the count typed on Section Setup. A table naming a
-    section of another location, or none, counts for no section.
+    A section of a location with no layout, or whose layout follows the plan, keeps the count typed
+    on Section Setup. A table naming a section of another location, or none, counts for no section.
     """
     counts: Dict[str, int] = {}
     for floorplan in laid_out(plan):
+        if floorplan.follows_plan:
+            continue
         own = {section.id for section in _sections_of(plan, floorplan.location_id)}
         for section_id in own:
             counts.setdefault(section_id, 0)
@@ -131,18 +154,38 @@ def _numbered_1_to_n(tables: List[FloorplanTable]) -> bool:
     )
 
 
+def _numbering_off_the_plan(floorplan: FloorplanObject, plan: SetupObject) -> Optional[str]:
+    """For a layout that follows the plan, the sentence of the first of its location's sections
+    whose tables are not numbered once each from 1 to its count; None when every one is. A table
+    of no section has no number (``NUMBERING``)."""
+    if any(table.section_id is None and table.number is not None for table in floorplan.tables):
+        return NUMBERING
+    for section in _sections_of(plan, floorplan.location_id):
+        numbers = [table.number for table in floorplan.tables if table.section_id == section.id]
+        if len(set(numbers)) != len(numbers) or any(
+                number is None or not 1 <= number <= section.count for number in numbers):
+            return numbered_to_its_count(section.name, section.count)
+    return None
+
+
 def layout_refusal(floorplan: FloorplanObject, plan: SetupObject) -> Optional[str]:
     """The sentence a layout is refused with, or None when it keeps every rule.
 
     Its location is one of the plan's; no two tables share an id; each section's tables are numbered
-    1 to N, and a table of no section has no number; every table is of one of the market's types; and every table's centre
-    stands inside the floorplan, which therefore needs its scale once it holds a table.
+    1 to N, or, on a layout that follows the plan, once each from 1 to the section's count (fewer
+    tables than the count saving), and a table of no section has no number; every table is of one of
+    the market's types; and every table's centre stands inside the floorplan, which therefore needs
+    its scale once it holds a table.
     """
     if floorplan.location_id not in _location_ids(plan):
         return UNKNOWN_LOCATION
     if len({table.id for table in floorplan.tables}) != len(floorplan.tables):
         return TABLE_IDS
-    if not _numbered_1_to_n(floorplan.tables):
+    if floorplan.follows_plan:
+        numbering = _numbering_off_the_plan(floorplan, plan)
+        if numbering:
+            return numbering
+    elif not _numbered_1_to_n(floorplan.tables):
         return NUMBERING
     types = {table_type.id for table_type in plan.table_types}
     if any(table.table_type_id not in types for table in floorplan.tables):
@@ -157,6 +200,26 @@ def layout_refusal(floorplan: FloorplanObject, plan: SetupObject) -> Optional[st
                 and -_EDGE_MM <= table.y_mm <= depth + _EDGE_MM)
            for table in floorplan.tables):
         return OUTSIDE_THE_FLOORPLAN
+    return None
+
+
+def count_refusal(plan: SetupObject) -> Optional[str]:
+    """Why a plan write is refused that would leave a section's count below the highest number a
+    table of its location's layout holds, where that layout follows the plan; else None.
+
+    A layout started in Draft counts its sections itself (``derive_counts``), so it is never
+    refused so. Asked of the plan write and the CSV start (``prepared_plan``), never of a layout's
+    own save, which ``layout_refusal`` judges.
+    """
+    for floorplan in laid_out(plan):
+        if not floorplan.follows_plan:
+            continue
+        for section in _sections_of(plan, floorplan.location_id):
+            highest = max((table.number for table in floorplan.tables
+                           if table.section_id == section.id and table.number is not None),
+                          default=0)
+            if highest > section.count:
+                return holds_a_table_past(section.name, highest)
     return None
 
 
@@ -180,13 +243,18 @@ def layout_seats(floorplan: FloorplanObject) -> Tuple[Optional[str], Tuple[Seat,
 
 
 def settled_part(plan: Optional[SetupObject]) -> Dict[str, Any]:
-    """What of a plan's layouts settles on leaving draft, in one comparable shape: every
-    floorplan's seats by its id, and the market's table types by theirs, so restating them in
-    another order is not a change."""
+    """What of a plan's layouts settles on leaving draft, in one comparable shape: the seats of
+    every floorplan started in Draft by its id, and the market's table types by theirs, so
+    restating them in another order is not a change.
+
+    A layout that follows the plan is left out: its seats are the plan's, which settle with the
+    sections, so its tables may still be added, removed, renumbered and put in another of its
+    location's sections, and it may start past draft (T422, D21)."""
     if plan is None:
         return {"floorplans": {}, "table_types": {}}
     return {
-        "floorplans": {floorplan.id: layout_seats(floorplan) for floorplan in plan.floorplans or []},
+        "floorplans": {floorplan.id: layout_seats(floorplan) for floorplan in plan.floorplans or []
+                       if not floorplan.follows_plan},
         "table_types": {table_type.id: table_type.model_dump() for table_type in plan.table_types},
     }
 
@@ -194,14 +262,38 @@ def settled_part(plan: Optional[SetupObject]) -> Dict[str, Any]:
 def settled_layout_refusal(
     stored: Optional[SetupObject], proposed: SetupObject, settled: str,
 ) -> Optional[str]:
-    """``settled``, the setup-settled sentence, when the proposed plan changes a seat, a table type
-    or the set of layouts the stored one holds; else None, so a table moved or turned saves.
+    """``settled``, the setup-settled sentence, when the proposed plan changes a seat of a layout
+    started in Draft, a table type or the set of those layouts the stored one holds; else None, so a
+    table moved or turned saves, and so does every change of a layout that follows the plan but a
+    kept table's type.
+
+    A table kept on a layout that follows the plan keeps its type too, as the page holds it: the
+    types settle with the market (T422, D23).
 
     ``save_floorplan_to_market`` asks it of every save past draft, answering 409 with the sentence.
     """
     if settled_part(stored) != settled_part(proposed):
         return settled
+    if _retyped_on_a_following_layout(stored, proposed):
+        return settled
     return None
+
+
+def _retyped_on_a_following_layout(stored: Optional[SetupObject], proposed: SetupObject) -> bool:
+    """Whether a table a stored layout that follows the plan holds is of another type in the
+    proposed plan's same layout."""
+    if stored is None:
+        return False
+    proposed_layouts = {floorplan.id: floorplan for floorplan in proposed.floorplans or []}
+    for floorplan in stored.floorplans or []:
+        after = proposed_layouts.get(floorplan.id)
+        if not floorplan.follows_plan or after is None:
+            continue
+        types = {table.id: table.table_type_id for table in after.tables}
+        if any(table.id in types and types[table.id] != table.table_type_id
+               for table in floorplan.tables):
+            return True
+    return False
 
 
 def _section_name(plan: SetupObject, section_id: Optional[str]) -> str:

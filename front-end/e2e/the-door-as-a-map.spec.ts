@@ -1,0 +1,206 @@
+import type { Page } from '@playwright/test';
+import { test, expect, BACKEND_URL, TEST_USER } from './fixtures';
+import { inTheWindow, PHONE_AND_DESK } from './helpers/phoneWindow';
+import { seedMarketDayMap, type SeededMarketDayMap } from './helpers/seedMarketDayMap';
+import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
+import { LoginPage } from './pages/LoginPage';
+
+/**
+ * The door as a map (T422 ticket 10): Attendance switches from its list to a map of the open day,
+ * on the seam's seeded market. Today North Wing's Aisle A 1 is Ember Ceramics' (checked in), 2 is
+ * Kiln & Co's (expected), 3 is shared by Loom House (left) and Paper Moth Press (right), and 4 is
+ * free; South Wing's Aisle B holds three more.
+ *
+ * The map shows each table by whether its vendor is here, a press on a vendor's table opens their
+ * drawer as their row does, each half of the shared table its own, and the map follows a check-in
+ * made on the list, and one made elsewhere, which the roster's re-read brings with no reload. The
+ * drawer holds no check-in (D39): a check-in is the list's.
+ */
+
+const VIEWER = { email: 'e2e-door-map-viewer@example.com', password: 'e2epassword123' };
+
+/** The roster reads itself again every 15 seconds; a check-in made elsewhere shows within that. */
+const REREAD = 20_000;
+
+/** The vendors of Aisle A today, in the order `DAY_MAP_VENDORS` seats them. */
+function aisleA(seeded: SeededMarketDayMap) {
+  const [ember, kiln, loom, moth] = seeded.vendors;
+  return { ember: ember!.email, kiln: kiln!.email, loom: loom!.email, moth: moth!.email };
+}
+
+async function openTheMap(page: Page, seeded: SeededMarketDayMap): Promise<AttendanceStatusPage> {
+  const door = new AttendanceStatusPage(page);
+  await door.goto(seeded.marketId);
+  await expect(door.viewList).toHaveAttribute('aria-pressed', 'true');
+  await door.viewMap.click();
+  await expect(door.viewMap).toHaveAttribute('aria-pressed', 'true');
+  await expect(page).toHaveURL(/[?&]view=map(&|$)/);
+  await expect(door.map).toBeVisible();
+  return door;
+}
+
+for (const size of PHONE_AND_DESK) {
+  test.describe(`the door as a map ${size.name}`, () => {
+    test.use(size.use);
+    const { press, expectFits } = inTheWindow(size);
+
+    test("draws each table by its vendor's arrival and opens the vendor pressed", async ({
+      authenticatedPage: page,
+      request,
+      expectAccessible,
+    }) => {
+      const seeded = await seedMarketDayMap(
+        request,
+        BACKEND_URL,
+        TEST_USER.email,
+        TEST_USER.password,
+      );
+      const vendors = aisleA(seeded);
+      const door = await openTheMap(page, seeded);
+      await expectFits(page, 'The door as a map');
+      await expectAccessible('the door as a map');
+
+      // The list's own controls stay the list's: the Show toggles are not on the map.
+      await expect(page.getByTestId('attendance-show-all')).toHaveCount(0);
+      await expect(door.rows).toHaveCount(0);
+      await expect(door.legend).toHaveText(['Here', 'Expected', 'No vendor']);
+      if (!size.phone) {
+        // At a desk the whole map, its zoom and its legend stand in the window as the page opens,
+        // as the layout page's does (T422 ticket 11).
+        const bottom = async (locator: typeof door.legend) => {
+          const box = (await locator.boundingBox())!;
+          return box.y + box.height;
+        };
+        const height = page.viewportSize()!.height;
+        expect(await page.evaluate(() => window.scrollY)).toBe(0);
+        expect(await bottom(page.getByTestId('day-map-zoom'))).toBeLessThanOrEqual(height);
+        expect(await bottom(door.legend.last())).toBeLessThanOrEqual(height);
+      }
+
+      // North Wing, the first location, opens: Ember Ceramics here, Kiln & Co expected, the shared
+      // table half here and half expected, and Aisle A 4 with nobody.
+      expect(await door.tone('Aisle A 1')).toBe('filled');
+      expect(await door.tone('Aisle A 2')).toBe('outlined');
+      expect(await door.tone('Aisle A 3', 'left')).toBe('outlined');
+      expect(await door.tone('Aisle A 3', 'right')).toBe('outlined');
+      expect(await door.tone('Aisle A 4')).toBe('free');
+
+      // A vendor's table opens their drawer, the day and the view kept; Back closes it, on the map.
+      await press(door.mapTable('Aisle A 2'));
+      await expect(door.drawer).toHaveAttribute('aria-hidden', 'false');
+      await expect(door.drawerEmail).toHaveText(vendors.kiln);
+      await expect(page).toHaveURL(/[?&]view=map(&|$)/);
+      await expect(page.getByTestId('vendor-drawer-tab-application')).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      await page.goBack();
+      await expect(door.drawer).toHaveAttribute('aria-hidden', 'true');
+      await expect(door.map).toBeVisible();
+      await expect(page).toHaveURL(/[?&]view=map(&|$)/);
+      await expect(page).not.toHaveURL(/vendor=/);
+
+      // Each half of the shared table opens its own vendor.
+      for (const [half, email] of [
+        ['left', vendors.loom],
+        ['right', vendors.moth],
+      ] as const) {
+        await press(door.mapTable('Aisle A 3', half));
+        await expect(door.drawerEmail).toHaveText(email);
+        await door.drawerClose.click();
+        await expect(door.drawer).toHaveAttribute('aria-hidden', 'true');
+      }
+
+      // A table with nobody says so, under the map, and opens nothing.
+      await press(door.mapTable('Aisle A 4'));
+      await expect(door.mapNote).toHaveText(/^Table Aisle A 4: no vendor on \w{3} \d+, \d{4}\.$/);
+      await expect(door.drawer).toHaveAttribute('aria-hidden', 'true');
+
+      // Kiln & Co checked in on the list: their table is filled on the map.
+      await door.viewList.click();
+      await door.checkIn(vendors.kiln);
+      await expect(door.status(vendors.kiln)).not.toHaveText('Not yet');
+      await door.viewMap.click();
+      await expect.poll(() => door.tone('Aisle A 2')).toBe('filled');
+
+      // Paper Moth Press checks in elsewhere, at a second organizer's door: the re-read brings it.
+      const elsewhere = await request.post(`${BACKEND_URL}/markets/${seeded.marketId}/attendance`, {
+        data: { vendorEmail: vendors.moth, date: seeded.today },
+      });
+      expect(elsewhere.ok(), await elsewhere.text()).toBeTruthy();
+      await expect.poll(() => door.tone('Aisle A 3', 'right'), { timeout: REREAD }).toBe('filled');
+      expect(await door.tone('Aisle A 3', 'left')).toBe('outlined');
+
+      // The map is kept across a reload, and across the other location.
+      await page.reload();
+      await expect(door.viewMap).toHaveAttribute('aria-pressed', 'true');
+      await press(
+        page.getByTestId('day-map-locations').getByRole('button', { name: 'South Wing' }),
+      );
+      await expect(door.mapTable('Aisle B 1')).toBeVisible();
+      await expectFits(page, 'The door as a map, South Wing');
+    });
+
+    test('the search marks the vendor it finds, and opens nothing', async ({
+      authenticatedPage: page,
+      request,
+    }) => {
+      const seeded = await seedMarketDayMap(
+        request,
+        BACKEND_URL,
+        TEST_USER.email,
+        TEST_USER.password,
+      );
+      const door = await openTheMap(page, seeded);
+      const marks = door.map.getByTestId('layout-map-read');
+      await expect(marks).toHaveCount(0);
+      await door.search.fill(aisleA(seeded).kiln);
+      await expect(marks).toHaveCount(1);
+      await expect(door.drawer).toHaveAttribute('aria-hidden', 'true');
+      await door.search.fill('Aisle A');
+      await expect(marks).toHaveCount(4);
+    });
+  });
+}
+
+test.describe('a Viewer', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('reads the map and opens the drawer, and nothing on the map writes', async ({
+    page,
+    request,
+  }) => {
+    ensureVerifiedUser(VIEWER.email, VIEWER.password);
+    const seeded = await seedMarketDayMap(
+      request,
+      BACKEND_URL,
+      TEST_USER.email,
+      TEST_USER.password,
+    );
+    const role = await request.post(`${BACKEND_URL}/markets/${seeded.marketId}/roles`, {
+      data: { user_email: VIEWER.email, role: 'viewer' },
+    });
+    expect(role.ok(), await role.text()).toBeTruthy();
+
+    const login = new LoginPage(page);
+    await login.login(VIEWER.email, VIEWER.password);
+    await login.waitForMarkets();
+
+    const writes: string[] = [];
+    page.on('request', (sent) => {
+      if (sent.method() !== 'GET' && new URL(sent.url()).pathname.startsWith('/api/markets/')) {
+        writes.push(`${sent.method()} ${sent.url()}`);
+      }
+    });
+    const door = await openTheMap(page, seeded);
+    expect(await door.tone('Aisle A 1')).toBe('filled');
+    await expect(door.checkIns).toHaveCount(0);
+    await door.mapTable('Aisle A 1').click();
+    await expect(door.drawerEmail).toHaveText(aisleA(seeded).ember);
+    await door.drawerClose.click();
+    await door.mapTable('Aisle A 4').click();
+    await expect(door.mapNote).toBeVisible();
+    expect(writes).toEqual([]);
+  });
+});

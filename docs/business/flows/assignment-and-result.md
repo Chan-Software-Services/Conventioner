@@ -47,6 +47,7 @@ sources:
   - T284
   - T277
   - T316
+  - T411
 ---
 
 # The assignment and its result
@@ -190,6 +191,7 @@ On both paths, from the Applications page, above both of the review's views ([`P
    Before Assignment the Applications page shows no Publish results at all, not even a disabled one.
    In Assignment the rail leads there: Publish market is disabled with "Vendors have not been told whether they have a table. Publish the results before the market goes live." and "Publish results" as the main button.
 2. "Publish results" asks first: 'N vendors will read "You have a table". M will read "You did not get assigned".', "Vendors read their result on the market's vendor page. No email is sent, so share the page's address with them.", the page's address with Copy ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)), and "Publishing cannot be undone, and tables cannot be allocated again after it: assignments change only by hand."
+   While it publishes nothing closes it and its confirm reads "Publishing…"; a refusal is said in it, and the next opening starts with none (T411).
 3. Confirm: the button gives way to a "Results published" chip; the run and the rules are settled (J3b, J14), and the market can be published (K1).
 4. Each vendor reads their outcome on the market's vendor page ([H3c](applying-online.md#h3c-a-vendor-checks-their-application)); a Google Form market's imported vendor signs in there with the address their response gave ([the Google Form path](the-google-form-path.md#p3-an-imported-vendor-reads-their-table)).
 

@@ -1,4 +1,5 @@
 import logging
+import math
 import re
 import unicodedata
 import uuid
@@ -818,6 +819,9 @@ class Market(BaseModel):
     # The Discord server it is connected to (E46/F01/S02). Server-owned: only the Discord card's
     # routes write it. Absent is not connected.
     discord: Optional["DiscordConnection"] = None
+    # What the public map shows and whether it is open (T422, ADR 0035). Server-owned: only the
+    # Public map card's write (``public_map.save_settings``) writes it. Absent is never set: off.
+    public_map: Optional["PublicMapSettings"] = None
     # The stored document this market was parsed from, as it was read: what a write judged on this
     # market holds (``market_write.write_market``). Set only by ``market_from_document``, carried by
     # ``model_copy``, never served or dumped; None on a market built in code rather than read.
@@ -1065,6 +1069,21 @@ class DiscordConnection(BaseModel):
     #: id: their usernames, never offered to that vendor again as a possible match. Written by
     #: declining an offer, never by a check, and about this server, as the check's fields are.
     declined_matches: Optional[Dict[str, List[str]]] = None
+
+
+class PublicMapSettings(BaseModel):
+    """What a market's public map shows, and whether it is open (T422, ADR 0035).
+
+    Each question is the key of a short text question of the market's own form, or None for not
+    shown: the vendor's public name, their website and their Instagram handle are read from those
+    answers alone. A key the form no longer holds as a text question reads as not chosen
+    (``public_map.chosen_question``). Written only by ``public_map.save_settings``.
+    """
+
+    enabled: bool = False
+    name_question: Optional[str] = None
+    website_question: Optional[str] = None
+    instagram_question: Optional[str] = None
 
 
 class DiscordVendorState(BaseModel):
@@ -1462,7 +1481,13 @@ class FloorplanTable(BaseModel):
 
 
 class FloorplanZone(BaseModel):
-    """A no-table zone of a layout: a rectangle from its top-left corner, in millimetres."""
+    """A no-table zone of a layout: a rectangle from its top-left corner, in millimetres, turned
+    ``rotation`` degrees clockwise about its centre (T422, D16).
+
+    The turn is stored 0 to 360: a finite one is read into that range as it parses, so a zone
+    turned -30 is stored turned 330. One that is not finite is kept as sent, for the floorplan's
+    bounds to refuse with their sentence (``floorplan_limits.measurement_refusal``).
+    """
 
     id: str = Field(default_factory=new_id)
     label: str = ""
@@ -1470,6 +1495,12 @@ class FloorplanZone(BaseModel):
     y_mm: float
     width_mm: float
     depth_mm: float
+    rotation: float = 0.0
+
+    @field_validator("rotation")
+    @classmethod
+    def _turned_within_a_circle(cls, value: float) -> float:
+        return value % 360 if math.isfinite(value) else value
 
 
 class LabelPoint(BaseModel):
@@ -1520,6 +1551,10 @@ class FloorplanObject(BaseModel):
     zones: List[FloorplanZone] = []
     section_styles: List[SectionStyle] = []
     starting_counts: List[StartingCount] = []
+    #: Whether this layout was started after Draft, and so follows the plan: it draws the seats
+    #: Section Setup settled and never counts them (T422, D21). Server-owned: set as the layout
+    #: starts (``api.floorplans_save``) and kept on every later save whatever a body sends.
+    follows_plan: bool = False
 
 
 class FloorplanTemplate(BaseModel):
@@ -1652,12 +1687,17 @@ class DiscordConnectionContract(ContractModel):
     role_run: Optional[DiscordRoleRunContract] = None
 
 
+class PublicMapSettingsContract(PublicMapSettings, ContractModel):
+    """Camel-cased contract view of what a market's public map shows."""
+
+
 class MarketSchemaContract(ContractModel):
     application_form: Optional[ApplicationFormContract] = None
     form_revision: Optional[int] = None
     plan_revision: Optional[int] = None
     discord: Optional[DiscordConnectionContract] = None
     discord_vendors: Optional[List[ServedDiscordVendorContract]] = None
+    public_map: Optional[PublicMapSettingsContract] = None
     example_columns: Optional[List[ExampleColumnContract]] = None
     import_mapping: Optional[ImportMappingContract] = None
     assignment_object: AssignmentObjectContract

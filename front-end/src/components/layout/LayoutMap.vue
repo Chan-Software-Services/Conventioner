@@ -24,20 +24,42 @@
  * given its `view`: two fingers pinch it, from the whole hall in to the editor's most, one drags it
  * once zoomed, and a tap (a press that moved no more than a few pixels) on a table, or within a
  * few pixels of one, activates it, as a click with no press before it (a screen reader's) does;
- * at the whole hall one finger scrolls the page as it would anywhere. Each table given the focus is told as `focused`. The map owns no editing state: its
- * only state is which table has the focus and, in `read`, the part of the hall it shows.
+ * at the whole hall one finger scrolls the page as it would anywhere. At a desk (T422, D42) Ctrl
+ * and the wheel zoom it about the pointer, the mouse drags it once zoomed, a plain wheel scrolls
+ * the page, and `zoomIn`, `zoomOut` and `fit` are exposed for a caller's buttons. Each table given
+ * the focus is told as `focused`.
+ *
+ * A day's map (T422) is the drawing given `seats`, in `read` or `print`: a table with a whole seat
+ * drawn in its seat's tone and named with who holds it, a shared table drawn as two halves (D41),
+ * each with a seat a button of its own, and a table with no seat drawn free (D40, `seatPaint`). A
+ * press on a seat emits `activateSeat` with its key before `activate` with the table's id. In
+ * `read`, the `selection` and what is `marked` (seat keys or table ids) are outlined over the map.
+ * The map owns no editing state: its only state is which table or half has the focus and, in
+ * `read`, the part of the hall it shows.
  */
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 import type { FloorplanObject, SectionObject, TableTypeObject } from '@/assets/types/datatypes';
-import LayoutMapTable from './LayoutMapTable.vue';
-import { NO_SECTION_PAINT, layoutSections, mapName, tableName, textWidthPx } from './layoutDrawing';
+import LayoutMapTable, { type DrawnHalf } from './LayoutMapTable.vue';
+import {
+  NO_SECTION_PAINT,
+  layoutSections,
+  mapName,
+  seatPaint,
+  tableName,
+  textWidthPx,
+  type MapSeat,
+  type SeatHalf,
+} from './layoutDrawing';
 import {
   OUTLINE_OUT_PX,
+  OUTLINE_WIDTH_PX,
   STANDARD_TABLE,
   TAP_REACH_PX,
   TAP_SLOP_PX,
   distanceToTable,
   grownTable,
+  halfAt,
+  halfTable,
   hallOf,
   keptView,
   nearestInDirection,
@@ -48,6 +70,7 @@ import {
   seenView,
   tableBounds,
   unionOf,
+  zoomedView,
   type Bounds,
   type Direction,
   type PointPx,
@@ -85,6 +108,12 @@ const props = withDefaults(
     /** Whether the image is drawn under the tables: unless told, it is in `read` and `edit`, and
      *  is left out of `print`. */
     showImage?: boolean;
+    /** Whether the image is drawn in grey under the tables of `read` and `edit`, as it is unless
+     *  told, rather than in its own colours. */
+    imageInGrey?: boolean;
+    /** Whether the image is drawn at half strength under the tables of `read` and `edit`, as it is
+     *  unless told, so the tables stand out over a busy plan; else at full strength. */
+    imageFaded?: boolean;
     /** The part of the hall shown; the whole hall when not given. */
     view?: MapView | null;
     /** The ids of the selected tables, outlined in `edit`; in `read`, the table the page reads,
@@ -96,21 +125,31 @@ const props = withDefaults(
     carried?: readonly string[];
     /** Whether each table carries its number; a printed map may leave them out. */
     numbers?: boolean;
+    /** A day's seats, drawn in `read` and `print`; none draws the layout as it is planned. */
+    seats?: readonly MapSeat[] | null;
+    /** Seat keys and table ids outlined in `read`, beside the `selection`. */
+    marked?: readonly string[];
   }>(),
   {
     imageUrl: '',
     showImage: undefined,
+    imageInGrey: true,
+    imageFaded: true,
     view: null,
     selection: () => [],
     guides: () => [],
     carried: () => [],
     numbers: true,
+    seats: null,
+    marked: () => [],
   },
 );
 
 const emit = defineEmits<{
   /** A table pressed in `read` mode. */
   activate: [tableId: string];
+  /** A seat pressed in `read` mode, a whole table's or a half's, before its table's `activate`. */
+  activateSeat: [seatKey: string];
   /** A table given the focus, in `read` or `edit`. */
   focused: [tableId: string];
 }>();
@@ -206,6 +245,43 @@ function look(view: ViewMm) {
   looked.value = kept.widthMm >= wholeSeen.value.widthMm * 0.999 ? null : kept;
 }
 
+/** How much a zoom button zooms by. */
+const ZOOM_STEP = 1.5;
+/** The most one wheel event zooms by, in the pixels it says it scrolled, as the editor's does. */
+const WHEEL_ZOOM_PX = 25;
+
+/** Zoom the view by `factor` about a point of the box, its middle unless told. */
+function zoomBy(factor: number, at?: PointPx) {
+  const width = box.value?.width ?? 0;
+  const height = box.value?.height ?? 0;
+  if (!byHand.value || width <= 0) return;
+  look(
+    zoomedView(
+      looked.value ?? wholeSeen.value,
+      factor,
+      at ?? { x: width / 2, y: height / 2 },
+      width,
+    ),
+  );
+}
+
+const zoomIn = () => zoomBy(ZOOM_STEP);
+const zoomOut = () => zoomBy(1 / ZOOM_STEP);
+/** Show the whole hall again. */
+function fit() {
+  looked.value = null;
+}
+
+/** Ctrl (or Command) and the wheel zoom about the pointer; a plain wheel is the page's. */
+function onWheel(event: WheelEvent) {
+  if (!byHand.value || !(event.ctrlKey || event.metaKey)) return;
+  event.preventDefault();
+  // A mouse's wheel says lines, a trackpad pixels; a notch is held to a quarter more or less.
+  const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : 1;
+  const by = Math.min(Math.max(event.deltaY * unit, -WHEEL_ZOOM_PX), WHEEL_ZOOM_PX);
+  zoomBy(Math.exp(-by * 0.01), onBox(event));
+}
+
 // A box of another size (a phone turned) keeps the view's middle and its zoom.
 watch(box, (now, before) => {
   const view = looked.value;
@@ -234,7 +310,7 @@ let pressEnded = -Infinity;
 /** How long after a press its click may come. */
 const CLICK_AFTER_PRESS_MS = 1000;
 
-function onBox(event: PointerEvent): PointPx {
+function onBox(event: MouseEvent): PointPx {
   const rect = svg.value!.getBoundingClientRect();
   return { x: event.clientX - rect.left, y: event.clientY - rect.top };
 }
@@ -304,12 +380,29 @@ function onPointerUp(event: PointerEvent) {
   if (pointers.size) return;
   pressEnded = performance.now();
   if (event.type !== 'pointerup' || notATap) return;
-  const id = tableOf(event) ?? tableNear(event);
-  if (id) emit('activate', id);
+  pressAt(event, true);
 }
 
-/** The table drawn nearest a point of the box within a tap's reach, for a tap on the floor. */
-function tableNear(event: MouseEvent): string | null {
+/** What was pressed: the table and the seat the press fell on, or by a tap on the floor (`near`)
+ *  the nearest within a tap's reach and the seat on the side it fell. */
+function pressAt(event: MouseEvent, near: boolean) {
+  const id = tableOf(event);
+  if (id) {
+    press(id, seatOf(event));
+    return;
+  }
+  const found = near ? tableNear(event) : null;
+  if (found) press(found.id, found.seatKey);
+}
+
+function press(tableId: string, seatKey: string | null) {
+  if (seatKey) emit('activateSeat', seatKey);
+  emit('activate', tableId);
+}
+
+/** The table drawn nearest a point of the box within a tap's reach, for a tap on the floor, and
+ *  its seat there: the whole table's, or that of the half on the side the tap fell. */
+function tableNear(event: MouseEvent): { id: string; seatKey: string | null } | null {
   const rect = svg.value?.getBoundingClientRect();
   if (!rect || rect.width <= 0 || rect.height <= 0) return null;
   const seen = seenView(shown.value, rect.width, rect.height);
@@ -318,16 +411,22 @@ function tableNear(event: MouseEvent): string | null {
     xMm: seen.xMm + (event.clientX - rect.left) * mmPerPx,
     yMm: seen.yMm + (event.clientY - rect.top) * mmPerPx,
   };
-  let nearest: string | null = null;
+  let nearest: DrawnTable | null = null;
   let least = TAP_REACH_PX * mmPerPx;
   for (const table of tables.value) {
     const away = distanceToTable(point, table, table);
     if (away <= least) {
-      nearest = table.id;
+      nearest = table;
       least = away;
     }
   }
-  return nearest;
+  if (!nearest) return null;
+  if (!nearest.halves) return { id: nearest.id, seatKey: nearest.seatKey };
+  const side = halfAt(point, nearest, nearest);
+  return {
+    id: nearest.id,
+    seatKey: nearest.halves.find((half) => half.side === side)?.seatKey ?? null,
+  };
 }
 
 // ── The tables ───────────────────────────────────────────────────────────────
@@ -342,10 +441,28 @@ interface DrawnTable {
   depthMm: number;
   fill: string;
   edge: string;
+  dashes?: string;
+  ink: string;
   number: string;
   numberSizeMm: number;
   bounds: Bounds;
+  /** The seat that holds the whole table, on a day's map. */
+  seatKey: string | null;
+  /** A shared table's halves, each drawn and pressed on its own; null for one table. */
+  halves: Omit<DrawnHalf, 'tabStop'>[] | null;
 }
+
+/** The day's seats by their table, in `read` and `print`: the first seat each part is given. */
+const seatsByTable = computed(() => {
+  if (!props.seats || props.mode === 'edit') return null;
+  const byTable = new Map<string, Partial<Record<SeatHalf, MapSeat>>>();
+  for (const seat of props.seats) {
+    const held = byTable.get(seat.tableId) ?? {};
+    held[seat.half] ??= seat;
+    byTable.set(seat.tableId, held);
+  }
+  return byTable;
+});
 
 /** Every table as it is drawn, section by section in number order, those in no section last, which
  *  is the order a screen reader meets them in. */
@@ -358,19 +475,55 @@ const tables = computed<DrawnTable[]>(() => {
     const type = typeById.value.get(table.tableTypeId);
     const size = type ?? STANDARD_TABLE;
     const number = props.numbers && section && table.number !== null ? String(table.number) : '';
-    return {
+    const named = tableName(table, section, type);
+    const drawn: DrawnTable = {
       id: table.id,
-      name: tableName(table, section, type),
+      name: named,
       xMm: table.xMm,
       yMm: table.yMm,
       rotation: table.rotation,
       widthMm: size.widthMm,
       depthMm: size.depthMm,
       ...paint,
+      ink: '--mm-black',
       number,
       numberSizeMm: number ? numberSizePx(size, number.length, scale.value) * mmPerPx.value : 0,
       bounds: tableBounds(table, size),
+      seatKey: null,
+      halves: null,
     };
+    // A day's seats are drawn on the tables with a code, the only tables a seat can name.
+    const seats = seatsByTable.value;
+    if (!seats || !section || table.number === null) return drawn;
+    const held = seats.get(table.id) ?? {};
+    if (held.whole || !(held.left || held.right)) {
+      const seat = held.whole ?? null;
+      return {
+        ...drawn,
+        ...seatPaint(seat ? seat.tone : 'free', paint),
+        name: `${named}, ${seat ? seat.name : 'no vendor'}`,
+        seatKey: seat?.key ?? null,
+      };
+    }
+    const halves = (['left', 'right'] as const).map((side) => {
+      const seat = held[side] ?? null;
+      const shape = halfTable(size, side, table.rotation);
+      const label = props.numbers ? `${table.number}${side === 'left' ? 'L' : 'R'}` : '';
+      return {
+        side,
+        seatKey: seat?.key ?? null,
+        name: seat ? `${named}, ${side} half, ${seat.name}` : '',
+        d: shape.d,
+        focusD: halfTable(size, side, table.rotation, -0.25 * mmPerPx.value).d,
+        ...seatPaint(seat ? seat.tone : 'free', paint),
+        label,
+        labelSizeMm: label
+          ? numberSizePx(shape.size, label.length, scale.value) * mmPerPx.value
+          : 0,
+        ...shape.centre,
+      };
+    });
+    return { ...drawn, halves };
   };
   const inSections = drawnSections.value.flatMap(({ section, paint, tables: own }) =>
     own.map((table) => draw(table, section, paint)),
@@ -384,19 +537,55 @@ const tables = computed<DrawnTable[]>(() => {
 
 const selected = computed(() => new Set(props.mode === 'edit' ? props.selection : []));
 
-/** In `read`, the tables of the selection (the table the page reads), each marked by an outline
- *  drawn over the map, outside the table's own button, so the mark coming and going as the focus
- *  moves never changes a table's box. */
-const readMarks = computed(() => {
-  if (props.mode !== 'read' || !props.selection.length) return [];
-  const marked = new Set(props.selection);
-  return tables.value
-    .filter((table) => marked.has(table.id))
-    .map((table) => ({
-      id: table.id,
-      transform: `translate(${table.xMm} ${table.yMm}) rotate(${table.rotation})`,
-      rect: grownTable(table, OUTLINE_OUT_PX * mmPerPx.value),
-    }));
+/** What the focus moves among, in the order a screen reader meets them: each table that is one
+ *  button by its id, and each seated half of a shared table as "<id>#left" or "#right", left
+ *  first, at its own middle on the hall. */
+const targets = computed(() =>
+  tables.value.flatMap((table) => {
+    if (!table.halves)
+      return [{ key: table.id, tableId: table.id, xMm: table.xMm, yMm: table.yMm }];
+    const turn = (table.rotation * Math.PI) / 180;
+    return table.halves
+      .filter((half) => half.seatKey !== null)
+      .map((half) => ({
+        key: `${table.id}#${half.side}`,
+        tableId: table.id,
+        xMm: table.xMm + half.xMm * Math.cos(turn) - half.yMm * Math.sin(turn),
+        yMm: table.yMm + half.xMm * Math.sin(turn) + half.yMm * Math.cos(turn),
+      }));
+  }),
+);
+
+/** In `read`, the tables of the selection (the table the page reads) and the seats and tables
+ *  `marked`, each marked by an outline drawn over the map, outside the table's own button, so the
+ *  mark coming and going as the focus moves never changes a table's box: round the table, or
+ *  round the half its seat holds. */
+interface ReadMark {
+  id: string;
+  transform: string;
+  /** The outline round a whole table, or the shape of the one round a half. */
+  rect: ReturnType<typeof grownTable> | null;
+  d: string | null;
+}
+
+const readMarks = computed<ReadMark[]>(() => {
+  if (props.mode !== 'read' || (!props.selection.length && !props.marked.length)) return [];
+  const marked = new Set([...props.selection, ...props.marked]);
+  const out = OUTLINE_OUT_PX * mmPerPx.value;
+  return tables.value.flatMap((table): ReadMark[] => {
+    const transform = `translate(${table.xMm} ${table.yMm}) rotate(${table.rotation})`;
+    if (marked.has(table.id) || (table.seatKey !== null && marked.has(table.seatKey))) {
+      return [{ id: table.id, transform, rect: grownTable(table, out), d: null }];
+    }
+    return (table.halves ?? [])
+      .filter((half) => half.seatKey !== null && marked.has(half.seatKey))
+      .map((half) => ({
+        id: `${table.id}#${half.side}`,
+        transform,
+        rect: null,
+        d: halfTable(table, half.side, table.rotation, out).d,
+      }));
+  });
 });
 const carriedIds = computed(() => new Set(props.mode === 'edit' ? props.carried : []));
 
@@ -461,17 +650,7 @@ const labels = computed<DrawnLabel[]>(() => {
   return drawn;
 });
 
-/** Where each section's name stands, in millimetres, for what the editor draws over the map
- *  (its turn handle) to keep off. */
-const labelBounds = computed<Bounds[]>(() =>
-  labels.value.map((label) => ({
-    left: label.x,
-    top: label.y,
-    right: label.x + label.width,
-    bottom: label.y + label.height,
-  })),
-);
-defineExpose({ labelBounds });
+defineExpose({ zoomIn, zoomOut, fit });
 
 // ── The no-table zones ───────────────────────────────────────────────────────
 
@@ -493,11 +672,15 @@ const zones = computed(() => {
           (ZONE_TEXT_PX * widthPx * 0.9) / Math.max(textWidthPx(label, ZONE_TEXT_PX), 1),
         )
       : 0;
+    // A turned zone is drawn turned about its centre, and its label turned back upright.
+    const centre = `${zone.xMm + zone.widthMm / 2} ${zone.yMm + zone.depthMm / 2}`;
     return {
       ...zone,
       label,
       name: label ? `No-table zone: ${label}` : 'No-table zone',
       textSizeMm: fits >= MIN_ZONE_TEXT_PX ? fits * mmPerPx.value : 0,
+      transform: zone.rotation ? `rotate(${zone.rotation} ${centre})` : undefined,
+      upright: zone.rotation ? `rotate(${-zone.rotation} ${centre})` : undefined,
     };
   });
 });
@@ -508,12 +691,13 @@ const hatchId = `layout-hatch-${useId()}`;
 
 const focusedId = ref<string | null>(null);
 
-/** The one table Tab stops on: the one focused last, else the first selected, else the first. */
+/** The one table or half Tab stops on: the one focused last, else the first selected, else the
+ *  first. */
 const tabStopId = computed(() => {
-  const drawn = tables.value;
-  if (focusedId.value && drawn.some((table) => table.id === focusedId.value))
+  const all = targets.value;
+  if (focusedId.value && all.some((target) => target.key === focusedId.value))
     return focusedId.value;
-  return drawn.find((table) => selected.value.has(table.id))?.id ?? drawn[0]?.id ?? null;
+  return all.find((target) => selected.value.has(target.tableId))?.key ?? all[0]?.key ?? null;
 });
 
 watch(
@@ -524,22 +708,26 @@ watch(
   },
 );
 
-function onFocused(id: string) {
-  focusedId.value = id;
+function onFocused(id: string, target: string) {
+  focusedId.value = target;
   emit('focused', id);
 }
 
-function tableOf(event: Event): string | null {
+/** The value of `attribute` on the element an event came from or the nearest round it. */
+function closestOf(event: Event, attribute: string): string | null {
   const target = event.target instanceof Element ? event.target : null;
-  return target?.closest('[data-table-id]')?.getAttribute('data-table-id') ?? null;
+  return target?.closest(`[${attribute}]`)?.getAttribute(attribute) ?? null;
 }
+
+const tableOf = (event: Event) => closestOf(event, 'data-table-id');
+/** The seat an event fell on: the half's, or the whole table's; none on a free half. */
+const seatOf = (event: Event) => closestOf(event, 'data-seat-key');
 
 function onClick(event: MouseEvent) {
   if (props.mode !== 'read') return;
   // The click of a press by hand: read as it ended, if it was a tap.
   if (performance.now() - pressEnded < CLICK_AFTER_PRESS_MS) return;
-  const id = tableOf(event) ?? (byHand.value ? tableNear(event) : null);
-  if (id) emit('activate', id);
+  pressAt(event, byHand.value);
 }
 
 const ARROWS: Record<string, Direction> = {
@@ -552,29 +740,33 @@ const ARROWS: Record<string, Direction> = {
 function onKeydown(event: KeyboardEvent) {
   // The editor round the map may take a key first, as it does while a table is picked up: on the
   // table or in the capture phase, since a listener of its own round the map hears the key after.
-  if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (event.defaultPrevented || event.ctrlKey || event.metaKey) return;
+  // In the editor, whose selection takes the plain arrows, Alt and an arrow moves between tables
+  // too (T422). A read map leaves Alt alone: Alt and an arrow is the browser's back and forward.
+  if (event.altKey && (props.mode !== 'edit' || !ARROWS[event.key])) return;
   const id = tableOf(event);
   if (!id) return;
   if ((event.key === 'Enter' || event.key === ' ') && props.mode === 'read') {
     event.preventDefault();
     // A key held down presses once.
-    if (!event.repeat) emit('activate', id);
+    if (!event.repeat) press(id, seatOf(event));
     return;
   }
   const direction = ARROWS[event.key];
   if (!direction || event.shiftKey) return;
   // An arrow on the map never scrolls the page, whether or not a table stands that way.
   event.preventDefault();
-  const from = tables.value.find((table) => table.id === id);
+  const at = closestOf(event, 'data-target') ?? id;
+  const from = targets.value.find((target) => target.key === at);
   if (!from) return;
   const next = nearestInDirection(
     from,
-    tables.value.filter((table) => table.id !== id),
+    targets.value.filter((target) => target.key !== at),
     direction,
   );
   if (!next) return;
-  const el = [...(svg.value?.querySelectorAll<SVGGElement>('[data-table-id]') ?? [])].find(
-    (table) => table.getAttribute('data-table-id') === next.id,
+  const el = [...(svg.value?.querySelectorAll<SVGGElement>('[data-target]') ?? [])].find(
+    (target) => target.getAttribute('data-target') === next.key,
   );
   el?.focus();
 }
@@ -600,6 +792,7 @@ function onKeydown(event: KeyboardEvent) {
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
     @pointercancel="onPointerUp"
+    @wheel="onWheel"
   >
     <defs>
       <!-- The hatch of a no-table zone: 45°, 10 px apart on the screen at any zoom. -->
@@ -634,13 +827,14 @@ function onKeydown(event: KeyboardEvent) {
     <image
       v-if="hall && imageUrl && imageShown"
       class="layout-map__image"
+      :class="{ 'layout-map__image--colour': !imageInGrey }"
       :href="imageUrl"
       x="0"
       y="0"
       :width="hall.widthMm"
       :height="hall.heightMm"
       preserveAspectRatio="none"
-      :opacity="interactive ? 0.5 : undefined"
+      :opacity="interactive && imageFaded ? 0.5 : undefined"
       aria-hidden="true"
       data-testid="layout-map-image"
     />
@@ -649,6 +843,7 @@ function onKeydown(event: KeyboardEvent) {
       v-for="zone in zones"
       :key="zone.id"
       class="layout-map__zone"
+      :transform="zone.transform"
       :role="interactive ? 'img' : undefined"
       :aria-label="interactive ? zone.name : undefined"
       data-testid="layout-map-zone"
@@ -669,6 +864,7 @@ function onKeydown(event: KeyboardEvent) {
       <text
         v-if="zone.textSizeMm > 0"
         data-testid="layout-map-zone-label"
+        :transform="zone.upright"
         :x="zone.xMm + zone.widthMm / 2"
         :y="zone.yMm + zone.depthMm / 2"
         :font-size="zone.textSizeMm"
@@ -713,6 +909,15 @@ function onKeydown(event: KeyboardEvent) {
       :depthMm="table.depthMm"
       :fill="table.fill"
       :edge="table.edge"
+      :dashes="table.dashes"
+      :ink="table.ink"
+      :seatKey="table.seatKey"
+      :halves="
+        table.halves?.map((half) => ({
+          ...half,
+          tabStop: `${table.id}#${half.side}` === tabStopId,
+        })) ?? null
+      "
       :number="table.number"
       :numberSizeMm="table.numberSizeMm"
       :selected="selected.has(table.id)"
@@ -733,10 +938,19 @@ function onKeydown(event: KeyboardEvent) {
       data-testid="layout-map-read"
     >
       <rect
+        v-if="mark.rect"
         v-bind="mark.rect"
         fill="none"
         stroke="var(--mm-black)"
-        stroke-width="2.5"
+        :stroke-width="OUTLINE_WIDTH_PX"
+        vector-effect="non-scaling-stroke"
+      />
+      <path
+        v-else
+        :d="mark.d!"
+        fill="none"
+        stroke="var(--mm-black)"
+        :stroke-width="OUTLINE_WIDTH_PX"
         vector-effect="non-scaling-stroke"
       />
     </g>
@@ -775,7 +989,8 @@ function onKeydown(event: KeyboardEvent) {
       </text>
     </g>
 
-    <!-- What the editor draws over the map, in the map's millimetres: the turn handle. -->
+    <!-- What the editor draws over the map, in the map's millimetres: the selection's frame and
+         its corners' turn knobs. -->
     <slot :mmPerPx="mmPerPx" />
   </svg>
 </template>
@@ -790,11 +1005,16 @@ function onKeydown(event: KeyboardEvent) {
   background: var(--layout-floor);
 }
 
-/* The floorplan lies under the tables in grey and at half strength, so the sections' colours are
-   the only colours. A printed map that carries the image draws it as it is. */
+/* The floorplan lies under the tables in grey and at half strength, unless the person viewing
+   asks for its own colours (`imageInGrey`, `imageFaded`), so the sections' colours are the only
+   colours. A printed map that carries the image draws it as it is. */
 .layout-map--read .layout-map__image,
 .layout-map--edit .layout-map__image {
   filter: grayscale(1);
+}
+
+.layout-map .layout-map__image--colour {
+  filter: none;
 }
 
 /* A name, a zone and the image are read, never pressed: a press on them is a press on the floor. */

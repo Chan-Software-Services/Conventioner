@@ -436,6 +436,18 @@ export interface Market {
   /** Each vendor the last "Check Discord" kept, as the pages show them, worked out by the server
    *  (`shown_vendors` in `back-end/api/discord_connection.py`, E46/F01/S05); none before a check. */
   discordVendors?: ServedDiscordVendor[];
+  /** What the public map shows, and whether it is on (T422); null until first set, and written
+   *  only by `PUT /markets/:id/public-map`. */
+  publicMap?: PublicMapSettings | null;
+}
+
+/** A market's public map settings (T422): each question is the key of a short text question of
+ *  the market's form, or null where none is chosen. */
+export interface PublicMapSettings {
+  enabled: boolean;
+  nameQuestion: string | null;
+  websiteQuestion: string | null;
+  instagramQuestion: string | null;
 }
 
 /**
@@ -769,7 +781,8 @@ export interface FloorplanTable {
   rotation: number;
 }
 
-/** A no-table zone of a layout: a rectangle from its top-left corner, in millimetres. */
+/** A no-table zone of a layout: a rectangle from its top-left corner, in millimetres, turned
+ *  `rotation` degrees clockwise about its centre (T422); none, or 0, is square to the page. */
 export interface FloorplanZone {
   id: string;
   label: string;
@@ -777,6 +790,7 @@ export interface FloorplanZone {
   yMm: number;
   widthMm: number;
   depthMm: number;
+  rotation?: number;
 }
 
 /** How a section is drawn on a layout: `color` indexes the section palette, 1 to 8, and
@@ -813,6 +827,9 @@ export interface FloorplanObject {
   zones: FloorplanZone[];
   sectionStyles: SectionStyle[];
   startingCounts: StartingCount[];
+  /** Whether the layout was started after Draft and so draws the seats the plan settled rather
+   *  than deciding its sections' counts (T422); set by the server alone. */
+  followsPlan?: boolean;
 }
 
 /**

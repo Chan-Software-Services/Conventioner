@@ -14,10 +14,14 @@
  * It mirrors the one refusal an organizer can cause - a form that would ask nothing, which would
  * keep the market from entering Review - so it is immediate; the server is the authority on the
  * rest, and its answer is the one shown.
+ *
+ * Its save belongs to its opening on this market (T411): nothing closes it while it saves, and a
+ * save answered after it was closed and opened again leaves the new opening alone.
  */
 import { computed, ref, watch } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
-import { api, getApiErrorMessage, isMarketChanged } from '@/utils/api';
+import { api, isMarketChanged } from '@/utils/api';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import {
   ESSENTIAL_KEY_PREFIX,
   SECTION_RANKING_KEY,
@@ -59,8 +63,13 @@ const newFieldLabel = ref('');
 const newFieldKey = ref('');
 const unasked = ref<string[]>([]);
 const keyTouched = ref(false);
-const saving = ref(false);
-const errorMessage = ref('');
+/** Said beside the form's own refusals, in the body, where it has always been. */
+const submission = useDialogSubmit({
+  opening: () => (props.open ? props.marketId : null),
+  failure: 'Could not save the form.',
+  says: 'self',
+});
+const { sentence: errorMessage } = submission;
 
 /** A label becomes a key until the organizer names one - the form builder's own rule. */
 watch(newFieldLabel, (label) => {
@@ -87,7 +96,6 @@ watch(
     newFieldLabel.value = props.suggestedFieldLabel ?? '';
     keyTouched.value = false;
     seedUnasked();
-    errorMessage.value = '';
   },
   { immediate: true },
 );
@@ -184,26 +192,30 @@ const changesNothing = computed(
 );
 
 const cannotSave = computed(
-  () => saving.value || Boolean(keyError.value) || wouldAskNothing.value || changesNothing.value,
+  () => Boolean(keyError.value) || wouldAskNothing.value || changesNothing.value,
 );
 
 async function save() {
   if (cannotSave.value) return;
-  saving.value = true;
-  errorMessage.value = '';
-  try {
-    const { data } = await api.put(`/markets/${props.marketId}/application-form`, {
-      ...proposed.value,
-      formRevision: props.formRevision,
-    });
-    emit('amended', (data?.application_form ?? proposed.value) as ApplicationForm);
-    emit('close');
-  } catch (err: unknown) {
-    errorMessage.value = getApiErrorMessage(err, 'Could not save the form.');
-    if (isMarketChanged(err)) emit('changed');
-  } finally {
-    saving.value = false;
-  }
+  const proposal = proposed.value;
+  await submission.submit(
+    async () => {
+      const { data } = await api.put(`/markets/${props.marketId}/application-form`, {
+        ...proposal,
+        formRevision: props.formRevision,
+      });
+      return (data?.application_form ?? proposal) as ApplicationForm;
+    },
+    {
+      done: (form) => {
+        emit('amended', form);
+        emit('close');
+      },
+      refused: (err) => {
+        if (isMarketChanged(err)) emit('changed');
+      },
+    },
+  );
 }
 </script>
 
@@ -217,6 +229,7 @@ async function save() {
     anchored
     confirm-label="Save and carry on"
     :confirm-disabled="cannotSave"
+    :submission="submission"
     @close="emit('close')"
     @submit="save"
   >

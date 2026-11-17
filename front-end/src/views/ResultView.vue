@@ -38,6 +38,7 @@ import ReadFailed from '@/components/ReadFailed.vue';
 import RowGroup from '@/components/RowGroup.vue';
 import { useGroupFolds } from '@/utils/useGroupFolds';
 import { useResultFilters } from '@/utils/useResultFilters';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import {
   HALF_TABLE_LEFT,
   HALF_TABLE_RIGHT,
@@ -293,8 +294,13 @@ interface OpenSeat {
 }
 
 const openSeat = ref<OpenSeat | null>(null);
-const placementBusy = ref(false);
-const placementError = ref('');
+const PLACEMENT_FAILED = 'That change could not be saved.';
+/**
+ * The seat dialog's write (T411), opened on the seat it was opened for: each opening is a new seat
+ * object, so an answer that lands after the dialog was opened on another seat, or the same seat
+ * again, never closes or speaks in it.
+ */
+const placement = useDialogSubmit({ opening: () => openSeat.value, failure: PLACEMENT_FAILED });
 
 /** Which change the server asked about first: its dialog's button says "Free anyway" and so on. */
 type HereChange = 'free' | 'move' | 'swap';
@@ -317,14 +323,12 @@ const hereAsked = computed(() => {
  */
 function openPlace(row: MarketTableRow, seat: Seat | null): void {
   if (isLoading.value) return;
-  placementError.value = '';
   hereQuestion.value = null;
   openSeat.value = { mode: 'place', row, seat, occupantEmail: null };
 }
 
 function openOccupied(row: MarketTableRow, email: string): void {
   if (isLoading.value) return;
-  placementError.value = '';
   hereQuestion.value = null;
   openSeat.value = { mode: 'occupied', row, seat: seatHeldBy(row, email), occupantEmail: email };
 }
@@ -344,7 +348,6 @@ const readOnly = computed(() => !mayTake(market.value, MarketAction.Assign));
 
 function closePlacement(): void {
   openSeat.value = null;
-  placementError.value = '';
   hereQuestion.value = null;
 }
 
@@ -395,47 +398,66 @@ function rereadTheTables(): Promise<unknown> {
 }
 
 /**
- * Send one change, `send(whileHere)`. A change the server asks about first (`isVendorHere`) puts
- * its sentence in the dialog with `change`'s confirming button, and confirming sends it again with
- * `whileHere: true`; nothing changed on the server, so nothing is read again (T318).
+ * Send one change, `send(whileHere)`, through the dialog's submission: a second press while one is
+ * out sends nothing, and the dialog holds until the answer lands. A change the server asks about
+ * first (`isVendorHere`) puts its sentence in the dialog with `change`'s confirming button, and
+ * confirming sends it again with `whileHere: true`; nothing changed on the server, so nothing is
+ * read again (T318).
  */
-async function runPlacementChange(
+function runPlacementChange(
   change: HereChange,
   send: (whileHere: boolean) => Promise<unknown>,
   whileHere = false,
-): Promise<void> {
-  placementBusy.value = true;
-  placementError.value = '';
-  hereQuestion.value = null;
-  try {
-    await send(whileHere);
-    closePlacement();
-    // Re-read rather than patch the grid in place: the solver places everyone else around a pin,
-    // so one change can move other vendors, and a locally patched grid would show a floor plan
-    // nobody is standing on. A placement is a write to the market's stored assignment, so the
-    // store re-reads the market too (E21/F02/S04): anything else showing it follows.
-    await Promise.all([rereadTheTables(), refreshMarket()]);
-  } catch (err: unknown) {
-    if (isVendorHere(err) && !whileHere) {
-      hereQuestion.value = {
-        sentence: getApiErrorMessage(err, 'That change could not be saved.'),
-        change,
-        send: () => void runPlacementChange(change, send, true),
-      };
-      return;
-    }
-    placementError.value = getApiErrorMessage(err, 'That change could not be saved.');
-    // A conflict says the page held tables the server no longer does: a seat taken meanwhile, or
-    // another change to the market landed first and this one stored nothing (ADR 0024). The dialog
-    // stays open on its refusal, and the tables are read again, so it shows who sits where now and
-    // offers only the seats that are free now. The store's market is read again too, by the
-    // market-changed interceptor when that is the refusal.
-    if (getApiErrorStatus(err) === 409) {
-      await Promise.all([rereadTheTables(), isMarketChanged(err) ? null : refreshMarket()]);
-    }
-  } finally {
-    placementBusy.value = false;
-  }
+): void {
+  const askedFirst = (err: unknown) => isVendorHere(err) && !whileHere;
+  void placement.submit(
+    async () => {
+      hereQuestion.value = null;
+      try {
+        await send(whileHere);
+      } catch (err: unknown) {
+        // A conflict says the page held tables the server no longer does: a seat taken meanwhile,
+        // or another change to the market landed first and this one stored nothing (ADR 0024). The
+        // tables are read again inside the hold, so the dialog, open on its refusal, shows who sits
+        // where now and offers only the seats that are free now. The store's market is read again
+        // too, by the market-changed interceptor when that is the refusal.
+        if (!askedFirst(err) && getApiErrorStatus(err) === 409) {
+          await Promise.all([rereadTheTables(), isMarketChanged(err) ? null : refreshMarket()]);
+        }
+        throw err;
+      }
+    },
+    {
+      done: async () => {
+        closePlacement();
+        await rereadAfterAChange();
+      },
+      refused: (err) => {
+        if (!askedFirst(err)) return;
+        hereQuestion.value = {
+          sentence: getApiErrorMessage(err, PLACEMENT_FAILED),
+          change,
+          send: () => runPlacementChange(change, send, true),
+        };
+        return '';
+      },
+      // A change that landed after the dialog moved to another seat changed the market all the
+      // same: the page reads it again, and the dialog open now is left as it is.
+      late: (answer) => {
+        if (answer.ok) void rereadAfterAChange();
+      },
+    },
+  );
+}
+
+/**
+ * Re-read rather than patch the grid in place: the solver places everyone else around a pin, so
+ * one change can move other vendors, and a locally patched grid would show a floor plan nobody is
+ * standing on. A placement is a write to the market's stored assignment, so the store re-reads the
+ * market too (E21/F02/S04): anything else showing it follows.
+ */
+function rereadAfterAChange(): Promise<unknown> {
+  return Promise.all([rereadTheTables(), refreshMarket()]);
 }
 
 function placementsUrl(): string {
@@ -456,7 +478,7 @@ function putPlacement(email: string, tableCode: string, tableChoice: Seat): void
   const seat = openSeat.value;
   if (!seat) return;
   const body = { email, date: seat.row.date, tableCode, tableChoice };
-  void runPlacementChange('move', (whileHere) =>
+  runPlacementChange('move', (whileHere) =>
     api.put(placementsUrl(), withWhileHere(body, whileHere)),
   );
 }
@@ -522,7 +544,7 @@ function freeSeat(deductOwed: boolean): void {
     date: seat.row.date,
     ...(deductOwed && { deductOwed }),
   };
-  void runPlacementChange('free', (whileHere) =>
+  runPlacementChange('free', (whileHere) =>
     api.delete(placementsUrl(), { data: withWhileHere(data, whileHere) }),
   );
 }
@@ -531,7 +553,7 @@ function swapSeats(withEmail: string): void {
   const seat = openSeat.value;
   if (!seat?.occupantEmail) return;
   const body = { date: seat.row.date, emails: [seat.occupantEmail, withEmail] };
-  void runPlacementChange('swap', (whileHere) =>
+  runPlacementChange('swap', (whileHere) =>
     api.post(`${placementsUrl()}/swap`, withWhileHere(body, whileHere)),
   );
 }
@@ -765,8 +787,7 @@ function swapSeats(withEmail: string): void {
       :emptySeats="emptySeats"
       :vendorNames="vendorNames"
       :vendorSearch="vendorSearch"
-      :busy="placementBusy"
-      :errorMessage="placementError"
+      :submission="placement"
       :deduction="deduction"
       :question="hereAsked"
       :resultsOut="resultsAreOut(market?.allocation)"

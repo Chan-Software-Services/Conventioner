@@ -55,12 +55,16 @@ describe("which page is a vendor's", () => {
     expect(isVendorFacing(router.resolve('/some-market'))).toBe(true);
   });
 
-  it('is the vendor page and no other route', () => {
+  it("is the market's public map (T422)", () => {
+    expect(isVendorFacing(router.resolve('/some-market/map'))).toBe(true);
+  });
+
+  it('is the vendor page and the public map, and no other route', () => {
     const vendorFacing = router
       .getRoutes()
       .filter((record) => record.meta.vendorFacing === true)
       .map((record) => record.name);
-    expect(vendorFacing).toEqual(['vendor-page']);
+    expect(vendorFacing).toEqual(['public-map', 'vendor-page']);
   });
 
   it.each([
@@ -108,6 +112,12 @@ describe('when the bar stands apart', () => {
     vendorPageAnswered('some-market', true);
     vendorPageAnswered('some-market', false);
     expect(standsApart(router.resolve('/some-market'))).toBe(true);
+  });
+
+  it('does on a public map, and not once its read answered "Page not found" (T422)', () => {
+    expect(standsApart(router.resolve('/some-market/map'))).toBe(true);
+    vendorPageAnswered('some-market', true);
+    expect(standsApart(router.resolve('/some-market/map'))).toBe(false);
   });
 
   it("is untouched by another slug's answer", () => {
