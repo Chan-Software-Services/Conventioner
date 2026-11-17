@@ -511,6 +511,12 @@ function struckPrice(line: PaymentLine): boolean {
   gap: var(--space-3) var(--space-4);
 }
 
+/* Prototype (release walk F1): a rule divides each part of the tab from the one above. */
+.payment-group {
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--mm-border);
+}
+
 .payment-figures {
   display: flex;
   gap: var(--space-6);
