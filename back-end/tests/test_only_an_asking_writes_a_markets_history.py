@@ -1,5 +1,5 @@
 """Only an asking, the unasked door or an applicant's own save writes a market's history through
-the history's writer (T105-9, ADR 0036).
+the history's writer (T105-9, ADR 0037).
 
 A change on a market records under the row its request asked: through the ``Asked`` its check
 returned (``Actions.Asked.record``), or, for the few records no request asks, through

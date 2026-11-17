@@ -20,7 +20,7 @@ and a structured detail. The wording belongs to whichever surface shows it
 (``front-end/src/utils/marketHistory.ts`` and its ``historyReaders/``, for every list of it) and must be changeable without a migration - the same rule
 ``placement_reasons`` follows.
 
-**A change records under the row it asked** (T105-9, ADR 0036): a market's entry is written
+**A change records under the row it asked** (T105-9, ADR 0037): a market's entry is written
 through the asking its write's check returned (``Actions.Asked.record``), or, for the few records
 no request asks, through ``unasked``, each caller with its reason. ``_record`` is private, so no
 entry can name a row passed by hand beside a check made elsewhere; an applicant's own change, which
@@ -182,7 +182,7 @@ def _record(
 ) -> None:
     """Write one entry. Never raises: a history that can break a change is worse than no history.
 
-    Private (T105-9, ADR 0036): a change records through the asking its check returned
+    Private (T105-9, ADR 0037): a change records through the asking its check returned
     (``Actions.Asked.record``) or through ``unasked``, never by naming a row here, and
     ``tests/test_only_an_asking_writes_a_markets_history.py`` fails any other module that calls it.
 
