@@ -101,7 +101,8 @@ const errorMessage = computed(() =>
 );
 /** When the list was last read from the server, by any of the reads below (E38/F05/S03). */
 const readAt = listRead.readAt;
-const refreshing = computed(() => listRead.phase.value === 'refreshing');
+/** Refresh's own read is out: the button waits for it, but not for a re-read it did not ask. */
+const refreshing = ref(false);
 /** A failed re-read keeps the list as last read, and says so beside Refresh until one lands. */
 const refreshError = computed(() =>
   listRead.phase.value === 'refresh_failed' || listRead.phase.value === 'refreshing'
@@ -109,7 +110,9 @@ const refreshError = computed(() =>
     : '',
 );
 /** A read is out: a re-read asked now would only overtake it. */
-const reading = computed(() => listRead.phase.value === 'loading' || refreshing.value);
+const reading = computed(
+  () => listRead.phase.value === 'loading' || listRead.phase.value === 'refreshing',
+);
 
 /**
  * Read again every half minute while the tab is in view, so who holds what and what others decided
@@ -130,14 +133,25 @@ function rereadOnTheClock() {
  */
 async function refresh() {
   // Not while a verdict is being written, as the background re-read waits too.
-  if (reading.value || saving.value) return;
+  if (refreshing.value || saving.value) return;
+  refreshing.value = true;
+  try {
+    await readAgain();
+  } finally {
+    refreshing.value = false;
+  }
+}
+/** A re-read overtakes one already out, so who holds what is read as the deal left it. */
+async function readAgain() {
   await listRead.reread();
   // The rail counts what is left as well: it should agree with the list just read.
   if (listRead.phase.value === 'ready') void marketStore.refresh();
 }
 watch(
   () => props.dealt,
-  () => void refresh(),
+  () => {
+    if (!saving.value) void readAgain();
+  },
 );
 onMounted(() => (rereading = setInterval(rereadOnTheClock, REREAD_MS)));
 onUnmounted(() => {

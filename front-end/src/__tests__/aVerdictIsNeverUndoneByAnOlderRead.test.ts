@@ -236,6 +236,59 @@ describe('the half-minute re-read', () => {
     expect(fetchMarketApplications).toHaveBeenCalledTimes(3);
     expect(rowOf(wrapper, 'jo')!.text()).toContain(statusLabel(ApplicationStatus.ReviewerRejected));
   });
+
+  it('is followed by another read when reviewers are dealt anew while it is out', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const wrapper = await allView();
+    fetchMarketApplications.mockClear();
+    holding = true;
+    vi.advanceTimersByTime(30_000);
+    expect(fetchMarketApplications).toHaveBeenCalledTimes(1);
+
+    await wrapper.setProps({ dealt: 1 });
+    await flushPromises();
+
+    expect(fetchMarketApplications).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves Refresh enabled while it is out', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const wrapper = await allView();
+    holding = true;
+    vi.advanceTimersByTime(30_000);
+    await flushPromises();
+    expect(held).toHaveLength(1);
+
+    const refresh = wrapper.get('[data-testid="applications-refresh"]');
+    expect(refresh.attributes('disabled')).toBeUndefined();
+  });
+});
+
+describe('Refresh', () => {
+  it('stays enabled while a verdict’s own re-read is out', async () => {
+    route.query = { vendor: 'jo@vendor.test' };
+    const wrapper = await allView();
+    holding = true;
+
+    await wrapper.get('[data-testid="applications-all-reject"]').trigger('click');
+    await flushPromises();
+    expect(held.length).toBeGreaterThan(0);
+
+    const refresh = wrapper.get('[data-testid="applications-refresh"]');
+    expect(refresh.attributes('disabled')).toBeUndefined();
+  });
+
+  it('is disabled while its own read is out', async () => {
+    const wrapper = await allView();
+    holding = true;
+
+    await wrapper.get('[data-testid="applications-refresh"]').trigger('click');
+    await flushPromises();
+
+    expect(held).toHaveLength(1);
+    const refresh = wrapper.get('[data-testid="applications-refresh"]');
+    expect(refresh.attributes('disabled')).toBeDefined();
+  });
 });
 
 describe('the list', () => {
