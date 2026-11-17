@@ -7,8 +7,6 @@ describes:
   - front-end/e2e/helpers/browserSaid.ts
   - front-end/e2e/helpers/withUser.ts
   - front-end/e2e/helpers/mongo.ts
-  - front-end/e2e/helpers/mongoSession.ts
-  - front-end/e2e/helpers/mongoScript.ts
   - front-end/e2e/helpers/marketScreens.ts
   - front-end/e2e/helpers/upcoming.ts
   - front-end/e2e/helpers/settledPlanChanged.ts
@@ -22,6 +20,8 @@ describes:
   - front-end/e2e/helpers/phoneWindow.ts#inTheWindow
   - front-end/e2e/helpers/stackReady.ts
   - front-end/e2e/helpers/signInWindow.ts
+  - front-end/e2e/helpers/mongoSession.ts
+  - front-end/e2e/helpers/mongoScript.ts
 verified: 2026-11-17
 sources:
   - E21/F02/S02
@@ -93,10 +93,11 @@ The fixture's page attaches it when the test fails, and a `withUser()` page when
 That wait ([`helpers/peopleAtScale.ts`](../../../front-end/e2e/helpers/peopleAtScale.ts), `requestsWhile`) lets go of the requests the old page still had out when a reload or a `goto` inside it brings a new page, since Playwright reports neither their end nor their failure, and still waits for the new page's own.
 `expectAccessible(state)` runs axe over the page as it stands and fails on any WCAG A or AA violation, one line per element as `rule (impact) target`; its configuration and why `color-contrast` is off are [the design language's](../../design-system.md#what-keeps-this-true).
 `settle(page)` ([`helpers/settle.ts`](../../../front-end/e2e/helpers/settle.ts)) waits, bounded, for CSS transitions to end, since a control mid-transition reports its passing paint rather than its own; every sweep calls it before it looks.
-A sweep's tests are registered by `walkTheScreens()`, so Playwright reports each under [`helpers/screens.ts`](../../../front-end/e2e/helpers/screens.ts), the line of its `test()` call, never the sweep's spec file; the describe title names the sweep, and `npx playwright test e2e/<sweep>.spec.ts` still runs that sweep alone.
+The screen sweeps' tests are registered by `sweepTheScreens()`, so Playwright reports each under [`helpers/screenSweeps.ts`](../../../front-end/e2e/helpers/screenSweeps.ts), the line of its `test()` call, never the group's spec file; the describe title names the group, a screen's test runs each check as a step, `<check> at <width>x<height>`, and `npx playwright test e2e/screen-sweeps- --grep '<screen>'` runs the checks of the screens whose names match alone.
 So does `expectInside`, the window check of the phone journeys ([`helpers/phoneWindow.ts`](../../../front-end/e2e/helpers/phoneWindow.ts)), since a box read in a slide's last frames stands a fraction of a thousandth of a pixel past where it rests, enough to fail an exact comparison with the window's edge.
 The same fixture hides the Vue DevTools floating panel (`#__vue-devtools-container__`) that the dev server injects, in every tab of its context: it overlays the app and intercepts clicks aimed at it, so a test failed on a click that hit that button instead of its own target.
 A context a test opens itself with `browser.newContext()` is outside the fixture, so it calls [`hideDevToolsPanel`](../../../front-end/e2e/helpers/hideDevToolsPanel.ts), as `withUser()` does: a click there may otherwise wait on the panel until the test times out, as the vendor's Send code did on the Google Form market's page.
+With `TEST_MAP_OUT` set, as CI's shards set it on a push to `dev` alone, `test` also records what each test's pages loaded and called, for [the test map](the-test-map.md) ([`helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts)); with it unset, no fixture of it is added.
 
 ## Opening a market, and shelling into Mongo
 

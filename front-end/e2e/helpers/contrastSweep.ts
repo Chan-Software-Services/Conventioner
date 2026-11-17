@@ -3,8 +3,9 @@ import type { Page } from '@playwright/test';
 /**
  * The contrast sweep's measures, run in the page: every visible text node's contrast against the
  * ground it is composited onto (E16/F01/S05), and every disabled control drawing the one disabled
- * state's line (T162). `contrast-sweep.spec.ts` runs them over every screen, and
- * `contrast-measure.spec.ts` shows them fixture pages with each defect they are meant to catch.
+ * state's line (T162). The screen sweeps' contrast check (`screenSweeps.ts`) runs them over every
+ * screen, and `contrast-measure.spec.ts` shows them fixture pages with each defect they are meant
+ * to catch.
  */
 
 export const AA_NORMAL = 4.5;

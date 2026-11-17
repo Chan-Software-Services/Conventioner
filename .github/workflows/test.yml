@@ -279,6 +279,9 @@ jobs:
       DISABLE_CAPTCHA: "true"
       DISABLE_EMAIL: "true"
       DISCORD_FAKE: "true"
+      # On a push to dev only, the shards record the test map (front-end/e2e/helpers/testMap.ts),
+      # which the test-map job below builds; every other run records nothing.
+      RECORD_TEST_MAP: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -296,6 +299,8 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
           TOTAL: ${{ matrix.total }}
+          # Empty, so off, unless this run records the test map.
+          TEST_MAP_OUT: ${{ env.RECORD_TEST_MAP == 'true' && format('{0}/test-map/records.jsonl', github.workspace) || '' }}
         run: node scripts/e2e-shards.ts "--shard=$SHARD/$TOTAL"
       - name: Report flaky tests
         if: always()
@@ -329,6 +334,20 @@ jobs:
       - name: Docker compose logs
         if: always()
         run: docker compose logs
+      # The test map lays each line of the back end's log against the test running then, by its
+      # timestamp (scripts/test_map.py build).
+      - name: The back end's log, for the test map
+        if: always() && env.RECORD_TEST_MAP == 'true'
+        run: |
+          mkdir -p test-map
+          docker compose logs --timestamps --no-log-prefix backend >test-map/backend.log
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && env.RECORD_TEST_MAP == 'true'
+        with:
+          name: test-map-shard-${{ matrix.shard }}
+          path: test-map/
+          if-no-files-found: ignore
+          retention-days: 90
       # The report that refreshes `e2e-shard-timings.json` (`node scripts/e2e-shards.ts refresh`).
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -401,6 +420,49 @@ jobs:
             front-end/test-results/
           retention-days: 7
 
+  # The test map (docs/implementation/testing/the-test-map.md), on a push to dev only, once the
+  # shards have recorded what each spec reached: the back end's suite once under coverage, for what
+  # each endpoint runs, then the build of both into the `test-map` artifact. No check requires it,
+  # and a pull request never runs it. A shard that failed still recorded; a shard that recorded
+  # nothing makes the build refuse, so the map is whole or not made. `--shards-expected` is the
+  # matrix's `total`: the two move together.
+  test-map:
+    name: test-map
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+    needs: e2e-shard
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install the back end's locks
+        working-directory: back-end
+        run: pip install -r requirements.txt -r requirements-floorplan-solver.txt -r requirements-dev.txt
+      - name: What each endpoint runs, from the back end's suite under coverage
+        run: python scripts/test_map.py endpoints --out "$RUNNER_TEMP/endpoints.json"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: test-map-shard-*
+          path: ${{ runner.temp }}/test-map-shards
+      - name: Build the map
+        env:
+          COMMIT: ${{ github.sha }}
+        run: >-
+          python scripts/test_map.py build --commit "$COMMIT"
+          --endpoints "$RUNNER_TEMP/endpoints.json"
+          --shards "$RUNNER_TEMP/test-map-shards" --shards-expected 10
+          --out "$RUNNER_TEMP/test-map.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-map
+          path: ${{ runner.temp }}/test-map.json
+          if-no-files-found: error
+          retention-days: 90
+
   # The one check to require: it passes only when every shard did, so branch protection names a
   # single job whatever the shard count becomes. It runs whatever the shards' result, so a failed
   # shard fails it, but not on a run that was cancelled, which would post a red check on the head
@@ -410,7 +472,41 @@ jobs:
     if: ${{ !cancelled() }}
     needs: e2e-shard
     runs-on: ubuntu-latest
+    # The audit reads the newest dev push's `test-map` artifact, which another run made.
+    permissions:
+      contents: read
+      actions: read
     steps:
+      # On a pull request, the selection audit (docs/implementation/testing/the-test-map.md): each
+      # spec the shards failed, as `scripts/affected-specs.py` would have treated it for the PR's
+      # diff (from the merge commit's first parent, as e2e-repeat reads it, hence two commits):
+      # ran, left to CI past the cap, or missed, each miss a warning annotation once a test map
+      # exists. Every step of it continues on error, so the job passes or fails on the last step
+      # alone.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        with:
+          pattern: e2e-results-shard-*
+          path: ${{ runner.temp }}/e2e-results
+      # The script needs only the standard library, so the runner's own Python runs it.
+      - name: Audit the selection
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          shopt -s nullglob
+          python3 scripts/affected-specs.py audit --github --base HEAD^1 --head HEAD \
+            "$RUNNER_TEMP"/e2e-results/*/results.json
       - name: Every shard passed
         env:
           SHARDS_RESULT: ${{ needs.e2e-shard.result }}

@@ -1,5 +1,7 @@
 # The test tools. Edit them here; requirements-dev.txt is their lock (scripts/lock-backend-requirements.sh).
 pytest>=8.0
+# CI's test-map job runs the suite under it (scripts/test_map.py), and reads its data file's tables.
+coverage>=7,<8
 # The resolver scripts/lock-backend-requirements.sh runs, pinned so CI's re-lock reproduces the locks
 # byte for byte; a newer uv may write them differently.
 uv==0.13.5
