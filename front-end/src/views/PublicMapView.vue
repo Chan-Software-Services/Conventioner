@@ -124,6 +124,14 @@ function chooseLocation(locationId: string) {
   goTo({ ...place.value, locationId, tableId: keeps ? place.value.tableId : null });
 }
 
+/* Prototype (release walk F6): the page never scrolls, so the window keeps no gutter for a bar
+   the page will never show, and the background reaches the window's right edge. */
+const gutterBefore = document.documentElement.style.scrollbarGutter;
+document.documentElement.style.scrollbarGutter = 'auto';
+onUnmounted(() => {
+  document.documentElement.style.scrollbarGutter = gutterBefore;
+});
+
 /** Prototype (release walk F6): a market day as the dropdown says it, "Nov 19". */
 const MONTH_NAMES = [
   'Jan',
@@ -386,58 +394,34 @@ function openVendor(vendor: ListedVendor) {
       <svg
         class="public-map__doodles"
         viewBox="0 0 1440 900"
-        preserveAspectRatio="xMidYMid slice"
+        preserveAspectRatio="none"
         aria-hidden="true"
         focusable="false"
       >
-        <defs>
-          <linearGradient id="pm-wave-honey" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="var(--layout-section-1-fill)" />
-            <stop offset="1" stop-color="var(--layout-section-1-fill)" stop-opacity="0.15" />
-          </linearGradient>
-          <linearGradient id="pm-wave-mint" x1="1" y1="0" x2="0" y2="1">
-            <stop offset="0" stop-color="var(--layout-section-4-fill)" />
-            <stop offset="1" stop-color="var(--layout-section-6-fill)" stop-opacity="0.5" />
-          </linearGradient>
-          <linearGradient id="pm-wave-teal" x1="0" y1="1" x2="1" y2="0">
-            <stop offset="0" stop-color="var(--layout-section-4-edge)" stop-opacity="0.22" />
-            <stop offset="1" stop-color="var(--layout-section-4-fill)" stop-opacity="0.6" />
-          </linearGradient>
-          <filter id="pm-soften" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="38" />
-          </filter>
-        </defs>
-        <rect width="1440" height="900" fill="var(--layout-floor)" />
-        <g filter="url(#pm-soften)">
-          <path
-            d="M1080 -60 C 1260 -40, 1500 40, 1480 220 C 1460 380, 1300 330, 1210 260 C 1110 180, 960 140, 990 40 C 1010 -20, 1040 -60, 1080 -60 Z"
-            fill="var(--layout-section-4-fill)"
-          />
-          <path
-            d="M-80 300 C 40 230, 220 280, 250 400 C 280 520, 160 600, 40 580 C -80 560, -160 380, -80 300 Z"
-            fill="var(--layout-section-1-fill)"
-          />
-          <path
-            d="M560 -40 C 700 -60, 860 10, 820 110 C 780 200, 640 170, 560 120 C 480 70, 450 -20, 560 -40 Z"
-            fill="var(--mm-yellow)"
-            opacity="0.18"
-          />
-          <path
-            d="M1180 620 C 1320 560, 1500 640, 1480 780 C 1460 920, 1260 960, 1170 860 C 1090 770, 1060 670, 1180 620 Z"
-            fill="var(--layout-section-6-fill)"
-          />
-        </g>
+        <rect width="1440" height="900" class="pm-bg__paper" />
         <path
-          d="M0 0 H 1440 V 110 C 1320 170, 1180 60, 1020 120 C 860 180, 760 70, 600 110 C 440 150, 320 60, 160 120 C 90 145, 40 140, 0 130 Z"
-          fill="url(#pm-wave-honey)"
+          class="pm-bg__mustard"
+          d="M-100 -100 H 1540 V 150 C 1320 230, 1180 70, 980 150 C 800 220, 700 60, 500 140 C 320 210, 160 90, -100 190 Z"
         />
         <path
-          d="M0 900 V 700 C 140 640, 280 740, 440 700 C 620 655, 700 780, 900 730 C 1080 685, 1200 600, 1440 660 V 900 Z"
-          fill="url(#pm-wave-mint)"
+          class="pm-bg__teal"
+          d="M1040 -80 C 1300 -60, 1560 60, 1520 300 C 1480 480, 1260 420, 1160 330 C 1060 240, 900 180, 940 60 C 960 -10, 990 -80, 1040 -80 Z"
         />
         <path
-          d="M0 900 V 800 C 180 760, 300 850, 520 815 C 720 783, 860 860, 1060 820 C 1240 785, 1340 840, 1440 810 V 900 Z"
-          fill="url(#pm-wave-teal)"
+          class="pm-bg__mustard pm-bg__soft"
+          d="M-120 300 C 60 220, 260 300, 290 440 C 320 580, 170 660, 30 640 C -110 620, -230 400, -120 300 Z"
+        />
+        <path
+          class="pm-bg__teal"
+          d="M-100 1000 V 700 C 140 620, 300 760, 480 700 C 660 640, 760 790, 960 730 C 1140 680, 1260 590, 1540 660 V 1000 Z"
+        />
+        <path
+          class="pm-bg__mustard pm-bg__soft"
+          d="M1160 600 C 1320 540, 1520 620, 1500 780 C 1480 940, 1260 980, 1160 880 C 1070 790, 1040 660, 1160 600 Z"
+        />
+        <path
+          class="pm-bg__teal pm-bg__soft"
+          d="M560 380 C 700 340, 860 400, 840 500 C 820 600, 660 600, 580 540 C 500 480, 460 410, 560 380 Z"
         />
       </svg>
       <header class="public-map__head">
@@ -868,8 +852,8 @@ function openVendor(vendor: ListedVendor) {
   height: calc(100dvh - var(--banner-h));
   padding-block: var(--space-4) var(--space-6);
   overflow: hidden;
-  background: var(--layout-floor);
-  box-shadow: 0 0 0 100vmax var(--layout-floor);
+  background: #ebe8e2;
+  box-shadow: 0 0 0 100vmax #ebe8e2;
   clip-path: inset(0 -100vmax);
   --pm-line: rgba(39, 35, 35, 0.16);
   --pm-soft-shadow: 0 1px 2px rgba(39, 35, 35, 0.06), 0 8px 24px rgba(39, 35, 35, 0.08);
@@ -1359,11 +1343,14 @@ function openVendor(vendor: ListedVendor) {
 }
 
 /* ── Prototype (release walk F6): a wavy, lumpy gradient behind the page ──
-   A honey wave along the top, mint and teal waves along the bottom, and soft blurred lumps of
-   honey, mint, pale teal and mustard, all in the app's own colours; the sheet in the middle is
-   solid, the map on its floor, the vendors on white. */
+   The makers' market poster's colours, its warm paper, mustard and bright teal, in waves along the
+   top and bottom and lumps between, blurred together so no edge shows; the layer is larger than
+   the window so the blur never fades at its edges. The sheet in the middle is solid. */
 .public-map {
   position: relative;
+  --pm-paper: #ebe8e2;
+  --pm-mustard: #e8a72b;
+  --pm-teal: #4bb39a;
 }
 
 .public-map__head,
@@ -1372,16 +1359,34 @@ function openVendor(vendor: ListedVendor) {
   z-index: 1;
 }
 
-/* Fixed to the window under the app bar, so it spans the window's whole width however wide; the
-   page's column clips nothing of it, being a box the window holds, not the column. */
+/* Fixed to the window under the app bar, a tenth of the window past each edge, and blurred whole. */
 .public-map__doodles {
   position: fixed;
-  top: var(--banner-h);
-  left: 0;
+  top: calc(var(--banner-h) - 10vh);
+  left: -10vw;
   z-index: 0;
-  width: 100vw;
-  height: calc(100dvh - var(--banner-h));
+  width: 120vw;
+  height: calc(120vh - var(--banner-h));
   pointer-events: none;
+  filter: blur(70px);
+}
+
+.pm-bg__paper {
+  fill: var(--pm-paper);
+}
+
+.pm-bg__mustard {
+  fill: var(--pm-mustard);
+  opacity: 0.5;
+}
+
+.pm-bg__teal {
+  fill: var(--pm-teal);
+  opacity: 0.42;
+}
+
+.pm-bg__soft {
+  opacity: 0.32;
 }
 
 .public-map .public-map__body {
