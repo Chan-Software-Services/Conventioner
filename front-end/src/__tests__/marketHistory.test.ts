@@ -1039,14 +1039,19 @@ describe('a selection’s verdict in a vendor’s own history', () => {
   });
 
   it('names no other vendor of the selection, nor their application', () => {
-    for (const each of [given, changed, undone]) {
+    // Made by kai, whose share Ben's was, since dana@'s address ends in ana@'s.
+    const byKai = (one: MarketHistoryEntry): MarketHistoryEntry => ({
+      ...one,
+      actor: 'kai@ember.test',
+      detail: { ...one.detail, dealt_to: { a1: SAM, a2: 'kai@ember.test' } },
+    });
+    for (const each of [given, changed, undone].map(byKai)) {
       const read = JSON.stringify([
         entryParts(each, own('ben@ember.test')),
         entryChanges(each, own('ben@ember.test')),
       ]);
-      // Whole words, since the actor's own address, dana@, ends in ana@'s.
       for (const other of ['ana@ember.test', 'Ana Rivera', CAL, SAM, 'a1', 'A1', 'a3', 'A3']) {
-        expect(read).not.toMatch(new RegExp(`(?<![\\w.@-])${other.replace(/\./g, '\\.')}`));
+        expect(read).not.toContain(other);
       }
     }
   });

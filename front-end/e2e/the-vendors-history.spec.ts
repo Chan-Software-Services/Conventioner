@@ -181,11 +181,11 @@ test("a verdict on a selection reads in a vendor's History tab as their own line
   );
   // It opens to each vendor's verdict by their address, never an application's id.
   const changes = await manage.openHistoryEntry(0);
-  await expect(changes.locator('tbody tr')).toHaveText(
-    vendors.map(
-      (vendor) => new RegExp(`^\\s*${vendor.email.replace(/\./g, '\\.')}\\s*Open\\s*Approved\\s*$`),
-    ),
-  );
+  const rows = changes.locator('tbody tr');
+  await expect(rows).toHaveCount(vendors.length);
+  for (const [index, vendor] of vendors.entries()) {
+    await expect(rows.nth(index).locator('th, td')).toHaveText([vendor.email, 'Open', 'Approved']);
+  }
 });
 
 test("a vendor's long History scrolls with the drawer's body and fetches at its end, with no box of its own", async ({
