@@ -317,6 +317,73 @@ test.describe('The focus sweep', () => {
     ]);
   });
 
+  test('a button with square corners is caught', async ({ page }) => {
+    await show(page, button('border-radius: 0;', ''));
+    expect(await problemsOfTheFirstStop(page)).toEqual([
+      'a border with square corners: border-radius 0px 0px 0px 0px',
+    ]);
+  });
+
+  /**
+   * A segmented control's options (T466), joined into one box: each keeps its own border, one
+   * after the first gives up its start edge, and only the box's outer corners are round, so the
+   * focus border, which follows the option's corners, is square where it meets its neighbour.
+   * `gap` sets them apart, as a wrapped box on a phone does; `radii` are each option's corners.
+   */
+  const segmented = (radii: string[], gap = 0) => `
+    <style>
+      .segmented { display: flex; gap: ${gap}px; }
+      .segmented__option { width: 80px; }
+      .segmented__option + .segmented__option { border-left-width: ${gap ? 1 : 0}px; }
+    </style>
+    <div class="segmented" role="group" aria-label="Show as">
+      ${radii
+        .map(
+          (radius, at) =>
+            `<button class="segmented__option" style="border-radius: ${radius}">${at}</button>`,
+        )
+        .join('')}
+    </div>`;
+
+  /** What the sweep says of each option in turn, reached by Tab. */
+  async function problemsOfEachStop(page: Page, stops: number): Promise<(string[] | null)[]> {
+    const found: (string[] | null)[] = [];
+    for (let at = 0; at < stops; at++) found.push(await problemsOfTheFirstStop(page));
+    return found;
+  }
+
+  test("a joined segmented box's options pass with their inner corners square", async ({
+    page,
+  }) => {
+    await show(page, segmented(['6px 0 0 6px', '0', '0 6px 6px 0']));
+    expect(await problemsOfEachStop(page, 3)).toEqual([[], [], []]);
+  });
+
+  test("a joined option's square corner away from its neighbours is caught", async ({ page }) => {
+    await show(page, segmented(['0', '0 6px 6px 0']));
+    expect(await problemsOfEachStop(page, 2)).toEqual([
+      ['a border with square corners: border-radius 0px 0px 0px 0px'],
+      [],
+    ]);
+  });
+
+  test('options set apart, as a wrapped box is on a phone, are caught with square corners', async ({
+    page,
+  }) => {
+    await show(page, segmented(['6px 0 0 6px', '0 6px 6px 0'], 4));
+    expect(await problemsOfEachStop(page, 2)).toEqual([
+      ['a border with square corners: border-radius 6px 0px 0px 6px'],
+      ['a border with square corners: border-radius 0px 6px 6px 0px'],
+    ]);
+  });
+
+  test('a lone option with square corners is caught', async ({ page }) => {
+    await show(page, segmented(['0']));
+    expect(await problemsOfTheFirstStop(page)).toEqual([
+      'a border with square corners: border-radius 0px 0px 0px 0px',
+    ]);
+  });
+
   test('a card may draw the border for the button naming it', async ({ page }) => {
     await show(
       page,
