@@ -106,6 +106,9 @@ const WRITES_NOTHING: Readonly<Record<string, string>> = {
   'components/elements/ElementLocationSetup.vue': 'answers locally; the setup saves the location',
   'views/StartFromCsvView.vue': 'answers locally; the import writes after it',
   'components/layout/LayoutExportDialog.vue': 'draws a PNG, held by `closeDisabled`',
+  'components/layout/LayoutView.vue':
+    "Layout settings: its table types' dialogs write by their own submissions, and Replace the " +
+    'image and Recalibrate close it before the page starts either',
   'components/ExportVendorsForm.vue': 'downloads a file, held by `closeDisabled`',
   'components/PhaseRail.vue':
     'its confirmations close before the move is sent, and the rail holds the move',

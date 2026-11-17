@@ -617,6 +617,13 @@ def _discord_choice(client, world):
     return client.put(f"/markets/{MARKET}/discord", json={"roleId": "r-vendor"})
 
 
+def _public_map_settings(client, world):
+    world.market(MarketPhase.MARKET_DAYS, applicationForm={"fields": [
+        {"key": "business_name", "label": "Business name", "type": "text"}]})
+    return client.put(f"/markets/{MARKET}/public-map",
+                      json={"enabled": True, "nameQuestion": "business_name"})
+
+
 def _check_discord(client, world):
     _discord(world, **DISCORD_SERVER, usernameQuestion="discord_username")
     world.patch(Discord, "server_members", lambda *_a, **_k: [])
@@ -832,6 +839,8 @@ WRITES = [
           History.DISCORD_CONNECTED, _connect_discord),
     Write("a Discord choice", "PUT", f"{M}/discord", Actions.CONNECT_DISCORD,
           History.DISCORD_SETTINGS, _discord_choice),
+    Write("the public map's settings", "PUT", f"{M}/public-map", Actions.PUBLISH_MAP,
+          History.PUBLIC_MAP, _public_map_settings),
     Write("who is in the Discord server", "POST", f"{M}/discord/check", Actions.CONNECT_DISCORD,
           History.DISCORD_CHECKED, _check_discord, vendors=(VENDOR,),
           subject={"application_ids": ["app-1"]}, detail_keys=("counts",)),

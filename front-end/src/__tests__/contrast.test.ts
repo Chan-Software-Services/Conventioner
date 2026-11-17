@@ -18,6 +18,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
+import { SEAT_TONES, sectionPaint, seatPaint } from '@/components/layout/layoutDrawing';
 
 const AA_NORMAL = 4.5;
 
@@ -397,6 +398,31 @@ describe('the section palette carries its own contract', () => {
       expect(contrast(resolve(edge), resolve('--layout-floor'))).toBeGreaterThanOrEqual(A_BOUNDARY);
       expect(contrast(resolve(edge), WHITE)).toBeGreaterThanOrEqual(A_BOUNDARY);
     });
+  }
+
+  /**
+   * A day's seats (T422, D40): a table filled in its section's tint, outlined white in its hue, or
+   * free on the floor in a dashed grey. Each tone's number reads at 7:1 on its fill, and each
+   * edge stands at 3:1 on its own fill's ground and on the floor round it. A section's hue as the
+   * number on white (3.83 for gold) or the muted ink on the floor (4.40) would not, so every tone
+   * numbers in `--mm-black`.
+   */
+  const colourOf = (value: string): Rgb => (value === 'white' ? WHITE : resolve(value));
+
+  for (let i = 1; i <= 8; i++) {
+    for (const tone of SEAT_TONES) {
+      it(`a ${tone} seat of section colour ${i} numbers at 7:1 and edges at 3:1`, () => {
+        const paint = seatPaint(tone, sectionPaint(i));
+        const fill = colourOf(paint.fill);
+        expect(contrast(colourOf(paint.ink), fill)).toBeGreaterThanOrEqual(INK_ON_A_TABLE);
+        expect(contrast(colourOf(paint.edge), resolve('--layout-floor'))).toBeGreaterThanOrEqual(
+          A_BOUNDARY,
+        );
+        if (tone === 'outlined') {
+          expect(contrast(colourOf(paint.edge), fill)).toBeGreaterThanOrEqual(A_BOUNDARY);
+        }
+      });
+    }
   }
 
   it("a zone's label reads at 7:1 on both greys of its hatch", () => {

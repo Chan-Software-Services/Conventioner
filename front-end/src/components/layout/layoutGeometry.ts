@@ -333,7 +333,7 @@ export function roundTurn(degrees: number): number {
   return turn === 360 ? 0 : turn;
 }
 
-/** An angle held to the nearest whole `step`, as the turn handle does in 15° steps. */
+/** An angle held to the nearest whole `step`, as a corner's turn knob does in 15° steps. */
 export function snapAngle(degrees: number, step: number): number {
   return Math.round(degrees / step) * step;
 }
@@ -366,9 +366,105 @@ export function grownTable(size: SizeMm, byMm: number) {
   };
 }
 
-/** How far outside a table's edge, in screen pixels, its selection's outline is drawn: 2.5 px of
- *  --mm-black, 3 px outside the 1.5 px edge, its middle so far out. */
-export const OUTLINE_OUT_PX = 0.75 + 3 + 1.25;
+/** The selection's outline, in screen pixels: 1.5 px of --mm-black (T422, the QC's item 1). */
+export const OUTLINE_WIDTH_PX = 1.5;
+/** How far outside a table's edge, in screen pixels, its selection's outline is drawn: its inner
+ *  side on the outer side of the table's 1.5 px edge, with no floor between them, its middle so
+ *  far out. */
+export const OUTLINE_OUT_PX = 0.75 + OUTLINE_WIDTH_PX / 2;
+
+// ── A shared table's halves ──────────────────────────────────────────────────
+
+/** A rectangle's outline as a path, each corner rounded by its own radius (top-left, top-right,
+ *  bottom-right, bottom-left), drawn clockwise from the top-left. */
+function roundedPath(box: Bounds, [tl, tr, br, bl]: readonly [number, number, number, number]) {
+  const arc = (r: number, x: number, y: number) => (r > 0 ? ` A ${r} ${r} 0 0 1 ${x} ${y}` : '');
+  return (
+    `M ${box.left + tl} ${box.top} H ${box.right - tr}` +
+    arc(tr, box.right, box.top + tr) +
+    ` V ${box.bottom - br}` +
+    arc(br, box.right - br, box.bottom) +
+    ` H ${box.left + bl}` +
+    arc(bl, box.left, box.bottom - bl) +
+    ` V ${box.top + tl}` +
+    arc(tl, box.left + tl, box.top) +
+    ' Z'
+  );
+}
+
+/** One half of a shared table, in the table's own turn about its centre. */
+export interface HalfTable {
+  /** Its box, grown as asked. */
+  box: Bounds;
+  /** Its shape: its two outer corners round, as the table's are, and the split square. */
+  d: string;
+  /** The middle of its box, where its label stands. */
+  centre: PointMm;
+  /** The size of its box ungrown, which sizes its label as a number is sized for a table. */
+  size: SizeMm;
+}
+
+/**
+ * A half of a shared table (T422, D41), in the table's own turn, grown by `byMm` on every side for
+ * an outline round it. The table is split across its longer side, so each half takes half of it;
+ * left is the half on the reader's left when the table's number reads upright, which for a table
+ * turned past a quarter (`readsUpsideDown`) is its own right end. A table deeper than it is wide
+ * is split across its depth, left the half at its top as its number reads.
+ */
+export function halfTable(
+  size: SizeMm,
+  side: 'left' | 'right',
+  rotation: number,
+  byMm = 0,
+): HalfTable {
+  const across = size.widthMm >= size.depthMm;
+  const first = (side === 'left') !== readsUpsideDown(rotation);
+  const w = size.widthMm / 2;
+  const h = size.depthMm / 2;
+  const ungrown: Bounds = across
+    ? first
+      ? { left: -w, top: -h, right: 0, bottom: h }
+      : { left: 0, top: -h, right: w, bottom: h }
+    : first
+      ? { left: -w, top: -h, right: w, bottom: 0 }
+      : { left: -w, top: 0, right: w, bottom: h };
+  const box: Bounds = {
+    left: ungrown.left - byMm,
+    top: ungrown.top - byMm,
+    right: ungrown.right + byMm,
+    bottom: ungrown.bottom + byMm,
+  };
+  const r = Math.max(TABLE_CORNER_MM + byMm, 0);
+  // The corners on the table's own edge are round; those on the split are square.
+  const radii: [number, number, number, number] = across
+    ? first
+      ? [r, 0, 0, r]
+      : [0, r, r, 0]
+    : first
+      ? [r, r, 0, 0]
+      : [0, 0, r, r];
+  return {
+    box,
+    d: roundedPath(box, radii),
+    centre: { xMm: (ungrown.left + ungrown.right) / 2, yMm: (ungrown.top + ungrown.bottom) / 2 },
+    size: { widthMm: ungrown.right - ungrown.left, depthMm: ungrown.bottom - ungrown.top },
+  };
+}
+
+/** Which half of a turned table a point of the hall lies on, as `halfTable` names them. */
+export function halfAt(
+  point: PointMm,
+  table: PointMm & { rotation: number },
+  size: SizeMm,
+): 'left' | 'right' {
+  const turn = (-table.rotation * Math.PI) / 180;
+  const dx = point.xMm - table.xMm;
+  const dy = point.yMm - table.yMm;
+  const along = dx * Math.cos(turn) - dy * Math.sin(turn);
+  const down = dx * Math.sin(turn) + dy * Math.cos(turn);
+  const first = (size.widthMm >= size.depthMm ? along : down) < 0;
+  return first !== readsUpsideDown(table.rotation) ? 'left' : 'right';
+}
 
 // ── Snapping ─────────────────────────────────────────────────────────────────
 
@@ -692,6 +788,20 @@ export function seenView(view: ViewMm, width: number, height: number): ViewMm {
   };
 }
 
+/** A view of a box `width` pixels across, zoomed by `factor` about a point of the box, the point
+ *  of the hall under it staying there: Ctrl and the wheel at a desk, or a zoom button about the
+ *  box's middle. */
+export function zoomedView(start: ViewMm, factor: number, at: PointPx, width: number): ViewMm {
+  const mmPerPx = start.widthMm / width;
+  const under = { xMm: start.xMm + at.x * mmPerPx, yMm: start.yMm + at.y * mmPerPx };
+  return {
+    xMm: under.xMm - (at.x * mmPerPx) / factor,
+    yMm: under.yMm - (at.y * mmPerPx) / factor,
+    widthMm: start.widthMm / factor,
+    heightMm: start.heightMm / factor,
+  };
+}
+
 /** A view of a box `width` pixels across, dragged by a finger moved `dx`, `dy` pixels. */
 export function pannedView(start: ViewMm, dx: number, dy: number, width: number): ViewMm {
   const mmPerPx = start.widthMm / width;
@@ -785,18 +895,23 @@ export function boxBetween(a: PointMm, b: PointMm): Bounds {
   };
 }
 
-/** The tables a box drawn on the floor selects: those whose centre is in it, its edge included. */
-export function tablesInBox<T extends PointMm & { id: string }>(
+/** The tables a box drawn on the floor selects: those wholly in it, every corner of the table as
+ *  turned, its edge included. A table the box only partly covers is left, so a few tables are
+ *  picked out of a dense block by the box drawn round them (the QC walk of 2026-11-16). */
+export function tablesInBox<T extends PointMm & { id: string; rotation: number }>(
   tables: readonly T[],
   box: Bounds,
+  sizeOf: (table: T) => SizeMm,
 ): string[] {
   return tables
-    .filter(
-      (table) =>
-        table.xMm >= box.left &&
-        table.xMm <= box.right &&
-        table.yMm >= box.top &&
-        table.yMm <= box.bottom,
+    .filter((table) =>
+      tableCorners(table, sizeOf(table)).every(
+        (corner) =>
+          corner.xMm >= box.left &&
+          corner.xMm <= box.right &&
+          corner.yMm >= box.top &&
+          corner.yMm <= box.bottom,
+      ),
     )
     .map((table) => table.id);
 }
@@ -2701,16 +2816,32 @@ export function polygonIsSimple(points: readonly PointMm[]): boolean {
 
 // ── No-table zones ───────────────────────────────────────────────────────────
 
-/** The box a no-table zone covers. */
-export function zoneBounds(
-  zone: Pick<FloorplanZone, 'xMm' | 'yMm' | 'widthMm' | 'depthMm'>,
-): Bounds {
-  return {
+type ZoneShape = Pick<FloorplanZone, 'xMm' | 'yMm' | 'widthMm' | 'depthMm' | 'rotation'>;
+
+/** A no-table zone's four corners, clockwise from its own top-left, as it stands turned about
+ *  its centre (T422). */
+export function zoneCorners(zone: ZoneShape): PointMm[] {
+  const box = cornersOf({
     left: zone.xMm,
     top: zone.yMm,
     right: zone.xMm + zone.widthMm,
     bottom: zone.yMm + zone.depthMm,
-  };
+  });
+  const turn = ((zone.rotation ?? 0) * Math.PI) / 180;
+  if (!turn) return box;
+  const cx = zone.xMm + zone.widthMm / 2;
+  const cy = zone.yMm + zone.depthMm / 2;
+  const cos = Math.cos(turn);
+  const sin = Math.sin(turn);
+  return box.map(({ xMm, yMm }) => ({
+    xMm: cx + (xMm - cx) * cos - (yMm - cy) * sin,
+    yMm: cy + (xMm - cx) * sin + (yMm - cy) * cos,
+  }));
+}
+
+/** The box a no-table zone covers: square to the page round it, as it stands turned. */
+export function zoneBounds(zone: ZoneShape): Bounds {
+  return boxOfPoints(zoneCorners(zone));
 }
 
 /** How far past a zone's edge a table is pushed, so the rounding of its place never takes it back

@@ -10,7 +10,7 @@
  * waiting). Where a component answers a press with an event, the line under it reads out what
  * it did.
  */
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { IntakeMode, MarketPhase } from '@/assets/types/datatypes';
 import AnswerValue from '@/components/AnswerValue.vue';
 import BarLedger from '@/components/BarLedger.vue';
@@ -111,6 +111,19 @@ const ENTRY_ITEMS = [
   { id: 'remove', label: 'Remove', destructive: true },
 ];
 const ACCOUNT_ITEMS = [{ id: 'sign-out', label: 'Sign out' }];
+// The layout map's Floorplan menu (T422): choices that stay chosen, two of them off while the
+// first is unticked, the list hanging above its button at the foot of the map.
+const viewChoices = reactive({ shown: true, grey: true, faded: true });
+const viewItems = computed(() => [
+  { id: 'shown', label: 'Show the floorplan', checked: viewChoices.shown },
+  { id: 'grey', label: 'Greyscale', checked: viewChoices.grey, disabled: !viewChoices.shown },
+  { id: 'faded', label: 'Faded', checked: viewChoices.faded, disabled: !viewChoices.shown },
+]);
+function chooseView(id: string) {
+  const key = id as keyof typeof viewChoices;
+  viewChoices[key] = !viewChoices[key];
+  chosenItem.value = `${id}: ${viewChoices[key] ? 'ticked' : 'not ticked'}`;
+}
 const chosenItem = ref<string | null>(null);
 const dayLabel = new Date(`${seats[0]!.date}T00:00:00`).toLocaleDateString('en-US', {
   weekday: 'long',
@@ -364,6 +377,21 @@ const shrinking = computed(() => applications.slice(0, shrinkingCount.value));
           @select="chosenItem = $event"
         >
           <template #trigger>organizer@example.com</template>
+        </RowMenu>
+      </div>
+    </LibraryPanel>
+    <LibraryPanel label="Choices that stay chosen, opening above: the layout map's Floorplan menu">
+      <div class="library-line library-line--foot">
+        <span>A map's zoom bar</span>
+        <RowMenu
+          label="Floorplan"
+          :items="viewItems"
+          testid="library-view-menu"
+          opens="above"
+          buttonClass="btn btn--secondary btn--compact"
+          @select="chooseView"
+        >
+          <template #trigger>Floorplan</template>
         </RowMenu>
       </div>
     </LibraryPanel>
@@ -748,6 +776,12 @@ const shrinking = computed(() => applications.slice(0, shrinkingCount.value));
   width: 100%;
   font-size: var(--text-sm);
   color: var(--mm-black);
+}
+
+/* A line at the foot of its panel, with room above it for a list that opens upward. */
+.library-line--foot {
+  align-items: flex-end;
+  min-height: 10rem;
 }
 
 /* A box too small for what it holds, as a screen would cap one. */

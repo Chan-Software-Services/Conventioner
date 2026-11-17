@@ -1,10 +1,13 @@
 /**
  * A layout's geometry (T257 ticket 03): a turned table's box, the section palette's order, where a
- * section's name goes, the focus an arrow key moves, and the size a number is drawn at.
+ * section's name goes, the focus an arrow key moves, and the size a number is drawn at; and (T422)
+ * the outline that hugs a table, a turned zone's corners, and the two halves of a shared table.
  */
 import { describe, expect, it } from 'vitest';
 import {
   MAX_NUMBER_PX,
+  OUTLINE_OUT_PX,
+  OUTLINE_WIDTH_PX,
   PX_PER_MM_AT_100,
   hallOf,
   nearestInDirection,
@@ -15,6 +18,10 @@ import {
   tableBounds,
   tableCorners,
   readsUpsideDown,
+  halfAt,
+  halfTable,
+  zoneBounds,
+  zoneCorners,
   zoomPercent,
   type Bounds,
 } from '@/components/layout/layoutGeometry';
@@ -278,5 +285,142 @@ describe("a table's number on the screen", () => {
     expect(zoomPercent(PX_PER_MM_AT_100)).toBe(100);
     expect(zoomPercent(0.004)).toBe(10);
     expect(zoomPercent(0.32)).toBe(800);
+  });
+});
+
+describe("the selection's outline", () => {
+  it('is 1.5 px, its inner side on the outer side of the 1.5 px edge, no floor between', () => {
+    expect(OUTLINE_WIDTH_PX).toBe(1.5);
+    // The edge's outer side is 0.75 px out; the outline's middle is half its width further.
+    expect(OUTLINE_OUT_PX - OUTLINE_WIDTH_PX / 2).toBe(0.75);
+  });
+});
+
+describe('a turned no-table zone', () => {
+  const STAGE = { xMm: 1000, yMm: 2000, widthMm: 4000, depthMm: 2000 };
+
+  it('has the corners of its box when square to the page, turned or not said', () => {
+    const square = [
+      { xMm: 1000, yMm: 2000 },
+      { xMm: 5000, yMm: 2000 },
+      { xMm: 5000, yMm: 4000 },
+      { xMm: 1000, yMm: 4000 },
+    ];
+    expect(zoneCorners(STAGE)).toEqual(square);
+    expect(zoneCorners({ ...STAGE, rotation: 0 })).toEqual(square);
+    expect(zoneBounds(STAGE)).toEqual({ left: 1000, top: 2000, right: 5000, bottom: 4000 });
+  });
+
+  it('turns its corners clockwise about its centre', () => {
+    // A quarter turn about (3000, 3000): 4 m across becomes 4 m down.
+    const corners = zoneCorners({ ...STAGE, rotation: 90 });
+    const expected = [
+      { xMm: 4000, yMm: 1000 },
+      { xMm: 4000, yMm: 5000 },
+      { xMm: 2000, yMm: 5000 },
+      { xMm: 2000, yMm: 1000 },
+    ];
+    corners.forEach((corner, i) => {
+      expect(corner.xMm).toBeCloseTo(expected[i].xMm);
+      expect(corner.yMm).toBeCloseTo(expected[i].yMm);
+    });
+  });
+
+  it('is bounded by the box square to the page round it as it stands turned', () => {
+    const bounds = zoneBounds({ ...STAGE, rotation: 30 });
+    const halfAcross = 2000 * Math.cos(Math.PI / 6) + 1000 * Math.sin(Math.PI / 6);
+    const halfDown = 2000 * Math.sin(Math.PI / 6) + 1000 * Math.cos(Math.PI / 6);
+    expect(bounds.left).toBeCloseTo(3000 - halfAcross);
+    expect(bounds.right).toBeCloseTo(3000 + halfAcross);
+    expect(bounds.top).toBeCloseTo(3000 - halfDown);
+    expect(bounds.bottom).toBeCloseTo(3000 + halfDown);
+  });
+});
+
+describe('the halves of a shared table', () => {
+  it('splits a table across its longer side, left on the reader’s left', () => {
+    const left = halfTable(SIX_FOOT, 'left', 0);
+    const right = halfTable(SIX_FOOT, 'right', 0);
+    expect(left.box).toEqual({ left: -915, top: -380, right: 0, bottom: 380 });
+    expect(right.box).toEqual({ left: 0, top: -380, right: 915, bottom: 380 });
+    expect(left.centre).toEqual({ xMm: -457.5, yMm: 0 });
+    // Its number is sized for the half's box.
+    expect(left.size).toEqual({ widthMm: 915, depthMm: 760 });
+  });
+
+  it('keeps left on the reader’s left of a table turned past a quarter, whose number is turned back', () => {
+    // At 180° the number is drawn a half turn further, so the reader's left is the table's own
+    // right end.
+    expect(halfTable(SIX_FOOT, 'left', 180).box.left).toBe(0);
+    expect(halfTable(SIX_FOOT, 'right', 180).box.right).toBe(0);
+    // A quarter turn reads top to bottom: left is the end at the top, the table's own left.
+    expect(halfTable(SIX_FOOT, 'left', 90).box.right).toBe(0);
+  });
+
+  it('splits a table deeper than it is wide across its depth, left at its top', () => {
+    const deep = { widthMm: 760, depthMm: 1830 };
+    expect(halfTable(deep, 'left', 0).box).toEqual({
+      left: -380,
+      top: -915,
+      right: 380,
+      bottom: 0,
+    });
+    expect(halfTable(deep, 'right', 0).size).toEqual({ widthMm: 760, depthMm: 915 });
+  });
+
+  /** Where a half's centre stands on the page, about the table's centre, the table turned. */
+  const onThePage = (
+    size: { widthMm: number; depthMm: number },
+    side: 'left' | 'right',
+    turn: number,
+  ) => {
+    const { centre } = halfTable(size, side, turn);
+    const r = (turn * Math.PI) / 180;
+    return {
+      xMm: centre.xMm * Math.cos(r) - centre.yMm * Math.sin(r),
+      yMm: centre.xMm * Math.sin(r) + centre.yMm * Math.cos(r),
+    };
+  };
+
+  it.each([
+    [0, 'xMm', -1],
+    [90, 'yMm', -1],
+    [180, 'xMm', -1],
+    [270, 'yMm', -1],
+  ] as const)(
+    'stands left at the reader’s left at 0° and 180°, and at the page’s top at 90° and 270° (%i°)',
+    (turn, axis, sign) => {
+      expect(Math.sign(onThePage(SIX_FOOT, 'left', turn)[axis])).toBe(sign);
+      expect(Math.sign(onThePage(SIX_FOOT, 'right', turn)[axis])).toBe(-sign);
+      // A press on the page lands on the half drawn there.
+      const at = onThePage(SIX_FOOT, 'left', turn);
+      expect(halfAt(at, { xMm: 0, yMm: 0, rotation: turn }, SIX_FOOT)).toBe('left');
+    },
+  );
+
+  it.each([
+    // A quarter turn reads top to bottom: the number's top, and the left half, face the page's right.
+    [90, 'xMm', 1],
+    // Past a quarter the number is turned back, so left is the table's own bottom, at the page's top.
+    [180, 'yMm', -1],
+  ] as const)(
+    'keeps a deep table’s left at its top as its number reads, turned %i°',
+    (turn, axis, sign) => {
+      const deep = { widthMm: 760, depthMm: 1830 };
+      expect(Math.sign(onThePage(deep, 'left', turn)[axis])).toBe(sign);
+      expect(Math.sign(onThePage(deep, 'right', turn)[axis])).toBe(-sign);
+      const at = onThePage(deep, 'left', turn);
+      expect(halfAt(at, { xMm: 0, yMm: 0, rotation: turn }, deep)).toBe('left');
+    },
+  );
+
+  it('draws each half with its outer corners round and the split square, grown on every side', () => {
+    const { d } = halfTable(SIX_FOOT, 'left', 0);
+    expect(d).toBe(
+      'M -875 -380 H 0 V 380 H -875 A 40 40 0 0 1 -915 340 V -340 A 40 40 0 0 1 -875 -380 Z',
+    );
+    const grown = halfTable(SIX_FOOT, 'right', 0, 10);
+    expect(grown.box).toEqual({ left: -10, top: -390, right: 925, bottom: 390 });
+    expect(grown.d).toContain('A 50 50');
   });
 });

@@ -106,6 +106,12 @@ export interface MarketSchema {
   }>;
   phase?: string;
   planRevision?: number;
+  publicMap?: {
+    enabled?: boolean;
+    instagramQuestion?: string;
+    nameQuestion?: string;
+    websiteQuestion?: string;
+  };
   rejectionRules?: {
     answers?: string[];
     key: string;
@@ -124,6 +130,7 @@ export interface MarketSchema {
       maxHalfTableProportionPerSection?: number;
     };
     floorplans?: {
+      followsPlan?: boolean;
       id?: string;
       imageGridfsId?: string;
       imageHeight?: number;
@@ -160,6 +167,7 @@ export interface MarketSchema {
         depthMm: number;
         id?: string;
         label?: string;
+        rotation?: number;
         widthMm: number;
         xMm: number;
         yMm: number;

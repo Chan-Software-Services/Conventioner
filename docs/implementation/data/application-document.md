@@ -11,7 +11,7 @@ describes:
   - back-end/datatypes.py#AnswerUpdate
   - back-end/migrations/create_applications_collection.py
   - back-end/migrations/migrate_submitted_at_to_iso.py
-verified: 2026-11-10
+verified: 2026-11-17
 sources:
   - wayfinding/v0-1-0/map
   - wayfinding/real-market-readiness/01
@@ -68,6 +68,7 @@ The organizer's and the applicant's views camel-case an application on the way o
 | `reviewer`                                   | whose share it was dealt to (`{user_id, email}`), absent when it never was ([the review is dealt among chosen reviewers](../../business/rules/the-review-is-dealt-among-chosen-reviewers.md)); three writes in this module write it, each called only by [`back-end/review_team.py`](../../../back-end/review_team.py) while its deal holds the market, so no two deals write the turn or a reviewer at once: `deal`, when reviewers are chosen or changed, only while the application is open and still dealt as read; `deal_follow_up`, a removed reviewer's follow-up handed on, which sets `follow_up_owner` with it; and `deal_arrival`, an arrival (an applicant's save, an import, or the rules returning it to open), only while it is still open, undealt and marked `arriving`, so one decided meanwhile keeps its verdict alone; a verdict never clears it, so it stays the record of whose share it was; not who is looking at it now, which is `held_by` |
 
 A vendor's names are answers in `form_data` too; `vendor_names_for_market` reads them as one map from address to the name to call each vendor ([a vendor is called by their chosen name](../../business/rules/a-vendor-is-called-by-their-chosen-name.md)).
+Every map from address to answers (`_answers_by_address`) reads a vendor holding a main and a waitlist application by the main one's answers, whichever the query returns last, so their name, the search's terms, the public map's answers and the answers their price group is read from (`vendor_answers_for_market`) never come from the waitlist application.
 
 Form field keys are held to `^[a-z0-9_]+$` (`FORM_FIELD_KEY_PATTERN` in `datatypes.py`) because they become keys inside `form_data`, where a dot or a leading `$` cannot be addressed by Mongo update operators.
 
