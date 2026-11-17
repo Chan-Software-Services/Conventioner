@@ -24,7 +24,7 @@ describes:
   - front-end/src/components/PlacementDialog.vue
   - back-end/api/attendance.py#checked_in_on
   - back-end/tests/test_a_vendor_who_is_here_is_asked_for.py
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - wayfinding/readable-journey/08
   - wayfinding/claims-and-room/map
