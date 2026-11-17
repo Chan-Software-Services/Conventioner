@@ -76,6 +76,12 @@ describe('the primitives exist and own what tokens cannot', () => {
     expect(declaration(PRIMITIVES, '.btn--compact', 'height')).toBe(
       'var(--control-height-compact)',
     );
+    // A field in a toolbar stands as tall as the compact buttons beside it (T466), its text the
+    // field's own.
+    expect(declaration(PRIMITIVES, '.field--compact', 'height')).toBe(
+      'var(--control-height-compact)',
+    );
+    expect(declaration(PRIMITIVES, '.field--compact', 'font-size')).toBeNull();
     // No pixel height is left but the textarea's 72px, which is a min, not a control height.
     const heights = new Set<string>();
     PRIMITIVES.walkDecls(/height$/, (decl) => {

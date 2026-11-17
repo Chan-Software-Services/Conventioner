@@ -14,6 +14,7 @@ const ENTRIES = [
   'dialog',
   'combobox',
   'filter-toggles',
+  'toolbars',
   'list-frame',
   'summaries',
   'folds',
