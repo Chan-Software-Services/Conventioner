@@ -251,6 +251,7 @@ The rule is [the review is dealt among chosen reviewers](../rules/the-review-is-
 **Status:** Works (walked live).
 "Choose what leads the card" on a card opens a dialog of the highlights ([F3](form-tab.md#f3-what-a-reviewer-reads-first)) over the card, where they used to unfold between its answers and its verdict buttons (T217).
 Each tick is saved as it is made, so the dialog has one Done and no Cancel, which would promise an undo the ticks do not have.
+On a phone the dialog is as tall as its ticks need, up to the window less its gutter, with its title and Done pinned and the ticks scrolling between them, rather than the window's height every other long dialog takes ([dialogs](../../implementation/conventions/dialogs.md#the-rules)).
 A tick that cannot be saved is taken back and said in the dialog, or on the page if the dialog has closed by the time it fails, beside whatever the card already says, such as who decided it first.
 Done, the close, Escape and the backdrop each close the dialog, with focus back on the button and the same application up: a tick changes what the card leads with, never which application it is.
 With the dialog open, A, R, S, N and Z do nothing to the card, and a key held for a card still arriving does not play behind it: a verdict says it did not count, and a Z leaves the undo on offer.

@@ -10,10 +10,10 @@ import { inTheWindow, type PhoneOrDesk } from './helpers/phoneWindow';
  * at a desk and on a phone. Each width is its step capped by the window; a body that scrolls keeps
  * the title and actions in view, its shades say there is more, and nothing in it is clipped; a long
  * dialog is capped at 80% of a desk's window and fills a phone's or a short window's less the
- * gutter; on a browser that draws classic scroll bars no bar reaches it; the tray stays pinned and
- * scrolls inside itself; a footer needs no form; a dialog with nothing to focus opens where the keys
- * scroll it; and every behaviour a dialog had is kept in either scroll. Dialogs close by Escape and
- * by Cancel.
+ * gutter, unless it fits its content on a phone, when it is as tall as a short list; on a browser
+ * that draws classic scroll bars no bar reaches it; the tray stays pinned and scrolls inside
+ * itself; a footer needs no form; a dialog with nothing to focus opens where the keys scroll it;
+ * and every behaviour a dialog had is kept in either scroll. Dialogs close by Escape and by Cancel.
  */
 
 const SECTIONS = [
@@ -21,6 +21,7 @@ const SECTIONS = [
   'The window scrolls, or only the body',
   'The body scrolls, with a tray',
   'The body scrolls, with nothing else to focus or no form',
+  'The body scrolls, as tall as a short list on a phone',
   'Every behaviour kept',
 ];
 
@@ -194,6 +195,43 @@ eachWindow('the dialog entry', (size) => {
 
     // The close answers, over what scrolled beneath it.
     await inTheWindow(size).press(page.getByTestId('library-window-close-button'));
+    await expect(window).toBeHidden();
+  });
+
+  test("a short list that fits its content ends under Done; without that, a long dialog fills a phone's window", async ({
+    page,
+  }) => {
+    await openEntry(page, 'dialog');
+    const viewport = page.viewportSize()!;
+    let window = await openDialog(page, size, 'Choose what leads', 'fits');
+
+    const [windowBox, doneBox] = await Promise.all([
+      window.boundingBox(),
+      page.getByTestId('library-fits-done').boundingBox(),
+    ]);
+    // Under Done: the actions' own 8px and the window's 16px more.
+    expect(windowBox!.y + windowBox!.height - (doneBox!.y + doneBox!.height)).toBeCloseTo(24, 0);
+    expect(windowBox!.height).toBeLessThan(viewport.height - 48 - 1);
+    expect(
+      await page
+        .getByTestId('library-fits-body')
+        .evaluate((el) => el.scrollHeight - el.clientHeight),
+      'its six ticks all show',
+    ).toBeLessThanOrEqual(1);
+    await inTheWindow(size).press(page.getByTestId('library-fits-done'));
+    await expect(window).toBeHidden();
+    await expect(readOut(page, 'As tall as its list on a phone, up to the window')).toHaveText(
+      'Last: Chose 2 of 6',
+    );
+
+    // A long dialog as short, with no such opt-in: on a phone it is the window less the gutter
+    // whatever it holds (Daniel's choice 22), at a desk as tall as its content.
+    window = await openDialog(page, size, /^Remove /, 'destructive');
+    await expect(page.getByTestId('library-destructive-body')).toHaveCount(1);
+    const height = (await window.boundingBox())!.height;
+    if (size.phone) expect(height).toBeCloseTo(viewport.height - 48, 0);
+    else expect(height).toBeLessThan(viewport.height * 0.8 - 1);
+    await page.keyboard.press('Escape');
     await expect(window).toBeHidden();
   });
 
