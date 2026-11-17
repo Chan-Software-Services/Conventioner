@@ -447,8 +447,8 @@ class NoApplicationsYetGuard:
 class AssignmentComputedGuard:
     """A market cannot go live until a table allocation has actually placed someone.
 
-    Publishing is what puts the market's vendor page (``/<slug>``) on the air, and a market with no
-    computed assignment serves a page that can tell nobody where to stand.
+    Publishing is what puts the market's vendor page (``/<slug>/vendor``) on the air, and a market
+    with no computed assignment serves a page that can tell nobody where to stand.
 
     This is an ENTRY INVARIANT on ``market_days`` rather than a guard on one edge: it is a property
     of sitting in the phase, whatever route got you there, so a second route added later cannot

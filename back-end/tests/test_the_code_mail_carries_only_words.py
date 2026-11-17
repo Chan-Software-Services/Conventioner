@@ -101,9 +101,9 @@ class TestTheMarketsNameIsOnlyWords:
         [mail] = sent
         assert mail["subject"] == "Your sign-in code for Harbour Night Market (#1)"
         assert "<strong>Harbour Night Market</strong>" in mail["html"]
-        assert f'<a href="https://app.test/{slug}">your page for Harbour Night Market</a>' in mail["html"]
+        assert f'<a href="https://app.test/{slug}/vendor">your page for Harbour Night Market</a>' in mail["html"]
         assert 'your page for "Harbour Night Market".' in mail["text"]
-        assert f"your page for Harbour Night Market: https://app.test/{slug}" in mail["text"]
+        assert f"your page for Harbour Night Market: https://app.test/{slug}/vendor" in mail["text"]
 
     def test_the_code_mail_is_sent_through_the_one_send_with_its_kind(self, monkeypatch, mail_on):
         import api.applicant_auth as applicant_auth

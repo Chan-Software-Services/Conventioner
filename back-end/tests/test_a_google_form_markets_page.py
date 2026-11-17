@@ -2,8 +2,8 @@
 
 A market that imports its vendors from the organizer's Google Form has a vendor page too, without
 an application: from the moment its results are published, or from its market days for one that
-went live before it could publish them. Before that, `/<slug>` and every vendor endpoint answer
-for it exactly as for a slug that names nothing. Applying itself stays a form market's alone.
+went live before it could publish them. Before that, `/<slug>/vendor` and every vendor endpoint
+answer for it exactly as for a slug that names nothing. Applying itself stays a form market's alone.
 """
 from types import SimpleNamespace
 

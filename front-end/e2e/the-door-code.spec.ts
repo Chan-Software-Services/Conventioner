@@ -127,7 +127,7 @@ test('an Editor makes the door code, reads it full screen and makes a new one', 
   const first = await shownCode(door);
   await expect(door.doorCodeQr).toHaveAttribute(
     'data-url',
-    new RegExp(`^https?://[^/]+/${marketSlug}\\?door=${first}$`),
+    new RegExp(`^https?://[^/]+/${marketSlug}/vendor\\?door=${first}$`),
   );
   await expect(door.doorCode).toContainText("Scan with your phone's camera to check in");
   await expect(page.getByTestId('door-code-made')).toContainText('by you');
@@ -155,7 +155,7 @@ test('an Editor makes the door code, reads it full screen and makes a new one', 
   expect(second).not.toBe(first);
   await expect(door.doorCodeQr).toHaveAttribute(
     'data-url',
-    new RegExp(`/${marketSlug}\\?door=${second}$`),
+    new RegExp(`/${marketSlug}/vendor\\?door=${second}$`),
   );
 
   // Closed and opened again, it is the new code the server holds.
