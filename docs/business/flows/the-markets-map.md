@@ -8,6 +8,7 @@ describes:
 verified: 2026-11-17
 sources:
   - T422
+  - T465
 ---
 
 # The market's map: published, found and directed by
@@ -44,21 +45,31 @@ Covered by:
 
 ## K8. A visitor finds a vendor
 
-**Status:** Works (read from the code as of T422, `the-public-map.spec.ts`).
+**Status:** Works (read from the code as of T465; `the-public-map.spec.ts`, `the-public-map-vendors.spec.ts`, `the-public-map-bubble.spec.ts`, `the-public-map-half.spec.ts` and `the-public-map-phone-card.spec.ts`).
 **Task (visitor):** "You are at the market. Find the ceramics stall."
 
 1. Open the map's address ([`PublicMapView.vue`](../../../front-end/src/views/PublicMapView.vue)); it opens on today when today is a market date, else the next, else the last.
-   Expect the market's name with "Map" under it, the day buttons in words ("Wed 18 Nov"), the open one pressed, a switch of the locations when the market has two or more, and the map: each table taken filled, each free one a grey dashed outline, as the legend "Taken" and "Free" says.
-2. "Find a vendor", over the day's vendors by name, each "<name>" with "Table <code>, <location>" under it: type part of the name and press the vendor.
-   Expect the map to open their location, outline their table and come into view, and the card to read "Table <code>", their public name, and "Website" and "Instagram" as links that open in a new tab.
+   Expect one sheet filling the window on a soft backdrop in the market's own section colours, the page never scrolling: the market's name in bold over a marker stroke with "vendor map" under it, the day ("Nov 18") and, at a market of two halls or more, the hall as two dropdowns at the map's top right, and the hall filling the rest, each table taken drawn in its section's colours and each free one a grey dashed outline, with a legend naming the hall's sections ("Section A") and "Free table" on a day the hall has one.
+   The no-table zones and their labels ("Stage") are drawn to orient by, with no legend item.
+2. "Find a vendor", over every named vendor of the day: type part of their public name, their website, their Instagram handle, their table's code or their section's name, and pick them from the dropdown.
+   Expect the map to open their hall and outline their table, or their half of a shared one, the card to read their table's code in its section's colours, the hall, their public name, and their website and Instagram as links that open in a new tab, and the field to empty for the next search.
+   An email address or a full name finds nobody.
+   Or browse the list under the field, each vendor led by their table's code, and press one; their row is ringed in mustard.
 3. Or press a table on the map: the card reads who is at it, "This table is free on Wed 18 Nov." with nobody, or "A vendor is at this table. Their details are not listed." for a vendor who gave no public name.
-   A shared table's halves are pressed apart, and its card lists "Left half" then "Right half".
-4. On a phone, pinch and drag the map; at a desk, "Zoom in", "Zoom out" and "Fit" on the map's corner, or Ctrl and the wheel, and a drag once zoomed.
+   A press on one half of a shared table reads that half's vendor alone, under "Left half" or "Right half", and a press on a half with nobody at it reads the whole table; this supersedes D35's card listing both halves, which it now does only when the whole table is picked (T465).
+4. At a desk the card speaks from the table in a bubble, up and to the right of it, to the left near the hall's right edge and under it near the top, following the table as the map zooms and pans.
+   On a phone it lies over the top of the vendor panel under the map, so the whole hall stays in view; closing it brings the list back.
+   Close, or Escape, shuts it.
+5. On a phone, pinch and drag the map; at a desk, "Zoom in", "Zoom out" and "Fit" on the map's corner, or Ctrl and the wheel, and a drag once zoomed.
 
-The address keeps the day, the location and the table, so a link opens one vendor's table on one day; a value it does not know falls back to the opening day or the first location.
+The address keeps the day, the location, the table and the half picked, so a link or a QR code opens one vendor's table, or their half of a shared one, on one day; a value it does not know falls back to the opening day or the first location, and a half the table is not split into on that day opens the whole table.
 It works signed out, on a phone and at a desk, with the logo alone in the app bar, as the vendor page shows it.
 Covered by:
 
+- `the-public-map-bubble.spec.ts`
+- `the-public-map-half.spec.ts`
+- `the-public-map-phone-card.spec.ts`
+- `the-public-map-vendors.spec.ts`
 - `the-public-map.spec.ts`
 
 ## K9. An organizer directs a vendor from Attendance's map

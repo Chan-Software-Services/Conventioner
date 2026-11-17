@@ -169,6 +169,8 @@ Six steps. Adjacent 1px steps are not distinguishable, so they carry no meaning 
 Nothing below 12px, which is the readable minimum.
 No `font-size` in `front-end/src` is smaller.
 
+The public map's market name is its one display heading (T465): Outfit at 600, `--text-2xl` at a desk and `--text-xl` at 640px and under, the nearest steps to the 30px and 25px of the release walk's prototype, whose 700 the weight rule below refuses.
+
 ### Line height
 
 `--leading` is running text's line height, 1.6 times the size, which `body` sets and every line box inherits.
@@ -333,24 +335,34 @@ The next such section takes the side of what it does.
 
 ## Radius
 
-Extracted from the newer screens. Three values.
+Three values extracted from the newer screens, and two the public map added (T465).
 
-| Token              | Value | Use                                   |
-| ------------------ | ----- | ------------------------------------- |
-| `--radius-control` | 6px   | Buttons, inputs, selects, small chips |
-| `--radius-card`    | 10px  | Cards, panels, dialogs                |
-| `--radius-pill`    | 999px | Pills and fully-rounded badges        |
+| Token              | Value | Use                                               |
+| ------------------ | ----- | ------------------------------------------------- |
+| `--radius-control` | 6px   | Buttons, inputs, selects, small chips             |
+| `--radius-card`    | 10px  | Cards, panels, dialogs                            |
+| `--radius-pill`    | 999px | Pills and fully-rounded badges                    |
+| `--radius-sheet`   | 22px  | A window-filling sheet: the public map's          |
+| `--radius-bubble`  | 18px  | A speech bubble: the public map's card, at a desk |
 
 "Fully rounded" has one spelling, `--radius-pill`.
 It was spelled four ways (`999px`, `100px`, `30px`, `20px`); none is left, the floorplan beta's last `20px` having moved to `--radius-pill`.
 
 ## Elevation
 
-One elevation shadow, extracted from the newer screens, where it is already used 77 times on a single screen.
+Two elevation shadows.
+The card's was extracted from the newer screens, where it is already used 77 times on a single screen.
 
 ```css
 --shadow-card:
   0 0 0 1px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.07), 0 6px 14px rgba(0, 0, 0, 0.08);
+```
+
+**What floats over a map takes the second, `--shadow-float`** (T465): the public map's sheet, its day and hall dropdowns, its zoom and legend pills and its bubble.
+The card's shadow, with its 1px ring, reads heavy over a pale map, so this one is softer and wider, and what it lifts draws its own edge in `--mm-border-soft`.
+
+```css
+--shadow-float: 0 1px 2px rgba(39, 35, 35, 0.06), 0 8px 24px rgba(39, 35, 35, 0.08);
 ```
 
 **A card that informs is flat**, where the cards worked in are lifted: on the [layout's page](implementation/modules/floorplan-placement.md#the-editor) the Sections card stands on `--mm-beige` with a 1px `--mm-border` edge and no shadow, so the white, lifted card of the selection or the tool under it reads as the one in hand (T422, the QC walk of 2026-11-16); its quiet lines take `--mm-text-muted-on-beige`, since `--mm-text-muted` is 4.23:1 there.
@@ -376,6 +388,7 @@ A line saying why something was not done, a save the server refused or a check t
 The roles are told apart by name rather than by a sidecar map, which could disagree with the CSS, or a lint rule, which would have to infer which ground each usage sits on.
 So a colour used both ways is two tokens: the old `--mm-grey` (alpha 0.25) is `--mm-border` for lines and `--mm-text-muted` (alpha 0.63, 4.63:1 on white) for secondary text.
 The contract says which values are text and holds those to AA; it does not raise every value, and a border keeps its 0.25.
+Two more paint no text (T465): `--mm-border-soft` (alpha 0.16) is the finer edge of what floats over the public map, its sheet, its pills, its bubble and its vendor panel's rules, a line as `--mm-border` is; and `--mm-paper` (`#fbfaf8`) is the near-white paper under the public map's backdrop, so it needs no contrast pair.
 
 **Ink on light and ink on dark are separate families** (`--mm-text-muted` and `--mm-text-muted-on-dark`), because contrast belongs to a pair: one muted grey cannot serve white and the near-black bar both, and two families make white text on a white page unwritable.
 Where the beige card needs a darker ink than white does, that is a token of its own (`--mm-text-muted-on-beige`).
@@ -464,9 +477,9 @@ A free table's dashed edge is the grey of a table in no section, 4.03 on the flo
 
 - a table shared by two vendors is two halves split across its longer side, each its own shape with its outer corners round and the split square, so the two edges meet as the line between them; left is the half on the reader's left as the number reads, a table turned a quarter having its left half at the top; each half is labelled with the number and "L" or "R" ("12L") at the size a number takes for the half's box, left out where it does not fit, and drawn in its own tone, a half with nobody at it free;
 - a seat or table marked, as a search marks it or a press picks it, takes the selection's outline: round the table, or round the half its seat holds;
-- the legend under the map is one line of swatches, each 24 by 14px drawn in its tone in the open location's first section's colours, with the page's word for it at `--text-sm` ("Here", "Expected", "No vendor"; "Taken", "Free");
-- the zoom stands on the map's bottom-right corner, as the editor's does: Zoom out, Zoom in and Fit as compact secondary buttons on a white card with the card's shadow; each press zooms by half again or a third less about the map's middle, Ctrl and the wheel zoom about the pointer at a desk, a mouse drag pans once zoomed, a plain wheel scrolls the page, and a phone pinches and drags; in a box narrower than 30rem the zoom stands under the map at the legend's end instead, with no card, so it covers none of a phone's small map, and the phone keeps the buttons as the one-finger way to zoom a pinch needs beside it (WCAG 2.5.1);
-- two locations or more are switched by a row of filter toggles above the map, the open one pressed.
+- the legend under the map is one line of swatches, each 24 by 14px drawn in its tone in the open location's first section's colours, with the page's word for it at `--text-sm` ("Here", "Expected", "No vendor"); a day map that fills its box draws none, and its caller's legend stands in its slot: the public map's is a pill naming each section of the open hall in its colours and "Free table" on a day the hall has one, each with a 14px swatch at `--text-xs` (T465);
+- the zoom stands on the map's bottom-right corner, as the editor's does: Zoom out, Zoom in and Fit as compact secondary buttons on a white card with the card's shadow; each press zooms by half again or a third less about the map's middle, Ctrl and the wheel zoom about the pointer at a desk, a mouse drag pans once zoomed, a plain wheel scrolls the page, and a phone pinches and drags; in a box narrower than 30rem the zoom stands under the map at the legend's end instead, with no card, so it covers none of a phone's small map, and the phone keeps the buttons as the one-finger way to zoom a pinch needs beside it (WCAG 2.5.1); a day map that fills its box, the public map's (T465), draws the zoom as a floating white pill with `--shadow-float` and borderless buttons over the map's bottom-right corner, its caller's legend pill over the bottom-left, and in a box narrower than 30rem both pills in one row under the map;
+- two locations or more are switched by a row of filter toggles above the map, the open one pressed, unless the map fills its box, whose caller draws the choice: the public map's hall select.
 
 ### The brand green is `--mm-green` (`#36826f`)
 
@@ -841,7 +854,7 @@ The list holds these states, one a line, each beside the state it is most like, 
 - a location's layout with a no-table zone drawn and turned, waiting for Enter (T422)
 - a location's layout drawn as its map, with 20 tables
 - the signed-out pages
-- the public map signed out, before a pick and with a shared table picked, at a desk and on a phone (T422)
+- the public map signed out, before a pick, with a shared table picked and with one half of it picked, at a desk and on a phone (T422, T465)
 
 They are walked over a stress seed ([`e2e/helpers/seedTheScreens.ts`](../front-end/e2e/helpers/seedTheScreens.ts)) of long names, 40 applications in every review state, a review divided between two reviewers and 36 vendors over four dates and three sections, since a layout that holds on three short names breaks on a real market.
 Contrast and axe measure each state at its first size, focus at its first size and a phone's width, and the layout sweep at every size.

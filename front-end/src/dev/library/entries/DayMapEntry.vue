@@ -3,13 +3,21 @@
  * The day map (T422): `DayMap`, a location's layout drawn on one market day, on the library's
  * fixture halls with their seats dealt from a seeded draw (`marketDay`): Upper Hall and Lower Hall,
  * every tone, a shared table with both halves held, one with a half free, and a seat marked as a
- * search marks it. Attendance's day, the public map's, and the same at a phone's width. Every map
- * here is the real component; the lines under each read out what it holds and what was pressed.
+ * search marks it. Attendance's day, the public map's, and the same at a phone's width; then the
+ * map filling a box of its own, as the public map's hall draws it (T465), with a two-item legend in
+ * its slot, at a desk and at a phone's width. Every map here is the real component; the lines under
+ * each read out what it holds and what was pressed.
  */
 import { ref } from 'vue';
 import DayMap from '@/components/daymap/DayMap.vue';
 import type { DayMapLegendItem } from '@/components/daymap/dayMap';
-import { tableName, type MapSeat } from '@/components/layout/layoutDrawing';
+import {
+  layoutSections,
+  paintValue,
+  seatPaint,
+  tableName,
+  type MapSeat,
+} from '@/components/layout/layoutDrawing';
 import ChoicesForYou from '../parts/ChoicesForYou.vue';
 import LibraryPanel from '../parts/LibraryPanel.vue';
 import LibrarySection from '../parts/LibrarySection.vue';
@@ -86,6 +94,41 @@ function pickInPublic(tableId: string, seatKey: string | null) {
 
 const phoneLocation = ref('loc-upper');
 const phonePress = ref('');
+
+// ── Filling its box ──────────────────────────────────────────────────────────
+
+/** The two boxes a filling map is shown in: a desk's and a phone's, each with its own press. */
+const FILL_BOXES = [
+  {
+    key: 'desk',
+    label: 'At a desk: the legend and the zoom over the map',
+    testid: 'library-day-map-fills',
+  },
+  {
+    key: 'phone',
+    label: "At a phone's width, 390 px: the legend and the zoom under the map",
+    testid: 'library-day-map-fills-phone',
+  },
+] as const;
+const fillsLocation = ref('loc-upper');
+const fillsPicked = ref<Record<string, string | null>>({ desk: null, phone: null });
+const fillsPress = ref<Record<string, string>>({ desk: '', phone: '' });
+function pickFilling(box: string, tableId: string, seatKey: string | null) {
+  fillsPicked.value[box] = seatKey ?? tableId;
+  fillsPress.value[box] = pickedWords(tableId, seatKey);
+}
+
+/** The caller's legend, as the public map fills the slot: Upper Hall's first section in its own
+ *  colours, and a free table. */
+const upper = day.locations.find((l) => l.id === 'loc-upper')!;
+const firstSection = layoutSections(upper.layout, upper.sections).find((s) => s.tables.length)!;
+const FILLS_LEGEND = [
+  {
+    label: firstSection.section.name,
+    paint: seatPaint('filled', firstSection.paint),
+  },
+  { label: 'Free table', paint: seatPaint('free', firstSection.paint) },
+];
 </script>
 
 <template>
@@ -162,6 +205,59 @@ const phonePress = ref('');
     </LibraryPanel>
   </LibrarySection>
 
+  <LibrarySection
+    title="Filling its box, as the public map draws it"
+    about="With fills, the map takes the box it is given whole: no shape of the hall, no edge, no location switch and no legend list of its own. The caller draws the choice of hall, fills the legend slot, here with a two-item legend, and the zoom floats as a pill. In a box 30rem and wider the legend and the zoom stand over the map's bottom corners; narrower, in one row under it."
+  >
+    <LibraryPanel
+      v-for="box in FILL_BOXES"
+      :key="box.key"
+      :class="{ 'library-wide': box.key === 'desk' }"
+      :label="box.label"
+    >
+      <div
+        class="library-demo"
+        :class="{ 'library-phone': box.key === 'phone' }"
+        :data-testid="box.testid"
+      >
+        <div class="library-fills-box" :class="`library-fills-box--${box.key}`">
+          <DayMap
+            v-model:locationId="fillsLocation"
+            fills
+            :locations="day.locations"
+            :tableTypes="day.tableTypes"
+            :seats="taken"
+            :picked="fillsPicked[box.key]"
+            :legend="[]"
+            @pick="(tableId, seatKey) => pickFilling(box.key, tableId, seatKey)"
+          >
+            <template #legend>
+              <ul class="library-fills-legend" aria-label="Legend">
+                <li v-for="item in FILLS_LEGEND" :key="item.label">
+                  <svg class="library-fills-swatch" viewBox="0 0 14 14" aria-hidden="true">
+                    <rect
+                      x="0.75"
+                      y="0.75"
+                      width="12.5"
+                      height="12.5"
+                      rx="3"
+                      :fill="paintValue(item.paint.fill)"
+                      :stroke="paintValue(item.paint.edge)"
+                      stroke-width="1.5"
+                      :stroke-dasharray="item.paint.dashes"
+                    />
+                  </svg>
+                  {{ item.label }}
+                </li>
+              </ul>
+            </template>
+          </DayMap>
+        </div>
+        <ReadOut label="Pressed" :value="fillsPress[box.key]" />
+      </div>
+    </LibraryPanel>
+  </LibrarySection>
+
   <ChoicesForYou>
     <li>
       <strong>Every number in black:</strong> a table's number is held to 7:1 on its fill. A
@@ -196,6 +292,13 @@ const phonePress = ref('');
       <strong>A vendor with no public name:</strong> their table is taken, and a screen reader hears
       "vendor not listed" where the name would be.
     </li>
+    <li>
+      <strong>Filling its box:</strong> the public map's hall is the box the sheet leaves it under
+      its title, whatever shape the hall is, so the map takes that box and the drawing centres the
+      hall in it, rather than the box taking the hall's shape. On a phone's width the legend and the
+      zoom leave the map for a row under it, since over it the two pills covered the small hall's
+      bottom third.
+    </li>
   </ChoicesForYou>
 </template>
 
@@ -215,5 +318,48 @@ const phonePress = ref('');
 /* A phone's width, at a desk too. */
 .library-phone {
   max-width: 390px;
+}
+
+/* The box a filling map takes, as the public map's hall gives it one: its height is the caller's. */
+.library-fills-box {
+  overflow: hidden;
+  border: 1px solid var(--mm-border-soft);
+  border-radius: var(--radius-card);
+  background: white;
+}
+
+.library-fills-box--desk {
+  height: 28rem;
+}
+
+.library-fills-box--phone {
+  height: 24rem;
+}
+
+/* A two-item legend, as a caller fills the slot: a white pill floating over the map. */
+.library-fills-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--mm-border-soft);
+  border-radius: var(--radius-pill);
+  background: white;
+  box-shadow: var(--shadow-float);
+  list-style: none;
+  font-size: var(--text-xs);
+}
+
+.library-fills-legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.library-fills-swatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
 }
 </style>

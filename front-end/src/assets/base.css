@@ -154,6 +154,12 @@
 
   /* ---- Lines and states. Never carry text, so exempt from the contrast rule. ---- */
   --mm-border: rgba(39, 35, 35, 0.25);
+  /* A finer edge, for what floats over a map (T465): the public map's sheet, its pills, its bubble
+     and its vendor panel's rules, where `--mm-border` reads as a frame drawn round each. */
+  --mm-border-soft: rgba(39, 35, 35, 0.16);
+  /* The near-white paper under the public map's backdrop (T465), which its blurred section colours
+     lie on. It carries no text, so it needs no contrast pair. */
+  --mm-paper: #fbfaf8;
   --hover-grey: rgba(192, 192, 192, 0.486);
 
   /* ============================================================================================
@@ -232,6 +238,8 @@
   --radius-control: 6px; /* buttons, inputs, selects, small chips */
   --radius-card: 10px; /* cards, panels, dialogs */
   --radius-pill: 999px; /* pills and fully-rounded badges */
+  --radius-sheet: 22px; /* a window-filling sheet, the public map's (T465) */
+  --radius-bubble: 18px; /* a speech bubble, the public map's card at a desk (T465) */
 
   /* One shadow, extracted - it is already used 77 times on the Assignments page alone.
      The legacy halo it replaces is `0 0 4px 5px rgba(0,0,0,.25)`: no offset means no light source,
@@ -239,6 +247,11 @@
      read as outlined in grey fog. Its inset twin is what makes the setup fields look pressed. */
   --shadow-card:
     0 0 0 1px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.07), 0 6px 14px rgba(0, 0, 0, 0.08);
+  /* The second elevation (T465), for what floats over a map: the public map's sheet, its dropdown
+     pills, its zoom and legend pills and its bubble. The card's shadow, with its 1px ring, reads
+     heavy over a pale map; this is softer and wider, and the thing it lifts draws its own edge in
+     `--mm-border-soft`. */
+  --shadow-float: 0 1px 2px rgba(39, 35, 35, 0.06), 0 8px 24px rgba(39, 35, 35, 0.08);
 
   /* A scroller's edge shade (T200, T217): drawn by `ScrollBox` at each edge with more beyond it,
      fading from this to nothing over its depth. A dark shade is lost on `--mm-black`, so a scroller
@@ -334,6 +347,22 @@ html {
      tapped control, whatever its shape. It inherits, so it is said once; the control's own hover,
      pressed (`.btn:active`) and focus states show the tap. */
   -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * A page that fills the window and never scrolls, the public map (T465), keeps no room for a bar
+ * it never shows: `useFillsTheWindow` puts this class on `<html>` while such a page is mounted.
+ */
+html.fills-the-window {
+  scrollbar-gutter: auto;
+}
+
+/* On a phone's browser `100vh` is the window with its bars hidden, taller than the one shown while
+   they are, so a page and a shell at least that tall scroll by the bars' height: while the page
+   fills the window they take the window shown, `100dvh`, and every other page keeps `100vh`. */
+html.fills-the-window body,
+html.fills-the-window .app-container {
+  min-height: 100dvh;
 }
 
 /*
