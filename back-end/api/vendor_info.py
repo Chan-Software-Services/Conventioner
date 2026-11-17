@@ -121,7 +121,7 @@ def update_vendor_info(
     verdicts = (RejectionRules.judge(
         RejectionRules.Rulebook(market), market_id, application_id,
         overturns=MarketsApi.may_overturn(updater.email, market),
-        arrival=ReviewState.Arrival(updater.email, Actions.UPDATE_VENDOR_INFO.id))
+        arrival=ReviewState.Arrival.of(change.asked))
         if judging else RejectionRules.Judged())
     moved = [key for key in values if key not in kept and key not in matched]
     # The one entry is the vendor info row's: the second row an answer the assignment or a price

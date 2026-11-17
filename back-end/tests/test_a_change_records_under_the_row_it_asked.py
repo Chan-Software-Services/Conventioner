@@ -18,6 +18,7 @@ import api.applicants as ApplicantsApi
 import api.market_actions as Actions
 import api.markets as MarketsApi
 import api.permissions as PermissionsApi
+import application_status as ReviewState
 import history as History
 import review_team as ReviewTeam
 from client_errors import BadRequestError, ForbiddenError
@@ -405,3 +406,16 @@ class TestTheReviewTeamRecordsThroughWhatItIsGiven:
                 Actions.Asked(Actions.CHOOSE_REVIEWERS, market.id, ASKER, "Only an Admin may."))
 
         assert history.docs == []
+
+    def test_an_arrival_is_marked_under_the_asking_its_write_gave(self):
+        """A move into open stores its arrival as ``arriving``, which the deal records under: the
+        row and the person its write was let through on, never ones it names itself."""
+        asked = Actions.Asked(Actions.UPDATE_VENDOR_INFO, "market-1", ASKER, None)
+
+        assert ReviewState.Arrival.of(asked).stored() == {
+            "actor": ASKER, "action": Actions.UPDATE_VENDOR_INFO.id}
+
+    def test_a_refused_asking_marks_no_arrival(self):
+        with pytest.raises(Actions.RecordedARefusal):
+            ReviewState.Arrival.of(
+                Actions.Asked(Actions.CHANGE_FORM, "market-1", ASKER, "Only an Admin may."))

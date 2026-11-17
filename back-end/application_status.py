@@ -27,6 +27,7 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 import api.applications as ApplicationsApi
+import api.market_actions as Actions
 from datatypes import (
     Application, ApplicationOrigin, ApplicationStatus, ApplicationType, IntakeMode, MarketPerson,
     VerdictGiver,
@@ -221,6 +222,17 @@ class Arrival:
 
     actor: Optional[str]
     action: str
+
+    @classmethod
+    def of(cls, asked: Actions.Asked) -> "Arrival":
+        """The arrival of a write a row let through (T352): its row and its person, as the asking
+        named them, so the deal is recorded under the row the write was let through on. A refused
+        asking raises ``RecordedARefusal`` and marks nothing, as recording through it does."""
+        if asked.refused is not None:
+            raise Actions.RecordedARefusal(
+                f"An application on market {asked.market_id} was marked for the deal under "
+                f"{asked.row.id!r}, which its person was refused.")
+        return cls(asked.actor, asked.row.id)
 
     def stored(self) -> Dict[str, Any]:
         return {"actor": self.actor, "action": self.action}

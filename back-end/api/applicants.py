@@ -875,8 +875,10 @@ OwnerOffered = Callable[[str], bool]
 
 def _undo_one(
     market_id: str, asked: UndoAsked, by: VerdictGiver, owner_offered: OwnerOffered,
+    giving: Actions.Asked,
 ) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Tuple[str, int]]]:
-    """Undo one verdict: the application as it was and as it is now, or why not and its status.
+    """Undo one verdict: the application as it was and as it is now, or why not and its status;
+    one returned to open or follow-up is marked for the deal under ``giving``, the undo's asking.
 
     Asked in this order: an application of another market is not there; one changed since the
     reviewer's verdict is stale, never written over; one that is not their own verdict within the
@@ -899,8 +901,7 @@ def _undo_one(
     owner = (doc["undo_to"].get("follow_up_owner") or {}).get("email")
     if owner and not owner_offered(owner):
         return doc, None, (UNDO_OWNER_REFUSED, 400)
-    done = ReviewState.undo(doc, pinned, by,
-                            ReviewState.Arrival(by.email, Actions.GIVE_VERDICTS.id))
+    done = ReviewState.undo(doc, pinned, by, ReviewState.Arrival.of(giving))
     if isinstance(done, ReviewState.Refused):
         return doc, None, (UNDO_REFUSED, 403)
     if not done:
@@ -925,7 +926,7 @@ def undo_verdict(
     one to, and with the stale-verdict sentence and the application as it stands (409) when someone
     wrote over it since.
     """
-    was, now, refused = _undo_one(market.id, asked, by, owner_offered)
+    was, now, refused = _undo_one(market.id, asked, by, owner_offered, giving)
     if refused:
         reason, status = refused
         if status == 409 and was is not None:
@@ -955,7 +956,7 @@ def undo_selection(
     now: Dict[str, Dict[str, Any]] = {}
     skipped: List[Dict[str, Any]] = []
     for asked in selection:
-        before, after, refused = _undo_one(market.id, asked, by, owner_offered)
+        before, after, refused = _undo_one(market.id, asked, by, owner_offered, giving)
         if refused:
             skipped.append({"id": asked[0], "email": (before or {}).get("applicant_email"),
                             "reason": refused[0]})
@@ -989,7 +990,7 @@ def reassign_follow_up(
     if not app_doc or app_doc.get("market_id") != market.id:
         return {"error": "Application not found for this market."}, 404
     if not ReviewState.hand_on_follow_up(
-            app_doc, owner, ReviewState.Arrival(giving.actor, Actions.GIVE_VERDICTS.id)):
+            app_doc, owner, ReviewState.Arrival.of(giving)):
         return {"error": "Only an application that needs a follow-up has an owner."}, 409
     giving.record(
         kind=History.FOLLOW_UP_OWNER,

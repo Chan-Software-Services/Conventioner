@@ -3295,7 +3295,7 @@ def save_rejection_rules(
     judged = market.model_copy(update={"rejection_rules": [RejectionRule(**r) for r in prepared]})
     verdicts = RejectionRules.judge(
         RejectionRules.Rulebook(judged), market_id, overturns=may_overturn(requesting_user, market),
-        arrival=ReviewState.Arrival(requesting_user, Actions.CHANGE_FORM.id))
+        arrival=ReviewState.Arrival.of(change.asked))
     change.asked.record(kind=History.REJECTION_RULES,
                         detail=lambda: _with_counts(History.changes(
                        {"rejection_rules": [rule.model_dump() for rule in market.rejection_rules or []],
@@ -3340,7 +3340,7 @@ def save_application_form(market_id: str, application_form_data: dict, requestin
     written = write_application_form(
         market, form_data,
         _revision_in(application_form_data, "form_revision", FORM_REVISION_NOT_A_COUNT),
-        overturns=may_overturn(requesting_user, market), by=requesting_user)
+        overturns=may_overturn(requesting_user, market), asked=change.asked)
     change.asked.record(
         kind=History.FORM,
         detail=lambda: _with_counts(form_changes(market, written.form), written.verdicts))
@@ -3382,14 +3382,14 @@ class FormWritten(NamedTuple):
 
 def write_application_form(
     market: Market, application_form_data: dict, form_revision: Any, overturns: bool = True,
-    *, by: Optional[str],
+    *, asked: Actions.Asked,
 ) -> FormWritten:
     """Judge and store the form on ``market``, loaded and asked by the caller, and return it as
     stored with what the rules decided against it; the caller records it. ``form_revision`` is the
     revision the writer's copy was read at (``_NO_REVISION`` when it named none), and
     ``overturns`` whether the writer may overturn an automatic rejection, as
-    ``RejectionRules.judge`` takes it, and ``by`` the writer, whose write marks for the deal what the
-    rules return to open.
+    ``RejectionRules.judge`` takes it, and ``asked`` the caller's asking of Change the form, under
+    which the write marks for the deal what the rules return to open.
 
     The write sets the questions and the unasked essentials alone, never the published stamp or the
     frozen offering, which Open applications and the first application write while the market is
@@ -3424,7 +3424,7 @@ def write_application_form(
     if rewritten is not None and rewritten.market is not None:
         return FormWritten(form_dict, RejectionRules.judge(
             RejectionRules.Rulebook(rewritten.market), market.id, overturns=overturns,
-            arrival=ReviewState.Arrival(by, Actions.CHANGE_FORM.id)), revision)
+            arrival=ReviewState.Arrival.of(asked)), revision)
     return FormWritten(form_dict, RejectionRules.Judged(), revision)
 
 
