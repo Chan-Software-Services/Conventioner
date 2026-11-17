@@ -553,4 +553,20 @@ describe('the Payment tab’s cards and boxes', () => {
     }
     wrapper.unmount();
   });
+
+  it('moves a date whole, else breaks it only after its weekday, never parting a month from its day', async () => {
+    const wrapper = await tab(true);
+    const line = wrapper.findAll('[data-testid="payment-line"]')[0];
+    const entry = wrapper.findAll('[data-testid="payment-entry"]')[0];
+
+    // A table-day's date, and a payment's paid day after what it was.
+    expect(line.get('.payment-line-date').text()).toBe('Thursday, May 7, 2099');
+    expect(line.get('[data-testid="payment-line-day"]').text()).toBe('May 7, 2099');
+    expect(entry.get('.payment-entry-what').text()).toBe('Cash, paid Wednesday, April 1, 2099');
+    expect(entry.get('[data-testid="payment-entry-day"]').text()).toBe('April 1, 2099');
+    expect(entry.get('[data-testid="payment-entry-date"]').text()).toBe('Wednesday, April 1, 2099');
+    expect(styleOf('.payment-date')).toMatchObject({ display: 'inline-block' });
+    expect(styleOf('.payment-day')).toMatchObject({ 'white-space': 'nowrap' });
+    wrapper.unmount();
+  });
 });
