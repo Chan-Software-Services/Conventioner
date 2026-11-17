@@ -197,6 +197,21 @@ test.describe('the bubble at a desk', () => {
     await expect(ember).toBeFocused();
   });
 
+  test('Escape in the search closes its open list first, and then the card', async ({ page }) => {
+    const map = new PublicMapPage(page);
+    await map.goto(seeded.slug);
+    await map.table('Aisle A 1').click();
+    await expect(map.cardNames).toHaveText(['Ember Ceramics']);
+    await map.searchInput.fill('kiln');
+    await expect(map.searchList).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(map.searchList).toBeHidden();
+    await expect(map.cardNames).toHaveText(['Ember Ceramics']);
+    await page.keyboard.press('Escape');
+    await expect(map.card).toHaveCount(0);
+    await expect(map.searchInput).toBeFocused();
+  });
+
   test('a vendor from the list whose table is zoomed out of view shows the whole hall first', async ({
     page,
   }) => {
