@@ -624,6 +624,10 @@ The import's four lists of rows and each question's answers on the proposal are 
 The library's `list-frame` entry shows it on Applications All, the people with access, the import's refused rows and a search standing elsewhere.
 Inside a `scroll="body"` dialog it needs nothing of its own, since the dialog's body scrolls it; the library's `summaries` entry shows it there, with no `findKey`, so the words go with the dialog.
 Enter in its field does nothing, so in a dialog's form it never saves what the person was only looking through.
+Two opt-in props set its tools on one compact line under a screen's toolbar (T466), as Applications All takes them; with neither, a frame is as above.
+`labelAsPlaceholder` keeps the field's label for a screen reader alone (`visually-hidden`) and shows its words as the field's placeholder.
+`pinnedTools` draws the field and the filters as a [`ToolRow`](#the-primitive-layer)'s start, the field `.field--compact`, the row bled across the market screen's gutter (`margin-inline: calc(-1 * var(--space-6))`, `--space-4` at 640px and under) so its rule runs edge to edge; from 1024px it is sticky at `calc(var(--banner-h) + var(--market-frame-h) + var(--pinned-tools-h, 0px))`, `z-index: 9`, flush under the `PinnedTools` block it stands inside, so neither moves as the rows scroll.
+Its count line is then `--text-xs`, the frame's 12px under the row's rule and 4px over the first row (`margin-block-end: calc(-1 * var(--space-2))`), reading as the list's.
 
 **A list is `ListFrame` when its rows are already read whole, and [`PagedList.vue`](../front-end/src/components/PagedList.vue) when the server pages them** (T224), since a list the server pages knows no total and cannot find among rows it has not read.
 `PagedList` holds any rows, its default slot, and knows nothing of what they are: the screen gives `hasMore`, `loading` and `error`, and reads the next page on `more`.
