@@ -59,6 +59,8 @@ def run_seed(checkout, tmp_path, *args, script=SEED, **env):
     scripts = checkout / "scripts"
     scripts.mkdir(parents=True, exist_ok=True)
     shutil.copy(script, scripts)
+    # The stack rule every seed sources.
+    shutil.copytree(REPO / "scripts" / "lib", scripts / "lib", dirs_exist_ok=True)
     (scripts / "th-compose.sh").write_text(SEED_STUB)
     (scripts / "th-compose.sh").chmod(0o755)
     log = tmp_path / "calls.log"

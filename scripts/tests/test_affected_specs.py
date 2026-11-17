@@ -305,6 +305,7 @@ class TestRuleFourEverySpec:
             "back-end/Dockerfile",
             "back-end/requirements-dev.txt",
             "scripts/seed_fixture.sh",
+            "scripts/lib/stack-identity.sh",
         ],
     )
     def test_a_file_the_suite_stands_on_chooses_every_spec(self, repo, path):

@@ -72,3 +72,15 @@ def test_it_reads_the_stack_it_was_told_and_never_starts_one(tmp_path, where, en
     assert result.returncode == 3
     assert "never starts one" in result.stderr
     assert calls == ["th-compose.sh ps --format {{.Service}}"]
+
+
+def test_both_seeds_take_the_stack_by_the_one_rule():
+    # One copy of the guard, scripts/lib/stack-identity.sh, so a fix to it reaches both seeds.
+    rule = (REPO / "scripts" / "lib" / "stack-identity.sh").read_text()
+    assert "stack_identity()" in rule
+    for seed in ("seed_fixture.sh", "seed_walk_market.sh"):
+        text = (REPO / "scripts" / seed).read_text()
+        assert 'source "$SCRIPT_DIR/lib/stack-identity.sh"' in text, seed
+        assert 'stack_identity "$PROJECT_DIR" "$PRIMARY"' in text, seed
+        # Neither reads a slot or a stack's variables by a copy of its own.
+        assert "STACK_VARS" not in text and r"\.treehouse/" not in text, seed
