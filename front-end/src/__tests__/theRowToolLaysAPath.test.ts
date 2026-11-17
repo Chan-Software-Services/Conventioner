@@ -154,6 +154,30 @@ describe('a path being drawn', () => {
     }
   });
 
+  it('spread to its ends, shows as ghosts the row a point at the pointer lays, spread whole again', () => {
+    const { row } = aTool();
+    rowChoices.spread = true;
+    row.addPoint(p(2000, 3000));
+    row.addPoint(p(12_000, 3000));
+    row.hoverAt(p(17_000, 3000));
+    const laid = row.poses.value;
+    const ghosts = row.ghosts.value;
+    expect(laid).toHaveLength(5);
+    expect(row.withAPoint.value).toBe(8);
+
+    row.addPoint(p(17_000, 3000));
+    const after = row.poses.value;
+    expect(after).toHaveLength(8);
+    // Each table the point lays is drawn now: as a ghost, or as the row's table where it stays.
+    const same = (a: { xMm: number; yMm: number }, b: { xMm: number; yMm: number }) =>
+      Math.hypot(a.xMm - b.xMm, a.yMm - b.yMm) < 0.01;
+    const kept = after.filter((pose, i) => laid[i] && same(pose, laid[i]));
+    expect(kept.length).toBeGreaterThan(0);
+    expect([...kept, ...ghosts].sort((a, b) => a.xMm - b.xMm)).toEqual(after);
+    // No ghost stands on a table the row keeps.
+    for (const ghost of ghosts) for (const one of kept) expect(same(ghost, one)).toBe(false);
+  });
+
   it('shows no ghost once the pointer has left, or rests on the last point', () => {
     const { row } = aTool();
     row.addPoint(p(2000, 3000));

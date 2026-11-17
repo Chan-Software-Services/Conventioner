@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
  * What the Row of tables tool draws over the map while a path is pending (T257): the tables the
- * row would place, in their section's colour and dashed, since they are not tables yet; past the
- * last point, the tables a point at the pointer would add, as faint dashed ghosts, never placed
- * (T422, item 17); the path through the points; each point clicked, the first ringed while a click
+ * row would place, in their section's colour and dashed, since they are not tables yet; the
+ * tables a point at the pointer would lay where the row has none, as faint dashed ghosts, never
+ * placed (T422, item 17); the path through the points; each point clicked, the first ringed while a click
  * on it would close the path into a shape; how many tables it holds, written at the pointer, "3
  * tables (7 with a point here)" while ghosts show; and the crosshair the
  * keys move, with a lead from the last point to it while the path takes a further point. A line
@@ -21,8 +21,11 @@ import type { PathPose, PointMm, Run, SizeMm } from './layoutGeometry';
 const props = defineProps<{
   runs: readonly Run[];
   poses: readonly PathPose[];
-  /** The tables a point at the pointer would add: drawn faint, as they are not the row's yet. */
+  /** The tables a point at the pointer would lay where the row has none: drawn faint, as they
+   *  are not the row's yet. */
   ghosts?: readonly PathPose[];
+  /** How many tables the row holds with a point at the pointer, while ghosts show. */
+  withAPoint?: number;
   size: SizeMm;
   points: readonly PointMm[];
   /** Where the count is written; null writes none. */
@@ -53,8 +56,7 @@ const lines = computed(() =>
 
 const countText = computed(() => {
   const laid = plural(props.poses.length, 'table', 'tables');
-  const more = props.ghosts?.length ?? 0;
-  return more ? `${laid} (${props.poses.length + more} with a point here)` : laid;
+  return props.ghosts?.length ? `${laid} (${props.withAPoint} with a point here)` : laid;
 });
 const count = computed(() => {
   const at = props.countAt;

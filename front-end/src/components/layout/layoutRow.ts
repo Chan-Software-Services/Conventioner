@@ -8,7 +8,7 @@
  * alone (`smoothRuns`), lined with tables of the tool card's type on the side chosen
  * (`placeRows`), clear of the tables and no-table zones that stand already and inside the
  * floorplan. The stretch from the last point to the pointer only shows, as ghosts, what a point
- * there would add; it is never placed, and one point alone places nothing (the QC walk of
+ * there would lay where the row has no table; it is never placed, and one point alone places nothing (the QC walk of
  * 2026-11-16, item 17). Nothing of a pending path is in the layout: it is not saved, not a step of
  * undo, and it is dropped whole. Placed, the tables are ordinary tables, numbered on in their
  * section in the order drawn, selected, and one step of undo.
@@ -275,9 +275,13 @@ export interface RowTool {
   runs: ComputedRef<Run[]>;
   /** The row that placing would add, along the points laid: none while `refusal` stands. */
   poses: ComputedRef<PathPose[]>;
-  /** The tables the path would add past its last point if a point were laid where the pointer
-   *  is: shown as ghosts, never placed (the QC walk of 2026-11-16, item 17). */
+  /** The tables a point laid where the pointer is would lay, less those of `poses` it keeps where
+   *  they stand: shown as ghosts, never placed (the QC walk of 2026-11-16, item 17). Past the last
+   *  point they are the tables it adds; a row spread to its ends is spread whole again, and a bend
+   *  at the last point is smoothed once it is no end, so the tables that move are ghosts too. */
   ghosts: ComputedRef<PathPose[]>;
+  /** How many tables the row holds with a point where the pointer is, while ghosts show; else 0. */
+  withAPoint: ComputedRef<number>;
   /** Why no row is shown or placed: the sentence of a gap that is no length, of an aisle that is
    *  none while more than one row is asked, or of a group field that holds no usable number, else
    *  ''. */
@@ -326,6 +330,10 @@ export interface RowTool {
    *  is added. */
   place(): FloorplanTable[];
 }
+
+/** Whether two tables stand at one place and turn, to within what a drawing can show. */
+const samePose = (a: PathPose, b: PathPose) =>
+  Math.hypot(a.xMm - b.xMm, a.yMm - b.yMm) < 0.5 && Math.abs(a.rotation - b.rotation) < 0.01;
 
 export function useRowTool(options: RowToolOptions): RowTool {
   const points = shallowRef<PointMm[]>([]);
@@ -406,12 +414,21 @@ export function useRowTool(options: RowToolOptions): RowTool {
   };
   const laidRows = computed(() => rowsAlong(laidRuns.value));
   const poses = computed(() => laidRows.value.flat());
-  // The whole path again with the pointer's place, each row past the tables its points alone
-  // hold.
-  const ghosts = computed(() => {
-    if (read.value || path.value.length === points.value.length) return [];
-    return rowsAlong(runs.value).flatMap((whole, k) => whole.slice(laidRows.value[k]?.length ?? 0));
-  });
+  // The rows a point laid at the pointer's place would lay: the whole path again, spread again
+  // where it is spread, so a laid table may move.
+  const nextRows = computed(() =>
+    read.value || path.value.length === points.value.length ? [] : rowsAlong(runs.value),
+  );
+  // Each row's tables that the point lays where none of the row's stands now.
+  const ghosts = computed(() =>
+    nextRows.value.flatMap((whole, k) => {
+      const laid = laidRows.value[k] ?? [];
+      return whole.filter((pose, i) => !(laid[i] && samePose(pose, laid[i])));
+    }),
+  );
+  const withAPoint = computed(() =>
+    ghosts.value.length ? nextRows.value.reduce((sum, one) => sum + one.length, 0) : 0,
+  );
 
   const placeable = computed(
     () => read.value !== null || drawn.value || drawnClosed.value || points.value.length >= 2,
@@ -464,6 +481,7 @@ export function useRowTool(options: RowToolOptions): RowTool {
     runs,
     poses,
     ghosts,
+    withAPoint,
     refusal,
     size,
     // A closed shape's count stands at its first point, where the click that closed it was.

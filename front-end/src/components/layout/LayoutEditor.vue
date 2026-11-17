@@ -2675,6 +2675,7 @@ defineExpose({
               :runs="row.runs.value"
               :poses="row.poses.value"
               :ghosts="row.ghosts.value"
+              :withAPoint="row.withAPoint.value"
               :size="row.size.value"
               :points="row.points.value"
               :countAt="
