@@ -116,10 +116,10 @@ describe('the vendor panel', () => {
     const pill = rows()[0]!.get('[data-testid="public-map-vendor-code"]');
     expect(pill.attributes('aria-hidden')).toBe('true');
     expect(pill.text()).toBe('Gold row 2');
-    expect(pill.attributes('style')).toContain(`--code-fill: ${GOLD.fill}`);
-    expect(pill.attributes('style')).toContain(`--code-edge: ${GOLD.edge}`);
+    expect(pill.attributes('style')).toContain(`background: ${GOLD.fill}`);
+    expect(pill.attributes('style')).toContain(`border-color: ${GOLD.edge}`);
     const unpainted = rows()[2]!.get('[data-testid="public-map-vendor-code"]');
-    expect(unpainted.attributes('style') ?? '').not.toContain('--code-fill');
+    expect(unpainted.attributes('style')).toBeUndefined();
   });
 
   it('does not filter the list as the search is typed in', async () => {

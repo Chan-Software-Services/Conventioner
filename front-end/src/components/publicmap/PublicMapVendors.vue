@@ -72,7 +72,7 @@ const isPicked = (vendor: ListedVendor) =>
 
 function codeStyle(tableId: string): Record<string, string> | undefined {
   const paint = props.paints.get(tableId);
-  return paint && { '--code-fill': paint.fill, '--code-edge': paint.edge };
+  return paint && { background: paint.fill, borderColor: paint.edge };
 }
 
 /** Whether the list has scrolled under the field, which alone draws the fade. */
@@ -195,7 +195,7 @@ function onScroll(event: Event) {
 /* The page's card over the panel's top on a phone reaches this far over the list, so a row the
    focus reaches is scrolled clear below it. */
 .public-map-vendors__scroll :deep(.scroll-box__scroller) {
-  scroll-padding-top: var(--public-map-card-reach, 0px);
+  scroll-padding-top: var(--public-map-card-reach);
 }
 
 /* The panel's inset, inside the scroller, so a row's focus halo is never cut at its edge. */
@@ -256,9 +256,9 @@ function onScroll(event: Event) {
   min-width: calc(var(--space-8) + var(--space-3));
   height: var(--space-6);
   padding-inline: var(--space-2);
-  border: 1.5px solid var(--code-edge, var(--mm-border-soft));
+  border: 1.5px solid var(--mm-border-soft);
   border-radius: var(--radius-pill);
-  background: var(--code-fill, var(--layout-floor));
+  background: var(--layout-floor);
   font-size: var(--text-xs);
   font-weight: 600;
   font-variant-numeric: tabular-nums;

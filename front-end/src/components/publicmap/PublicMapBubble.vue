@@ -130,7 +130,7 @@ onBeforeUnmount(() => resized?.disconnect());
 .public-map-bubble::after {
   content: '';
   position: absolute;
-  left: calc(var(--tail-x, 50%) - 7px);
+  left: calc(var(--tail-x) - 7px);
   width: 14px;
   height: 14px;
   border: 1px solid var(--mm-border-soft);

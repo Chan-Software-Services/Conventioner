@@ -673,6 +673,10 @@ async function openVendor(vendor: ListedVendor) {
    its top on anything narrower than a desk. The panel itself never scrolls: the vendors' part
    scrolls its own list in the box it is given, and keeps the panel's inset inside its scroller. */
 .public-map__side {
+  /* How far the phone's card reaches over the list, which the list reads as its scroll padding;
+     none until `measureReach` measures it. */
+  --public-map-card-reach: 0px;
+
   position: relative;
   display: flex;
   flex-direction: column;
