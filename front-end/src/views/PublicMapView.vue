@@ -7,8 +7,10 @@
  * It is one sheet filling the window under the app bar, on the paper of its backdrop, and the page
  * never scrolls (T465): the map side holds the market's name, the day and hall selects at its top
  * right and the hall filling the rest, with the open hall's legend and the zoom at its bottom
- * corners; the vendor panel stands beside it at a desk and under it on a phone, the card of the
- * table picked at its top. The parts are in `components/publicmap/`.
+ * corners; the vendor panel stands beside it at a desk and under it on a phone. The card of the
+ * table picked speaks from that table in a bubble at a desk, and stands at the panel's top on
+ * anything narrower; one card is ever in the page. Close and Escape shut it, giving the focus back
+ * to the table when it was in the card. The parts are in `components/publicmap/`.
  *
  * It reads the map before drawing anything, so a slug is never printed back before the server has
  * said there is a map here. A market whose map is not open answers as a slug naming nothing, and
@@ -24,23 +26,27 @@
  * Nothing a vendor typed is rendered as markup: their three answers, cleaned by the server, are
  * text, and a link is built from them only as an `http`/`https` address or an Instagram handle.
  */
-import { computed, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import DayMap from '@/components/daymap/DayMap.vue';
 import IconSparkle from '@/components/icons/IconSparkle.vue';
 import PageNotFound from '@/components/PageNotFound.vue';
 import ReadFailed from '@/components/ReadFailed.vue';
 import PublicMapBackdrop from '@/components/publicmap/PublicMapBackdrop.vue';
+import PublicMapBubble from '@/components/publicmap/PublicMapBubble.vue';
 import PublicMapLegend from '@/components/publicmap/PublicMapLegend.vue';
 import PublicMapTableCard from '@/components/publicmap/PublicMapTableCard.vue';
 import PublicMapVendors from '@/components/publicmap/PublicMapVendors.vue';
+import { edgesIn, inView } from '@/components/publicmap/bubblePlacement';
 import { hallLegend, tablePaints } from '@/components/publicmap/publicMapPaint';
+import { useWideSheet } from '@/components/publicmap/useWideSheet';
 import {
   publicDayLocations,
   publicSeats,
   type DayMapLegendItem,
   type PublicMapAnswer,
 } from '@/components/daymap/dayMap';
+import type { SeatHalf } from '@/components/layout/layoutDrawing';
 import { vendorPageAnswered } from '@/utils/currentPlace';
 import { calendarToday } from '@/utils/marketGuide';
 import {
@@ -104,12 +110,13 @@ const place = computed<MapPlace>(() =>
   map.value ? mapPlace(map.value, route.query, today) : { date: '', locationId: '', tableId: null },
 );
 
-/** Write the place to the address, replacing it, every other key of the query kept. */
-function goTo(next: MapPlace) {
+/** Write the place to the address, replacing it, every other key of the query kept; settled once
+ *  the address has moved. */
+async function goTo(next: MapPlace) {
   const rest = Object.fromEntries(
     Object.entries(route.query).filter(([key]) => !['date', 'location', 'table'].includes(key)),
   );
-  void router.replace({
+  await router.replace({
     query: {
       ...rest,
       date: next.date,
@@ -120,17 +127,17 @@ function goTo(next: MapPlace) {
 }
 
 function chooseDay(date: string) {
-  goTo({ ...place.value, date });
+  void goTo({ ...place.value, date });
 }
 
 function chooseLocation(locationId: string) {
   const location = map.value?.locations.find((l) => l.id === locationId);
   const keeps = location?.layout.tables.some((t) => t.id === place.value.tableId);
-  goTo({ ...place.value, locationId, tableId: keeps ? place.value.tableId : null });
+  void goTo({ ...place.value, locationId, tableId: keeps ? place.value.tableId : null });
 }
 
 function pick(tableId: string) {
-  goTo({ ...place.value, tableId });
+  void goTo({ ...place.value, tableId });
 }
 
 // ── The floorplan images, one object URL per location, read as each location opens ──
@@ -202,10 +209,63 @@ const cardPaint = computed(() =>
   place.value.tableId ? (paints.value.get(place.value.tableId) ?? null) : null,
 );
 
-/** A vendor of the list: their location opened and their table picked. The page never scrolls,
- *  so the map is always in view. */
-function openVendor(vendor: ListedVendor) {
-  goTo({ ...place.value, locationId: vendor.locationId, tableId: vendor.tableId });
+// ── The card: in the bubble at a desk, at the panel's top when narrower ──
+
+const wide = useWideSheet();
+const dayMap = ref<InstanceType<typeof DayMap> | null>(null);
+const hall = ref<HTMLElement | null>(null);
+/** The card's part, wherever it stands, to tell whether the focus is in it. */
+const cardPart = ref<InstanceType<typeof PublicMapTableCard> | null>(null);
+/** Bumped on each `viewed` of the day map, so the bubble places itself again. */
+const moved = ref(0);
+
+/** The table, or its half, the bubble speaks for. */
+const anchor = computed(() =>
+  card.value && place.value.tableId
+    ? { tableId: place.value.tableId, half: 'whole' as const }
+    : null,
+);
+const locate = (tableId: string, half: SeatHalf) => dayMap.value?.targetRect(tableId, half) ?? null;
+
+/** Close the card: the table dropped from the address, and the focus given back to the table when
+ *  it was in the card (a table that is no button leaves it where the browser puts it). */
+async function closeCard() {
+  const picked = anchor.value;
+  if (!picked) return;
+  const el = (cardPart.value?.$el as Element | undefined) ?? null;
+  const focusWasIn = Boolean(el?.contains(document.activeElement));
+  await goTo({ ...place.value, tableId: null });
+  if (!focusWasIn) return;
+  await nextTick();
+  dayMap.value?.focusTarget(picked.tableId, picked.half);
+}
+
+// Escape closes the card at any width, unless something already took it, or the focus is in a
+// combobox whose list is open, which Escape closes first.
+function onKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || event.defaultPrevented || !card.value) return;
+  const focused = document.activeElement;
+  if (
+    focused?.getAttribute('role') === 'combobox' &&
+    focused.getAttribute('aria-expanded') === 'true'
+  )
+    return;
+  event.preventDefault();
+  void closeCard();
+}
+onMounted(() => window.addEventListener('keydown', onKeydown));
+onUnmounted(() => window.removeEventListener('keydown', onKeydown));
+
+/** A vendor of the list: their location opened and their table picked. The page never scrolls; a
+ *  table zoomed out of view is brought back by showing the whole hall first. */
+async function openVendor(vendor: ListedVendor) {
+  await goTo({ ...place.value, locationId: vendor.locationId, tableId: vendor.tableId });
+  await nextTick();
+  const area = hall.value?.getBoundingClientRect();
+  const table = dayMap.value?.targetRect(vendor.tableId, 'whole');
+  if (!area || !table) return;
+  const seen = inView({ width: area.width, height: area.height }, edgesIn(area, table));
+  if (!seen) dayMap.value?.fit();
 }
 </script>
 
@@ -274,8 +334,9 @@ function openVendor(vendor: ListedVendor) {
             </div>
           </div>
 
-          <div class="public-map__hall" data-testid="public-map-hall">
+          <div ref="hall" class="public-map__hall" data-testid="public-map-hall">
             <DayMap
+              ref="dayMap"
               fills
               :locations="locations"
               :tableTypes="map.tableTypes"
@@ -285,20 +346,39 @@ function openVendor(vendor: ListedVendor) {
               :legend="NO_LEGEND"
               @update:locationId="chooseLocation"
               @pick="pick"
+              @viewed="moved++"
             >
               <template #legend>
                 <PublicMapLegend :items="legendItems" />
               </template>
             </DayMap>
+            <PublicMapBubble v-if="wide" :anchor="anchor" :locate="locate" :moved="moved">
+              <PublicMapTableCard
+                v-if="card"
+                ref="cardPart"
+                :card="card"
+                :day="day"
+                :hallName="hallName"
+                :paint="cardPaint"
+                @close="closeCard"
+              />
+            </PublicMapBubble>
           </div>
         </div>
 
         <div class="public-map__side">
           <!-- The live region stays while the card comes and goes, so a pick is announced. -->
-          <div class="public-map__live" aria-live="polite">
-            <section v-if="card" class="public-map__card" data-testid="public-map-card">
-              <PublicMapTableCard :card="card" :day="day" :hallName="hallName" :paint="cardPaint" />
-            </section>
+          <div v-if="!wide" class="public-map__live" aria-live="polite">
+            <PublicMapTableCard
+              v-if="card"
+              ref="cardPart"
+              class="public-map__card"
+              :card="card"
+              :day="day"
+              :hallName="hallName"
+              :paint="cardPaint"
+              @close="closeCard"
+            />
           </div>
 
           <PublicMapVendors
@@ -479,14 +559,10 @@ function openVendor(vendor: ListedVendor) {
 }
 
 .public-map__card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
   padding: var(--space-4);
-  border: 1px solid var(--mm-border);
+  border: 1px solid var(--mm-border-soft);
   border-radius: var(--radius-card);
   background: white;
-  overflow-wrap: anywhere;
 }
 
 .public-map__vendors {

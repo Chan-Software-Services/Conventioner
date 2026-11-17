@@ -23,6 +23,7 @@ import {
   sectionPaint,
   seatPaint,
   type MapSeat,
+  type SeatHalf,
 } from '@/components/layout/layoutDrawing';
 import { hallOf } from '@/components/layout/layoutGeometry';
 import type { DayMapLegendItem, DayMapLocation } from './dayMap';
@@ -52,6 +53,8 @@ const locationId = defineModel<string>('locationId', { required: true });
 const emit = defineEmits<{
   /** A table pressed, and the seat pressed on it, or null where it has no vendor. */
   pick: [tableId: string, seatKey: string | null];
+  /** The part of the hall shown changed, or the map's box did (T465). */
+  viewed: [];
 }>();
 
 /** The open location: the one asked for, else the first. */
@@ -72,6 +75,14 @@ function onActivate(tableId: string) {
   emit('pick', tableId, pressedSeat);
   pressedSeat = null;
 }
+
+// What a caller stands over a table (the public map's bubble) reads where the table is drawn, gives
+// it the focus back and shows the whole hall again, through the map (T465).
+defineExpose({
+  targetRect: (tableId: string, half: SeatHalf) => map.value?.targetRect(tableId, half) ?? null,
+  focusTarget: (tableId: string, half: SeatHalf) => map.value?.focusTarget(tableId, half) ?? false,
+  fit: () => map.value?.fit(),
+});
 
 const marks = computed(() => [...(props.picked ? [props.picked] : []), ...props.marked]);
 
@@ -118,6 +129,7 @@ const swatches = computed(() => {
           mode="read"
           @activateSeat="pressedSeat = $event"
           @activate="onActivate"
+          @viewed="emit('viewed')"
         />
       </div>
       <div

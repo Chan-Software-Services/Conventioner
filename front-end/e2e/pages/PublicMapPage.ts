@@ -151,6 +151,12 @@ export class PublicMapPage {
     return this.map.getByRole('button');
   }
 
+  /** The speech bubble the card stands in at a desk, saying where it opened by `data-side`,
+   *  `data-vert` and its tail's offset `--tail-x` (T465 ticket 05). */
+  get bubble(): Locator {
+    return this.page.getByTestId('public-map-bubble');
+  }
+
   /** The card of the table picked. */
   get card(): Locator {
     return this.page.getByTestId('public-map-card');

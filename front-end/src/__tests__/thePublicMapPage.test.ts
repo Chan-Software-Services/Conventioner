@@ -9,7 +9,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import type { PublicMapAnswer } from '@/components/daymap/dayMap';
 import { publicDayLocations } from '@/components/daymap/dayMap';
+import DayMap from '@/components/daymap/DayMap.vue';
 import PublicMapBackdrop from '@/components/publicmap/PublicMapBackdrop.vue';
+import PublicMapBubble from '@/components/publicmap/PublicMapBubble.vue';
 import PublicMapTableCard from '@/components/publicmap/PublicMapTableCard.vue';
 import PublicMapVendors from '@/components/publicmap/PublicMapVendors.vue';
 import { tablePaints } from '@/components/publicmap/publicMapPaint';
@@ -519,7 +521,7 @@ describe('the address', () => {
     expect(routing.replace).toHaveBeenLastCalledWith({
       query: { date: TOMORROW, location: 'loc-upper', table: 'g1' },
     });
-    expect(card().text()).toBe('Table Gold row 1This table is free on Sat 6 Jun.');
+    expect(card().text()).toBe('Table Gold row 1Upper HallThis table is free on Sat 6 Jun.');
   });
 
   it('changes the location with replace, dropping a table that is not there', async () => {
@@ -561,5 +563,211 @@ describe("the list of the day's vendors", () => {
     );
     expect(card().text()).toContain('Cog Prints');
     expect(page.getComponent(PublicMapTableCard).props('paint')).toEqual(PAINTS.get('s1'));
+  });
+});
+
+// ── The card's place, closing it, and a vendor out of view (T465 ticket 05) ──
+
+/** A window narrower than the sheet's two columns, its `matchMedia` answering not wide until
+ *  `widen` says the window grew. */
+function narrowWindow() {
+  const heard: ((event: { matches: boolean }) => void)[] = [];
+  vi.spyOn(window, 'matchMedia').mockImplementation(
+    (query: string) =>
+      ({
+        media: query,
+        matches: false,
+        addEventListener: (_: string, listener: (event: { matches: boolean }) => void) =>
+          heard.push(listener),
+        removeEventListener: (_: string, listener: (event: { matches: boolean }) => void) =>
+          heard.splice(heard.indexOf(listener), 1),
+      }) as unknown as MediaQueryList,
+  );
+  return {
+    heard,
+    widen: () => heard.forEach((listener) => listener({ matches: true })),
+  };
+}
+
+const side = () => wrapper!.get('.public-map__side');
+const escape = (on: EventTarget = document.body) =>
+  on.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+  );
+
+describe("the card's place", () => {
+  it('is the speech bubble in the hall at a desk, one card in the page', async () => {
+    const page = await open(found(), { table: 'g1' });
+    expect(page.findAll('[data-testid="public-map-card"]')).toHaveLength(1);
+    const bubble = page.get('[data-testid="public-map-hall"] [data-testid="public-map-bubble"]');
+    expect(bubble.find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(side().find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(page.getComponent(PublicMapBubble).props('anchor')).toEqual({
+      tableId: 'g1',
+      half: 'whole',
+    });
+  });
+
+  it('is placed again whenever the day map shows another part of the hall', async () => {
+    const page = await open(found(), { table: 'g1' });
+    const moved = () => page.getComponent(PublicMapBubble).props('moved');
+    const before = moved();
+    page.getComponent(DayMap).vm.$emit('viewed');
+    await flushPromises();
+    expect(moved()).toBe(before + 1);
+  });
+
+  it("is the vendor panel's top in a narrower window, and the bubble once it widens", async () => {
+    const window = narrowWindow();
+    const page = await open(found(), { table: 'g1' });
+    expect(page.findAll('[data-testid="public-map-card"]')).toHaveLength(1);
+    expect(side().find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(page.find('[data-testid="public-map-bubble-layer"]').exists()).toBe(false);
+    window.widen();
+    await flushPromises();
+    expect(page.findAll('[data-testid="public-map-card"]')).toHaveLength(1);
+    expect(
+      page.find('[data-testid="public-map-bubble"] [data-testid="public-map-card"]').exists(),
+    ).toBe(true);
+    page.unmount();
+    wrapper = null;
+    expect(window.heard).toHaveLength(0);
+  });
+
+  it('is the bubble in a window with no matchMedia', async () => {
+    vi.stubGlobal('matchMedia', undefined);
+    try {
+      const page = await open(found(), { table: 'g1' });
+      expect(
+        page.find('[data-testid="public-map-bubble"] [data-testid="public-map-card"]').exists(),
+      ).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('closing the card', () => {
+  it('Close drops the table from the address, and gives the focus back to the table', async () => {
+    const page = await open(found(), { table: 'g1' });
+    const close = page.get<HTMLButtonElement>('[data-testid="public-map-card-close"]');
+    close.element.focus();
+    await close.trigger('click');
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper' },
+    });
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(page.get('[data-table-id="g1"]').element);
+  });
+
+  it('Escape closes it at any width, leaving the focus where it was outside the card', async () => {
+    narrowWindow();
+    const page = await open(found(), { table: 'g1' });
+    escape();
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper' },
+    });
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('Escape from inside the card gives the focus back to the table', async () => {
+    const page = await open(found(), { table: 'g1' });
+    const close = page.get<HTMLButtonElement>('[data-testid="public-map-card-close"]');
+    close.element.focus();
+    escape(close.element);
+    await flushPromises();
+    expect(document.activeElement).toBe(page.get('[data-table-id="g1"]').element);
+  });
+
+  it('Escape does nothing once something else has handled it', async () => {
+    await open(found(), { table: 'g1' });
+    const handled = (event: Event) => event.preventDefault();
+    document.body.addEventListener('keydown', handled);
+    try {
+      escape();
+      await flushPromises();
+    } finally {
+      document.body.removeEventListener('keydown', handled);
+    }
+    expect(routing.replace).not.toHaveBeenCalled();
+  });
+
+  it('Escape in a combobox whose list is open closes the list, not the card', async () => {
+    const page = await open(found(), { table: 'g1' });
+    const field = document.createElement('input');
+    field.setAttribute('role', 'combobox');
+    field.setAttribute('aria-expanded', 'true');
+    document.body.append(field);
+    try {
+      field.focus();
+      escape(field);
+      await flushPromises();
+      expect(routing.replace).not.toHaveBeenCalled();
+      expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
+      // Its list shut, Escape closes the card.
+      field.setAttribute('aria-expanded', 'false');
+      escape(field);
+      await flushPromises();
+      expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    } finally {
+      field.remove();
+    }
+  });
+
+  it('Escape does nothing with no card, nor once the page has left', async () => {
+    const page = await open();
+    escape();
+    await flushPromises();
+    expect(routing.replace).not.toHaveBeenCalled();
+    page.unmount();
+    wrapper = null;
+    routing.route.query = { table: 'g1' };
+    escape();
+    await flushPromises();
+    expect(routing.replace).not.toHaveBeenCalled();
+  });
+});
+
+describe('a vendor opened from the list', () => {
+  /** The hall and the map 1,200 by 900 px at the window's top-left, Gold row 1 drawn at `g1`. */
+  function drawn(g1: DOMRect) {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: Element,
+    ) {
+      const id = this.getAttribute('data-testid');
+      if (id === 'layout-map' || id === 'public-map-hall') return new DOMRect(0, 0, 1200, 900);
+      if (this.getAttribute('data-table-id') === 'g1') return g1;
+      return new DOMRect(0, 0, 0, 0);
+    });
+  }
+  const viewWidth = () =>
+    Number(wrapper!.get('[data-testid="layout-map"]').attributes('viewBox')!.split(' ')[2]);
+  const kiln = () => mapListing(ANSWER, TODAY).find((vendor) => vendor.name === 'Kiln & Co')!;
+
+  it('fits the map first when their table is out of view', async () => {
+    const page = await open();
+    const whole = viewWidth();
+    await page.get('[data-testid="day-map-zoom-in"]').trigger('click');
+    expect(viewWidth()).toBeLessThan(whole);
+    drawn(new DOMRect(1500, 300, 40, 20));
+    page.getComponent(PublicMapVendors).vm.$emit('open', kiln());
+    await flushPromises();
+    expect(viewWidth()).toBeCloseTo(whole);
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper', table: 'g1' },
+    });
+  });
+
+  it('keeps the zoom when their table is in view', async () => {
+    const page = await open();
+    await page.get('[data-testid="day-map-zoom-in"]').trigger('click');
+    const zoomed = viewWidth();
+    drawn(new DOMRect(500, 300, 40, 20));
+    page.getComponent(PublicMapVendors).vm.$emit('open', kiln());
+    await flushPromises();
+    expect(viewWidth()).toBeCloseTo(zoomed);
   });
 });

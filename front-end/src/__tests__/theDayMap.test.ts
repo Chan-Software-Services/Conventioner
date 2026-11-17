@@ -509,3 +509,46 @@ describe('the day map filling its box, as the public map draws it', () => {
     map.unmount();
   });
 });
+
+describe('the day map, for what a caller stands over its tables (T465)', () => {
+  type Exposed = {
+    targetRect: (tableId: string, half: string) => DOMRect | null;
+    focusTarget: (tableId: string, half: string) => boolean;
+    fit: () => void;
+  };
+
+  it('tells viewed whenever its map does, as a zoom changes the part shown', async () => {
+    const map = dayMap({ fills: true });
+    await nextTick();
+    const before = map.emitted('viewed')?.length ?? 0;
+    await map.get('[data-testid="day-map-zoom-in"]').trigger('click');
+    await nextTick();
+    expect(map.emitted('viewed')).toHaveLength(before + 1);
+    expect(map.emitted('viewed')!.at(-1)).toEqual([]);
+  });
+
+  it("passes on its map's targetRect, focusTarget and fit", async () => {
+    const map = dayMap({ fills: true });
+    const exposed = map.vm as unknown as Exposed;
+    const g1 = new DOMRect(10, 20, 30, 40);
+    const measured = Element.prototype.getBoundingClientRect;
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: Element,
+    ) {
+      return this.getAttribute('data-table-id') === 'g1' ? g1 : measured.call(this);
+    });
+    expect(exposed.targetRect('g1', 'whole')).toEqual(g1);
+    expect(exposed.targetRect('nope', 'whole')).toBeNull();
+    expect(exposed.focusTarget('g1', 'whole')).toBe(true);
+    expect(document.activeElement).toBe(map.get('[data-table-id="g1"]').element);
+
+    const width = () =>
+      Number(map.get('[data-testid="layout-map"]').attributes('viewBox')!.split(' ')[2]);
+    const whole = width();
+    await map.get('[data-testid="day-map-zoom-in"]').trigger('click');
+    expect(width()).toBeLessThan(whole);
+    exposed.fit();
+    await nextTick();
+    expect(width()).toBeCloseTo(whole);
+  });
+});

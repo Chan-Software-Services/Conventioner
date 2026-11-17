@@ -27,7 +27,9 @@
  * at the whole hall one finger scrolls the page as it would anywhere. At a desk (T422, D42) Ctrl
  * and the wheel zoom it about the pointer, the mouse drags it once zoomed, a plain wheel scrolls
  * the page, and `zoomIn`, `zoomOut` and `fit` are exposed for a caller's buttons. Each table given
- * the focus is told as `focused`.
+ * the focus is told as `focused`. A caller standing something over a table (T465, the public map's
+ * bubble) reads its screen box by `targetRect`, gives it the focus back by `focusTarget`, and hears
+ * `viewed` whenever the part of the hall shown or the map's box changes.
  *
  * A day's map (T422) is the drawing given `seats`, in `read` or `print`: a table with a whole seat
  * drawn in its seat's tone and named with who holds it, a shared table drawn as two halves (D41),
@@ -152,6 +154,9 @@ const emit = defineEmits<{
   activateSeat: [seatKey: string];
   /** A table given the focus, in `read` or `edit`. */
   focused: [tableId: string];
+  /** The part of the hall shown changed, or the box was measured at another size, so what a
+   *  caller stands over a table (the public map's bubble) is placed again (T465). */
+  viewed: [];
 }>();
 
 const interactive = computed(() => props.mode !== 'print');
@@ -295,6 +300,18 @@ watch(box, (now, before) => {
     heightMm,
   });
 });
+
+// The part shown or the box's size changed: told once the drawing is updated, so a caller reading a
+// table's screen box then reads where it now is.
+watch(
+  () => {
+    const view = shown.value;
+    const size = box.value ? `${box.value.width} ${box.value.height}` : '';
+    return `${view.xMm} ${view.yMm} ${view.widthMm} ${view.heightMm} ${size}`;
+  },
+  () => emit('viewed'),
+  { flush: 'post' },
+);
 
 /** The pointers down on a read map, where each is on its box. */
 const pointers = new Map<number, PointPx>();
@@ -650,7 +667,33 @@ const labels = computed<DrawnLabel[]>(() => {
   return drawn;
 });
 
-defineExpose({ zoomIn, zoomOut, fit });
+/** A table's drawn group, or a half's of a shared table, inside this map; a half the table is not
+ *  split into is the table. */
+function targetOf(tableId: string, half: SeatHalf): SVGGElement | null {
+  const table = [...(svg.value?.querySelectorAll<SVGGElement>('[data-table-id]') ?? [])].find(
+    (el) => el.getAttribute('data-table-id') === tableId,
+  );
+  if (!table || half === 'whole') return table ?? null;
+  return table.querySelector<SVGGElement>(`[data-half="${half}"]`) ?? table;
+}
+
+/** The screen box of a table, or of one half of it, as drawn now; null when it is not drawn. */
+function targetRect(tableId: string, half: SeatHalf): DOMRect | null {
+  return targetOf(tableId, half)?.getBoundingClientRect() ?? null;
+}
+
+/** Give the focus to a table's button, or to a half's when the half is one, else to the table's
+ *  own when it is one; whether anything took it. */
+function focusTarget(tableId: string, half: SeatHalf): boolean {
+  const target = targetOf(tableId, half);
+  const button = [target, target?.closest<SVGGElement>('[data-table-id]')].find(
+    (el) => el?.getAttribute('role') === 'button',
+  );
+  button?.focus();
+  return Boolean(button);
+}
+
+defineExpose({ zoomIn, zoomOut, fit, targetRect, focusTarget });
 
 // ── The no-table zones ───────────────────────────────────────────────────────
 

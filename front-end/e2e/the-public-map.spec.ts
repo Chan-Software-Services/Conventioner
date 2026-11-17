@@ -334,7 +334,7 @@ for (const size of PHONE_AND_DESK) {
         await expect(map.card).toContainText('Kiln & Co');
       });
     } else {
-      test('at a desk the map takes the left and the card and the list a 21rem panel', async ({
+      test('at a desk the map takes the left, the list a 21rem panel, and the card speaks from the hall', async ({
         page,
       }) => {
         const map = new PublicMapPage(page);
@@ -342,15 +342,19 @@ for (const size of PHONE_AND_DESK) {
         await press(map.table('Aisle A 1'));
         const root = (await map.root.boundingBox())!;
         const left = (await map.dayMap.boundingBox())!;
+        const hall = (await map.hall.boundingBox())!;
         const card = (await map.card.boundingBox())!;
         const list = (await map.vendors.first().boundingBox())!;
         // The panel is 21rem from the map side's end to the sheet's inner edge (the column's 16px
         // padding and the sheet's 1px edge in from the page's).
         expect(root.x + root.width - 16 - 1 - (left.x + left.width)).toBeCloseTo(336, 0);
-        expect(card.x).toBeGreaterThan(left.x + left.width);
-        expect(list.x).toBeCloseTo(card.x, 0);
-        expect(list.y).toBeGreaterThan(card.y + card.height);
-        expect(card.y).toBeCloseTo(left.y + 16, 0);
+        expect(list.x).toBeGreaterThan(left.x + left.width);
+        // The card is the bubble, inside the hall; the panel holds no card.
+        await expect(map.bubble.getByTestId('public-map-card')).toBeVisible();
+        expect(card.x).toBeGreaterThanOrEqual(hall.x);
+        expect(card.x + card.width).toBeLessThanOrEqual(hall.x + hall.width);
+        expect(card.y).toBeGreaterThanOrEqual(hall.y);
+        expect(card.y + card.height).toBeLessThanOrEqual(hall.y + hall.height);
         await map.zoomIn.click();
         await expect.poll(async () => (await map.view()).width).toBeLessThan(30_000);
       });
