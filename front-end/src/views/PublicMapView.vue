@@ -400,9 +400,7 @@ function openVendor(vendor: ListedVendor) {
               stroke-linecap="round"
             />
           </svg>
-          <p class="public-map__subtitle" data-testid="public-map-subtitle">
-            Vendor map · {{ listed.length }} {{ listed.length === 1 ? 'vendor' : 'vendors' }}
-          </p>
+          <p class="public-map__subtitle" data-testid="public-map-subtitle">Vendor map</p>
         </div>
       </header>
 
@@ -1186,6 +1184,34 @@ function openVendor(vendor: ListedVendor) {
   z-index: 1;
   padding-block: var(--space-4) var(--space-2);
   background: white;
+}
+
+/* The vendors blur and fade out as they scroll up under the find field. */
+.public-map__side :deep(.list-frame__tools)::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  height: 2rem;
+  pointer-events: none;
+  background: linear-gradient(to bottom, white, rgb(255 255 255 / 0%));
+  backdrop-filter: blur(3px);
+  mask-image: linear-gradient(to bottom, black, transparent);
+}
+
+/* The field's fade stands for the box's own top shade, which would lie over the field. */
+.public-map__side :deep(.scroll-box__shade--top) {
+  display: none;
+}
+
+/* No count of vendors on screen; a screen reader still hears how many a search finds. */
+.public-map__side :deep(.list-frame__words[role='status']) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .public-map__side :deep(.list-frame__tools .field-label) {
