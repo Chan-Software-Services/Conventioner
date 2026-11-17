@@ -406,7 +406,7 @@ async function showMore(): Promise<void> {
 @media (width >= 1024px) {
   .list-frame__tools--pinned {
     position: sticky;
-    top: calc(var(--banner-h) + var(--market-frame-h) + var(--pinned-tools-h, 0px));
+    top: calc(var(--banner-h) + var(--market-frame-h) + var(--pinned-tools-h));
     z-index: 9;
   }
 }

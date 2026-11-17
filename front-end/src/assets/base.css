@@ -220,6 +220,10 @@
      on a phone): measured by MarketFrame and set on its card, so a screen's own sticky column can
      sit under it. Zero outside a frame. */
   --market-frame-h: 0px;
+  /* What a screen's PinnedTools block pins under the market frame (T466): measured by PinnedTools
+     and set on its root, so a second sticky row inside it stands flush under the block. Zero
+     outside a block. */
+  --pinned-tools-h: 0px;
   /* A screen of cards (E23/F01/S01, `.card-grid` in primitives.css): the gap between cards, and the
      room below which two tracks become one. */
   --card-grid-gap: var(--space-8);

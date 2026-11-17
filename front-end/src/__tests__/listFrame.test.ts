@@ -935,7 +935,7 @@ describe('pinnedTools', () => {
       expect(valueOf(styles, PINNED, 'position')).toBeNull();
       expect(valueOf(styles, PINNED, 'position', DESK)).toBe('sticky');
       expect(valueOf(styles, PINNED, 'top', DESK)).toBe(
-        'calc(var(--banner-h) + var(--market-frame-h) + var(--pinned-tools-h, 0px))',
+        'calc(var(--banner-h) + var(--market-frame-h) + var(--pinned-tools-h))',
       );
       expect(valueOf(styles, PINNED, 'z-index', DESK)).toBe('9');
     });
