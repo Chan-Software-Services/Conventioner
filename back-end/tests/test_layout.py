@@ -418,6 +418,20 @@ class TestDescribeChange:
 
         assert change == {"zones": {"added": 2, "changed": 1, "removed": 1}}
 
+    def test_a_zone_turned_counts_as_changed(self):
+        zone = {"id": "z-1", "label": "Stage", "x_mm": 0, "y_mm": 0, "width_mm": 10, "depth_mm": 10}
+
+        change = self._change(_floorplan([], zones=[zone]),
+                              _floorplan([], zones=[{**zone, "rotation": 30}]))
+
+        assert change == {"zones": {"added": 0, "changed": 1, "removed": 0}}
+
+    def test_a_zone_stored_before_turns_and_saved_square_is_no_change(self):
+        zone = {"id": "z-1", "label": "Stage", "x_mm": 0, "y_mm": 0, "width_mm": 10, "depth_mm": 10}
+
+        assert self._change(_floorplan([], zones=[zone]),
+                            _floorplan([], zones=[{**zone, "rotation": 0}])) == {}
+
     def test_a_replaced_image_is_said(self):
         assert self._change(_floorplan([]), _floorplan([], image_gridfs_id="img-2")) == {
             "image": "replaced"}
