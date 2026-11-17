@@ -623,13 +623,15 @@ async function decideSelection() {
 
 <template>
   <div class="all-view" data-testid="applications-all">
-    <ListFreshness
-      testid="applications"
-      :readAt="readAt"
-      :refreshing="refreshing || saving"
-      :failed="refreshError"
-      @refresh="refresh"
-    />
+    <Teleport defer to="#applications-toolbar-end">
+      <ListFreshness
+        testid="applications"
+        :readAt="readAt"
+        :refreshing="refreshing || saving"
+        :failed="refreshError"
+        @refresh="refresh"
+      />
+    </Teleport>
     <ListFrame
       :items="shown"
       :wholeCount="applications.length"
@@ -639,6 +641,8 @@ async function decideSelection() {
       :noun="APPLICATION_NOUN"
       :findKey="SEARCH_KEY"
       findLabel="Find by name or address"
+      findPlaceholder="Find by name or address"
+      findLabelHidden
       :state="listState"
       testid="applications-all-list"
       @drawn="rowsDrawn"
@@ -646,7 +650,7 @@ async function decideSelection() {
       <template #filters>
         <!-- Named by the words over it, with what the statuses that are not plain mean (E38/F05/S01). -->
         <div class="all-filter-group">
-          <span id="applications-all-filter-label" class="field-label">Filter</span>
+          <span id="applications-all-filter-label" class="field-label visually-hidden">Filter</span>
           <div class="all-filters">
             <div
               class="all-status"
@@ -692,21 +696,23 @@ async function decideSelection() {
               testid="applications-all-assigned-to"
               @update:model-value="assignTo($event as string)"
             />
-            <button
-              v-if="mayExport"
-              type="button"
-              class="btn btn--secondary btn--compact all-export"
-              data-testid="applications-all-export-button"
-              @click="openExport"
-            >
-              Export
-            </button>
+            <Teleport defer to="#applications-toolbar-end">
+              <button
+                v-if="mayExport"
+                type="button"
+                class="btn btn--secondary btn--compact all-export"
+                data-testid="applications-all-export-button"
+                @click="openExport"
+              >
+                Export
+              </button>
+            </Teleport>
           </div>
         </div>
       </template>
 
       <template #aboveRows>
-        <p id="applications-all-filter-hint" class="all-filter-hint">
+        <p id="applications-all-filter-hint" class="all-filter-hint visually-hidden">
           Open is not decided yet. Needs follow-up waits on someone reaching out to the applicant.
         </p>
 
@@ -1324,5 +1330,84 @@ async function decideSelection() {
 .drawer-buttons {
   display: flex;
   gap: var(--space-2);
+}
+
+/* ── Prototype (release walk F7): the find field and the filters on one line under the toolbar,
+   the statuses as one segmented control; Export sits in the toolbar, after Refresh, at its end. ── */
+.all-filter-group {
+  flex: 1 1 auto;
+}
+
+.all-status {
+  flex-wrap: nowrap;
+  gap: 0;
+}
+
+.all-status .btn {
+  border-radius: 0;
+}
+
+/* The find field as short as the compact statuses beside it. */
+.all-view :deep(.list-frame__find .field) {
+  height: var(--control-height-compact);
+  font-size: var(--text-sm);
+}
+
+.all-status .btn + .btn {
+  margin-inline-start: -1px;
+}
+
+.all-status .btn:first-child {
+  border-start-start-radius: var(--radius-control);
+  border-end-start-radius: var(--radius-control);
+}
+
+.all-status .btn:last-child {
+  border-start-end-radius: var(--radius-control);
+  border-end-end-radius: var(--radius-control);
+}
+
+.all-export {
+  order: 1;
+  margin-inline-start: 0;
+}
+
+/* A phone: the statuses wrap, a step apart, rather than run past the screen's edge. */
+@media (width <= 640px) {
+  .all-status {
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+
+  .all-status .btn,
+  .all-status .btn + .btn {
+    margin-inline-start: 0;
+    border-radius: var(--radius-control);
+  }
+}
+
+/* Prototype (release walk F7): the count belongs to the list it counts, small, a narrow step to
+   the first row under it and the frame's own step from the filters above. */
+.all-view :deep(.list-frame__words[role='status']) {
+  margin-block: 0 calc(-1 * var(--space-2));
+  font-size: var(--text-xs);
+}
+
+/* ── Prototype (release walk F7): the find field and the filters pinned under the page's toolbar
+   (its height, 53px, the toolbar's 28px controls and 12px over and under them with its rule)
+   while the rows scroll, from 1024px as the frame pins. ── */
+@media (width >= 1024px) {
+  .all-view :deep(.list-frame__tools) {
+    position: sticky;
+    top: calc(var(--banner-h) + var(--market-frame-h, 0px) + 53px);
+    z-index: 5;
+    margin-inline: calc(-1 * var(--space-6));
+    /* Flush under the toolbar at rest as when pinned, so it never moves; 12px over its labels and
+       12px under its controls. */
+    padding: var(--space-3) var(--space-6);
+    /* A rule across the area under the pinned tools, so the rows read as passing under them. */
+    border-bottom: 1px solid var(--mm-border);
+    background: white;
+  }
 }
 </style>

@@ -79,7 +79,8 @@ const condition = computed(() => {
     case MarketPhase.Assignment:
     case MarketPhase.Offers:
     case MarketPhase.MarketDays:
-      return props.market?.verdictsSettledReason ?? '';
+      // Prototype (release walk F7): the review-closed line is not shown.
+      return '';
     default:
       return '';
   }
@@ -100,11 +101,13 @@ const condition = computed(() => {
     </p>
     <!-- Who reviews which application, while the review is open (E38/F07/S02). -->
     <ReviewersPanel :market="market" @saved="dealt++" />
-    <!-- A step for the market, over whichever view is open (E38/F05/S01). -->
-    <PublishResults :market="market" />
     <!-- Which view, said over the switch and named by those words (E38/F05/S01). -->
+    <!-- Prototype (release walk F7): the page's toolbar, the view on the left and the list's own
+         Export and Refresh carried in at its end (`ApplicationsAll` teleports them). -->
     <div class="review-views">
-      <span id="review-views-label" class="field-label">How do you want to review?</span>
+      <span id="review-views-label" class="field-label visually-hidden"
+        >How do you want to review?</span
+      >
       <div
         class="review-views-switch"
         role="group"
@@ -132,7 +135,10 @@ const condition = computed(() => {
           One by one
         </button>
       </div>
-      <p id="review-views-hint" class="review-views-hint">
+      <!-- A step for the market, beside the view switch over whichever view is open (E38/F05/S01). -->
+      <PublishResults :market="market" />
+      <div id="applications-toolbar-end" class="review-views-end"></div>
+      <p id="review-views-hint" class="review-views-hint visually-hidden">
         All lists every application, to filter and decide several at once. One by one shows one
         application at a time, with every answer.
       </p>
@@ -194,6 +200,71 @@ const condition = computed(() => {
 @media (width <= 640px) {
   .settings-body.settings-body-stacked {
     padding: var(--space-4);
+  }
+}
+
+/* ── Prototype (release walk F7): the Applications toolbar ──
+   One row set off by a rule across the whole area: the view as one segmented control on the left,
+   the list's Export and its read time with Refresh at the end. The hint stays for a screen reader. */
+.review-views {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  /* 12px over its controls and 12px under them: the area's own 24px top is taken back by 12px. */
+  margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-6)) var(--space-4);
+  padding: 0 var(--space-6) var(--space-3);
+  border-bottom: 1px solid var(--mm-border);
+}
+
+.review-views-switch {
+  gap: 0;
+}
+
+.review-views-switch .btn {
+  border-radius: 0;
+}
+
+.review-views-switch .btn + .btn {
+  margin-inline-start: -1px;
+}
+
+.review-views-switch .btn:first-child {
+  border-start-start-radius: var(--radius-control);
+  border-end-start-radius: var(--radius-control);
+}
+
+.review-views-switch .btn:last-child {
+  border-start-end-radius: var(--radius-control);
+  border-end-end-radius: var(--radius-control);
+}
+
+.review-views-end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-inline-start: auto;
+}
+
+@media (width <= 640px) {
+  .review-views {
+    margin-block-start: calc(-1 * var(--space-1));
+    margin-inline: calc(-1 * var(--space-4));
+    padding-inline: var(--space-4);
+  }
+}
+
+/* ── Prototype (release walk F7): the toolbar pinned under the market's frame while the list
+   scrolls, from 1024px as the frame pins; the list's find field and filters pin under it. ── */
+@media (width >= 1024px) {
+  .review-views {
+    position: sticky;
+    top: calc(var(--banner-h) + var(--market-frame-h, 0px));
+    z-index: 6;
+    padding-block-start: var(--space-3);
+    margin-block: calc(-1 * var(--space-6)) 0;
+    background: white;
   }
 }
 </style>

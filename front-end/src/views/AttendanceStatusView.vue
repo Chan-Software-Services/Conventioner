@@ -536,121 +536,125 @@ const drawer = useVendorDrawer();
         This market has no dates yet.
       </p>
       <template v-else-if="dates.length">
-        <div class="door-top">
-          <div class="door-pickers">
-            <label class="door-picker">
-              <span class="visually-hidden">Market date</span>
-              <select
-                class="field field--select door-select"
-                name="attendance-date"
-                :value="selectedDate"
-                data-testid="attendance-date-select"
-                @change="chooseDate(($event.target as HTMLSelectElement).value)"
-              >
-                <option v-for="date in dates" :key="date" :value="date">
-                  {{ getShortDate(date) }}
-                </option>
-              </select>
-            </label>
-            <label v-if="view === 'map' && mapLocations.length > 1" class="door-picker">
-              <span class="visually-hidden">Location</span>
-              <select
-                class="field field--select door-select"
-                name="attendance-location"
-                :value="mapLocationId"
-                data-testid="attendance-location-select"
-                @change="chooseLocation(($event.target as HTMLSelectElement).value)"
-              >
-                <option v-for="location in mapLocations" :key="location.id" :value="location.id">
-                  {{ location.name }}
-                </option>
-              </select>
-            </label>
+        <!-- Prototype (release walk F7): the toolbar and the search pinned under the frame while the
+             list scrolls, from a desk's width. -->
+        <div class="door-pin">
+          <div class="door-top">
+            <div class="door-pickers">
+              <label class="door-picker">
+                <span class="visually-hidden">Market date</span>
+                <select
+                  class="field field--select door-select"
+                  name="attendance-date"
+                  :value="selectedDate"
+                  data-testid="attendance-date-select"
+                  @change="chooseDate(($event.target as HTMLSelectElement).value)"
+                >
+                  <option v-for="date in dates" :key="date" :value="date">
+                    {{ getShortDate(date) }}
+                  </option>
+                </select>
+              </label>
+              <label v-if="view === 'map' && mapLocations.length > 1" class="door-picker">
+                <span class="visually-hidden">Location</span>
+                <select
+                  class="field field--select door-select"
+                  name="attendance-location"
+                  :value="mapLocationId"
+                  data-testid="attendance-location-select"
+                  @change="chooseLocation(($event.target as HTMLSelectElement).value)"
+                >
+                  <option v-for="location in mapLocations" :key="location.id" :value="location.id">
+                    {{ location.name }}
+                  </option>
+                </select>
+              </label>
+            </div>
+            <!-- When the roster was read, then Print roster and the door code: together at the row's
+                 end, or the end of a line of their own when the dates fill theirs. -->
+            <div class="door-tools">
+              <FilterToggles
+                class="door-view"
+                :options="VIEWS"
+                label="Show as"
+                testid="attendance-view"
+                :modelValue="view"
+                :rest="view"
+                @update:modelValue="chooseView($event as View)"
+              />
+              <ListFreshness
+                class="door-freshness"
+                testid="attendance"
+                :readAt="readAt"
+                :refreshing="refreshing"
+                :failed="refreshError"
+                @refresh="retry"
+              />
+              <span class="door-papers">
+                <button
+                  type="button"
+                  class="btn btn--secondary btn--compact"
+                  data-testid="attendance-print"
+                  @click="printRoster"
+                >
+                  Print roster
+                </button>
+                <button
+                  v-if="offersTheDoorCode"
+                  type="button"
+                  class="btn btn--secondary btn--compact"
+                  data-testid="attendance-door-code"
+                  @click="showingDoorCode = true"
+                >
+                  Door code
+                </button>
+              </span>
+            </div>
           </div>
-          <!-- When the roster was read, then Print roster and the door code: together at the row's
-               end, or the end of a line of their own when the dates fill theirs. -->
-          <div class="door-tools">
-            <FilterToggles
-              class="door-view"
-              :options="VIEWS"
-              label="Show as"
-              testid="attendance-view"
-              :modelValue="view"
-              :rest="view"
-              @update:modelValue="chooseView($event as View)"
-            />
-            <ListFreshness
-              class="door-freshness"
-              testid="attendance"
-              :readAt="readAt"
-              :refreshing="refreshing"
-              :failed="refreshError"
-              @refresh="retry"
-            />
-            <span class="door-papers">
-              <button
-                type="button"
-                class="btn btn--secondary btn--compact"
-                data-testid="attendance-print"
-                @click="printRoster"
-              >
-                Print roster
-              </button>
-              <button
-                v-if="offersTheDoorCode"
-                type="button"
-                class="btn btn--secondary btn--compact"
-                data-testid="attendance-door-code"
-                @click="showingDoorCode = true"
-              >
-                Door code
-              </button>
-            </span>
-          </div>
-        </div>
 
-        <div class="door-bar">
-          <h2 class="door-summary" data-testid="attendance-summary">
-            {{ today.here }} of {{ today.expected }} checked in
-          </h2>
-          <div v-if="view === 'list'" class="door-show" role="group" aria-label="Show">
-            <button
-              type="button"
-              class="btn btn--secondary btn--compact"
-              :aria-pressed="show === 'all'"
-              data-testid="attendance-show-all"
-              @click="show = 'all'"
-            >
-              All {{ today.expected }}
-            </button>
-            <button
-              type="button"
-              class="btn btn--secondary btn--compact"
-              :aria-pressed="show === 'not-yet'"
-              data-testid="attendance-show-not-yet"
-              @click="show = 'not-yet'"
-            >
-              {{ notHere }} {{ today.expected - today.here }}
-            </button>
-            <button
-              type="button"
-              class="btn btn--secondary btn--compact"
-              :aria-pressed="show === 'here'"
-              data-testid="attendance-show-here"
-              @click="show = 'here'"
-            >
-              Checked in {{ today.here }}
-            </button>
+          <div class="door-bar">
+            <h2 class="door-summary" data-testid="attendance-summary">
+              {{ today.here }} of {{ today.expected }} checked in
+            </h2>
+            <div v-if="view === 'list'" class="door-show" role="group" aria-label="Show">
+              <button
+                type="button"
+                class="btn btn--secondary btn--compact"
+                :aria-pressed="show === 'all'"
+                data-testid="attendance-show-all"
+                @click="show = 'all'"
+              >
+                All {{ today.expected }}
+              </button>
+              <button
+                type="button"
+                class="btn btn--secondary btn--compact"
+                :aria-pressed="show === 'not-yet'"
+                data-testid="attendance-show-not-yet"
+                @click="show = 'not-yet'"
+              >
+                {{ notHere }} {{ today.expected - today.here }}
+              </button>
+              <button
+                type="button"
+                class="btn btn--secondary btn--compact"
+                :aria-pressed="show === 'here'"
+                data-testid="attendance-show-here"
+                @click="show = 'here'"
+              >
+                Checked in {{ today.here }}
+              </button>
+            </div>
+            <input
+              v-model="search"
+              type="search"
+              name="attendance-search"
+              class="field door-search"
+              aria-label="Find a vendor"
+              placeholder="Name, email or table"
+              data-testid="attendance-search"
+            />
           </div>
-          <input
-            v-model="search"
-            type="search"
-            name="attendance-search"
-            class="field door-search"
-            aria-label="Find a vendor"
-            placeholder="Name, email or table"
-            data-testid="attendance-search"
-          />
         </div>
 
         <p
@@ -855,7 +859,7 @@ const drawer = useVendorDrawer();
 .door .door-top {
   align-items: center;
   margin-inline: calc(-1 * var(--space-6));
-  margin-block-start: calc(var(--space-3) - var(--space-6));
+  margin-block-start: calc(-1 * var(--space-3));
   padding-inline: var(--space-6);
   padding-block-end: var(--space-3);
   border-block-end: 1px solid var(--mm-border);
@@ -1113,5 +1117,42 @@ const drawer = useVendorDrawer();
   .door-notes {
     grid-area: notes;
   }
+}
+
+/* ── Prototype (release walk F7): the toolbar and the search stay in view, pinned under the
+   market's frame, while the list or the map scrolls; from 1024px, as the frame pins, since on a
+   phone the pinned block may reach no lower than the layout sweep allows. ── */
+@media (width >= 1024px) {
+  .door-pin {
+    position: sticky;
+    top: calc(var(--banner-h) + var(--market-frame-h, 0px));
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    /* The area's 24px top is the block's own, so the toolbar keeps its 12px over its controls when
+       pinned too, never slipping under the frame. */
+    margin: calc(-1 * var(--space-6)) calc(-1 * var(--space-6)) 0;
+    padding: var(--space-3) var(--space-6) var(--space-3);
+    /* A rule across the area under the pinned tools, so the rows read as passing under them. */
+    border-bottom: 1px solid var(--mm-border);
+    background: white;
+  }
+
+  .door-pin .door-top {
+    margin-block-start: 0;
+  }
+}
+
+@media (width < 1024px) {
+  .door-pin {
+    display: contents;
+  }
+}
+
+/* Prototype (release walk F5): the search as short as the compact buttons beside it. */
+.door .door-search {
+  height: var(--control-height-compact);
+  font-size: var(--text-sm);
 }
 </style>

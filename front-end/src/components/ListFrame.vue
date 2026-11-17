@@ -77,6 +77,10 @@ const props = withDefaults(
     findKey?: string;
     /** The field's label, with `finds`. */
     findLabel?: string;
+    /** Prototype (release walk F7): words in the empty field, and the label for a screen reader
+     *  alone, where the placeholder says what the field finds. */
+    findPlaceholder?: string;
+    findLabelHidden?: boolean;
     state?: 'ready' | 'loading' | 'failed';
     /** What a failed read says, `getApiErrorMessage`'s on a screen. */
     failedMessage?: string;
@@ -88,6 +92,8 @@ const props = withDefaults(
     filterKey: undefined,
     finds: undefined,
     findLabel: undefined,
+    findPlaceholder: undefined,
+    findLabelHidden: false,
     pageSize: 50,
     findFrom: LIST_FIND_FROM,
     state: 'ready',
@@ -233,11 +239,14 @@ async function showMore(): Promise<void> {
       :data-testid="`${testid}-tools`"
     >
       <div v-if="showsField" class="list-frame__find">
-        <label class="field-label" :for="fieldId">{{ findLabel }}</label>
+        <label class="field-label" :class="{ 'visually-hidden': findLabelHidden }" :for="fieldId">{{
+          findLabel
+        }}</label>
         <input
           :id="fieldId"
           ref="field"
           :value="typed"
+          :placeholder="findPlaceholder"
           type="search"
           autocomplete="off"
           class="field"

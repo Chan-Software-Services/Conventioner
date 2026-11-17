@@ -967,15 +967,19 @@ function submittedOn(app: Application): string {
 
 <template>
   <div v-if="visible && market" class="monitor-panel" data-testid="app-monitor-panel">
-    <ListFreshness
-      v-if="!loading"
-      class="monitor-freshness"
-      testid="applications"
-      :readAt="readAt"
-      :refreshing="refreshing || saving"
-      :failed="refreshError"
-      @refresh="refresh"
-    />
+    <!-- Prototype (release walk F7): the read time and Refresh in the page's toolbar, where the All
+         view puts them. -->
+    <Teleport defer to="#applications-toolbar-end">
+      <ListFreshness
+        v-if="!loading"
+        class="monitor-freshness"
+        testid="applications"
+        :readAt="readAt"
+        :refreshing="refreshing || saving"
+        :failed="refreshError"
+        @refresh="refresh"
+      />
+    </Teleport>
     <ReadFailed
       v-if="loadError"
       name="applications"
@@ -1419,8 +1423,9 @@ function submittedOn(app: Application): string {
   padding: 0 0 var(--space-4);
 }
 
+/* Prototype (release walk F7): in the toolbar's row, so no step of its own under it. */
 .monitor-freshness {
-  margin-bottom: var(--space-4);
+  margin-bottom: 0;
 }
 
 .loading-state,

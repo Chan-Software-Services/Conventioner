@@ -67,6 +67,10 @@ watch(
   { immediate: true },
 );
 const confirming = ref(false);
+/** Prototype (release walk F7): by market days results are out by definition, so it says nothing. */
+const publishedInMarketDays = computed(
+  () => published.value && props.market?.phase === MarketPhase.MarketDays,
+);
 /**
  * Publishing, for the confirmation's one opening on this market (T411): nothing closes it while it
  * publishes, so a refusal is said in it, and a new opening starts with none.
@@ -91,7 +95,7 @@ async function publish() {
 </script>
 
 <template>
-  <div v-if="market && itsPhase && publishes" class="publish-row">
+  <div v-if="market && itsPhase && publishes && !publishedInMarketDays" class="publish-row">
     <button
       v-if="!published"
       class="publish-button"
@@ -111,8 +115,10 @@ async function publish() {
     <span v-else-if="!published" class="publish-hint" data-testid="applications-publish-hint">
       Vendors read whether they have a table on the market's vendor page. No email is sent.
     </span>
-    <span v-if="published" class="chip chip--positive" data-testid="applications-published-badge">
-      Results published
+    <!-- Prototype (release walk F7): a quiet status in the toolbar, not a chip on a line of its own. -->
+    <span v-if="published" class="publish-status" data-testid="applications-published-badge">
+      <span class="publish-status-dot" aria-hidden="true"></span>
+      Results published · vendors can see them
     </span>
 
     <!-- What publishing tells whom, before it does (E36/F04/S01): it cannot be undone. -->
@@ -222,5 +228,25 @@ async function publish() {
   overflow-wrap: anywhere;
   color: var(--mm-text-link);
   font-size: var(--text-sm);
+}
+
+/* ── Prototype (release walk F7): the published state as a quiet status in the toolbar. ── */
+.publish-row {
+  margin-bottom: 0;
+}
+
+.publish-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--mm-text-muted);
+}
+
+.publish-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--mm-green);
 }
 </style>
