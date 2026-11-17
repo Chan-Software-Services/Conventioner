@@ -278,7 +278,8 @@ export interface RowTool {
   /** The tables a point laid where the pointer is would lay, less those of `poses` it keeps where
    *  they stand: shown as ghosts, never placed (the QC walk of 2026-11-16, item 17). Past the last
    *  point they are the tables it adds; a row spread to its ends is spread whole again, and a bend
-   *  at the last point is smoothed once it is no end, so the tables that move are ghosts too. */
+   *  at the last point gentle enough to be no corner is smoothed once it is no end, so the tables
+   *  that move are ghosts too. */
   ghosts: ComputedRef<PathPose[]>;
   /** How many tables the row holds with a point where the pointer is, while ghosts show; else 0. */
   withAPoint: ComputedRef<number>;
