@@ -354,12 +354,15 @@ describe('the palette carries a contrast contract', () => {
       // Lines, hover states and a scroller's edge shades. These never sit under text.
       '--focus-border-on-fill',
       '--mm-border',
+      '--mm-border-soft',
       '--hover-grey',
       '--edge-shade',
       '--edge-shade-on-dark',
       // The section palette's fills and edges, held by their own contract below.
       ...LAYOUT_PAIRS.flat(),
       '--layout-zone-hatch',
+      // The paper under the public map's backdrop (T465), which carries no text.
+      '--mm-paper',
     ]);
     const unaccounted = Object.keys(tokens).filter((t) => !known.has(t));
     expect(unaccounted).toEqual([]);

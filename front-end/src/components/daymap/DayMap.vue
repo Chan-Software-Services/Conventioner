@@ -33,13 +33,17 @@ const props = withDefaults(
     tableTypes: readonly TableTypeObject[];
     /** The day's seats, at any of the locations. */
     seats: readonly MapSeat[];
+    /** The map takes its box whole, as the public map's hall: no shape of its own, no edge, no
+     *  location switch and no legend list (the caller draws the choice and fills the `legend`
+     *  slot), and the zoom a floating pill (T465). */
+    fills?: boolean;
     /** The seat's key or the table's id picked, outlined on the map. */
     picked: string | null;
     /** More seats or tables outlined, as a search marks the vendors it finds. */
     marked?: readonly string[];
     legend: readonly DayMapLegendItem[];
   }>(),
-  { marked: () => [] },
+  { marked: () => [], fills: false },
 );
 
 const locationId = defineModel<string>('locationId', { required: true });
@@ -87,10 +91,10 @@ const swatches = computed(() => {
 </script>
 
 <template>
-  <div class="day-map" data-testid="day-map">
+  <div class="day-map" :class="{ 'day-map--fills': fills }" data-testid="day-map">
     <div class="day-map__grid">
       <FilterToggles
-        v-if="locations.length > 1 && open"
+        v-if="locations.length > 1 && open && !fills"
         class="day-map__locations"
         :options="switches"
         label="Location"
@@ -100,7 +104,7 @@ const swatches = computed(() => {
         @update:modelValue="locationId = $event as string"
       />
 
-      <div v-if="open" class="day-map__frame" :style="{ aspectRatio: shape }">
+      <div v-if="open" class="day-map__frame" :style="fills ? undefined : { aspectRatio: shape }">
         <LayoutMap
           ref="map"
           :layout="open.layout"
@@ -148,7 +152,10 @@ const swatches = computed(() => {
         </button>
       </div>
 
-      <ul class="day-map__legend" aria-label="Legend" data-testid="day-map-legend">
+      <div v-if="fills" class="day-map__legend-slot">
+        <slot name="legend" />
+      </div>
+      <ul v-else class="day-map__legend" aria-label="Legend" data-testid="day-map-legend">
         <li
           v-for="item in swatches"
           :key="item.tone"
@@ -231,6 +238,88 @@ const swatches = computed(() => {
 .day-map__zoom-button {
   min-width: var(--target-min);
   justify-content: center;
+}
+
+/* Filling its box (T465), as the public map's hall: the map takes the whole box, with no shape,
+   edge or corner of its own, so the drawing's own `preserveAspectRatio` centres the hall in it; the
+   caller's legend stands over the map's bottom-left corner and the zoom, a floating pill, over its
+   bottom-right, each `--space-3` in, the legend leaving the zoom its room. */
+.day-map--fills,
+.day-map--fills .day-map__grid {
+  height: 100%;
+}
+
+.day-map--fills .day-map__grid {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: 'map map';
+  gap: 0;
+}
+
+.day-map--fills .day-map__frame {
+  height: 100%;
+  max-height: none;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.day-map--fills .day-map__zoom {
+  z-index: 1;
+  border: 1px solid var(--mm-border-soft);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-float);
+}
+
+.day-map--fills .day-map__zoom-button {
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+}
+
+.day-map--fills .day-map__zoom-button:hover {
+  background: var(--layout-floor);
+}
+
+.day-map__legend-slot {
+  position: absolute;
+  bottom: var(--space-3);
+  left: var(--space-3);
+  z-index: 1;
+  grid-area: map;
+  max-width: calc(100% - 10rem);
+}
+
+/* A box a phone's width: the map takes the box less one row under it, which holds the legend at
+   its start and the zoom at its end, so neither covers the small hall. */
+@container (width < 30rem) {
+  .day-map--fills .day-map__grid {
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'map map'
+      'legend zoom';
+    column-gap: var(--space-2);
+    padding-bottom: var(--space-3);
+  }
+
+  .day-map--fills .day-map__legend-slot,
+  .day-map--fills .day-map__zoom {
+    position: static;
+    align-self: center;
+    margin-top: var(--space-3);
+  }
+
+  .day-map--fills .day-map__legend-slot {
+    grid-area: legend;
+    max-width: none;
+    margin-inline-start: var(--space-3);
+  }
+
+  .day-map--fills .day-map__zoom {
+    grid-area: zoom;
+    margin-inline-end: var(--space-3);
+    padding: var(--space-1);
+    box-shadow: var(--shadow-float);
+  }
 }
 
 .day-map__legend {

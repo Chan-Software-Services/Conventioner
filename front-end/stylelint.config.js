@@ -58,7 +58,7 @@ export default {
       },
       {
         message:
-          'Use a scale token from base.css - --text-*, --radius-*, --shadow-card. See docs/design-system.md.',
+          'Use a scale token from base.css - --text-*, --radius-*, --shadow-card or --shadow-float. See docs/design-system.md.',
       },
     ],
     'declaration-property-value-allowed-list': [
