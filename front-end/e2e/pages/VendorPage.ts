@@ -90,6 +90,11 @@ export class VendorPage {
     return this.page.getByTestId('vendor-sign-in-resend-btn');
   }
 
+  /** "Use a different email", back to the email step from the code step. */
+  get differentEmailButton(): Locator {
+    return this.page.getByTestId('vendor-sign-in-back-btn');
+  }
+
   /** The code step's one action once its code no longer works. */
   get sendNewCodeButton(): Locator {
     return this.page.getByTestId('vendor-sign-in-send-new-code-btn');

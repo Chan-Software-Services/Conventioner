@@ -49,14 +49,16 @@ async function checkIn(code: string, scanned: boolean) {
   if (!seat) return;
   busy.value = true;
   error.value = null;
+  const vendor = store.applicantEmail;
   const result = await store.checkIn(seat.date, code);
   busy.value = false;
   if (result.ok) {
     typed.value = '';
     return;
   }
-  // A sign-in that ran out takes the page back to the sign-in; a scanned code waits through it.
-  if (result.signedOut && scanned) store.holdDoorCode(props.marketSlug, code);
+  // A sign-in that ran out takes the page back to the sign-in; a scanned code waits through it,
+  // for this vendor's next sign-in and no one else's.
+  if (result.signedOut && scanned) store.holdDoorCode(props.marketSlug, code, vendor);
   error.value = result.message;
 }
 
@@ -78,7 +80,7 @@ async function undo() {
 
 /** A door code scanned at the entrance, used once, for today. */
 async function useScannedCode() {
-  // Signed out (a sign-in that ran out mid-check-in), the code waits for the next sign-in.
+  // Signed out (a sign-in that ran out mid-check-in), the code waits for the vendor's next sign-in.
   if (!store.isAuthenticatedFor(props.marketSlug)) return;
   const code = store.takeDoorCode(props.marketSlug);
   if (!code || !store.page) return;
