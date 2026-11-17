@@ -218,24 +218,27 @@ function openVendor(vendor: ListedVendor) {
 
     <template v-else-if="map">
       <header class="public-map__head">
+        <p class="public-map__eyebrow">Vendor map</p>
         <h1 class="public-map__title" data-testid="public-map-heading">{{ map.marketName }}</h1>
-        <p class="public-map__subtitle" data-testid="public-map-subtitle">Map</p>
-      </header>
+        <p class="public-map__subtitle" data-testid="public-map-subtitle">
+          {{ listed.length }} {{ listed.length === 1 ? 'vendor' : 'vendors' }} on {{ day }}
+        </p>
 
-      <nav class="public-map__days" aria-label="Market day" data-testid="public-map-days">
-        <button
-          v-for="date in map.dates"
-          :key="date"
-          type="button"
-          class="btn btn--secondary btn--compact public-map__day"
-          :aria-pressed="date === place.date"
-          :data-date="date"
-          data-testid="public-map-day"
-          @click="chooseDay(date)"
-        >
-          {{ dayInWords(date) }}
-        </button>
-      </nav>
+        <nav class="public-map__days" aria-label="Market day" data-testid="public-map-days">
+          <button
+            v-for="date in map.dates"
+            :key="date"
+            type="button"
+            class="btn btn--secondary btn--compact public-map__day"
+            :aria-pressed="date === place.date"
+            :data-date="date"
+            data-testid="public-map-day"
+            @click="chooseDay(date)"
+          >
+            {{ dayInWords(date) }}
+          </button>
+        </nav>
+      </header>
 
       <div class="public-map__body">
         <div ref="mapBox" class="public-map__map" data-testid="public-map-map">
@@ -252,7 +255,12 @@ function openVendor(vendor: ListedVendor) {
         </div>
 
         <div class="public-map__side">
-          <section class="public-map__card" aria-live="polite" data-testid="public-map-card">
+          <section
+            class="public-map__card"
+            :class="{ 'public-map__card--picked': card }"
+            aria-live="polite"
+            data-testid="public-map-card"
+          >
             <p v-if="!card" class="public-map__hint">{{ PICK_A_TABLE }}</p>
             <template v-else>
               <h2 class="public-map__card-title">Table {{ card.code }}</h2>
@@ -332,10 +340,14 @@ function openVendor(vendor: ListedVendor) {
                 data-testid="public-map-vendor"
                 @click="openVendor(item)"
               >
-                <span class="public-map__vendor-name">{{ item.name }}</span>
-                <span class="public-map__vendor-seat"
-                  >Table {{ item.code }}, {{ item.locationName }}</span
-                >
+                <span class="public-map__code" aria-hidden="true">{{ item.code }}</span>
+                <span class="public-map__vendor-words">
+                  <span class="public-map__vendor-name">{{ item.name }}</span>
+                  <span class="public-map__vendor-seat"
+                    ><span class="visually-hidden">Table {{ item.code }}, </span
+                    >{{ item.locationName }}</span
+                  >
+                </span>
               </button>
             </template>
             <template #empty>
@@ -349,6 +361,10 @@ function openVendor(vendor: ListedVendor) {
 </template>
 
 <style scoped>
+/* ── Prototype (release walk F6): the public map, designed for visitors ──
+   A dark title band names the market, how many vendors are there that day and the day tabs; the
+   map stands in a raised card with the hall tabs and the legend inside it; beside it (under it on
+   a phone) the picked table's card and the vendor list, each vendor led by their table's code. */
 /* The page's column: the workspace's width at most, on the app bar's own inset. */
 .public-map {
   display: flex;
@@ -546,6 +562,205 @@ function openVendor(vendor: ListedVendor) {
 @media (width <= 640px) {
   .public-map__vendor {
     min-height: 44px;
+  }
+}
+
+/* ── Prototype (release walk F6) ── */
+.public-map {
+  gap: var(--space-6);
+  padding-block-start: var(--space-4);
+}
+
+/* The title band: the market's name on the app's dark, as the market frame's bar is. */
+.public-map__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-8) var(--space-6);
+  border-radius: var(--radius-card);
+  background: var(--mm-black);
+  color: white;
+}
+
+.public-map__eyebrow {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mm-text-muted-on-dark);
+}
+
+.public-map__head .public-map__title {
+  font-size: var(--text-2xl);
+  line-height: 1.15;
+  color: white;
+}
+
+.public-map__head .public-map__subtitle {
+  margin: 0;
+  font-size: var(--text-md);
+  color: var(--mm-text-muted-on-dark);
+}
+
+/* The days, pills on the band: the chosen one white. */
+.public-map__head .public-map__days {
+  margin-block-start: var(--space-4);
+}
+
+.public-map__head .public-map__day {
+  height: var(--control-height);
+  padding-inline: var(--space-4);
+  border: 1px solid var(--mm-text-muted-on-dark);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: white;
+  font-size: var(--text-sm);
+}
+
+.public-map__head .public-map__day:hover {
+  border-color: white;
+  background: transparent;
+  color: white;
+}
+
+.public-map__head .public-map__day[aria-pressed='true'] {
+  border-color: white;
+  background: white;
+  color: var(--mm-black);
+  font-weight: 600;
+}
+
+@media (width >= 1000px) {
+  .public-map__body {
+    grid-template-columns: minmax(0, 1fr) 24rem;
+  }
+}
+
+/* The map in a raised card, the hall tabs and the legend inside it. */
+.public-map__map {
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: white;
+  box-shadow: var(--shadow-card);
+}
+
+.public-map__map :deep(.filter-toggles) {
+  gap: 0;
+}
+
+.public-map__map :deep(.filter-toggles__toggle) {
+  border-radius: 0;
+}
+
+.public-map__map :deep(.filter-toggles__toggle + .filter-toggles__toggle) {
+  margin-inline-start: -1px;
+}
+
+.public-map__map :deep(.filter-toggles__toggle:first-child) {
+  border-start-start-radius: var(--radius-pill);
+  border-end-start-radius: var(--radius-pill);
+  padding-inline-start: var(--space-4);
+}
+
+.public-map__map :deep(.filter-toggles__toggle:last-child) {
+  border-start-end-radius: var(--radius-pill);
+  border-end-end-radius: var(--radius-pill);
+  padding-inline-end: var(--space-4);
+}
+
+.public-map__map :deep(.day-map__frame) {
+  border-color: transparent;
+}
+
+/* The picked table's card: raised, its code a badge, a green edge along its start. */
+.public-map__card {
+  border: none;
+  box-shadow: var(--shadow-card);
+}
+
+.public-map__card--picked {
+  border-inline-start: 4px solid var(--mm-green);
+}
+
+.public-map__hint {
+  font-size: var(--text-sm);
+}
+
+/* The list in a raised card of its own, a rule between vendors. */
+.public-map__side :deep(.list-frame) {
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: white;
+  box-shadow: var(--shadow-card);
+}
+
+.public-map__side :deep(.list-frame__rows > li + li) {
+  border-block-start: 1px solid var(--mm-border);
+}
+
+/* A vendor: their table's code, then their name over their hall. */
+.public-map__vendor {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-2);
+}
+
+.public-map__vendor:hover {
+  border-color: transparent;
+  background: none;
+}
+
+.public-map__vendor:hover .public-map__vendor-name {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.public-map__vendor[aria-current='true'] {
+  border-color: var(--mm-black);
+}
+
+.public-map__vendor-words {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-hairline);
+  min-width: 0;
+}
+
+/* A table's code as a badge: the app's green on its lightest tint. */
+.public-map__code {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.25rem;
+  height: 2rem;
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-control);
+  background: var(--mm-fill-third);
+  color: var(--mm-black);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (width <= 640px) {
+  .public-map {
+    padding-inline: var(--space-3);
+  }
+
+  .public-map__head {
+    padding: var(--space-6) var(--space-4) var(--space-4);
+  }
+
+  .public-map__head .public-map__title {
+    font-size: var(--text-xl);
+  }
+
+  .public-map__map {
+    padding: var(--space-2);
   }
 }
 </style>
