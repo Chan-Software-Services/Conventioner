@@ -23,6 +23,7 @@ describes:
   - back-end/app.py#verify_attendance_indexes
   - front-end/e2e/one-record-for-a-vendors-day.spec.ts
   - front-end/src/components/ListFreshness.vue
+  - front-end/src/utils/useUpdatedWords.ts
   - front-end/src/components/DoorRosterPrint.vue
   - front-end/src/components/attendance/AttendanceMap.vue
 verified: 2026-11-16
@@ -171,6 +172,7 @@ Moved to another market, the page says "Loading…" at once, never the last mark
 A check-in or its undo is held on the market whose roster the row came from, and posts there only: no read asked before it lands, so none undoes it, and it shows on its row from the server's answer at once (`checkedInAt` from the answer, `checkedInBy` the signed-in address and `state` `here` at the row's own table, or all three cleared and `state` `expected`; an undone row with no seat goes), and a re-read follows.
 Its refusal is said only on the market it was made on, so a refusal landing after the organizer moved says nothing on the market they moved to, and it is forgotten on moving, so coming back to that market never says it again; each row is held busy only while its own write is out, by its market, date and vendor, so taps on several rows all go through and a write still out on the last market holds no row of this one.
 The top row ends with [`ListFreshness`](../../../front-end/src/components/ListFreshness.vue) (`attendance-updated`, `attendance-refresh`) before Print roster and Door code: when the roster was last read, ageing on screen, and Refresh.
+Its words age by [`useUpdatedWords`](../../../front-end/src/utils/useUpdatedWords.ts), a 10-second clock that says a read landing now as "Updated just now" at once, and given `showTime` false it draws only Refresh and a failed refresh's line, for a screen that says the time elsewhere through the same composable (T466).
 A re-read or a Refresh that fails keeps the rows and says "Could not update. The roster is as it was last read." on a line under the top row, until a read lands: between Refresh and Door code it pushed Door code onto a line of its own on a phone; a first read that fails is still the page that could not be read, with Try again.
 The clock, a tab coming back and the browser coming back online read it again quietly, so that page stays, with its sentence, while their read is out; only Try again says "Loading…".
 There is no offline copy and no queue of taps.

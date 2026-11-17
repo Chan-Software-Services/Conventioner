@@ -58,6 +58,13 @@ export const ENTRIES: readonly LibraryEntry[] = [
       'L2, L5, L6, L8, L12; Applications, Vendors, Payments, Attendance, Assignments, Stats and Markets',
   },
   {
+    id: 'toolbars',
+    title: 'Toolbars',
+    summary:
+      'A toolbar row and its groups, a segmented control, and a block of rows pinned under the frame',
+    serves: 'Attendance, Applications (release walk F5, F7)',
+  },
+  {
     id: 'list-frame',
     title: 'List frame',
     summary:
