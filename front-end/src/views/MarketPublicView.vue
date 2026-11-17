@@ -21,7 +21,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router';
 import PageNotFound from '@/components/PageNotFound.vue';
 import ReadFailed from '@/components/ReadFailed.vue';
 import { useApplicationStore } from '@/stores/application';
-import { vendorPageAnswered } from '@/utils/currentPlace';
+import { marketPageAnswered, vendorPageAnswered } from '@/utils/currentPlace';
 import { vendorPagePath } from '@/utils/market';
 import { getFormattedDate } from '@/utils/utils';
 import {
@@ -48,13 +48,21 @@ const state = ref<State>('loading');
 const page = ref<VendorPageInfo | null>(null);
 
 // A "Page not found" here is no vendor's page, so the app bar keeps an organizer's way about on it,
-// as on the vendor page: told by the slug the page answered for, kept, since by the page's unmount
-// the route is already the next page's.
+// as on the vendor page; a page that found its market (the call, a notice or the map) gives the bar
+// its link to the vendor's side. Told by the slug the page answered for, kept, since by the page's
+// unmount the route is already the next page's.
 let answeredFor = marketSlug.value;
 watch(state, (now) => {
   answeredFor = marketSlug.value;
   vendorPageAnswered(answeredFor, now === 'not-found');
+  marketPageAnswered(answeredFor, now === 'ready');
 });
+
+/** Take back what the bar was told for the slug the page last answered. */
+function takeBackAnswer() {
+  vendorPageAnswered(answeredFor, false);
+  marketPageAnswered(answeredFor, false);
+}
 
 /** Each read is numbered, so one answering after the address moved to another market is dropped. */
 let reads = 0;
@@ -97,14 +105,14 @@ watch(() => route.query.door, forwardDoorCode);
 watch(marketSlug, (now, before) => {
   if (now === before || gone || route.name !== 'market-page') return;
   if (typeof route.query.door === 'string') return;
-  vendorPageAnswered(answeredFor, false);
+  takeBackAnswer();
   page.value = null;
   void load();
 });
 
 onUnmounted(() => {
   gone = true;
-  vendorPageAnswered(answeredFor, false);
+  takeBackAnswer();
 });
 </script>
 

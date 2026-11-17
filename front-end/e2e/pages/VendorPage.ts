@@ -44,6 +44,16 @@ export class VendorPage {
     return this.page.getByTestId('vendor-page-market-name');
   }
 
+  /** The market's dates under its name, one item a date; absent for a market with none (T469). */
+  get dates(): Locator {
+    return this.page.getByTestId('vendor-page-dates');
+  }
+
+  /** "See the market map", to the market's own address, while the public map is open (T469). */
+  get mapLink(): Locator {
+    return this.page.getByTestId('vendor-page-map-link');
+  }
+
   get notFound(): Locator {
     return this.page.getByTestId('vendor-page-not-found');
   }

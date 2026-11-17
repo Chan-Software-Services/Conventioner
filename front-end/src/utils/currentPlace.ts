@@ -54,3 +54,25 @@ export function standsApart(
 ): boolean {
   return isVendorFacing(route) && route.params.marketSlug !== absentVendorPage.value;
 }
+
+/** The slug whose market page answered found (T469), while that answer stands. */
+const foundMarketPage = shallowRef<string | null>(null);
+
+/** The market page says whether its read of `slug` found the market: the call, a notice or the map. */
+export function marketPageAnswered(slug: string, found: boolean): void {
+  if (found) foundMarketPage.value = slug;
+  else if (foundMarketPage.value === slug) foundMarketPage.value = null;
+}
+
+/**
+ * The slug the app bar's link to the vendor's side goes to (T469), or none: on a market page that
+ * answered found and still stands apart, so never while it loads, after a failed read, or once the
+ * page (or the map it shows) answered "Page not found".
+ */
+export function vendorLinkFor(
+  route: Pick<RouteLocationNormalizedLoaded, 'name' | 'matched' | 'params'>,
+): string | null {
+  const slug = route.params.marketSlug;
+  if (route.name !== 'market-page' || typeof slug !== 'string') return null;
+  return slug === foundMarketPage.value && standsApart(route) ? slug : null;
+}

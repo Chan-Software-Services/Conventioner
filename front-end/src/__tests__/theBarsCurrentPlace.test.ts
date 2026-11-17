@@ -3,7 +3,9 @@ import router from '@/router';
 import {
   currentPlace,
   isVendorFacing,
+  marketPageAnswered,
   standsApart,
+  vendorLinkFor,
   vendorPageAnswered,
 } from '@/utils/currentPlace';
 import { loadedRoute } from './support/loadedRoute';
@@ -137,6 +139,60 @@ describe('when the bar stands apart', () => {
     'does not on %s',
     (path) => {
       expect(standsApart(router.resolve(path))).toBe(false);
+    },
+  );
+});
+
+/**
+ * The bar's way to the vendor's side (T469): on a market page that has answered found, and there
+ * alone, it names the slug the link goes to; anywhere else it names none.
+ */
+describe("the bar's link to the vendor page", () => {
+  const link = (path: string) => vendorLinkFor(loadedRoute(router, path));
+
+  afterEach(() => {
+    marketPageAnswered('some-market', false);
+    marketPageAnswered('other-market', false);
+    vendorPageAnswered('some-market', false);
+  });
+
+  it('names none on a market page that has not answered', () => {
+    expect(link('/some-market')).toBeNull();
+  });
+
+  it('names the slug once the market page answered found', () => {
+    marketPageAnswered('some-market', true);
+    expect(link('/some-market')).toBe('some-market');
+  });
+
+  it('names none once the page takes its answer back', () => {
+    marketPageAnswered('some-market', true);
+    marketPageAnswered('some-market', false);
+    expect(link('/some-market')).toBeNull();
+  });
+
+  it("names none on another slug's market page than the one that answered", () => {
+    marketPageAnswered('some-market', true);
+    expect(link('/other-market')).toBeNull();
+  });
+
+  it("is untouched by another slug's taking back", () => {
+    marketPageAnswered('some-market', true);
+    marketPageAnswered('other-market', false);
+    expect(link('/some-market')).toBe('some-market');
+  });
+
+  it('names none once the page under it answered "Page not found", as a closing map does', () => {
+    marketPageAnswered('some-market', true);
+    vendorPageAnswered('some-market', true);
+    expect(link('/some-market')).toBeNull();
+  });
+
+  it.each(['/some-market/vendor', '/markets', '/markets/m1/setup', '/login', '/no/such/page'])(
+    'names none on %s',
+    (path) => {
+      marketPageAnswered('some-market', true);
+      expect(link(path)).toBeNull();
     },
   );
 });
