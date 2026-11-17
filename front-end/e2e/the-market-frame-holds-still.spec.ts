@@ -1,14 +1,20 @@
 import type { Locator, Page } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
-import { marketScreenPath, marketSetupPath } from './helpers/marketScreens';
+import {
+  marketPagePath,
+  marketScreenPath,
+  marketSetupPath,
+  vendorPagePath,
+} from './helpers/marketScreens';
 import { seedApplicantMarket } from './helpers/seedApplicantMarket';
 import { seedPhaseMarket } from './helpers/seedPhaseMarket';
 
 /**
  * A market's frame is the same on every page of it, and the rail's addresses and next step are one
  * row at 1440 (bugs 11 and 12, and items 12 and 13 of bug 43; E26/F10/S01; settles claims-and-room
- * 07): beside the spine while the market had one address, and on the rail's designed second row now
- * that it has two, the market page and the vendor page, each whole (E30/F01/S03, T469).
+ * 07): with two addresses, the market page and the vendor page, each whole, beside the spine where
+ * they fit and on the rail's designed second row for a longer address, such as the test stack's
+ * (E30/F01/S03, T469).
  *
  * Each screen placed the frame itself, so it sat at x 16 on most pages, x 0 on Start from your
  * Google Form and the floorplan wizard, and x 32 on the import - and the last two had no card and
@@ -44,20 +50,19 @@ test("the rail holds the market's two addresses, whole, and the next step on one
   );
   await page.goto(marketSetupPath(marketId, 'applications'));
 
-  const spine = await box(page.getByTestId('phase-rail-spine'));
   const market = page.getByTestId('phase-rail-market-page');
   const vendor = page.getByTestId('phase-rail-vendor-page');
   const next = page.getByTestId('phase-transition-assignment');
-  // Under the spine, on the row the two addresses ask for, never squeezed beside it.
+  // On one row, whichever row the two whole addresses ask for: beside the spine where they fit,
+  // else under it.
   const row = middle(await box(market));
-  expect((await box(market)).y).toBeGreaterThan(spine.y + spine.height);
   expect(Math.abs(middle(await box(vendor)) - row)).toBeLessThan(4);
   expect(Math.abs(middle(await box(next)) - row)).toBeLessThan(4);
 
   // Each whole: the address it shows, the link, its hover text, and what Copy copies.
   for (const [chip, end] of [
-    [market, `/${marketSlug}`],
-    [vendor, `/${marketSlug}/vendor`],
+    [market, marketPagePath(marketSlug)],
+    [vendor, vendorPagePath(marketSlug)],
   ] as const) {
     const link = chip.getByRole('link');
     await expect(link).toHaveText(new RegExp(`${end}$`));
