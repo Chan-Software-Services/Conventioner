@@ -4,7 +4,7 @@ kind: testing
 describes:
   - scripts/seed_fixture.sh
   - scripts/seed_walk_market.sh
-verified: 2026-11-13
+verified: 2026-11-18
 sources:
   - E26
   - E41/F01/S01
