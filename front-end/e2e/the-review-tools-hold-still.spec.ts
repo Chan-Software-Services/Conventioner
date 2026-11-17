@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
 import { widths } from './helpers/phoneWindow';
+import { transitionMarket } from './helpers/seedPhaseMarket';
 import { marketSetupPath } from './helpers/marketScreens';
 import { mongoEval } from './helpers/mongo';
 import { APPLICATION_FIELDS, seedApplicantMarket } from './helpers/seedApplicantMarket';
@@ -136,6 +137,38 @@ for (const { view, query, shown, withFilters } of VIEWS) {
     }
   });
 }
+
+/**
+ * In the assignment, before results go out, Publish results and its hint share the toolbar's start,
+ * so at 1100 a failed refresh's line moves the end under it and the block grows a line: the filters
+ * follow its measured height, flush under it at every scroll.
+ */
+test("All: the filters stay flush under a toolbar a failed refresh's line has grown", async ({
+  authenticatedPage: page,
+  request,
+}) => {
+  const marketId = await aLongReview(request);
+  mongoEval(
+    `db.applications.updateMany(${JSON.stringify({ market_id: marketId })}, { $set: { status: 'reviewer_approved' } })`,
+  );
+  await transitionMarket(request, BACKEND_URL, TEST_USER.email, marketId, 'assignment');
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await page.goto(marketSetupPath(marketId, 'applications'));
+  await expect(page.getByTestId('applications-all-row').first()).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId('applications-publish-hint')).toBeVisible();
+  const height = () =>
+    page.getByTestId('applications-tools').evaluate((block) => block.offsetHeight);
+  const oneLine = await height();
+
+  await page.route(THE_LIST, (route) =>
+    route.request().method() === 'GET' ? route.abort() : route.continue(),
+  );
+  await page.getByTestId('applications-refresh').click();
+  await expect(page.getByTestId('applications-refresh-error')).toBeVisible();
+  await expect.poll(height, 'the failed line grows the toolbar').toBeGreaterThan(oneLine + 20);
+  await expectHeldStill(page, 'All at 1100 in the assignment, the toolbar grown', true);
+  await page.unroute(THE_LIST);
+});
 
 test('on a phone the toolbar scrolls with the page, on both views', async ({
   authenticatedPage: page,
