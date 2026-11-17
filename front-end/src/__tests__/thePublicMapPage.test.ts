@@ -8,6 +8,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import type { PublicMapAnswer } from '@/components/daymap/dayMap';
+import PublicMapTableCard from '@/components/publicmap/PublicMapTableCard.vue';
+import PublicMapVendors from '@/components/publicmap/PublicMapVendors.vue';
 import { standsApart } from '@/utils/currentPlace';
 import {
   dayInWords,
@@ -20,6 +22,7 @@ import {
   type PublicMapRead,
 } from '@/utils/publicMap';
 import PublicMapView from '@/views/PublicMapView.vue';
+import { ANSWER, TODAY, TOMORROW } from './support/publicMapAnswer';
 
 const fetchPublicMap = vi.fn<(slug: string) => Promise<PublicMapRead>>();
 const fetchPublicMapImage = vi.fn<(slug: string, locationId: string) => Promise<Blob>>();
@@ -55,108 +58,6 @@ vi.mock('vue-router', async () => {
     useRouter: () => ({ push: vi.fn(), replace: routing.replace }),
   };
 });
-
-const TODAY = '2099-06-05';
-const TOMORROW = '2099-06-06';
-
-const table = (id: string, sectionId: string, number: number, xMm: number) => ({
-  id,
-  sectionId,
-  number,
-  tableTypeId: 'type-6ft',
-  xMm,
-  yMm: 3000,
-  rotation: 0,
-});
-
-/** Two halls; Gold row 2 shared as its left and right halves; one vendor with no public name. */
-const ANSWER: PublicMapAnswer = {
-  marketName: 'Harbour Night Market',
-  dates: [TODAY, TOMORROW],
-  tableTypes: [{ id: 'type-6ft', name: 'Standard 6 ft', widthMm: 1830, depthMm: 760 }],
-  locations: [
-    {
-      id: 'loc-upper',
-      name: 'Upper Hall',
-      sections: [{ id: 'sec-gold', name: 'Gold row' }],
-      layout: {
-        id: 'fp-upper',
-        locationId: 'loc-upper',
-        imageWidth: 800,
-        imageHeight: 600,
-        scalePxPerUnit: 800 / 30_000,
-        hasImage: true,
-        tables: [
-          table('g1', 'sec-gold', 1, 5000),
-          table('g2', 'sec-gold', 2, 8000),
-          table('g3', 'sec-gold', 3, 11_000),
-          table('g4', 'sec-gold', 4, 14_000),
-        ],
-        zones: [],
-        sectionStyles: [],
-      },
-    },
-    {
-      id: 'loc-lower',
-      name: 'Lower Hall',
-      sections: [{ id: 'sec-silver', name: 'Silver aisle' }],
-      layout: {
-        id: 'fp-lower',
-        locationId: 'loc-lower',
-        imageWidth: 800,
-        imageHeight: 400,
-        scalePxPerUnit: 800 / 20_000,
-        hasImage: false,
-        tables: [table('s1', 'sec-silver', 1, 4000)],
-        zones: [],
-        sectionStyles: [],
-      },
-    },
-  ],
-  seats: [
-    {
-      date: TODAY,
-      tableId: 'g1',
-      half: 'whole',
-      name: 'Kiln & Co',
-      website: 'https://www.kiln-and-co.example/shop',
-      instagram: 'example_kiln',
-    },
-    {
-      date: TODAY,
-      tableId: 'g2',
-      half: 'right',
-      name: 'Bee Candles',
-      website: null,
-      instagram: null,
-    },
-    {
-      date: TODAY,
-      tableId: 'g2',
-      half: 'left',
-      name: 'Acme Ceramics',
-      website: null,
-      instagram: 'example_acme',
-    },
-    { date: TODAY, tableId: 'g3', half: 'whole', name: null, website: null, instagram: null },
-    {
-      date: TODAY,
-      tableId: 's1',
-      half: 'whole',
-      name: 'Cog Prints',
-      website: null,
-      instagram: null,
-    },
-    {
-      date: TOMORROW,
-      tableId: 'g4',
-      half: 'whole',
-      name: 'Dune Glass',
-      website: null,
-      instagram: null,
-    },
-  ],
-};
 
 const found = (map: PublicMapAnswer = ANSWER): PublicMapRead => ({
   map,
@@ -485,89 +386,31 @@ describe('the page', () => {
 });
 
 describe('pressing a table', () => {
-  it('writes it to the address, and the card names its vendor and their links', async () => {
-    await open();
+  it("writes it to the address, and the card is mounted with the page's place", async () => {
+    const page = await open();
     await pressTable('g1');
     expect(routing.replace).toHaveBeenLastCalledWith({
       query: { date: TODAY, location: 'loc-upper', table: 'g1' },
     });
+    const part = page.getComponent(PublicMapTableCard);
+    expect(part.props()).toEqual({
+      card: tableCard(ANSWER, TODAY, 'g1'),
+      day: 'Fri 5 Jun',
+      hallName: 'Upper Hall',
+      paint: null,
+    });
     expect(card().get('h2').text()).toBe('Table Gold row 1');
     expect(card().text()).toContain('Kiln & Co');
-    const links = card().findAll('a');
-    expect(links.map((a) => [a.text(), a.attributes('href')])).toEqual([
-      ['www.kiln-and-co.example', 'https://www.kiln-and-co.example/shop'],
-      ['@example_kiln', 'https://www.instagram.com/example_kiln/'],
-    ]);
-    for (const link of links) {
-      expect(link.attributes('target')).toBe('_blank');
-      expect(link.attributes('rel')).toBe('noopener noreferrer');
-    }
-    expect(card().text()).toContain('Website');
-    expect(card().text()).toContain('Instagram');
   });
 
-  it('lists both vendors of a shared table, left then right, whichever half is pressed', async () => {
-    await open();
+  it('opens the card of a shared table whichever half is pressed', async () => {
+    const page = await open();
     for (const half of ['left', 'right'] as const) {
       await pressTable('g2', half);
-      const halves = card().findAll('[data-testid="public-map-card-half"]');
-      expect(halves.map((h) => h.get('h3').text())).toEqual(['Left half', 'Right half']);
-      expect(halves[0].text()).toContain('Acme Ceramics');
-      expect(halves[0].get('a').text()).toBe('@example_acme');
-      expect(halves[1].text()).toContain('Bee Candles');
-      expect(halves[1].find('a').exists()).toBe(false);
+      expect(page.getComponent(PublicMapTableCard).props('card')).toEqual(
+        tableCard(ANSWER, TODAY, 'g2'),
+      );
     }
-  });
-
-  it('says a half with nobody is free on the day, in words, beside the half that is taken', async () => {
-    await open({
-      map: {
-        ...ANSWER,
-        seats: ANSWER.seats.filter((s) => !(s.tableId === 'g2' && s.half === 'right')),
-      },
-      notFound: false,
-      failed: false,
-    });
-    await pressTable('g2', 'left');
-    const halves = card().findAll('[data-testid="public-map-card-half"]');
-    expect(halves.map((h) => h.get('h3').text())).toEqual(['Left half', 'Right half']);
-    expect(halves[0].text()).toContain('Acme Ceramics');
-    expect(halves[1].text()).toBe('Right halfThis half is free on Fri 5 Jun.');
-  });
-
-  it('says a vendor with no public name is there, and nothing of them', async () => {
-    await open();
-    await pressTable('g3');
-    expect(card().text()).toBe(
-      'Table Gold row 3A vendor is at this table. Their details are not listed.',
-    );
-  });
-
-  it('says a free table is free on the day, in words', async () => {
-    await open({ map: ANSWER, notFound: false, failed: false }, { date: TOMORROW });
-    await pressTable('g1');
-    expect(card().text()).toBe('Table Gold row 1This table is free on Sat 6 Jun.');
-  });
-
-  it('renders nothing a vendor typed as markup', async () => {
-    const hostile = {
-      ...ANSWER,
-      seats: [
-        {
-          date: TODAY,
-          tableId: 'g1',
-          half: 'whole' as const,
-          name: '<img src=x onerror=alert(1)>Shop',
-          website: 'javascript:alert(1)',
-          instagram: 'a"b',
-        },
-      ],
-    };
-    await open(found(hostile));
-    await pressTable('g1');
-    expect(card().find('img').exists()).toBe(false);
-    expect(card().text()).toContain('<img src=x onerror=alert(1)>Shop');
-    expect(card().find('a').exists()).toBe(false);
   });
 });
 
@@ -618,34 +461,24 @@ describe('the address', () => {
 });
 
 describe("the list of the day's vendors", () => {
-  const rows = () => wrapper!.findAll('[data-testid="public-map-vendors-row"]');
-
-  it('lists the named vendors by name, each with its table and location, and counts them', async () => {
-    const page = await open();
-    expect(rows().map((r) => r.text())).toEqual([
-      'Acme CeramicsTable Gold row 2, Upper Hall',
-      'Bee CandlesTable Gold row 2, Upper Hall',
-      'Cog PrintsTable Silver aisle 1, Lower Hall',
-      'Kiln & CoTable Gold row 1, Upper Hall',
-    ]);
-    expect(page.get('[data-testid="public-map-vendors-count"]').text()).toBe('4 vendors');
-    expect(page.get('label[for]').text()).toBe('Find a vendor');
-  });
-
-  it('narrows as the find field is typed in, and does nothing on Enter', async () => {
-    const page = await open();
-    const find = page.get('[data-testid="public-map-vendors-find"]');
-    await find.setValue('cog');
+  it("is mounted with the page's day and table", async () => {
+    const page = await open(found(), { table: 'g2' });
+    expect(page.getComponent(PublicMapVendors).props()).toEqual({
+      map: ANSWER,
+      date: TODAY,
+      pickedTableId: 'g2',
+      pickedSeatKey: null,
+      paints: new Map(),
+    });
+    await page.findAll('[data-testid="public-map-day"]')[1].trigger('click');
     await flushPromises();
-    expect(rows().map((r) => r.text())).toEqual(['Cog PrintsTable Silver aisle 1, Lower Hall']);
-    const enter = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
-    find.element.dispatchEvent(enter);
-    expect(enter.defaultPrevented).toBe(true);
+    expect(page.getComponent(PublicMapVendors).props('date')).toBe(TOMORROW);
   });
 
   it("opens a vendor's location, picks their table and brings the map into view", async () => {
     const page = await open();
-    await rows()[2].get('button').trigger('click');
+    const cog = mapListing(ANSWER, TODAY).find((vendor) => vendor.name === 'Cog Prints')!;
+    page.getComponent(PublicMapVendors).vm.$emit('open', cog);
     await flushPromises();
     expect(routing.replace).toHaveBeenLastCalledWith({
       query: { date: TODAY, location: 'loc-lower', table: 's1' },
@@ -656,12 +489,5 @@ describe("the list of the day's vendors", () => {
     expect(card().text()).toContain('Cog Prints');
     expect(scrolled).toHaveBeenCalled();
     expect(scrolled.mock.contexts.at(-1)).toBe(page.get('[data-testid="public-map-map"]').element);
-  });
-
-  it('says so when no vendor is listed for the day', async () => {
-    const page = await open(found({ ...ANSWER, seats: [] }));
-    expect(page.get('[data-testid="public-map-vendors-empty"]').text()).toBe(
-      'No vendors are listed for this day yet.',
-    );
   });
 });

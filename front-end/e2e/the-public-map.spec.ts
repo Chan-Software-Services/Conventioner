@@ -11,6 +11,8 @@ import { seedMarketDayMap, type SeededMarketDayMap } from './helpers/seedMarketD
  * whose business name was an email address, withheld. Today seven vendors are seated, tomorrow
  * two.
  *
+ * The list of the day's vendors is proved in `the-public-map-vendors.spec.ts`.
+ *
  * The allowlist on the page: whatever a visitor presses, the page's text and its links hold no
  * email address and none of the seeded personal markers, and every request goes to the map's two
  * public routes or the app's own files. A market whose map is off reads exactly as an address
@@ -113,12 +115,12 @@ for (const size of PHONE_AND_DESK) {
       await expect(page).toHaveURL(
         new RegExp(`\\?date=${seeded.today}&location=${seeded.north.id}&table=north-table-1$`),
       );
-      await expect(map.card.getByRole('heading', { level: 2 })).toHaveText('Table Aisle A 1');
-      await expect(map.card).toContainText('Ember Ceramics');
-      const website = map.card.getByTestId('public-map-card-website');
+      await expect(map.card).toContainText('Aisle A 1');
+      await expect(map.cardNames).toHaveText(['Ember Ceramics']);
+      const website = map.cardWebsites;
       await expect(website).toHaveText('ember-ceramics.test');
       await expect(website).toHaveAttribute('href', 'https://ember-ceramics.test/');
-      const instagram = map.card.getByTestId('public-map-card-instagram');
+      const instagram = map.cardInstagrams;
       await expect(instagram).toHaveText('@example_ember');
       await expect(instagram).toHaveAttribute('href', 'https://www.instagram.com/example_ember/');
       for (const link of [website, instagram]) {
@@ -130,9 +132,8 @@ for (const size of PHONE_AND_DESK) {
 
       // A free table says so for the day.
       await press(map.table('Aisle A 4'));
-      await expect(map.card).toHaveText(
-        /Table Aisle A 4\s*This table is free on \w{3} \d+ \w{3}\./,
-      );
+      await expect(map.card).toContainText('Aisle A 4');
+      await expect(map.cardWhole).toHaveText(/^This table is free on \w{3} \d+ \w{3}\.$/);
     });
 
     test('each half of the shared table is pressed on its own, and the card reads both', async ({
@@ -143,7 +144,7 @@ for (const size of PHONE_AND_DESK) {
       await map.goto(seeded.slug);
       for (const half of ['left', 'right'] as const) {
         await press(map.table('Aisle A 3', half));
-        await expect(map.card.getByRole('heading', { level: 2 })).toHaveText('Table Aisle A 3');
+        await expect(map.card).toContainText('Aisle A 3');
         await expect(map.cardHalves.getByRole('heading', { level: 3 })).toHaveText([
           'Left half',
           'Right half',
@@ -164,38 +165,6 @@ for (const size of PHONE_AND_DESK) {
         'Aisle A 3, Standard 6 ft, right half, Paper Moth Press',
       );
       await expectAccessible('the public map, a shared table picked');
-    });
-
-    test('finding a vendor narrows the list, and a press opens their hall and table', async ({
-      page,
-    }) => {
-      const map = new PublicMapPage(page);
-      await map.goto(seeded.slug);
-      await expect(map.vendors).toHaveText([
-        /^Ember Ceramics\s*Table Aisle A 1, North Wing$/,
-        /^Kiln & Co\s*Table Aisle A 2, North Wing$/,
-        /^Loom House\s*Table Aisle A 3, North Wing$/,
-        /^Paper Moth Press\s*Table Aisle A 3, North Wing$/,
-        /^Salt & Sage\s*Table Aisle B 3, South Wing$/,
-      ]);
-      await expect(map.vendorsCount).toHaveText('5 vendors');
-
-      await map.find.fill('salt');
-      await expect(map.vendors).toHaveText([/^Salt & Sage/]);
-      const before = page.url();
-      await map.find.press('Enter');
-      await expect(map.vendors).toHaveCount(1);
-      expect(page.url()).toBe(before);
-
-      // Scrolled away from the map first, so bringing it into view is seen.
-      await map.vendors.first().scrollIntoViewIfNeeded();
-      await press(map.vendors.first());
-      await expect(map.map).toHaveAccessibleName(/^South Wing layout/);
-      await expect(map.location(seeded.south.name)).toHaveAttribute('aria-pressed', 'true');
-      await expect(map.card).toContainText('Table Aisle B 3');
-      await expect(map.card).toContainText('Salt & Sage');
-      await expect(page).toHaveURL(new RegExp(`location=${seeded.south.id}&table=south-table-3`));
-      await expect(map.dayMap).toBeInViewport();
     });
 
     test('a change of day and of location redraws the map, the address keeping them', async ({
@@ -223,13 +192,15 @@ for (const size of PHONE_AND_DESK) {
       // A vendor with no public name, today: taken, and nothing of them shown.
       await press(map.day(seeded.today));
       await press(map.table('Aisle B 1'));
-      await expect(map.card).toHaveText(
-        /Table Aisle B 1\s*A vendor is at this table\. Their details are not listed\./,
+      await expect(map.card).toContainText('Aisle B 1');
+      await expect(map.cardWhole).toHaveText(
+        'A vendor is at this table. Their details are not listed.',
       );
       // An email given as the business name is withheld, and with it every link of theirs.
       await press(map.table('Aisle B 2'));
-      await expect(map.card).toHaveText(
-        /Table Aisle B 2\s*A vendor is at this table\. Their details are not listed\./,
+      await expect(map.card).toContainText('Aisle B 2');
+      await expect(map.cardWhole).toHaveText(
+        'A vendor is at this table. Their details are not listed.',
       );
       await expect(map.card.getByRole('link')).toHaveCount(0);
     });
@@ -244,7 +215,7 @@ for (const size of PHONE_AND_DESK) {
         table: 'north-table-1',
       });
       await expect(map.day(seeded.tomorrow)).toHaveAttribute('aria-pressed', 'true');
-      await expect(map.card.getByRole('heading', { level: 2 })).toHaveText('Table Aisle A 1');
+      await expect(map.card).toContainText('Aisle A 1');
       await expect(map.card).toContainText('Loom House');
       await page.reload();
       await expect(map.card).toContainText('Loom House');

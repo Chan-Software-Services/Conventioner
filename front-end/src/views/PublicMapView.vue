@@ -21,9 +21,11 @@
 import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import DayMap from '@/components/daymap/DayMap.vue';
-import ListFrame from '@/components/ListFrame.vue';
 import PageNotFound from '@/components/PageNotFound.vue';
 import ReadFailed from '@/components/ReadFailed.vue';
+import PublicMapTableCard from '@/components/publicmap/PublicMapTableCard.vue';
+import PublicMapVendors from '@/components/publicmap/PublicMapVendors.vue';
+import type { TablePaint } from '@/components/publicmap/publicMapPaint';
 import {
   publicDayLocations,
   publicSeats,
@@ -33,20 +35,13 @@ import {
 import { vendorPageAnswered } from '@/utils/currentPlace';
 import { calendarToday } from '@/utils/marketGuide';
 import {
-  DETAILS_NOT_LISTED,
   MAP_COULD_NOT_LOAD,
-  NO_VENDORS_LISTED,
   PICK_A_TABLE,
   dayInWords,
   fetchPublicMap,
   fetchPublicMapImage,
-  freeHalfOn,
-  freeTableOn,
-  instagramLink,
-  mapListing,
   mapPlace,
   tableCard,
-  websiteLink,
   type ListedVendor,
   type MapPlace,
 } from '@/utils/publicMap';
@@ -187,11 +182,11 @@ const card = computed(() =>
     ? tableCard(map.value, place.value.date, place.value.tableId)
     : null,
 );
-const HALF_NAMES = { left: 'Left half', right: 'Right half' } as const;
-
-const listed = computed(() => (map.value ? mapListing(map.value, place.value.date) : []));
-const finds = (vendor: ListedVendor, words: string) =>
-  vendor.name.toLowerCase().includes(words.toLowerCase());
+const hallName = computed(
+  () => map.value?.locations.find((l) => l.id === place.value.locationId)?.name ?? '',
+);
+/** No table is painted in its section's colours yet. */
+const NO_PAINTS: ReadonlyMap<string, TablePaint> = new Map();
 
 const mapBox = ref<HTMLElement>();
 
@@ -254,94 +249,17 @@ function openVendor(vendor: ListedVendor) {
         <div class="public-map__side">
           <section class="public-map__card" aria-live="polite" data-testid="public-map-card">
             <p v-if="!card" class="public-map__hint">{{ PICK_A_TABLE }}</p>
-            <template v-else>
-              <h2 class="public-map__card-title">Table {{ card.code }}</h2>
-              <div
-                v-for="part in card.halves"
-                :key="part.side"
-                class="public-map__part"
-                :data-testid="
-                  part.side === 'whole' ? 'public-map-card-whole' : 'public-map-card-half'
-                "
-              >
-                <h3 v-if="part.side !== 'whole'" class="public-map__half">
-                  {{ HALF_NAMES[part.side] }}
-                </h3>
-                <p v-if="!part.seat" class="public-map__note">
-                  {{ part.side === 'whole' ? freeTableOn(day) : freeHalfOn(day) }}
-                </p>
-                <p v-else-if="!part.seat.name" class="public-map__note">
-                  {{ DETAILS_NOT_LISTED }}
-                </p>
-                <template v-else>
-                  <p class="public-map__name" data-testid="public-map-card-name">
-                    {{ part.seat.name }}
-                  </p>
-                  <dl
-                    v-if="websiteLink(part.seat.website) || instagramLink(part.seat.instagram)"
-                    class="public-map__links"
-                  >
-                    <template v-if="websiteLink(part.seat.website)">
-                      <dt>Website</dt>
-                      <dd>
-                        <a
-                          :href="websiteLink(part.seat.website)!.href"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="public-map__link"
-                          data-testid="public-map-card-website"
-                          >{{ websiteLink(part.seat.website)!.text }}</a
-                        >
-                      </dd>
-                    </template>
-                    <template v-if="instagramLink(part.seat.instagram)">
-                      <dt>Instagram</dt>
-                      <dd>
-                        <a
-                          :href="instagramLink(part.seat.instagram)!.href"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="public-map__link"
-                          data-testid="public-map-card-instagram"
-                          >{{ instagramLink(part.seat.instagram)!.text }}</a
-                        >
-                      </dd>
-                    </template>
-                  </dl>
-                </template>
-              </div>
-            </template>
+            <PublicMapTableCard v-else :card="card" :day="day" :hallName="hallName" :paint="null" />
           </section>
 
-          <ListFrame
-            :items="listed"
-            :finds="finds"
-            :findFrom="0"
-            findKey="find"
-            findLabel="Find a vendor"
-            :filterKey="place.date"
-            :itemKey="(vendor) => vendor.key"
-            :noun="{ one: 'vendor', many: 'vendors' }"
-            testid="public-map-vendors"
-          >
-            <template #row="{ item }">
-              <button
-                type="button"
-                class="public-map__vendor"
-                :aria-current="item.tableId === place.tableId ? 'true' : undefined"
-                data-testid="public-map-vendor"
-                @click="openVendor(item)"
-              >
-                <span class="public-map__vendor-name">{{ item.name }}</span>
-                <span class="public-map__vendor-seat"
-                  >Table {{ item.code }}, {{ item.locationName }}</span
-                >
-              </button>
-            </template>
-            <template #empty>
-              <p>{{ NO_VENDORS_LISTED }}</p>
-            </template>
-          </ListFrame>
+          <PublicMapVendors
+            :map="map"
+            :date="place.date"
+            :pickedTableId="place.tableId"
+            :pickedSeatKey="null"
+            :paints="NO_PAINTS"
+            @open="openVendor"
+          />
         </div>
       </div>
     </template>
@@ -424,111 +342,8 @@ function openVendor(vendor: ListedVendor) {
   overflow-wrap: anywhere;
 }
 
-.public-map__hint,
-.public-map__note {
+.public-map__hint {
   margin: 0;
-  font-size: var(--text-sm);
-  color: var(--mm-text-muted);
-}
-
-.public-map__card-title {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: 600;
-}
-
-.public-map__part {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.public-map__half {
-  margin: 0;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--mm-text-muted);
-}
-
-.public-map__name {
-  margin: 0;
-  font-weight: 600;
-}
-
-.public-map__links {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--space-1) var(--space-3);
-  margin: 0;
-  font-size: var(--text-sm);
-}
-
-.public-map__links dt {
-  color: var(--mm-text-muted);
-}
-
-.public-map__links dd {
-  margin: 0;
-  min-width: 0;
-}
-
-.public-map__link {
-  color: var(--mm-text-link);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-/* Each link stands alone on its line, so on a phone it is a thumb's target, its name level with
-   its middle, as an answer that is only an address is (`AnswerValue.vue`). */
-@media (width <= 640px) {
-  .public-map__links {
-    align-items: center;
-  }
-
-  .public-map__link {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--target-min);
-  }
-}
-
-/* A vendor of the list: their name over their table, the whole row the button. */
-.public-map__vendor {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-hairline);
-  width: 100%;
-  min-height: var(--target-min);
-  /* The card's own inset, so a vendor's name stands on the card's text above it. */
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
-  background: none;
-  color: var(--mm-black);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-  overflow-wrap: anywhere;
-}
-
-/* An edge, not a tint: the muted table line would fall under AA on a hover's grey. The picked
-   vendor's edge is the map's own mark, black. */
-.public-map__vendor:hover {
-  border-color: var(--mm-border);
-}
-
-.public-map__vendor[aria-current='true'] {
-  border-color: var(--mm-black);
-}
-
-.public-map__vendor-name {
-  font-weight: 600;
-}
-
-.public-map__vendor-seat {
   font-size: var(--text-sm);
   color: var(--mm-text-muted);
 }
@@ -540,12 +355,6 @@ function openVendor(vendor: ListedVendor) {
 
   .public-map__map {
     position: static;
-  }
-}
-
-@media (width <= 640px) {
-  .public-map__vendor {
-    min-height: 44px;
   }
 }
 </style>
