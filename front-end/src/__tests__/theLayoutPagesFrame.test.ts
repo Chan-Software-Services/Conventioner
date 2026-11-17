@@ -212,7 +212,7 @@ describe('the tool card', () => {
     await w.get('[data-testid="layout-add-type"]').setValue('square');
     expect(w.emitted('update:sectionId')).toEqual([['silver']]);
     expect(w.emitted('update:typeId')).toEqual([['square']]);
-    expect(w.text()).toContain('Press Escape for Select.');
+    expect(w.text()).toContain('Right-click the map or press Escape for Select.');
   });
 
   it('gives Row of tables its choices: Flip side only beside the line, Aisle only for rows', async () => {
@@ -220,6 +220,11 @@ describe('the tool card', () => {
     const w = card();
     const stand = w.get('[data-testid="layout-row-stand"]');
     expect(stand.attributes('role')).toBe('radiogroup');
+    // Centred on the line first, as it is the default (item 17).
+    expect(stand.findAll('label').map((label) => label.text())).toEqual([
+      'Centred on the line',
+      'Beside the line',
+    ]);
     expect(stand.findAll('input[type="radio"]')).toHaveLength(2);
     await w.get('[data-testid="layout-row-flip"]').trigger('click');
     expect(w.emitted('flip')).toHaveLength(1);

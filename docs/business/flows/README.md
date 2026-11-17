@@ -31,6 +31,7 @@ One line per node, sorted by file name.
 - [The market's statistics](stats.md) - N1 to N7: the Stats tab's strip, who applied, the room, how full, the money, check-in and what they answered
 - [Taking applications](taking-applications.md) - H1, H1a, H4, H5: opening applications, and stopping and taking them again on the online path
 - [The Google Form path](the-google-form-path.md) - P1 and P2: a market whose vendors' responses are imported, from creation to the end
+- [The market's map](the-markets-map.md) - K7 to K9: an Admin opens the public map, a visitor finds a vendor on it, an organizer directs a vendor from Attendance's map
 - [The mixed path](the-mixed-path.md) - P4: an online form plus imported stragglers, not offered
 - [The online path](the-online-path.md) - P3: a market whose vendors apply on its own page, from creation to the end
 - [The vendor drawer](vendor-drawer.md) - one vendor's notes, application, assignments, payment and history, from wherever they appear

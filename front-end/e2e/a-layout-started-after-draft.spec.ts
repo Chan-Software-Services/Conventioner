@@ -55,22 +55,22 @@ test.describe('A layout started after Draft', () => {
     await expect(layout.settings).toBeHidden();
     await expect(layout.sectionCounts).toHaveText('0 of 6');
 
-    // A straight row drawn long enough for eight places the plan's six, and says so.
+    // A straight row drawn long enough for eight places the plan's six by Enter, and says so.
     await layout.toolRow.click();
     await expect(layout.addSection.locator('option:checked')).toHaveText('Hall A');
-    await layout.saved(() =>
-      layout.drag([2000, 3000], [18_000, 3000], {
-        hold: async () => {
-          await expect(layout.rowCount).toHaveText('8 tables');
-        },
-      }),
-    );
+    await layout.drag([2000, 3000], [18_000, 3000], {
+      hold: async () => {
+        await expect(layout.rowCount).toHaveText('8 tables');
+      },
+    });
+    await layout.saved(() => page.keyboard.press('Enter'));
     await expect(layout.status).toHaveText('Hall A has 6 tables in the plan; 6 were placed.');
     await expect(layout.tables).toHaveCount(PLAN);
     await expect(layout.sectionCounts).toHaveText('6 of 6');
 
     // Another row has no seat left to draw.
     await layout.drag([2000, 9000], [8000, 9000]);
+    await page.keyboard.press('Enter');
     await expect(layout.status).toHaveText("Hall A's 6 tables are all on the layout.");
     await expect(layout.tables).toHaveCount(PLAN);
 

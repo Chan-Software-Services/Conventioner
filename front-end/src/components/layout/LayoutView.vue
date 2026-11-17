@@ -84,14 +84,8 @@ import { layoutSections } from './layoutDrawing';
 import { exportLayoutPng } from './exportLayoutPng';
 import { LAYOUT_IS_FULL, placeTables } from './layoutFill';
 import { STANDARD_TABLE, hallOf } from './layoutGeometry';
-import {
-  MAX_LAYOUT_TABLES,
-  lengthMmOf,
-  rowChoices,
-  rowOnFrom,
-  saidNoLength,
-  standingShapes,
-} from './layoutRow';
+import { lengthMmOf, saidNoLength } from './layoutLength';
+import { MAX_LAYOUT_TABLES, rowChoices, rowOnFrom, standingShapes } from './layoutRow';
 import { saveLayout, saveLayoutOnUnload, type UploadedFloorplan } from './layoutSave';
 import { turnSelection } from './layoutSelection';
 import {

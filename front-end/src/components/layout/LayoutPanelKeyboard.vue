@@ -34,7 +34,7 @@ const GROUPS: readonly {
       [['W'], 'Row of tables', 'seats'],
       [['A'], 'Fill an area', 'seats'],
       [['Z'], 'No-table zone'],
-      [['Escape'], 'Back to Select, with nothing being drawn'],
+      [['Escape', 'Right-click'], 'Back to Select, with nothing being drawn'],
       [['?'], 'Show or hide these shortcuts'],
     ],
   },
@@ -80,6 +80,7 @@ const GROUPS: readonly {
       [['Ctrl+Enter'], 'Place the row; Enter places a closed shape'],
       [['Escape'], 'Drop the row'],
       [['Shift'], 'While dragging: a straight row'],
+      [['Shift+click'], 'Lay a point at any angle; a click holds the line to 15° steps'],
     ],
   },
   {
@@ -91,6 +92,14 @@ const GROUPS: readonly {
       [['Backspace'], 'Take the last corner back'],
       [['Ctrl+Enter'], 'Close the area, of three corners or more, and ask how to fill it'],
       [['Escape'], 'Drop the area'],
+    ],
+  },
+  {
+    title: 'With a no-table zone drawn',
+    keys: [
+      [['Enter'], 'Add the zone drawn'],
+      [['Escape', 'Right-click'], 'Drop it, and No-table zone stays on'],
+      [['Shift'], 'While turning it by its knob: by the degree'],
     ],
   },
   {

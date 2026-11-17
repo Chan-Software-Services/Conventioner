@@ -24,6 +24,7 @@ sources:
 A market's public map shows anyone, with no sign-in, each market day's tables and who is at them, at `/<slug>/map` ([ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md)).
 [`back-end/public_map.py`](../../../back-end/public_map.py) holds its settings' write, its gate's own conditions, its read and its image; [`back-end/public_answers.py`](../../../back-end/public_answers.py) cleans the three answers it publishes.
 The page that draws it, and Attendance's map beside the list, read what this answers.
+How an Admin opens it and a visitor uses it is [the market's map](../../business/flows/the-markets-map.md).
 
 ## The settings
 
@@ -82,7 +83,7 @@ It reads the image by the layout it found, never by an id the request names.
 
 ## What a layout stores for it
 
-A no-table zone stores its turn, `rotation`, degrees clockwise about its centre, read into 0 to 360 as it parses; a turn that is not a finite number is refused by the floorplan's bounds.
+A no-table zone stores its turn, `rotation`, as [the market document](../data/market-document.md) sets out the zone's shape.
 A layout stores `followsPlan`, whether it was started after Draft: true on one started past Draft ([ADR 0034](../../adr/0034-a-layout-started-after-draft-follows-the-plan.md)), false on one started in Draft, and kept on every later save whatever the body sends ([`back-end/api/floorplans_save.py`](../../../back-end/api/floorplans_save.py)).
 [`back-end/tests/test_a_layouts_stored_shapes.py`](../../../back-end/tests/test_a_layouts_stored_shapes.py) saves both through the layout's own route.
 

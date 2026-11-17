@@ -52,16 +52,15 @@ test('a market past Draft with no layout gets a public map a visitor reads a ven
   await expect(layout.scale).toHaveText('30.0 m across');
   await expect(layout.sectionCounts).toHaveText('0 of 4');
 
-  // Row of tables places Aisle A's four, numbered 1 to 4 in the order drawn.
+  // Row of tables places Aisle A's four by Enter, numbered 1 to 4 in the order drawn.
   await layout.toolRow.click();
   await expect(layout.addSection.locator('option:checked')).toHaveText('Aisle A');
-  await layout.saved(() =>
-    layout.drag([3000, 6000], [16_000, 6000], {
-      hold: async () => {
-        await expect(layout.rowCount).toHaveText('7 tables');
-      },
-    }),
-  );
+  await layout.drag([3000, 6000], [16_000, 6000], {
+    hold: async () => {
+      await expect(layout.rowCount).toHaveText('7 tables');
+    },
+  });
+  await layout.saved(() => page.keyboard.press('Enter'));
   await expect(layout.status).toHaveText('Aisle A has 4 tables in the plan; 4 were placed.');
   await expect(layout.tables).toHaveCount(4);
   await expect(layout.sectionCounts).toHaveText('4 of 4');

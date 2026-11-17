@@ -114,16 +114,15 @@ test.describe('A layout is the plan’s tables', () => {
     await expect(layout.scale).toHaveText('30.0 m across');
     await expect(layout.stage).toBeVisible();
 
-    // A straight row of six Gold tables, dragged along the top wall.
+    // A straight row of six Gold tables, dragged along the top wall and placed by Enter.
     await layout.toolRow.click();
     await expect(layout.addSection.locator('option:checked')).toHaveText('Gold row');
-    await layout.saved(() =>
-      layout.drag([2000, 3000], [14_000, 3000], {
-        hold: async () => {
-          await expect(layout.rowCount).toHaveText('6 tables');
-        },
-      }),
-    );
+    await layout.drag([2000, 3000], [14_000, 3000], {
+      hold: async () => {
+        await expect(layout.rowCount).toHaveText('6 tables');
+      },
+    });
+    await layout.saved(() => page.keyboard.press('Enter'));
     await expect(layout.announcement).toHaveText('Added Gold row 1 to 6.');
 
     // Four Silver tables, packed into a box by Fill an area.
@@ -165,6 +164,9 @@ test.describe('A layout is the plan’s tables', () => {
     await expect(layout.scale).toHaveText('30.0 m across');
     await layout.toolRow.click();
     await expect(layout.addSection.locator('option:checked')).toHaveText('Bronze corner');
+    // Beside the line, inside the corner: Centred on the line is the default.
+    await layout.rowBeside.check();
+    await layout.rowBeside.blur();
     await layout.clickAt([3000, 3000]);
     await layout.clickAt([11_000, 3000]);
     await layout.clickAt([11_000, 11_000]);

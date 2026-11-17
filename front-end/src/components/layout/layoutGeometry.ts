@@ -5,6 +5,7 @@
  * stored.
  */
 import type { FloorplanObject, FloorplanZone, SectionStyle } from '@/assets/types/datatypes';
+import type { Grouping } from './layoutGroups';
 
 export interface PointMm {
   xMm: number;
@@ -332,6 +333,12 @@ export function roundTurn(degrees: number): number {
   const turn = Math.round((((degrees % 360) + 360) % 360) * 1000) / 1000;
   return turn === 360 ? 0 : turn;
 }
+
+/** The one step, 15°, that a turn and a row's line hold to (the QC walk of 2026-11-16, item 16): a
+ *  selection's turn knob and R with Shift turn by it, and a zone drawn's knob and a point-to-point
+ *  row's line from its last point hold to it from the page's axis (D11: absolute, not from the
+ *  last line). */
+export const ANGLE_STEP = 15;
 
 /** An angle held to the nearest whole `step`, as a corner's turn knob does in 15° steps. */
 export function snapAngle(degrees: number, step: number): number {
@@ -1222,6 +1229,9 @@ export interface RowOptions {
   /** The floorplan: a table whose centre would stand outside it is left out. */
   extent?: SizeMm;
   maxCount?: number;
+  /** Tables in groups of `size` along each run, `gapMm` apart within a group and the group's
+   *  `spacerMm` between one group and the next (`layoutGroups.ts`); null or none for no groups. */
+  group?: Grouping | null;
 }
 
 type Vec = readonly [number, number];
@@ -1766,10 +1776,18 @@ function rowAlong(
       loop && s >= whole.length ? null : poseAt(run, s, widthMm, depthMm, side);
 
     const step = widthMm / 16;
-    /** Place the run's tables `gap` apart: how many, the room left past the last, and whether
-     *  the row was cut short by the most it may place. */
-    const march = (gap: number): { count: number; left: number; capped: boolean } => {
+    /** Place the run's tables `rowGap` apart, in groups where asked: how many, the room left past
+     *  the last, and whether the row was cut short by the most it may place. */
+    const march = (rowGap: number): { count: number; left: number; capped: boolean } => {
       const from = placed.length;
+      const group = options.group;
+      /** The gap before the run's `k`th table, from 0: the group's spacer before the first of each
+       *  group but the run's first, widened by as much as a spread row widens its gap; else the
+       *  row's (D10). */
+      const gapBefore = (k: number) =>
+        group && k > 0 && k % group.size === 0 ? group.spacerMm + (rowGap - gapMm) : rowGap;
+      /** The gap the table being placed keeps from every table before it. */
+      let gap = rowGap;
       /**
        * The first clear place between one that is not and one that is, each with how clear it
        * stands where that is known: by where a straight line between the two would cross from
@@ -1900,6 +1918,7 @@ function rowAlong(
       let firstEnd = 0;
       let capped = false;
       for (;;) {
+        gap = gapBefore(placed.length - from);
         if (out.length >= maxCount) {
           // Cut short only where another table would have fitted.
           capped = at(s) !== null;
@@ -1955,19 +1974,22 @@ function rowAlong(
         if (placed.length - from === 1) firstEnd = pose.endS;
         lastS = pose.startS;
         lastEnd = pose.endS;
-        s = pose.endS + gap;
+        s = pose.endS + gapBefore(placed.length - from);
       }
+      gap = rowGap;
       const count = placed.length - from;
       if (!count) return { count, left: 0, capped };
       // Past the last table: the run's length left over, or round a loop the gap to the first
-      // table over the gap every other pair has.
+      // table over the gap it should keep: the row's, or in groups the spacer, since the first
+      // table starts a group.
       // Two tables round a loop are one pair both ways, nearest on the side they were marched:
       // their room is the path left between the second and the first, over the path between
       // the first and the second.
+      const seam = group ? group.spacerMm + (rowGap - gapMm) : rowGap;
       const left = !loop
         ? whole.length - lastEnd
         : count > 2
-          ? separationOf(placed[placed.length - 1].corners, placed[from].corners) - gap
+          ? separationOf(placed[placed.length - 1].corners, placed[from].corners) - seam
           : count === 2
             ? whole.length - lastEnd - (lastS - firstEnd)
             : 0;
@@ -2954,6 +2976,37 @@ export function offZones(
     }
   }
   return still;
+}
+
+/**
+ * Whether any of the tables (`shapes`, their corners as they stand turned) stands on a no-table
+ * zone as the zone itself stands turned, touching it being clear of it, as the push reads it. A
+ * table in the corner of the box round a turned zone, clear of the zone, stands on none, so a
+ * table a row, a fill or Add table laid clear of a turned zone is never pushed, while one put down
+ * on the zone is pushed off the box round it (`offZones`, D15).
+ */
+export function standsOnAZone(
+  shapes: readonly (readonly PointMm[])[],
+  zones: readonly Pick<FloorplanZone, 'xMm' | 'yMm' | 'widthMm' | 'depthMm' | 'rotation'>[],
+): boolean {
+  if (!shapes.length || !zones.length) return false;
+  const boxes = shapes.map(boxOfPoints);
+  return zones.some((zone) => {
+    const round = zoneBounds(zone);
+    let corners: PointMm[] | null = null;
+    return boxes.some((box, i) => {
+      if (
+        box.right <= round.left ||
+        box.left >= round.right ||
+        box.bottom <= round.top ||
+        box.top >= round.bottom
+      ) {
+        return false;
+      }
+      corners ??= zoneCorners(zone);
+      return shapesOverlap(shapes[i], corners, TOUCHING_A_ZONE_MM);
+    });
+  });
 }
 
 function boxOfPoints(points: readonly PointMm[]): Bounds {

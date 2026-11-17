@@ -267,6 +267,8 @@ function layoutAt(
     | 'pickedUp'
     | 'keys'
     | 'row'
+    | 'ghosts'
+    | 'grouped'
     | 'drawn'
     | 'fillShape'
     | 'fillDialog'
@@ -276,6 +278,7 @@ function layoutAt(
     | 'settings'
     | 'viewMenu'
     | 'zones'
+    | 'zoneDraft'
     | 'settled',
 ) {
   return async (page: Page, seed: TheScreensSeed) => {
@@ -373,7 +376,29 @@ function layoutAt(
         await layout.drawThrough(places);
         await expect(layout.rowPoints.first()).toBeVisible();
         await expect(layout.rowTables.first()).toBeVisible();
-        await expect(layout.hint).toContainText('Drag a point to adjust the curve.');
+        await expect(layout.hint).toContainText('Drag a point to adjust the line.');
+      }
+      if (stage === 'ghosts') {
+        // Row of tables on, two points clicked over the clear floor south of the tables and the
+        // pointer on past the last: the row the points hold, and the ghosts a point at the
+        // pointer would add, counted beside it (T422, item 17).
+        await layout.toolRow.click();
+        await layout.clickAt([12_000, 15_000]);
+        await layout.clickAt([16_000, 15_000]);
+        await layout.hoverAt([24_000, 15_000]);
+        await expect(layout.rowGhosts.first()).toBeVisible();
+        await expect(layout.rowCount).toContainText('with a point here');
+      }
+      if (stage === 'grouped') {
+        // Row of tables on, Group tables ticked, and a straight line dragged over the clear
+        // floor south of the tables: let go, it waits with its two ends, its tables in pairs
+        // (T422, item 15).
+        await layout.toolRow.click();
+        await layout.group.check();
+        await expect(layout.groupSize).toHaveValue('2');
+        await layout.drag([11_000, 16_000], [25_000, 16_000]);
+        await expect(layout.rowPoints).toHaveCount(2);
+        await expect(layout.rowTables.first()).toBeVisible();
       }
       if (stage === 'fillShape' || stage === 'fillDialog') {
         // Fill an area on, and an L's corners clicked over the clear floor south of the tables.
@@ -439,6 +464,15 @@ function layoutAt(
         // The No-table zone tool on, its card the list of the layout's zones.
         await layout.toolZone.click();
         await expect(layout.zonesCard).toBeVisible();
+      }
+      if (stage === 'zoneDraft') {
+        // The No-table zone tool on, a box dragged over the clear floor south of the tables and
+        // turned 30° by its knob: a draft with its handles, not added (T422, item 19).
+        await layout.toolZone.click();
+        await layout.drag([12_000, 13_000], [17_000, 16_000]);
+        await layout.dragFrom(layout.zoneTurn, [14_500 + 2500, 14_500 - 4330]);
+        await expect(layout.zoneDraft).toHaveAttribute('transform', /rotate\(30\)$/);
+        await expect(layout.hint).toContainText('Enter adds it');
       }
       return;
     }
@@ -1566,6 +1600,22 @@ export const SCREEN_GROUPS = {
       deskOnly: true,
       open: layoutAt('row'),
     },
+    // A clicked path's ghosts past its last point (T422, item 17).
+    {
+      name: 'the layout, a row with ghosts past its last point',
+      who: 'organizer',
+      sizes: ORGANIZER,
+      deskOnly: true,
+      open: layoutAt('ghosts'),
+    },
+    // Row of tables with Group tables, a straight line waiting for Enter (T422, items 15 and 17).
+    {
+      name: 'the layout, a grouped row waiting for Enter',
+      who: 'organizer',
+      sizes: ORGANIZER,
+      deskOnly: true,
+      open: layoutAt('grouped'),
+    },
     // A row's line drawn by hand (T257): the smoothed path waiting with its points.
     {
       name: 'the layout, a curve drawn by hand',
@@ -1624,6 +1674,14 @@ export const SCREEN_GROUPS = {
       sizes: ORGANIZER,
       deskOnly: true,
       open: layoutAt('zones'),
+    },
+    // A no-table zone drawn and turned, waiting for Enter (T422, item 19).
+    {
+      name: 'the layout, a no-table zone drawn and turned',
+      who: 'organizer',
+      sizes: ORGANIZER,
+      deskOnly: true,
+      open: layoutAt('zoneDraft'),
     },
     {
       name: 'the layout, its image being replaced',

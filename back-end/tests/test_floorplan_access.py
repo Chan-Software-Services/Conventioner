@@ -1116,6 +1116,19 @@ class TestFillingAnArea:
         ]
         assert asked["direction"] == "down"
 
+    def test_a_grouping_reaches_the_placement_and_none_is_sent_unless_asked(
+        self, sign_in, market, placements,
+    ):
+        client = sign_in("owner@example.com")
+
+        assert _place_body(client, _fill_body()).status_code == 200
+        response = _place_body(client, _fill_body(grouping={"size": 2, "spacer_mm": 1200}))
+
+        assert response.status_code == 200
+        plain, grouped = placements
+        assert plain["grouping"] is None
+        assert grouped["grouping"] == {"size": 2, "spacer_mm": 1200}
+
     def test_a_drawn_shape_reaches_the_placement_and_rows_run_across_unless_asked(
         self, sign_in, market, placements,
     ):
@@ -1183,6 +1196,21 @@ class TestFillingAnArea:
         ({"existing_mm": [[[0, 0], [1800, 0], [1800, 900]]]}, "existing_mm.0.3: Field required"),
         ({"existing_mm": [[[0, 0], [1800, 0], [1800, 900], [0, "low"]]]}, "existing_mm.0.3.1: "),
         ({"direction": "diagonal"}, "direction: Input should be 'across' or 'down'"),
+        ({"grouping": {"size": 0, "spacer_mm": 1200}},
+         "grouping.size: Input should be greater than or equal to 1"),
+        ({"grouping": {"size": 51, "spacer_mm": 1200}},
+         "grouping.size: Input should be less than or equal to 50"),
+        ({"grouping": {"size": 2.5, "spacer_mm": 1200}},
+         "grouping.size: Input should be a valid integer"),
+        ({"grouping": {"size": "2", "spacer_mm": 1200}},
+         "grouping.size: Input should be a valid integer"),
+        ({"grouping": {"size": 2, "spacer_mm": -1}},
+         "grouping.spacer_mm: Input should be greater than or equal to 0"),
+        ({"grouping": {"size": 2, "spacer_mm": 100_001}},
+         "grouping.spacer_mm: Input should be less than or equal to 100000"),
+        ({"grouping": {"size": 2}}, "grouping.spacer_mm: Field required"),
+        ({"grouping": {"size": 2, "spacer_mm": 1200, "wide": True}}, "grouping.wide: "),
+        ({"grouping": 2}, "grouping: "),
     ])
     def test_a_malformed_area_is_refused_by_name(
         self, sign_in, market, placements, changes, named,
@@ -1199,6 +1227,7 @@ class TestFillingAnArea:
         ({"area_mm": None, "area_polygon_mm": [[0, 0], [5000, "@@"], [0, 5000]]},
          "area_polygon_mm.1.1"),
         ({"existing_mm": [[[0, 0], [1800, 0], ["@@", 900], [0, 900]]]}, "existing_mm.0.2.0"),
+        ({"grouping": {"size": 2, "spacer_mm": "@@"}}, "grouping.spacer_mm"),
     ])
     def test_a_number_that_is_not_finite_in_an_area_is_refused_by_name(
         self, sign_in, market, placements, token, changes, named,
