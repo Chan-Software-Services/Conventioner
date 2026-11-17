@@ -104,7 +104,7 @@ test('the organizer opens the door code, and a vendor who scans it signed out la
   await attendance.doorCodeButton.click();
   await attendance.doorCodeMake.click();
   const url = await attendance.doorCodeQr.getAttribute('data-url');
-  expect(url).toMatch(new RegExp(`/${seed.marketSlug}\\?door=[A-Z0-9]{6}$`));
+  expect(url).toMatch(new RegExp(`/${seed.marketSlug}/vendor\\?door=[A-Z0-9]{6}$`));
   const scanned = new URL(url!);
 
   // The vendor's camera opens it. Signed out, the code waits through the sign-in, off the address.
