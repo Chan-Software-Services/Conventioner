@@ -230,7 +230,8 @@ onBeforeUnmount(() => observer?.disconnect());
   margin: var(--space-6) var(--space-6) 0;
 }
 
-/* The tab's note too: at the desk's 24px it stood 8px right of the rail and the notes above it. */
+/* The tab's note too: at the desk's 24px it stood 8px right of the rail and the failed re-read
+   line above it. */
 @media (width <= 640px) {
   .market-fits-a-phone .market-read-only,
   .market-fits-a-phone .market-reread-failed {
