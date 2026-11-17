@@ -1860,7 +1860,8 @@ def list_market_applications(market_id: str) -> Response:
     if refused:
         return jsonify({"error": refused}), 403
 
-    result, status_code = ApplicantsApi.list_market_applications(market_id)
+    result, status_code = ApplicantsApi.list_market_applications(
+        market_id, ReviewTeam.review_view(context.market, context.organization))
     return jsonify(result), status_code
 
 
@@ -1927,6 +1928,12 @@ def _reviewing(reviewer: Reviewer) -> ApplicantsApi.Reviewing:
     return ApplicantsApi.Reviewing(giving=reviewer.giving, changing=changing)
 
 
+def _view(reviewer: Reviewer) -> ReviewTeam.ReviewView:
+    """The one view of the market a review write's answer serves each application's review state
+    over (``ReviewTeam.review_view``), from the market and organization ``_reviewer_on`` loaded."""
+    return ReviewTeam.review_view(reviewer.context.market, reviewer.context.organization)
+
+
 def _named_status(name: Any) -> Optional[ApplicationStatus]:
     """The application status a request names, or None when it names none."""
     return next((status for status in ApplicationStatus if status.value == name), None)
@@ -1961,7 +1968,7 @@ def review_application(market_id: str, application_id: str) -> Response:
             context.market, context.organization, person, data['ownerEmail'])
     result, status_code = ApplicantsApi.review_application(
         market_id, application_id, new_status, by=person.as_giver(),
-        reviewing=_reviewing(reviewer), owner=owner,
+        reviewing=_reviewing(reviewer), view=_view(reviewer), owner=owner,
         seen=ApplicantsApi.seen_from(data.get('seen')),
     )
     return jsonify(result), status_code
@@ -2036,7 +2043,8 @@ def undo_review(market_id: str, application_id: str) -> Response:
     result, status_code = ApplicantsApi.undo_verdict(
         reviewer.context.market, reviewer.context.organization, asked,
         by=reviewer.person.as_giver(),
-        owner_offered=_owner_offered(reviewer.context, reviewer.person), giving=reviewer.giving)
+        owner_offered=_owner_offered(reviewer.context, reviewer.person), giving=reviewer.giving,
+        view=_view(reviewer))
     return jsonify(result), status_code
 
 
@@ -2091,7 +2099,9 @@ def next_for_review(market_id: str) -> Response:
         market_id, person, data.get('after'), bool(data.get('includeFollowUps')),
         want=data.get('want'), chosen=Actions.is_chosen(person.email, context.market),
         mine_only=data.get('mineOnly') is True)
-    return jsonify({"application": ApplicantsApi.organizer_view(doc) if doc else None,
+    # Built after the deal, so the card's share is what the deal left.
+    view = _view(reviewer)
+    return jsonify({"application": ApplicantsApi.organizer_view(doc, view) if doc else None,
                     "dealt": dealt}), 200
 
 
@@ -2129,7 +2139,7 @@ def reassign_follow_up(market_id: str, application_id: str) -> Response:
         data.get('ownerEmail'))
     result, status_code = ApplicantsApi.reassign_follow_up(
         reviewer.context.market, reviewer.context.organization, application_id, owner,
-        reviewer.giving)
+        reviewer.giving, _view(reviewer))
     return jsonify(result), status_code
 
 

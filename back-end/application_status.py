@@ -76,6 +76,32 @@ class State(str, Enum):
         """Whether no verdict is given yet: open, or waiting on a follow-up."""
         return self in (State.OPEN, State.FOLLOW_UP)
 
+    @property
+    def served(self) -> "Served":
+        """This state as every organizer read serves it (``review.state``): the four states a
+        screen tells apart, an approval and a rejection each whoever gave it."""
+        return _SERVED[self]
+
+
+class Served(str, Enum):
+    """An application's review state as the organizer is served it (``review.state``): open,
+    follow-up, approved or rejected. What every screen, the export and the guard read to decide
+    anything, never the stored status, which keeps old spellings."""
+
+    OPEN = "open"
+    FOLLOW_UP = "follow_up"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+_SERVED = {
+    State.OPEN: Served.OPEN,
+    State.FOLLOW_UP: Served.FOLLOW_UP,
+    State.APPROVED_BY_A_PERSON: Served.APPROVED,
+    State.APPROVED_ADDED: Served.APPROVED,
+    State.REJECTED_BY_A_PERSON: Served.REJECTED,
+    State.REJECTED_BY_A_RULE: Served.REJECTED,
+}
 
 
 #: The statuses the old offers flow carried an approval on to (``NoApprovedApplicationsGuard``:
@@ -149,6 +175,23 @@ def is_decided(doc: Dict[str, Any]) -> bool:
 
 #: Every status a state names, as ``state_of`` reads it.
 _STATED_STATUSES = (None, "", *(status.value for status in ApplicationStatus))
+
+
+def _stored_as(state: State) -> List[Optional[str]]:
+    """Every stored status ``state_of`` reads as ``state`` on its own, missing and empty among
+    them: walked off the rule, so a count filtering on them names no spelling a second time."""
+    return [status for status in _STATED_STATUSES if state_of({"status": status}) is state]
+
+
+def undecided_counts(market_id: str) -> Tuple[int, int]:
+    """How many of a market's applications are open, and how many need a follow-up, whatever
+    their stored spelling: what Begin assignment's guard counts (``AllApplicationsReviewedGuard``).
+    A stored status alone decides whether an application is undecided, so two counts filtered on
+    the spellings of each undecided state count exactly what ``state_of`` reads so."""
+    return (
+        ApplicationsApi.count_applications_with_any_status(market_id, _stored_as(State.OPEN)),
+        ApplicationsApi.count_applications_with_any_status(market_id, _stored_as(State.FOLLOW_UP)),
+    )
 
 
 def saw_decided(seen: Dict[str, Any]) -> bool:

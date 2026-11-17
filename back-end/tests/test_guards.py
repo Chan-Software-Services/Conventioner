@@ -705,6 +705,50 @@ class TestAllApplicationsReviewedGuard:
         result = AllApplicationsReviewedGuard().evaluate(self._market(), None)
         assert result.passed is False
 
+    #: Its message for one open application, word for word as before the owner counted it.
+    ONE_OPEN = ("1 application is still open. Every application must be approved or rejected "
+                "before the market can enter Assignment.")
+
+    def _stored(self, applications, *statuses):
+        """The market's applications as stored, one per status, a missing status by ``None``."""
+        market = self._market()
+        applications.documents = [
+            {"id": f"app-{index}", "market_id": market.id, "applicant_email": f"v{index}@x.test",
+             **({} if status is None else {"status": status})}
+            for index, status in enumerate(statuses)]
+        return market
+
+    def test_counts_one_stored_under_review_as_open(self, applications):
+        market = self._stored(applications, "under_review", "reviewer_approved")
+
+        result = AllApplicationsReviewedGuard().evaluate(market, None)
+
+        assert (result.passed, result.message) == (False, self.ONE_OPEN)
+
+    def test_counts_one_stored_with_no_status_as_open(self, applications):
+        """Stored with no status, it is open, as every reader reads it; the guard used to count
+        only ``open`` and ``under_review``, so it let Begin assignment through."""
+        market = self._stored(applications, None, "reviewer_rejected")
+
+        result = AllApplicationsReviewedGuard().evaluate(market, None)
+
+        assert (result.passed, result.message) == (False, self.ONE_OPEN)
+
+    def test_counts_every_spelling_of_open_and_the_follow_ups_apart(self, applications):
+        market = self._stored(applications, None, "", "open", "under_review", "needs_follow_up",
+                              "reviewer_approved", "reviewer_rejected", "cancelled", "assigned")
+
+        result = AllApplicationsReviewedGuard().evaluate(market, None)
+
+        assert result.message.startswith(
+            "4 applications are still open and 1 application needs a follow-up. ")
+
+    def test_passes_once_every_spelling_stored_is_decided(self, applications):
+        market = self._stored(applications, "reviewer_approved", "reviewer_rejected", "cancelled",
+                              "assigned", "vendor_refused")
+
+        assert AllApplicationsReviewedGuard().evaluate(market, None).passed is True
+
     def test_fails_when_no_applications_exist(self, monkeypatch):
         self._patch(monkeypatch, total=0, unreviewed=0)
         result = AllApplicationsReviewedGuard().evaluate(self._market(), None)
