@@ -24,6 +24,7 @@ import { useLayoutEditor } from '@/components/layout/useLayoutEditor';
 import {
   MIN_ZONE_SIDE_MM,
   ZONE_DROPPED,
+  ZONE_OFF_THE_FLOORPLAN,
   draftOfBox,
   handleCursor,
   heldInHall,
@@ -492,6 +493,30 @@ describe('Enter, with a zone drawn', () => {
     expect(zoneBounds(zone).left).toBeLessThan(1);
   });
 
+  it('keeps a draft moved mostly off the floorplan, and says to move it back on', async () => {
+    const { w, stage, draft, zones } = await anEditor();
+    await drawADraft(stage);
+    const body = w.get('[data-testid="layout-zone-draft-body"]').element;
+    // Carried over the hall's left edge until 5 cm of it is left on the floorplan.
+    await drag(body, stage, p(10_000, 8000), p(-1950, 8000));
+    await key('Enter');
+    expect(zones()).toEqual([]);
+    expect(draft()).toEqual({ ...DRAFT, cxMm: -1950 });
+    expect(w.emitted('status')!.at(-1)).toEqual([ZONE_OFF_THE_FLOORPLAN]);
+
+    // Carried back on, it is added.
+    await drag(
+      w.get('[data-testid="layout-zone-draft-body"]').element,
+      stage,
+      p(-1950, 8000),
+      p(10_000, 8000),
+    );
+    await key('Enter');
+    expect(zones()).toEqual([
+      { id: 'zone-new', label: '', xMm: 8000, yMm: 7000, widthMm: 4000, depthMm: 2000 },
+    ]);
+  });
+
   it('on a table under the focus adds the draft, picking nothing up', async () => {
     const table = {
       id: 'a',
@@ -560,6 +585,16 @@ describe('a zone drawn and dropped', () => {
     expect(zones()).toEqual([]);
     await key('Escape');
     expect(toolOn()).toBe('layout-tool-select');
+  });
+
+  it('goes with a change of location, adding nothing to the next', async () => {
+    const { stage, editor, draft, zones } = await anEditor();
+    await drawADraft(stage);
+    editor.adopt({ ...editor.layout.value!, id: 'fp-2', locationId: 'loc-lower', zones: [] });
+    await nextTick();
+    expect(draft()).toBeNull();
+    await key('Enter');
+    expect(zones()).toEqual([]);
   });
 
   it('goes with a change of tool', async () => {

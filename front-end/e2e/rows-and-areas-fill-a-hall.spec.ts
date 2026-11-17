@@ -157,7 +157,7 @@ test.describe('Rows fill a hall', () => {
     await expect(layout.hint).toContainText('Click along a wall. A sharp turn makes a corner.');
     // Centred on the line is the card's first choice, and its default (item 17).
     await expect(layout.rowCentred).toBeChecked();
-    await expect(layout.rowStand.locator('label').first()).toHaveText('Centred on the line');
+    await expect(layout.rowStandChoices.first()).toHaveAccessibleName('Centred on the line');
 
     await layout.drag([2000, 3000], [22_000, 3000], {
       hold: async () => {
@@ -1902,7 +1902,7 @@ test.describe('Rows and areas in groups, steps and a right-click', () => {
     await expect(layout.groupSize).toHaveCount(0);
     await layout.group.check();
     await expect(layout.groupSize).toHaveValue('2');
-    await expect(layout.groupGap).toHaveValue('120');
+    await expect(layout.groupSpacer).toHaveValue('120');
 
     // A field that holds no usable number says so under the card, and no row is shown.
     await layout.groupSize.fill('0');
@@ -1910,21 +1910,21 @@ test.describe('Rows and areas in groups, steps and a right-click', () => {
     await expect(layout.groupSize).toHaveAttribute('aria-invalid', 'true');
     await expect(layout.groupSize).toHaveAttribute('aria-describedby', 'layout-group-size-error');
     await layout.groupSize.fill('2');
-    await layout.groupGap.fill('wide');
-    await expect(layout.groupGapError).toHaveText(
+    await layout.groupSpacer.fill('wide');
+    await expect(layout.groupSpacerError).toHaveText(
       "Type the spacer's width in centimetres, 0 to 1,000.",
     );
     await layout.drag([2000, 8000], [22_000, 8000]);
     await expect(layout.rowPoints).toHaveCount(2);
     await expect(layout.rowTables).toHaveCount(0);
     await expect(layout.rowCount).toHaveCount(0);
-    await layout.groupGap.fill('120');
-    await expect(layout.groupGapError).toHaveCount(0);
+    await layout.groupSpacer.fill('120');
+    await expect(layout.groupSpacerError).toHaveCount(0);
 
     // Mended, the 20 m line holds four pairs, 1.2 m of floor between each pair and the next.
     await expect(layout.rowTables).toHaveCount(8);
     await expect(layout.rowCount).toHaveText('8 tables');
-    await layout.groupGap.blur();
+    await layout.groupSpacer.blur();
     await layout.saved(() => page.keyboard.press('Enter'));
     await expect(layout.announcement).toHaveText('Added Gold row 1 to 8.');
     const tables = await stored(request, seeded.marketId);
@@ -1941,10 +1941,10 @@ test.describe('Rows and areas in groups, steps and a right-click', () => {
     const { layout, seeded } = await open(page, request, [], [], 'fill');
     // The choice is the row's too: ticked on Fill an area, it is ticked on Row of tables.
     await layout.group.check();
-    await layout.groupGap.fill('100');
+    await layout.groupSpacer.fill('100');
     await layout.toolRow.click();
     await expect(layout.group).toBeChecked();
-    await expect(layout.groupGap).toHaveValue('100');
+    await expect(layout.groupSpacer).toHaveValue('100');
     await layout.toolFill.click();
 
     // A box 20 m across with room for two rows: each row in pairs, 1 m between pairs.

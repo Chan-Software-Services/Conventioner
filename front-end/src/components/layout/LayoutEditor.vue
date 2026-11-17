@@ -14,7 +14,7 @@
  * frame's corners turns it about its middle in 15° steps (Shift: by the degree); R turns it a
  * quarter. With tables selected the arrow keys move them 10 cm, or 1 m with Shift, a key held
  * down being one change. A section's name is dragged
- * to where it should stand. Add table: a click places a table of the options strip's section and
+ * to where it should stand. Add table: a click places a table of the tool card's section and
  * type at the point, and the tool stays on. A drag or a turn is one change, and Escape puts it
  * back.
  *
@@ -39,7 +39,7 @@
  * closed by a click on its first corner, a double-click or Enter, and never while its sides cross.
  * The area closed, a dialog (`LayoutFillDialog.vue`) asks the section, the type, how many, which
  * way the rows run and the aisle, and Fill asks the placement (`fill`) and adds its answer as one
- * change, saying how many were placed (`status`). "Fill what is in view", in the options strip and
+ * change, saying how many were placed (`status`). "Fill what is in view", on the tool card and
  * the dialog, fills the part of the hall the map shows, with nothing drawn. Backspace or Ctrl+Z
  * takes the last corner back and Escape drops the shape.
  *
@@ -109,6 +109,7 @@ import {
 import { plural } from '@/utils/utils';
 import { NO_SECTION_PAINT, layoutSections } from './layoutDrawing';
 import {
+  ANGLE_STEP,
   STANDARD_TABLE,
   angleFrom,
   boxBetween,
@@ -167,13 +168,18 @@ import {
   ZONE_DRAFT_DRAWN,
   ZONE_DROPPED,
   ZONE_EDGES,
+  ZONE_OFF_THE_FLOORPLAN,
+  ZONE_TOO_SMALL,
   boxOfDraft,
   draftOfBox,
+  draftOnTheFloorplan,
   handleCursor,
   movedDraft,
   sizedDraft,
   turnedDraft,
+  zoneHandleNamed,
   type ZoneDraft,
+  type ZoneEditMode,
   type ZoneHandle,
 } from './layoutZoneDraft';
 
@@ -531,7 +537,7 @@ function measure() {
   const { width, height } = el.getBoundingClientRect();
   if (width <= 0 || height <= 0) return;
   // The stage's first size fits the floorplan, and so does a later one while the view was the
-  // floorplan fitted, as when a tool's options strip takes room from the map or gives it back;
+  // floorplan fitted, as when the window is made wider or narrower;
   // a view the organizer zoomed or moved keeps its middle and zoom, and so does any view under a
   // gesture in hand, which a frame of the drag would otherwise read in another place.
   const was = size.value;
@@ -629,7 +635,6 @@ const DRAG_PX = 4;
 const SNAP_PX = 8;
 /** How far along the line they would share a still table may stand and still be snapped to. */
 const SNAP_REACH_MM = 5000;
-const TURN_STEP = 15;
 /** How far above a zone drawn its knob's stem reaches, and its knob's middle stands, in pixels. */
 const ZONE_STEM_PX = 17;
 const ZONE_KNOB_PX = 24;
@@ -665,7 +670,7 @@ type Gesture =
   | {
       kind: 'zoneEdit';
       /** Moved by its middle, sized by a corner or an edge (`handle`), or turned by its knob. */
-      mode: 'move' | 'size' | 'turn';
+      mode: ZoneEditMode;
       handle: ZoneHandle;
       /** The draft as the press found it, which every frame reckons from. */
       start: ZoneDraft;
@@ -731,10 +736,15 @@ const zoneBox = shallowRef<Bounds | null>(null);
  */
 const zoneDraft = shallowRef<ZoneDraft | null>(null);
 
-/** Add the zone drawn, turned as it stands, as one step of undo. */
+/** Add the zone drawn, turned as it stands, as one step of undo. A draft carried so far off the
+ *  floorplan that too little of it is left on is kept, to be moved back on. */
 function addZoneDraft() {
   const draft = zoneDraft.value;
   if (!draft) return;
+  if (layout.value.zones.length < MAX_ZONES && !draftOnTheFloorplan(draft, hall.value)) {
+    tell(ZONE_OFF_THE_FLOORPLAN);
+    return;
+  }
   zoneDraft.value = null;
   addZone(boxOfDraft(draft), draft.rotation);
 }
@@ -899,7 +909,8 @@ function closeRow() {
 function placeRow() {
   // One point laid is no row yet: Enter waits for the next (item 17).
   if (!row.pending.value || !row.placeable.value) return;
-  // A gap or an aisle that is no length places nothing, the path kept for the field mended.
+  // A gap, an aisle or a group field that is no usable number places nothing, the path kept for
+  // the field mended.
   if (row.refusal.value) {
     say(row.refusal.value);
     return;
@@ -1053,6 +1064,7 @@ function onPointerDown(event: PointerEvent) {
   // crosshair goes.
   if (pointTool.value) keysOnMap.value = false;
 
+  const zoneHandle = tool.value === 'zone' && zoneDraft.value ? zoneHandleAt(event) : null;
   if (event.button === 1 || (event.button === 0 && spaceHeld.value)) {
     event.preventDefault();
     gesture = { kind: 'pan', from, camera: cam };
@@ -1093,14 +1105,13 @@ function onPointerDown(event: PointerEvent) {
       point: fillTool.pointNear(toMm(event), ROW_POINT_PX / cam.pxPerMm),
       begun: false,
     };
-  } else if (tool.value === 'zone' && zoneDraft.value && zoneHandleAt(event)) {
-    const handle = zoneHandleAt(event)!;
+  } else if (zoneHandle && zoneDraft.value) {
     // A handle is no stop of the keyboard's: the press leaves the focus where it was.
     event.preventDefault();
     gesture = {
       kind: 'zoneEdit',
-      mode: handle.mode,
-      handle: handle.handle,
+      mode: zoneHandle.mode,
+      handle: zoneHandle.handle,
       start: zoneDraft.value,
       fromMm: toMm(event),
       begun: false,
@@ -1277,7 +1288,7 @@ function turnTo(turn: Extract<Gesture, { kind: 'turn' }>, atMm: PointMm, fine: b
   turn.atMm = atMm;
   let by = angleFrom(turn.centre, atMm) - turn.fromAngle;
   by = ((((by + 180) % 360) + 360) % 360) - 180;
-  by = snapAngle(by, fine ? 1 : TURN_STEP);
+  by = snapAngle(by, fine ? 1 : ANGLE_STEP);
   if (!turn.begun) {
     if (by === 0) return;
     turn.begun = true;
@@ -1300,13 +1311,14 @@ function reTurn(fine: boolean) {
 
 /** The draft's handle a press is on: its body moves it, a corner or an edge sizes it, the knob
  *  turns it. */
-function zoneHandleAt(event: Event): { mode: 'move' | 'size' | 'turn'; handle: ZoneHandle } | null {
+function zoneHandleAt(event: Event): ReturnType<typeof zoneHandleNamed> {
   const target = event.target instanceof Element ? event.target : null;
   const handle = target?.closest('[data-zone-handle]');
   if (!handle) return null;
-  const mode = handle.getAttribute('data-zone-handle') as 'move' | 'size' | 'turn';
-  const [sx, sy] = (handle.getAttribute('data-handle') ?? '0,0').split(',').map(Number);
-  return { mode, handle: [sx, sy] as unknown as ZoneHandle };
+  return zoneHandleNamed(
+    handle.getAttribute('data-zone-handle'),
+    handle.getAttribute('data-handle'),
+  );
 }
 
 /** A frame of a drag on the zone drawn, reckoned from the draft as the press found it. */
@@ -1368,7 +1380,7 @@ function endGesture(event: PointerEvent, cancelled: boolean) {
     // Drawn, the box is a draft to move, size and turn; Enter adds it.
     const box = boxBetween(done.fromMm, clampToHall(toMm(event), hall.value));
     if (box.right - box.left < MIN_ZONE_SIDE_MM || box.bottom - box.top < MIN_ZONE_SIDE_MM) {
-      tell('Drag a larger box to mark a no-table zone.');
+      tell(ZONE_TOO_SMALL);
       return;
     }
     zoneDraft.value = draftOfBox(box);
@@ -1459,7 +1471,7 @@ function endGesture(event: PointerEvent, cancelled: boolean) {
   }
 }
 
-/** Add a table of the options strip's section and type at a point, selected, and say so. */
+/** Add a table of the tool card's section and type at a point, selected, and say so. */
 function place(at: PointMm): string | null {
   const ids = props.editor.addTables([
     {
@@ -1487,7 +1499,7 @@ function addZone(box: Bounds, rotation: number) {
     tell(
       layout.value.zones.length >= MAX_ZONES
         ? `A layout holds at most ${MAX_ZONES} no-table zones.`
-        : 'Drag a larger box to mark a no-table zone.',
+        : ZONE_TOO_SMALL,
     );
     return;
   }
@@ -1678,7 +1690,7 @@ function onWindowKeydown(event: KeyboardEvent) {
     // Not under a drag or a turn in hand, whose next frame would draw over it.
     if (!targets().length || gesture) return;
     event.preventDefault();
-    turnByKey(event.shiftKey ? TURN_STEP : 90);
+    turnByKey(event.shiftKey ? ANGLE_STEP : 90);
   } else if (
     plain &&
     !event.shiftKey &&
@@ -2047,7 +2059,7 @@ function carriedKey(event: KeyboardEvent, focused: string | null) {
   } else if (event.key.toLowerCase() === 'r') {
     event.preventDefault();
     if (event.repeat) return;
-    const by = event.shiftKey ? TURN_STEP : 90;
+    const by = event.shiftKey ? ANGLE_STEP : 90;
     turnSelection(props.editor, props.tableTypes, by);
     say(saidTurned(tablesOf(ids), by, sections));
     show(tablesOf(ids));
@@ -2336,6 +2348,7 @@ watch(
     abandon();
     row.reset();
     fillTool.reset();
+    zoneDraft.value = null;
     fillAsked.value = false;
     fit();
   },

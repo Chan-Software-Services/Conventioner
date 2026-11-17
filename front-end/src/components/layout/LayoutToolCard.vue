@@ -10,10 +10,9 @@
  * tables adds where its tables stand on the line, Centred on the line first and at first (item
  * 17), the gap, the rows, the aisle between rows of more than one, and Spread evenly to the ends;
  * their values are the app's while it is open (`rowChoices`). Fill an area adds "Fill what is in
- * view". Both take Group tables, so many to a
- * group with a spacer between groups, one choice for the two (`groupChoices`, item 15); a group
- * field that holds no usable number says so under them (D9). Its last line says a right-click on
- * the map or Escape goes back to Select.
+ * view". Both take Group tables, so many to a group with a spacer between groups, one choice for
+ * the two (`groupChoices`, item 15); a group field that holds no usable number says so under them
+ * (D9). Its last line says a right-click on the map or Escape goes back to Select.
  */
 import { computed, useId } from 'vue';
 import type { SectionObject, TableTypeObject } from '@/assets/types/datatypes';
@@ -90,11 +89,21 @@ const aisleError = computed(() => (rowsOf(rowChoices.rows) > 1 ? rowErrors.value
           data-testid="layout-row-stand"
         >
           <label class="layout-tool-card__choice">
-            <input v-model="rowChoices.centred" type="radio" :value="true" />
+            <input
+              v-model="rowChoices.centred"
+              type="radio"
+              :value="true"
+              data-testid="layout-row-centred"
+            />
             Centred on the line
           </label>
           <label class="layout-tool-card__choice">
-            <input v-model="rowChoices.centred" type="radio" :value="false" />
+            <input
+              v-model="rowChoices.centred"
+              type="radio"
+              :value="false"
+              data-testid="layout-row-beside"
+            />
             Beside the line
           </label>
           <button
@@ -198,24 +207,24 @@ const aisleError = computed(() => (rowsOf(rowChoices.rows) > 1 ? rowErrors.value
             />
             tables
           </span>
-          <label class="layout-tool-card__name" :for="`${toolCardTitleId}-group-gap`">
+          <label class="layout-tool-card__name" :for="`${toolCardTitleId}-group-spacer`">
             Spacer
           </label>
           <span class="layout-tool-card__unit">
             <input
-              :id="`${toolCardTitleId}-group-gap`"
-              v-model="groupChoices.gapCm"
+              :id="`${toolCardTitleId}-group-spacer`"
+              v-model="groupChoices.spacerCm"
               class="field layout-tool-card__number"
               type="text"
               inputmode="decimal"
               autocomplete="off"
-              :aria-invalid="!!groupErrors.gap"
-              :aria-describedby="groupErrors.gap ? 'layout-group-gap-error' : undefined"
-              data-testid="layout-group-gap"
+              :aria-invalid="!!groupErrors.spacer"
+              :aria-describedby="groupErrors.spacer ? 'layout-group-spacer-error' : undefined"
+              data-testid="layout-group-spacer"
             />
             cm between groups
           </span>
-          <p v-if="groupErrors.size || groupErrors.gap" class="layout-tool-card__error">
+          <p v-if="groupErrors.size || groupErrors.spacer" class="layout-tool-card__error">
             <span
               v-if="groupErrors.size"
               id="layout-group-size-error"
@@ -224,11 +233,11 @@ const aisleError = computed(() => (rowsOf(rowChoices.rows) > 1 ? rowErrors.value
               >{{ groupErrors.size }}</span
             >
             <span
-              v-if="groupErrors.gap"
-              id="layout-group-gap-error"
+              v-if="groupErrors.spacer"
+              id="layout-group-spacer-error"
               role="alert"
-              data-testid="layout-group-gap-error"
-              >{{ groupErrors.gap }}</span
+              data-testid="layout-group-spacer-error"
+              >{{ groupErrors.spacer }}</span
             >
           </p>
         </template>

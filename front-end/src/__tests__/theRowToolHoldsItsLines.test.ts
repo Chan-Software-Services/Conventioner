@@ -13,11 +13,10 @@ import { mount, type VueWrapper } from '@vue/test-utils';
 import type { FloorplanObject, FloorplanTable, SectionObject } from '@/assets/types/datatypes';
 import LayoutEditor from '@/components/layout/LayoutEditor.vue';
 import LayoutPanelKeyboard from '@/components/layout/LayoutPanelKeyboard.vue';
-import { angleFrom } from '@/components/layout/layoutGeometry';
+import { ANGLE_STEP, angleFrom } from '@/components/layout/layoutGeometry';
 import { GROUP_CHOICES_AT_FIRST, groupChoices } from '@/components/layout/layoutGroups';
 import {
   ROW_ANGLE_HELD,
-  ROW_ANGLE_STEP,
   ROW_CHOICES_AT_FIRST,
   heldToTheSteps,
   rowChoices,
@@ -234,7 +233,7 @@ describe('the steps and a table’s snap', () => {
     const held = heldToTheSteps(last, p(1000, 200), p(1000, 200));
     expect(angleFrom(last, held)).toBeCloseTo(15, 9);
     expect(Math.hypot(held.xMm, held.yMm)).toBeCloseTo(Math.hypot(1000, 200), 9);
-    expect(ROW_ANGLE_STEP).toBe(15);
+    expect(ANGLE_STEP).toBe(15);
   });
 
   it('keeps a snap that lies on a step, and none that lies off it', () => {

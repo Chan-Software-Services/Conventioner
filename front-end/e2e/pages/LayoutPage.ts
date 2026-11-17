@@ -65,6 +65,8 @@ export class LayoutPage {
   /** The row card's "Centred on the line", the default, and "Beside the line" radios. */
   readonly rowCentred: Locator;
   readonly rowBeside: Locator;
+  /** The row card's two stand choices, in the order they stand. */
+  readonly rowStandChoices: Locator;
   readonly rowFlip: Locator;
   readonly rowRows: Locator;
   readonly rowAisle: Locator;
@@ -82,9 +84,9 @@ export class LayoutPage {
   /** "Group tables" on Row of tables' and Fill an area's cards, its two fields and their lines. */
   readonly group: Locator;
   readonly groupSize: Locator;
-  readonly groupGap: Locator;
+  readonly groupSpacer: Locator;
   readonly groupSizeError: Locator;
-  readonly groupGapError: Locator;
+  readonly groupSpacerError: Locator;
   readonly toolFill: Locator;
   /** "Fill what is in view", on Fill an area's card. */
   readonly fillView: Locator;
@@ -268,6 +270,7 @@ export class LayoutPage {
     this.rowStand = page.getByTestId('layout-row-stand');
     this.rowCentred = this.rowStand.getByRole('radio', { name: 'Centred on the line' });
     this.rowBeside = this.rowStand.getByRole('radio', { name: 'Beside the line' });
+    this.rowStandChoices = this.rowStand.getByTestId(/^layout-row-(centred|beside)$/);
     this.rowFlip = page.getByTestId('layout-row-flip');
     this.rowRows = page.getByTestId('layout-row-rows');
     this.rowAisle = page.getByTestId('layout-row-aisle');
@@ -282,9 +285,9 @@ export class LayoutPage {
     this.rowCrosshair = this.map.getByTestId('layout-row-crosshair');
     this.group = page.getByTestId('layout-group');
     this.groupSize = page.getByTestId('layout-group-size');
-    this.groupGap = page.getByTestId('layout-group-gap');
+    this.groupSpacer = page.getByTestId('layout-group-spacer');
     this.groupSizeError = page.getByTestId('layout-group-size-error');
-    this.groupGapError = page.getByTestId('layout-group-gap-error');
+    this.groupSpacerError = page.getByTestId('layout-group-spacer-error');
     this.toolFill = this.toolbar.getByRole('button', { name: 'Fill an area', exact: true });
     this.fillView = page.getByTestId('layout-fill-view');
     this.fillPreview = this.map.getByTestId('layout-fill-preview');

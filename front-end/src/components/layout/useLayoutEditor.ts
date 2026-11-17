@@ -627,8 +627,8 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
    * The tables with those named pushed off the no-table zones they stand on, together, to the
    * nearest clear place inside the hall, as a snap would take them (`offZones`); the same array
    * when they stand clear. A turned zone is stood on only where its turned shape is, and pushed
-   * off by the box round it (D15). What is picked up by keyboard is pushed only as it is dropped, so the
-   * keys can carry it across a zone.
+   * off by the box round it (D15, D54). What is picked up by keyboard is pushed only as it is
+   * dropped, so the keys can carry it across a zone.
    */
   function pushedOff(
     tables: FloorplanTable[],

@@ -161,7 +161,7 @@ export function fillRequest(
     scale_px_per_mm: layout.scalePxPerUnit ?? 0,
     room_mm: { width_mm: hall?.widthMm ?? 0, height_mm: hall?.heightMm ?? 0 },
     aisle_config: { wallBufferMm: 0, tableSpacingMm: choice.aisleMm },
-    ...(grouping ? { grouping: { size: grouping.size, spacer_mm: grouping.gapMm } } : {}),
+    ...(grouping ? { grouping: { size: grouping.size, spacer_mm: grouping.spacerMm } } : {}),
     ...(area.kind === 'box'
       ? {
           area_mm: [

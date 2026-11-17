@@ -5,6 +5,7 @@
  * stored.
  */
 import type { FloorplanObject, FloorplanZone, SectionStyle } from '@/assets/types/datatypes';
+import type { Grouping } from './layoutGroups';
 
 export interface PointMm {
   xMm: number;
@@ -332,6 +333,11 @@ export function roundTurn(degrees: number): number {
   const turn = Math.round((((degrees % 360) + 360) % 360) * 1000) / 1000;
   return turn === 360 ? 0 : turn;
 }
+
+/** The one step, in degrees from the page's axis, that a turn and a row's line hold to (the QC walk
+ *  of 2026-11-16, item 16; D11: absolute, not from the last line): a selection's turn knob and R
+ *  with Shift, a zone drawn's knob, and a point-to-point row's line from its last point. */
+export const ANGLE_STEP = 15;
 
 /** An angle held to the nearest whole `step`, as a corner's turn knob does in 15° steps. */
 export function snapAngle(degrees: number, step: number): number {
@@ -1222,9 +1228,9 @@ export interface RowOptions {
   /** The floorplan: a table whose centre would stand outside it is left out. */
   extent?: SizeMm;
   maxCount?: number;
-  /** Tables in groups of `size` along each run, `gapMm` apart within a group and the group's own
-   *  `gapMm` between one group and the next (`layoutGroups.ts`); null or none for no groups. */
-  group?: { size: number; gapMm: number } | null;
+  /** Tables in groups of `size` along each run, `gapMm` apart within a group and the group's
+   *  `spacerMm` between one group and the next (`layoutGroups.ts`); null or none for no groups. */
+  group?: Grouping | null;
 }
 
 type Vec = readonly [number, number];
@@ -1778,7 +1784,7 @@ function rowAlong(
        *  group but the run's first, widened by as much as a spread row widens its gap; else the
        *  row's (D10). */
       const gapBefore = (k: number) =>
-        group && k > 0 && k % group.size === 0 ? group.gapMm + (rowGap - gapMm) : rowGap;
+        group && k > 0 && k % group.size === 0 ? group.spacerMm + (rowGap - gapMm) : rowGap;
       /** The gap the table being placed keeps from every table before it. */
       let gap = rowGap;
       /**
@@ -1973,14 +1979,16 @@ function rowAlong(
       const count = placed.length - from;
       if (!count) return { count, left: 0, capped };
       // Past the last table: the run's length left over, or round a loop the gap to the first
-      // table over the gap every other pair has.
+      // table over the gap it should keep: the row's, or in groups the spacer, since the first
+      // table starts a group.
       // Two tables round a loop are one pair both ways, nearest on the side they were marched:
       // their room is the path left between the second and the first, over the path between
       // the first and the second.
+      const seam = group ? group.spacerMm + (rowGap - gapMm) : rowGap;
       const left = !loop
         ? whole.length - lastEnd
         : count > 2
-          ? separationOf(placed[placed.length - 1].corners, placed[from].corners) - gap
+          ? separationOf(placed[placed.length - 1].corners, placed[from].corners) - seam
           : count === 2
             ? whole.length - lastEnd - (lastS - firstEnd)
             : 0;

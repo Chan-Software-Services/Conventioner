@@ -23,12 +23,13 @@
  *
  * A path of three points or more can be closed: its last point joined to its first, smooth at
  * the seam as anywhere, its tables spread evenly round it. A closed path stays pending, to be
- * placed or opened again. The options strip's Rows and Aisle place that many rows in the one
+ * placed or opened again. The tool card's Rows and Aisle place that many rows in the one
  * gesture, each offset toward the tables' side, the first row numbered whole, then the next.
  */
 import { computed, reactive, shallowRef, type ComputedRef, type ShallowRef } from 'vue';
 import type { FloorplanObject, FloorplanTable, TableTypeObject } from '@/assets/types/datatypes';
 import {
+  ANGLE_STEP,
   STANDARD_TABLE,
   angleFrom,
   snapAngle,
@@ -153,7 +154,7 @@ export function rowsOf(typed: string): number {
   return Number.isFinite(rows) && rows >= 1 ? Math.min(rows, MAX_ROWS) : 1;
 }
 
-/** What the options strip's Gap and Aisle say of themselves: each one's sentence where it holds
+/** What the tool card's Gap and Aisle say of themselves: each one's sentence where it holds
  *  no length, else ''. */
 export function rowFieldErrors() {
   return {
@@ -162,9 +163,6 @@ export function rowFieldErrors() {
   };
 }
 
-/** The steps, in degrees from the page's axis, a point-to-point row's line from its last point
- *  holds to (the QC walk of 2026-11-16, item 16; D11: absolute, not from the last line). */
-export const ROW_ANGLE_STEP = 15;
 /** How near a step's line, in degrees, a table's snap may lie and still be kept. */
 export const ROW_ANGLE_HELD = 0.5;
 
@@ -177,12 +175,12 @@ export const ROW_ANGLE_HELD = 0.5;
 export function heldToTheSteps(last: PointMm, at: PointMm, snapped: PointMm): PointMm {
   const offTheSteps = (point: PointMm) => {
     const angle = angleFrom(last, point);
-    return Math.abs(snapAngle(angle, ROW_ANGLE_STEP) - angle);
+    return Math.abs(snapAngle(angle, ANGLE_STEP) - angle);
   };
   const didSnap = snapped.xMm !== at.xMm || snapped.yMm !== at.yMm;
   if (didSnap && offTheSteps(snapped) < ROW_ANGLE_HELD) return snapped;
   const length = Math.hypot(at.xMm - last.xMm, at.yMm - last.yMm);
-  const turn = (snapAngle(angleFrom(last, at), ROW_ANGLE_STEP) * Math.PI) / 180;
+  const turn = (snapAngle(angleFrom(last, at), ANGLE_STEP) * Math.PI) / 180;
   return { xMm: last.xMm + length * Math.cos(turn), yMm: last.yMm + length * Math.sin(turn) };
 }
 
@@ -279,8 +277,9 @@ export interface RowTool {
   /** The tables the path would add past its last point if a point were laid where the pointer
    *  is: shown as ghosts, never placed (the QC walk of 2026-11-16, item 17). */
   ghosts: ComputedRef<PathPose[]>;
-  /** Why no row is shown or placed: the sentence of a gap that is no length, or of an aisle that
-   *  is none while more than one row is asked, else ''. */
+  /** Why no row is shown or placed: the sentence of a gap that is no length, of an aisle that is
+   *  none while more than one row is asked, or of a group field that holds no usable number, else
+   *  ''. */
   refusal: ComputedRef<string>;
   /** The size of the tables it would add. */
   size: ComputedRef<SizeMm>;
@@ -386,10 +385,10 @@ export function useRowTool(options: RowToolOptions): RowTool {
   const laidRuns = computed(() =>
     read.value ? strokeRuns(read.value) : smoothRuns(points.value, { closed: drawnClosed.value }),
   );
-  const posesAlong = (along: Run[]): PathPose[] => {
+  /** Each row's tables along `along`, the first row first: the order they are numbered in. */
+  const rowsAlong = (along: Run[]): PathPose[][] => {
     const now = layout();
     if (!now || !along.length || refusal.value) return [];
-    // The rows in order, the first whole and then the next: the order they are numbered in.
     return placeRows(along, {
       ...size.value,
       gapMm: lengthMmOf(rowChoices.gapCm) ?? 0,
@@ -402,13 +401,15 @@ export function useRowTool(options: RowToolOptions): RowTool {
       // A closed shape's tables are always spread round it; an open path's where asked.
       spread: drawnClosed.value || rowChoices.spread,
       group: groupingOf(),
-    }).flat();
+    });
   };
-  const poses = computed(() => posesAlong(laidRuns.value));
-  // The whole path again with the pointer's place, past the tables the points alone hold.
+  const laidRows = computed(() => rowsAlong(laidRuns.value));
+  const poses = computed(() => laidRows.value.flat());
+  // The whole path again with the pointer's place, each row past the tables its points alone
+  // hold.
   const ghosts = computed(() => {
     if (read.value || path.value.length === points.value.length) return [];
-    return posesAlong(runs.value).slice(poses.value.length);
+    return rowsAlong(runs.value).flatMap((whole, k) => whole.slice(laidRows.value[k]?.length ?? 0));
   });
 
   const placeable = computed(

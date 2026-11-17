@@ -14,6 +14,8 @@ import LayoutToolCard from '@/components/layout/LayoutToolCard.vue';
 import {
   placeAlongRuns,
   placeRows,
+  separation,
+  tableCorners,
   type PathPose,
   type RowOptions,
 } from '@/components/layout/layoutGeometry';
@@ -82,7 +84,7 @@ const gapsOf = (poses: readonly PathPose[]) => {
 };
 
 const TABLE: RowOptions = { ...SIX_FOOT, gapMm: 0, side: 'right' };
-const PAIRS = { size: 2, gapMm: 1200 };
+const PAIRS = { size: 2, spacerMm: 1200 };
 
 beforeEach(() => {
   Object.assign(groupChoices, GROUP_CHOICES_AT_FIRST);
@@ -93,17 +95,17 @@ describe('the grouping asked', () => {
   it('is off at first, two to a group with 120 cm between groups once ticked', () => {
     expect(groupingOf()).toBeNull();
     groupChoices.grouped = true;
-    expect(groupingOf()).toEqual({ size: 2, gapMm: 1200 });
+    expect(groupingOf()).toEqual({ size: 2, spacerMm: 1200 });
   });
 
   it.each([
-    ['1', '0', { size: 1, gapMm: 0 }],
-    ['50', '1000', { size: 50, gapMm: 10_000 }],
-    [' 3 ', '2,5', { size: 3, gapMm: 25 }],
-  ])('reads %j to a group and a %j cm spacer', (size, gapCm, grouping) => {
-    Object.assign(groupChoices, { grouped: true, size, gapCm });
+    ['1', '0', { size: 1, spacerMm: 0 }],
+    ['50', '1000', { size: 50, spacerMm: 10_000 }],
+    [' 3 ', '2,5', { size: 3, spacerMm: 25 }],
+  ])('reads %j to a group and a %j cm spacer', (size, spacerCm, grouping) => {
+    Object.assign(groupChoices, { grouped: true, size, spacerCm });
     expect(groupingOf()).toEqual(grouping);
-    expect(groupFieldErrors()).toEqual({ size: '', gap: '' });
+    expect(groupFieldErrors()).toEqual({ size: '', spacer: '' });
     expect(groupRefusal()).toBe('');
   });
 
@@ -117,16 +119,16 @@ describe('the grouping asked', () => {
     },
   );
 
-  it.each(['-1', '1001', 'wide', ''])('says what a spacer takes for %j', (gapCm) => {
-    Object.assign(groupChoices, { grouped: true, gapCm });
+  it.each(['-1', '1001', 'wide', ''])('says what a spacer takes for %j', (spacerCm) => {
+    Object.assign(groupChoices, { grouped: true, spacerCm });
     expect(groupingOf()).toBeNull();
-    expect(groupFieldErrors().gap).toBe(SPACER_SAID);
+    expect(groupFieldErrors().spacer).toBe(SPACER_SAID);
     expect(groupRefusal()).toBe(SPACER_SAID);
   });
 
   it('says nothing of a field while grouping is off, whatever it holds', () => {
-    Object.assign(groupChoices, { grouped: false, size: 'none', gapCm: 'none' });
-    expect(groupFieldErrors()).toEqual({ size: '', gap: '' });
+    Object.assign(groupChoices, { grouped: false, size: 'none', spacerCm: 'none' });
+    expect(groupFieldErrors()).toEqual({ size: '', spacer: '' });
     expect(groupRefusal()).toBe('');
     expect(groupingOf()).toBeNull();
   });
@@ -148,7 +150,7 @@ describe("a row's march", () => {
   });
 
   it('keeps the gap typed within a group, and the spacer alone between groups', () => {
-    const poses = placeAlongRuns(line, { ...TABLE, gapMm: 300, group: { size: 3, gapMm: 900 } });
+    const poses = placeAlongRuns(line, { ...TABLE, gapMm: 300, group: { size: 3, spacerMm: 900 } });
     expect(gapsOf(poses).map(Math.round)).toEqual([300, 300, 900, 300]);
   });
 
@@ -214,6 +216,34 @@ describe('Row of tables', () => {
     groupChoices.grouped = true;
     expect(row.poses.value).toHaveLength(5);
     expect(gapsOf(row.poses.value).map(Math.round)).toEqual([0, 1200, 0, 1200]);
+  });
+
+  it('keeps the spacer round a closed shape, at its seam as between every other two groups', () => {
+    const editor = anEditor();
+    const row = useRowTool({
+      editor,
+      tableTypes: () => TYPES,
+      sectionId: () => 'gold',
+      tableTypeId: () => 'six-foot',
+    });
+    groupChoices.grouped = true;
+    for (let i = 0; i < 8; i += 1) {
+      const turn = (i * Math.PI) / 4;
+      row.addPoint(p(15_000 + 4300 * Math.cos(turn), 11_000 + 4300 * Math.sin(turn)));
+    }
+    row.close();
+    const ring = row.poses.value;
+    expect(ring.length).toBeGreaterThan(6);
+    // The floor from each table to the next round the ring, the last to the first at the seam.
+    const gaps = ring.map((pose, i) =>
+      separation(tableCorners(pose, SIX_FOOT), tableCorners(ring[(i + 1) % ring.length], SIX_FOOT)),
+    );
+    // Before each table that starts a pair, the first's at the seam among them, is a spacer.
+    const spacers = gaps.filter((_, i) => ((i + 1) % ring.length) % 2 === 0);
+    const within = gaps.filter((_, i) => ((i + 1) % ring.length) % 2 !== 0);
+    expect(Math.max(...spacers) - Math.min(...spacers)).toBeLessThan(1);
+    expect(Math.max(...within) - Math.min(...within)).toBeLessThan(1);
+    expect(spacers[0] - within[0]).toBeCloseTo(1200, 0);
   });
 
   it('shows no row while a group field holds no usable number, and says why', () => {
@@ -282,7 +312,7 @@ describe("the editor's fill", () => {
   }
 
   it('asks the placement for the tables in groups', async () => {
-    Object.assign(groupChoices, { grouped: true, size: '3', gapCm: '90' });
+    Object.assign(groupChoices, { grouped: true, size: '3', spacerCm: '90' });
     const fill = vi.fn<(request: unknown) => Promise<FillAnswer>>(() =>
       Promise.resolve({ placed_tables: [], timed_out: false }),
     );
@@ -292,7 +322,7 @@ describe("the editor's fill", () => {
   });
 
   it('asks nothing while a group field holds no usable number, and says why in the dialog', async () => {
-    Object.assign(groupChoices, { grouped: true, gapCm: 'wide' });
+    Object.assign(groupChoices, { grouped: true, spacerCm: 'wide' });
     const fill = vi.fn(() => Promise.resolve({ placed_tables: [], timed_out: false }));
     await fillTheView(fill);
     expect(fill).not.toHaveBeenCalled();
@@ -324,13 +354,13 @@ describe('the tool card', () => {
       const w = card(tool);
       await w.get('[data-testid="layout-group"]').setValue(true);
       const size = w.get<HTMLInputElement>('[data-testid="layout-group-size"]');
-      const gap = w.get<HTMLInputElement>('[data-testid="layout-group-gap"]');
+      const spacer = w.get<HTMLInputElement>('[data-testid="layout-group-spacer"]');
       expect(size.element.value).toBe('2');
-      expect(gap.element.value).toBe('120');
+      expect(spacer.element.value).toBe('120');
       expect(w.get(`label[for="${size.attributes('id')}"]`).text()).toBe('Per group');
-      expect(w.get(`label[for="${gap.attributes('id')}"]`).text()).toBe('Spacer');
+      expect(w.get(`label[for="${spacer.attributes('id')}"]`).text()).toBe('Spacer');
       expect(size.element.parentElement!.textContent!.trim()).toBe('tables');
-      expect(gap.element.parentElement!.textContent!.trim()).toBe('cm between groups');
+      expect(spacer.element.parentElement!.textContent!.trim()).toBe('cm between groups');
       expect(w.find('[data-testid="layout-group-size-error"]').exists()).toBe(false);
     },
   );
@@ -341,7 +371,7 @@ describe('the tool card', () => {
       const w = card(tool);
       await w.get('[data-testid="layout-group"]').setValue(true);
       await w.get('[data-testid="layout-group-size"]').setValue('0');
-      await w.get('[data-testid="layout-group-gap"]').setValue('wide');
+      await w.get('[data-testid="layout-group-spacer"]').setValue('wide');
 
       const size = w.get('[data-testid="layout-group-size"]');
       const sizeError = w.get('[data-testid="layout-group-size-error"]');
@@ -350,10 +380,10 @@ describe('the tool card', () => {
       expect(size.attributes('aria-invalid')).toBe('true');
       expect(size.attributes('aria-describedby')).toBe(sizeError.attributes('id'));
 
-      const gap = w.get('[data-testid="layout-group-gap"]');
-      const gapError = w.get('[data-testid="layout-group-gap-error"]');
-      expect(gapError.text()).toBe(SPACER_SAID);
-      expect(gap.attributes('aria-describedby')).toBe(gapError.attributes('id'));
+      const spacer = w.get('[data-testid="layout-group-spacer"]');
+      const spacerError = w.get('[data-testid="layout-group-spacer-error"]');
+      expect(spacerError.text()).toBe(SPACER_SAID);
+      expect(spacer.attributes('aria-describedby')).toBe(spacerError.attributes('id'));
 
       await w.get('[data-testid="layout-group-size"]').setValue('4');
       expect(w.find('[data-testid="layout-group-size-error"]').exists()).toBe(false);

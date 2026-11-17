@@ -18,16 +18,16 @@ export const groupChoices = reactive({
   /** Tables to a group, as typed. */
   size: '2',
   /** The spacer between one group and the next, in centimetres, as typed. */
-  gapCm: '120',
+  spacerCm: '120',
 });
 
 /** What `groupChoices` holds when the app opens. */
 export const GROUP_CHOICES_AT_FIRST = { ...groupChoices } as const;
 
-/** A grouping to lay tables by: `size` to a group, then `gapMm` of floor before the next. */
+/** A grouping to lay tables by: `size` to a group, then `spacerMm` of floor before the next. */
 export interface Grouping {
   size: number;
-  gapMm: number;
+  spacerMm: number;
 }
 
 /** The tables to a group typed: a whole number from 1 to `MAX_GROUP_SIZE`, else null. */
@@ -44,23 +44,23 @@ export const SAID_NO_GROUP_SIZE = `Type how many tables to a group, 1 to ${MAX_G
 /** What Per group and Spacer say of themselves while grouping is on: each one's sentence where it
  *  holds no usable number, else ''. */
 export function groupFieldErrors(choices: typeof groupChoices = groupChoices) {
-  if (!choices.grouped) return { size: '', gap: '' };
+  if (!choices.grouped) return { size: '', spacer: '' };
   return {
     size: sizeOf(choices.size) === null ? SAID_NO_GROUP_SIZE : '',
-    gap: lengthMmOf(choices.gapCm) === null ? saidNoLength('spacer') : '',
+    spacer: lengthMmOf(choices.spacerCm) === null ? saidNoLength('spacer') : '',
   };
 }
 
 /** Why no row is shown or area filled for the grouping: the first field's sentence, else ''. */
 export function groupRefusal(choices: typeof groupChoices = groupChoices): string {
   const errors = groupFieldErrors(choices);
-  return errors.size || errors.gap;
+  return errors.size || errors.spacer;
 }
 
 /** The grouping asked, or null where grouping is off or a field holds no usable number. */
 export function groupingOf(choices: typeof groupChoices = groupChoices): Grouping | null {
   if (!choices.grouped) return null;
   const size = sizeOf(choices.size);
-  const gapMm = lengthMmOf(choices.gapCm);
-  return size === null || gapMm === null ? null : { size, gapMm };
+  const spacerMm = lengthMmOf(choices.spacerCm);
+  return size === null || spacerMm === null ? null : { size, spacerMm };
 }

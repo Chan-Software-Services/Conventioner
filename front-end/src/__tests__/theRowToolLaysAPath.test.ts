@@ -130,6 +130,30 @@ describe('a path being drawn', () => {
     expect(Math.max(...added.map((one) => one.xMm + 915))).toBeLessThanOrEqual(7600 + 0.01);
   });
 
+  it('shows each row of several its own ghosts, past its own last table', () => {
+    const { row } = aTool();
+    rowChoices.rows = '2';
+    row.addPoint(p(2000, 3000));
+    row.addPoint(p(8000, 3000));
+    row.hoverAt(p(16_000, 3000));
+    const laid = row.poses.value;
+    const ghosts = row.ghosts.value;
+    // Each row's stretch to the pointer, the same length in both: four more tables a row.
+    expect(laid).toHaveLength(6);
+    expect(ghosts).toHaveLength(8);
+    const rowOf = (pose: { yMm: number }) => Math.round(pose.yMm);
+    const lines = [...new Set(laid.map(rowOf))];
+    expect(lines).toHaveLength(2);
+    for (const line of lines) {
+      const lastOfTheRow = Math.max(
+        ...laid.filter((pose) => rowOf(pose) === line).map((pose) => pose.xMm),
+      );
+      const its = ghosts.filter((ghost) => rowOf(ghost) === line);
+      expect(its).toHaveLength(4);
+      for (const ghost of its) expect(ghost.xMm).toBeGreaterThan(lastOfTheRow);
+    }
+  });
+
   it('shows no ghost once the pointer has left, or rests on the last point', () => {
     const { row } = aTool();
     row.addPoint(p(2000, 3000));
