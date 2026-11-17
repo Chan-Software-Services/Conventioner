@@ -124,12 +124,6 @@ function chooseLocation(locationId: string) {
   goTo({ ...place.value, locationId, tableId: keeps ? place.value.tableId : null });
 }
 
-/** Prototype (release walk F6): the title's look to compare, `?look=1` to `?look=6`. */
-const look = computed(() => {
-  const asked = Number(route.query.look);
-  return Number.isInteger(asked) && asked >= 1 && asked <= 6 ? asked : 1;
-});
-
 /** Prototype (release walk F6): a market day as the dropdown says it, "Nov 19". */
 const MONTH_NAMES = [
   'Jan',
@@ -389,26 +383,147 @@ function openVendor(vendor: ListedVendor) {
     </template>
 
     <template v-else-if="map">
-      <header class="public-map__head" :class="`public-map__head--look-${look}`">
-        <div class="public-map__words">
-          <p class="public-map__eyebrow" aria-hidden="true">✦ Vendor map</p>
-          <h1 class="public-map__title" data-testid="public-map-heading">{{ map.marketName }}</h1>
-          <span class="public-map__sparkles" aria-hidden="true">✦ ✧</span>
-          <svg
-            class="public-map__squiggle"
-            viewBox="0 0 120 10"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
+      <svg class="public-map__doodles" aria-hidden="true" focusable="false">
+        <defs>
+          <pattern id="public-map-marks" width="1100" height="700" patternUnits="userSpaceOnUse">
             <path
-              d="M2 6 C 12 1, 22 9, 32 5 S 52 1, 62 5 S 82 9, 92 5 S 112 1, 118 5"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-              stroke-linecap="round"
+              class="pm-bg__blob pm-bg__blob--honey"
+              d="M180.2 44.7 Q186.0 60.0 179.7 74.6 Q173.3 89.3 157.1 94.8 Q140.8 100.3 125.0 90.0 Q109.2 79.7 112.6 61.6 Q115.9 43.6 128.8 33.6 Q141.7 23.5 158.0 26.5 Q174.4 29.4 180.2 44.7 Z"
             />
-          </svg>
-          <p class="public-map__subtitle" data-testid="public-map-subtitle">Vendor map</p>
+            <path
+              class="pm-bg__blob pm-bg__blob--mint"
+              d="M958.7 21.7 Q967.2 33.0 958.8 44.5 Q950.5 56.0 937.6 61.0 Q924.6 65.9 913.6 56.6 Q902.6 47.3 902.8 33.1 Q902.9 19.0 913.2 7.2 Q923.5 -4.7 936.9 2.9 Q950.2 10.4 958.7 21.7 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--honey"
+              d="M480.8 103.4 L484.7 109.3 L491.9 109.0 L487.5 114.7 L489.9 121.4 L483.2 118.9 L477.6 123.3 L477.9 116.2 L471.9 112.2 L478.8 110.3 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--teal"
+              d="M669.6 42.5 L674.3 49.8 L682.9 49.5 L677.6 56.2 L680.5 64.3 L672.4 61.3 L665.6 66.6 L666.0 58.0 L658.8 53.1 L667.2 50.8 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--teal"
+              d="M804 106 Q804 115 813 115 Q804 115 804 125 Q804 115 795 115 Q804 115 804 106 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--honey"
+              d="M980 113 Q980 119 986 119 Q980 119 980 125 Q980 119 974 119 Q980 119 980 113 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--teal"
+              d="M588 76 Q588 83 595 83 Q588 83 588 90 Q588 83 581 83 Q588 83 588 76 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--honey"
+              transform="translate(1041 99) rotate(-12)"
+              d="M0 0 q5.6 -5.4 11.3 0 q5.6 5.4 11.3 0 q5.6 -5.4 11.3 0 q5.6 5.4 11.3 0 q5.6 -5.4 11.3 0 q5.6 5.4 11.3 0"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--teal"
+              transform="translate(778 30) rotate(14)"
+              d="M0 0 q7.8 -7.0 15.6 0 q7.8 7.0 15.6 0 q7.8 -7.0 15.6 0 q7.8 7.0 15.6 0"
+            />
+            <circle class="pm-bg__dot pm-bg__dot--honey" cx="525" cy="24" r="3" />
+            <circle class="pm-bg__dot pm-bg__dot--teal" cx="891" cy="104" r="3" />
+            <path
+              class="pm-bg__blob pm-bg__blob--mint"
+              d="M900.9 510.0 Q905.9 519.8 901.2 530.1 Q896.6 540.5 885.8 541.4 Q875.0 542.3 867.3 536.0 Q859.6 529.7 859.0 519.5 Q858.4 509.4 866.5 502.5 Q874.6 495.6 885.2 497.9 Q895.8 500.1 900.9 510.0 Z"
+            />
+            <path
+              class="pm-bg__blob pm-bg__blob--honey"
+              d="M388.8 457.6 Q395.5 471.1 388.6 484.4 Q381.6 497.6 367.9 498.5 Q354.1 499.3 341.8 492.7 Q329.6 486.0 332.1 472.4 Q334.7 458.7 343.5 446.8 Q352.2 434.9 367.2 439.5 Q382.1 444.0 388.8 457.6 Z"
+            />
+            <path
+              class="pm-bg__blob pm-bg__blob--mint"
+              d="M802.8 531.0 Q810.4 542.1 801.9 552.2 Q793.4 562.2 782.2 566.2 Q771.0 570.2 760.6 562.8 Q750.1 555.3 750.5 542.3 Q750.9 529.4 760.7 520.4 Q770.4 511.5 782.8 515.7 Q795.2 519.8 802.8 531.0 Z"
+            />
+            <path
+              class="pm-bg__blob pm-bg__blob--honey"
+              d="M254.5 397.8 Q259.2 405.5 256.0 415.0 Q252.8 424.6 242.5 426.8 Q232.2 429.0 224.8 422.1 Q217.4 415.2 218.0 405.8 Q218.6 396.3 225.8 391.0 Q233.1 385.6 241.4 387.9 Q249.8 390.2 254.5 397.8 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--honey"
+              d="M507.2 400.7 L512.3 407.7 L520.8 407.0 L515.7 414.0 L519.0 421.9 L510.8 419.2 L504.3 424.8 L504.3 416.2 L497.0 411.7 L505.2 409.0 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--teal"
+              d="M983.1 536.8 L986.2 544.7 L994.6 546.2 L988.1 551.6 L989.3 560.0 L982.1 555.5 L974.5 559.3 L976.6 551.0 L970.6 544.9 L979.1 544.4 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--honey"
+              d="M50.0 164.4 L53.4 172.4 L62.0 173.7 L55.4 179.4 L56.8 188.0 L49.3 183.5 L41.6 187.5 L43.6 179.0 L37.4 172.9 L46.1 172.2 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--teal"
+              d="M1029.6 352.8 L1033.4 357.9 L1039.7 357.3 L1036.0 362.5 L1038.5 368.3 L1032.5 366.4 L1027.7 370.6 L1027.7 364.3 L1022.2 361.1 L1028.2 359.0 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--honey"
+              d="M199.2 294.4 L203.1 301.2 L210.9 301.5 L205.6 307.2 L207.7 314.8 L200.6 311.5 L194.1 315.9 L195.0 308.1 L188.9 303.3 L196.5 301.7 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--teal"
+              d="M594 352 Q594 360 601 360 Q594 360 594 367 Q594 360 587 360 Q594 360 594 352 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--honey"
+              d="M918 654 Q918 662 926 662 Q918 662 918 670 Q918 662 910 662 Q918 662 918 654 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--teal"
+              d="M837 419 Q837 426 844 426 Q837 426 837 434 Q837 426 829 426 Q837 426 837 419 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--honey"
+              d="M687 271 Q687 278 694 278 Q687 278 687 285 Q687 278 680 278 Q687 278 687 271 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--teal"
+              d="M48 528 Q48 537 57 537 Q48 537 48 545 Q48 537 40 537 Q48 537 48 528 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--honey"
+              d="M322 243 Q322 250 329 250 Q322 250 322 257 Q322 250 315 250 Q322 250 322 243 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--teal"
+              d="M505 294 Q505 303 514 303 Q505 303 505 312 Q505 303 496 303 Q505 303 505 294 Z"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--honey"
+              transform="translate(366 657) rotate(6)"
+              d="M0 0 q5.6 -6.8 11.1 0 q5.6 6.8 11.1 0 q5.6 -6.8 11.1 0 q5.6 6.8 11.1 0 q5.6 -6.8 11.1 0 q5.6 6.8 11.1 0"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--teal"
+              transform="translate(585 670) rotate(1)"
+              d="M0 0 q5.1 -5.9 10.2 0 q5.1 5.9 10.2 0 q5.1 -5.9 10.2 0 q5.1 5.9 10.2 0 q5.1 -5.9 10.2 0 q5.1 5.9 10.2 0"
+            />
+            <path
+              class="pm-bg__line pm-bg__line--honey"
+              transform="translate(724 653) rotate(1)"
+              d="M0 0 q6.8 -6.5 13.6 0 q6.8 6.5 13.6 0 q6.8 -6.5 13.6 0 q6.8 6.5 13.6 0 q6.8 -6.5 13.6 0 q6.8 6.5 13.6 0"
+            />
+            <circle class="pm-bg__dot pm-bg__dot--honey" cx="1047" cy="650" r="3" />
+            <circle class="pm-bg__dot pm-bg__dot--teal" cx="1025" cy="218" r="3" />
+            <circle class="pm-bg__dot pm-bg__dot--honey" cx="611" cy="196" r="3" />
+            <circle class="pm-bg__dot pm-bg__dot--teal" cx="519" cy="514" r="3" />
+            <circle class="pm-bg__dot pm-bg__dot--honey" cx="1066" cy="471" r="3" />
+            <circle class="pm-bg__dot pm-bg__dot--teal" cx="89" cy="637" r="3" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#public-map-marks)" />
+      </svg>
+      <header class="public-map__head">
+        <div class="public-map__words">
+          <h1 class="public-map__title" data-testid="public-map-heading">{{ map.marketName }}</h1>
+          <p class="public-map__subtitle" data-testid="public-map-subtitle">
+            <svg class="public-map__subtitle-icon" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M8 1.5 Q8.6 7.4 14.5 8 Q8.6 8.6 8 14.5 Q7.4 8.6 1.5 8 Q7.4 7.4 8 1.5 Z" />
+            </svg>
+            Vendor map
+          </p>
         </div>
       </header>
 
@@ -851,36 +966,41 @@ function openVendor(vendor: ListedVendor) {
   min-width: 0;
 }
 
+/* The name in bold Outfit over a honey stroke, drawn as a thick underline behind the letters so it
+   follows each line's words; under it "vendor map" in Merge One, led by a teal sparkle. */
 .public-map__head .public-map__title {
-  font-family: 'Merge One', sans-serif;
-  font-size: var(--text-xl);
-  font-weight: 400;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
   line-height: 1.15;
-  letter-spacing: 0.01em;
-}
-
-/* The squiggle, thin and teal, under the name's start. */
-.public-map__squiggle {
-  width: 4.5rem;
-  height: 0.5rem;
-  color: var(--layout-section-4-edge);
-}
-
-.public-map__squiggle path {
-  stroke-width: 1.75;
+  letter-spacing: -0.01em;
+  text-decoration: underline;
+  text-decoration-color: var(--layout-section-1-fill);
+  text-decoration-thickness: 0.4em;
+  text-underline-offset: -0.22em;
+  text-decoration-skip-ink: none;
 }
 
 .public-map__head .public-map__subtitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   margin: 0;
-  font-size: var(--text-xs);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-family: 'Merge One', sans-serif;
+  font-size: var(--text-md);
+  letter-spacing: 0.01em;
+  text-transform: lowercase;
   color: var(--mm-text-muted-on-beige);
 }
 
-.public-map__head .public-map__subtitle::before {
-  content: '✦ ';
-  color: var(--mm-yellow);
+.public-map__subtitle-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: var(--layout-section-4-edge);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
 }
 
 /* The day and the hall: two soft pill selects side by side on the map's top left; the map's own
@@ -1313,161 +1433,90 @@ function openVendor(vendor: ListedVendor) {
   }
 }
 
-/* ── Prototype (release walk F6): six looks for the title and subtitle, `?look=1` to `?look=6` ── */
-.public-map__eyebrow,
-.public-map__sparkles {
-  display: none;
-}
-
-/* 2. A mint pill above the name; no squiggle, no line under. */
-.public-map__head--look-2 .public-map__eyebrow {
-  display: inline-flex;
-  align-self: flex-start;
-  margin: 0 0 var(--space-1);
-  padding: 2px var(--space-3);
-  border: 1px solid var(--layout-section-4-edge);
-  border-radius: var(--radius-pill);
-  background: var(--layout-section-4-fill);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.public-map__head--look-2 .public-map__squiggle,
-.public-map__head--look-2 .public-map__subtitle {
-  display: none;
-}
-
-/* 3. Light and airy: the name in light Outfit, the subtitle led by a fine mustard rule. */
-.public-map__head--look-3 .public-map__title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 1.875rem;
-  font-weight: 300;
-  letter-spacing: 0.01em;
-}
-
-.public-map__head--look-3 .public-map__squiggle {
-  display: none;
-}
-
-.public-map__head--look-3 .public-map__subtitle {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.public-map__head--look-3 .public-map__subtitle::before {
-  content: '';
-  width: 2rem;
-  height: 1.5px;
-  background: var(--mm-yellow);
-}
-
-/* 4. One line: the name, a fine rule, "Vendor map", two sparkles. */
-.public-map__head--look-4 .public-map__words {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1) var(--space-3);
-}
-
-.public-map__head--look-4 .public-map__squiggle {
-  display: none;
-}
-
-.public-map__head--look-4 .public-map__subtitle {
-  order: 2;
-  padding-inline-start: var(--space-3);
-  border-inline-start: 1px solid var(--pm-line);
-  font-size: var(--text-sm);
-  letter-spacing: 0.02em;
-  text-transform: none;
-}
-
-.public-map__head--look-4 .public-map__subtitle::before {
-  content: none;
-}
-
-.public-map__head--look-4 .public-map__sparkles {
-  display: inline;
-  order: 3;
-  color: var(--mm-yellow);
-  font-size: var(--text-sm);
-  letter-spacing: 0.2em;
-}
-
-/* 5. A ticket: the name in a white card with a dashed edge, "VENDOR MAP" above it, sparkles at its
-   corner. */
-.public-map__head--look-5 .public-map__words {
+/* ── Prototype (release walk F6): marks across the paper ──
+   Soft blobs, outlined stars, sparkles, squiggles and dots in honey and teal, scattered over the
+   whole page behind everything; the map's side of the sheet is paper too, so they show around
+   the hall, and the vendor panel stays a white card. */
+.public-map {
   position: relative;
-  padding: var(--space-3) var(--space-6) var(--space-3) var(--space-4);
-  border: 1.5px dashed var(--pm-line);
-  border-radius: 16px;
-  background: white;
 }
 
-.public-map__head--look-5 .public-map__eyebrow {
-  display: block;
-  order: -1;
-  margin: 0;
-  font-size: var(--text-xs);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--mm-text-muted);
+.public-map__head,
+.public-map__body {
+  position: relative;
+  z-index: 1;
 }
 
-.public-map__head--look-5 .public-map__eyebrow::first-letter {
-  color: var(--mm-yellow);
-}
-
-.public-map__head--look-5 .public-map__squiggle,
-.public-map__head--look-5 .public-map__subtitle {
-  display: none;
-}
-
-.public-map__head--look-5 .public-map__sparkles {
-  display: block;
+.public-map__doodles {
   position: absolute;
-  top: var(--space-2);
-  right: var(--space-3);
-  color: var(--layout-section-4-edge);
-  font-size: var(--text-xs);
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
-/* 6. A highlighter: the name in bold Outfit over a honey stroke, "vendor map" in Merge One. */
-.public-map__head--look-6 .public-map__title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 1.75rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  /* The honey stroke as a thick underline behind the letters, so it follows each line's words. */
-  text-decoration: underline;
-  text-decoration-color: var(--layout-section-1-fill);
-  text-decoration-thickness: 0.4em;
-  text-underline-offset: -0.22em;
-  text-decoration-skip-ink: none;
+.pm-bg__blob--honey {
+  fill: var(--layout-section-1-fill);
+  opacity: 0.55;
 }
 
-.public-map__head--look-6 .public-map__squiggle {
-  display: none;
+.pm-bg__blob--mint {
+  fill: var(--layout-section-4-fill);
+  opacity: 0.7;
 }
 
-.public-map__head--look-6 .public-map__subtitle {
-  font-family: 'Merge One', sans-serif;
-  font-size: var(--text-md);
-  letter-spacing: 0.01em;
-  text-transform: lowercase;
+.pm-bg__line {
+  fill: none;
+  stroke-width: 1.75;
+  opacity: 0.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.public-map__head--look-6 .public-map__subtitle::before {
-  content: '✧ ';
-  color: var(--layout-section-4-edge);
+.pm-bg__line--honey {
+  stroke: var(--mm-yellow);
 }
 
-@media (width <= 640px) {
-  .public-map__head--look-4 .public-map__subtitle {
-    padding-inline-start: 0;
-    border-inline-start: none;
+.pm-bg__line--teal {
+  stroke: var(--layout-section-4-edge);
+}
+
+.pm-bg__dot--honey {
+  fill: var(--mm-yellow);
+}
+
+.pm-bg__dot--teal {
+  fill: var(--layout-section-4-edge);
+  opacity: 0.8;
+}
+
+.public-map .public-map__body {
+  background: transparent;
+}
+
+.public-map .public-map__map {
+  background: transparent;
+}
+
+/* The map's own floor colour gives way to the paper, so the marks show around the hall's walls;
+   the hall's floor inside them stays. */
+.public-map__map :deep(.layout-map--read) {
+  background: transparent;
+}
+
+/* A paper margin round the hall, where the marks show. */
+.public-map__map :deep(.day-map__frame) {
+  padding: var(--space-6);
+}
+
+@media (width < 1000px) {
+  .public-map__map :deep(.day-map__frame) {
+    padding: var(--space-2);
   }
+}
+
+.public-map .public-map__side {
+  background: white;
 }
 </style>
