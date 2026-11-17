@@ -6,9 +6,17 @@
  * line of a freed table, and adds up both totals (`back-end/payments.py`). This only reads, words
  * and records.
  */
+import type { InjectionKey } from 'vue';
 import { api, getApiErrorStatus } from '@/utils/api';
 import { formatPrice } from '@/utils/pricing';
 import { getFormattedDate, getTimestampDate } from '@/utils/utils';
+
+/**
+ * What a page showing payments provides to hear of a payment written from the drawer whose answer
+ * came once the drawer's Payment tab was gone (closed, or another tab chosen), when no event can
+ * reach it: Payments reads its totals again.
+ */
+export const PAYMENT_WRITTEN: InjectionKey<() => void> = Symbol('paymentWritten');
 
 /** How the organizers take a payment (Daniel, T92 Q7), as the server names each. */
 export const PAYMENT_METHODS: readonly { id: PaymentMethod; label: string }[] = [

@@ -60,6 +60,7 @@ sources:
   - T263
   - T270
   - T411
+  - T421
 ---
 
 # Reviewing applications
@@ -217,7 +218,10 @@ Covered by:
 
 A selection is only ever the rows ticked, one by one or by Select all, which ticks the rows on screen: each is in front of the reviewer and counted in the confirmation, and nothing past them is decided.
 The rows on screen are the pages drawn so far, so a row past the cap is neither ticked nor decided until the reviewer has asked for it.
-The list is read again every 30 seconds while the tab is in view, quietly, which moves its "Updated" time too; every verdict given from it, and every Refresh, re-reads the market, so the rail's count moves.
+The list is read again every 30 seconds while the tab is in view, which moves its "Updated" time too, and not while a verdict is being written; every verdict given from it, and every Refresh whose read of the list lands, re-reads the market, so the rail's count moves.
+A re-read that fails, the half minute's as well as Refresh's, keeps the list and says "Could not refresh. The list is as it was last read." beside Refresh until a read lands.
+The list is one keyed read ([`useServerRead`](../../../front-end/src/utils/useServerRead.ts)): moved to another market, it says "Loading applications…" at once, never the last market's rows, and an answer or a refusal for the market left never lands on this one.
+Each verdict, follow-up, selection's verdict and undo holds the list while it is written, so a re-read asked before it never shows the application as it was, and each ends in one re-read of the list; one answering after a move to another market says and offers nothing there, and a move withdraws the Undo and the selection's done line the last market's verdict offered (`aVerdictIsNeverUndoneByAnOlderRead.test.ts`, T421).
 
 ## Dividing the review
 
@@ -251,6 +255,7 @@ The rule is [the review is dealt among chosen reviewers](../rules/the-review-is-
 **Status:** Works (walked live).
 "Choose what leads the card" on a card opens a dialog of the highlights ([F3](form-tab.md#f3-what-a-reviewer-reads-first)) over the card, where they used to unfold between its answers and its verdict buttons (T217).
 Each tick is saved as it is made, so the dialog has one Done and no Cancel, which would promise an undo the ticks do not have.
+On a phone the dialog is as tall as its ticks need, up to the window less its gutter, with its title and Done pinned and the ticks scrolling between them, rather than the window's height every other long dialog takes ([dialogs](../../implementation/conventions/dialogs.md#the-rules)).
 A tick that cannot be saved is taken back and said in the dialog, or on the page if the dialog has closed by the time it fails, beside whatever the card already says, such as who decided it first.
 Done, the close, Escape and the backdrop each close the dialog, with focus back on the button and the same application up: a tick changes what the card leads with, never which application it is.
 With the dialog open, A, R, S, N and Z do nothing to the card, and a key held for a card still arriving does not play behind it: a verdict says it did not count, and a Z leaves the undo on offer.

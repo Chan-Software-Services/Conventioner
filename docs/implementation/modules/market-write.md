@@ -62,6 +62,7 @@ sources:
   - T315
   - T318
   - T411
+  - T421
 ---
 
 # The market write
@@ -227,7 +228,8 @@ A seed or spec writes the form through [`e2e/helpers/saveApplicationForm.ts`](..
 
 Manage market keeps a copy of the market of its own, so on that refusal from adding, changing or taking a role, from a change to the permission table (a row, Reset or Copy), or from a rename, it re-reads that copy, and the sentence stands where that action's refusal always has: under the add form, in the removal's confirmation, under the person's row, in the table change's confirmation, under the name ([ending and managing a market](../../business/flows/ending-and-managing-a-market.md)).
 The permission dialog ([`MarketPermissions.vue`](../../../front-end/src/components/MarketPermissions.vue)) asks [`ManageMarketOverlay.vue`](../../../front-end/src/views/ManageMarketOverlay.vue) for the re-read with its `marketChanged` event, and an open confirmation follows the table read again: a row's change takes the row as it now stands, and one with nothing left to change, or a reset with no row left to return, closes, its sentence then on the Permissions dialog's own error line and focus taken back inside that dialog, since Reset, disabled then, or a row gone cannot take it; after a refused rename (`handleRename`) the re-read market may be past draft, so the name field gives way to why the name is fixed.
-Manage market's re-read after a refused add, take, rename or transfer of ownership runs inside that write's submission ([dialogs](../conventions/dialogs.md)), so the dialog holds until its copy is read again, and a re-read for a market Manage market has since left, asked of that submission's `isCurrent`, reads nothing (T411); the reads no write sends, the one as Manage market opens and the one `marketChanged` asks for, go by Manage market's own count of its openings.
+Manage market's re-read after a refused add, take, rename or transfer of ownership runs inside that write's submission ([dialogs](../conventions/dialogs.md)), so the dialog holds until its copy is read again, and a re-read for a market Manage market has since left, asked of that submission's `isCurrent`, reads nothing (T411).
+Every read of that copy, the one as Manage market opens, a write's and the one `marketChanged` asks for, is one keyed read ([reads keyed by market](market-store.md#reads-keyed-by-market)), keyed by the market Manage market is open on: a read of a market it has left never lands, a re-read overtakes every read asked before it, so an older answer never puts back what a write changed, and each write is sent to that key's address (T421).
 
 A list saved on the market a click at a time (`useSavedOnTheMarket` in [`front-end/src/utils/savedOnTheMarket.ts`](../../../front-end/src/utils/savedOnTheMarket.ts), the highlights and the automatic rejections) is the [autosave](plan-autosave.md)'s no-pause case: one write out at a time, a click made while one is out sent when it answers with the list as it then stands, and the market re-read once the last of them lands; a re-read landing while a click is unsaved is skipped.
 A write that does not land drops the clicks behind it and puts back what the server last answered, never the click before, with the reason, since the screen has no Retry.

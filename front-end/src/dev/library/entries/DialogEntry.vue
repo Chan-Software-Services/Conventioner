@@ -2,8 +2,9 @@
 /**
  * The dialog (T200, T217): `AppDialog` in its three widths, the whole-window scroll beside the body
  * scroll on the same 150-person list, the body scroll with a tray, the footer without a form, a
- * read-only list the keys scroll, and the dialogs that prove every behaviour is kept, each on the
- * fixture's people and applicants. Daniel's choices on it are made, so it asks none.
+ * read-only list the keys scroll, a short list that fits its content on a phone (T446), and the
+ * dialogs that prove every behaviour is kept, each on the fixture's people, applicants and columns.
+ * Daniel's choices on it are made, so it asks none.
  *
  * Every dialog here is the real `AppDialog`, opened from a button the way a screen opens one; the
  * line under each button reads out how it last closed, so a save is seen to land and a close is
@@ -33,6 +34,7 @@ type DialogId =
   | 'tray'
   | 'actions'
   | 'read'
+  | 'fits'
   | 'destructive'
   | 'error'
   | 'anchored'
@@ -88,6 +90,10 @@ const nameInActions = ref(applications[0]!.name);
 function act(what: string) {
   outcome.actions = what;
 }
+
+// A long dialog whose list is usually short: on a phone it is as tall as these few ticks.
+const fewColumns = offered.columns.slice(0, 6);
+const chosenFew = ref<string[]>(fewColumns.slice(0, 2).map((column) => column.id));
 
 // Every behaviour kept, in either scroll.
 const SCROLLS = [
@@ -237,6 +243,18 @@ function addUser() {
   </LibrarySection>
 
   <LibrarySection
+    title="The body scrolls, as tall as a short list on a phone"
+    about="Serves: Choose what leads the card, whose list is usually short; every other long dialog fills a phone's window (Daniel's choice 22)"
+  >
+    <LibraryPanel label="As tall as its list on a phone, up to the window">
+      <button type="button" class="btn btn--secondary" @click="open('fits')">
+        Choose what leads
+      </button>
+      <ReadOut label="Last" :value="outcome.fits ?? null" />
+    </LibraryPanel>
+  </LibrarySection>
+
+  <LibrarySection
     title="Every behaviour kept"
     about="Serves: the 9 destructive confirmations, the 6 anchored dialogs, the 7 of several actions, and every form's error"
   >
@@ -333,6 +351,33 @@ function addUser() {
     @close="closed('read')"
   >
     <p v-for="person in people" :key="person.id" class="library-text">{{ person.name }}</p>
+  </AppDialog>
+
+  <!-- A short list, its window as tall as the list on a phone, Done pinned beneath it. -->
+  <AppDialog
+    :open="opened === 'fits'"
+    title="Choose what leads the card"
+    testid="library-fits"
+    size="wide"
+    scroll="body"
+    fits-content-on-a-phone
+    @close="closed('fits')"
+  >
+    <p class="library-text">A reviewer reads these first.</p>
+    <label v-for="column in fewColumns" :key="column.id" class="library-check">
+      <input v-model="chosenFew" type="checkbox" :value="column.id" />
+      <span>{{ column.label }}</span>
+    </label>
+    <template #actions>
+      <button
+        type="button"
+        class="btn btn--primary"
+        data-testid="library-fits-done"
+        @click="saved('fits', `Chose ${chosenFew.length} of ${fewColumns.length}`)"
+      >
+        Done
+      </button>
+    </template>
   </AppDialog>
 
   <!-- The sizes. -->
