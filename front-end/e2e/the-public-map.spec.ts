@@ -146,28 +146,27 @@ for (const size of PHONE_AND_DESK) {
       await expect(map.cardWhole).toHaveText(/^This table is free on \w{3} \d+ \w{3}\.$/);
     });
 
-    test('each half of the shared table is pressed on its own, and the card reads both', async ({
+    test('each half of the shared table is pressed on its own, and the card reads that half', async ({
       page,
       expectAccessible,
     }) => {
       const map = new PublicMapPage(page);
       await map.goto(seeded.slug);
-      for (const half of ['left', 'right'] as const) {
-        await press(map.table('Aisle A 3', half));
-        await expect(map.card).toContainText('Aisle A 3');
-        await expect(map.cardHalves.getByRole('heading', { level: 3 })).toHaveText([
-          'Left half',
-          'Right half',
-        ]);
-        await expect(map.cardHalves.nth(0)).toContainText('Loom House');
-        await expect(map.cardHalves.nth(0).getByTestId('public-map-card-instagram')).toHaveText(
-          '@example_loom',
-        );
-        await expect(map.cardHalves.nth(1)).toContainText('Paper Moth Press');
-        await expect(map.cardHalves.nth(1).getByTestId('public-map-card-website')).toHaveText(
-          'paper-moth.test',
-        );
-      }
+      await press(map.table('Aisle A 3', 'left'));
+      await expect(map.card).toContainText('Aisle A 3');
+      await expect(map.cardHalves.getByRole('heading', { level: 3 })).toHaveText(['Left half']);
+      await expect(map.cardHalves).toContainText('Loom House');
+      await expect(map.cardHalves.getByTestId('public-map-card-instagram')).toHaveText(
+        '@example_loom',
+      );
+      await expect(map.card).not.toContainText('Paper Moth Press');
+      await press(map.table('Aisle A 3', 'right'));
+      await expect(map.cardHalves.getByRole('heading', { level: 3 })).toHaveText(['Right half']);
+      await expect(map.cardHalves).toContainText('Paper Moth Press');
+      await expect(map.cardHalves.getByTestId('public-map-card-website')).toHaveText(
+        'paper-moth.test',
+      );
+      await expect(map.card).not.toContainText('Loom House');
       await expect(map.table('Aisle A 3', 'left')).toHaveAccessibleName(
         'Aisle A 3, Standard 6 ft, left half, Loom House',
       );

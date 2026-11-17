@@ -17,9 +17,11 @@
  * reads "Page not found", the bar falling back as on the vendor page; a request that never answered
  * is neither, and says so with "Try again".
  *
- * The day, the open location and the picked table live in the address (`date`, `location`,
- * `table`), each changed with `router.replace`, so a link or a QR code opens one table on one day;
- * a value the map does not know falls back to the default without an error. The floorplan image
+ * The day, the open location, the picked table and the half of a shared table picked alone live in
+ * the address (`date`, `location`, `table`, `half`), each changed with `router.replace`, so a link
+ * or a QR code opens one table, or one half, on one day; a value the map does not know falls back
+ * to the default without an error, and a half the table is not split into that day shows the whole
+ * table. The floorplan image
  * is read through the API client as bytes and drawn from an object URL, since the
  * Content-Security-Policy draws images only from the app and from blobs.
  *
@@ -42,6 +44,7 @@ import { hallLegend, tablePaints } from '@/components/publicmap/publicMapPaint';
 import { useWideSheet } from '@/components/publicmap/useWideSheet';
 import {
   publicDayLocations,
+  publicSeatKey,
   publicSeats,
   type DayMapLegendItem,
   type PublicMapAnswer,
@@ -56,9 +59,11 @@ import {
   fetchPublicMapImage,
   mapPlace,
   shortDay,
+  shownParts,
   tableCard,
   type ListedVendor,
   type MapPlace,
+  type PickedHalf,
 } from '@/utils/publicMap';
 import { useFillsTheWindow } from '@/utils/useFillsTheWindow';
 
@@ -107,14 +112,18 @@ void load();
 const today = calendarToday();
 
 const place = computed<MapPlace>(() =>
-  map.value ? mapPlace(map.value, route.query, today) : { date: '', locationId: '', tableId: null },
+  map.value
+    ? mapPlace(map.value, route.query, today)
+    : { date: '', locationId: '', tableId: null, half: null },
 );
 
-/** Write the place to the address, replacing it, every other key of the query kept; settled once
- *  the address has moved. */
+/** Write the place to the address, replacing it, every other key of the query kept, and the half
+ *  only beside a table; settled once the address has moved. */
 async function goTo(next: MapPlace) {
   const rest = Object.fromEntries(
-    Object.entries(route.query).filter(([key]) => !['date', 'location', 'table'].includes(key)),
+    Object.entries(route.query).filter(
+      ([key]) => !['date', 'location', 'table', 'half'].includes(key),
+    ),
   );
   await router.replace({
     query: {
@@ -122,6 +131,7 @@ async function goTo(next: MapPlace) {
       date: next.date,
       location: next.locationId,
       ...(next.tableId ? { table: next.tableId } : {}),
+      ...(next.tableId && next.half ? { half: next.half } : {}),
     },
   });
 }
@@ -136,8 +146,16 @@ function chooseLocation(locationId: string) {
   void goTo({ ...place.value, locationId, tableId: keeps ? place.value.tableId : null });
 }
 
-function pick(tableId: string) {
-  void goTo({ ...place.value, tableId });
+/** The side of the day's seat with this key, when it holds a half; none for a whole seat or none. */
+function halfOfSeat(seatKey: string | null): PickedHalf | null {
+  const half = seatKey ? seats.value.find((seat) => seat.key === seatKey)?.half : undefined;
+  return half === 'left' || half === 'right' ? half : null;
+}
+
+/** A table pressed: a seated half picks that half alone; a whole table, or a half with nobody at
+ *  it, which the map gives no seat, picks the whole table. */
+function pick(tableId: string, seatKey: string | null) {
+  void goTo({ ...place.value, tableId, half: halfOfSeat(seatKey) });
 }
 
 // ── The floorplan images, one object URL per location, read as each location opens ──
@@ -199,9 +217,25 @@ const legendItems = computed(() => hallLegend(openLocation.value, seats.value));
 const paints = computed(() => tablePaints(locations.value));
 
 const day = computed(() => dayInWords(place.value.date));
-const card = computed(() =>
-  map.value && place.value.tableId
-    ? tableCard(map.value, place.value.date, place.value.tableId)
+/** The picked table's card, narrowed to the half picked when the table is split that day. */
+const card = computed(() => {
+  const whole =
+    map.value && place.value.tableId
+      ? tableCard(map.value, place.value.date, place.value.tableId)
+      : null;
+  return whole ? shownParts(whole, place.value.half) : null;
+});
+/** The half the card shows alone, or none when it shows the whole table. */
+const shownHalf = computed<PickedHalf | null>(() => {
+  const parts = card.value?.halves ?? [];
+  const side = parts.length === 1 ? parts[0]!.side : 'whole';
+  return side === 'whole' ? null : side;
+});
+/** The key of the seat at the half shown alone, or none: a half with nobody at it, as a whole
+ *  table, is outlined and ringed by its table. */
+const pickedSeatKey = computed(() =>
+  place.value.tableId && shownHalf.value && card.value?.halves[0]?.seat
+    ? publicSeatKey({ tableId: place.value.tableId, half: shownHalf.value })
     : null,
 );
 const hallName = computed(() => openLocation.value?.name ?? '');
@@ -219,10 +253,10 @@ const cardPart = ref<InstanceType<typeof PublicMapTableCard> | null>(null);
 /** Bumped on each `viewed` of the day map, so the bubble places itself again. */
 const moved = ref(0);
 
-/** The table, or its half, the bubble speaks for. */
+/** The table, or the half shown alone, the bubble speaks for. */
 const anchor = computed(() =>
   card.value && place.value.tableId
-    ? { tableId: place.value.tableId, half: 'whole' as const }
+    ? { tableId: place.value.tableId, half: shownHalf.value ?? ('whole' as const) }
     : null,
 );
 const locate = (tableId: string, half: SeatHalf) => dayMap.value?.targetRect(tableId, half) ?? null;
@@ -256,10 +290,16 @@ function onKeydown(event: KeyboardEvent) {
 onMounted(() => window.addEventListener('keydown', onKeydown));
 onUnmounted(() => window.removeEventListener('keydown', onKeydown));
 
-/** A vendor of the list: their location opened and their table picked. The page never scrolls; a
- *  table zoomed out of view is brought back by showing the whole hall first. */
+/** A vendor of the list: their location opened and their table picked, or their half of a shared
+ *  one. The page never scrolls; a table zoomed out of view is brought back by showing the whole
+ *  hall first. */
 async function openVendor(vendor: ListedVendor) {
-  await goTo({ ...place.value, locationId: vendor.locationId, tableId: vendor.tableId });
+  await goTo({
+    ...place.value,
+    locationId: vendor.locationId,
+    tableId: vendor.tableId,
+    half: halfOfSeat(vendor.key),
+  });
   await nextTick();
   const area = hall.value?.getBoundingClientRect();
   const table = dayMap.value?.targetRect(vendor.tableId, 'whole');
@@ -342,7 +382,7 @@ async function openVendor(vendor: ListedVendor) {
               :tableTypes="map.tableTypes"
               :locationId="place.locationId"
               :seats="seats"
-              :picked="place.tableId"
+              :picked="pickedSeatKey ?? place.tableId"
               :legend="NO_LEGEND"
               @update:locationId="chooseLocation"
               @pick="pick"
@@ -386,7 +426,7 @@ async function openVendor(vendor: ListedVendor) {
             :map="map"
             :date="place.date"
             :pickedTableId="place.tableId"
-            :pickedSeatKey="null"
+            :pickedSeatKey="pickedSeatKey"
             :paints="paints"
             @open="openVendor"
           />

@@ -23,9 +23,11 @@ import {
   mapPlace,
   openingDate,
   shortDay,
+  shownParts,
   tableCard,
   websiteLink,
   type PublicMapRead,
+  type TableCard,
 } from '@/utils/publicMap';
 import PublicMapView from '@/views/PublicMapView.vue';
 import { ANSWER, TODAY, TOMORROW } from './support/publicMapAnswer';
@@ -115,7 +117,7 @@ describe('a day as the day select says it', () => {
 describe('the place the address names', () => {
   it('is the day, the location and the table it carries', () => {
     expect(mapPlace(ANSWER, { date: TOMORROW, location: 'loc-lower', table: 's1' }, TODAY)).toEqual(
-      { date: TOMORROW, locationId: 'loc-lower', tableId: 's1' },
+      { date: TOMORROW, locationId: 'loc-lower', tableId: 's1', half: null },
     );
   });
 
@@ -124,20 +126,50 @@ describe('the place the address names', () => {
       date: TODAY,
       locationId: 'loc-lower',
       tableId: 's1',
+      half: null,
     });
   });
 
   it('falls back from every value it does not know, without an error', () => {
     expect(
       mapPlace(ANSWER, { date: '1999-01-01', location: 'nowhere', table: 'x9' }, TODAY),
-    ).toEqual({ date: TODAY, locationId: 'loc-upper', tableId: null });
+    ).toEqual({ date: TODAY, locationId: 'loc-upper', tableId: null, half: null });
     // A table at another location than the open one is no pick there.
     expect(mapPlace(ANSWER, { location: 'loc-upper', table: 's1' }, TODAY)).toEqual({
       date: TODAY,
       locationId: 'loc-upper',
       tableId: null,
+      half: null,
     });
     expect(mapPlace(ANSWER, { date: ['a', 'b'] as unknown as string }, TODAY).date).toBe(TODAY);
+  });
+
+  it('carries the half named beside a table, left or right (T465)', () => {
+    expect(mapPlace(ANSWER, { table: 'g2', half: 'left' }, TODAY).half).toBe('left');
+    expect(mapPlace(ANSWER, { table: 'g2', half: 'right' }, TODAY).half).toBe('right');
+    // Read whatever the day: the card shows the whole table on a day it is not split.
+    expect(mapPlace(ANSWER, { date: TOMORROW, table: 'g2', half: 'right' }, TODAY).half).toBe(
+      'right',
+    );
+  });
+
+  it('reads no half that is no side, nor one with no table picked, without an error', () => {
+    for (const half of ['middle', 'whole', '', 'LEFT', ['left', 'right']]) {
+      expect(mapPlace(ANSWER, { table: 'g2', half: half as unknown as string }, TODAY)).toEqual({
+        date: TODAY,
+        locationId: 'loc-upper',
+        tableId: 'g2',
+        half: null,
+      });
+    }
+    expect(mapPlace(ANSWER, { half: 'left' }, TODAY).half).toBeNull();
+    expect(mapPlace(ANSWER, { table: 'x9', half: 'left' }, TODAY).half).toBeNull();
+    expect(mapPlace(ANSWER, { location: 'loc-lower', table: 'g2', half: 'left' }, TODAY)).toEqual({
+      date: TODAY,
+      locationId: 'loc-lower',
+      tableId: null,
+      half: null,
+    });
   });
 });
 
@@ -241,6 +273,38 @@ describe("a table's card", () => {
   it('holds no seat for a free table, and is none for a table not on the map', () => {
     expect(tableCard(ANSWER, TOMORROW, 'g1')?.halves).toEqual([{ side: 'whole', seat: null }]);
     expect(tableCard(ANSWER, TODAY, 'nope')).toBeNull();
+  });
+});
+
+describe('the parts of a card shown for a half picked (T465)', () => {
+  const shared = tableCard(ANSWER, TODAY, 'g2')!;
+  const sides = (card: TableCard) => card.halves.map((h) => [h.side, h.seat?.name]);
+
+  it('are the half alone when the table is split that day', () => {
+    expect(sides(shownParts(shared, 'left'))).toEqual([['left', 'Acme Ceramics']]);
+    expect(sides(shownParts(shared, 'right'))).toEqual([['right', 'Bee Candles']]);
+    expect(shownParts(shared, 'right').code).toBe('Gold row 2');
+  });
+
+  it('are every part with no half picked', () => {
+    expect(shownParts(shared, null)).toEqual(shared);
+  });
+
+  it('are the whole table when it is not split that day, as an old link names it', () => {
+    const whole = tableCard(ANSWER, TOMORROW, 'g2')!;
+    expect(shownParts(whole, 'right')).toEqual(whole);
+    const kiln = tableCard(ANSWER, TODAY, 'g1')!;
+    expect(shownParts(kiln, 'left')).toEqual(kiln);
+  });
+
+  it('are a free half alone, with nobody at it', () => {
+    const rightFree = {
+      ...ANSWER,
+      seats: ANSWER.seats.filter((s) => !(s.tableId === 'g2' && s.half === 'right')),
+    };
+    expect(sides(shownParts(tableCard(rightFree, TODAY, 'g2')!, 'right'))).toEqual([
+      ['right', undefined],
+    ]);
   });
 });
 
@@ -481,14 +545,151 @@ describe('pressing a table', () => {
     expect(card().text()).toContain('Kiln & Co');
   });
 
-  it('opens the card of a shared table whichever half is pressed', async () => {
+  it("picks a shared table's seated half alone, its side written beside the table (T465)", async () => {
     const page = await open();
     for (const half of ['left', 'right'] as const) {
       await pressTable('g2', half);
+      expect(routing.replace).toHaveBeenLastCalledWith({
+        query: { date: TODAY, location: 'loc-upper', table: 'g2', half },
+      });
       expect(page.getComponent(PublicMapTableCard).props('card')).toEqual(
-        tableCard(ANSWER, TODAY, 'g2'),
+        shownParts(tableCard(ANSWER, TODAY, 'g2')!, half),
       );
+      expect(page.getComponent(DayMap).props('picked')).toBe(`g2:${half}`);
+      expect(page.getComponent(PublicMapVendors).props('pickedSeatKey')).toBe(`g2:${half}`);
+      expect(page.getComponent(PublicMapBubble).props('anchor')).toEqual({ tableId: 'g2', half });
     }
+    expect(card().findAll('[data-testid="public-map-card-half"]')).toHaveLength(1);
+    expect(card().get('h3').text()).toBe('Right half');
+    expect(card().text()).toContain('Bee Candles');
+    expect(card().text()).not.toContain('Acme Ceramics');
+  });
+
+  it('writes no half for a whole table, and drops the half picked before', async () => {
+    const page = await open(found(), { table: 'g2', half: 'left' });
+    await pressTable('g1');
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper', table: 'g1' },
+    });
+    expect(page.getComponent(DayMap).props('picked')).toBe('g1');
+    expect(page.getComponent(PublicMapVendors).props('pickedSeatKey')).toBeNull();
+    expect(page.getComponent(PublicMapBubble).props('anchor')).toEqual({
+      tableId: 'g1',
+      half: 'whole',
+    });
+  });
+
+  it('opens the whole table for a free half pressed, both its parts', async () => {
+    const rightFree = {
+      ...ANSWER,
+      seats: ANSWER.seats.filter((s) => !(s.tableId === 'g2' && s.half === 'right')),
+    };
+    const page = await open(found(rightFree));
+    await pressTable('g2', 'right');
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper', table: 'g2' },
+    });
+    expect(page.getComponent(PublicMapTableCard).props('card')).toEqual(
+      tableCard(rightFree, TODAY, 'g2'),
+    );
+    expect(page.getComponent(DayMap).props('picked')).toBe('g2');
+    expect(page.getComponent(PublicMapVendors).props('pickedSeatKey')).toBeNull();
+  });
+});
+
+describe('a half in the address (T465)', () => {
+  it('opens that half alone, outlined, and its vendor ringed', async () => {
+    const page = await open(found(), { table: 'g2', half: 'left' });
+    expect(page.getComponent(PublicMapTableCard).props('card')).toEqual(
+      shownParts(tableCard(ANSWER, TODAY, 'g2')!, 'left'),
+    );
+    expect(card().get('h3').text()).toBe('Left half');
+    expect(page.getComponent(DayMap).props('picked')).toBe('g2:left');
+    expect(page.getComponent(PublicMapVendors).props('pickedSeatKey')).toBe('g2:left');
+  });
+
+  it('shows the whole table on a day it is not split, outlined whole, with no error', async () => {
+    const page = await open(found(), { date: TOMORROW, table: 'g2', half: 'right' });
+    expect(page.getComponent(PublicMapTableCard).props('card')).toEqual(
+      tableCard(ANSWER, TOMORROW, 'g2'),
+    );
+    expect(page.getComponent(DayMap).props('picked')).toBe('g2');
+    expect(page.getComponent(PublicMapVendors).props('pickedSeatKey')).toBeNull();
+    expect(page.getComponent(PublicMapBubble).props('anchor')).toEqual({
+      tableId: 'g2',
+      half: 'whole',
+    });
+    expect(page.find('[role="alert"]').exists()).toBe(false);
+  });
+
+  it('shows the whole table for a half that is no side, with no error', async () => {
+    const page = await open(found(), { table: 'g2', half: 'middle' });
+    expect(page.getComponent(PublicMapTableCard).props('card')).toEqual(
+      tableCard(ANSWER, TODAY, 'g2'),
+    );
+    expect(page.getComponent(DayMap).props('picked')).toBe('g2');
+    expect(page.find('[role="alert"]').exists()).toBe(false);
+  });
+
+  it('outlines the whole table for a half with nobody at it, its card saying it is free', async () => {
+    const rightFree = {
+      ...ANSWER,
+      seats: ANSWER.seats.filter((s) => !(s.tableId === 'g2' && s.half === 'right')),
+    };
+    const page = await open(found(rightFree), { table: 'g2', half: 'right' });
+    expect(card().text()).toContain('Right half');
+    expect(card().text()).toContain('This half is free on Fri 5 Jun.');
+    expect(page.getComponent(DayMap).props('picked')).toBe('g2');
+    expect(page.getComponent(PublicMapVendors).props('pickedSeatKey')).toBeNull();
+    expect(page.getComponent(PublicMapBubble).props('anchor')).toEqual({
+      tableId: 'g2',
+      half: 'right',
+    });
+  });
+
+  it('keeps the half on a change of day', async () => {
+    await open(found(), { location: 'loc-upper', table: 'g2', half: 'right' });
+    await daySelect().setValue(TOMORROW);
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TOMORROW, location: 'loc-upper', table: 'g2', half: 'right' },
+    });
+  });
+
+  it('drops the half with the table, on a change of hall and on Close', async () => {
+    await open(found(), { table: 'g2', half: 'right' });
+    await locationSelect().setValue('loc-lower');
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-lower' },
+    });
+    routing.route.query = { table: 'g2', half: 'right' };
+    await flushPromises();
+    await wrapper!.get('[data-testid="public-map-card-close"]').trigger('click');
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper' },
+    });
+  });
+
+  it('keeps every other key of the query, and writes no half key it did not read', async () => {
+    await open(found(), { table: 'g2', half: 'middle', utm: 'qr' });
+    await daySelect().setValue(TOMORROW);
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { utm: 'qr', date: TOMORROW, location: 'loc-upper', table: 'g2' },
+    });
+  });
+
+  it("Close from a half's card gives the focus back to that half", async () => {
+    const page = await open(found(), { table: 'g2', half: 'right' });
+    const close = page.get<HTMLButtonElement>('[data-testid="public-map-card-close"]');
+    close.element.focus();
+    await close.trigger('click');
+    await flushPromises();
+    expect(document.activeElement).toBe(
+      page.get('[data-table-id="g2"] [data-half="right"]').element,
+    );
   });
 });
 
@@ -563,6 +764,23 @@ describe("the list of the day's vendors", () => {
     );
     expect(card().text()).toContain('Cog Prints');
     expect(page.getComponent(PublicMapTableCard).props('paint')).toEqual(PAINTS.get('s1'));
+  });
+
+  it('writes the half of a vendor at a shared table, and none for a whole seat (T465)', async () => {
+    const page = await open();
+    const named = (name: string) => mapListing(ANSWER, TODAY).find((v) => v.name === name)!;
+    page.getComponent(PublicMapVendors).vm.$emit('open', named('Bee Candles'));
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper', table: 'g2', half: 'right' },
+    });
+    expect(card().text()).toContain('Bee Candles');
+    expect(card().text()).not.toContain('Acme Ceramics');
+    page.getComponent(PublicMapVendors).vm.$emit('open', named('Kiln & Co'));
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper', table: 'g1' },
+    });
   });
 });
 
