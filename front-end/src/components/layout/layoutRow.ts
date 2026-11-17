@@ -4,32 +4,36 @@
  * holds (`LayoutRowPreview.vue`); the geometry is `layoutGeometry.ts`'s.
  *
  * A path is the points clicked so far, with the pointer's place after them while it is over the
- * map. The row shown is always the row that placing would add: the smooth path through those
- * points (`smoothRuns`), lined with tables of the options strip's type on the side chosen
+ * map. The row shown is the row that placing would add: the smooth path through the points laid
+ * alone (`smoothRuns`), lined with tables of the tool card's type on the side chosen
  * (`placeRows`), clear of the tables and no-table zones that stand already and inside the
- * floorplan. Nothing of a pending path is in the layout: it is not saved, not a step of undo, and
- * it is dropped whole. Placed, the tables are ordinary tables, numbered on in their section in
- * the order drawn, selected, and one step of undo.
+ * floorplan. The stretch from the last point to the pointer only shows, as ghosts, what a point
+ * there would add; it is never placed, and one point alone places nothing (the QC walk of
+ * 2026-11-16, item 17). Nothing of a pending path is in the layout: it is not saved, not a step of
+ * undo, and it is dropped whole. Placed, the tables are ordinary tables, numbered on in their
+ * section in the order drawn, selected, and one step of undo.
  *
  * With no path pending, a press and a drag draw the row's line by hand: a stroke. While it is in
  * hand the row is shown along the stroke as it reads (`readStroke`): the straight line between
  * its ends where it is nearly straight or Shift is held, else its smoothed line, closed where it
- * has come back to its start. Let go, a straight stroke is its two ends, for the editor to place
- * at once; any other becomes the path's points, a few places chosen on the smoothed line
- * (`fitStroke`), and waits as a clicked path does. Such a path is `drawn`: it is finished, so the
- * pointer's place is no part of it and it takes no further point, until it is placed, dropped or
- * taken back to one point.
+ * has come back to its start. Let go, a straight stroke's two ends are the path's points, and any
+ * other's a few places chosen on the smoothed line (`fitStroke`); either waits for Enter as a
+ * clicked path does. Such a path is `drawn`: it is finished, so the pointer's place is no part of
+ * it and it takes no further point, until it is placed, dropped or taken back to one point.
  *
  * A path of three points or more can be closed: its last point joined to its first, smooth at
  * the seam as anywhere, its tables spread evenly round it. A closed path stays pending, to be
- * placed or opened again. The options strip's Rows and Aisle place that many rows in the one
+ * placed or opened again. The tool card's Rows and Aisle place that many rows in the one
  * gesture, each offset toward the tables' side, the first row numbered whole, then the next.
  */
 import { computed, reactive, shallowRef, type ComputedRef, type ShallowRef } from 'vue';
 import type { FloorplanObject, FloorplanTable, TableTypeObject } from '@/assets/types/datatypes';
 import {
+  ANGLE_STEP,
   STANDARD_TABLE,
-  cornersOf,
+  angleFrom,
+  snapAngle,
+  zoneCorners,
   hallOf,
   fitStroke,
   placeAlongRuns,
@@ -47,6 +51,8 @@ import {
   type SizeMm,
   type StrokeOptions,
 } from './layoutGeometry';
+import { groupRefusal, groupingOf } from './layoutGroups';
+import { lengthMmOf, saidNoLength } from './layoutLength';
 import type { LayoutEditor, NewTable } from './useLayoutEditor';
 
 /** The most tables a layout holds: the server's `MAX_PLACED_TABLES` (`floorplan_limits.py`). */
@@ -124,15 +130,15 @@ export function strokeOptions(pxPerMm: number, straight: boolean): StrokeOptions
 }
 
 /**
- * What the options strip holds for a row, kept while the app is open, so the side chosen for one
- * wall is the side the next row starts on: the side of the line the tables stand on, whether they
- * are centred on it instead, the gap between them in centimetres, as typed, how many rows and the
- * aisle between them in centimetres, as typed, and whether an open path's tables are spread
- * evenly to its ends.
+ * What the tool card holds for a row, kept while the app is open, so the side chosen for one
+ * wall is the side the next row starts on: whether the tables are centred on the line, as they are
+ * at first (the QC walk of 2026-11-16, item 17), else the side of it they stand on, the gap between
+ * them in centimetres, as typed, how many rows and the aisle between them in centimetres, as
+ * typed, and whether an open path's tables are spread evenly to its ends.
  */
 export const rowChoices = reactive({
   side: 'right' as 'right' | 'left',
-  centred: false,
+  centred: true,
   gapCm: '0',
   rows: '1',
   aisleCm: '120',
@@ -148,29 +154,34 @@ export function rowsOf(typed: string): number {
   return Number.isFinite(rows) && rows >= 1 ? Math.min(rows, MAX_ROWS) : 1;
 }
 
-/** The widest gap or aisle a row or a fill takes, in centimetres: the placement's 10,000 mm. */
-export const MAX_LENGTH_CM = 1000;
-
-/** A gap or an aisle typed, in millimetres: a number of centimetres from 0 to 1,000, a comma for
- *  the point taken; null for anything else, which its field says rather than reading as none. */
-export function lengthMmOf(typed: string): number | null {
-  const text = String(typed).trim().replace(',', '.');
-  if (!/^\d+(\.\d+)?$/.test(text)) return null;
-  const cm = Number(text);
-  return cm <= MAX_LENGTH_CM ? Math.round(cm * 10) : null;
-}
-
-/** What a gap's or an aisle's field says of a value that is no length. */
-export const saidNoLength = (what: 'gap' | 'aisle') =>
-  `Type the ${what}'s width in centimetres, 0 to ${MAX_LENGTH_CM.toLocaleString('en')}.`;
-
-/** What the options strip's Gap and Aisle say of themselves: each one's sentence where it holds
+/** What the tool card's Gap and Aisle say of themselves: each one's sentence where it holds
  *  no length, else ''. */
 export function rowFieldErrors() {
   return {
     gap: lengthMmOf(rowChoices.gapCm) === null ? saidNoLength('gap') : '',
     aisle: lengthMmOf(rowChoices.aisleCm) === null ? saidNoLength('aisle') : '',
   };
+}
+
+/** How near a step's line, in degrees, a table's snap may lie and still be kept. */
+export const ROW_ANGLE_HELD = 0.5;
+
+/**
+ * A point laid after `last` with no Shift held: the pointer's place `at` kept at its distance
+ * from `last`, its line from there held to the nearest 15° step. A table's corner or edge the
+ * pointer snapped to (`snapped`, where it differs from `at`) is kept only where it lies within
+ * half a degree of a step, so the line never takes an angle of a table's choosing.
+ */
+export function heldToTheSteps(last: PointMm, at: PointMm, snapped: PointMm): PointMm {
+  const offTheSteps = (point: PointMm) => {
+    const angle = angleFrom(last, point);
+    return Math.abs(snapAngle(angle, ANGLE_STEP) - angle);
+  };
+  const didSnap = snapped.xMm !== at.xMm || snapped.yMm !== at.yMm;
+  if (didSnap && offTheSteps(snapped) < ROW_ANGLE_HELD) return snapped;
+  const length = Math.hypot(at.xMm - last.xMm, at.yMm - last.yMm);
+  const turn = (snapAngle(angleFrom(last, at), ANGLE_STEP) * Math.PI) / 180;
+  return { xMm: last.xMm + length * Math.cos(turn), yMm: last.yMm + length * Math.sin(turn) };
 }
 
 /** What a row is never laid over: the tables as they stand turned, and the no-table zones. */
@@ -180,14 +191,7 @@ export function standingShapes(
 ): PointMm[][] {
   return [
     ...layout.tables.map((table) => tableCorners(table, sizeOf(table))),
-    ...layout.zones.map((zone) =>
-      cornersOf({
-        left: zone.xMm,
-        top: zone.yMm,
-        right: zone.xMm + zone.widthMm,
-        bottom: zone.yMm + zone.depthMm,
-      }),
-    ),
+    ...layout.zones.map(zoneCorners),
   ];
 }
 
@@ -249,10 +253,13 @@ export interface RowTool {
   crosshair: Readonly<ShallowRef<PointMm | null>>;
   /** Whether a path is being drawn: a point is laid, or a stroke is in hand. */
   pending: ComputedRef<boolean>;
+  /** Whether placing would act: a stroke is in hand, the path is drawn or closed, or two points or
+   *  more are laid. */
+  placeable: ComputedRef<boolean>;
   /** Whether a stroke is in hand: a line being drawn by a drag, not yet let go. */
   stroking: ComputedRef<boolean>;
-  /** Whether the pending path came from a curved stroke: it takes no further point, and the
-   *  pointer's place is no part of it. */
+  /** Whether the pending path came from a stroke, straight or curved: it takes no further point,
+   *  and the pointer's place is no part of it. */
   drawn: Readonly<ShallowRef<boolean>>;
   /** Whether the path has been closed into a shape, its last point joined to its first. */
   closed: Readonly<ShallowRef<boolean>>;
@@ -266,10 +273,14 @@ export interface RowTool {
   closeAt: ComputedRef<PointMm | null>;
   /** The smooth path through the points, and the pointer's place while it is over the map. */
   runs: ComputedRef<Run[]>;
-  /** The row that placing would add: none while `refusal` stands. */
+  /** The row that placing would add, along the points laid: none while `refusal` stands. */
   poses: ComputedRef<PathPose[]>;
-  /** Why no row is shown or placed: the sentence of a gap that is no length, or of an aisle that
-   *  is none while more than one row is asked, else ''. */
+  /** The tables the path would add past its last point if a point were laid where the pointer
+   *  is: shown as ghosts, never placed (the QC walk of 2026-11-16, item 17). */
+  ghosts: ComputedRef<PathPose[]>;
+  /** Why no row is shown or placed: the sentence of a gap that is no length, of an aisle that is
+   *  none while more than one row is asked, or of a group field that holds no usable number, else
+   *  ''. */
   refusal: ComputedRef<string>;
   /** The size of the tables it would add. */
   size: ComputedRef<SizeMm>;
@@ -299,8 +310,8 @@ export interface RowTool {
   strokeTo(samples: readonly PointMm[] | null, options?: StrokeOptions): void;
   /**
    * Let the stroke go. `'none'`: there was none, or it was no line. `'straight'`: its two ends
-   * are the path, for the editor to place at once. `'curve'`: the points fitted to it are the
-   * path's, closed where it came back to its start, and the path is `drawn`.
+   * are the path's points. `'curve'`: the points fitted to it are the path's, closed where it came
+   * back to its start. Either way the path is `drawn`, and waits for Enter.
    */
   endStroke(): 'none' | 'straight' | 'curve';
   moveCrosshair(to: PointMm): void;
@@ -311,7 +322,8 @@ export interface RowTool {
   /** Drop the path and the crosshair's place, for another layout. */
   reset(): void;
   /** Add the row shown to the layout, selected, as one change, and clear the path: the tables
-   *  added, none where no table fits. */
+   *  added, none where no table fits. A single point laid is no row yet: it is kept, and nothing
+   *  is added. */
   place(): FloorplanTable[];
 }
 
@@ -367,13 +379,18 @@ export function useRowTool(options: RowToolOptions): RowTool {
   // The aisle is read only between rows, so it refuses only when more than one is asked.
   const refusal = computed(() => {
     const errors = rowFieldErrors();
-    return errors.gap || (rowsOf(rowChoices.rows) > 1 ? errors.aisle : '');
+    return errors.gap || (rowsOf(rowChoices.rows) > 1 ? errors.aisle : '') || groupRefusal();
   });
-  const poses = computed(() => {
+  // The path through the points laid alone: what placing adds. The pointer's place only shows
+  // what a point there would add.
+  const laidRuns = computed(() =>
+    read.value ? strokeRuns(read.value) : smoothRuns(points.value, { closed: drawnClosed.value }),
+  );
+  /** Each row's tables along `along`, the first row first: the order they are numbered in. */
+  const rowsAlong = (along: Run[]): PathPose[][] => {
     const now = layout();
-    if (!now || !runs.value.length || refusal.value) return [];
-    // The rows in order, the first whole and then the next: the order they are numbered in.
-    return placeRows(runs.value, {
+    if (!now || !along.length || refusal.value) return [];
+    return placeRows(along, {
       ...size.value,
       gapMm: lengthMmOf(rowChoices.gapCm) ?? 0,
       side: side.value,
@@ -384,8 +401,21 @@ export function useRowTool(options: RowToolOptions): RowTool {
       aisleMm: lengthMmOf(rowChoices.aisleCm) ?? 0,
       // A closed shape's tables are always spread round it; an open path's where asked.
       spread: drawnClosed.value || rowChoices.spread,
-    }).flat();
+      group: groupingOf(),
+    });
+  };
+  const laidRows = computed(() => rowsAlong(laidRuns.value));
+  const poses = computed(() => laidRows.value.flat());
+  // The whole path again with the pointer's place, each row past the tables its points alone
+  // hold.
+  const ghosts = computed(() => {
+    if (read.value || path.value.length === points.value.length) return [];
+    return rowsAlong(runs.value).flatMap((whole, k) => whole.slice(laidRows.value[k]?.length ?? 0));
   });
+
+  const placeable = computed(
+    () => read.value !== null || drawn.value || drawnClosed.value || points.value.length >= 2,
+  );
 
   function clear() {
     points.value = [];
@@ -399,6 +429,8 @@ export function useRowTool(options: RowToolOptions): RowTool {
   function place(): FloorplanTable[] {
     // A row refused for a field that is no length is kept, to be placed once the field is mended.
     if (refusal.value) return [];
+    // A single point is no row yet: it waits for the next, whatever the pointer shows past it.
+    if (!placeable.value) return [];
     const sectionId = options.sectionId();
     const tableTypeId = options.tableTypeId();
     const added: NewTable[] = poses.value.map((pose) => ({
@@ -419,6 +451,7 @@ export function useRowTool(options: RowToolOptions): RowTool {
     points,
     crosshair,
     pending: computed(() => points.value.length > 0 || stroke.value !== null),
+    placeable,
     stroking: computed(() => stroke.value !== null),
     drawn,
     closed,
@@ -430,6 +463,7 @@ export function useRowTool(options: RowToolOptions): RowTool {
     }),
     runs,
     poses,
+    ghosts,
     refusal,
     size,
     // A closed shape's count stands at its first point, where the click that closed it was.
@@ -509,7 +543,10 @@ export function useRowTool(options: RowToolOptions): RowTool {
       hover.value = null;
       closing.value = false;
       if (was.kind === 'straight') {
+        // A straight line waits as a curve does, its two ends to adjust, for Enter to place it
+        // (the QC walk of 2026-11-16, item 17).
         points.value = [...was.ends];
+        drawn.value = true;
         return 'straight';
       }
       const fit = fitStroke(held.samples, held.options);

@@ -81,6 +81,11 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
+/** The tables beside the line, on `side`, where Centred on the line is the default (item 17). */
+function standBeside(side: 'left' | 'right') {
+  Object.assign(rowChoices, { centred: false, side });
+}
+
 describe('a path closed into a shape', () => {
   it('cannot close with fewer than three points', () => {
     const { row } = aTool();
@@ -95,7 +100,7 @@ describe('a path closed into a shape', () => {
 
   it('closes into a ring that stays pending, its tables spread evenly, the seam like the rest', () => {
     const { row, tables } = aTool();
-    rowChoices.side = 'left';
+    standBeside('left');
     for (const point of roundTheStage) row.addPoint(point);
     const open = row.poses.value.length;
     expect(row.close()).toBe(true);
@@ -112,6 +117,22 @@ describe('a path closed into a shape', () => {
     row.hoverAt(p(1000, 1000));
     expect(row.poses.value).toHaveLength(10);
     expect(row.countAt.value).toEqual(roundTheStage[0]);
+  });
+
+  it('centred on the line, closes into a ring whose tables stand on it, spread evenly', () => {
+    const { row } = aTool();
+    for (const point of roundTheStage) row.addPoint(point);
+    row.close();
+    const poses = row.poses.value;
+    expect(poses.length).toBeGreaterThan(5);
+    // On the smooth loop through the eight points, which bows a little inside their circle.
+    for (const pose of poses) {
+      const away = Math.hypot(pose.xMm - 15_000, pose.yMm - 11_000);
+      expect(away).toBeGreaterThan(2900);
+      expect(away).toBeLessThanOrEqual(3000);
+    }
+    const gaps = gapsRound(poses);
+    expect(Math.max(...gaps) - Math.min(...gaps)).toBeLessThan(1);
   });
 
   it('takes no further point, and opens again as it was', () => {
@@ -131,7 +152,7 @@ describe('a path closed into a shape', () => {
 
   it('is shown closed while the pointer rests on its first point, and not after', () => {
     const { row } = aTool();
-    rowChoices.side = 'left';
+    standBeside('left');
     for (const point of roundTheStage) row.addPoint(point);
     row.hoverClose(true);
     expect(row.closing.value).toBe(true);
@@ -188,7 +209,7 @@ describe('a path closed into a shape', () => {
 
   it('is placed as a ring numbered from the first point clicked, in the direction drawn', () => {
     const { row, tables, editor } = aTool();
-    rowChoices.side = 'left';
+    standBeside('left');
     for (const point of roundTheStage) row.addPoint(point);
     row.close();
     const added = row.place();
@@ -236,6 +257,7 @@ describe('several rows in one gesture', () => {
 
   it('places two straight rows an aisle apart, the first row numbered whole, then the next', () => {
     const { row } = aTool();
+    standBeside('right');
     rowChoices.rows = '2';
     row.strokeTo([p(2000, 3000), p(22_000, 3000)], STROKE);
     expect(row.poses.value).toHaveLength(20);
@@ -247,6 +269,17 @@ describe('several rows in one gesture', () => {
     // A table's depth and the aisle of 120 cm on: 1.2 m of clear floor between the rows.
     for (const table of second) expect(table.yMm).toBeCloseTo(3380 + 760 + 1200, 2);
     expect(second.map((table) => table.xMm)).toEqual(first.map((table) => table.xMm));
+  });
+
+  it('centred on the line, stands the first row on it and the next a table and the aisle on', () => {
+    const { row } = aTool();
+    rowChoices.rows = '2';
+    row.strokeTo([p(2000, 3000), p(22_000, 3000)], STROKE);
+    expect(row.side.value).toBe('centre');
+    const poses = row.poses.value;
+    expect(poses).toHaveLength(20);
+    for (const pose of poses.slice(0, 10)) expect(pose.yMm).toBeCloseTo(3000, 2);
+    for (const pose of poses.slice(10)) expect(pose.yMm).toBeCloseTo(3000 + 760 + 1200, 2);
   });
 
   it('holds the aisle typed, in centimetres, and stands rows back to back at none', () => {
@@ -262,7 +295,7 @@ describe('several rows in one gesture', () => {
   it('offsets the rows to the side the tables stand on', () => {
     const { row } = aTool();
     rowChoices.rows = '2';
-    rowChoices.side = 'left';
+    standBeside('left');
     row.strokeTo([p(2000, 9000), p(22_000, 9000)], STROKE);
     expect(row.poses.value[0].yMm).toBeCloseTo(9000 - 380, 6);
     expect(row.poses.value[10].yMm).toBeCloseTo(9000 - 380 - 1960, 6);
@@ -270,7 +303,7 @@ describe('several rows in one gesture', () => {
 
   it('places rings within rings round a closed shape', () => {
     const { row } = aTool();
-    rowChoices.side = 'left';
+    standBeside('left');
     rowChoices.rows = '2';
     for (const point of roundTheStage) row.addPoint(point);
     row.close();

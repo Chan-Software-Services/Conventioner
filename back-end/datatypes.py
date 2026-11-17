@@ -1498,9 +1498,10 @@ class FloorplanZone(BaseModel):
     """A no-table zone of a layout: a rectangle from its top-left corner, in millimetres, turned
     ``rotation`` degrees clockwise about its centre (T422, D16).
 
-    The turn is stored 0 to 360: a finite one is read into that range as it parses, so a zone
-    turned -30 is stored turned 330. One that is not finite is kept as sent, for the floorplan's
-    bounds to refuse with their sentence (``floorplan_limits.measurement_refusal``).
+    The turn is stored from 0 up to 360: a finite one is read into that range as it parses, so a
+    zone turned -30 is stored turned 330, and one a whisker short of a whole circle, which the
+    modulo rounds up to 360 itself, is stored as 0. One that is not finite is kept as sent, for the
+    floorplan's bounds to refuse with their sentence (``floorplan_limits.measurement_refusal``).
     """
 
     id: str = Field(default_factory=new_id)
@@ -1514,7 +1515,10 @@ class FloorplanZone(BaseModel):
     @field_validator("rotation")
     @classmethod
     def _turned_within_a_circle(cls, value: float) -> float:
-        return value % 360 if math.isfinite(value) else value
+        if not math.isfinite(value):
+            return value
+        turned = value % 360
+        return 0.0 if turned == 360 else turned
 
 
 class LabelPoint(BaseModel):

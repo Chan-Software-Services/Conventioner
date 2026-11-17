@@ -483,6 +483,20 @@ def _area_zone(
     return zone.difference(unary_union(usable)) if usable else zone
 
 
+def _row_lefts(left: float, right: float, width: float, grouping: Optional[Dict]) -> List[float]:
+    """Where each table of a clear stretch from *left* to *right* begins: end to end, or with
+    *grouping* in groups of ``grouping["size"]``, end to end, with ``grouping["spacer_mm"]`` of
+    floor before the next group."""
+    lefts: List[float] = []
+    x = left
+    while x + width <= right + _FIT_SLACK_MM:
+        lefts.append(x)
+        x += width
+        if grouping and len(lefts) % grouping["size"] == 0:
+            x += grouping["spacer_mm"]
+    return lefts
+
+
 def _rows_place(
     zone: BaseGeometry,
     tables: List[BetaTableType],
@@ -490,12 +504,16 @@ def _rows_place(
     spacing_mm: float,
     direction: str,
     deadline: float,
+    grouping: Optional[Dict] = None,
 ) -> Tuple[List[Dict], bool]:
     """Fill *zone* with rows of tables: each row's tables end to end, touching, from the left of
     every stretch of the row that is clear, and the rows *spacing_mm* apart, from the zone's top.
     ``across`` rows run across the page, their tables unturned; ``down`` rows run down it, from the
     zone's left, their tables turned a quarter. The answer is in the order placed: row by row, each
     from its start.
+
+    With *grouping* (``size`` and ``spacer_mm``) a row's tables stand in groups of ``size``, end to
+    end, with ``spacer_mm`` of floor before the next group; each clear stretch starts its own.
 
     A type's tables are placed whole before the next type's, which keep the aisle from them.
     Returns the placed tables and whether it stopped at *deadline*, a ``time.monotonic()`` reading,
@@ -518,9 +536,7 @@ def _rows_place(
             if time.monotonic() >= deadline:
                 return placed, True
             for left, right in _free_stretches(zone, top, depth):
-                fit = int((right - left + _FIT_SLACK_MM) // width)
-                for nth in range(min(fit, wanted - len(mine))):
-                    x = left + nth * width
+                for x in _row_lefts(left, right, width, grouping)[: wanted - len(mine)]:
                     mine.append(box(x, top, x + width, top + depth))
                     centre = (x + width / 2, top + depth / 2)
                     placed.append({
@@ -567,6 +583,7 @@ def auto_place_tables(
     area_polygon_mm: Optional[Sequence[Sequence[float]]] = None,
     existing_mm: Sequence[Sequence[Sequence[float]]] = (),
     direction: str = "across",
+    grouping: Optional[Dict] = None,
 ) -> PlacementResult:
     """Auto-place rectangular tables inside the room boundary, or inside an area of it.
 
@@ -602,6 +619,9 @@ def auto_place_tables(
         The tables already placed, each its four corners as it stands turned. Read with an area.
     direction:
         ``across`` or ``down``: which way an area's rows run.
+    grouping:
+        ``size`` and ``spacer_mm``, or None: an area's rows in groups of ``size`` tables, end to
+        end, with ``spacer_mm`` of floor before the next group. Read with an area.
 
     Returns
     -------
@@ -639,7 +659,7 @@ def auto_place_tables(
             area, _build_room_polygon([], room_mm), obstacle_objects, existing_mm, table_spacing,
         )
         placed, timed_out = _rows_place(
-            zone, table_objects, counts, table_spacing, direction, deadline,
+            zone, table_objects, counts, table_spacing, direction, deadline, grouping,
         )
         return PlacementResult(placed=placed, timed_out=timed_out)
 

@@ -3,6 +3,10 @@
  * one step of undo that saves; and a table put down on a zone, by a drag, a click or a drop, pushed
  * off it to the nearest clear place, as a snap takes it, while one carried by keyboard crosses a
  * zone freely until it is dropped.
+ *
+ * A zone may be turned (T422, item 19): its real shape keeps a row, a fill, a duplicate and Add
+ * table's free place off the floor it covers, a table put down on it is pushed off the box round
+ * it (D15), and it is held inside the hall as it stands turned.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -16,8 +20,11 @@ import {
   shapesOverlap,
   tableCorners,
   zoneBounds,
+  zoneCorners,
   type Bounds,
 } from '@/components/layout/layoutGeometry';
+import { fillRequest } from '@/components/layout/layoutFill';
+import { rowOnFrom, standingShapes } from '@/components/layout/layoutRow';
 import type { SavedLayout } from '@/components/layout/layoutSave';
 import { MAX_ZONES, useLayoutEditor } from '@/components/layout/useLayoutEditor';
 import { mathCalls } from './support/mathCalls';
@@ -272,6 +279,106 @@ describe('a table put down on a zone', () => {
   });
 });
 
+// ── A turned zone ────────────────────────────────────────────────────────────
+
+/** A ramp 10 m by 1 m about (40 m, 30 m), turned 45°: it runs down the page from left to right,
+ *  and the box round it, (36.1 m, 26.1 m) to (43.9 m, 33.9 m), leaves its top-right and its
+ *  bottom-left corners clear of it. */
+const RAMP: FloorplanZone = {
+  id: 'zone-ramp',
+  label: 'Ramp',
+  xMm: 35_000,
+  yMm: 29_500,
+  widthMm: 10_000,
+  depthMm: 1000,
+  rotation: 45,
+};
+const onTheRamp = (t: FloorplanTable) =>
+  shapesOverlap(tableCorners(t, SIX_FOOT), zoneCorners(RAMP));
+const inTheRampsBox = (t: FloorplanTable) =>
+  shapesOverlap(tableCorners(t, SIX_FOOT), cornersOf(zoneBounds(RAMP)));
+
+describe('a turned zone in the model', () => {
+  it('is added with its turn, as one step', () => {
+    const { editor, zonesNow } = anEditor([], []);
+    const id = editor.addZone({ left: 8000, top: 7000, right: 12_000, bottom: 9000 }, '', 30.0004);
+    expect(zonesNow()).toEqual([
+      { id, label: '', xMm: 8000, yMm: 7000, widthMm: 4000, depthMm: 2000, rotation: 30 },
+    ]);
+    editor.undo();
+    expect(zonesNow()).toEqual([]);
+  });
+
+  it('is held inside the hall as it stands turned, not as its unturned box', () => {
+    const { editor, zonesNow } = anEditor([], []);
+    // Its unturned box is inside, from 0.5 m; turned, it reaches past the hall's left edge.
+    editor.addZone({ left: 500, top: 20_000, right: 4500, bottom: 24_000 }, '', 45);
+    const [zone] = zonesNow();
+    expect(zone.rotation).toBe(45);
+    expect(zone.widthMm).toBe(4000);
+    expect(zone.yMm).toBe(20_000);
+    expect(zoneBounds(zone).left).toBeGreaterThan(-0.01);
+    expect(zoneBounds(zone).left).toBeLessThan(1);
+  });
+
+  it('keeps a row off the floor it covers, and lays one where only its unturned box stood', () => {
+    const shapes = standingShapes(aLayout([], [RAMP]), () => SIX_FOOT);
+    // Along the ramp's own middle line, from 2 m right of its centre: its unturned box would
+    // reach 3 m further, and the ramp itself is well behind.
+    const laid = rowOnFrom({ xMm: 42_000, yMm: 30_000, rotation: 0 }, SIX_FOOT, 3, {
+      gapMm: 300,
+      obstacles: shapes,
+      hall: { widthMm: 60_000, heightMm: 45_000 },
+    });
+    expect(laid).toHaveLength(3);
+    expect(laid[0].xMm).toBeCloseTo(44_130, 0);
+    const across = laid.map((pose) => table('x', pose.xMm, pose.yMm));
+    expect(across.some(onTheRamp)).toBe(false);
+    expect(inTheRampsBox(across[0])).toBe(true);
+  });
+
+  it("asks a fill to keep off the zone's turned shape", () => {
+    const area = {
+      kind: 'box' as const,
+      box: { left: 30_000, top: 20_000, right: 50_000, bottom: 40_000 },
+    };
+    const choice = { count: null, direction: 'across' as const, aisleMm: 1500 };
+    const request = fillRequest(aLayout([], [RAMP]), [SIX_FOOT], 'six-foot', area, choice);
+    expect(request.obstacles).toEqual([
+      { polygon: zoneCorners(RAMP).map((c) => [c.xMm, c.yMm]), type: 'no_table_zone' },
+    ]);
+  });
+
+  it("duplicates beside a table where the zone's shape leaves room, with a fresh id (D45)", () => {
+    const { editor, byId } = anEditor([table('a', 43_500, 28_940)], [RAMP]);
+    const [copy] = editor.duplicate(['a']);
+    expect(copy).toBe('new-1');
+    expect(copy).not.toBe('a');
+    // One table depth and 300 mm down, where the ramp's unturned box would stand, into the box
+    // round it, clear of the ramp itself.
+    expect(byId(copy)).toMatchObject({ xMm: 43_500, yMm: 30_000 });
+    expect(inTheRampsBox(byId(copy))).toBe(true);
+    expect(onTheRamp(byId(copy))).toBe(false);
+  });
+
+  it('leaves a table put down in the free corner of its box where it is', () => {
+    const { editor, byId } = anEditor([], [RAMP]);
+    const [id] = editor.addTables([
+      { sectionId: 'gold', tableTypeId: 'six-foot', xMm: 42_500, yMm: 27_200 },
+    ]);
+    expect(byId(id)).toMatchObject({ xMm: 42_500, yMm: 27_200 });
+  });
+
+  it('pushes a table put down on it off the box round it (D15)', () => {
+    const { editor, byId } = anEditor([], [RAMP]);
+    const [id] = editor.addTables([
+      { sectionId: 'gold', tableTypeId: 'six-foot', xMm: 40_000, yMm: 30_000 },
+    ]);
+    expect(onTheRamp(byId(id))).toBe(false);
+    expect(inTheRampsBox(byId(id))).toBe(false);
+  });
+});
+
 // ── The card ─────────────────────────────────────────────────────────────────
 
 describe('the No-table zones card', () => {
@@ -343,8 +450,11 @@ describe('the No-table zones card', () => {
   });
 
   it('says what was drawn and removed', () => {
-    expect(saidZoneAdded({ left: 0, top: 0, right: 4000, bottom: 3000 })).toBe(
+    expect(saidZoneAdded({ widthMm: 4000, depthMm: 3000 })).toBe(
       'Added a no-table zone 4.0 m by 3.0 m. Name it in the panel.',
+    );
+    expect(saidZoneAdded({ widthMm: 4000, depthMm: 3000, rotation: 22.5 })).toBe(
+      'Added a no-table zone 4.0 m by 3.0 m, turned 22.5°. Name it in the panel.',
     );
     expect(saidZoneRemoved('Stage')).toBe('Removed the no-table zone Stage');
     expect(saidZoneRemoved(' ')).toBe('Removed a no-table zone');

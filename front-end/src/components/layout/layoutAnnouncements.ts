@@ -5,10 +5,10 @@
  * The page holds one polite live region and puts these in it.
  */
 import { ref, type Ref } from 'vue';
-import type { FloorplanTable } from '@/assets/types/datatypes';
+import type { FloorplanTable, FloorplanZone } from '@/assets/types/datatypes';
 import { plural } from '@/utils/utils';
 import { metres, placeInMetres, tableCode, type LayoutSection } from './layoutDrawing';
-import type { Alignment, Bounds, PointMm } from './layoutGeometry';
+import type { Alignment, PointMm } from './layoutGeometry';
 
 /** A table's code among the sections the map draws; null for a table in no section. */
 function codeOf(table: FloorplanTable, sections: readonly LayoutSection[]): string | null {
@@ -202,12 +202,16 @@ export function saidOpened(count: RowHolds): string {
   return `Opened again. ${held(count)}`;
 }
 
-/** A curved stroke let go, smoothed into a path that waits: "Curve drawn through 6 points. 10
- *  tables. Enter places it."; one that came back to its start, "Loop drawn through 8 points. 14
- *  tables. Enter places it."; while a field refuses, its sentence, and no Enter, which would
- *  place nothing. */
+/** A stroke let go, a path that waits for Enter: a straight one, its two ends, "Line drawn. 10
+ *  tables. Enter places it."; a curved one, smoothed, "Curve drawn through 6 points. 10 tables.
+ *  Enter places it."; one that came back to its start, "Loop drawn through 8 points. 14 tables.
+ *  Enter places it."; while a field refuses, its sentence, and no Enter, which would place
+ *  nothing. */
 export function saidCurveDrawn(points: number, tables: RowHolds, closed: boolean): string {
-  const drawn = `${closed ? 'Loop' : 'Curve'} drawn through ${points} points. ${held(tables)}`;
+  const drawn =
+    !closed && points === 2
+      ? `Line drawn. ${held(tables)}`
+      : `${closed ? 'Loop' : 'Curve'} drawn through ${points} points. ${held(tables)}`;
   return typeof tables === 'string' ? drawn : `${drawn} Enter places it.`;
 }
 
@@ -244,10 +248,14 @@ export function useAnnouncements(): { said: Ref<string>; say: (words: string) =>
   return { said, say };
 }
 
-/** "Added a no-table zone 4.0 m by 3.0 m. Name it in the panel." */
-export function saidZoneAdded(box: Bounds): string {
+/** "Added a no-table zone 4.0 m by 3.0 m. Name it in the panel.", with ", turned 30°" after its
+ *  size for a turned one: the zone as it was stored. */
+export function saidZoneAdded(
+  zone: Pick<FloorplanZone, 'widthMm' | 'depthMm' | 'rotation'>,
+): string {
+  const turned = zone.rotation ? `, turned ${zone.rotation}°` : '';
   return (
-    `Added a no-table zone ${metres(box.right - box.left)} by ${metres(box.bottom - box.top)}. ` +
+    `Added a no-table zone ${metres(zone.widthMm)} by ${metres(zone.depthMm)}${turned}. ` +
     'Name it in the panel.'
   );
 }

@@ -45,6 +45,7 @@ How the map is read, its gate, its answer and its image: [the public map](../imp
 ## Consequences
 
 - An organizer decides what is public, question by question; a form with no short text question for a business name has no public map until one is asked.
+- How an Admin opens the map and a visitor finds a vendor on it is [the market's map](../business/flows/the-markets-map.md).
 - A vendor's seat is never public before results are, so a vendor learns their table before a stranger does.
 - An archived market's map is closed for good, since its switch can no longer be turned off.
 - The answer may be cached for a minute and the image for five; there is no rate limit of its own, as the vendor page's read has none.

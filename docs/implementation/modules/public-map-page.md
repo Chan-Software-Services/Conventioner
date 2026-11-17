@@ -63,3 +63,4 @@ Every link opens in a new tab with `rel="noopener noreferrer"`.
 
 - [ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md): the map publishes only the answers the organizer chose, cleaned.
 - [A gated market answers as absent](../../business/rules/a-gated-market-answers-as-absent.md): a closed map reads as no market.
+- [The market's map](../../business/flows/the-markets-map.md): how a visitor finds a vendor on it (K8).

@@ -62,6 +62,11 @@ export class LayoutPage {
   readonly addType: Locator;
   readonly rowGap: Locator;
   readonly rowStand: Locator;
+  /** The row card's "Centred on the line", the default, and "Beside the line" radios. */
+  readonly rowCentred: Locator;
+  readonly rowBeside: Locator;
+  /** The row card's two stand choices, in the order they stand. */
+  readonly rowStandChoices: Locator;
   readonly rowFlip: Locator;
   readonly rowRows: Locator;
   readonly rowAisle: Locator;
@@ -72,8 +77,16 @@ export class LayoutPage {
   readonly rowCount: Locator;
   readonly rowPoints: Locator;
   readonly rowTables: Locator;
+  /** What a point at the pointer would add past the row's last point: never placed. */
+  readonly rowGhosts: Locator;
   readonly rowLines: Locator;
   readonly rowCrosshair: Locator;
+  /** "Group tables" on Row of tables' and Fill an area's cards, its two fields and their lines. */
+  readonly group: Locator;
+  readonly groupSize: Locator;
+  readonly groupSpacer: Locator;
+  readonly groupSizeError: Locator;
+  readonly groupSpacerError: Locator;
   readonly toolFill: Locator;
   /** "Fill what is in view", on Fill an area's card. */
   readonly fillView: Locator;
@@ -158,6 +171,11 @@ export class LayoutPage {
   readonly imageFaded: Locator;
   readonly toolZone: Locator;
   readonly zoneBox: Locator;
+  /** The no-table zone drawn and not added yet, its body, and its turn knob (T422, item 19). */
+  readonly zoneDraft: Locator;
+  readonly zoneDraftBody: Locator;
+  readonly zoneTurn: Locator;
+  readonly zonesHint: Locator;
   readonly zonesCard: Locator;
   readonly zoneRows: Locator;
   readonly zoneLabels: Locator;
@@ -250,6 +268,9 @@ export class LayoutPage {
     this.addType = page.getByTestId('layout-add-type');
     this.rowGap = page.getByTestId('layout-row-gap');
     this.rowStand = page.getByTestId('layout-row-stand');
+    this.rowCentred = this.rowStand.getByRole('radio', { name: 'Centred on the line' });
+    this.rowBeside = this.rowStand.getByRole('radio', { name: 'Beside the line' });
+    this.rowStandChoices = this.rowStand.getByTestId(/^layout-row-(centred|beside)$/);
     this.rowFlip = page.getByTestId('layout-row-flip');
     this.rowRows = page.getByTestId('layout-row-rows');
     this.rowAisle = page.getByTestId('layout-row-aisle');
@@ -259,8 +280,14 @@ export class LayoutPage {
     this.rowCount = this.map.getByTestId('layout-row-count');
     this.rowPoints = this.map.getByTestId('layout-row-point');
     this.rowTables = this.map.getByTestId('layout-row-table');
+    this.rowGhosts = this.map.getByTestId('layout-row-ghost');
     this.rowLines = this.map.getByTestId('layout-row-line');
     this.rowCrosshair = this.map.getByTestId('layout-row-crosshair');
+    this.group = page.getByTestId('layout-group');
+    this.groupSize = page.getByTestId('layout-group-size');
+    this.groupSpacer = page.getByTestId('layout-group-spacer');
+    this.groupSizeError = page.getByTestId('layout-group-size-error');
+    this.groupSpacerError = page.getByTestId('layout-group-spacer-error');
     this.toolFill = this.toolbar.getByRole('button', { name: 'Fill an area', exact: true });
     this.fillView = page.getByTestId('layout-fill-view');
     this.fillPreview = this.map.getByTestId('layout-fill-preview');
@@ -322,6 +349,10 @@ export class LayoutPage {
     this.settingsClose = page.getByTestId('layout-settings-close-button');
     this.toolZone = this.toolbar.getByRole('button', { name: 'No-table zone', exact: true });
     this.zoneBox = this.map.getByTestId('layout-zone-box');
+    this.zoneDraft = this.map.getByTestId('layout-zone-draft');
+    this.zoneDraftBody = this.map.getByTestId('layout-zone-draft-body');
+    this.zoneTurn = this.map.getByTestId('layout-zone-turn');
+    this.zonesHint = page.getByTestId('layout-panel-zones-hint');
     this.zonesCard = page.getByTestId('layout-panel-zones');
     this.zoneRows = page.getByTestId('layout-panel-zone');
     this.zoneLabels = page.getByTestId('layout-zone-label');
@@ -543,6 +574,61 @@ export class LayoutPage {
     await this.page.keyboard.up('Shift');
   }
 
+  /** A corner of the zone drawn, by the signs of its side in the zone's own axes ("1,1" is its own
+   *  bottom-right), or an edge's whole length or its middle handle ("1,0" its own right). */
+  zoneCorner(handle: string): Locator {
+    return this.map.locator(`[data-testid="layout-zone-corner"][data-handle="${handle}"]`);
+  }
+
+  zoneEdge(handle: string): Locator {
+    return this.map.locator(`[data-testid="layout-zone-edge"][data-handle="${handle}"]`);
+  }
+
+  zoneEdgeHandle(handle: string): Locator {
+    return this.map.locator(`[data-testid="layout-zone-edge-handle"][data-handle="${handle}"]`);
+  }
+
+  /** The zone drawn as it stands: its centre and turn from its frame, its sides from its body, in
+   *  millimetres and degrees; null with none. */
+  async zoneDraftNow(): Promise<{
+    cxMm: number;
+    cyMm: number;
+    widthMm: number;
+    depthMm: number;
+    rotation: number;
+  } | null> {
+    if (!(await this.zoneDraft.count())) return null;
+    const frame = (await this.zoneDraft.getAttribute('transform')) ?? '';
+    const [, cx, cy, turn] = frame
+      .match(/translate\(([-\d.e]+) ([-\d.e]+)\) rotate\(([-\d.e]+)\)/)!
+      .map(Number);
+    return {
+      cxMm: cx,
+      cyMm: cy,
+      widthMm: Number(await this.zoneDraftBody.getAttribute('width')),
+      depthMm: Number(await this.zoneDraftBody.getAttribute('height')),
+      rotation: turn,
+    };
+  }
+
+  /**
+   * Press on a part of the map (a handle of the zone drawn, say) at its middle on screen, and drag
+   * to a point of the hall, in millimetres, with the pointer, as a person does; `shift` holds
+   * Shift through the drag.
+   */
+  async dragFrom(part: Locator, to: [number, number], shift = false): Promise<void> {
+    const box = (await part.boundingBox())!;
+    const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const end = await this.onScreen(to);
+    if (shift) await this.page.keyboard.down('Shift');
+    await this.page.mouse.move(start.x, start.y);
+    await this.page.mouse.down();
+    await this.page.mouse.move((start.x + end.x) / 2, (start.y + end.y) / 2, { steps: 4 });
+    await this.page.mouse.move(end.x, end.y, { steps: 4 });
+    await this.page.mouse.up();
+    if (shift) await this.page.keyboard.up('Shift');
+  }
+
   /** A no-table zone of the map, by its name ("No-table zone: Stage"). */
   zone(name: string): Locator {
     return this.map.getByRole('img', { name, exact: true });
@@ -602,6 +688,12 @@ export class LayoutPage {
   async clickAt(mm: [number, number]): Promise<void> {
     const at = await this.onScreen(mm);
     await this.page.mouse.click(at.x, at.y);
+  }
+
+  /** Right-click the map at a point of the hall, in millimetres, as a person asks for a menu. */
+  async rightClickAt(mm: [number, number]): Promise<void> {
+    const at = await this.onScreen(mm);
+    await this.page.mouse.click(at.x, at.y, { button: 'right' });
   }
 
   /**

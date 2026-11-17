@@ -51,6 +51,16 @@ class RoomSize(BaseModel):
     height_mm: Annotated[float, Field(strict=True, gt=0)]
 
 
+class Grouping(BaseModel):
+    """Fill an area's rows in groups (T422): ``size`` tables end to end, then ``spacer_mm`` of floor
+    before the next group, along each clear stretch of a row."""
+
+    model_config = ConfigDict(allow_inf_nan=False, extra="forbid")
+
+    size: Annotated[int, Field(strict=True, ge=1, le=50)]
+    spacer_mm: Annotated[float, Field(strict=True, ge=0, le=100_000)]
+
+
 class PlaceTablesRequest(BaseModel):
     """The placement's body, in the wire shape the layout's Fill an area (``layoutFill.ts``) sends:
     snake case, but for ``aisle_config``'s camel-cased keys. ``market_id`` is read before it, for
@@ -62,7 +72,8 @@ class PlaceTablesRequest(BaseModel):
 
     Fill an area adds the area, as a box (``area_mm``: x, y, width, depth) or a drawn shape's
     corners (``area_polygon_mm``), the tables already placed, each by its four corners as it
-    stands turned (``existing_mm``), and which way the rows run (``direction``).
+    stands turned (``existing_mm``), which way the rows run (``direction``), and, where its tables
+    stand in groups, how many to a group and the spacer between groups (``grouping``).
     """
 
     model_config = ConfigDict(allow_inf_nan=False)
@@ -78,6 +89,7 @@ class PlaceTablesRequest(BaseModel):
     area_polygon_mm: Optional[List[_Point]] = None
     existing_mm: List[Tuple[_Point, _Point, _Point, _Point]] = []
     direction: Literal["across", "down"] = "across"
+    grouping: Optional[Grouping] = None
 
 
 def _parsed_request(data, market_id: str) -> PlaceTablesRequest:
@@ -121,14 +133,18 @@ def place_tables():
             },
             "area_mm": [2000, 3000, 20000, 12000],
             "existing_mm": [[[x, y], [x, y], [x, y], [x, y]]],
-            "direction": "across"
+            "direction": "across",
+            "grouping": {"size": 2, "spacer_mm": 1200}
         }
 
     ``area_mm`` (a box: x, y, width, depth) or ``area_polygon_mm`` (a drawn shape's corners,
     ``[[x, y], ...]``, 3 to 50 that do not cross), one or the other, makes it Fill an area: the
     room is ``room_mm``, which it then needs, the wall buffer is not read, and the tables stand
     in rows inside the area, ``direction`` saying whether the rows run ``across`` or ``down``,
-    with ``tableSpacingMm`` between the rows and from every table of ``existing_mm``.
+    with ``tableSpacingMm`` between the rows and from every table of ``existing_mm``. With
+    ``grouping`` (``size`` 1 to 50 tables, ``spacer_mm`` 0 to 100 m) each row's tables stand in
+    groups of ``size``, end to end, with ``spacer_mm`` of floor before the next group; each clear
+    stretch of a row starts a group of its own.
 
     **Returns**::
 
@@ -190,6 +206,7 @@ def place_tables():
         area_polygon_mm=asked.area_polygon_mm,
         existing_mm=asked.existing_mm,
         direction=asked.direction,
+        grouping=asked.grouping.model_dump() if asked.grouping else None,
     )
 
     return jsonify({"placed_tables": result.placed, "timed_out": result.timed_out}), 200

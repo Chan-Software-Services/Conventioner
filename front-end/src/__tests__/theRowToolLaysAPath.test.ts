@@ -24,13 +24,13 @@ import { separation, tableCorners } from '@/components/layout/layoutGeometry';
 import {
   MAX_LAYOUT_TABLES,
   ROW_CHOICES_AT_FIRST,
-  lengthMmOf,
   rowChoices,
   rowOnFrom,
   standingShapes,
   strokeOptions,
   useRowTool,
 } from '@/components/layout/layoutRow';
+import { lengthMmOf } from '@/components/layout/layoutLength';
 import type { SavedLayout } from '@/components/layout/layoutSave';
 import { useLayoutEditor } from '@/components/layout/useLayoutEditor';
 
@@ -106,14 +106,63 @@ describe('a path being drawn', () => {
     expect(row.countAt.value).toEqual(p(22_000, 3000));
   });
 
-  it('follows the pointer past the last point, and the points alone once it has left', () => {
-    const { row } = aTool();
+  it('places along its points alone, the stretch to the pointer shown as ghosts', () => {
+    const { row, tables } = aTool();
     row.addPoint(p(2000, 3000));
     row.hoverAt(p(7600, 3000));
-    expect(row.poses.value).toHaveLength(3);
-    expect(row.countAt.value).toEqual(p(7600, 3000));
-    row.hoverAt(null);
+    // One point holds no row: what a point at the pointer would add is ghosts, and Enter waits.
     expect(row.poses.value).toEqual([]);
+    expect(row.ghosts.value).toHaveLength(3);
+    expect(row.countAt.value).toEqual(p(7600, 3000));
+    expect(row.place()).toEqual([]);
+    expect(row.points.value).toEqual([p(2000, 3000)]);
+    expect(tables()).toEqual([]);
+
+    row.addPoint(p(7600, 3000));
+    row.hoverAt(p(15_000, 3000));
+    expect(row.poses.value).toHaveLength(3);
+    expect(row.ghosts.value).toHaveLength(4);
+    const lastOfTheRow = Math.max(...row.poses.value.map((pose) => pose.xMm));
+    for (const ghost of row.ghosts.value) expect(ghost.xMm).toBeGreaterThan(lastOfTheRow);
+
+    const added = row.place();
+    expect(added).toHaveLength(3);
+    expect(Math.max(...added.map((one) => one.xMm + 915))).toBeLessThanOrEqual(7600 + 0.01);
+  });
+
+  it('shows each row of several its own ghosts, past its own last table', () => {
+    const { row } = aTool();
+    rowChoices.rows = '2';
+    row.addPoint(p(2000, 3000));
+    row.addPoint(p(8000, 3000));
+    row.hoverAt(p(16_000, 3000));
+    const laid = row.poses.value;
+    const ghosts = row.ghosts.value;
+    // Each row's stretch to the pointer, the same length in both: four more tables a row.
+    expect(laid).toHaveLength(6);
+    expect(ghosts).toHaveLength(8);
+    const rowOf = (pose: { yMm: number }) => Math.round(pose.yMm);
+    const lines = [...new Set(laid.map(rowOf))];
+    expect(lines).toHaveLength(2);
+    for (const line of lines) {
+      const lastOfTheRow = Math.max(
+        ...laid.filter((pose) => rowOf(pose) === line).map((pose) => pose.xMm),
+      );
+      const its = ghosts.filter((ghost) => rowOf(ghost) === line);
+      expect(its).toHaveLength(4);
+      for (const ghost of its) expect(ghost.xMm).toBeGreaterThan(lastOfTheRow);
+    }
+  });
+
+  it('shows no ghost once the pointer has left, or rests on the last point', () => {
+    const { row } = aTool();
+    row.addPoint(p(2000, 3000));
+    row.addPoint(p(7600, 3000));
+    row.hoverAt(p(15_000, 3000));
+    expect(row.ghosts.value).not.toEqual([]);
+    row.hoverAt(null);
+    expect(row.ghosts.value).toEqual([]);
+    expect(row.poses.value).toHaveLength(3);
   });
 
   it('shows a straight stroke from its press to where it is', () => {
@@ -175,16 +224,18 @@ describe('a path being drawn', () => {
     expect(row.poses.value).toEqual([]);
   });
 
-  it('stands its tables on the right of the line drawn, the left once flipped, or on it', () => {
+  it('stands its tables on the line at first, beside it on the right where asked, the left once flipped', () => {
     const { row } = aTool();
     row.strokeTo([p(2000, 3000), p(22_000, 3000)], STROKE);
+    expect(ROW_CHOICES_AT_FIRST.centred).toBe(true);
+    expect(row.side.value).toBe('centre');
+    expect(row.poses.value[0].yMm).toBeCloseTo(3000, 6);
+    rowChoices.centred = false;
+    expect(row.side.value).toBe('right');
     expect(row.poses.value[0].yMm).toBeCloseTo(3380, 6);
     row.flip();
     expect(row.side.value).toBe('left');
     expect(row.poses.value[0].yMm).toBeCloseTo(2620, 6);
-    rowChoices.centred = true;
-    expect(row.side.value).toBe('centre');
-    expect(row.poses.value[0].yMm).toBeCloseTo(3000, 6);
   });
 
   it('takes the size of the type chosen', () => {
