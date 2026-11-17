@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { defineComponent, h, ref } from 'vue';
+import { defineComponent, effectScope, h, ref } from 'vue';
 import { updatedAgo } from '@/utils/updatedAgo';
 import { useUpdatedWords } from '@/utils/useUpdatedWords';
 import ListFreshness from '@/components/ListFreshness.vue';
@@ -128,6 +128,22 @@ describe('useUpdatedWords', () => {
     const { wrapper } = mountWords(Date.now());
     expect(vi.getTimerCount()).toBe(1);
     wrapper.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('starts no clock outside a scope that could stop it, and still says the read', () => {
+    vi.useFakeTimers();
+    const words = useUpdatedWords(ref<number | null>(Date.now()));
+    expect(vi.getTimerCount()).toBe(0);
+    expect(words.value).toBe('Updated just now');
+  });
+
+  it('runs its clock for the effect scope that called it, and stops it with that scope', () => {
+    vi.useFakeTimers();
+    const scope = effectScope();
+    scope.run(() => useUpdatedWords(ref<number | null>(Date.now())));
+    expect(vi.getTimerCount()).toBe(1);
+    scope.stop();
     expect(vi.getTimerCount()).toBe(0);
   });
 });
