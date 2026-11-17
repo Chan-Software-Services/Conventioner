@@ -182,7 +182,7 @@ for (const size of THREE_WINDOWS) {
       await expect(door.refreshError).toHaveCount(0);
 
       // Print roster beside the door code, and no note asking for paper (T466).
-      await expect(page.getByTestId('attendance-print-note')).toHaveCount(0);
+      await expect(page.getByText('a printed roster still works')).toHaveCount(0);
       await expect(door.print).toHaveText('Print roster');
       for (const [control, what] of [
         [door.dateSelect, 'the date'],

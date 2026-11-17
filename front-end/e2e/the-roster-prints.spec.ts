@@ -41,7 +41,7 @@ test('the printed roster is every vendor of the day, alone on the paper and its 
   await door.goto(seed.marketId);
   await expect(door.rows).toHaveCount(3);
   // The page says only what it must: the phase guide asks for paper, no note of its own (T466).
-  await expect(page.getByTestId('attendance-print-note')).toHaveCount(0);
+  await expect(page.getByText('a printed roster still works')).toHaveCount(0);
   await expect(door.print).toHaveText('Print roster');
   await expect(door.printSheet).toBeHidden();
 
