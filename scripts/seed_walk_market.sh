@@ -9,7 +9,7 @@
 #
 # Every write goes through the back end's own API, signed in as the fixture organizer
 # (e2e@example.com), as the organizer's screens would make it:
-#   - "Fernwick Winter Makers Market", a Google Form market of three days: today, tomorrow and the
+#   - "Example Winter Makers Fair", a Google Form market of three days: today, tomorrow and the
 #     day after, each where this machine is, or from SEED_TODAY (YYYY-MM-DD) and the two days after
 #     it when that is set, so a walk can be seeded for a day that is not this one;
 #   - two halls laid out, each on a floorplan drawn here: Main Hall (Gold, sections A of 16 tables
@@ -85,7 +85,7 @@ TODAY = date.fromisoformat(os.environ["SEED_TODAY"])
 DATES = [TODAY + timedelta(days=n) for n in range(3)]
 ISO_DATES = [d.isoformat() for d in DATES]
 
-MARKET_NAME = "Fernwick Winter Makers Market"
+MARKET_NAME = "Example Winter Makers Fair"
 APPLICATIONS = 184
 REJECTED = 34
 CHECKED_IN_SHARE = 0.45
