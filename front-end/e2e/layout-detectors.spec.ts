@@ -59,6 +59,23 @@ test.describe('The layout detectors', () => {
     ]);
   });
 
+  test('a row pulled across its parent by its own negative margin is no child outside it, and one pulled further is', async ({
+    page,
+  }) => {
+    // A tool row bled across a 24px gutter, as a list frame's pinned tools are (T466).
+    const found = await findingsOn(
+      page,
+      `<div style="padding: 0 24px"><div style="display: flex; flex-direction: column">
+         <div data-testid="bled" style="margin-inline: -24px; padding: 0 24px">Bled to the edges</div>
+         <div data-testid="past" style="margin-inline: -24px; width: calc(100% + 64px)">Past its margin</div>
+       </div></div>`,
+      390,
+    );
+    expect(of(found, 'child-outside-parent').map((f) => `${f.el}: ${f.detail}`)).toEqual([
+      'div > div > div[past]: 16px outside div',
+    ]);
+  });
+
   test('text cut off by its box is clipped', async ({ page }) => {
     const found = await findingsOn(
       page,
