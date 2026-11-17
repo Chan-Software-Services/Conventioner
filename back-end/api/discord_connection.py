@@ -826,9 +826,9 @@ def _write(
     market: Market, before: DiscordConnection, after: DiscordConnection, kind: str,
     asked: Actions.Asked,
 ) -> None:
-    """Write the card's change, recorded through the asking that let it in, holding each field it changes as the market was loaded with it, so
-    a change another tab saved to the same field meanwhile is not undone; a field it does not
-    change, saved meanwhile, stands beside it.
+    """Write the card's change, recorded through the asking that let it in, holding each field it
+    changes as the market was loaded with it, so a change another tab saved to the same field
+    meanwhile is not undone; a field it does not change, saved meanwhile, stands beside it.
 
     Raises:
         MarketChanged: the market moved, or a field this changes was changed, since it was

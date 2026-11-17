@@ -5,8 +5,8 @@ and which of the market's own short text questions hold each vendor's public nam
 Instagram handle. Their write asks the table's "Publish the map" row (an Admin's by default, D25),
 loads through ``_market_change`` so an archived market refuses it, writes through the market write
 holding the settings as read, and records what changed in the market's history through the asking
-that let it through, each question by its key and its label, as Discord's question is. A write that changes nothing writes
-and records nothing.
+that let it through, each question by its key and its label, as Discord's question is. A write
+that changes nothing writes and records nothing.
 
 **The read is public** (``GET /public/markets/<slug>/map``), behind one gate
 (``market_documents.public_map_market_by_slug``, D30): found by its slug as the vendor page finds
