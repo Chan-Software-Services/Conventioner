@@ -123,7 +123,10 @@ describe('the scale exists as tokens', () => {
     '--radius-control',
     '--radius-card',
     '--radius-pill',
+    '--radius-sheet',
+    '--radius-bubble',
     '--shadow-card',
+    '--shadow-float',
   ];
 
   it('defines every step the design language names', () => {

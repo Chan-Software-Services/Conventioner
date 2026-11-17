@@ -8,7 +8,9 @@ import { inTheWindow } from './helpers/phoneWindow';
  * Hall and Lower Hall with their seats dealt from seed 422, at a desk and on a phone. Each table is
  * drawn filled, outlined or free, a shared table is two halves each pressed on its own, a press is
  * read out, the location switch opens Lower Hall with its turned stage, a search's mark outlines
- * one half, and the map zooms by its buttons and, at a desk, by Ctrl and the wheel.
+ * one half, and the map zooms by its buttons and, at a desk, by Ctrl and the wheel. Filling a box
+ * of its own, as the public map's hall draws it (T465), the map takes the box whole, and the
+ * caller's legend and the zoom stand over its bottom corners, or in a row under it in a narrow box.
  */
 
 const readOutsOf = (panel: Locator): Locator => panel.getByTestId('read-out');
@@ -32,7 +34,7 @@ eachWindow('the day map entry', (size) => {
     expectAccessible,
   }) => {
     await expect(page.getByTestId('library-serves')).toContainText('The public map page');
-    await expect(page.getByTestId('choices-for-you').getByRole('listitem')).toHaveCount(7);
+    await expect(page.getByTestId('choices-for-you').getByRole('listitem')).toHaveCount(8);
     const door = page.getByTestId('library-day-map-door');
     await expect(readOutsOf(door).nth(2)).toHaveText(
       'Dealt: 63 tables, 45 seats filled, 18 outlined, 8 tables free, 13 shared, 5 of them with a half free',
@@ -210,5 +212,49 @@ eachWindow('the day map entry', (size) => {
     expect(zoom.y).toBeGreaterThanOrEqual(frame.y + frame.height);
     await press(phone.getByRole('button', { name: `${GOLD_3}, left half, Nettle Knits` }));
     await expect(readOutsOf(phone)).toHaveText(`Pressed: ${GOLD_3}, left half, Nettle Knits`);
+  });
+
+  test('filling its box, the legend and the zoom stand over the corners, or under a narrow map', async ({
+    page,
+  }) => {
+    const { press } = inTheWindow(size);
+    for (const testid of ['library-day-map-fills', 'library-day-map-fills-phone']) {
+      const panel = page.getByTestId(testid);
+      await panel.scrollIntoViewIfNeeded();
+      // The caller draws the choice of hall and the legend: the map draws neither.
+      await expect(panel.getByTestId('day-map-locations')).toHaveCount(0);
+      await expect(panel.getByTestId('day-map-legend')).toHaveCount(0);
+      const legend = panel.getByRole('list', { name: 'Legend' });
+      await expect(legend.getByRole('listitem')).toHaveText(['Gold row', 'Free table']);
+
+      const box = (await panel.getByTestId('day-map').boundingBox())!;
+      const map = (await panel.getByTestId('layout-map').boundingBox())!;
+      const key = (await legend.boundingBox())!;
+      const zoom = (await panel.getByTestId('day-map-zoom').boundingBox())!;
+      const inset = 12;
+      if (box.width >= 480) {
+        // The map takes the box whole, the legend and the zoom over its bottom corners.
+        expect(map.height, testid).toBeCloseTo(box.height, 0);
+        expect(map.width, testid).toBeCloseTo(box.width, 0);
+        expect(key.x - map.x, testid).toBeCloseTo(inset, 0);
+        expect(map.y + map.height - (key.y + key.height), testid).toBeCloseTo(inset, 0);
+        expect(map.x + map.width - (zoom.x + zoom.width), testid).toBeCloseTo(inset, 0);
+        expect(map.y + map.height - (zoom.y + zoom.height), testid).toBeCloseTo(inset, 0);
+        expect(key.x + key.width, testid).toBeLessThan(zoom.x);
+      } else {
+        // The map takes the box less one row under it, the legend at its start, the zoom at its end.
+        expect(map.width, testid).toBeCloseTo(box.width, 0);
+        expect(key.y, testid).toBeGreaterThanOrEqual(map.y + map.height);
+        expect(zoom.y, testid).toBeGreaterThanOrEqual(map.y + map.height);
+        expect(key.x - box.x, testid).toBeCloseTo(inset, 0);
+        expect(box.x + box.width - (zoom.x + zoom.width), testid).toBeCloseTo(inset, 0);
+        expect(zoom.x - (key.x + key.width), testid).toBeGreaterThanOrEqual(8 - 0.5);
+        const bottom = Math.max(key.y + key.height, zoom.y + zoom.height);
+        expect(box.y + box.height - bottom, testid).toBeGreaterThanOrEqual(inset - 0.5);
+      }
+
+      await press(panel.getByRole('button', { name: `${GOLD_3}, left half, Nettle Knits` }));
+      await expect(readOutsOf(panel)).toHaveText(`Pressed: ${GOLD_3}, left half, Nettle Knits`);
+    }
   });
 });
