@@ -854,6 +854,12 @@ function swapSeats(withEmail: string): void {
   gap: var(--space-6);
 }
 
+/* The body's gap alone sets the failed-read line apart, so it sits as near the tables it speaks of
+   as the summary above it, not a margin further off. */
+.tables-body > .read-failed {
+  margin: 0;
+}
+
 /* A failed read's sentence wraps in even lines on a phone, never one word alone on the last. */
 .tables-body > .read-failed :deep(p) {
   text-wrap: balance;
