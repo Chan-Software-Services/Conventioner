@@ -120,48 +120,54 @@ async function publish() {
       Results published · vendors can see them
     </span>
 
-    <!-- What publishing tells whom, before it does (E36/F04/S01): it cannot be undone. -->
-    <AppDialog
-      :open="confirming"
-      title="Publish results"
-      testid="publish-results"
-      :confirm-label="publishing ? 'Publishing…' : 'Publish results'"
-      :submission="submission"
-      @close="confirming = false"
-      @submit="publish"
-    >
-      <p v-if="outcomes" class="publish-outcomes">
-        {{ outcomes.haveATable }}
-        {{ outcomes.haveATable === 1 ? 'vendor will read' : 'vendors will read' }}
-        "{{ HAS_A_TABLE }}". {{ outcomes.notAssigned }} will read "{{ NOT_ASSIGNED }}".
-      </p>
-      <p class="publish-outcomes" data-testid="publish-results-telling">
-        Vendors read their result on the market's vendor page. No email is sent, so share the page's
-        address with them.
-      </p>
-      <div v-if="vendorPageUrl" class="publish-address" data-testid="publish-results-address">
-        <a
-          class="publish-address-url"
-          :href="vendorPageUrl"
-          target="_blank"
-          rel="noopener"
-          data-testid="publish-results-address-url"
-          >{{ vendorPageUrl }}</a
-        >
-        <button
-          type="button"
-          class="btn btn--secondary btn--compact"
-          data-testid="publish-results-address-copy"
-          @click="copy(vendorPageUrl)"
-        >
-          {{ copied === vendorPageUrl ? 'Copied' : 'Copy' }}
-        </button>
-      </div>
-      <p class="publish-outcomes">
-        Publishing cannot be undone, and tables cannot be allocated again after it: assignments
-        change only by hand.
-      </p>
-    </AppDialog>
+    <!--
+      What publishing tells whom, before it does (E36/F04/S01): it cannot be undone. Teleported to
+      the body: the button stands in the review's pinned toolbar, whose sticky block is a stacking
+      context from 1024px, which would hold the dialog under the market's frame and the app bar.
+    -->
+    <Teleport to="body">
+      <AppDialog
+        :open="confirming"
+        title="Publish results"
+        testid="publish-results"
+        :confirm-label="publishing ? 'Publishing…' : 'Publish results'"
+        :submission="submission"
+        @close="confirming = false"
+        @submit="publish"
+      >
+        <p v-if="outcomes" class="publish-outcomes">
+          {{ outcomes.haveATable }}
+          {{ outcomes.haveATable === 1 ? 'vendor will read' : 'vendors will read' }}
+          "{{ HAS_A_TABLE }}". {{ outcomes.notAssigned }} will read "{{ NOT_ASSIGNED }}".
+        </p>
+        <p class="publish-outcomes" data-testid="publish-results-telling">
+          Vendors read their result on the market's vendor page. No email is sent, so share the
+          page's address with them.
+        </p>
+        <div v-if="vendorPageUrl" class="publish-address" data-testid="publish-results-address">
+          <a
+            class="publish-address-url"
+            :href="vendorPageUrl"
+            target="_blank"
+            rel="noopener"
+            data-testid="publish-results-address-url"
+            >{{ vendorPageUrl }}</a
+          >
+          <button
+            type="button"
+            class="btn btn--secondary btn--compact"
+            data-testid="publish-results-address-copy"
+            @click="copy(vendorPageUrl)"
+          >
+            {{ copied === vendorPageUrl ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+        <p class="publish-outcomes">
+          Publishing cannot be undone, and tables cannot be allocated again after it: assignments
+          change only by hand.
+        </p>
+      </AppDialog>
+    </Teleport>
   </div>
 </template>
 

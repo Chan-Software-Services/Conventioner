@@ -35,7 +35,11 @@ function marketTaking(intakeMode?: IntakeMode, publish: Partial<Market> = {}): M
 }
 
 async function mounted(market: Market) {
-  const wrapper = mount(PublishResults, { props: { market } });
+  // The dialog teleports to the body; stubbed, it renders in place, where the wrapper reads it.
+  const wrapper = mount(PublishResults, {
+    props: { market },
+    global: { stubs: { teleport: true } },
+  });
   await wrapper.vm.$nextTick();
   return wrapper;
 }

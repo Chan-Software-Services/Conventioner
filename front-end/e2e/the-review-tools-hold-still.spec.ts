@@ -1,10 +1,15 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
 import { widths } from './helpers/phoneWindow';
 import { transitionMarket } from './helpers/seedPhaseMarket';
 import { marketSetupPath } from './helpers/marketScreens';
 import { mongoEval } from './helpers/mongo';
-import { APPLICATION_FIELDS, seedApplicantMarket } from './helpers/seedApplicantMarket';
+import {
+  APPLICATION_FIELDS,
+  planSetupObject,
+  seedApplicantMarket,
+} from './helpers/seedApplicantMarket';
+import { seedApprovedVendor } from './helpers/seedApplication';
 
 /**
  * The review's tools hold still (T466, release walk F7).
@@ -218,5 +223,72 @@ test("on a phone the statuses wrap, and nothing on All's two lines passes the wi
           .filter((box) => box.width && (box.left < 0 || box.right > window.innerWidth)),
       );
     expect(past, `nothing in ${line} passes the window's edge`).toEqual([]);
+  }
+});
+
+/**
+ * Publish results' confirmation opens from inside the pinned toolbar, whose sticky block is a
+ * stacking context from 1024px: the dialog stands over the app bar and the market's frame, its scrim
+ * covering both, and its title is on top on a short window.
+ */
+test("Publish results' confirmation stands over the app bar and the market's frame", async ({
+  authenticatedPage: page,
+  request,
+}) => {
+  const DATE = '2099-08-01';
+  const { marketId } = await seedApplicantMarket(
+    request,
+    BACKEND_URL,
+    TEST_USER.email,
+    TEST_USER.password,
+    { setupObject: planSetupObject([DATE]) },
+  );
+  seedApprovedVendor(marketId, 'held-still-seated@vendor.test', {
+    dates: [DATE],
+    tiers: ['Gold'],
+    sections: ['Main Hall', 'Garden'],
+  });
+  await transitionMarket(request, BACKEND_URL, TEST_USER.email, marketId, 'assignment');
+  const ran = await request.post(`${BACKEND_URL}/markets/${marketId}/assignment`);
+  expect(ran.ok(), await ran.text()).toBeTruthy();
+
+  for (const [width, height] of [
+    [1440, 900],
+    [1100, 600],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await page.goto(marketSetupPath(marketId, 'applications'));
+    await page.getByTestId('applications-publish-button').click();
+    await expect(page.getByTestId('publish-results-window')).toBeVisible();
+    // What is painted on top at a part's centre. The page behind an open dialog is held `inert`,
+    // which hit-testing passes through, so the marks are lifted for the probe and put back.
+    const onTop = (part: Locator) =>
+      part.evaluate((element) => {
+        const held = [...document.querySelectorAll('[inert]')];
+        held.forEach((behind) => behind.removeAttribute('inert'));
+        const box = element.getBoundingClientRect();
+        const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        held.forEach((behind) => behind.setAttribute('inert', ''));
+        return (
+          hit
+            ?.closest(
+              '[data-testid="publish-results-background"], [data-testid="publish-results-window"]',
+            )
+            ?.getAttribute('data-testid') ?? 'the page'
+        );
+      });
+    for (const behind of ['app-bar-logo', 'market-bar-title', 'phase-rail']) {
+      expect(
+        await onTop(page.getByTestId(behind)),
+        `${width}x${height}: the dialog covers ${behind}`,
+      ).not.toBe('the page');
+    }
+    const dialog = page.getByTestId('publish-results-window');
+    expect(
+      await onTop(dialog.getByRole('heading', { name: 'Publish results' })),
+      `${width}x${height}: nothing covers the dialog's title`,
+    ).toBe('publish-results-window');
+    await page.getByTestId('publish-results-close-button').click();
+    await expect(page.getByTestId('publish-results-window')).toHaveCount(0);
   }
 });
