@@ -425,7 +425,8 @@ describe('the day map', () => {
     styles.walkDecls('grid-template-areas', (decl) => {
       everyArea.push(decl.value);
     });
-    expect(everyArea).toHaveLength(4);
+    // The four above and the two of a map that fills its box (T465).
+    expect(everyArea).toHaveLength(6);
     for (const value of everyArea) expect(value).not.toContain("'switch");
     expect(valueOf(styles, '.day-map__locations', 'margin-block-end')).toBe('var(--space-3)');
     const note = (property: string) => valueOf(styles, '.day-map__note', property);
@@ -468,9 +469,9 @@ describe('the day map without fills, as Attendance draws it', () => {
     });
     expect(wrapper.html()).toMatchInlineSnapshot(`
       "<div data-v-d4ffb88c="" class="day-map" data-testid="day-map">
+        <div data-v-203e6a75="" data-v-d4ffb88c="" class="filter-toggles day-map__locations" role="group" aria-label="Location" data-testid="day-map-locations"><button data-v-203e6a75="" type="button" class="btn btn--secondary btn--compact filter-toggles__toggle" aria-pressed="true" data-testid="day-map-locations-loc-upper"><span data-v-203e6a75="" class="filter-toggles__words" data-testid="day-map-locations-words">Upper Hall <!--v-if--></span></button><button data-v-203e6a75="" type="button" class="btn btn--secondary btn--compact filter-toggles__toggle" aria-pressed="false" data-testid="day-map-locations-loc-lower"><span data-v-203e6a75="" class="filter-toggles__words" data-testid="day-map-locations-words">Lower Hall <!--v-if--></span></button></div>
         <div data-v-d4ffb88c="" class="day-map__grid">
-          <div data-v-203e6a75="" data-v-d4ffb88c="" class="filter-toggles day-map__locations" role="group" aria-label="Location" data-testid="day-map-locations"><button data-v-203e6a75="" type="button" class="btn btn--secondary btn--compact filter-toggles__toggle" aria-pressed="true" data-testid="day-map-locations-loc-upper"><span data-v-203e6a75="" class="filter-toggles__words" data-testid="day-map-locations-words">Upper Hall <!--v-if--></span></button><button data-v-203e6a75="" type="button" class="btn btn--secondary btn--compact filter-toggles__toggle" aria-pressed="false" data-testid="day-map-locations-loc-lower"><span data-v-203e6a75="" class="filter-toggles__words" data-testid="day-map-locations-words">Lower Hall <!--v-if--></span></button></div>
-          <div data-v-d4ffb88c="" class="day-map__frame" style="aspect-ratio: 29999.999999999996 / 22500;">
+          <div data-v-d4ffb88c="" class="day-map__frame" data-testid="day-map-frame" style="aspect-ratio: 29999.999999999996 / 22500;">
             <layout-map-stub data-v-d4ffb88c="" layout="[object Object]" locationname="Upper Hall" sections="[object Object]" tabletypes="[object Object]" mode="read" imageurl="/api/public/markets/harbour/map/image/loc-upper" imageingrey="true" imagefaded="true" selection="" guides="" carried="" numbers="true" seats="[object Object],[object Object],[object Object]" marked="g1,g2:right"></layout-map-stub>
           </div>
           <div data-v-d4ffb88c="" class="day-map__zoom" role="group" aria-label="Zoom" data-testid="day-map-zoom"><button data-v-d4ffb88c="" type="button" class="btn btn--secondary btn--compact day-map__zoom-button" data-testid="day-map-zoom-out"><span data-v-d4ffb88c="" aria-hidden="true">-</span><span data-v-d4ffb88c="" class="visually-hidden">Zoom out</span></button><button data-v-d4ffb88c="" type="button" class="btn btn--secondary btn--compact day-map__zoom-button" data-testid="day-map-zoom-in"><span data-v-d4ffb88c="" aria-hidden="true">+</span><span data-v-d4ffb88c="" class="visually-hidden">Zoom in</span></button><button data-v-d4ffb88c="" type="button" class="btn btn--secondary btn--compact day-map__zoom-button" data-testid="day-map-fit"> Fit </button></div>
@@ -485,6 +486,7 @@ describe('the day map without fills, as Attendance draws it', () => {
                 <rect data-v-d4ffb88c="" x="0.75" y="0.75" width="22.5" height="12.5" rx="2" fill="var(--layout-floor)" stroke="var(--layout-no-section-edge)" stroke-width="1.5" stroke-dasharray="4 3"></rect>
               </svg><span data-v-d4ffb88c="">No vendor</span></li>
           </ul>
+          <!--v-if-->
         </div>
       </div>"
     `);
