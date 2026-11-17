@@ -67,7 +67,7 @@ const rows = applications.slice(0, 60);
       class="library-wide"
       label="A select at the start; at the end three groups: a segmented control, the paper tools, Refresh"
     >
-      <div class="library-demo">
+      <div class="library-demo" data-testid="library-demo-toolbar">
         <div class="library-card">
           <ToolRow testid="library-toolbar">
             <label class="library-select">
@@ -84,7 +84,7 @@ const rows = applications.slice(0, 60);
               </select>
             </label>
             <template #end>
-              <ToolGroup>
+              <ToolGroup data-testid="library-toolbar-group">
                 <SegmentedControl
                   v-model="showAs"
                   :options="SHOW_AS"
@@ -92,7 +92,7 @@ const rows = applications.slice(0, 60);
                   testid="library-toolbar-view"
                 />
               </ToolGroup>
-              <ToolGroup>
+              <ToolGroup data-testid="library-toolbar-group">
                 <button
                   type="button"
                   class="btn btn--secondary btn--compact"
@@ -110,7 +110,7 @@ const rows = applications.slice(0, 60);
                   Door code
                 </button>
               </ToolGroup>
-              <ToolGroup>
+              <ToolGroup data-testid="library-toolbar-group">
                 <ListFreshness
                   testid="library-toolbar"
                   :readAt="readAt"
@@ -133,7 +133,7 @@ const rows = applications.slice(0, 60);
       class="library-wide"
       label="A second row: a count, and a search taking the room left"
     >
-      <div class="library-demo">
+      <div class="library-demo" data-testid="library-demo-count-row">
         <div class="library-card">
           <ToolRow testid="library-count-row">
             <h2 class="library-count" data-testid="library-count">
@@ -159,7 +159,7 @@ const rows = applications.slice(0, 60);
     about="One choice of a few, one always on, joined into one box: each option keeps its own border, and the one before the pressed option draws its edge green."
   >
     <LibraryPanel class="library-wide" label="Five options, apart on a phone (wrapsOnAPhone)">
-      <div class="library-demo">
+      <div class="library-demo" data-testid="library-demo-statuses">
         <SegmentedControl
           v-model="statuses"
           :options="ALL_VIEW_FILTERS"
@@ -177,7 +177,7 @@ const rows = applications.slice(0, 60);
     about="From 1024px the block stands under the market's frame and the rows pass under it; narrower, it scrolls away with them. Here the box is the page and has no frame."
   >
     <LibraryPanel class="library-wide" :label="`Pinned over ${rows.length} rows in a box`">
-      <div class="library-demo">
+      <div class="library-demo" data-testid="library-demo-pinned">
         <ScrollBox class="library-pinned-box" testid="library-pinned-box">
           <PinnedTools testid="library-pinned">
             <template #tools>

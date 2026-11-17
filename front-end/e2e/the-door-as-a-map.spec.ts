@@ -96,7 +96,7 @@ for (const size of PHONE_AND_DESK) {
         // The map stands on the screen's 24px inset under the pinned tools, as the list's first
         // line does: the day map keeps no empty row over it for the switch it does not draw (T466).
         const toolsBottom = await bottom(door.tools);
-        const mapTop = (await door.dayMap.locator('.day-map__frame').boundingBox())!.y;
+        const mapTop = (await door.mapFrame.boundingBox())!.y;
         expect(Math.round(mapTop - toolsBottom)).toBe(24);
       }
 

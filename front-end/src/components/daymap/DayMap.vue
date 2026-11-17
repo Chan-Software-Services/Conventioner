@@ -104,7 +104,12 @@ const swatches = computed(() => {
       @update:modelValue="locationId = $event as string"
     />
     <div class="day-map__grid">
-      <div v-if="open" class="day-map__frame" :style="{ aspectRatio: shape }">
+      <div
+        v-if="open"
+        class="day-map__frame"
+        data-testid="day-map-frame"
+        :style="{ aspectRatio: shape }"
+      >
         <LayoutMap
           ref="map"
           :layout="open.layout"

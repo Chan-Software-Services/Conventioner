@@ -205,7 +205,7 @@ test('the search and the filters stand on one compact line, the count small over
   const tools = await box('applications-all-list-tools');
   const field = await box('applications-all-list-find');
   const statuses = await box('applications-all-filter');
-  const mine = (await page.locator('label').filter({ has: all.mine }).boundingBox())!;
+  const mine = (await all.mineLabel.boundingBox())!;
   expect(field.height, 'the field is compact').toBe(28);
   expect(statuses.height, 'the statuses are compact').toBe(28);
   expect(tools.height, 'the line: 28px controls, 12px over and under, and the rule').toBe(53);

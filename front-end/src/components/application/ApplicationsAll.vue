@@ -667,7 +667,7 @@ async function decideSelection() {
           testid="applications-all-filter"
           @update:model-value="setQuery({ status: $event === 'all' ? null : $event })"
         />
-        <label class="all-mine">
+        <label class="all-mine" data-testid="applications-all-mine-label">
           <input
             type="checkbox"
             :checked="mine"

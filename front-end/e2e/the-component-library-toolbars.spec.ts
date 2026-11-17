@@ -1,4 +1,4 @@
-import type { Locator } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { eachWindow, expectLaidOut, openEntry } from './helpers/componentLibrary';
 import { inTheWindow } from './helpers/phoneWindow';
@@ -13,10 +13,9 @@ import { inTheWindow } from './helpers/phoneWindow';
  */
 
 const box = async (locator: Locator) => (await locator.boundingBox())!;
-const readOutOf = (control: Locator): Locator =>
-  control
-    .locator('xpath=ancestor::div[contains(@class, "library-demo")][1]')
-    .getByTestId('read-out');
+/** The read-outs under one demo: `toolbar`, `count-row`, `statuses` or `pinned`. */
+const readOutOf = (page: Page, demo: string): Locator =>
+  page.getByTestId(`library-demo-${demo}`).getByTestId('read-out');
 
 /** Each edge's colour and width, read off the button's own computed border. */
 const edgesOf = (button: Locator) =>
@@ -85,7 +84,7 @@ eachWindow('the toolbars entry', (size) => {
   });
 
   test('a rule stands between two groups at a desk, and none on a phone', async ({ page }) => {
-    const groups = page.getByTestId('library-toolbar').locator('.tool-group');
+    const groups = page.getByTestId('library-toolbar-group');
     await expect(groups).toHaveCount(3);
     if (size.phone) {
       for (const group of await groups.all()) await expect(group).toHaveCSS('display', 'contents');
@@ -103,7 +102,7 @@ eachWindow('the toolbars entry', (size) => {
   }) => {
     const { press } = inTheWindow(size);
     const view = page.getByTestId('library-toolbar-view');
-    const readOuts = readOutOf(view);
+    const readOuts = readOutOf(page, 'toolbar');
 
     await page.getByTestId('library-toolbar-date').selectOption({ index: 1 });
     await expect(readOuts.nth(0)).not.toHaveText('Market date: nothing');
@@ -129,7 +128,7 @@ eachWindow('the toolbars entry', (size) => {
     if (!size.phone) expect(searchBox.x).toBeGreaterThan(count.x + count.width);
     await expect(search).toHaveAccessibleName('Find a vendor');
     await search.fill('Ana');
-    await expect(readOutOf(search)).toHaveText('Finding: Ana');
+    await expect(readOutOf(page, 'count-row')).toHaveText('Finding: Ana');
   });
 
   test('a segmented control is one joined box, its pressed option green all round', async ({
@@ -150,7 +149,7 @@ eachWindow('the toolbars entry', (size) => {
 
     await press(map);
     await expect(view.getByRole('button', { pressed: true })).toHaveText('Map');
-    await expect(readOutOf(view).nth(1)).toHaveText('Show as: Map');
+    await expect(readOutOf(page, 'toolbar').nth(1)).toHaveText('Show as: Map');
     // Map's start edge is List's end edge, green; its other three are its own.
     expect((await edgesOf(list)).right).toBe(GREEN);
     expect(await edgesOf(map)).toMatchObject({ top: GREEN, right: GREEN, bottom: GREEN });
@@ -198,7 +197,7 @@ eachWindow('the toolbars entry', (size) => {
     }
 
     await press(page.getByTestId('library-statuses-reviewer_approved'));
-    await expect(readOutOf(statuses)).toHaveText('Showing: Approved');
+    await expect(readOutOf(page, 'statuses')).toHaveText('Showing: Approved');
   });
 
   test('the pinned block stays put at a desk as the rows scroll, and scrolls away on a phone', async ({
@@ -221,6 +220,6 @@ eachWindow('the toolbars entry', (size) => {
     // Pinned or not, its view switch works.
     await at(0);
     await inTheWindow(size).press(page.getByTestId('library-pinned-view-one'));
-    await expect(readOutOf(block)).toHaveText('View: One by one');
+    await expect(readOutOf(page, 'pinned')).toHaveText('View: One by one');
   });
 });

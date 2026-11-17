@@ -69,6 +69,8 @@ export class AttendanceStatusPage {
   readonly viewMap: Locator;
   /** The map of the open day, its drawing, its legend's lines and the line a free table leaves. */
   readonly dayMap: Locator;
+  /** The day map's box, its border round the drawing. */
+  readonly mapFrame: Locator;
   readonly map: Locator;
   readonly legend: Locator;
   readonly mapNote: Locator;
@@ -124,6 +126,7 @@ export class AttendanceStatusPage {
     this.viewList = page.getByTestId('attendance-view-list');
     this.viewMap = page.getByTestId('attendance-view-map');
     this.dayMap = page.getByTestId('attendance-map');
+    this.mapFrame = this.dayMap.getByTestId('day-map-frame');
     this.map = this.dayMap.getByTestId('layout-map');
     this.legend = this.dayMap.getByTestId('day-map-legend-item');
     this.mapNote = page.getByTestId('attendance-map-note');
