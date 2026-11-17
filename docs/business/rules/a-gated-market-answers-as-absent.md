@@ -14,7 +14,7 @@ describes:
   - back-end/market_documents.py#public_map_market_by_slug
   - back-end/tests/test_the_public_map.py
   - front-end/e2e/the-public-map.spec.ts
-verified: 2026-11-17
+verified: 2026-11-18
 sources:
   - wayfinding/v0-1-0/06
   - wayfinding/v0-1-0/07

@@ -404,3 +404,114 @@ describe('seats in print', () => {
     expect(tableById(map, 'g4').attributes('aria-label')).toBe('Gold row 4, Standard 6 ft');
   });
 });
+
+describe('what the map tells and offers a caller who stands something over it (T465)', () => {
+  /** The map's `ResizeObserver`s, so a test can say its box was resized. */
+  const observers: (() => void)[] = [];
+  class FakeResizeObserver {
+    constructor(callback: () => void) {
+      observers.push(callback);
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+
+  afterEach(() => {
+    observers.length = 0;
+    vi.unstubAllGlobals();
+  });
+
+  /** The screen boxes a test gives a table's group or a half's, by table id and side. */
+  function boxes(of: Record<string, DOMRect>) {
+    const before = Element.prototype.getBoundingClientRect;
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: Element,
+    ) {
+      const half = this.getAttribute('data-half');
+      const tableId = (half ? this.parentElement : this)?.getAttribute('data-table-id');
+      const key = half ? `${tableId}#${half}` : tableId;
+      return (key && of[key]) || before.call(this);
+    });
+  }
+
+  it('emits viewed when a zoom changes the part of the hall it shows', async () => {
+    const map = draw();
+    await nextTick();
+    const before = map.emitted('viewed')?.length ?? 0;
+    (map.vm as unknown as { zoomIn: () => void }).zoomIn();
+    await nextTick();
+    expect(map.emitted('viewed')?.length).toBe(before + 1);
+    (map.vm as unknown as { fit: () => void }).fit();
+    await nextTick();
+    expect(map.emitted('viewed')?.length).toBe(before + 2);
+  });
+
+  it('emits viewed when its box is measured at another size, and not at the same size', async () => {
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    let width = 1200;
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: Element,
+    ) {
+      return this.getAttribute('data-testid') === 'layout-map'
+        ? new DOMRect(0, 0, width, 900)
+        : new DOMRect(0, 0, 0, 0);
+    });
+    wrapper = mount(LayoutMap, {
+      attachTo: document.body,
+      props: {
+        layout: layout(),
+        locationName: UPPER.name,
+        sections: SECTIONS,
+        tableTypes: TYPES,
+        mode: 'read',
+        seats: SEATS,
+      },
+    });
+    await nextTick();
+    const before = wrapper.emitted('viewed')?.length ?? 0;
+    observers.forEach((resized) => resized());
+    await nextTick();
+    expect(wrapper.emitted('viewed')?.length ?? 0).toBe(before);
+    width = 800;
+    observers.forEach((resized) => resized());
+    await nextTick();
+    expect(wrapper.emitted('viewed')?.length).toBe(before + 1);
+  });
+
+  it("gives the screen box of a table's group, or of a half's, and none for a table not drawn", () => {
+    const map = draw();
+    const g1 = new DOMRect(100, 50, 40, 20);
+    const g2 = new DOMRect(200, 50, 40, 20);
+    const g2Right = new DOMRect(220, 50, 20, 20);
+    boxes({ g1, g2, 'g2#right': g2Right });
+    const exposed = map.vm as unknown as {
+      targetRect: (tableId: string, half: string) => DOMRect | null;
+    };
+    expect(exposed.targetRect('g1', 'whole')).toEqual(g1);
+    expect(exposed.targetRect('g2', 'right')).toEqual(g2Right);
+    expect(exposed.targetRect('g2', 'whole')).toEqual(g2);
+    // A half of a table not split that day is the whole table.
+    expect(exposed.targetRect('g1', 'left')).toEqual(g1);
+    expect(exposed.targetRect('nope', 'whole')).toBeNull();
+  });
+
+  it("focuses a table's button, or a half's, and says when there was no button to focus", () => {
+    const map = draw();
+    const exposed = map.vm as unknown as {
+      focusTarget: (tableId: string, half: string) => boolean;
+    };
+    expect(exposed.focusTarget('g1', 'whole')).toBe(true);
+    expect(document.activeElement).toBe(tableById(map, 'g1').element);
+    expect(exposed.focusTarget('g2', 'right')).toBe(true);
+    expect(document.activeElement).toBe(halfOf(map, 'g2', 'right').element);
+    // A free table is a button too.
+    expect(exposed.focusTarget('g4', 'whole')).toBe(true);
+    expect(document.activeElement).toBe(tableById(map, 'g4').element);
+    // Gold row 3's right half is free, so no button; nor is a shared table's own group.
+    expect(exposed.focusTarget('g3', 'right')).toBe(false);
+    expect(exposed.focusTarget('g2', 'whole')).toBe(false);
+    expect(exposed.focusTarget('nope', 'whole')).toBe(false);
+    expect(document.activeElement).toBe(tableById(map, 'g4').element);
+  });
+});

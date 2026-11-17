@@ -482,12 +482,14 @@ function layoutAt(
 }
 
 /**
- * The day map market's public map (T422), with the table `table` picked from the address when
- * given, once its floorplan has drawn and `shows` is on the card.
+ * The day map market's public map (T422), its address carrying `query` (a table picked, a half of
+ * it) when given, once its floorplan has drawn and `shows` is on screen: the hall, or a part of the
+ * card, which shows only once a table is picked (T465).
  */
-function publicMapAt(table?: string, shows = 'public-map-card') {
+function publicMapAt(query: Record<string, string> = {}, shows = 'public-map-hall') {
   return async (page: Page, seed: TheScreensSeed) => {
-    await page.goto(`/${seed.dayMap.slug}/map${table ? `?table=${table}` : ''}`);
+    const search = new URLSearchParams(query).toString();
+    await page.goto(`/${seed.dayMap.slug}/map${search ? `?${search}` : ''}`);
     await expect(page.getByTestId('layout-map-image')).toHaveAttribute('href', /^blob:/, {
       timeout: 15000,
     });
@@ -1875,21 +1877,34 @@ export const SCREEN_GROUPS = {
       open: at(fixed('/no/such/page'), 'page-not-found'),
     },
     {
-      // A market's public map, signed out (T422): the day buttons, North Wing's map with its location
-      // switch, zoom and legend, the card waiting for a press, and the day's vendors under "Find a
-      // vendor"; at a desk in two columns, on a phone one.
+      // A market's public map, signed out (T422, T465): one sheet filling the window on its
+      // blurred backdrop, the map side holding the market's name, the day and hall selects at its
+      // top right and North Wing's hall filling the rest, its section legend and zoom at the hall's
+      // foot, no card before a press; and the vendor panel, "Find a vendor" over every named
+      // vendor of the day, beside the map at a desk and under it on a phone.
       name: 'the public map',
       who: 'nobody',
       sizes: PUBLIC,
       open: publicMapAt(),
     },
     {
-      // The public map with a shared table picked from the address, as a shared link opens it: the
-      // card lists both halves, and the list edges the two vendors at it.
+      // The public map with a shared table picked whole from the address, as an old shared link
+      // opens it: the card names both halves, in a speech bubble from the table at a desk and over
+      // the vendor panel's top on a phone, scrolling in its own box there, and the list rings the
+      // two vendors at it.
       name: 'the public map, a shared table picked',
       who: 'nobody',
       sizes: PUBLIC,
-      open: publicMapAt('north-table-3', 'public-map-card-half'),
+      open: publicMapAt({ table: 'north-table-3' }, 'public-map-card-half'),
+    },
+    {
+      // The public map with one half of the shared table picked, as a vendor's link or QR code
+      // opens it (T465): the map outlines that half, the card names its vendor alone under "Right
+      // half", and the list rings that vendor's row alone.
+      name: 'the public map, a half picked',
+      who: 'nobody',
+      sizes: PUBLIC,
+      open: publicMapAt({ table: 'north-table-3', half: 'right' }, 'public-map-card-half'),
     },
     {
       // A market's vendor page, signed out (ADR 0022): its name and the email step.

@@ -448,3 +448,189 @@ describe('the day map', () => {
     }
   });
 });
+
+// ── Filling its box, as the public map draws it (T465) ───────────────────────
+
+describe('the day map without fills, as Attendance draws it', () => {
+  it('renders exactly as before fills existed', () => {
+    // LayoutMap stubbed, so the snapshot is the day map's own markup alone.
+    wrapper = mount(DayMap, {
+      props: {
+        locations: publicDayLocations(ANSWER, imageUrl),
+        tableTypes: TYPES,
+        locationId: 'loc-upper',
+        seats: publicSeats(ANSWER.seats, '2099-06-05'),
+        picked: 'g1',
+        marked: ['g2:right'],
+        legend: LEGEND,
+      },
+      global: { stubs: { LayoutMap: true } },
+    });
+    expect(wrapper.html()).toMatchInlineSnapshot(`
+      "<div data-v-d4ffb88c="" class="day-map" data-testid="day-map">
+        <div data-v-d4ffb88c="" class="day-map__grid">
+          <div data-v-203e6a75="" data-v-d4ffb88c="" class="filter-toggles day-map__locations" role="group" aria-label="Location" data-testid="day-map-locations"><button data-v-203e6a75="" type="button" class="btn btn--secondary btn--compact filter-toggles__toggle" aria-pressed="true" data-testid="day-map-locations-loc-upper"><span data-v-203e6a75="" class="filter-toggles__words" data-testid="day-map-locations-words">Upper Hall <!--v-if--></span></button><button data-v-203e6a75="" type="button" class="btn btn--secondary btn--compact filter-toggles__toggle" aria-pressed="false" data-testid="day-map-locations-loc-lower"><span data-v-203e6a75="" class="filter-toggles__words" data-testid="day-map-locations-words">Lower Hall <!--v-if--></span></button></div>
+          <div data-v-d4ffb88c="" class="day-map__frame" style="aspect-ratio: 29999.999999999996 / 22500;">
+            <layout-map-stub data-v-d4ffb88c="" layout="[object Object]" locationname="Upper Hall" sections="[object Object]" tabletypes="[object Object]" mode="read" imageurl="/api/public/markets/harbour/map/image/loc-upper" imageingrey="true" imagefaded="true" selection="" guides="" carried="" numbers="true" seats="[object Object],[object Object],[object Object]" marked="g1,g2:right"></layout-map-stub>
+          </div>
+          <div data-v-d4ffb88c="" class="day-map__zoom" role="group" aria-label="Zoom" data-testid="day-map-zoom"><button data-v-d4ffb88c="" type="button" class="btn btn--secondary btn--compact day-map__zoom-button" data-testid="day-map-zoom-out"><span data-v-d4ffb88c="" aria-hidden="true">-</span><span data-v-d4ffb88c="" class="visually-hidden">Zoom out</span></button><button data-v-d4ffb88c="" type="button" class="btn btn--secondary btn--compact day-map__zoom-button" data-testid="day-map-zoom-in"><span data-v-d4ffb88c="" aria-hidden="true">+</span><span data-v-d4ffb88c="" class="visually-hidden">Zoom in</span></button><button data-v-d4ffb88c="" type="button" class="btn btn--secondary btn--compact day-map__zoom-button" data-testid="day-map-fit"> Fit </button></div>
+          <ul data-v-d4ffb88c="" class="day-map__legend" aria-label="Legend" data-testid="day-map-legend">
+            <li data-v-d4ffb88c="" class="day-map__legend-item" data-tone="filled" data-testid="day-map-legend-item"><svg data-v-d4ffb88c="" class="day-map__swatch" viewBox="0 0 24 14" aria-hidden="true">
+                <rect data-v-d4ffb88c="" x="0.75" y="0.75" width="22.5" height="12.5" rx="2" fill="var(--layout-section-1-fill)" stroke="var(--layout-section-1-edge)" stroke-width="1.5"></rect>
+              </svg><span data-v-d4ffb88c="">Here</span></li>
+            <li data-v-d4ffb88c="" class="day-map__legend-item" data-tone="outlined" data-testid="day-map-legend-item"><svg data-v-d4ffb88c="" class="day-map__swatch" viewBox="0 0 24 14" aria-hidden="true">
+                <rect data-v-d4ffb88c="" x="0.75" y="0.75" width="22.5" height="12.5" rx="2" fill="white" stroke="var(--layout-section-1-edge)" stroke-width="1.5"></rect>
+              </svg><span data-v-d4ffb88c="">Expected</span></li>
+            <li data-v-d4ffb88c="" class="day-map__legend-item" data-tone="free" data-testid="day-map-legend-item"><svg data-v-d4ffb88c="" class="day-map__swatch" viewBox="0 0 24 14" aria-hidden="true">
+                <rect data-v-d4ffb88c="" x="0.75" y="0.75" width="22.5" height="12.5" rx="2" fill="var(--layout-floor)" stroke="var(--layout-no-section-edge)" stroke-width="1.5" stroke-dasharray="4 3"></rect>
+              </svg><span data-v-d4ffb88c="">No vendor</span></li>
+          </ul>
+        </div>
+      </div>"
+    `);
+  });
+});
+
+describe('the day map filling its box, as the public map draws it', () => {
+  const SLOT = '<ul data-testid="caller-legend"><li>Section A</li><li>Free table</li></ul>';
+
+  let filled: VueWrapper | null = null;
+  afterEach(() => {
+    filled?.unmount();
+    filled = null;
+  });
+
+  /** The day map filling its box, its legend slot holding the caller's two items. */
+  function filling(props: Record<string, unknown> = {}) {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: Element,
+    ) {
+      if (this.getAttribute('data-testid') !== 'layout-map') return new DOMRect(0, 0, 0, 0);
+      return new DOMRect(0, 0, 1200, 900);
+    });
+    filled = mount(DayMap, {
+      attachTo: document.body,
+      props: {
+        locations: publicDayLocations(ANSWER, imageUrl),
+        tableTypes: TYPES,
+        locationId: 'loc-upper',
+        seats: publicSeats(ANSWER.seats, '2099-06-05'),
+        picked: null,
+        legend: [],
+        fills: true,
+        ...props,
+      },
+      slots: { legend: SLOT },
+    });
+    return filled;
+  }
+
+  it('marks its root as filling, which draws the zoom as a floating pill', () => {
+    const map = filling();
+    expect(map.get('[data-testid="day-map"]').classes()).toContain('day-map--fills');
+    expect(map.get('[data-testid="day-map-zoom"]').findAll('button')).toHaveLength(3);
+  });
+
+  it('takes its box whole: the frame keeps no shape of the hall', () => {
+    expect(filling().get('.day-map__frame').attributes('style')).toBeUndefined();
+  });
+
+  it('draws no location switch, even for two locations: the caller draws the choice', () => {
+    const map = filling();
+    expect(map.find('[data-testid="day-map-locations"]').exists()).toBe(false);
+    expect(map.get('[data-testid="layout-map"]').attributes('aria-label')).toBe(
+      'Upper Hall layout, 2 tables',
+    );
+  });
+
+  it("draws no legend list of its own, and the caller's legend in its slot", () => {
+    const map = filling({ legend: LEGEND });
+    expect(map.find('[data-testid="day-map-legend"]').exists()).toBe(false);
+    const slot = map.get('.day-map__legend-slot');
+    expect(slot.get('[data-testid="caller-legend"]').text()).toBe('Section AFree table');
+  });
+
+  it('draws no slot without fills', () => {
+    const map = mount(DayMap, {
+      props: {
+        locations: publicDayLocations(ANSWER, imageUrl),
+        tableTypes: TYPES,
+        locationId: 'loc-upper',
+        seats: [],
+        picked: null,
+        legend: LEGEND,
+      },
+      slots: { legend: SLOT },
+      global: { stubs: { LayoutMap: true } },
+    });
+    expect(map.find('.day-map__legend-slot').exists()).toBe(false);
+    expect(map.find('[data-testid="caller-legend"]').exists()).toBe(false);
+    expect(map.get('[data-testid="day-map"]').classes()).not.toContain('day-map--fills');
+    map.unmount();
+  });
+});
+
+describe('the day map, for what a caller stands over its tables (T465)', () => {
+  type Exposed = {
+    targetRect: (tableId: string, half: string) => DOMRect | null;
+    focusTarget: (tableId: string, half: string) => boolean;
+    fit: () => void;
+    floatingRects: () => DOMRect[];
+  };
+
+  it('tells viewed whenever its map does, as a zoom changes the part shown', async () => {
+    const map = dayMap({ fills: true });
+    await nextTick();
+    const before = map.emitted('viewed')?.length ?? 0;
+    await map.get('[data-testid="day-map-zoom-in"]').trigger('click');
+    await nextTick();
+    expect(map.emitted('viewed')).toHaveLength(before + 1);
+    expect(map.emitted('viewed')!.at(-1)).toEqual([]);
+  });
+
+  it("passes on its map's targetRect, focusTarget and fit", async () => {
+    const map = dayMap({ fills: true });
+    const exposed = map.vm as unknown as Exposed;
+    const g1 = new DOMRect(10, 20, 30, 40);
+    const measured = Element.prototype.getBoundingClientRect;
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: Element,
+    ) {
+      return this.getAttribute('data-table-id') === 'g1' ? g1 : measured.call(this);
+    });
+    expect(exposed.targetRect('g1', 'whole')).toEqual(g1);
+    expect(exposed.targetRect('nope', 'whole')).toBeNull();
+    expect(exposed.focusTarget('g1', 'whole')).toBe(true);
+    expect(document.activeElement).toBe(map.get('[data-table-id="g1"]').element);
+
+    const width = () =>
+      Number(map.get('[data-testid="layout-map"]').attributes('viewBox')!.split(' ')[2]);
+    const whole = width();
+    await map.get('[data-testid="day-map-zoom-in"]').trigger('click');
+    expect(width()).toBeLessThan(whole);
+    exposed.fit();
+    await nextTick();
+    expect(width()).toBeCloseTo(whole);
+  });
+
+  it('tells where what floats over its map stands: the zoom, and the legend slot when filling', async () => {
+    const zoom = new DOMRect(880, 548, 108, 40);
+    const legend = new DOMRect(12, 548, 300, 40);
+    // Measured after the mount, whose own measure of the map's box it replaces.
+    const floatingOf = (map: VueWrapper) => {
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+        this: Element,
+      ) {
+        const id = this.getAttribute('data-testid');
+        if (id === 'day-map-zoom') return zoom;
+        if (id === 'day-map-legend-slot') return legend;
+        return new DOMRect(0, 0, 0, 0);
+      });
+      return (map.vm as unknown as Exposed).floatingRects();
+    };
+    expect(floatingOf(dayMap({ fills: true }))).toEqual([zoom, legend]);
+    wrapper!.unmount();
+    const below = dayMap();
+    expect(floatingOf(below)).toEqual([zoom]);
+  });
+});
