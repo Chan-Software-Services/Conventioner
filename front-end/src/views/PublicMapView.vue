@@ -24,6 +24,7 @@ import DayMap from '@/components/daymap/DayMap.vue';
 import ListFrame from '@/components/ListFrame.vue';
 import PageNotFound from '@/components/PageNotFound.vue';
 import ReadFailed from '@/components/ReadFailed.vue';
+import ScrollBox from '@/components/ScrollBox.vue';
 import {
   publicDayLocations,
   publicSeats,
@@ -218,18 +219,19 @@ function openVendor(vendor: ListedVendor) {
 
     <template v-else-if="map">
       <header class="public-map__head">
-        <p class="public-map__eyebrow">Vendor map</p>
-        <h1 class="public-map__title" data-testid="public-map-heading">{{ map.marketName }}</h1>
-        <p class="public-map__subtitle" data-testid="public-map-subtitle">
-          {{ listed.length }} {{ listed.length === 1 ? 'vendor' : 'vendors' }} on {{ day }}
-        </p>
+        <div class="public-map__words">
+          <h1 class="public-map__title" data-testid="public-map-heading">{{ map.marketName }}</h1>
+          <p class="public-map__subtitle" data-testid="public-map-subtitle">
+            Vendor map · {{ listed.length }} {{ listed.length === 1 ? 'vendor' : 'vendors' }}
+          </p>
+        </div>
 
         <nav class="public-map__days" aria-label="Market day" data-testid="public-map-days">
           <button
             v-for="date in map.dates"
             :key="date"
             type="button"
-            class="btn btn--secondary btn--compact public-map__day"
+            class="public-map__day"
             :aria-pressed="date === place.date"
             :data-date="date"
             data-testid="public-map-day"
@@ -254,7 +256,7 @@ function openVendor(vendor: ListedVendor) {
           />
         </div>
 
-        <div class="public-map__side">
+        <aside class="public-map__side" aria-label="Vendors">
           <section
             class="public-map__card"
             :class="{ 'public-map__card--picked': card }"
@@ -321,40 +323,43 @@ function openVendor(vendor: ListedVendor) {
             </template>
           </section>
 
-          <ListFrame
-            :items="listed"
-            :finds="finds"
-            :findFrom="0"
-            findKey="find"
-            findLabel="Find a vendor"
-            :filterKey="place.date"
-            :itemKey="(vendor) => vendor.key"
-            :noun="{ one: 'vendor', many: 'vendors' }"
-            testid="public-map-vendors"
-          >
-            <template #row="{ item }">
-              <button
-                type="button"
-                class="public-map__vendor"
-                :aria-current="item.tableId === place.tableId ? 'true' : undefined"
-                data-testid="public-map-vendor"
-                @click="openVendor(item)"
-              >
-                <span class="public-map__code" aria-hidden="true">{{ item.code }}</span>
-                <span class="public-map__vendor-words">
-                  <span class="public-map__vendor-name">{{ item.name }}</span>
-                  <span class="public-map__vendor-seat"
-                    ><span class="visually-hidden">Table {{ item.code }}, </span
-                    >{{ item.locationName }}</span
-                  >
-                </span>
-              </button>
-            </template>
-            <template #empty>
-              <p>{{ NO_VENDORS_LISTED }}</p>
-            </template>
-          </ListFrame>
-        </div>
+          <ScrollBox class="public-map__scroll" fieldsLeaveTheStop testid="public-map-scroll">
+            <ListFrame
+              :items="listed"
+              :pageSize="1000"
+              :finds="finds"
+              :findFrom="0"
+              findKey="find"
+              findLabel="Find a vendor"
+              :filterKey="place.date"
+              :itemKey="(vendor) => vendor.key"
+              :noun="{ one: 'vendor', many: 'vendors' }"
+              testid="public-map-vendors"
+            >
+              <template #row="{ item }">
+                <button
+                  type="button"
+                  class="public-map__vendor"
+                  :aria-current="item.tableId === place.tableId ? 'true' : undefined"
+                  data-testid="public-map-vendor"
+                  @click="openVendor(item)"
+                >
+                  <span class="public-map__code" aria-hidden="true">{{ item.code }}</span>
+                  <span class="public-map__vendor-words">
+                    <span class="public-map__vendor-name">{{ item.name }}</span>
+                    <span class="public-map__vendor-seat"
+                      ><span class="visually-hidden">Table {{ item.code }}, </span
+                      >{{ item.locationName }}</span
+                    >
+                  </span>
+                </button>
+              </template>
+              <template #empty>
+                <p>{{ NO_VENDORS_LISTED }}</p>
+              </template>
+            </ListFrame>
+          </ScrollBox>
+        </aside>
       </div>
     </template>
   </div>
@@ -362,9 +367,10 @@ function openVendor(vendor: ListedVendor) {
 
 <style scoped>
 /* ── Prototype (release walk F6): the public map, designed for visitors ──
-   A dark title band names the market, how many vendors are there that day and the day tabs; the
-   map stands in a raised card with the hall tabs and the legend inside it; beside it (under it on
-   a phone) the picked table's card and the vendor list, each vendor led by their table's code. */
+   A quiet header, the market's name and the days; under it one viewer: the map large on the left,
+   the hall tabs and the legend floating on it, and beside it a panel as tall as the map, the
+   picked table on top and the vendors under it. The page fills the window and never scrolls; only
+   the vendor list scrolls, inside the panel. */
 /* The page's column: the workspace's width at most, on the app bar's own inset. */
 .public-map {
   display: flex;
@@ -567,132 +573,210 @@ function openVendor(vendor: ListedVendor) {
 
 /* ── Prototype (release walk F6) ── */
 .public-map {
-  gap: var(--space-6);
-  padding-block-start: var(--space-4);
+  /* The window's height under the app bar, not the shell's `flex: 1`, which grows with the list. */
+  flex: none;
+  gap: var(--space-4);
+  height: calc(100dvh - var(--banner-h));
+  padding-block: var(--space-4);
+  overflow: hidden;
 }
 
-/* The title band: the market's name on the app's dark, as the market frame's bar is. */
+/* The header: the name and how many vendors, the days at its end. */
 .public-map__head {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-8) var(--space-8) var(--space-6);
-  border-radius: var(--radius-card);
-  background: var(--mm-black);
-  color: white;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-6);
 }
 
-.public-map__eyebrow {
-  margin: 0;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--mm-text-muted-on-dark);
+.public-map__words {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
 }
 
 .public-map__head .public-map__title {
-  font-size: var(--text-2xl);
-  line-height: 1.15;
-  color: white;
+  font-size: var(--text-lg);
+  line-height: 1.2;
 }
 
 .public-map__head .public-map__subtitle {
   margin: 0;
-  font-size: var(--text-md);
-  color: var(--mm-text-muted-on-dark);
 }
 
-/* The days, pills on the band: the chosen one white. */
-.public-map__head .public-map__days {
-  margin-block-start: var(--space-4);
+/* A segmented control: the days on a beige track, the chosen one a raised white chip. */
+.public-map__days,
+.public-map__map :deep(.filter-toggles) {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--mm-beige);
 }
 
-.public-map__head .public-map__day {
-  height: var(--control-height);
-  padding-inline: var(--space-4);
-  border: 1px solid var(--mm-text-muted-on-dark);
+.public-map__day,
+.public-map__map :deep(.filter-toggles__toggle) {
+  min-height: 32px;
+  height: 32px;
+  padding: 0 var(--space-4);
+  border: none;
   border-radius: var(--radius-pill);
   background: transparent;
-  color: white;
+  color: var(--mm-black);
+  font: inherit;
   font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: none;
 }
 
-.public-map__head .public-map__day:hover {
-  border-color: white;
-  background: transparent;
-  color: white;
+.public-map__day:hover,
+.public-map__map :deep(.filter-toggles__toggle:hover) {
+  background: var(--mm-beige-hover);
 }
 
-.public-map__head .public-map__day[aria-pressed='true'] {
-  border-color: white;
+.public-map__day[aria-pressed='true'],
+.public-map__map :deep(.filter-toggles__toggle[aria-pressed='true']) {
   background: white;
   color: var(--mm-black);
   font-weight: 600;
+  box-shadow: var(--shadow-card);
+}
+
+/* The viewer: map and panel side by side, one height, in one framed box. */
+.public-map__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 0;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--mm-border);
+  border-radius: var(--radius-card);
+  background: white;
+  box-shadow: var(--shadow-card);
 }
 
 @media (width >= 1000px) {
   .public-map__body {
-    grid-template-columns: minmax(0, 1fr) 24rem;
+    grid-template-columns: minmax(0, 1fr) 22rem;
   }
 }
 
-/* The map in a raised card, the hall tabs and the legend inside it. */
+/* The map fills its side of the viewer, whatever the hall's shape. */
 .public-map__map {
-  padding: var(--space-4);
-  border-radius: var(--radius-card);
-  background: white;
-  box-shadow: var(--shadow-card);
+  position: relative;
+  top: auto;
+  height: 100%;
+  min-height: 0;
+  background: var(--layout-floor);
 }
 
-.public-map__map :deep(.filter-toggles) {
+.public-map__map :deep(.day-map),
+.public-map__map :deep(.day-map__grid) {
+  height: 100%;
+}
+
+.public-map__map :deep(.day-map__grid) {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: 'map map';
   gap: 0;
 }
 
-.public-map__map :deep(.filter-toggles__toggle) {
+.public-map__map :deep(.day-map__frame) {
+  /* The hall's shape is the map's to fit inside the pane, not the pane's to take. */
+  aspect-ratio: auto !important;
+  height: 100%;
+  max-height: none;
+  border: none;
   border-radius: 0;
 }
 
-.public-map__map :deep(.filter-toggles__toggle + .filter-toggles__toggle) {
-  margin-inline-start: -1px;
-}
-
-.public-map__map :deep(.filter-toggles__toggle:first-child) {
-  border-start-start-radius: var(--radius-pill);
-  border-end-start-radius: var(--radius-pill);
-  padding-inline-start: var(--space-4);
-}
-
-.public-map__map :deep(.filter-toggles__toggle:last-child) {
-  border-start-end-radius: var(--radius-pill);
-  border-end-end-radius: var(--radius-pill);
-  padding-inline-end: var(--space-4);
-}
-
-.public-map__map :deep(.day-map__frame) {
-  border-color: transparent;
-}
-
-/* The picked table's card: raised, its code a badge, a green edge along its start. */
-.public-map__card {
-  border: none;
+/* The hall tabs float on the map's top left, the legend on its bottom left. */
+.public-map__map :deep(.day-map__locations) {
+  grid-area: map;
+  align-self: start;
+  justify-self: start;
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: 1;
+  background: white;
   box-shadow: var(--shadow-card);
+}
+
+.public-map__map :deep(.day-map__legend) {
+  grid-area: map;
+  align-self: end;
+  justify-self: start;
+  flex-wrap: nowrap;
+  position: absolute;
+  bottom: var(--space-3);
+  left: var(--space-3);
+  z-index: 1;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: white;
+  box-shadow: var(--shadow-card);
+  font-size: var(--text-xs);
+}
+
+/* The zoom stays on the map's bottom right at every width, a phone's too. */
+.public-map__map :deep(.day-map__zoom) {
+  grid-area: map;
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-3);
+  z-index: 1;
+  padding: var(--space-1);
+  box-shadow: var(--shadow-card);
+}
+
+/* The panel: the picked table over the vendors, which scroll inside it. */
+.public-map__side {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  border-inline-start: 1px solid var(--mm-border);
+}
+
+.public-map__card {
+  flex: none;
+  padding: var(--space-4);
+  border: none;
+  border-block-end: 1px solid var(--mm-border);
+  border-radius: 0;
+  background: white;
 }
 
 .public-map__card--picked {
-  border-inline-start: 4px solid var(--mm-green);
+  box-shadow: inset 4px 0 0 var(--mm-green);
 }
 
-.public-map__hint {
-  font-size: var(--text-sm);
+.public-map__card-title {
+  font-family: 'Merge One';
+  font-weight: 400;
 }
 
-/* The list in a raised card of its own, a rule between vendors. */
+.public-map__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .public-map__side :deep(.list-frame) {
-  padding: var(--space-4);
-  border-radius: var(--radius-card);
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+/* The find field stays at the panel's top while the vendors scroll under it. */
+.public-map__side :deep(.list-frame__tools) {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-block: var(--space-3) var(--space-2);
   background: white;
-  box-shadow: var(--shadow-card);
 }
 
 .public-map__side :deep(.list-frame__rows > li + li) {
@@ -704,12 +788,13 @@ function openVendor(vendor: ListedVendor) {
   flex-direction: row;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-2);
+  padding: var(--space-2) var(--space-1);
+  border: none;
+  border-radius: 0;
 }
 
 .public-map__vendor:hover {
   border-color: transparent;
-  background: none;
 }
 
 .public-map__vendor:hover .public-map__vendor-name {
@@ -718,7 +803,8 @@ function openVendor(vendor: ListedVendor) {
 }
 
 .public-map__vendor[aria-current='true'] {
-  border-color: var(--mm-black);
+  box-shadow: inset 3px 0 0 var(--mm-green);
+  padding-inline-start: var(--space-3);
 }
 
 .public-map__vendor-words {
@@ -728,39 +814,56 @@ function openVendor(vendor: ListedVendor) {
   min-width: 0;
 }
 
-/* A table's code as a badge: the app's green on its lightest tint. */
 .public-map__code {
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 3.25rem;
-  height: 2rem;
+  min-width: 3rem;
+  height: 1.75rem;
   padding-inline: var(--space-2);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-pill);
   background: var(--mm-fill-third);
   color: var(--mm-black);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
+/* A phone: the map over the panel, the map the larger part, both within the window. */
+@media (width < 1000px) {
+  .public-map__body {
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .public-map__card {
+    gap: var(--space-1);
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .public-map__card-title {
+    font-size: var(--text-md);
+  }
+
+  .public-map__side {
+    border-inline-start: none;
+    border-block-start: 1px solid var(--mm-border);
+  }
+}
+
 @media (width <= 640px) {
   .public-map {
     padding-inline: var(--space-3);
+    padding-block-start: var(--space-4);
   }
 
-  .public-map__head {
-    padding: var(--space-6) var(--space-4) var(--space-4);
+  .public-map__days {
+    max-width: 100%;
   }
 
-  .public-map__head .public-map__title {
-    font-size: var(--text-xl);
-  }
-
-  .public-map__map {
-    padding: var(--space-2);
+  .public-map__day {
+    padding-inline: var(--space-3);
   }
 }
 </style>
