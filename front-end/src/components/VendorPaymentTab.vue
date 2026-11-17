@@ -19,10 +19,11 @@
  * The account is one keyed read (T421, `useServerRead`), keyed by market and vendor: moving the
  * drawer to another vendor drops what was shown in the same tick and says "Loading…" until theirs
  * lands, and a read of the last vendor that answers late lands nowhere. A move also closes any
- * dialog open on the last vendor, and each dialog is keyed by the account, so an entry dialog
- * opened on Ana is gone with her and nothing it answers later is heard; a write's answer is taken
- * only into the account it was opened on (`adopt`), so a confirmation of Ana's answering on Ben's
- * tab changes nothing there.
+ * dialog open on the last vendor, and Record payment and Change owed are keyed by the account, so
+ * one opened on Ana is gone with her and none of its own events reach Ben's tab; a write's answer
+ * is taken only into the account it was opened on (`adopt`), so a confirmation of Ana's answering
+ * on Ben's tab changes nothing there and reads nothing on it: Payments alone is told to read its
+ * totals again.
  */
 import { computed, inject, onScopeDispose, ref, watch } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
@@ -78,7 +79,7 @@ const accountRead = useServerRead<AccountKey, VendorAccount>(
 const { phase, sentence, key: openOn } = accountRead;
 /** The account as read for the vendor open now, or as a write on it answered. */
 const account = accountRead.data;
-/** The account the tab is open on, as one name: each dialog is keyed by it. */
+/** The account the tab is open on, as one name: Record payment and Change owed are keyed by it. */
 const accountName = computed(() => openOn.value?.join('\n') ?? '');
 
 /** The open dialog, if any: one at a time. */
@@ -442,8 +443,8 @@ function struckPrice(line: PaymentLine): boolean {
          carries a transform, which makes it the box a fixed dialog inside it centres on (dialogs: a
          dialog opened from inside a modal teleports). -->
     <Teleport to="body">
-      <!-- Keyed by the account, so a dialog opened on one vendor is gone with them, and nothing it
-           answers after the move is heard on the next vendor's tab. -->
+      <!-- Keyed by the account, so a dialog opened on one vendor is gone with them, and none of its
+           own events after the move reach the next vendor's tab. -->
       <RecordPaymentDialog
         :key="`record ${accountName}`"
         :open="!!entryDialog"
