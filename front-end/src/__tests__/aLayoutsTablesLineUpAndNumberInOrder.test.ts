@@ -1,7 +1,7 @@
 /**
- * The geometry of many tables at once (T257 ticket 05): the box that selects by centre, a ragged
- * selection lined up and spaced evenly, where a duplicate goes, the order Renumber by position
- * reads a section in, and a table whose section is gone read as in no section.
+ * The geometry of many tables at once (T257 ticket 05): the box that selects the tables wholly in
+ * it (T422), a ragged selection lined up and spaced evenly, where a duplicate goes, the order
+ * Renumber by position reads a section in, and a table whose section is gone read as in no section.
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -45,16 +45,32 @@ describe('a box drawn on the floor', () => {
     expect(boxBetween({ xMm: 5000, yMm: 2000 }, { xMm: 1000, yMm: 6000 })).toEqual(drawn);
   });
 
-  it('selects every table whose centre is in it, its edge included, and no other', () => {
+  it('selects every table wholly in it, as turned, its edge included, and no other', () => {
+    // Standard tables, 1830 x 760 mm.
     const tables = [
       at('inside', 3000, 3000),
-      at('on-the-edge', 5000, 4000),
-      // Most of this table is in the box, and its centre is not.
-      at('centre-outside', 5100, 3000),
+      // Its right end on the box's right edge.
+      at('on-the-edge', 5000 - 915, 4000),
+      // Most of this table, centre and all, is in the box; its end is not.
+      at('mostly-inside', 4500, 3000),
+      // Square to the page it fits the box's width; turned a quarter it is 1830 deep and fits;
+      // turned 45°, its corners reach past the box's top.
+      at('turned', 2000, 3000, 90),
+      at('turned-out', 2000, 2400, 45),
       at('far', 20_000, 20_000),
     ];
     const drawn = { left: 1000, top: 2000, right: 5000, bottom: 6000 };
-    expect(tablesInBox(tables, drawn)).toEqual(['inside', 'on-the-edge']);
+    expect(tablesInBox(tables, drawn, () => SIX_FOOT)).toEqual(['inside', 'on-the-edge', 'turned']);
+  });
+
+  it("reads each table's own size", () => {
+    const tables = [at('long', 3000, 3000), at('short', 3000, 5000)];
+    const drawn = { left: 1500, top: 2000, right: 4500, bottom: 6000 };
+    const sizes: Record<string, { widthMm: number; depthMm: number }> = {
+      long: { widthMm: 3200, depthMm: 760 },
+      short: SIX_FOOT,
+    };
+    expect(tablesInBox(tables, drawn, (table) => sizes[table.id])).toEqual(['short']);
   });
 });
 

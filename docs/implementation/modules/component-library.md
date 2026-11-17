@@ -9,7 +9,7 @@ describes:
   - back-end/tests/fixtures/component_library_fixture.py
   - back-end/tests/test_component_library_fixture.py
   - front-end/e2e/helpers/componentLibrary.ts
-verified: 2026-11-12
+verified: 2026-11-17
 sources:
   - T200
   - T191
@@ -25,6 +25,8 @@ sources:
   - T201
   - T318
   - T411
+  - T446
+  - T422
 ---
 
 # The component library
@@ -72,9 +74,11 @@ The `combobox` entry draws [`ChoiceField`](../../../front-end/src/components/Cho
 The `list-frame` entry draws [`PagedList`](../../../front-end/src/components/PagedList.vue) beside `ListFrame`: a box of its own, a page that fails once until "Try again" brings it, and a body-scroll dialog whose body is the box, each with a `ReadOut` of how many it has read.
 Each pages the fixture's 359 applications 25 at a time through `pagedRead`, a short timer in the entry in place of a request, so a page is seen to land with no endpoint and no store.
 The `dialog` entry's save in flight writes as a dialog does, through [`useDialogSubmit`](../../../front-end/src/utils/useDialogSubmit.ts) over a send that its "Let the save land" resolves, so the hold it shows is the shell's, for as long as it is looked at.
+Its short list, six of the fixture's export columns as ticks, passes `fitsContentOnAPhone`, so on a phone it is as tall as its ticks, where its other dialogs whose body scrolls keep a phone's height by Daniel's choice 22 ([dialogs](../conventions/dialogs.md#the-rules)).
 The `charts` entry draws the Stats tab's charts on the fixture, in the tab's order (T201): its 359 applications over time as a `ColumnChart`, a column for each of the 22 days from an opening two days before the first response to a close three days after the last, and a column a week over an intake opened eight weeks earlier, each with its sentence read out under it; the review's statuses as a `SplitBar`, and again with Needs follow-up at zero, told but not linked; the room as a `MeterBar` a row, the four dates' tables asked against their 59 tables, the three tiers' table-days (Bronze with no table), and the dates' tables alone, as before anyone applies; how full as a `FillGrid`, the fixture's seats with every table of both sections taken on the four dates, the same seats partway placed so a cell stands at each step, and over nine days, which scrolls in its box on a phone; and the question of 228 answers as `BarLedger` passes it on the tab, folded past 8, in a card of at most 40rem, about a lone card's width on the tab at a desk, where each answer is one line, in a card narrower than 32rem, where each stacks, and on a question of five answers, with no button.
 
 The `components` entry draws each reusable component that exists today, the real one as its screens mount it; [`ListFreshness`](../../../front-end/src/components/ListFreshness.vue), which says when a list was last read beside Refresh, is drawn never read, just read, read five minutes before, refreshing and failed, with a `ReadOut` of the reads asked for (T318).
+Its [`RowMenu`](../../../front-end/src/components/RowMenu.vue) is drawn as the Payments tab's two menus and the app bar's account menu, and as the layout map's Floorplan menu, choices that stay chosen opening above their button, the second and third disabled while the first is unticked (T422).
 
 The page uses only the design tokens, the primitives and the app's components; Stylelint holds its files as it holds every file, so a raw colour, size or spacing is an error there.
 A state the pointer or the keyboard makes (hover, held down, focus) is drawn held beside the live control by a class of the entry's own that copies what `primitives.css`, or the component it mounts, draws for it (`FileDropZone`'s focus halo); the live control is the one to trust.
@@ -93,6 +97,7 @@ It holds 359 applications (every applicant of the four-day grid with a full name
 Each application's `export` holds what those columns and filters read of a vendor, which the `export-vendors` entry reads: there [`exportVendors.ts`](../../../front-end/src/dev/library/exportVendors.ts) answers as the product's server would, so [`ExportVendorsForm.vue`](../../../front-end/src/components/ExportVendorsForm.vue), the dialog that ships, mounted there on the fixture, follows its filters with no endpoint, and its Download only reads out what it would export.
 The `summaries` entry reads only each approved vendor's Discord state from it, as the outcome of L9's role run.
 The `layout-map` entry reads none of it: its halls are made in [`layoutFixture.ts`](../../../front-end/src/dev/library/layoutFixture.ts), a hall of four sections and 49 tables as the layout's prototype drew it, one of nine sections, and one of 400 tables dealt from a seeded draw, each over a floorplan drawn there as an SVG, and [`LayoutMap`](floorplan-placement.md#the-drawing) draws them in each of its modes, at four zooms and panned, the frames of the pan read out (T257).
+The `day-map` entry reads none of it either: `marketDay` in the same file gives a market day of Upper Hall and a Lower Hall of two sections and a stage turned 30 degrees, its seats dealt from seed 422 (63 tables; 8 free; 13 shared, 5 of them with a half free; 45 seats filled and 18 outlined, each vendor named from two word lists, never a person's name), which [`DayMap`](floorplan-placement.md#the-day-map) draws as Attendance would, with a search's mark, as the public map would, and in a box a phone's width, each press read out (T422).
 
 **Never edit it by hand**: change the deriver and run `python tests/fixtures/component_library_fixture.py` from `back-end/`.
 [`test_component_library_fixture.py`](../../../back-end/tests/test_component_library_fixture.py) fails when the committed file is not exactly its output, and pins every count above, since the library exists to judge a pattern at the size it must work at.

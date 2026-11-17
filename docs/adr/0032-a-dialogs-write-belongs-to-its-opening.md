@@ -5,7 +5,7 @@ describes:
   - front-end/src/utils/useSubmit.ts
   - front-end/src/utils/useDialogSubmit.ts
   - front-end/src/components/AppDialog.vue
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - T277
   - T411
@@ -45,7 +45,7 @@ The rules are in [dialogs](../implementation/conventions/dialogs.md#the-rules).
 - No dialog that writes on a press keeps a `busy` or an error of its own for its write, and none of them can forget the hold: a dialog on its submission holds through its write with nothing else asked.
 - Every file that draws `AppDialog` is said to write or not, on the lists of [`everyWritingDialogUsesTheSubmit.test.ts`](../../front-end/src/__tests__/everyWritingDialogUsesTheSubmit.test.ts), which fails a new one until it is, and a writing dialog with no submission.
 - An answer for an earlier opening cannot close, mark or fill the one the person is in, whatever the network does.
-- A re-read inside a write asks the submission whether its opening still stands (`isCurrent`, handed to `send`), so no dialog keeps a count of its openings for its writes; Manage market keeps one only for the reads no write sends, as it opens and when its permissions change, which no submission holds.
+- A re-read inside a write asks the submission whether its opening still stands (`isCurrent`, handed to `send`), so no dialog keeps a count of its openings for its writes; Manage market's reads that no write sends, as it opens and when its permissions change, are its keyed read's, keyed by the market it is open on, so no count is kept for them either ([ADR 0036](0036-a-market-keyed-read-is-one-keyed-read.md)).
 - A request that never answers holds its dialog until a reload, since there is no timer and no retry, as before.
 - Browser history is not a close: Back during a held write still takes the page, and the opening and the unmount rule only keep the late answer out of what comes after.
 

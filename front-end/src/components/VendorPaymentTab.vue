@@ -15,17 +15,27 @@
  * Each dialog's write belongs to its opening (T411): held while it writes, and an answer that lands
  * after its opening has gone is shown in the account behind the dialog (`refreshed`), never by
  * closing what is open now.
+ *
+ * The account is one keyed read (T421, `useServerRead`), keyed by market and vendor: moving the
+ * drawer to another vendor drops what was shown in the same tick and says "Loading…" until theirs
+ * lands, and a read of the last vendor that answers late lands nowhere. A move also closes any
+ * dialog open on the last vendor, and Record payment and Change owed are keyed by the account, so
+ * one opened on Ana is gone with her and none of its own events reach Ben's tab; a write's answer
+ * is taken only into the account it was opened on (`adopt`), so a confirmation of Ana's answering
+ * on Ben's tab changes nothing there and reads nothing on it: Payments alone is told to read its
+ * totals again.
  */
-import { computed, ref, watch } from 'vue';
+import { computed, inject, onScopeDispose, ref, watch } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
 import ChangeOwedDialog from '@/components/ChangeOwedDialog.vue';
 import RecordPaymentDialog from '@/components/RecordPaymentDialog.vue';
 import RowMenu from '@/components/RowMenu.vue';
-import { getApiErrorMessage } from '@/utils/api';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
+import { useServerRead } from '@/utils/useServerRead';
 import { getFormattedTimestamp } from '@/utils/utils';
 import { dateLabel } from '@/utils/vendorDetails';
 import {
+  PAYMENT_WRITTEN,
   accountAsItStands,
   balanceChip,
   balanceText,
@@ -58,25 +68,19 @@ const emit = defineEmits<{
   changed: [];
 }>();
 
-const account = ref<VendorAccount | null>(null);
-const isLoading = ref(false);
-const loadError = ref('');
+/** Whose account the tab is open on: the market, and the vendor's address. */
+type AccountKey = readonly [marketId: string, email: string];
 
-async function load(): Promise<void> {
-  if (!props.marketId || !props.email) return;
-  isLoading.value = true;
-  loadError.value = '';
-  try {
-    account.value = await loadAccount(props.marketId, props.email);
-  } catch (err) {
-    account.value = null;
-    loadError.value = getApiErrorMessage(err, 'Their payments could not be loaded.');
-  } finally {
-    isLoading.value = false;
-  }
-}
-
-watch(() => [props.marketId, props.email], load, { immediate: true });
+const accountRead = useServerRead<AccountKey, VendorAccount>(
+  () => (props.marketId && props.email ? [props.marketId, props.email] : null),
+  ([marketId, email]) => loadAccount(marketId, email),
+  { failure: 'Their payments could not be loaded.' },
+);
+const { phase, sentence, key: openOn } = accountRead;
+/** The account as read for the vendor open now, or as a write on it answered. */
+const account = accountRead.data;
+/** The account the tab is open on, as one name: Record payment and Change owed are keyed by it. */
+const accountName = computed(() => openOn.value?.join('\n') ?? '');
 
 /** The open dialog, if any: one at a time. */
 type Open =
@@ -95,17 +99,66 @@ function show(dialog: Open): void {
   open.value = dialog;
 }
 
-function saved(updated: VendorAccount): void {
-  account.value = updated;
+// A move to another vendor or market closes what was open on the last one: a reset of what the
+// tab shows, never a read.
+let moves = 0;
+watch(
+  openOn,
+  () => {
+    moves += 1;
+    open.value = null;
+    confirmSpent.value = false;
+  },
+  { flush: 'sync' },
+);
+
+let gone = false;
+onScopeDispose(() => (gone = true));
+const paymentWritten = inject(PAYMENT_WRITTEN, null);
+/**
+ * A dialog's write, as it is sent. Answered on the account it was made on, the dialog says so
+ * itself (`saved`, `refreshed`). Answered once the tab moved to another vendor or market, the
+ * dialog is gone with the account it was keyed by: the answer is taken into nothing here, and
+ * Payments is told to read its totals again. When the tab has come back to that account meanwhile,
+ * its read on coming back may have been served before the write, so the account is read again.
+ * Answered once the tab itself is gone, the page that showed it is told instead. A refused or
+ * failed write tells nothing more than the dialog did.
+ */
+function sending(write: Promise<VendorAccount>): void {
+  const sentAt = moves;
+  const sentOn = openOn.value;
+  write.then(
+    () => {
+      if (gone) paymentWritten?.();
+      else if (moves !== sentAt) {
+        readAgainIfBack(sentOn, sentAt);
+        emit('changed');
+      }
+    },
+    () => undefined,
+  );
+}
+
+/**
+ * A write sent on `on` succeeded after the tab moved away and came back to `on`: the read made on
+ * coming back may have been served before the write was stored, so the account is read again.
+ */
+function readAgainIfBack(on: AccountKey | null, sentAt: number): void {
+  if (on && moves !== sentAt && accountName.value === on.join('\n')) void accountRead.reread();
+}
+
+/** A write's answer, taken into the account it was made on: nothing on another vendor's tab. */
+function saved(on: AccountKey | null, updated: VendorAccount): void {
+  if (on) accountRead.adopt(on, () => updated);
   open.value = null;
   emit('changed');
 }
 
 /** A refusal that answered the account as it stands (a press already recorded, or an edit or a
  * removal of an entry changed meanwhile): shown behind the dialog, which stays open with its
- * refusal, since another write moved it. */
-function refreshed(updated: VendorAccount): void {
-  account.value = updated;
+ * refusal, since another write moved it; taken only into the account it was made on. */
+function refreshed(on: AccountKey | null, updated: VendorAccount): void {
+  if (on) accountRead.adopt(on, () => updated);
   emit('changed');
 }
 
@@ -151,25 +204,41 @@ const confirmText = computed(() => {
 
 async function confirm(): Promise<void> {
   const dialog = confirming.value;
-  if (!dialog || confirmSpent.value) return;
+  const on = openOn.value;
+  const sentAt = moves;
+  if (!dialog || !on || confirmSpent.value) return;
+  const [marketId, email] = on;
   await confirmSubmission.submit(
-    () =>
-      dialog.kind === 'calculated'
-        ? useCalculatedPrice(props.marketId, props.email, dialog.line.date)
-        : removePayment(props.marketId, dialog.entry.id),
+    () => {
+      const write =
+        dialog.kind === 'calculated'
+          ? useCalculatedPrice(marketId, email, dialog.line.date)
+          : removePayment(marketId, dialog.entry.id);
+      // Answered once the tab is gone (the drawer closed), the submission calls nothing more, so
+      // the page that showed it is told; on the tab, `saved` or `late` tells Payments.
+      write.then(
+        () => {
+          if (gone) paymentWritten?.();
+        },
+        () => undefined,
+      );
+      return write;
+    },
     {
-      done: saved,
+      done: (updated) => saved(on, updated),
       refused: (err) => {
         const standing = accountAsItStands(err);
         if (standing) {
-          refreshed(standing);
+          refreshed(on, standing);
           confirmSpent.value = true;
         }
       },
-      // An earlier confirmation's answer: the account takes it, and what is open now stays.
+      // An earlier confirmation's answer: the account it was made on takes it, and what is open
+      // now stays. Answered after a move away and back, it is read again too.
       late: (answer) => {
         const standing = answer.ok ? answer.answer : accountAsItStands(answer.error);
-        if (standing) refreshed(standing);
+        if (standing) refreshed(on, standing);
+        if (answer.ok) readAgainIfBack(on, sentAt);
       },
     },
   );
@@ -207,14 +276,12 @@ function owedText(cents: number | null): string {
 function struckPrice(line: PaymentLine): boolean {
   return !!line.owedSetBy && line.priceCents != null && line.priceCents !== line.owedCents;
 }
-
-defineExpose({ reload: load });
 </script>
 
 <template>
   <section class="payment-tab" data-testid="payment-tab">
-    <p v-if="isLoading && !account" class="payment-note">Loading…</p>
-    <p v-else-if="loadError" class="payment-note">{{ loadError }}</p>
+    <p v-if="phase === 'loading'" class="payment-note">Loading…</p>
+    <p v-else-if="phase === 'failed'" class="payment-note">{{ sentence }}</p>
 
     <template v-else-if="account">
       <div class="payment-totals">
@@ -376,7 +443,10 @@ defineExpose({ reload: load });
          carries a transform, which makes it the box a fixed dialog inside it centres on (dialogs: a
          dialog opened from inside a modal teleports). -->
     <Teleport to="body">
+      <!-- Keyed by the account, so a dialog opened on one vendor is gone with them, and none of its
+           own events after the move reach the next vendor's tab. -->
       <RecordPaymentDialog
+        :key="`record ${accountName}`"
         :open="!!entryDialog"
         :marketId="marketId"
         :email="email"
@@ -384,18 +454,21 @@ defineExpose({ reload: load });
         :mode="entryDialog?.mode"
         :entry="entryDialog?.entry"
         @close="open = null"
-        @saved="saved"
-        @refreshed="refreshed"
+        @saved="saved(openOn, $event)"
+        @refreshed="refreshed(openOn, $event)"
+        @sending="sending"
       />
       <ChangeOwedDialog
+        :key="`owed ${accountName}`"
         :open="!!owedLine"
         :marketId="marketId"
         :email="email"
         :line="owedLine"
         :currency="account?.currency ?? null"
         @close="open = null"
-        @saved="saved"
-        @refreshed="refreshed"
+        @saved="saved(openOn, $event)"
+        @refreshed="refreshed(openOn, $event)"
+        @sending="sending"
       />
       <AppDialog
         :open="!!confirmText"

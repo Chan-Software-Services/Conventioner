@@ -1,4 +1,4 @@
-"""``application_status`` is the only module that writes an application's review state (ADR 0034).
+"""``application_status`` is the only module that writes an application's review state (ADR 0037).
 
 The review state is ``ReviewState.OWNED_FIELDS``: the status, the verdict's giver, time and
 reason, the follow-up's owner, what an undo returns to, who added the vendor and when, the origin,

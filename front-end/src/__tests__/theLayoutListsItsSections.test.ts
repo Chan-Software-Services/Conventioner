@@ -234,3 +234,45 @@ describe('the Sections card', () => {
     expect(wrapper.find('[data-testid="layout-panel-starting"]').exists()).toBe(false);
   });
 });
+
+describe('the Sections card of a layout that follows the plan (T422)', () => {
+  const planned = SECTIONS.map((section) =>
+    section.id === 'sec-gold' ? { ...section, count: 13 } : { ...section, count: 4 },
+  );
+  const following = (props: Record<string, unknown> = {}) =>
+    mount(LayoutPanelSections, {
+      props: {
+        locationName: 'Upper Hall',
+        sections: layoutSections(LAYOUT, planned),
+        editable: true,
+        followsPlan: true,
+        startingCounts: [{ sectionId: 'sec-gold', count: 13 }],
+        ...props,
+      },
+    });
+
+  it('counts each section as placed of its count in the plan', () => {
+    const wrapper = following();
+    expect(
+      wrapper.findAll('[data-testid="layout-panel-section-count"]').map((count) => count.text()),
+    ).toEqual(['2 of 13', '1 of 4']);
+    // The count says what is left; Section Setup's start says nothing more.
+    expect(wrapper.find('[data-testid="layout-panel-starting"]').exists()).toBe(false);
+  });
+
+  it('keeps "Renumber by position" enabled past Draft', () => {
+    const wrapper = following({ settled: false });
+    expect(
+      wrapper
+        .get('[data-testid="layout-panel-section-menu-sec-gold-button"]')
+        .attributes('disabled'),
+    ).toBeUndefined();
+  });
+
+  it('counts tables as before on a layout started in Draft', () => {
+    const wrapper = following({ followsPlan: false });
+    expect(wrapper.findAll('[data-testid="layout-panel-section-count"]')[0].text()).toBe(
+      '2 tables',
+    );
+  });
+});

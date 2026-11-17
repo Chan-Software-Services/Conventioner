@@ -9,7 +9,7 @@
  * names of what they hold (E38/F08/S01).
  */
 import { MarketAction, mayTake } from '@/utils/marketActions';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import {
@@ -39,6 +39,7 @@ import RowGroup from '@/components/RowGroup.vue';
 import { useGroupFolds } from '@/utils/useGroupFolds';
 import { useResultFilters } from '@/utils/useResultFilters';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
+import { useServerRead } from '@/utils/useServerRead';
 import {
   HALF_TABLE_LEFT,
   HALF_TABLE_RIGHT,
@@ -109,14 +110,55 @@ const tablesShown = computed(() => {
   return settledBy(shown) !== null && mayTake(shown, MarketAction.Assign);
 });
 
-const allRows = ref<MarketTableRow[]>([]);
-/** Email to name, from the same response as the rows, so a table and its occupant agree. */
-const vendorNames = ref<VendorNames>({});
-/** What the search finds each vendor by beyond their address, from the same response (E35/F02/S01). */
-const vendorSearch = ref<VendorSearch>({});
-/** Who may be put in a seat, and what they asked for - so a change that alters their table
-    choice can be said out loud before it is made. */
-const vendors = ref<PlaceableVendor[]>([]);
+/** What one read of the tables answers, each part from the same response. */
+interface TablesRead {
+  rows: MarketTableRow[];
+  /** Email to name, so a table and its occupant agree. */
+  vendorNames: VendorNames;
+  /** What the search finds each vendor by beyond their address (E35/F02/S01). */
+  vendorSearch: VendorSearch;
+  /** Who may be put in a seat, and what they asked for - so a change that alters their table
+      choice can be said out loud before it is made. */
+  vendors: PlaceableVendor[];
+}
+
+async function readTables(id: string): Promise<TablesRead> {
+  const resp = await api.get<Partial<TablesRead>>(`/markets/${encodeURIComponent(id)}/tables`);
+  return {
+    rows: Array.isArray(resp.data?.rows) ? resp.data.rows : [],
+    vendorNames: resp.data?.vendorNames ?? {},
+    vendorSearch: resp.data?.vendorSearch ?? {},
+    vendors: Array.isArray(resp.data?.vendors) ? resp.data.vendors : [],
+  };
+}
+
+/**
+ * Moved on by Try again, so the read's key asks again who is signed in, as it does on each market:
+ * the address is kept outside Vue, where nothing watches it.
+ */
+const signInAsked = ref(0);
+
+/**
+ * The tables, one keyed read of the open market (T421): a move to another market drops the last
+ * market's tables in the same tick and reads the next, and an answer for another market, or one a
+ * newer read has overtaken, never lands. With no market id, or nobody signed in, nothing is read.
+ */
+const tablesRead = useServerRead(
+  () => {
+    void signInAsked.value;
+    return marketId.value && signedInEmail() ? marketId.value : null;
+  },
+  readTables,
+  {
+    failure: 'The tables could not be loaded.',
+    refreshFailure: 'Could not update. The tables are as they were last read.',
+  },
+);
+
+const allRows = computed(() => tablesRead.data.value?.rows ?? []);
+const vendorNames = computed(() => tablesRead.data.value?.vendorNames ?? {});
+const vendorSearch = computed(() => tablesRead.data.value?.vendorSearch ?? {});
+const vendors = computed(() => tablesRead.data.value?.vendors ?? []);
 /** Who holds a seat by hand though the review left them out, as the tables read says (E36/F02/S03). */
 const notApprovedAddresses = computed(
   () => new Set(vendors.value.filter((v) => v.notApproved).map((v) => v.email.toLowerCase())),
@@ -124,8 +166,27 @@ const notApprovedAddresses = computed(
 function notApproved(email: string | null | undefined): boolean {
   return Boolean(email) && notApprovedAddresses.value.has(String(email).toLowerCase());
 }
-const isLoading = ref(false);
-const errorMessage = ref('');
+/** A read of the tables is out, the first or a re-read. */
+const isLoading = computed(
+  () => tablesRead.phase.value === 'loading' || tablesRead.phase.value === 'refreshing',
+);
+/**
+ * What the page says of the tables it could not read: a first read's failure, or a re-read's over
+ * the tables kept, gone while the next read is out.
+ */
+const errorMessage = computed(() => {
+  if (!marketId.value) return 'Missing market id.';
+  if (tablesRead.key.value === null) return 'You must be signed in to view tables.';
+  const phase = tablesRead.phase.value;
+  return phase === 'failed' || phase === 'refresh_failed' ? tablesRead.sentence.value : '';
+});
+
+/** Try again: who is signed in is asked again, and the tables are read again. */
+function readTheTablesAgain(): void {
+  const before = tablesRead.key.value;
+  signInAsked.value += 1;
+  if (tablesRead.key.value === before) void tablesRead.reread();
+}
 
 /**
  * The filters live in the address. The system was once complete and unreachable: every filter was
@@ -232,49 +293,8 @@ function toggleStatus(kind: TableStatus): void {
 
 const filterOptionsShown = computed(() => filterOptions(allRows.value));
 
-async function loadTables(): Promise<void> {
-  errorMessage.value = '';
-  if (!marketId.value) {
-    errorMessage.value = 'Missing market id.';
-    return;
-  }
-  if (!signedInEmail()) {
-    errorMessage.value = 'You must be signed in to view tables.';
-    return;
-  }
-  isLoading.value = true;
-  try {
-    const resp = await api.get<{
-      rows: MarketTableRow[];
-      vendorNames: VendorNames;
-      vendorSearch?: VendorSearch;
-      vendors?: PlaceableVendor[];
-    }>(`/markets/${encodeURIComponent(marketId.value)}/tables`);
-    allRows.value = Array.isArray(resp.data?.rows) ? resp.data.rows : [];
-    vendorNames.value = resp.data?.vendorNames ?? {};
-    vendorSearch.value = resp.data?.vendorSearch ?? {};
-    vendors.value = Array.isArray(resp.data?.vendors) ? resp.data.vendors : [];
-  } catch (err: unknown) {
-    errorMessage.value = getApiErrorMessage(err, 'The tables could not be loaded.');
-    allRows.value = [];
-    vendorNames.value = {};
-    vendorSearch.value = {};
-    vendors.value = [];
-  } finally {
-    isLoading.value = false;
-  }
-}
-
-watch(
-  () => marketId.value,
-  () => {
-    forgetSectionFolds();
-    allRows.value = [];
-    void loadTables();
-  },
-);
-
-onMounted(loadTables);
+// What the page shows of the market it left goes with it: a reset, never a read.
+watch(tablesRead.key, forgetSectionFolds);
 
 // ── Changing a placement (E11/F03/S01) ─────────────────────────────────────────
 //
@@ -394,7 +414,10 @@ const emptySeats = computed((): EmptySeat[] => {
 
 /** The tables and, when a vendor's details are open, those details, read again. */
 function rereadTheTables(): Promise<unknown> {
-  return Promise.all([loadTables(), details.loaded.value ? details.load() : Promise.resolve()]);
+  return Promise.all([
+    tablesRead.reread(),
+    details.loaded.value ? details.load() : Promise.resolve(),
+  ]);
 }
 
 /**
@@ -561,12 +584,17 @@ function swapSeats(withEmail: string): void {
 
 <template>
   <div class="tables-view">
-    <MarketFrame :market="market" @retry="loadTables">
+    <MarketFrame :market="market" @retry="readTheTablesAgain">
       <div class="tables-body">
         <!-- The Assignments page (E22/F04/S04): how the assignment came out, then the tables it sits on,
              then who changed what. -->
         <ResultSummary v-if="market" :market="market" />
-        <ReadFailed v-if="errorMessage" name="tables" :message="errorMessage" @retry="loadTables" />
+        <ReadFailed
+          v-if="errorMessage"
+          name="tables"
+          :message="errorMessage"
+          @retry="readTheTablesAgain"
+        />
 
         <template v-if="tablesShown">
           <!-- Only a first read says so: a re-read leaves the tables up until the new ones come, or a
@@ -824,6 +852,17 @@ function swapSeats(withEmail: string): void {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
+}
+
+/* The body's gap alone sets the failed-read line apart, so it sits as near the tables it speaks of
+   as the summary above it, not a margin further off. */
+.tables-body > .read-failed {
+  margin: 0;
+}
+
+/* A failed read's sentence wraps in even lines on a phone, never one word alone on the last. */
+.tables-body > .read-failed :deep(p) {
+  text-wrap: balance;
 }
 
 /* Stays in view over the tables it filters. */

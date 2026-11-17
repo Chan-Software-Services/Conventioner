@@ -53,6 +53,7 @@ sources:
   - T315
   - T337
   - T318
+  - T422
 ---
 
 # E2E patterns
@@ -65,6 +66,7 @@ How to run the suite is [TESTING.md](../../TESTING.md#end-to-end-e2e-tests); the
 **Every selector is a `data-testid`, named `viewname-element`** (`login-email-input`, `markets-create-button`), so a spec never depends on a CSS class or on the words on screen.
 Adding a `data-testid` changes no behaviour; a view gains them as specs need them.
 **The one exception is a location's layout** (T257): its map's tables are found by their accessible names ("Gold row 5, Standard 6 ft"), and its toolbar's tools, its menus' items, its location links and its sections' swatches by role and name ([`LayoutPage.ts`](../../../front-end/e2e/pages/LayoutPage.ts)), since what its specs prove is what a screen reader hears: a table's code and type are read back from its name, as the spec of the layout asks.
+A layout's day map (T422) is found the same way, on the public map ([`PublicMapPage.ts`](../../../front-end/e2e/pages/PublicMapPage.ts)) and on Attendance's map ([`AttendanceStatusPage.ts`](../../../front-end/e2e/pages/AttendanceStatusPage.ts)): a table, or a half of a shared one, by the start of its name ("Aisle A 3, Standard 6 ft, left half"), and on the public map the location switch's buttons by name.
 Everything else on the page is found by its `data-testid`.
 
 **A page object wraps one screen** ([`front-end/e2e/pages/`](../../../front-end/e2e/pages/)): it holds `getByTestId()` locators and exposes action methods, and a spec calls those methods rather than reaching for locators of its own.
@@ -159,6 +161,7 @@ Markets' search is drawn only past 12 markets or while the address holds words, 
 
 **A spec ends an organizer's session on the server**: `mongoEval` unsets the user's `login_id`, so the cookie names a login no account holds and the next request answers 401, as after a password reset; the next sign-in gives the account a new one.
 `context.clearCookies()` ends it only in the browser: the stack keeps its sessions on disk, where it stays until it lapses.
+A spec that ends it to have a press find it ended ends it as the press's request is sent, from that request's route, as [`a-failure-says-what-to-do.spec.ts`](../../../front-end/e2e/a-failure-says-what-to-do.spec.ts)'s "a session that ends mid-review" does: ended before the press, a read the page sent on its own, such as a drawer's on opening, can find it ended first and take the page to sign in, and the press then waits out the test on a control that is gone.
 
 **A call made with a page's cookies goes to `APP_API`, as the page's own calls do** (E38/F14/S01).
 `APP_API` is the address the app's pages call the API at, through the dev server's proxy, so such a call reaches the back end the way the page's do.

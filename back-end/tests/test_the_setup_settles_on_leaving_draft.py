@@ -9,7 +9,7 @@ import copy
 
 import pytest
 
-from conftest import COMPLETE_PLAN, FakeMarketsCollection, sessions_load_through_get_user, stored_market
+from conftest import COMPLETE_PLAN, FakeMarketsCollection, stored_market
 
 import api.markets as MarketsApi
 import api.permissions as PermissionsApi
@@ -123,34 +123,3 @@ def test_the_reason_speaks_of_the_markets_own_path(applications, intake_mode, wo
         phase=MarketPhase.APPLICATIONS, setupObject=COMPLETE_PLAN, intakeMode=intake_mode))
 
     assert words in MarketsApi.setup_lock_reason(market)
-
-
-@pytest.mark.parametrize("phase", AFTER_DRAFT)
-def test_no_layout_starts_after_draft(market, monkeypatch, phase):
-    """A layout's tables are its sections' counts, which are setup: past draft a layout's tables
-    may move but none is added, so no layout starts (T257;
-    ``test_a_floorplan_save_keeps_the_market_readable.py`` has the rest)."""
-    from types import SimpleNamespace
-
-    import app as app_module
-    import api.users as UsersApi
-
-    collection = market(phase)
-    monkeypatch.setattr(app_module.login_manager, "session_protection", None)
-    sessions_load_through_get_user(monkeypatch)
-    monkeypatch.setattr(UsersApi, "get_user", lambda email: SimpleNamespace(
-        id="user-1", email=email, is_active=True, is_authenticated=True, is_anonymous=False,
-        get_id=lambda e=email: e))
-    client = app_module.app.test_client()
-    with client.session_transaction() as session:
-        session["_user_id"] = "owner@example.com"
-        session["_fresh"] = True
-
-    response = client.post("/floorplans/save-to-market",
-                           json={"market_id": "market-123",
-                                 "floorplan": {"id": "fp-new", "locationId": "loc-any"},
-                                 "revision": 0})
-
-    assert response.status_code == 409
-    assert "settled" in response.get_json()["error"]
-    assert collection.last_update is None

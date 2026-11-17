@@ -97,6 +97,13 @@ export const ENTRIES: readonly LibraryEntry[] = [
       "A location's layout page, its editor, the PNG export; later, a public and a market-day map",
   },
   {
+    id: 'day-map',
+    title: 'Day map',
+    summary:
+      'A layout on one market day: each table filled, outlined or free, a shared table as two halves, the location switch, the zoom and the legend',
+    serves: "The public map page, Attendance's map",
+  },
+  {
     id: 'charts',
     title: 'Charts',
     summary: "Applications over time, the review's split bar, and the answers' bars folded past 8",

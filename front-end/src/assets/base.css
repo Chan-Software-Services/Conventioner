@@ -176,6 +176,10 @@
   --text-lg: 20px; /* section headings, card titles */
   --text-xl: 26px; /* page and screen titles */
   --text-2xl: 32px; /* display figures - the assignment summary's numbers */
+  /* The line height of running text, a factor of the size, which `body` sets and every line box
+     inherits. A box placed on a line's middle (a dialog's close on its title's first line) is
+     offset by half of `size * --leading`, so it follows the line if the leading changes (T422). */
+  --leading: 1.6;
 
   /* A 4px grid. The largest migration cost is here: 10px was the second most-used spacing value in
      the product (87 uses) and is on no grid, so each one goes to 8 or 12 by judgement. */
@@ -358,7 +362,7 @@ body {
   transition:
     color 0.5s,
     background-color 0.5s;
-  line-height: 1.6;
+  line-height: var(--leading);
   /*
    * The product's UI face, declared once (E15/F01/S01). It used to be Inter, which 274 component
    * rules then overrode to Outfit - so Inter survived only where nothing overrode it, and the one

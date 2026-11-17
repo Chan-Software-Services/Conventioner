@@ -1293,7 +1293,8 @@ function submittedOn(app: Application): string {
 
       Nothing here touches `cursor`, so a reviewer on card twelve stays on card twelve: the marks
       change what the card SHOWS, never which application is up. Each tick is saved as it is made, so
-      there is a Done and no Cancel, which would promise an undo the ticks do not have.
+      there is a Done and no Cancel, which would promise an undo the ticks do not have. Its list is
+      usually short, so on a phone it is as tall as the ticks, not the window (T446, `dialogs.md`).
     -->
     <AppDialog
       :open="choosingHighlights"
@@ -1301,6 +1302,7 @@ function submittedOn(app: Application): string {
       testid="choose-highlights"
       size="wide"
       scroll="body"
+      fits-content-on-a-phone
       :error="highlightsError"
       @close="stopChoosingHighlights"
     >

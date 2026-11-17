@@ -11,6 +11,9 @@ describes:
   - back-end/market_documents.py#vendor_page_market_by_slug
   - back-end/tests/test_a_google_form_markets_page.py
   - front-end/e2e/a-google-form-markets-vendor-page.spec.ts
+  - back-end/market_documents.py#public_map_market_by_slug
+  - back-end/tests/test_the_public_map.py
+  - front-end/e2e/the-public-map.spec.ts
 verified: 2026-11-17
 sources:
   - wayfinding/v0-1-0/06
@@ -29,6 +32,7 @@ sources:
   - bug/20
   - T202
   - T263
+  - T422
 ---
 
 # A gated market answers as absent
@@ -65,6 +69,12 @@ Before then it has nothing to tell anyone, so its page would only confirm the ma
 One that has reached its market days has a page too, published or not: a Google Form market went live before it could publish results, and the change must not lock its vendors out; its vendors read their tables there as if its results were published.
 An archived one that reached them counts, by its phase record, and where that record began late, by a check-in, as everywhere else that asks whether a market ran.
 
+**A market's public map, `/<slug>/map`, answers the same way while it is closed** ([ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md)).
+It is open only while the vendor page finds the market, its results are out (published, or it reached its market days), it is not archived, an Admin has turned it on, its public name question is still a short text question of the form, and a location is laid out with a table in a section; its read and its image then answer byte for byte as a slug naming no market does, with the vendor page's own body.
+A seat is never public before its vendor is told it, and an archived market can no longer be written, so its switch could never be turned off.
+What a public read may answer at all is [security invariants](../../implementation/conventions/security-invariants.md#each-request)' to say.
+The page then reads "Page not found", as at an address naming nothing ([the public map page](../../implementation/modules/public-map-page.md)), and [`the-public-map.spec.ts`](../../../front-end/e2e/the-public-map.spec.ts) holds that its text is an unknown slug's.
+
 **The organizer's own link to the page follows the gate.**
 The rail shows the vendor page's address, "Vendor page" with Copy, while the page answers: a form market from the first phase after draft, a CSV market once its results are published or it reached its market days; both until it is archived, and after that only for a market that ran ([the phase rail](../../implementation/modules/phase-rail.md)).
 Before then a link would be the one place the product admitted the market was real, and a draft's page deliberately tells the organizer nothing either.
@@ -76,6 +86,8 @@ Manage market's Delete names the vendor page among what stops working by the sam
 - **`vendor_page_market_by_slug()`** ([`back-end/market_documents.py`](../../../back-end/market_documents.py)) decides whether a market has a vendor page: a market at the slug, in a phase of `APPLICANT_SURFACE_PHASES`, whose intake mode is `form`, or whose results are published, or that reached `market_days` (`attendance.market_ran`), or `None`, the same answer as for a slug that names nothing.
   It adds what it reads (the intake mode, the results flag, the id and the phase record) to the caller's projection, so a caller names only its own fields.
   It is read by the page's own public read (`get_vendor_page`), requesting and verifying a sign-in code and resuming a remembered one (`request_login_code`, `verify_login_code`, `resume_sign_in` in [`back-end/api/applicant_auth.py`](../../../back-end/api/applicant_auth.py)), and the vendor's own read (`get_applicant_application` in `back-end/api/applicants.py`), which on a CSV market carries no `formData`.
+- **`public_map_market_by_slug()`**, beside it, is the public map's gate, the map's read and its image both asking it (`public_map.py`, [the public map](../../implementation/modules/public-map.md#the-gate)).
+  [`back-end/tests/test_the_public_map.py`](../../../back-end/tests/test_the_public_map.py) closes the map one condition at a time and asserts each answers as an unknown slug.
 - **`applicant_intake_market_by_slug()`**, beside it, is the gate of applying: the public form and the save, which only a `form` market has.
   Every caller's existing not-found branch serves either's `None`, so the gate needs no message of its own; both are kept with [the market document](../../implementation/data/market-document.md), whose slug and draft rules they read.
   Each is one lookup rather than a check in each endpoint, because a check in each is a chance to forget one.

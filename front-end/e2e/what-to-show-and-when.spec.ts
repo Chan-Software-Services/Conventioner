@@ -125,7 +125,7 @@ test.describe('What to show, and when', () => {
     await expect(page.getByTestId('market-setup-import-button')).toHaveCount(0);
   });
 
-  test('past draft the layout says the setup is settled, and offers nothing to upload', async ({
+  test('past draft the layout offers the upload, and says the layout follows the plan', async ({
     authenticatedPage: page,
     request,
   }) => {
@@ -137,9 +137,14 @@ test.describe('What to show, and when', () => {
     );
     // Reached by its address, the way a bookmark or the back button would.
     await page.goto(marketScreenPath(marketId, 'layout'));
-    await expect(page.getByTestId('layout-setup-settled')).toContainText('The setup is settled');
-    await expect(page.getByTestId('layout-no-floorplan')).toBeVisible();
-    await expect(page.getByTestId('floorplan-upload-dropzone')).toHaveCount(0);
+    // A layout started past draft follows the plan (T422): the upload is offered, under the
+    // sentence that says so in place of the setup's settled one.
+    await expect(page.getByTestId('layout-follows-plan')).toContainText(
+      'This layout follows the plan',
+    );
+    await expect(page.getByTestId('layout-setup-settled')).toHaveCount(0);
+    await expect(page.getByTestId('floorplan-upload-dropzone')).toBeVisible();
+    await expect(page.getByTestId('layout-no-floorplan')).toHaveCount(0);
     await page.getByRole('link', { name: 'Back to Market Setup' }).click();
     await expect(page).toHaveURL(marketSetupPath(marketId, 'setup'));
   });

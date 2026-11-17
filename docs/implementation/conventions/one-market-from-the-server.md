@@ -4,6 +4,7 @@ kind: convention
 describes:
   - front-end/src/utils/market.ts#parseMarketFromApi
   - front-end/src/__tests__/noMarketInTheBrowser.test.ts
+  - front-end/src/__tests__/everyMarketReadIsKeyed.test.ts
   - back-end/api/markets.py#get_market_for_user
 verified: 2026-11-14
 sources:
@@ -20,6 +21,7 @@ sources:
   - T213
   - T263
   - T274
+  - T421
 ---
 
 # One market, from the server
@@ -41,6 +43,13 @@ The write itself names what it changes; there is no whole-market write ([ADR 000
 The plan keeps its own `setupObject` and `planIntakeMode`, and the form builder its own form.
 The editor writes, the store re-reads, and the working copy is reset from it; a re-read never overwrites a working copy that holds unsaved edits.
 A phase move once replaced the whole local market with the transition's response, which carries the setup as last saved, so advancing a phase silently discarded every unsaved edit, and Assign was then disabled for a reason the screen never stated.
+
+**A market-keyed read goes through `useServerRead`; no new read goes on a watch of a market id.**
+A read of something keyed by the market open (the market itself, a roster, a list, a vendor's account) is one keyed read, [`useServerRead`](../../../front-end/src/utils/useServerRead.ts): a move to another market drops what the last one showed in the same tick, an answer or a refusal for the market left never lands, and a write held through it keeps every read asked before it from landing ([reads keyed by market](../modules/market-store.md#reads-keyed-by-market), [ADR 0036](../../adr/0036-a-market-keyed-read-is-one-keyed-read.md)).
+The reads still made by hand, outside it, the review's own queue and the market's history among them, are listed in [reads keyed by market](../modules/market-store.md#reads-keyed-by-market); the rule holds every new one.
+Each screen once read on `watch(marketId, load)` and checked each answer by hand, nine guards under eight names or none, and where one was missing a late answer for the market just left landed under the next one's name.
+[`everyMarketReadIsKeyed.test.ts`](../../../front-end/src/__tests__/everyMarketReadIsKeyed.test.ts) fails, naming the file, on a `watch(` whose source names a market id outside the files it lists, each listed with why its watches are allowed (a reset of what is shown, a write resumed, the store opened, who is signed in asked again, or a read with its own guard: the review's queue and the history), or on more such watches in a file than it allows.
+A screen forgets what it showed on a move by a watch of its read's `key`, which the test does not match.
 
 **Nothing about a market is stored in the browser.**
 The `localStorage` key `market` is gone, and [`noMarketInTheBrowser.test.ts`](../../../front-end/src/__tests__/noMarketInTheBrowser.test.ts) fails, naming the file, if any source file reads, writes or removes it again.
@@ -67,12 +76,14 @@ A field added to the read now reaches every screen without touching the parser.
 ## How it is enforced
 
 - `noMarketInTheBrowser.test.ts` reads the source for the stored market key.
+- `everyMarketReadIsKeyed.test.ts` reads the source for a watch of a market id.
 - `front-end/src/__tests__/market.test.ts` pins that the parser carries fields it does not name.
 - The back end has no route that accepts a whole market (`back-end/tests/test_the_market_put_is_gone.py`).
 
 ## What breaks it
 
 - A screen that keeps its own `ref` of the market, or fetches the market itself instead of reading the store.
+- A screen that reads on a watch of the market id, holding its own data, loading flag and error, instead of one keyed read.
 - A write followed by assigning its response into the held market instead of `refresh()`.
 - A parser, mapper or type guard that rebuilds the market from a list of keys.
 - A tab computing a fact about the market (a lock, a verdict on a move) that the server already answers.

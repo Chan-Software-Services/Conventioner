@@ -1331,6 +1331,7 @@ REQUIRED_BODIES = [
     ("put", "/markets/<market_id>/plan", None),
     ("post", "/markets/<market_id>/discord/connection", None),
     ("put", "/markets/<market_id>/discord", None),
+    ("put", "/markets/<market_id>/public-map", None),
     ("post", "/markets/<market_id>/discord/possible-matches/<application_id>/declined", None),
     ("put", "/markets/<market_id>/application-form", None),
     ("post", "/markets/<market_id>/transition", None),

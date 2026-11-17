@@ -3,19 +3,19 @@ layer: implementation
 kind: data
 describes:
   - back-end/api/applications.py
-  - back-end/application_status.py
-  - back-end/tests/test_one_writer_of_the_review_state.py
-  - back-end/tests/test_the_review_state_table.py
-  - back-end/tests/test_changed_answers_are_one_event.py
   - back-end/datatypes.py#Application
   - back-end/datatypes.py#ApplicationStatus
   - back-end/datatypes.py#ApplicationType
-  - back-end/datatypes.py#ApplicationOrigin
   - back-end/datatypes.py#VerdictGiver
   - back-end/datatypes.py#MarketPerson
   - back-end/datatypes.py#AnswerUpdate
   - back-end/migrations/create_applications_collection.py
   - back-end/migrations/migrate_submitted_at_to_iso.py
+  - back-end/application_status.py
+  - back-end/tests/test_one_writer_of_the_review_state.py
+  - back-end/tests/test_the_review_state_table.py
+  - back-end/tests/test_changed_answers_are_one_event.py
+  - back-end/datatypes.py#ApplicationOrigin
 verified: 2026-11-17
 sources:
   - wayfinding/v0-1-0/map
@@ -41,7 +41,7 @@ sources:
 
 One document per application in the `applications` collection: a vendor's answers to one market's form, and where review has got to with them.
 [`back-end/api/applications.py`](../../../back-end/api/applications.py) is the single owner of the collection, and every reader and writer goes through it, so the storage contract lives in one place.
-Its review state is the one exception: every write of `status`, `verdict_by`, `verdict_at`, `verdict_reason`, `follow_up_owner`, `undo_to`, `added_by`, `added_at`, `origin`, `arriving` and `reviewer` is [`back-end/application_status.py`](../../../back-end/application_status.py)'s (imported as `ReviewState`, [ADR 0034](../../adr/0034-an-applications-review-state-has-one-owner.md)), through the collection `api/applications.py` binds, which keeps the reads, the claim's writes, the deletes and the indexes.
+Its review state is the one exception: every write of `status`, `verdict_by`, `verdict_at`, `verdict_reason`, `follow_up_owner`, `undo_to`, `added_by`, `added_at`, `origin`, `arriving` and `reviewer` is [`back-end/application_status.py`](../../../back-end/application_status.py)'s (imported as `ReviewState`, [ADR 0037](../../adr/0037-an-applications-review-state-has-one-owner.md)), through the collection `api/applications.py` binds, which keeps the reads, the claim's writes, the deletes and the indexes.
 [`tests/test_one_writer_of_the_review_state.py`](../../../back-end/tests/test_one_writer_of_the_review_state.py) fails a write of any of those fields anywhere else.
 The model is `Application` in [`back-end/datatypes.py`](../../../back-end/datatypes.py).
 
@@ -77,6 +77,7 @@ The organizer's and the applicant's views camel-case an application on the way o
 | `reviewer`                                   | whose share it was dealt to (`{user_id, email}`), absent when it never was ([the review is dealt among chosen reviewers](../../business/rules/the-review-is-dealt-among-chosen-reviewers.md)); two writes in [`back-end/application_status.py`](../../../back-end/application_status.py) write it, each called only by [`back-end/review_team.py`](../../../back-end/review_team.py) while its deal holds the market, so no two deals write the turn or a reviewer at once: `deal`, an open application dealt when reviewers are chosen or changed, or as it waits for the deal, only while it is open and still dealt as read; and `deal_follow_up`, a follow-up whose owner is a removed reviewer or may no longer own one here handed on, which sets `follow_up_owner` with it; a verdict never clears it, so it stays the record of whose share it was; not who is looking at it now, which is `held_by` |
 
 A vendor's names are answers in `form_data` too; `vendor_names_for_market` reads them as one map from address to the name to call each vendor ([a vendor is called by their chosen name](../../business/rules/a-vendor-is-called-by-their-chosen-name.md)).
+Every map from address to answers (`_answers_by_address`) reads a vendor holding a main and a waitlist application by the main one's answers, whichever the query returns last, so their name, the search's terms, the public map's answers and the answers their price group is read from (`vendor_answers_for_market`) never come from the waitlist application.
 
 Form field keys are held to `^[a-z0-9_]+$` (`FORM_FIELD_KEY_PATTERN` in `datatypes.py`) because they become keys inside `form_data`, where a dot or a leading `$` cannot be addressed by Mongo update operators.
 
@@ -109,7 +110,7 @@ A re-import still compares the file with `form_data` (`csv_import._unchanged`): 
 
 The applicant never reads a status: their page reads "Submitted" until results are published, then an outcome read off the stored seats ([an applicant never reads a verdict early](../../business/rules/an-applicant-never-reads-a-verdict-early.md)).
 
-Every function this section names is in `application_status.py`, the review state's owner ([ADR 0034](../../adr/0034-an-applications-review-state-has-one-owner.md)).
+Every function this section names is in `application_status.py`, the review state's owner ([ADR 0037](../../adr/0037-an-applications-review-state-has-one-owner.md)).
 This section states the transition table once; every other node points here rather than restate a transition.
 
 ### The states, and how they are stored

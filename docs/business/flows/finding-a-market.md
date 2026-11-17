@@ -24,6 +24,7 @@ sources:
   - T223
   - T260
   - T311
+  - T422
 ---
 
 # Finding and opening markets
@@ -113,7 +114,7 @@ At a desk [the app bar](../../implementation/modules/app-bar.md) holds Markets a
 At 640px and below the bar is the logo and a menu button at its right, which opens a sheet under the bar holding Markets and Organizations, the current one marked, the address, Change password, Sign out and Sign out everywhere; choosing a row, Escape or a press outside it closes it.
 Sign out everywhere asks first, in a dialog, from either.
 Every organizer account has the same bar, whatever their role and on every page, "Page not found" included; someone not signed in sees the logo alone.
-A market's vendor page is the vendors', so it shows the logo alone, with no link, to an organizer who opens it too (T260); a one-segment address that answers "Page not found", a draft's page among them, keeps the organizer's full bar.
+A market's vendor page is the vendors', so it shows the logo alone, with no link, to an organizer who opens it too (T260), as its public map does (T422); a one-segment address that answers "Page not found", a draft's page among them, keeps the organizer's full bar, as a closed map's does.
 Covered by:
 
 - `sign-out-everywhere.spec.ts`

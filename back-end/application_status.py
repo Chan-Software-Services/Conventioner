@@ -4,7 +4,7 @@ The review state is the fields a verdict, a follow-up, a deal, an addition or an
 ``OWNED_FIELDS``. Every write of any of them is a function here, and
 ``tests/test_one_writer_of_the_review_state.py`` fails when any other module writes one, so a rule
 about how an application moves between open, follow-up, approved and rejected is written once and
-cannot be bypassed by a second writer that forgot it (ADR 0034).
+cannot be bypassed by a second writer that forgot it (ADR 0037).
 
 Imported by its callers as ``ReviewState``, since ``datatypes.ApplicationStatus`` is the stored
 spelling of one of its fields.

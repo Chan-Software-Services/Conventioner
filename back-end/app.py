@@ -17,6 +17,7 @@ import api.vendor_info as VendorInfoApi
 import api.payments as PaymentsApi
 import api.vendor_export as VendorExportApi
 import api.discord_connection as DiscordConnectionApi
+import public_map as PublicMapApi
 import csv_import as CsvImport
 import csv_proposal as CsvProposal
 import csv_start as CsvStart
@@ -1151,6 +1152,17 @@ def decline_discord_match(market_id: str, application_id: str) -> Response:
     return jsonify({"message": "Declined"}), 200
 
 
+@app.route('/markets/<market_id>/public-map', methods=['PUT'])
+@login_required
+def save_public_map(market_id: str) -> Response:
+    """Change what the market's public map shows, or turn it on or off (T422). Body: any of
+    { "enabled", "nameQuestion", "websiteQuestion", "instagramQuestion" }, the switch a boolean and
+    each question a short text question's key or null. Answers { "publicMap": {...} } as stored.
+    Asks ``Actions.PUBLISH_MAP``."""
+    return jsonify(PublicMapApi.save_settings(
+        market_id, json_object(required=True), authenticated_email())), 200
+
+
 @app.route('/markets/<market_id>/vendor-notes', methods=['GET'])
 @login_required
 def get_vendor_notes(market_id: str) -> Response:
@@ -1760,6 +1772,32 @@ def public_get_vendor_page(market_slug: str) -> Response:
     """Public: what a market's vendor page needs before sign-in (ADR 0022). No authentication."""
     result, status_code = ApplicantsApi.get_vendor_page(market_slug)
     return jsonify(result), status_code
+
+
+@app.route('/public/markets/<market_slug>/map', methods=['GET'])
+def public_get_map(market_slug: str) -> Response:
+    """Public: the market's map, each market day's tables and who is at them (T422, ADR 0035). No
+    authentication. A market whose map is closed answers as a slug naming no market does."""
+    answer = PublicMapApi.public_map(market_slug)
+    if answer is None:
+        return jsonify({"error": ApplicantsApi.MARKET_NOT_FOUND}), 404
+    response = jsonify(answer)
+    response.headers["Cache-Control"] = PublicMapApi.MAP_CACHE_CONTROL
+    return response, 200
+
+
+@app.route('/public/markets/<market_slug>/map/image/<location_id>', methods=['GET'])
+def public_get_map_image(market_slug: str, location_id: str) -> Response:
+    """Public: the floorplan image of a location the market's map lists (T422, D33). No
+    authentication; found by the location, never by an image's id."""
+    found = PublicMapApi.public_map_image(market_slug, location_id)
+    if found is None:
+        return jsonify({"error": ApplicantsApi.MARKET_NOT_FOUND}), 404
+    data, mimetype = found
+    response = make_response(data)
+    response.headers["Content-Type"] = mimetype
+    response.headers["Cache-Control"] = PublicMapApi.IMAGE_CACHE_CONTROL
+    return response, 200
 
 
 @app.route('/public/markets/<market_slug>/application-form', methods=['GET'])

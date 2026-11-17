@@ -1121,9 +1121,10 @@ def _moved(floorplan):
 class TestALayoutAfterDraft:
     """Past draft, until the market is archived, where a table stands still changes: its place and
     its turn, the no-table zones, the image, the scale, the sections' colours and labels. What would
-    move a seat does not: a table added, removed or of another id, another number, section or type,
-    or a layout started (``layout.settled_layout_refusal``), refused 409 with the setup-settled
-    sentence and nothing written."""
+    move a seat of this layout, started in Draft, does not: a table added, removed or of another id,
+    another number, section or type (``layout.settled_layout_refusal``), refused 409 with the
+    setup-settled sentence and nothing written. A layout started past draft follows the plan
+    (``test_a_layout_started_after_draft.py``)."""
 
     @pytest.mark.parametrize("phase", AFTER_DRAFT)
     def test_a_table_moved_and_turned_saves(self, client, market, market_records, phase):
@@ -1201,15 +1202,6 @@ class TestALayoutAfterDraft:
         assert "settled" in response.get_json()["error"]
         assert market.last_update is None
         assert _floorplan_entries(market_records) == []
-
-    def test_a_layout_is_not_started(self, client, market, market_records):
-        _settled_market(market)
-
-        response = _save(client, _floorplan("fp-2", location="loc-old", tables=[]), revision=0)
-
-        assert response.status_code == 409, response.get_json()
-        assert response.get_json() == {"error": _settled_sentence(market)}
-        assert market.last_update is None
 
     def test_a_layout_read_before_another_save_is_stale_before_it_is_judged(self, client, market):
         _settled_market(market)

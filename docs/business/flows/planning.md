@@ -33,6 +33,7 @@ sources:
   - T271
   - T257
   - T274
+  - T422
 ---
 
 # Planning the market
@@ -99,7 +100,8 @@ Removing a location that has a layout ([E6](#e6-a-locations-layout)) asks first,
 
 **Status:** Works (walked live).
 "+" adds a row of name, Location, Tier and Count; "Total tables" sums the counts; tables are named after their section ("North Row 1" to "North Row 4").
-A section of a location that has a layout ([E6](#e6-a-locations-layout)) has no Count to type: the cell reads the number of tables the layout places in it, "13" with "from the layout" under it, and "Total tables" sums those with the typed ones.
+A section of a location whose layout was started in Draft ([E6](#e6-a-locations-layout)) has no Count to type: the cell reads the number of tables the layout places in it, "13" with "from the layout" under it, and "Total tables" sums those with the typed ones.
+A layout started after Draft follows the plan, so its location's sections keep their typed Count ([ADR 0034](../../adr/0034-a-layout-started-after-draft-follows-the-plan.md)).
 A section may have no tier; a plan without tiers assigns, and its form asks no tier preference (bug 23; re-walked live as P1).
 Covered by:
 
@@ -129,7 +131,7 @@ Covered by:
 
 **Status:** Works (T257): a location's floorplan, its scale, its table types and no-table zones, and tables placed one at a time, as rows along a drawn line, or filling an area, then moved, turned, duplicated, lined up, renumbered and removed, one or several at a time, by pointer or by keyboard, moved and turned after Draft, read on a phone and exported as a PNG; walked whole, from a new market's two halls to the Assignments page naming a moved table's vendor, by `a-layout-is-the-plans-tables.spec.ts`.
 It replaced the floorplan beta, a wizard whose save nothing read again.
-Under Section Setup's rows, each named location offers "Lay out Upper Hall", or "Open Upper Hall's layout · 49 tables" once it has one; a location with no name offers nothing until it has one, and a plan that cannot change offers only the layouts it has, to read.
+Under Section Setup's rows, each named location offers "Lay out Upper Hall", or "Open Upper Hall's layout · 49 tables" once it has one; a location with no name offers nothing until it has one, and a person who may not change the setup is offered only the layouts it has, to read; past Draft a person who may is offered "Lay out Upper Hall" too, since a layout started then follows the plan ([ADR 0034](../../adr/0034-a-layout-started-after-draft-follows-the-plan.md)).
 Opening one saves the plan's pending edits first, then goes to `/markets/<id>/layout/<location>`, under the Market Setup tab; `/markets/<id>/layout` opens the first location's, and the floorplan beta's old address, `/markets/<id>/floorplan`, lands there too.
 
 1. **Upload:** "Drop the floorplan's image or PDF here, or choose a file", the app's one drop zone, with "Upload the venue's floorplan for Upper Hall to start." beside it.
@@ -138,35 +140,40 @@ Opening one saves the plan's pending edits first, then goes to `/markets/<id>/la
 2. **Set the scale:** "Drag across something whose length you know, like a wall or a door.", by pointer or with the arrow keys and Enter; type its length in m, cm, mm, ft or in, and "Set the scale".
    The head row then reads "30.0 m across" (before, "Not calibrated"), and "Recalibrate" draws the line again.
 
-3. **Place the tables:** at a desk the map is an editor, with a toolbar over it: Select, Add table, Row of tables, Fill an area, No-table zone, Undo, Redo, Zoom out, Zoom in, Fit.
-   - "Add table" then a click on the floor places a table of the Section and Table type chosen under the toolbar, "Gold row 1", then "Gold row 2", at its true size; the tool stays on.
+3. **Place the tables:** at a desk the map is an editor, with a toolbar over it: Select, Add table, Row of tables, Fill an area, No-table zone, the keyboard button, Undo and Redo; Zoom out, Zoom in and Fit stand on the map's bottom-right corner, after the Floorplan menu.
+   - "Add table" then a click on the floor places a table of the Section and Table type chosen on the tool's card in the panel, "Gold row 1", then "Gold row 2", at its true size; the tool stays on.
    - "Row of tables" lines a drawn line with tables beside it or centred on it, the count following the line as it is drawn, with the Gap between them (none at first): a drag is a straight row, or a curve drawn by hand, smoothed into a few points that can be dragged before Enter places it; clicks lay the line's points, a sharp turn making a corner, and a click on the first point closes it into a shape, its tables spread evenly round it; Rows and Aisle lay rows side by side in the same gesture.
    - "Fill an area" packs a box dragged, or a shape of clicked corners, with rows of tables of one section and type, a count or as many as fit, round the no-table zones and the tables already placed, and says how many fitted ("Placed 24 of 30; the rest did not fit.").
    - "No-table zone" marks a box of the hall, a stage or a pillar, named in the panel; a table put down on one is pushed off it, and rows and fills keep clear of it.
-   - A press selects a table (Shift or Ctrl for more), a box dragged on the floor every table whose centre is in it, Ctrl+A all of them and Escape none; the panel's card reads the selection: one table's code, section, type and position in metres, or "3 tables selected" and their codes.
+   - A press selects a table (Shift or Ctrl for more), a box dragged on the floor every table wholly inside it, Ctrl+A all of them and Escape none; the panel's card reads the selection: one table's code, section, type and position in metres, or "27 tables selected" and how many in each section, "15 in Gold row, 12 in no section".
+   - The selection stands in a frame with a round knob on each corner; a knob dragged turns it in 15° steps, by the degree with Shift, and R a quarter.
+     With tables selected the arrow keys move them 10 cm, or 1 m with Shift, a key held down being one change, and Alt and an arrow moves between tables.
    - The card's Section and Table type fields change the selection's.
      Tables put in another section are numbered after its own, so 3 of Gold row's 9 put in Silver aisle (of 18) become Silver aisle 19 to 21, and Gold row closes to 1 to 6.
    - "Duplicate" puts a copy of each selected table beside it, numbered on, and the Align menu lines several up by an edge or a centre, or spaces them evenly across or down.
    - A drag moves the selection; near another table's edge or centre it snaps, with a guide line, and Alt places it freely; a table's centre never leaves the floorplan.
-   - The handle above a selected table (beside it, where a neighbour stands above) turns it in 15° steps (Alt: freely), and R or "Turn 90°" by a quarter; its number turns with it.
+   - "Turn 90°" turns the selection a quarter, as R does; a table's number turns with it.
    - "Remove" takes the selection away with no question, since Undo brings it back; in Draft the section's later tables close the gap, so removing "Gold row 2" of 4 leaves 1 to 3.
    - Undo and Redo, by their buttons or Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y, take back and bring back each change, across saves.
    - The wheel or two fingers move the view, Ctrl and the wheel or a pinch zoom it, and Space and a drag pan.
-   - By keyboard the map is one Tab stop: the arrow keys move between its tables, Enter or Space picks one up, the arrow keys move it 10 cm (1 m with Shift), R turns it, Enter drops it and Escape puts it back; Add table, Row of tables and Fill an area each have a form for the keys, and the panel's "Keyboard" card lists them.
+   - By keyboard the map is one Tab stop: the arrow keys move between its tables, Enter or Space picks one up, the arrow keys move it 10 cm (1 m with Shift), R turns it, Enter drops it and Escape puts it back; Add table, Row of tables and Fill an area each have a form for the keys, and the "Keyboard shortcuts" panel, shown by the toolbar's keyboard button or `?`, lists them, beside the page where the window has room, else over the map's corner.
 4. **Sections on the layout:** the panel lists "Sections in Upper Hall", each with its colour, tier and count.
    - A section's swatch opens eight colours to choose from, and its name on the map is dragged to where it should stand.
    - Its row's menu has "Renumber by position (rows across the page)", which numbers its tables in rows from the top, each from the left.
    - A section removed on Section Setup leaves its tables on the layout, grey and numberless: "3 tables are in no section", with "Select them", to put them in a section from the card or remove them.
      Until then the market stays a draft: "Upper Hall's layout has 3 tables in no section. Put them in a section or remove them.", with "Open the layout" on the rail.
    - While a section has fewer tables than Section Setup had typed for it when the layout began, the panel says so: "Section Setup had Gold row at 13: 9 placed."
-5. **Table types, zones and the floorplan:** the panel's "Table types" card lists the market's types, each its size and how many tables are of it, with "Add a type", Edit, Remove (refused while tables are of it, with how many), "Use saved types" and "Save these types"; "No-table zones" names each zone; and "Floorplan" hides or shows the image under the tables, with "Replace the image" and "Recalibrate", the tables keeping their places in metres.
+5. **Table types, zones and the floorplan:** Layout settings, opened from the head, lists the market's types, each its size and how many tables are of it, with "Add a type", Edit, Remove (refused while tables are of it, with how many), "Use saved types" and "Save these types", and holds "Replace the image" and "Recalibrate", the tables keeping their places in metres; "No-table zones" names each zone; and the map's Floorplan menu shows or hides the image under the tables, with a tick each for drawing it in greyscale and faded.
 
 The layout is edited at a desk: at a phone's width it is read.
 It saves itself a moment after each change, the head row saying "Saving…" then "Saved"; a save that did not land says why with Retry and keeps what is on screen, a move to another page then asks "Leave without saving?" first, and a reload or a closed tab with a change still waiting is asked by the browser first.
 The head row's switch moves between the market's locations, each its own layout, and when another tab or person saved the layout first it says "This layout changed elsewhere. Reload to see the latest." with Reload, the tab keeping what it shows until then.
 The layout makes no AI calls ([a location's layout](../../implementation/modules/floorplan-placement.md)).
 Only one table type is used by assignment in this release ([F6](form-tab.md#f6-table-type-preference)).
-Past Draft, until the market is archived, the editor stays under the setup-settled sentence: tables are still moved and turned, and the zones, the image, the scale and the sections' colours and labels still change, while Add table, Row of tables, Fill an area, Duplicate, "Row of N…", Remove, the Section and Table type fields, Renumber and the table types' changes are disabled, and a location with no layout offers nothing to upload ([E7](#e7-edit-the-plan-after-draft)).
+Past Draft, until the market is archived, the editor of a layout started in Draft stays under the setup-settled sentence: tables are still moved and turned, and the zones, the image, the scale and the sections' colours and labels still change, while Add table, Row of tables, Fill an area, Duplicate, "Row of N…", Remove, the Section and Table type fields, Renumber and the table types' changes are disabled ([E7](#e7-edit-the-plan-after-draft)).
+A location with no layout past Draft can still be laid out: its layout follows the plan, under "This layout follows the plan: place each section's tables, up to its count. The seats themselves are settled."
+Each section holds at most the tables Section Setup settled, each numbered once up to that count; the Sections card says "4 of 13"; a tool that would pass the count places what fits and says "Gold row has 13 tables in the plan; 4 were placed."; a removal leaves the other numbers alone and a new table takes the lowest free number; and the selection's card gains a Number field for one table, which swaps numbers with the table that holds the one typed.
+Only the table types stay settled, and Section Setup keeps that location's counts as typed ([ADR 0034](../../adr/0034-a-layout-started-after-draft-follows-the-plan.md)).
 No vendor's table changes: a table keeps its section and number wherever it stands.
 An archived market's layout, and a Viewer's in any phase, is read: the map and the sections with no toolbar, and the frame saying why.
 Anyone on the market exports a location's layout as a PNG to print or send, in any phase: "Export PNG" in the head row, with or without the venue's floorplan under the tables and with or without the tables' numbers, saves the market's name, the location and the market's dates over the map and a legend of its sections under it, 3200 px wide, named for the market and the location.
@@ -176,6 +183,7 @@ Covered by:
 - `a-layout-is-the-plans-tables.spec.ts`
 - `a-layout-on-a-phone.spec.ts`
 - `a-layout-saves-once.spec.ts`
+- `a-layout-started-after-draft.spec.ts`
 - `a-table-moves-by-keyboard.spec.ts`
 - `a-table-moves-by-pointer.spec.ts`
 - `numbers-follow-the-rules.spec.ts`
@@ -199,7 +207,8 @@ What still changes after Draft, and where:
 - the assignment rules (priority and options), on the Assignment tab, until the market can no longer return to Assignment or its results are published ([J14](assignment-and-result.md#j14-the-rules-close-with-the-assignment));
 - what a reviewer reads first, on the form tab's Review setup, in every phase but Archived, and the automatic rejections there until the market reaches Assignment ([F3](form-tab.md#f3-what-a-reviewer-reads-first));
 - the Discord card, in every phase until the market is archived, since it is a manual tool rather than part of the plan ([the Discord connection](../../implementation/modules/discord.md));
-- where a layout's tables stand, on the layout page, until the market is archived: its tables moved and turned, its no-table zones, its image, its scale and its sections' colours and labels, never a table added, removed, renumbered or given another section or type ([E6](#e6-a-locations-layout)).
+- where a layout's tables stand, on the layout page, until the market is archived: its tables moved and turned, its no-table zones, its image, its scale and its sections' colours and labels, never a table of a layout started in Draft added, removed, renumbered or given another section or type ([E6](#e6-a-locations-layout));
+- a location's layout started after Draft, which follows the plan: its tables placed, removed and numbered up to each section's settled count ([E6](#e6-a-locations-layout)).
 
 What else freezes, and when:
 

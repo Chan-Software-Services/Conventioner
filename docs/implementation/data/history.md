@@ -46,6 +46,7 @@ sources:
   - T315
   - T335
   - T318
+  - T422
 ---
 
 # The market's history
@@ -282,6 +283,12 @@ One block per action, in the order of [the actions table](../modules/market-acti
   - Vendors: each vendor it gave the role or whose state it changed, in the order of `application_ids`
   - Subject: `application_ids`
   - Detail: `role_name`, the role by its name then; `given`, the application ids it gave the role; by application id, each named vendor's state before and after, and `addresses`, as a check's; and `counts`, how many assigned vendors ended in each outcome (`given`, `already_had`, `not_found`, `no_username`, `not_yet`, `failed`)
+
+**`publish-map`**
+
+- `public_map`: [the Public map card](../modules/public-map.md#the-settings): turning the map on or off, or a question chosen or cleared
+  - Detail: whichever of `enabled`, `name_question`, `name_question_label`, `website_question`, `website_question_label`, `instagram_question` and `instagram_question_label` changed, each label the question's on the form then, null when none; a write that changes nothing records nothing
+  - The history reads it in words ([`historyReaders/publicMap.ts`](../../../front-end/src/utils/historyReaders/publicMap.ts)): "turned the public map on" or "off", "set the public map's name to “<label>”" (and its website, its Instagram), and "stopped showing the website on the public map" ("Instagram", and "names" for the name); its rows are the card's own, "Show the public map", "Public name", "Website" and "Instagram", each question by its label or "Not shown"
 
 **`manage-editors-and-viewers`, or `manage-admins` when an Admin or Owner role is either side**
 
