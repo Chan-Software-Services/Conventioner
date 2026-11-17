@@ -34,7 +34,7 @@ This project uses a **dev → main promotion flow**:
 
 - **`dev`** is the default/integration branch.
   All feature branches and bugfix PRs target `dev`.
-  CI (`.github/workflows/test.yml`) runs on every push and PR to `dev`.
+  CI (`.github/workflows/test.yml`) runs on every push and PR to `dev`, and on a merge queue's trial commit for it ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)).
 - **`main`** is the deploy-only branch.
   It is deployed only by hand, through the Deploy workflow, and is reached **only** by promoting `dev` → `main` as a deliberate, versioned release.
   Never commit or open PRs directly against `main` (the release-please Release PR and a `hotfix/` PR are the exceptions, [below](#hotfixes)).
@@ -121,7 +121,7 @@ No checkout in them keeps git credentials (`persist-credentials: false`).
 
 ### How a promotion proves itself
 
-Every check the Promote workflow makes before it moves `main` lives in [`scripts/promote_check.py`](../scripts/promote_check.py), which reads GitHub and writes nothing, so it can be run anywhere without promoting: `GITHUB_TOKEN="$(gh auth token)" GITHUB_REPOSITORY=chanjdaniel/Conventioner python3 scripts/promote_check.py --commit <sha>`.
+Every check the Promote workflow makes before it moves `main` lives in [`scripts/promote_check.py`](../scripts/promote_check.py), which reads GitHub and writes nothing, so it can be run anywhere without promoting: `GITHUB_TOKEN="$(gh auth token)" GITHUB_REPOSITORY=Chan-Software-Services/Conventioner python3 scripts/promote_check.py --commit <sha>`.
 It reads the Test runs through [`scripts/github_runs.py`](../scripts/github_runs.py), the same code Deploy's Test check uses, so "the newest run decides" means one thing in both.
 [`scripts/tests/test_promote_check.py`](../scripts/tests/test_promote_check.py) runs it against a stub server, pins the workflow's steps, and runs the workflow's own shell with a fake `gh`.
 

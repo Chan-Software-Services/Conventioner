@@ -57,7 +57,7 @@ Production went live on 2026-10-18 as v1.0.0.
 | Captcha          | Google reCAPTCHA v3, one property listing `conventioner.io`                                                                                         | organizer sign-up only                                                                                                                                 |
 | CSV help         | Hosted TypeSafe (optional)                                                                                                                          | reading a Google Form export's columns                                                                                                                 |
 | Discord          | Discord Developer Portal, the Conventioner application (optional)                                                                                   | connecting a market to an organizer's server, where a later run gives its vendors a role ([the Discord connection](implementation/modules/discord.md)) |
-| CI and deploys   | GitHub Actions: `Test` (`test.yml`), `Deploy` (`deploy.yml`), `Release Please`                                                                      | `github.com/chanjdaniel/Conventioner`                                                                                                                  |
+| CI and deploys   | GitHub Actions: `Test` (`test.yml`), `Deploy` (`deploy.yml`), `Release Please`                                                                      | `github.com/Chan-Software-Services/Conventioner`                                                                                                       |
 
 The domains are DNS records at a third-party registrar pointing at Vercel.
 
