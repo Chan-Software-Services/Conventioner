@@ -7,6 +7,8 @@ describes:
   - front-end/e2e/helpers/browserSaid.ts
   - front-end/e2e/helpers/withUser.ts
   - front-end/e2e/helpers/mongo.ts
+  - front-end/e2e/helpers/mongoSession.ts
+  - front-end/e2e/helpers/mongoScript.ts
   - front-end/e2e/helpers/marketScreens.ts
   - front-end/e2e/helpers/upcoming.ts
   - front-end/e2e/helpers/settledPlanChanged.ts
@@ -20,8 +22,6 @@ describes:
   - front-end/e2e/helpers/phoneWindow.ts#inTheWindow
   - front-end/e2e/helpers/stackReady.ts
   - front-end/e2e/helpers/signInWindow.ts
-  - front-end/e2e/helpers/mongoSession.ts
-  - front-end/e2e/helpers/mongoScript.ts
 verified: 2026-11-17
 sources:
   - E21/F02/S02
@@ -161,6 +161,7 @@ Markets' search is drawn only past 12 markets or while the address holds words, 
 
 **A spec ends an organizer's session on the server**: `mongoEval` unsets the user's `login_id`, so the cookie names a login no account holds and the next request answers 401, as after a password reset; the next sign-in gives the account a new one.
 `context.clearCookies()` ends it only in the browser: the stack keeps its sessions on disk, where it stays until it lapses.
+A spec that ends it to have a press find it ended ends it as the press's request is sent, from that request's route, as [`a-failure-says-what-to-do.spec.ts`](../../../front-end/e2e/a-failure-says-what-to-do.spec.ts)'s "a session that ends mid-review" does: ended before the press, a read the page sent on its own, such as a drawer's on opening, can find it ended first and take the page to sign in, and the press then waits out the test on a control that is gone.
 
 **A call made with a page's cookies goes to `APP_API`, as the page's own calls do** (E38/F14/S01).
 `APP_API` is the address the app's pages call the API at, through the dev server's proxy, so such a call reaches the back end the way the page's do.
