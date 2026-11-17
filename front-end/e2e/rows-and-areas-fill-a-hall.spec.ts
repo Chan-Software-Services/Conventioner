@@ -2410,6 +2410,50 @@ test.describe('Types and zones shape a hall', () => {
     await expect(layout.toolSelect).toHaveAttribute('aria-pressed', 'true');
   });
 
+  test('a turned zone draft carried off the floorplan is kept by Enter, with what to do, and added once moved back on', async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    const seeded = await seedLayout(request, BACKEND_URL, TEST_USER.email, TEST_USER.password, {
+      metresAcross: 30,
+    });
+    const layout = new LayoutPage(page);
+    await layout.goto(seeded.marketId, seeded.upper.id);
+    await layout.toolZone.click();
+    await layout.drag([6000, 6000], [10_000, 8000]);
+    await expect(layout.zoneDraft).toBeVisible();
+    let draft = (await layout.zoneDraftNow())!;
+    // Its knob turned to 45°, about its centre.
+    const centre = { x: draft.cxMm, y: draft.cyMm };
+    const turn = (-45 * Math.PI) / 180;
+    await layout.dragFrom(layout.zoneTurn, [
+      centre.x + 5000 * Math.cos(turn),
+      centre.y + 5000 * Math.sin(turn),
+    ]);
+    expect((await layout.zoneDraftNow())!.rotation).toBe(45);
+
+    // Carried by its middle over the hall's left edge until none of its turned shape is on it.
+    await layout.dragFrom(layout.zoneDraftBody, [-3000, 7000]);
+    draft = (await layout.zoneDraftNow())!;
+    expect(draft.cxMm).toBeLessThan(-2200);
+    await page.keyboard.press('Enter');
+    await expect(layout.status).toHaveText(
+      'Too little of the zone is on the floorplan. Move it further on, then press Enter to add it.',
+    );
+    await expect(layout.zoneDraft).toBeVisible();
+    await expect(layout.zones).toHaveCount(0);
+    expect((await layout.zoneDraftNow())!.rotation).toBe(45);
+
+    // Moved back on, Enter adds it as it stands turned.
+    await layout.dragFrom(layout.zoneDraftBody, [8000, 7000]);
+    await layout.saved(() => page.keyboard.press('Enter'));
+    await expect(layout.zoneDraft).toHaveCount(0);
+    await expect(layout.zones).toHaveCount(1);
+    await expect(layout.zones.first()).toHaveAttribute('transform', /^rotate\(45 /);
+    const [stored] = (await storedPlan(request, seeded.marketId)).floorplans[0].zones;
+    expect(stored.rotation).toBe(45);
+  });
+
   test('the Floorplan menu hides and shows the image; a replaced image keeps every table where it was in metres and its old file is deleted', async ({
     authenticatedPage: page,
     request,
