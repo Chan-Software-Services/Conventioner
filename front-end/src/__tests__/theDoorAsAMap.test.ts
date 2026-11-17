@@ -252,7 +252,7 @@ afterEach(() => {
 describe('List and Map', () => {
   it('stand in the tools row, List pressed and the list shown, with no map', async () => {
     const wrapper = await open();
-    const tools = wrapper.get('.door-tools');
+    const tools = wrapper.get(testid('attendance-toolbar'));
     const list = tools.get(testid('attendance-view-list'));
     const map = tools.get(testid('attendance-view-map'));
     expect([list.text(), map.text()]).toEqual(['List', 'Map']);
@@ -279,7 +279,7 @@ describe('List and Map', () => {
 
   it('a change of day keeps the map', async () => {
     const wrapper = await openOnMap();
-    await wrapper.get(testid(`attendance-date-${TODAY}`)).trigger('click');
+    await wrapper.get(testid('attendance-date-select')).setValue(TODAY);
     expect(router.replace).toHaveBeenLastCalledWith({ query: { view: 'map', date: TODAY } });
   });
 
@@ -520,6 +520,124 @@ describe('under the map', () => {
     expect(words(wrapper, 'attendance-map-off-layout')).toBe(
       '3 vendors are at tables not on a layout. Show in the list',
     );
+  });
+});
+
+/*
+ * The location is the toolbar's select beside the day (T466, release walk F5), offered on the map
+ * when two locations or more are laid out, by the one rule the map reads (`laidOutLocations`).
+ */
+describe('the location select (T466)', () => {
+  const SOUTH = { id: 'loc-south', name: 'South Wing' };
+  const ANNEX = { id: 'loc-annex', name: 'Annex' };
+  const AISLE_B = { id: 'sec-aisle-b', name: 'Aisle B' };
+
+  /** North Wing as before, South Wing laid out with Aisle B's one table, and the Annex drawn with
+   *  no scale, so not laid out. */
+  const TWO_LAID_OUT = {
+    ...LAID_OUT,
+    locations: [NORTH, SOUTH, ANNEX],
+    sections: [...LAID_OUT.sections, { ...AISLE_B, location: SOUTH, tier: null, count: 1 }],
+    floorplans: [
+      ...LAID_OUT.floorplans,
+      {
+        ...LAID_OUT.floorplans[0],
+        id: 'fp-south',
+        locationId: SOUTH.id,
+        tables: [{ ...table('s1', 1, 4000), sectionId: AISLE_B.id }],
+      },
+      { ...LAID_OUT.floorplans[0], id: 'fp-annex', locationId: ANNEX.id, scalePxPerUnit: null },
+    ],
+  };
+
+  const select = (wrapper: VueWrapper) => wrapper.get(testid('attendance-location-select'));
+  const options = (wrapper: VueWrapper) =>
+    select(wrapper)
+      .findAll('option')
+      .map((option) => [option.attributes('value'), option.text()]);
+  const chosen = (wrapper: VueWrapper) => (select(wrapper).element as HTMLSelectElement).value;
+
+  it('on the map, offers exactly the laid-out locations, the first open, after the day', async () => {
+    marketNow = market({}, TWO_LAID_OUT);
+    const wrapper = await openOnMap();
+    expect(options(wrapper)).toEqual([
+      [NORTH.id, NORTH.name],
+      [SOUTH.id, SOUTH.name],
+    ]);
+    expect(chosen(wrapper)).toBe(NORTH.id);
+    expect(select(wrapper).attributes('name')).toBe('attendance-location-select');
+    expect(select(wrapper).classes()).toEqual(
+      expect.arrayContaining(['field', 'field--select', 'field--compact']),
+    );
+    const label = select(wrapper).element.closest('label');
+    expect(label?.querySelector('.visually-hidden')?.textContent?.trim()).toBe('Location');
+    // The Tab order: the day, then the location, then List and Map.
+    const order = wrapper
+      .get(testid('attendance-toolbar'))
+      .findAll('select, button')
+      .map((el) => el.attributes('data-testid'));
+    expect(order.slice(0, 4)).toEqual([
+      'attendance-date-select',
+      'attendance-location-select',
+      'attendance-view-list',
+      'attendance-view-map',
+    ]);
+    // The day map draws no switch of its own: the select is the one.
+    expect(wrapper.find(testid('day-map-locations')).exists()).toBe(false);
+  });
+
+  it("choosing one replaces the address's location, and the map draws it", async () => {
+    marketNow = market({}, TWO_LAID_OUT);
+    const wrapper = await openOnMap();
+    expect(wrapper.find('[data-table-id="t1"]').exists()).toBe(true);
+    await select(wrapper).setValue(SOUTH.id);
+    expect(router.replace).toHaveBeenLastCalledWith({
+      query: { view: 'map', location: SOUTH.id },
+    });
+    expect(router.push).not.toHaveBeenCalled();
+    await flushPromises();
+    expect(chosen(wrapper)).toBe(SOUTH.id);
+    expect(wrapper.find('[data-table-id="s1"]').exists()).toBe(true);
+    expect(wrapper.find('[data-table-id="t1"]').exists()).toBe(false);
+  });
+
+  it('opens on the location in the address, as a reload does', async () => {
+    marketNow = market({}, TWO_LAID_OUT);
+    route.query = { view: 'map', location: SOUTH.id };
+    const wrapper = await open();
+    expect(chosen(wrapper)).toBe(SOUTH.id);
+    expect(wrapper.find('[data-table-id="s1"]').exists()).toBe(true);
+  });
+
+  it('an address naming a location not laid out shows the first, as the map does', async () => {
+    marketNow = market({}, TWO_LAID_OUT);
+    route.query = { view: 'map', location: ANNEX.id };
+    const wrapper = await open();
+    expect(chosen(wrapper)).toBe(NORTH.id);
+    expect(wrapper.find('[data-table-id="t1"]').exists()).toBe(true);
+  });
+
+  it('is not offered on the list', async () => {
+    marketNow = market({}, TWO_LAID_OUT);
+    const wrapper = await open();
+    expect(wrapper.find(testid('attendance-location-select')).exists()).toBe(false);
+  });
+
+  it('is not offered with one location laid out', async () => {
+    const wrapper = await openOnMap();
+    expect(wrapper.find(testid('attendance-location-select')).exists()).toBe(false);
+    expect(wrapper.find(testid('day-map-locations')).exists()).toBe(false);
+  });
+});
+
+describe('when it was read, on the map (T466)', () => {
+  it("is the day map's note under the map, never over it or in the toolbar", async () => {
+    const wrapper = await openOnMap();
+    expect(wrapper.get(testid('day-map')).get(testid('day-map-note')).text()).toBe(
+      'Updated just now',
+    );
+    expect(wrapper.find(testid('attendance-updated')).exists()).toBe(false);
+    expect(wrapper.get(testid('attendance-tools')).text()).not.toMatch(/Updated/);
   });
 });
 

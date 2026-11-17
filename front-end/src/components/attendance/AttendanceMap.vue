@@ -13,10 +13,11 @@
  * gives stands under the map as the day map's note.
  *
  * Nothing here writes: check-in, Undo and notes stay on the list (D39). The open location is the
- * page's own state, in the address as `location`, replaced, as the day is.
+ * page's own state, in the address as `location`, chosen in the page's toolbar (T466), so the day
+ * map draws no location switch of its own.
  */
 import { computed, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import type { Market } from '@/assets/types/datatypes';
 import { laidOutLocations, openLocationId } from '@/components/attendance/laidOutLocations';
 import DayMap from '@/components/daymap/DayMap.vue';
@@ -58,17 +59,12 @@ const emit = defineEmits<{
 }>();
 
 const route = useRoute();
-const router = useRouter();
 
 /** The locations laid out, by the one rule the page's location select reads too. */
 const laidOut = computed(() => laidOutLocations(props.market?.setupObject));
 
 /** The open location: the address's, else the first laid out. */
 const openId = computed(() => openLocationId(laidOut.value, String(route.query.location ?? '')));
-
-function chooseLocation(location: string) {
-  void router.replace({ query: { ...route.query, location } });
-}
 
 /** Only the open location's image is read, with the session, as the layout page reads it. */
 const { url: imageUrl } = useFloorplanImage(
@@ -182,7 +178,7 @@ const mayChangeSetup = computed(() => mayTake(props.market, MarketAction.ChangeS
         :marked="marked"
         :legend="legend"
         :note="updated"
-        @update:locationId="chooseLocation"
+        :locationSwitch="false"
         @pick="pick"
       />
       <p

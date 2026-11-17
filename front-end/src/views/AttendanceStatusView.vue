@@ -32,7 +32,12 @@ export const REREAD_MS = 15_000;
  *
  * A paper roster is the door's fallback when the venue's network or the back end fails (T318):
  * "Print roster" prints every vendor of the chosen date by table, whatever the filters on screen
- * say (`DoorRosterPrint`), and in Market Days a note asks for it on each day still to be run.
+ * say (`DoorRosterPrint`).
+ *
+ * Its tools are one toolbar and a count row, pinned under the market's frame at a desk (T466,
+ * release walk F5): the date and, on the map, the location as selects, List and Map, the paper
+ * tools and Refresh last, in the markup's order, which is the Tab order; then the count, the list's
+ * filters and the search. When the roster was read stands over the list, or under the map.
  */
 import { MarketAction, mayTake } from '@/utils/marketActions';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
@@ -45,8 +50,12 @@ import { tableInWords } from '@/utils/placementChange';
 import { vendorMatches, type VendorNames } from '@/utils/vendorIdentity';
 import MarketFrame from '@/components/MarketFrame.vue';
 import VendorDrawer from '@/components/VendorDrawer.vue';
-import FilterToggles from '@/components/FilterToggles.vue';
 import AttendanceMap from '@/components/attendance/AttendanceMap.vue';
+import { laidOutLocations, openLocationId } from '@/components/attendance/laidOutLocations';
+import PinnedTools from '@/components/PinnedTools.vue';
+import SegmentedControl, { type SegmentedOption } from '@/components/SegmentedControl.vue';
+import ToolGroup from '@/components/ToolGroup.vue';
+import ToolRow from '@/components/ToolRow.vue';
 import VendorNameButton from '@/components/VendorNameButton.vue';
 import VendorNotes from '@/components/VendorNotes.vue';
 import ListFreshness from '@/components/ListFreshness.vue';
@@ -62,6 +71,7 @@ import { useOpenMarket } from '@/utils/openMarket';
 import { signedInEmail } from '@/utils/signedIn';
 import { withoutQueryKey } from '@/utils/routeQuery';
 import { useServerRead } from '@/utils/useServerRead';
+import { useUpdatedWords } from '@/utils/useUpdatedWords';
 
 /**
  * Where a vendor stands at the door on a date: a seat and no check-in (`expected`), a check-in made
@@ -125,6 +135,8 @@ const dates = computed(() => rosterRead.data.value?.dates ?? []);
 const roster = computed(() => rosterRead.data.value?.roster ?? []);
 /** When the roster was last read from the server, in milliseconds, or null before the first. */
 const readAt = rosterRead.readAt;
+/** "Updated just now", ageing: over the list, or under the map as its note. */
+const updatedWords = useUpdatedWords(readAt);
 const wasRead = computed(() => rosterRead.data.value !== null);
 /** The open market's failed first read, kept through the clock's quiet re-reads until one lands. */
 const firstFailure = ref<{ key: string; sentence: string } | null>(null);
@@ -146,6 +158,8 @@ const readError = computed(() => {
     : '';
 });
 const isLoading = computed(() => rosterRead.phase.value === 'loading' && !readError.value);
+/** A roster with dates to show, under the pinned tools. */
+const hasRoster = computed(() => !isLoading.value && dates.value.length > 0);
 /** A Refresh, or the clock's re-read, in flight, so Refresh cannot be pressed twice. */
 const refreshing = computed(() => rosterRead.phase.value === 'refreshing');
 /** A re-read that failed: the rows stay, and this says they are old. */
@@ -194,12 +208,23 @@ function chooseDate(date: string) {
   void router.replace({ query: { ...route.query, date } });
 }
 
+/** The locations the map can draw, by the rule the map reads, so the select offers no other. */
+const laidOut = computed(() => laidOutLocations(market.value?.setupObject));
+/** The map's open location: the address's, else the first laid out. */
+const locationId = computed(() =>
+  openLocationId(laidOut.value, String(route.query.location ?? '')),
+);
+
+function chooseLocation(location: string) {
+  void router.replace({ query: { ...route.query, location } });
+}
+
 /**
  * The roster as a list, today's page, or as a map of the open day (T422, D38): the page's own
  * state, in the address as `view=map`, replaced, so a change of day and a reload keep it.
  */
 type View = 'list' | 'map';
-const VIEWS = [
+const VIEWS: readonly SegmentedOption[] = [
   { id: 'list', label: 'List' },
   { id: 'map', label: 'Map' },
 ];
@@ -240,13 +265,12 @@ function hasSeat(row: RosterRow): boolean {
   return row.state !== 'here_without_seat';
 }
 
-/** A date's seats, and those checked in: a vendor here with no table that day is not counted. */
-function tally(date: string) {
-  const day = roster.value.filter((row) => row.date === date && hasSeat(row));
+/** The chosen date's seats, and those checked in: a vendor here with no table that day is not
+ *  counted. */
+const today = computed(() => {
+  const day = roster.value.filter((row) => row.date === selectedDate.value && hasSeat(row));
   return { expected: day.length, here: day.filter((row) => row.checkedInAt).length };
-}
-
-const today = computed(() => tally(selectedDate.value));
+});
 
 /**
  * Whether the chosen day is over: it has passed, or the market is archived. A vendor who never
@@ -322,17 +346,6 @@ const printedDay = computed(() => roster.value.filter((row) => row.date === sele
 const printedSeated = computed(() => printedDay.value.filter(hasSeat).map(printedRow));
 const printedUnseated = computed(() =>
   printedDay.value.filter((row) => !hasSeat(row)).map(printedRow),
-);
-
-/**
- * Asks for a printed roster in Market Days on each day still to be run: on a day that has passed,
- * or a market archived, paper is too late.
- */
-const asksForPaper = computed(
-  () =>
-    market.value?.phase === MarketPhase.MarketDays &&
-    !!selectedDate.value &&
-    selectedDate.value >= calendarToday(),
 );
 
 function printRoster(): void {
@@ -501,78 +514,93 @@ const drawer = useVendorDrawer();
 
 <template>
   <MarketFrame :market="market" @retry="retry">
-    <div class="door">
-      <ReadFailed v-if="readError" name="attendance" :message="readError" @retry="retry" />
-      <p v-if="errorMessage" class="door-error" role="alert">{{ errorMessage }}</p>
-      <p v-if="isLoading" class="door-note">Loading…</p>
-      <!-- Said of a roster that was read: under a failed read there is nothing to say it of. -->
-      <p v-else-if="wasRead && dates.length === 0" class="door-note">
-        This market has no dates yet.
-      </p>
-      <template v-else-if="dates.length">
-        <div class="door-top">
-          <nav class="door-dates" aria-label="Market date">
-            <button
-              v-for="date in dates"
-              :key="date"
-              type="button"
-              class="btn btn--secondary btn--compact door-date"
-              :aria-pressed="date === selectedDate"
-              :data-testid="`attendance-date-${date}`"
-              @click="chooseDate(date)"
+    <!-- Once the roster has dates, its tools pin under the frame at a desk and the roster passes
+         under them; before, the page says why there is no roster, with nothing to pin. -->
+    <PinnedTools v-if="hasRoster" testid="attendance-tools">
+      <template #tools>
+        <ToolRow testid="attendance-toolbar">
+          <label class="door-picker">
+            <span class="visually-hidden">Market date</span>
+            <select
+              class="field field--select field--compact door-select"
+              name="attendance-date-select"
+              data-testid="attendance-date-select"
+              :value="selectedDate"
+              @change="chooseDate(($event.target as HTMLSelectElement).value)"
             >
-              {{ getShortDate(date) }}
-              <span class="door-date-count">{{ tally(date).here }}/{{ tally(date).expected }}</span>
-            </button>
-          </nav>
-          <!-- When the roster was read, then Print roster and the door code: together at the row's
-               end, or the end of a line of their own when the dates fill theirs. -->
-          <div class="door-tools">
-            <FilterToggles
-              class="door-view"
-              :options="VIEWS"
-              label="Show as"
-              testid="attendance-view"
-              :modelValue="view"
-              :rest="view"
-              @update:modelValue="chooseView($event as View)"
-            />
-            <ListFreshness
-              class="door-freshness"
-              testid="attendance"
-              :readAt="readAt"
-              :refreshing="refreshing"
-              :failed="refreshError"
-              @refresh="retry"
-            />
-            <span class="door-papers">
-              <button
-                type="button"
-                class="btn btn--secondary btn--compact"
-                data-testid="attendance-print"
-                @click="printRoster"
+              <option v-for="date in dates" :key="date" :value="date">
+                {{ getShortDate(date) }}
+              </option>
+            </select>
+          </label>
+          <label v-if="view === 'map' && laidOut.length > 1" class="door-picker">
+            <span class="visually-hidden">Location</span>
+            <select
+              class="field field--select field--compact door-select"
+              name="attendance-location-select"
+              data-testid="attendance-location-select"
+              :value="locationId"
+              @change="chooseLocation(($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="location in laidOut" :key="location.id" :value="location.id">
+                {{ location.name }}
+              </option>
+            </select>
+          </label>
+          <template #end>
+            <!-- The groups, then a failed refresh's line under them, right-aligned: Refresh is the
+                 last control in the markup, so the last the Tab key reaches. -->
+            <div class="door-end">
+              <ToolGroup>
+                <SegmentedControl
+                  :options="VIEWS"
+                  label="Show as"
+                  testid="attendance-view"
+                  :modelValue="view"
+                  @update:modelValue="chooseView($event as View)"
+                />
+              </ToolGroup>
+              <ToolGroup>
+                <button
+                  type="button"
+                  class="btn btn--secondary btn--compact"
+                  data-testid="attendance-print"
+                  @click="printRoster"
+                >
+                  Print roster
+                </button>
+                <button
+                  v-if="offersTheDoorCode"
+                  type="button"
+                  class="btn btn--secondary btn--compact"
+                  data-testid="attendance-door-code"
+                  @click="showingDoorCode = true"
+                >
+                  Door code
+                </button>
+              </ToolGroup>
+              <ToolGroup>
+                <ListFreshness
+                  testid="attendance"
+                  :readAt="readAt"
+                  :refreshing="refreshing"
+                  failed=""
+                  :showTime="false"
+                  @refresh="retry"
+                />
+              </ToolGroup>
+              <p
+                v-if="refreshError"
+                class="door-refresh-error"
+                role="alert"
+                data-testid="attendance-refresh-error"
               >
-                Print roster
-              </button>
-              <button
-                v-if="offersTheDoorCode"
-                type="button"
-                class="btn btn--secondary btn--compact"
-                data-testid="attendance-door-code"
-                @click="showingDoorCode = true"
-              >
-                Door code
-              </button>
-            </span>
-          </div>
-        </div>
-
-        <p v-if="asksForPaper" class="note" data-testid="attendance-print-note">
-          If the venue's network fails, a printed roster still works. Print this day's roster before
-          the doors open.
-        </p>
-
-        <div class="door-bar">
+                {{ refreshError }}
+              </p>
+            </div>
+          </template>
+        </ToolRow>
+        <ToolRow testid="attendance-bar">
           <h2 class="door-summary" data-testid="attendance-summary">
             {{ today.here }} of {{ today.expected }} checked in
           </h2>
@@ -609,13 +637,16 @@ const drawer = useVendorDrawer();
             v-model="search"
             type="search"
             name="attendance-search"
-            class="field door-search"
+            class="field field--compact door-search"
             aria-label="Find a vendor"
             placeholder="Name, email or table"
             data-testid="attendance-search"
           />
-        </div>
+        </ToolRow>
+      </template>
 
+      <div class="door">
+        <p v-if="errorMessage" class="door-error" role="alert">{{ errorMessage }}</p>
         <AttendanceMap
           v-if="view === 'map'"
           :market="market"
@@ -625,10 +656,14 @@ const drawer = useVendorDrawer();
           :openVendor="drawer.email.value"
           :notHere="notHere"
           :hereWithoutSeat="withoutSeatToday"
+          :updated="updatedWords"
           @open="drawer.open($event)"
           @showList="showListFromMap"
         />
         <template v-else>
+          <p v-if="updatedWords" class="door-updated" data-testid="attendance-updated">
+            {{ updatedWords }}
+          </p>
           <p v-if="today.expected === 0 && withoutSeatToday === 0" class="door-note">
             Nobody is assigned on this date.
           </p>
@@ -704,7 +739,15 @@ const drawer = useVendorDrawer();
             </ul>
           </template>
         </template>
-      </template>
+      </div>
+    </PinnedTools>
+    <div v-else class="door">
+      <ReadFailed v-if="readError" name="attendance" :message="readError" @retry="retry" />
+      <p v-if="isLoading" class="door-note">Loading…</p>
+      <!-- Said of a roster that was read: under a failed read there is nothing to say it of. -->
+      <p v-else-if="wasRead && dates.length === 0" class="door-note">
+        This market has no dates yet.
+      </p>
     </div>
     <VendorDrawer
       :market="market"
@@ -742,68 +785,36 @@ const drawer = useVendorDrawer();
   color: var(--mm-black);
 }
 
-.door-top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-2) var(--space-4);
+/* The day and the location, each as wide as its longest option, its figures in columns. */
+.door-select {
+  width: auto;
+  font-variant-numeric: tabular-nums;
 }
 
-/* At the row's end, and at the end of its own line when the dates fill theirs. */
-.door-tools {
+/* The toolbar's end: its groups, a rule between each, and a failed refresh's line under them at
+   their end. The line adds nothing to the end's width (`contain: inline-size`), so it wraps inside
+   the groups' width and never moves Print roster or Door code to a line of their own. */
+.door-end {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-2);
-  margin-inline-start: auto;
+  gap: var(--space-2) var(--space-3);
 }
 
-/* List and Map, a step apart from the time and Refresh after them, as Print roster is. */
-.door-view {
-  margin-inline-end: var(--space-2);
-}
-
-/* The time, Refresh and a failed read's line are the group's own items, so that line goes under
-   the row, whole, rather than between Refresh and the buttons after it, where on a phone it pushed
-   Door code onto a line of its own. */
-.door-freshness {
-  display: contents;
-}
-
-.door-freshness :deep(.freshness-error) {
+.door-refresh-error {
   flex-basis: 100%;
-  order: 1;
+  contain: inline-size;
+  margin: 0;
+  color: var(--mm-red);
+  font-size: var(--text-xs);
   text-align: end;
 }
 
-/* Print roster and Door code, a step apart from Refresh, which belongs to the time before it. They
-   wrap as one: on a phone Door code went to a line alone under Print roster. */
-.door-papers {
-  display: flex;
-  gap: var(--space-2);
-  margin-inline-start: var(--space-2);
-}
-
-.door-dates,
 .door-show {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
-}
-
-.door-date-count {
-  /* Figures in a column need fixed-width digits (E15/F01/S03). The button's own ink, not muted:
-     muted grey is 4.26 on the chosen date's green ground, below AA. */
-  font-variant-numeric: tabular-nums;
-}
-
-.door-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3) var(--space-4);
 }
 
 .door-summary {
@@ -813,9 +824,18 @@ const drawer = useVendorDrawer();
   font-variant-numeric: tabular-nums;
 }
 
+/* The search takes the count row's room. */
 .door-search {
   flex: 1 1 240px;
   min-width: 0;
+}
+
+/* On the list, when it was read, over the list's right edge, 4px over its first row. */
+.door-updated {
+  margin: 0 0 calc(-1 * var(--space-3));
+  color: var(--mm-text-muted);
+  font-size: var(--text-xs);
+  text-align: end;
 }
 
 .door-heading {
@@ -908,18 +928,13 @@ const drawer = useVendorDrawer();
     padding: var(--space-4);
   }
 
-  /* On a phone the tools never share the dates' line: they start their own lines at the left, as
-     the dates do, List and Map first, rather than at the right with a gap before them. */
-  .door-tools {
+  /* On a phone the end starts its own lines at the start edge, as the toolbar's start does. */
+  .door-end {
     justify-content: flex-start;
-    margin-inline-start: 0;
+    gap: var(--space-2);
   }
 
-  .door-papers {
-    margin-inline-start: 0;
-  }
-
-  .door-freshness :deep(.freshness-error) {
+  .door-refresh-error {
     text-align: start;
   }
 }

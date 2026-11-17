@@ -136,9 +136,10 @@ for (const size of PHONE_AND_DESK) {
       // The map is kept across a reload, and across the other location.
       await page.reload();
       await expect(door.viewMap).toHaveAttribute('aria-pressed', 'true');
-      await press(
-        page.getByTestId('day-map-locations').getByRole('button', { name: 'South Wing' }),
-      );
+      // The location is the toolbar's select, beside the day (T466).
+      await expect(page.getByTestId('day-map-locations')).toHaveCount(0);
+      await door.locationSelect.selectOption({ label: 'South Wing' });
+      await expect(page).toHaveURL(/[?&]location=loc-south-wing(&|$)/);
       await expect(door.mapTable('Aisle B 1')).toBeVisible();
       // Every table of South Wing's Aisle B is held today: its legend names no free table.
       await expect(door.legend).toHaveText(['Here', 'Expected']);

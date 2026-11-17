@@ -280,10 +280,8 @@ test('from assignment to the archive, each tile is the figure of the page it lin
   for (const id of ['checkedIn', 'notYet']) {
     await follow(stats, marketId, id, async () => {
       await expect(page).toHaveURL(new RegExp(`/attendance\\?date=${SEED_MARKET_DATE}$`));
-      await expect(door.date(SEED_MARKET_DATE)).toHaveAttribute('aria-pressed', 'true', {
-        timeout: 15000,
-      });
-      await expect(door.date(SEED_MARKET_DATE)).toContainText('1/2');
+      await expect(door.dateSelect).toHaveValue(SEED_MARKET_DATE, { timeout: 15000 });
+      await expect(door.summary).toHaveText('1 of 2 checked in');
     });
   }
 
@@ -294,7 +292,7 @@ test('from assignment to the archive, each tile is the figure of the page it lin
 
   await follow(stats, marketId, 'came', async () => {
     await expect(page).toHaveURL(new RegExp(`${marketScreenPath(marketId, 'attendance')}(\\?|$)`));
-    await expect(door.date(SEED_MARKET_DATE)).toBeVisible({ timeout: 15000 });
+    await expect(door.dateSelect).toHaveValue(SEED_MARKET_DATE, { timeout: 15000 });
   });
   await follow(stats, marketId, 'paid', async () => {
     await expect(page).toHaveURL(new RegExp(`${marketScreenPath(marketId, 'payments')}$`));
@@ -432,8 +430,6 @@ test("check-in reads each day's vendors in of those expected from Market Days, a
   await second.getByRole('link', { name: '1 not yet' }).click();
   await expect(page).toHaveURL(new RegExp(`/attendance\\?date=${SECOND_DATE}$`));
   const door = new AttendanceStatusPage(page);
-  await expect(door.date(SECOND_DATE)).toHaveAttribute('aria-pressed', 'true', {
-    timeout: 15000,
-  });
-  await expect(door.date(SECOND_DATE)).toContainText('1/2');
+  await expect(door.dateSelect).toHaveValue(SECOND_DATE, { timeout: 15000 });
+  await expect(door.summary).toHaveText('1 of 2 checked in');
 });

@@ -14,18 +14,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { AxiosError } from 'axios';
+import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
+import { parse as parseSfc } from 'vue/compiler-sfc';
 import { reactive, ref } from 'vue';
 
 import AttendanceStatusView, { REREAD_MS } from '@/views/AttendanceStatusView.vue';
 import { MarketPhase, type Market } from '@/assets/types/datatypes';
 import { calendarToday } from '@/utils/marketGuide';
+import { getShortDate } from '@/utils/utils';
 import { answersRefusing, VIEWER_ANSWERS } from './support/servedAnswers';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 
+const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
+
 vi.mock('vue-router', () => ({
   useRoute: () => route,
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => router,
 }));
 vi.mock('@/utils/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/utils/api')>();
@@ -38,7 +44,10 @@ vi.mock('@/utils/vendorDetails', () => ({
   useVendorDetails: () => ({ loaded: { value: false }, load: vi.fn() }),
 }));
 
-const route = reactive({ params: { marketId: 'market-1' }, query: {} });
+const route = reactive<{ params: Record<string, string>; query: Record<string, string> }>({
+  params: { marketId: 'market-1' },
+  query: {},
+});
 
 const ORGANIZER = 'org@example.com';
 const ANA = 'ana@example.com';
@@ -181,6 +190,14 @@ async function open(): Promise<VueWrapper> {
   return wrapper;
 }
 
+/** The view's own styles, as they ship. */
+function viewStyles(): string {
+  const { descriptor } = parseSfc(
+    readFileSync(resolvePath(process.cwd(), 'src/views/AttendanceStatusView.vue'), 'utf8'),
+  );
+  return descriptor.styles.map((style) => style.content).join('\n');
+}
+
 function status(wrapper: VueWrapper, email: string): string {
   return wrapper
     .get(`[data-testid="attendance-row"][data-vendor="${email}"]`)
@@ -198,6 +215,10 @@ enableAutoUnmount(afterEach);
 
 beforeEach(() => {
   vi.resetAllMocks();
+  router.replace.mockImplementation(({ query }: { query: Record<string, string> }) => {
+    route.query = query;
+    return Promise.resolve();
+  });
   route.query = {};
   marketNow = MARKET;
   visibility = 'visible';
@@ -473,20 +494,21 @@ describe('when a read fails', () => {
   });
 });
 
-describe('when it was read', () => {
-  it('is said at the end of the top row, before Door code, with Refresh, which reads at once', async () => {
+describe('when it was read (T466)', () => {
+  it("is said over the list, out of the toolbar, and ages; Refresh, the toolbar's last, reads at once", async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
     const wrapper = await open();
-    expect(wrapper.get('[data-testid="attendance-updated"]').text()).toBe('Updated just now');
-
-    const top = wrapper.get('.door-top');
-    const testids = top.findAll('[data-testid]').map((el) => el.attributes('data-testid'));
-    expect(testids.indexOf('attendance-refresh')).toBeLessThan(
-      testids.indexOf('attendance-door-code'),
-    );
-    expect(testids.indexOf('attendance-updated')).toBeGreaterThan(
-      testids.indexOf(`attendance-date-${TODAY}`),
-    );
+    const updated = wrapper.get('[data-testid="attendance-updated"]');
+    expect(updated.text()).toBe('Updated just now');
+    expect(updated.element.tagName).toBe('P');
+    // Over the list, under the pinned tools, and never in the toolbar.
+    const tools = wrapper.get('[data-testid="attendance-tools"]');
+    expect(tools.find('[data-testid="attendance-updated"]').exists()).toBe(false);
+    expect(tools.text()).not.toMatch(/Updated/);
+    const list = wrapper.get('[data-testid="attendance-list-seated"]').element;
+    expect(
+      updated.element.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
     // Hidden, it reads nothing, and the time it says ages.
     setVisibility('hidden');
@@ -500,6 +522,164 @@ describe('when it was read', () => {
     await wrapper.get('[data-testid="attendance-refresh"]').trigger('click');
     await flushPromises();
     expect(rosterReads()).toBe(before + 1);
+  });
+
+  it("a failed refresh's line stands in the pinned block, after the toolbar's Refresh", async () => {
+    const wrapper = await open();
+    serveRoster(offline);
+    await wrapper.get('[data-testid="attendance-refresh"]').trigger('click');
+    await flushPromises();
+    const toolbar = wrapper
+      .get('[data-testid="attendance-tools"]')
+      .get('[data-testid="attendance-toolbar"]');
+    const error = toolbar.get('[data-testid="attendance-refresh-error"]');
+    expect(error.attributes('role')).toBe('alert');
+    expect(error.text()).toBe('Could not update. The roster is as it was last read.');
+    const ids = toolbar.findAll('[data-testid]').map((el) => el.attributes('data-testid'));
+    expect(ids.indexOf('attendance-refresh-error')).toBeGreaterThan(
+      ids.indexOf('attendance-refresh'),
+    );
+  });
+});
+
+/*
+ * Attendance's toolbar (T466, release walk F5): the date as one select, List and Map, the paper
+ * tools and Refresh last, a second row of the count, the list's filters and the search, both pinned
+ * under the market's frame at a desk.
+ */
+describe('the toolbar (T466)', () => {
+  const YESTERDAY = dayFromToday(-1);
+  const TOMORROW = dayFromToday(1);
+
+  function threeDays() {
+    serveRoster(() =>
+      Promise.resolve({
+        data: {
+          dates: [YESTERDAY, TODAY, TOMORROW],
+          roster: [
+            row(ANA, 'A1', { checkedInAt: ARRIVED }),
+            row(BEN, 'A2'),
+            { ...row(ANA, 'A1'), date: TOMORROW },
+          ],
+        },
+      }),
+    );
+  }
+
+  it('the date is one select, its options the day alone, the open day chosen', async () => {
+    threeDays();
+    const wrapper = await open();
+    const select = wrapper.get('[data-testid="attendance-date-select"]');
+    expect(select.element.tagName).toBe('SELECT');
+    expect(select.attributes('name')).toBe('attendance-date-select');
+    expect(select.classes()).toEqual(
+      expect.arrayContaining(['field', 'field--select', 'field--compact']),
+    );
+    expect(select.findAll('option').map((option) => option.text())).toEqual(
+      [YESTERDAY, TODAY, TOMORROW].map(getShortDate),
+    );
+    expect((select.element as HTMLSelectElement).value).toBe(TODAY);
+    // Named by a label a screen reader hears, though its words are not on screen.
+    const label = select.element.closest('label');
+    expect(label?.querySelector('.visually-hidden')?.textContent?.trim()).toBe('Market date');
+    // No button per date, and no tally of each.
+    expect(wrapper.find(`[data-testid="attendance-date-${TODAY}"]`).exists()).toBe(false);
+    expect(wrapper.get('[data-testid="attendance-toolbar"]').text()).not.toMatch(/\d+\/\d+/);
+  });
+
+  it("choosing a day replaces the address's date, and the page shows that day", async () => {
+    threeDays();
+    route.query = { view: 'list' };
+    const wrapper = await open();
+    await wrapper.get('[data-testid="attendance-date-select"]').setValue(TOMORROW);
+    expect(router.replace).toHaveBeenLastCalledWith({ query: { view: 'list', date: TOMORROW } });
+    expect(router.push).not.toHaveBeenCalled();
+    await flushPromises();
+    expect(wrapper.get('[data-testid="attendance-summary"]').text()).toBe('0 of 1 checked in');
+    expect(
+      (wrapper.get('[data-testid="attendance-date-select"]').element as HTMLSelectElement).value,
+    ).toBe(TOMORROW);
+  });
+
+  it('the Tab order follows the toolbar as drawn: date, List, Map, Print roster, Door code, Refresh', async () => {
+    const wrapper = await open();
+    const focusable = (testid: string) =>
+      wrapper
+        .get(`[data-testid="${testid}"]`)
+        .findAll('select, button, input')
+        .map((el) => el.attributes('data-testid'));
+    expect(focusable('attendance-toolbar')).toEqual([
+      'attendance-date-select',
+      'attendance-view-list',
+      'attendance-view-map',
+      'attendance-print',
+      'attendance-door-code',
+      'attendance-refresh',
+    ]);
+    // Then the count row's: the list's filters and the search.
+    expect(focusable('attendance-bar')).toEqual([
+      'attendance-show-all',
+      'attendance-show-not-yet',
+      'attendance-show-here',
+      'attendance-search',
+    ]);
+    expect(focusable('attendance-tools')).toEqual([
+      ...focusable('attendance-toolbar'),
+      ...focusable('attendance-bar'),
+    ]);
+    // The markup is the order: nothing in the page's styles moves a control.
+    expect(viewStyles()).not.toMatch(/(^|[\s;{])order\s*:/);
+  });
+
+  it('List and Map are one joined choice; Print roster and Door code are one group, Refresh its own', async () => {
+    const wrapper = await open();
+    const view = wrapper.get('[data-testid="attendance-view"]');
+    expect(view.attributes('role')).toBe('group');
+    expect(view.attributes('aria-label')).toBe('Show as');
+    expect(view.classes()).toContain('segmented');
+    const groups = wrapper
+      .get('[data-testid="attendance-toolbar"]')
+      .findAll('.tool-group')
+      .map((group) => group.findAll('button').map((el) => el.attributes('data-testid')));
+    expect(groups).toEqual([
+      ['attendance-view-list', 'attendance-view-map'],
+      ['attendance-print', 'attendance-door-code'],
+      ['attendance-refresh'],
+    ]);
+  });
+
+  it('the count row holds the count, the Show buttons and the search, each compact', async () => {
+    const wrapper = await open();
+    const bar = wrapper
+      .get('[data-testid="attendance-tools"]')
+      .get('[data-testid="attendance-bar"]');
+    expect(bar.get('[data-testid="attendance-summary"]').text()).toBe('0 of 2 checked in');
+    const search = bar.get('[data-testid="attendance-search"]');
+    expect(search.classes()).toEqual(expect.arrayContaining(['field', 'field--compact']));
+    expect(search.attributes('aria-label')).toBe('Find a vendor');
+    expect(search.attributes('placeholder')).toBe('Name, email or table');
+    for (const id of ['all', 'not-yet', 'here']) {
+      expect(bar.get(`[data-testid="attendance-show-${id}"]`).classes()).toContain('btn--compact');
+    }
+  });
+
+  it('no pinned tools while the roster loads, fails its first read or has no dates', async () => {
+    serveRoster(() => new Promise(() => {}));
+    let wrapper = await open();
+    expect(wrapper.text()).toContain('Loading');
+    expect(wrapper.find('[data-testid="attendance-tools"]').exists()).toBe(false);
+    wrapper.unmount();
+
+    serveRoster(offline);
+    wrapper = await open();
+    expect(wrapper.find('[data-testid="attendance-read-failed"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="attendance-tools"]').exists()).toBe(false);
+    wrapper.unmount();
+
+    serveRoster(() => Promise.resolve({ data: { dates: [], roster: [] } }));
+    wrapper = await open();
+    expect(wrapper.text()).toContain('This market has no dates yet.');
+    expect(wrapper.find('[data-testid="attendance-tools"]').exists()).toBe(false);
   });
 });
 
@@ -715,9 +895,6 @@ describe('where each vendor stands (T318)', () => {
  * nothing prompted the organizer to keep one (T318).
  */
 describe('printing the roster (T318)', () => {
-  const NOTE =
-    "If the venue's network fails, a printed roster still works. Print this day's roster before the doors open.";
-
   function onDay(days: number) {
     const day = dayFromToday(days);
     route.query = { date: day };
@@ -731,14 +908,14 @@ describe('printing the roster (T318)', () => {
     );
   }
 
-  it('Print roster stands in the top row, before Door code, and prints', async () => {
+  it('Print roster stands in the toolbar, before Door code, and prints', async () => {
     // happy-dom has no `window.print`.
     const print = vi.fn();
     Object.defineProperty(window, 'print', { configurable: true, value: print });
     const wrapper = await open();
 
-    const top = wrapper.get('.door-top');
-    const testids = top.findAll('[data-testid]').map((el) => el.attributes('data-testid'));
+    const toolbar = wrapper.get('[data-testid="attendance-toolbar"]');
+    const testids = toolbar.findAll('[data-testid]').map((el) => el.attributes('data-testid'));
     expect(testids).toContain('attendance-print');
     expect(testids.indexOf('attendance-print')).toBeLessThan(
       testids.indexOf('attendance-door-code'),
@@ -765,22 +942,15 @@ describe('printing the roster (T318)', () => {
     expect(wrapper.find('[data-testid="attendance-print"]').exists()).toBe(false);
   });
 
+  // The page says only what it must (T466): the phase guide asks for paper already.
   it.each([
-    ['today', 0, true],
-    ['a day to come', 1, true],
-    ['a past day', -1, false],
-  ])('the note to print shows on %s: %s', async (_name, days, shown) => {
+    ['today', 0],
+    ['a day to come', 1],
+    ['a past day', -1],
+  ])('no note asks for paper on %s', async (_name, days) => {
     onDay(days);
     const wrapper = await open();
-    const note = wrapper.find('[data-testid="attendance-print-note"]');
-    expect(note.exists()).toBe(shown);
-    if (shown) expect(note.text()).toBe(NOTE);
-  });
-
-  it('the note never shows on an archived market', async () => {
-    marketNow = { ...MARKET, phase: MarketPhase.Archived } as Market;
-    onDay(0);
-    const wrapper = await open();
     expect(wrapper.find('[data-testid="attendance-print-note"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('a printed roster still works');
   });
 });

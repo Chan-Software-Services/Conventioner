@@ -18,7 +18,7 @@ import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
  * tablet on the table, a laptop at the desk.
  *
  * At each, an organizer checks a vendor in and undoes it, reads when the roster was read and reads
- * it again, sees the note asking for a printed roster and Print roster, and reads a vendor here at
+ * it again, sees Print roster, and reads a vendor here at
  * another table than the one they hold and one here with no table at all, with nothing scrolling
  * sideways, every target a thumb's 44px on the phone, and no address broken mid-word.
  *
@@ -181,14 +181,14 @@ for (const size of THREE_WINDOWS) {
       await expect(door.updated).toHaveText('Updated just now');
       await expect(door.refreshError).toHaveCount(0);
 
-      // The note asking for paper, and Print roster beside the door code.
-      await expect(door.printNote).toContainText('a printed roster still works');
+      // Print roster beside the door code, and no note asking for paper (T466).
+      await expect(page.getByTestId('attendance-print-note')).toHaveCount(0);
       await expect(door.print).toHaveText('Print roster');
       for (const [control, what] of [
+        [door.dateSelect, 'the date'],
         [door.print, 'Print roster'],
         [door.doorCodeButton, 'Door code'],
         [door.refresh, 'Refresh'],
-        [door.printNote, 'the print note'],
       ] as const) {
         await expectInside(control, what);
       }
