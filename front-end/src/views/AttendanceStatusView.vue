@@ -91,6 +91,8 @@ interface RosterRow {
   date: string;
   vendorEmail: string;
   vendorName: string;
+  /** The name on their identification, which both searches find as well (T466). */
+  vendorFullName?: string;
   /** The seat held that day; null on a `here_without_seat` row. */
   tableCode: string | null;
   tableChoice: string | null;
@@ -256,6 +258,12 @@ const names = computed<VendorNames>(() => {
   for (const row of roster.value) if (row.vendorName) out[row.vendorEmail] = row.vendorName;
   return out;
 });
+/** The name on each vendor's identification, which a search finds too, as on Vendors (T466). */
+const fullNames = computed<VendorNames>(() => {
+  const out: Record<string, string> = {};
+  for (const row of roster.value) if (row.vendorFullName) out[row.vendorEmail] = row.vendorFullName;
+  return out;
+});
 
 /** Whoever the table lets check vendors in may, while the market is running; the server is the
  *  authority. */
@@ -301,7 +309,7 @@ const shownToday = computed(() => {
     if (show.value === 'here' && !row.checkedInAt) return false;
     if (!term) return true;
     if ((row.tableCode ?? '').toLowerCase().includes(term)) return true;
-    return vendorMatches(term, row.vendorEmail, names.value);
+    return vendorMatches(term, row.vendorEmail, names.value, fullNames.value);
   });
 });
 const shown = computed(() => shownToday.value.filter(hasSeat));
@@ -358,11 +366,17 @@ const mapSearchGroups = computed<PickerGroup[]>(() => [
 ]);
 const dayRowByEmail = computed(() => new Map(dayRows.value.map((row) => [row.vendorEmail, row])));
 
-/** The list search's own terms: the table, the vendor's name and their address. */
+/**
+ * The list search's own terms: the table, the name they go by, the one on their identification and
+ * their address.
+ */
 function findsOnMap(option: PickerOption, words: string): boolean {
   const term = words.toLowerCase();
   const tableCode = dayRowByEmail.value.get(option.value)?.tableCode ?? '';
-  return tableCode.toLowerCase().includes(term) || vendorMatches(term, option.value, names.value);
+  return (
+    tableCode.toLowerCase().includes(term) ||
+    vendorMatches(term, option.value, names.value, fullNames.value)
+  );
 }
 
 /**

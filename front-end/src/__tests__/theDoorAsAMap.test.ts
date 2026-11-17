@@ -115,6 +115,8 @@ interface Row {
   date: string;
   vendorEmail: string;
   vendorName: string;
+  /** The name on their identification, served beside the one shown (T466). */
+  vendorFullName?: string;
   tableCode: string | null;
   tableChoice: string | null;
   section: string | null;
@@ -554,15 +556,32 @@ describe("the map's search (T466)", () => {
   it.each([
     ['their name, as the roster gives it (a preferred name, else the full name)', 'pottery', [ANA]],
     ['a preferred name standing for a full one', 'bee', [BEN]],
+    ['the full name on their identification, when they go by another', 'beatrice', [BEN]],
     ['their address', 'dee@', [DEE]],
     ['their table', 'aisle a 3', [CAL, DEE]],
     ['a table on no layout', 'Annex', [FAY]],
     ['words with spaces round them', '  knits ', [CAL]],
   ])('finds a vendor by %s', async (_what, words, found) => {
-    answer = day({ [BEN]: { vendorName: 'Bee' } });
+    answer = day({ [BEN]: { vendorName: 'Bee', vendorFullName: 'Beatrice Fixture' } });
     const wrapper = await openOnMap();
     await type(wrapper, words);
     expect(listed(wrapper)).toEqual(found);
+  });
+
+  it('names a vendor found by their full name as they go by', async () => {
+    answer = day({ [BEN]: { vendorName: 'Bee', vendorFullName: 'Beatrice Fixture' } });
+    const wrapper = await openOnMap();
+    await type(wrapper, 'beatrice');
+    expect(rows(wrapper)).toEqual([['Bee', 'Table Aisle A 2, a whole table']]);
+  });
+
+  it("the list's search finds a vendor by their full name too, the map's and the list's one set of terms", async () => {
+    answer = day({ [BEN]: { vendorName: 'Bee', vendorFullName: 'Beatrice Fixture' } });
+    const wrapper = await open();
+    await wrapper.get(testid('attendance-search')).setValue('beatrice');
+    expect(
+      wrapper.findAll(testid('attendance-row')).map((one) => one.attributes('data-vendor')),
+    ).toEqual([BEN]);
   });
 
   it('draws at most 50 rows, then says how many more and to type to narrow them', async () => {
