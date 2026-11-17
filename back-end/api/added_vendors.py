@@ -5,19 +5,20 @@ answers, nothing in the vendor drawer. A seat now goes only to an applicant (E36
 is how someone becomes one without applying: an organizer records a name and an address, and the
 application says who added it and when.
 
-An added vendor is approved by the act of adding, and is never an input to the run: their answers
-may be missing, and a missing answer refuses every run. They are seated by hand, as a vendor the
-run holds a seat for (`held_vendors_for`).
+An added vendor is approved by the act of adding, and is never an input to the run while they are
+still an added one (origin ``added``): their answers may be missing, and a missing answer refuses
+every run. They are seated by hand, as a vendor the run holds a seat for (`held_vendors_for`).
+Once their answers arrive, by an import or their own save, they stay approved and are read like
+any applicant (T277 P7).
 
 They are asked every question of the form's own that a price group reads, each required, so they
 are priced like any other (E43/F01/S03); a market whose card has no group asks nothing more.
 """
-from datetime import datetime, timezone
 from typing import Any, Dict, Tuple
 
-import api.applications as ApplicationsApi
 import api.market_actions as Actions
 import api.markets as MarketsApi
+import application_status as ReviewState
 import history as History
 import market_deletion as MarketDeletion
 import essential_fields as EssentialFields
@@ -25,7 +26,7 @@ import pricing as Pricing
 from application_write import validated_answer
 from assignment.utils import convert_keys_to_camel_case
 from client_errors import BadRequestError, ConflictError
-from datatypes import Application, ApplicationStatus, Market, MarketPerson
+from datatypes import Market, MarketPerson
 from utils.email_address import normalized_email
 
 class AddVendorRefused(ConflictError):
@@ -53,22 +54,13 @@ def add_vendor(
     if "@" not in address or " " in address:
         raise AddVendorInvalid("Give the vendor's email address.")
     answers = _price_answers(market, data.get("answers"))
-    if ApplicationsApi.find_application_by_email(market_id, address) is not None:
+    # Never written over: one already here, or one stored by a request in flight, is refused.
+    application = ReviewState.add(
+        market_id, address, {EssentialFields.FULL_NAME_KEY: name, **answers}, adder)
+    if application is None:
         raise AddVendorRefused(
             f"{address} already has an application in this market. Assign them on the Assignments page."
         )
-
-    now = datetime.now(timezone.utc).isoformat()
-    application = ApplicationsApi.find_or_create_application(Application(
-        market_id=market_id,
-        applicant_email=address,
-        form_data={EssentialFields.FULL_NAME_KEY: name, **answers},
-        status=ApplicationStatus.REVIEWER_APPROVED,
-        verdict_by=adder.as_giver(),
-        verdict_at=now,
-        added_by=adder,
-        added_at=now,
-    ))
     History.record(
         market_id, adder.email, Actions.ADD_VENDOR, vendors=[address],
         subject={"application_id": application.id},

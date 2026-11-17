@@ -8,10 +8,14 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from datatypes import Application, ApplicationStatus, ApplicationType, MarketPerson, MarketPhase
+from datatypes import (
+    Application, ApplicationOrigin, ApplicationStatus, ApplicationType, MarketPerson, MarketPhase,
+    VerdictGiver,
+)
 
 import api.applicant_auth as ApplicantAuth
 import api.applications as ApplicationsApi
+import application_status as ReviewState
 import sign_in_limits
 from real_mongo import harness
 
@@ -26,6 +30,12 @@ def _application(market_id: str, email: str = APPLICANT, **fields) -> Applicatio
         status=ApplicationStatus.OPEN, **fields)
 
 
+def _arrive(market_id: str, **kind) -> Application:
+    """An applicant's first save, as it stores their application."""
+    return ReviewState.arrive(market_id, APPLICANT, ApplicationOrigin.APPLIED, None,
+                              ReviewState.Arrival(APPLICANT, "apply"), **kind)
+
+
 def _reviewer(n: int) -> MarketPerson:
     return MarketPerson(user_id=f"reviewer-{n}", email=f"reviewer-{n}@example.com")
 
@@ -36,8 +46,7 @@ class TestOneApplicantIsOneApplication:
         """The create is an upsert on a public endpoint: twenty requests for one new address at
         once all read nothing, and only the unique identity index stops the second document."""
         harness.warm(applications, 20)
-        answered = race(20, lambda _i: ApplicationsApi.find_or_create_application(
-            _application("market-race")))
+        answered = race(20, lambda _i: _arrive("market-race"))
 
         assert [a for a in answered if isinstance(a, BaseException)] == []
         stored = list(applications.find({"market_id": "market-race", "applicant_email": APPLICANT}))
@@ -49,8 +58,7 @@ class TestOneApplicantIsOneApplication:
         waitlist application leave one of each."""
         def create(i):
             kind = ApplicationType.MAIN if i % 2 else ApplicationType.WAITLIST
-            return ApplicationsApi.find_or_create_application(
-                _application("market-race", application_type=kind))
+            return _arrive("market-race", application_type=kind)
 
         harness.warm(applications, 20)
         answered = race(20, create)
@@ -59,6 +67,62 @@ class TestOneApplicantIsOneApplication:
         stored = list(applications.find({"market_id": "market-race"}))
         assert sorted(doc["application_type"] for doc in stored) == ["main", "waitlist"]
         assert {a.id for a in answered} == {doc["id"] for doc in stored}
+
+
+#: An applicant's answers ``COMPLETE_PLAN``'s form takes, and a shop of the form's own.
+ANSWERS = {
+    "essential_full_name": "Fixture Racer", "essential_available_dates": ["2099-08-01"],
+    "essential_max_dates": 1, "essential_tier_preference": {"2099-08-01": ["Gold"]},
+    "essential_table_choice": "full", "essential_section_ranking": ["Main Hall", "Garden"],
+    "shop": "Ember",
+}
+
+
+class TestAVerdictLandingInsideAnApplicantsSave:
+    """The applicant's save holds the application as it read it (decision 9.1 of T277): a verdict
+    landing between its read and its write makes the write match nothing on the server, and the
+    save is written again on what is stored then, so the changed answers send that verdict back to
+    open."""
+
+    @pytest.fixture
+    def applied(self, boot_indexes, signed_in, market_in, monkeypatch):
+        import api.applicants as ApplicantsApi
+
+        signed_in("organizer@example.com")
+        market = market_in(MarketPhase.APPLICATIONS, intakeMode="form", applicationForm={
+            "fields": [{"key": "shop", "label": "Shop", "type": "text"}]})
+        monkeypatch.setattr(ApplicantsApi, "authenticate_request",
+                            lambda _header: {"market_id": market["id"], "email": APPLICANT})
+        assert self._save(market, ANSWERS).status_code == 200
+        return market
+
+    @staticmethod
+    def _save(market, answers):
+        import app as app_module
+
+        return app_module.app.test_client().put(
+            f"/public/markets/{market['slug']}/applicant/application",
+            json={"formData": answers})
+
+    def test_the_save_lands_on_the_verdict_and_sends_it_back_to_open(
+            self, applied, applications, interleave):
+        stored = applications.find_one({"market_id": applied["id"]})
+
+        def a_reviewer_approves():
+            assert ReviewState.give_verdict(
+                stored, {"status": "open", "verdict_at": None},
+                ApplicationStatus.REVIEWER_APPROVED,
+                VerdictGiver(kind="person", user_id="u-reviewer", email="reviewer@example.com"))
+
+        interleave("essential_fields.freeze_and_effective_essential_options", a_reviewer_approves)
+        response = self._save(applied, {**ANSWERS, "shop": "Kiln"})
+
+        assert response.status_code == 200, response.get_json()
+        after = applications.find_one({"id": stored["id"]})
+        assert after["form_data"]["shop"] == "Kiln"
+        assert after["status"] == ApplicationStatus.OPEN.value
+        assert "verdict_by" not in after and "verdict_at" not in after
+        assert after[ApplicationsApi.ARRIVING_FIELD] == {"actor": APPLICANT, "action": "apply"}
 
 
 class TestTwoReviewersAreHandedDifferentCards:

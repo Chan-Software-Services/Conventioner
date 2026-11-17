@@ -203,10 +203,21 @@ const refusedOn = ref<string | null>(null);
  * area says why - every one left is open with someone else, or their share is done (E38/F07/S04).
  */
 const handedNothing = ref(false);
+/**
+ * The card the server last handed this reviewer and holds for them (E34/F03/S02), by its id: the
+ * card up while it is still to decide here, never the queue's card at its place (T277 P4). Once a
+ * verdict takes it out of the queue, the queue's next card shows until the next hand-out answers.
+ */
+const handed = ref<string | null>(null);
+const handedCard = computed(() =>
+  handed.value ? undecided.value.find((a) => a.id === handed.value) : undefined,
+);
 const current = computed<Application | undefined>(
   () =>
     (refusedOn.value ? applications.value.find((a) => a.id === refusedOn.value) : undefined) ??
-    (handedNothing.value && decides.value ? undefined : undecided.value[cursor.value]),
+    (handedNothing.value && decides.value
+      ? undefined
+      : ((decides.value ? handedCard.value : undefined) ?? undecided.value[cursor.value])),
 );
 /**
  * Changed from HERE, not only from the form builder (E19/F03/S02).
@@ -333,6 +344,11 @@ const helping = ref(false);
 const mineOnly = computed(() => sharing.value && !helping.value);
 /** What the reviewer walks now: their share, or the whole queue. */
 const walked = computed(() => (mineOnly.value ? share.value : undecided.value));
+/**
+ * Whether Next has a card to move on to: one in what the reviewer walks besides the card up. The card
+ * up may be outside it, as a verdict they undid comes back up dealt to another reviewer.
+ */
+const anotherToWalk = computed(() => walked.value.some((app) => app.id !== current.value?.id));
 /**
  * Their share has nothing left to decide and the rest of the queue, outside their share, has: said
  * so, with the offer to help.
@@ -491,6 +507,8 @@ async function takeNext(after: string | null, want: string | null = null) {
     else await read();
     if (mine !== handing) return;
     handedNothing.value = !app;
+    handed.value = app ? app.id : null;
+    // Where the walk is, for its count and a reader's Next: the card's place, when the queue has it.
     cursor.value = app
       ? Math.max(
           undecided.value.findIndex((a) => a.id === app.id),
@@ -498,11 +516,13 @@ async function takeNext(after: string | null, want: string | null = null) {
         )
       : 0;
     // Its deal dealt others too: with the card up, read them as dealt, and find the card again in
-    // the list read. A failed read leaves the list as it was; a later hand-out takes over.
+    // the list read; one the read does not hold is still the card handed, so it stays up. A failed
+    // read leaves the list as it was; a later hand-out takes over.
     if (app && dealtSinceRead) {
       asking = null;
       await read().catch(() => null);
       if (mine !== handing) return;
+      if (!applications.value.some((a) => a.id === app.id)) adopt(app);
       const at = undecided.value.findIndex((a) => a.id === app.id);
       if (at >= 0) cursor.value = at;
     }
@@ -550,6 +570,7 @@ async function loadApplications() {
     await read();
     if (mine !== loads) return;
     cursor.value = 0;
+    handed.value = null;
     if (props.named) await showNamed();
     else if (decides.value) await takeNext(null);
   } catch (err) {
@@ -1196,7 +1217,7 @@ function submittedOn(app: Application): string {
           </button>
           <button
             class="btn btn--secondary"
-            :disabled="saving || (!refusedOn && walked.length < 2)"
+            :disabled="saving || (!refusedOn && !anotherToWalk)"
             @click="next"
             data-testid="app-monitor-next-button"
           >

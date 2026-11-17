@@ -15,26 +15,34 @@ import api.permissions as PermissionsApi
 import assignment.vendor_input as VendorInput
 import essential_fields as EF
 from client_errors import ForbiddenError
-from datatypes import ApplicationStatus, EssentialFormOptions, MarketPerson, MarketPhase
+from datatypes import (
+    ApplicationOrigin, ApplicationStatus, EssentialFormOptions, MarketPerson, MarketPhase,
+)
 
 ADDER = MarketPerson(user_id="user-editor", email="editor@market.test")
 
 
 @pytest.fixture
-def stored(monkeypatch):
-    """A market in ``phase`` and the applications written to it."""
+def stored(monkeypatch, applications):
+    """A market in ``phase`` and the applications adding wrote to it."""
     written = []
+    add = AddedVendors.ReviewState.add
+
+    def recorded(*args):
+        application = add(*args)
+        if application is not None:
+            written.append(application)
+        return application
 
     def at(phase: MarketPhase, already_applied=()):
-        monkeypatch.setattr(
-            MarketsApi, "markets_collection", FakeMarketsCollection(stored_market(phase)))
+        market = stored_market(phase)
+        monkeypatch.setattr(MarketsApi, "markets_collection", FakeMarketsCollection(market))
         monkeypatch.setattr(PermissionsApi, "user_has_permission", lambda *_a, **_k: True)
-        monkeypatch.setattr(
-            AddedVendors.ApplicationsApi, "find_application_by_email",
-            lambda _market_id, email: {"id": "app-1"} if email in already_applied else None)
-        monkeypatch.setattr(
-            AddedVendors.ApplicationsApi, "find_or_create_application",
-            lambda application: written.append(application) or application)
+        for email in already_applied:
+            applications.insert_one({"id": f"app-{email}", "market_id": market["id"],
+                                     "applicant_email": email, "application_type": "main",
+                                     "form_data": {}, "status": "open"})
+        monkeypatch.setattr(AddedVendors.ReviewState, "add", recorded)
         return written
 
     return at
@@ -52,6 +60,7 @@ def test_an_editor_adds_a_vendor_while_assigning_or_on_the_day(stored, phase):
     assert application.applicant_email == "walk.in@example.com"
     assert application.form_data == {EF.FULL_NAME_KEY: "Walk-in Wares"}
     assert application.status is ApplicationStatus.REVIEWER_APPROVED
+    assert application.origin is ApplicationOrigin.ADDED
     assert application.added_by == ADDER
     assert application.added_at
     assert result["application"]["addedBy"]["email"] == "editor@market.test"

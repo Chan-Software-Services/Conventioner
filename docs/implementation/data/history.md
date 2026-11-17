@@ -13,7 +13,7 @@ describes:
   - back-end/api/organizations.py#get_history
   - back-end/tests/test_the_organizations_history.py
   - back-end/api/organizations.py#get_default_permission_history
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - wayfinding/readable-journey/08
   - E40/F01/S01
@@ -317,7 +317,7 @@ One block per action, in the order of [the actions table](../modules/market-acti
 - `submitted`, `edited`: an applicant's own application ([a vendor signs in before applying](../../business/rules/a-vendor-signs-in-before-applying.md))
   - Vendors: the applicant
   - Subject: `application_id`
-  - Detail: the answers that changed, with their values; `rejected_by_rules` and `returned_by_rules`: whether the rules rejected it, or returned it to undecided, as it landed
+  - Detail: the answers that changed, with their values; `rejected_by_rules` and `returned_by_rules`: whether the rules rejected it, or returned it to undecided, as it landed; `returned_to_review: true` on an edit whose changed answers sent a person's verdict back to open ([changed answers](application-document.md#changed-answers)), which the History reads as "<vendor> edited their application, which sent it back to Open" and leaves out of the entry's rows
 
 An undo reads "<actor> undid their verdict on <vendor>: Rejected back to Open", a selection's "undid their verdicts on N applications: …".
 A verdict on someone else's share reads "…, dealt to <address>", and nothing is added when its reviewer decided it or it was never dealt; an entry written before reviewers existed reads as it always did.

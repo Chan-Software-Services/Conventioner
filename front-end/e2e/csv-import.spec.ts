@@ -3,6 +3,7 @@ import type { APIRequestContext, Locator } from '@playwright/test';
 import { ensureTestOrg } from './helpers/seeds';
 import { seedApplicationWithStatus } from './helpers/seedPhaseMarket';
 import { seedApplicantMarket, planSetupObject, PLAN_TIERS } from './helpers/seedApplicantMarket';
+import { putVerdict } from './helpers/putVerdict';
 
 /**
  * Importing vendors from the CSV a Google Form produced (E01/F02/S02).
@@ -620,10 +621,9 @@ test.describe('CSV vendor import', () => {
     const imported = (await listApplications(request, seed.marketId)).find(
       (a) => a.applicantEmail === 'nadia@ember.test',
     )!;
-    const reviewRes = await request.put(
-      `${BACKEND_URL}/markets/${seed.marketId}/applications/${imported.id}/review`,
-      { data: { status: 'reviewer_approved' } },
-    );
+    const reviewRes = await putVerdict(request, BACKEND_URL, seed.marketId, imported.id, {
+      status: 'reviewer_approved',
+    });
     expect(reviewRes.ok()).toBeTruthy();
 
     // The form is re-exported with their availability narrowed - an answer the solver reads.
@@ -637,7 +637,7 @@ test.describe('CSV vendor import', () => {
 
     // Said before it happens: silently un-approving someone is not acceptable either way.
     await expect(importPage.returningNote).toContainText(
-      '1 approved application will return to review',
+      '1 decided application will return to review',
     );
     await expect(importPage.returningNote).toContainText('nadia@ember.test');
 
@@ -650,7 +650,7 @@ test.describe('CSV vendor import', () => {
     expect(statusOf(after)).toBe('open');
   });
 
-  test('a re-import says an approval it leaves alone keeps its verdict, and keeps it', async ({
+  test('a re-import that corrects any answer returns an approval to review too', async ({
     authenticatedPage: page,
     request,
   }) => {
@@ -666,14 +666,14 @@ test.describe('CSV vendor import', () => {
     const imported = (await listApplications(request, seed.marketId)).find(
       (a) => a.applicantEmail === 'nadia@ember.test',
     )!;
-    const reviewRes = await request.put(
-      `${BACKEND_URL}/markets/${seed.marketId}/applications/${imported.id}/review`,
-      { data: { status: 'reviewer_approved' } },
-    );
+    const reviewRes = await putVerdict(request, BACKEND_URL, seed.marketId, imported.id, {
+      status: 'reviewer_approved',
+    });
     expect(reviewRes.ok()).toBeTruthy();
 
-    // A corrected business name moves nothing the solver reads, so the approval stands - and the
-    // preview says so, rather than that every row awaits review (T116 rereview 10).
+    // A corrected business name moves nothing the solver reads, and still nobody approved the
+    // answers as they read now, so the approval goes back to review (decision 9.1, T277), as it
+    // does when an applicant changes their own; the preview says so before anything is written.
     const renamed = [
       HEADERS.join(','),
       ROWS[0].replace('Ember Ceramics', 'Ember Ceramics Studio'),
@@ -683,9 +683,11 @@ test.describe('CSV vendor import', () => {
     await importPage.clickPreview();
 
     await expect(importPage.previewMerge).toHaveText(
-      '0 new, 1 updated. The 1 updated application already decided keeps its verdict. Nothing has been written yet.',
+      '0 new, 1 updated. Nothing has been written yet.',
     );
-    await expect(importPage.returningNote).toBeHidden();
+    await expect(importPage.returningNote).toContainText(
+      '1 decided application will return to review',
+    );
 
     await importPage.clickConfirm();
     await expect(importPage.resultSummary).toBeVisible();
@@ -693,7 +695,7 @@ test.describe('CSV vendor import', () => {
     const after = (await listApplications(request, seed.marketId)).find(
       (a) => a.applicantEmail === 'nadia@ember.test',
     )!;
-    expect(statusOf(after)).toBe('reviewer_approved');
+    expect(statusOf(after)).toBe('open');
     expect(after.formData.business_name).toBe('Ember Ceramics Studio');
   });
 
@@ -1133,10 +1135,9 @@ test.describe('CSV vendor import', () => {
 
     // The organizer approves everyone, then imports the same export again.
     for (const application of applications) {
-      const res = await request.put(
-        `${BACKEND_URL}/markets/${seed.marketId}/applications/${application.id}/review`,
-        { data: { status: 'reviewer_approved' } },
-      );
+      const res = await putVerdict(request, BACKEND_URL, seed.marketId, application.id, {
+        status: 'reviewer_approved',
+      });
       expect(res.ok()).toBeTruthy();
     }
 

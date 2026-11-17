@@ -5,6 +5,7 @@ import { transitionMarket } from './helpers/seedPhaseMarket';
 import { marketScreenPath } from './helpers/marketScreens';
 import { ApplicationsAllPage } from './pages/ApplicationsAllPage';
 import { UpdateInfoDialog } from './pages/UpdateInfoDialog';
+import { putVerdict } from './helpers/putVerdict';
 
 /**
  * An Admin updates an answer the assignment reads (E41/F01/S02).
@@ -69,10 +70,9 @@ async function allocated(request: APIRequestContext): Promise<string> {
 
   const listed = await request.get(`${BACKEND_URL}/markets/${marketId}/applications`);
   const [application] = (await listed.json()).applications as { id: string }[];
-  const approved = await request.put(
-    `${BACKEND_URL}/markets/${marketId}/applications/${application.id}/review`,
-    { data: { status: 'reviewer_approved' } },
-  );
+  const approved = await putVerdict(request, BACKEND_URL, marketId, application.id, {
+    status: 'reviewer_approved',
+  });
   expect(approved.ok(), await approved.text()).toBeTruthy();
   await transitionMarket(request, BACKEND_URL, TEST_USER.email, marketId, 'assignment');
   const ran = await request.post(`${BACKEND_URL}/markets/${marketId}/assignment`);

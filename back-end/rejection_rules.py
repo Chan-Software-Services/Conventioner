@@ -17,9 +17,10 @@ from datetime import date
 from typing import Any, Dict, List, Optional, Tuple
 
 import api.applications as ApplicationsApi
+import application_status as ReviewState
 import essential_fields as EssentialFields
 from client_errors import BadRequestError
-from datatypes import AnswerCondition, ApplicationStatus, Market, RejectionRule, VerdictGiver
+from datatypes import AnswerCondition, Market, RejectionRule
 
 #: A checkbox's two answers, as a rule names them.
 TICKED = "ticked"
@@ -203,6 +204,7 @@ class Judged:
 
 def judge(
     book: Rulebook, market_id: str, application_id: Optional[str] = None, overturns: bool = True,
+    *, arrival: ReviewState.Arrival,
 ) -> Judged:
     """Apply the rules to the market's undecided applications and to those a rule rejected; or to
     ``application_id`` alone, as it arrives. Returns how many it rejected and returned.
@@ -213,26 +215,20 @@ def judge(
     ``overturns`` is false: returning it overturns an automatic rejection, which a person's write
     does only when the table's change row is theirs (E38/F06/S01). Every write is
     conditioned on the application being as it was read, so a person's verdict that lands in
-    between is never overwritten.
+    between is never overwritten. One returned to open is marked for the deal by ``arrival``, the
+    write whose rules judged it, which deals it once it ends.
     """
     rejected = returned = 0
     for doc in ApplicationsApi.judgeable_applications(market_id, application_id):
-        by_rule = doc.get("status") == ApplicationStatus.REVIEWER_REJECTED.value
         # What the organizer reads, an update of an answer in its place (E41/F01/S01).
         met = book.rejecting(ApplicationsApi.effective_answers(doc))
         if met is None:
-            if by_rule and overturns and not book.results_published \
-                    and ApplicationsApi.update_application_status(
-                        doc["id"], ApplicationStatus.OPEN, if_unchanged_since=doc):
+            # Only a rule's rejection returns (the owner refuses the rest).
+            if overturns and not book.results_published and ReviewState.rule_returns(doc, arrival):
                 returned += 1
             continue
         rule_key, reason = met
-        if by_rule and (doc.get("verdict_by") or {}).get("rule") == rule_key \
-                and doc.get("verdict_reason") == reason:
-            continue
-        if ApplicationsApi.update_application_status(
-                doc["id"], ApplicationStatus.REVIEWER_REJECTED,
-                by=VerdictGiver(kind="rule", rule=rule_key), reason=reason,
-                if_unchanged_since=doc):
+        # Refused when this rule already rejected it for this reason, so nothing is written.
+        if ReviewState.rule_rejects(doc, rule_key, reason):
             rejected += 1
     return Judged(rejected=rejected, returned=returned)

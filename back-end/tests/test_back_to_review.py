@@ -14,7 +14,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from conftest import (  # noqa: E402
-    COMPLETE_PLAN, mongo_matches, mongo_update, reject_malformed_update,
+    COMPLETE_PLAN, mongo_matches, mongo_update, reject_malformed_update, seen_as_stored,
     sessions_load_through_get_user, skip_without_real_dependencies,
 )
 
@@ -146,9 +146,9 @@ def _review_writes(client):
     claim, reviewers and rules. An undo takes back a verdict given on an application awaiting one,
     so the approval is first sent to a follow-up."""
     verdict = client.put(f"/markets/{MARKET}/applications/app-1/review",
-                         json={"status": "needs_follow_up"})
+                         json={"status": "needs_follow_up", "seen": seen_as_stored("app-1")})
     decided = client.put(f"/markets/{MARKET}/applications/app-1/review",
-                         json={"status": "reviewer_rejected"})
+                         json={"status": "reviewer_rejected", "seen": seen_as_stored("app-1")})
     # The undo is of the decision just given, as the card that gave it asks.
     given = (decided.get_json() or {}).get("application") or {}
     return {
@@ -400,7 +400,8 @@ class TestTheRunAfterTheReviewReopens:
         assert _back(world.client).status_code == 200
 
         rejected = world.client.put(f"/markets/{MARKET}/applications/app-2/review",
-                                    json={"status": "reviewer_rejected"})
+                                    json={"status": "reviewer_rejected",
+                                          "seen": seen_as_stored("app-2")})
         assert rejected.status_code == 200, rejected.get_json()
         # Nothing blocks Begin assignment on the pin: it is ADR 0013's override.
         assert _begin(world.client).status_code == 200

@@ -47,16 +47,19 @@ def _document(phase, pricing=EXAMPLE_TABLE, fields=FORM_FIELDS, **overrides):
 def adding(monkeypatch):
     """A market in market days with the Example College card, and the applications added to it."""
     written = []
+    add = AddedVendors.ReviewState.add
+
+    def recorded(*args):
+        application = add(*args)
+        if application is not None:
+            written.append(application)
+        return application
 
     def at(pricing=EXAMPLE_TABLE, phase=MarketPhase.MARKET_DAYS, fields=FORM_FIELDS):
         monkeypatch.setattr(
             MarketsApi, "markets_collection", FakeMarketsCollection(_document(phase, pricing, fields)))
         monkeypatch.setattr(PermissionsApi, "user_has_permission", lambda *_a, **_k: True)
-        monkeypatch.setattr(
-            AddedVendors.ApplicationsApi, "find_application_by_email", lambda *_a: None)
-        monkeypatch.setattr(
-            AddedVendors.ApplicationsApi, "find_or_create_application",
-            lambda application: written.append(application) or application)
+        monkeypatch.setattr(AddedVendors.ReviewState, "add", recorded)
         return written
 
     return at

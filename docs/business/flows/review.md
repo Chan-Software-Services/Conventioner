@@ -10,7 +10,7 @@ describes:
   - front-end/src/components/market/ReviewerName.vue
   - front-end/src/components/application/VerdictUndoLine.vue
   - front-end/src/utils/verdictUndo.ts
-verified: 2026-11-11
+verified: 2026-11-17
 sources:
   - wayfinding/v0-1-0/map
   - wayfinding/v0-1-0/08
@@ -125,7 +125,8 @@ A verdict on a card whose answers changed since it was opened, by the vendor's o
 If they approved or rejected it, the card offers a verdict only to someone who may change one (below), and tells a reviewer it refuses the row's sentence instead.
 A verdict on the card hands out the one after it in arrival order, even when Next had moved the reviewer ahead.
 Someone who gives no verdicts walks the queue with Next and holds nothing, and is told when the card on screen is open with someone else.
-The card on screen is always the one the newest Next, verdict, refresh or load handed over: an answer that comes back late, after a later one was asked for, never puts its card up (the Next race, E38/F07/S04).
+Next is disabled while a verdict, an undo or a follow-up is saving, and otherwise only when no other card is left to walk to.
+The card on screen is always the one the newest Next, verdict, refresh or load handed over, found by its id, even when the list read since does not hold it: an answer that comes back late, after a later one was asked for, never puts its card up (the Next race, E38/F07/S04), and a card decided between the server's read of the queue and its claim is never handed (T277 P4).
 Taking the follow-ups in or out while a hand-out is on its way asks again of the walk as it is now, so a card marked for follow-up and taken straight back in comes up again, not "Every application left is open with another reviewer." (T151).
 An advisory appears when the form asks only the essential questions, since every card then reads alike.
 Covered by:
@@ -148,7 +149,8 @@ Both views offer it through one composable, [`front-end/src/utils/verdictUndo.ts
 
 1. One by one: the line under the counts, above the next card, is a polite live region, "<Approved|Rejected> <name> (<email>)." or "Marked <name> (<email>) for follow-up." (the email alone when they gave no name), with "Undo" and its key, Z.
    It stays for the window the server's answer gives (`undoSeconds`), or until the next verdict, which offers its own; a change from the reviewed applications offers none, and takes the one on offer away.
-2. "Undo" returns the application to what the server kept of it when the verdict landed, open, or needs follow-up marked and owned as it was, still dealt to whom it was dealt, and puts it up as the card, held for the reviewer.
+2. "Undo" returns the application to what the server kept of it when the verdict landed, open, or needs follow-up marked and owned as it was, and puts it up as the card, held for the reviewer.
+   With reviewers chosen it stays dealt to whom it was dealt while they may still review here, and is dealt to the next reviewer in turn otherwise, as a verdict undone after the reviewers were chosen or after its reviewer was removed is ([the review is dealt among chosen reviewers](../rules/the-review-is-dealt-among-chosen-reviewers.md), `an-undone-verdict-is-dealt-again.spec.ts`); the card says whose it is now.
    A follow-up whose owner the reviewer may no longer hand one to is not brought back: the owner has lost their role since, or, to a reviewer from outside the market's organization, is not named in its roles.
    The line says "This verdict can no longer be undone here: the follow-up it closed would come back to an owner you cannot see on this market. An Admin or the market's owner can change it.", in place of the review route's two refusals of an owner ("A follow-up's owner must have a role on this market." and "You can hand a follow-up only to someone named in this market's roles."), since an undo hands the follow-up to nobody.
 3. A refused undo says why on the line in place of the button: "This verdict can no longer be undone here. An Admin or the owner can change it." past the window or on someone else's verdict, or who changed it since ("<email> approved this application since you opened it.").

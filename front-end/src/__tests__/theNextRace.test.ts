@@ -155,6 +155,39 @@ describe('two hand-outs in flight', () => {
   });
 });
 
+describe('the card handed out', () => {
+  /*
+   * The card shown is the one the server handed over and holds for the reviewer, found by its id
+   * (T277 P4). It used to be the queue's card at the handed one's place, with the first as a
+   * fallback: a handed card the list read after the hand-out did not hold put another card up,
+   * and a verdict pressed on it landed on an application nobody had handed over.
+   */
+  it('is the one handed, even when the list read after it does not hold it', async () => {
+    const dee = application('dee');
+    api.post.mockResolvedValueOnce({ data: { application: dee, dealt: 1 } });
+    fetchMarketApplications
+      .mockResolvedValueOnce([AMY, BEN, CAL])
+      .mockResolvedValueOnce([AMY, BEN, CAL]);
+
+    const wrapper = mount(ApplicationMonitor, { props: { market, visible: true } });
+    await flushPromises();
+
+    expect(fetchMarketApplications).toHaveBeenCalledTimes(2);
+    expect(shown(wrapper)).toBe('dee@example.com');
+    wrapper.unmount();
+  });
+
+  it('is the one handed when the list holds it past where the walk is', async () => {
+    api.post.mockResolvedValueOnce({ data: { application: CAL } });
+
+    const wrapper = mount(ApplicationMonitor, { props: { market, visible: true } });
+    await flushPromises();
+
+    expect(shown(wrapper)).toBe('cal@example.com');
+    wrapper.unmount();
+  });
+});
+
 describe('a verdict on the card', () => {
   it('asks the server for the next card, after the one decided, and puts that one up', async () => {
     const wrapper = mount(ApplicationMonitor, { props: { market, visible: true } });

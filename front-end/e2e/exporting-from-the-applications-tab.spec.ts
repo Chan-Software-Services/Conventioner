@@ -6,6 +6,7 @@ import {
 } from './helpers/seedPhaseMarket';
 import { ApplicationsAllPage } from './pages/ApplicationsAllPage';
 import { VendorExportDialog } from './pages/VendorExportDialog';
+import { putVerdict } from './helpers/putVerdict';
 
 /** The address column of a downloaded file's rows, its header left out. */
 function emailsIn(text: string): string[] {
@@ -39,10 +40,9 @@ test('Export from the All view opens on its filter and Mine, and downloads exact
   seedApplicationWithStatus(marketId, 'open', 'eve@ember.test');
   const dee = seedApplicationWithStatus(marketId, 'open', 'dee@ember.test');
   seedApplicationWithStatus(marketId, 'needs_follow_up', 'fay@ember.test');
-  const followUp = await request.put(
-    `${BACKEND_URL}/markets/${marketId}/applications/${dee}/review`,
-    { data: { status: 'needs_follow_up' } },
-  );
+  const followUp = await putVerdict(request, BACKEND_URL, marketId, dee, {
+    status: 'needs_follow_up',
+  });
   expect(followUp.ok(), await followUp.text()).toBeTruthy();
 
   const all = new ApplicationsAllPage(page);

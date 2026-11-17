@@ -14,15 +14,24 @@ from pymongo.errors import DuplicateKeyError, OperationFailure, PyMongoError
 
 from conftest import skip_without_real_dependencies
 
-from datatypes import Application, ApplicationStatus, ApplicationType
+from datatypes import ApplicationOrigin, ApplicationType
 
 import api.applications as ApplicationsApi
+import application_status as ReviewState
 
 
 @pytest.fixture(autouse=True)
 def unbuilt(monkeypatch):
     """A process that has not built its indexes yet - which every process is, once, at boot."""
     monkeypatch.setattr(ApplicationsApi, "_indexes_ready", False)
+
+
+def _arrive(market_id="market-123", email="vendor@example.com",
+            application_type=ApplicationType.MAIN):
+    """An applicant's first save, as it stores their application."""
+    return ReviewState.arrive(market_id, email, ApplicationOrigin.APPLIED, None,
+                              ReviewState.Arrival(email, "apply"),
+                              application_type=application_type)
 
 
 def _unbuildable(collection, monkeypatch):
@@ -97,24 +106,12 @@ class TestTheApplicationIdentityIndex:
         _unbuildable(applications, monkeypatch)
 
         with pytest.raises(ApplicationsApi.ApplicationIndexError):
-            ApplicationsApi.find_or_create_application(Application(
-                market_id="market-123",
-                applicant_email="vendor@example.com",
-                application_type=ApplicationType.MAIN,
-                form_data={},
-                status=ApplicationStatus.OPEN,
-            ))
+            _arrive()
 
         assert applications.documents == []
 
     def test_an_index_that_builds_lets_the_application_be_stored(self, applications):
-        stored = ApplicationsApi.find_or_create_application(Application(
-            market_id="market-123",
-            applicant_email="vendor@example.com",
-            application_type=ApplicationType.MAIN,
-            form_data={},
-            status=ApplicationStatus.OPEN,
-        ))
+        stored = _arrive()
 
         assert stored.applicant_email == "vendor@example.com"
         assert len(applications.documents) == 1
@@ -125,27 +122,13 @@ class TestCreatingAnApplicationConcurrently:
 
     The upsert itself is not what makes this safe -- an upsert that matches nothing and inserts can
     still duplicate when two requests both match nothing before either inserts. The unique index is
-    the difference: the second insert raises DuplicateKeyError, and ``find_or_create_application``
+    the difference: the second insert raises DuplicateKeyError, and ``arrive``
     catches it, reads the winner's document back, and returns that instead.
     """
 
-    _defaults = dict(
-        market_id="market-123",
-        applicant_email="vendor@example.com",
-        application_type=ApplicationType.MAIN,
-        form_data={"name": "My Shop"},
-        status=ApplicationStatus.OPEN,
-    )
-
-    def _app(self, **overrides):
-        kwargs = dict(self._defaults, **overrides)
-        return Application(**kwargs)
-
     def test_two_calls_for_the_same_identity_leave_one_document(self, applications):
-        app = self._app()
-
-        first = ApplicationsApi.find_or_create_application(app)
-        second = ApplicationsApi.find_or_create_application(app)
+        first = _arrive()
+        second = _arrive()
 
         assert len(applications.documents) == 1
         assert first.applicant_email == "vendor@example.com"
@@ -153,30 +136,22 @@ class TestCreatingAnApplicationConcurrently:
 
     def test_the_second_call_is_a_no_op_not_an_error(self, applications):
         """The caller gets the application that exists; it does not have to catch anything."""
-        app = self._app()
-        ApplicationsApi.find_or_create_application(app)
+        _arrive()
 
-        second = ApplicationsApi.find_or_create_application(app)
+        second = _arrive()
 
         assert second is not None
         assert second.applicant_email == "vendor@example.com"
 
     def test_a_waitlist_application_alongside_a_main_one_is_not_a_duplicate(self, applications):
-        main = self._app(application_type=ApplicationType.MAIN)
-        waitlist = self._app(application_type=ApplicationType.WAITLIST,
-                             main_application_id=main.id)
-
-        ApplicationsApi.find_or_create_application(main)
-        ApplicationsApi.find_or_create_application(waitlist)
+        _arrive(application_type=ApplicationType.MAIN)
+        _arrive(application_type=ApplicationType.WAITLIST)
 
         assert len(applications.documents) == 2
 
     def test_different_markets_do_not_collide(self, applications):
-        market_a = self._app(market_id="market-a")
-        market_b = self._app(market_id="market-b")
-
-        ApplicationsApi.find_or_create_application(market_a)
-        ApplicationsApi.find_or_create_application(market_b)
+        _arrive(market_id="market-a")
+        _arrive(market_id="market-b")
 
         assert len(applications.documents) == 2
 
@@ -201,12 +176,11 @@ class TestCreatingAnApplicationConcurrently:
         monkeypatch.setattr(applications, "find_one_and_update", one_duplicate)
 
         # Pre-seed the winner's document so the fallback find_one can read it back
-        app = self._app()
-        ApplicationsApi.find_or_create_application(app)
+        _arrive()
         monkeypatch.setattr(applications, "find_one_and_update", one_duplicate)
 
         # Now race: the upsert raises DuplicateKeyError, but find_one finds the existing doc
-        stored = ApplicationsApi.find_or_create_application(app)
+        stored = _arrive()
 
         assert stored is not None
         assert stored.applicant_email == "vendor@example.com"

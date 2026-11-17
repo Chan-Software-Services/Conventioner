@@ -16,7 +16,8 @@ from types import SimpleNamespace
 import pytest
 
 from conftest import (
-    FakeMarketsCollection, accounts_by_id, sessions_load_through_get_user, stored_market,
+    FakeMarketsCollection, accounts_by_id, seen_as_stored, sessions_load_through_get_user,
+    stored_market,
 )
 import app as app_module
 import api.markets as MarketsApi
@@ -96,7 +97,8 @@ def _signed_in(monkeypatch, email):
 def _mark(client, owner_email):
     return client.put(
         "/markets/market-123/applications/app-1/review",
-        json={"status": "needs_follow_up", "ownerEmail": owner_email},
+        json={"status": "needs_follow_up", "ownerEmail": owner_email,
+              "seen": seen_as_stored("app-1")},
     )
 
 
@@ -190,7 +192,8 @@ def test_an_undo_over_an_owner_they_are_not_offered_hands_nothing(monkeypatch, m
     assert marked.status_code == 200
     outsider = _signed_in(monkeypatch, "editor@market.test")
     given = outsider.put("/markets/market-123/applications/app-1/review",
-                         json={"status": "reviewer_approved"}).get_json()["application"]
+                         json={"status": "reviewer_approved",
+                               "seen": seen_as_stored("app-1")}).get_json()["application"]
 
     response = outsider.post("/markets/market-123/applications/app-1/review/undo", json={
         "seen": {"status": given["status"], "verdictAt": given["verdictAt"]}})

@@ -218,17 +218,21 @@ class TestAnImport:
 
 
 class TestAnApplicantsSave:
-    def test_deals_their_own_application_and_no_one_elses(self, world):
+    def test_records_only_their_own_application_as_theirs(self, world):
         _choose([ANA, BEN, CAT])
-        # Open and undealt from a time when nobody chosen could review here.
-        world.applications.documents.append(_application("left-over", 21))
+        # Waiting for the deal from a time when nobody chosen could review here.
+        world.applications.documents.append(_application(
+            "left-over", 21, arriving={"actor": "left-over@vendor.test", "action": History.APPLY}))
 
         _submit(world, "v8@vendor.test")
 
         dealt = _reviewers(world)
-        assert (dealt["v8"], dealt["left-over"]) == (BEN, None)
-        [entry] = _arrivals(world)
-        assert entry["vendors"] == ["v8@vendor.test"]
+        # The left-over arrived first, so it takes the eighth turn and the save the ninth.
+        assert (dealt["left-over"], dealt["v8"]) == (BEN, CAT)
+        assert [(e["actor"], e["vendors"]) for e in _arrivals(world)] == [
+            ("left-over@vendor.test", ["left-over@vendor.test"]),
+            ("v8@vendor.test", ["v8@vendor.test"]),
+        ]
 
     def test_does_not_read_the_markets_other_applications(self, world, monkeypatch):
         _choose([ANA, BEN, CAT])
@@ -251,10 +255,10 @@ def test_a_market_with_no_team_is_not_read_for_a_deal(world, monkeypatch):
         raise AssertionError("dealt with no reviewers")
 
     import api.applications as ApplicationsApi
-    monkeypatch.setattr(ApplicationsApi, "mark_arriving", untouched)
-    monkeypatch.setattr(ApplicationsApi, "mark_all_arriving", untouched)
+    monkeypatch.setattr(ApplicationsApi, "any_arriving", untouched)
+    monkeypatch.setattr(ApplicationsApi, "arriving_in_arrival_order", untouched)
     monkeypatch.setattr(world.markets, "find_one_and_update", untouched)
+    monkeypatch.setattr(world.markets, "update_one", untouched)
 
     market = MarketsApi.market_from_document(stored_market(MarketPhase.APPLICATIONS))
-    assert ReviewTeam.deal_arrivals(market, ADMIN, History.APPLY) == 0
-    assert ReviewTeam.deal_arrivals(market, ADMIN, History.APPLY, only="v1") == 0
+    assert ReviewTeam.deal_arrivals(market) == 0
