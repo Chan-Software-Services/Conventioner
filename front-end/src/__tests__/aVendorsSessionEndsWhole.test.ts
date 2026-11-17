@@ -168,6 +168,7 @@ describe('a request answering after the vendor signed out', () => {
       marketDates: ['2099-08-01'],
       ended: false,
       rememberUntil: '2099-08-01',
+      mapOpen: false,
     };
     const read = held<Application>();
     applicantApi.fetchApplicantApplication.mockReturnValue(read.promise);

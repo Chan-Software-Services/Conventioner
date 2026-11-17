@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * A market's vendor page, at its own address `/<slug>` (ADR 0022).
+ * A market's vendor page, at `/<slug>/vendor` (ADR 0022, T469), under the market page at `/<slug>`.
  *
  * The one page a vendor uses at a market: signed out, it names the market and asks for an email
  * address and then the code sent to it; signed in, it shows where they stand and their

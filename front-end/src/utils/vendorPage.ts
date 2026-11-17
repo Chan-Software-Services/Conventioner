@@ -1,6 +1,7 @@
 /**
- * A market's vendor page, `/<slug>` (ADR 0022): what it reads before sign-in, and which sections
- * it shows a signed-in vendor in each state of the market.
+ * A market's vendor page, `/<slug>/vendor` (ADR 0022): what it reads before sign-in, and which
+ * sections it shows a signed-in vendor in each state of the market. The market page at `/<slug>`
+ * (T469) reads the same answer, and chooses here what it shows.
  */
 import type { ApplicantSeat, Application, Market } from '@/assets/types/datatypes';
 import { IntakeMode, MarketPhase } from '@/assets/types/datatypes';
@@ -20,6 +21,8 @@ export interface VendorPageInfo {
   ended: boolean;
   /** The date "Remember me" would end, `YYYY-MM-DD`, or null once the market's last date passed. */
   rememberUntil: string | null;
+  /** The market's public map is open now: its read would answer (`public_map_is_open`, T469). */
+  mapOpen: boolean;
 }
 
 /**
@@ -42,6 +45,37 @@ export async function fetchVendorPage(marketSlug: string): Promise<VendorPageRea
     const status = (err as { response?: { status?: number } })?.response?.status;
     return { page: null, notFound: status === 404, failed: status !== 404 };
   }
+}
+
+/**
+ * What the market page at `/<slug>` shows (T469), in this order: the public map whenever the
+ * server says it is open, in any stage; the application call while a form market takes
+ * applications; and otherwise a notice of where the market stands (`marketPageNotice`).
+ */
+export type MarketPageShows = 'map' | 'call' | 'notice';
+
+export function marketPageShows(
+  page: Pick<VendorPageInfo, 'mapOpen' | 'intakeMode' | 'takesApplications'>,
+): MarketPageShows {
+  if (page.mapOpen) return 'map';
+  if (page.intakeMode === IntakeMode.Form && page.takesApplications) return 'call';
+  return 'notice';
+}
+
+/** The market page's notice lines (T469). */
+export const MARKET_ENDED = 'This market has ended.';
+export const MAP_NOT_PUBLISHED = "The map isn't published yet.";
+export const APPLICATIONS_CLOSED = 'Applications are closed.';
+
+/**
+ * The notice's line: an archived market has ended, whether or not it ran; one whose results are
+ * out has a map to come; any other has stopped taking applications (stopped, in Assignment, or in
+ * Offers before its results).
+ */
+export function marketPageNotice(page: Pick<VendorPageInfo, 'phase' | 'resultsPublished'>): string {
+  if (page.phase === MarketPhase.Archived) return MARKET_ENDED;
+  if (page.resultsPublished) return MAP_NOT_PUBLISHED;
+  return APPLICATIONS_CLOSED;
 }
 
 /**

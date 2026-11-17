@@ -7,12 +7,12 @@ import {
   type ApplicantMarketSeed,
 } from './helpers/seedApplicantMarket';
 import { seedApprovedVendor } from './helpers/seedApplication';
-import { marketSetupPath } from './helpers/marketScreens';
+import { marketPagePath, marketSetupPath, vendorPagePath } from './helpers/marketScreens';
 
 /**
- * One vendor page per market, at the market's own address (T202, ADR 0022).
+ * One vendor page per market, under the market's own address (T202, ADR 0022, T469).
  *
- * The vendor opens `/<slug>`, sees the market's name and the sign-in, signs in with the code sent to
+ * The vendor opens `/<slug>/vendor`, sees the market's name and the sign-in, signs in with the code sent to
  * them, and reads "Submitted" until results are published, then their table, on one page; the
  * organizer's Publish results says that is where they read it, and that no email is sent.
  */
@@ -81,7 +81,7 @@ for (const [label, viewport] of [
       const market = await marketWithAVendor(request, vendor);
 
       const vendorPage = await signIn(page, market, vendor);
-      await expect(page).toHaveURL(new RegExp(`/${market.marketSlug}$`));
+      await expect(page).toHaveURL(new RegExp(`${vendorPagePath(market.marketSlug)}$`));
       await expect(vendorPage.signedInAs).toContainText('Riley Fixture');
       await expect(vendorPage.signedInAs).toContainText(vendor);
       await expect(vendorPage.status).toContainText('Submitted');
@@ -92,7 +92,7 @@ for (const [label, viewport] of [
       // Edit opens the form on the page itself, on the saved answers, and it fits the window too.
       await vendorPage.editButton.click();
       await expect(vendorPage.input('business_name')).toHaveValue('Fixture Prints');
-      await expect(page).toHaveURL(new RegExp(`/${market.marketSlug}$`));
+      await expect(page).toHaveURL(new RegExp(`${vendorPagePath(market.marketSlug)}$`));
       await fitsTheWindow(page);
       await vendorPage.cancelButton.click();
       await expect(vendorPage.form).toHaveCount(0);
@@ -166,10 +166,16 @@ test("the form's old address is a page that is not there, even while the market 
   request,
 }) => {
   // Applying is on the vendor page itself now; `/<slug>/apply` is deleted, not redirected (Daniel:
-  // nobody uses it), so it falls to the app's not-found page like any other address.
+  // nobody uses it), so it falls to the app's not-found page like any other address, and so does
+  // the same under the vendor page's address (T469).
   const market = await marketWithAVendor(request, `old-apply-${Date.now()}@example.com`);
-  await page.goto(`/${market.marketSlug}/apply`);
-  await expect(page.getByTestId('page-not-found')).toBeVisible();
-  await expect(page.getByTestId('apply-form')).toHaveCount(0);
-  await expect(page.getByTestId('vendor-sign-in-email-input')).toHaveCount(0);
+  for (const address of [
+    `${marketPagePath(market.marketSlug)}/apply`,
+    `${vendorPagePath(market.marketSlug)}/apply`,
+  ]) {
+    await page.goto(address);
+    await expect(page.getByTestId('page-not-found')).toBeVisible();
+    await expect(page.getByTestId('apply-form')).toHaveCount(0);
+    await expect(page.getByTestId('vendor-sign-in-email-input')).toHaveCount(0);
+  }
 });

@@ -98,6 +98,7 @@ function pageOf(overrides: Partial<VendorPageInfo> = {}): VendorPageRead {
       marketDates: ['2099-08-01'],
       ended: false,
       rememberUntil: '2099-08-01',
+      mapOpen: false,
       ...overrides,
     },
     notFound: false,

@@ -451,9 +451,10 @@ def vendor_page_market_by_slug(
 ) -> Optional[Dict[str, Any]]:
     """The market whose vendor page is at this slug, or ``None`` (ADR 0022).
 
-    The vendor page, ``/<slug>``, is where a vendor signs in and reads their own application, their
-    result and their seats. This decides whether a market has one: every vendor read and the
+    The vendor page, ``/<slug>/vendor``, is where a vendor signs in and reads their own application,
+    their result and their seats. This decides whether a market has one: every vendor read and the
     sign-in go through it, while applying itself stays behind ``applicant_intake_market_by_slug``.
+    It decides the market page at ``/<slug>`` too (T469), which reads the vendor page's answer.
 
     A market whose vendors apply on its page has one in every phase but draft. A market that imports
     its vendors from the organizer's Google Form has one once its results are published, when its
@@ -482,19 +483,37 @@ def vendor_page_market_by_slug(
 def public_map_market_by_slug(collection: Any, market_slug: str) -> Optional[Market]:
     """The market whose public map is at this slug, or ``None`` (T422, D30, ADR 0035).
 
-    The public map, ``/<slug>/map``, shows anyone each market day's tables and the vendors' chosen
-    answers at them. A market has one while all of these hold: the vendor page finds it
-    (``vendor_page_market_by_slug``), its results are out (``results_are_out``), since a seat is
-    never public before its vendor is told, it is not archived, since an archived market can no
-    longer be written and so its switch could never be turned off, and its own settings open it
-    (``public_map.is_open``: the switch on, a name question the form still asks, a location laid
-    out). ``None`` is the answer for everything else, the same answer a slug that names nothing
-    gets, so a stranger learns nothing of a market whose map is closed.
+    The public map, shown at the market's own address (``/<slug>``), shows anyone each market day's
+    tables and the vendors' chosen answers at them. A market has one while the vendor page finds it
+    (``vendor_page_market_by_slug``) and ``public_map_is_open`` holds. ``None`` is the answer for
+    everything else, the same answer a slug that names nothing gets, so a stranger learns nothing of
+    a market whose map is closed.
 
     The whole document is read, since the answer draws its plan, its form and its seats.
     """
     market_doc = vendor_page_market_by_slug(collection, market_slug)
-    if market_doc is None or not results_are_out(market_doc):
+    if market_doc is None:
+        return None
+    return _open_map_market(market_doc)
+
+
+def public_map_is_open(market_doc: Dict[str, Any]) -> bool:
+    """Is this market's public map open, past the vendor page's own gate (T469)?
+
+    The one statement of the map's gate, read by the map itself (``public_map_market_by_slug``) and
+    by the vendor page's read, whose ``mapOpen`` tells the market's address to show the map, so the
+    two never disagree. It holds while all of these do: the results are out (``results_are_out``),
+    since a seat is never public before its vendor is told; the market is not archived, since an
+    archived market can no longer be written and so its switch could never be turned off; the
+    document reads as a ``Market``; and its own settings open it (``public_map.is_open``: the switch
+    on, a name question the form still asks, a location laid out). It reads the whole document.
+    """
+    return _open_map_market(market_doc) is not None
+
+
+def _open_map_market(market_doc: Dict[str, Any]) -> Optional[Market]:
+    """The market read from this document when its public map is open, else ``None``."""
+    if not results_are_out(market_doc):
         return None
     if phase_from_market_document(market_doc) is MarketPhase.ARCHIVED:
         return None

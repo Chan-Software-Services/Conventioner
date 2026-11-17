@@ -36,6 +36,7 @@ from market_documents import (
     market_doc_key,
     market_from_document,
     market_serves_applicants,
+    public_map_is_open,
     results_are_out,
     vendor_page_market_by_slug,
 )
@@ -280,14 +281,8 @@ def get_vendor_page(market_slug: str) -> Tuple[Dict[str, Any], int]:
     """
     from db_config import get_database
     db = get_database()
-    market_doc = vendor_page_market_by_slug(
-        db["markets"],
-        market_slug,
-        fields=(
-            "id", "phase", "applicationsStopped", "resultsPublished", "setupObject",
-            "phaseHistory",
-        ),
-    )
+    # The whole document, read once: ``mapOpen`` reads the market's form, layouts and settings.
+    market_doc = vendor_page_market_by_slug(db["markets"], market_slug)
     if not market_doc:
         return {"error": MARKET_NOT_FOUND}, 404
 
@@ -301,6 +296,7 @@ def get_vendor_page(market_slug: str) -> Tuple[Dict[str, Any], int]:
         "marketDates": dates,
         "ended": AttendanceApi.ended_after_it_ran(market_doc),
         "rememberUntil": RememberedSignIns.remembered_until_date(dates, RememberedSignIns.now()),
+        "mapOpen": public_map_is_open(market_doc),
     }, 200
 
 

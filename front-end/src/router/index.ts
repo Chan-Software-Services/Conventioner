@@ -190,29 +190,46 @@ const router = createRouter({
       path: '/markets/:marketId/floorplan',
       redirect: (to: RouteLocation) => marketPath(String(to.params.marketId), 'layout'),
     },
-    // A market's vendor page (ADR 0022): sign-in, status, the application and the result, at the
-    // market's own address. It is the vendors', so the app bar holds none of the organizer app's
-    // way about on it, even for an organizer who opens it (T260), unless it answers "Page not
-    // found", as it does for a slug naming no market and a gated market's.
+    // A market's own address (T469): its market page, for anyone, signed in or out, in every
+    // stage: the public map while the server says it is open, the application call while the
+    // market takes applications, and a notice of where it stands otherwise. It is the vendors' and
+    // the shoppers' side of the market, so the app bar holds none of the organizer app's way about
+    // on it, even for an organizer who opens it (T260), unless it answers "Page not found", as it
+    // does for a slug naming no market and a gated market's. A door code here comes from a poster
+    // printed while this was the vendor page, so it goes on to the vendor page, which takes it.
     {
       path: '/:marketSlug',
+      name: 'market-page',
+      component: () => import('@/views/MarketPublicView.vue'),
+      meta: { public: true, vendorFacing: true },
+      beforeEnter: (to) =>
+        typeof to.query.door === 'string'
+          ? { name: 'vendor-page', params: to.params, query: to.query, hash: to.hash }
+          : true,
+    },
+    // A market's vendor page (ADR 0022, T469): sign-in, status, the application, the result and
+    // the door's check-in. It stands apart from the organizer app as the market page does, and
+    // answers "Page not found" for the same markets.
+    {
+      path: '/:marketSlug/vendor',
       name: 'vendor-page',
       component: () => import('@/views/VendorPage.vue'),
       meta: { public: true, vendorFacing: true },
     },
-    // A market's public map (T422): each market day's tables and who is at them, for anyone, with
-    // no sign-in. The vendors' side of the market, as its vendor page is, so the bar shows the logo
-    // alone, and a public page, so it fits a phone. A market whose map is not open answers "Page not
-    // found" on the same route, the bar falling back as on the vendor page.
+    // The public map's address before T469 (T422), which a link made since may hold: the map is
+    // the market page now, so it lands there with its day, location and table.
     {
       path: '/:marketSlug/map',
-      name: 'public-map',
-      component: () => import('@/views/PublicMapView.vue'),
-      meta: { public: true, vendorFacing: true },
+      redirect: (to: RouteLocation) => ({
+        name: 'market-page',
+        params: to.params,
+        query: to.query,
+        hash: to.hash,
+      }),
     },
     // Anything no route above names, a deeper address among them, matched no route at all, so
-    // the app rendered a blank page. `/:marketSlug` catches single-segment addresses and answers
-    // for itself.
+    // the app rendered a blank page. `/:marketSlug` and `/:marketSlug/vendor` answer "Page not
+    // found" for themselves, for a slug naming no market.
     {
       path: '/:pathMatch(.*)*',
       name: 'not-found',

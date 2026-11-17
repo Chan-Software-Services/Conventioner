@@ -41,30 +41,37 @@ describe('which place is current', () => {
     expect(place('/organizations')).toBe('organizations');
   });
 
-  it.each(['/login', '/reset-password-request', '/some-market', '/no/such/page'])(
-    'is neither on %s',
-    (path) => {
-      expect(place(path)).toBeNull();
-    },
-  );
+  it.each([
+    '/login',
+    '/reset-password-request',
+    '/some-market',
+    '/some-market/vendor',
+    '/no/such/page',
+  ])('is neither on %s', (path) => {
+    expect(place(path)).toBeNull();
+  });
 });
 
-/** The vendor page stands apart from the organizer app (T260), and it alone: "Page not found" does not. */
+/**
+ * The market's two pages stand apart from the organizer app (T260, T469), and they alone: "Page not
+ * found" does not.
+ */
 describe("which page is a vendor's", () => {
   it('is the vendor page', () => {
+    expect(isVendorFacing(router.resolve('/some-market/vendor'))).toBe(true);
+  });
+
+  it("is the market page, the public map's place (T469)", () => {
     expect(isVendorFacing(router.resolve('/some-market'))).toBe(true);
   });
 
-  it("is the market's public map (T422)", () => {
-    expect(isVendorFacing(router.resolve('/some-market/map'))).toBe(true);
-  });
-
-  it('is the vendor page and the public map, and no other route', () => {
+  it('is the market page and the vendor page, and no other route', () => {
     const vendorFacing = router
       .getRoutes()
       .filter((record) => record.meta.vendorFacing === true)
-      .map((record) => record.name);
-    expect(vendorFacing).toEqual(['public-map', 'vendor-page']);
+      .map((record) => String(record.name))
+      .sort();
+    expect(vendorFacing).toEqual(['market-page', 'vendor-page']);
   });
 
   it.each([
@@ -80,7 +87,7 @@ describe("which page is a vendor's", () => {
 });
 
 /**
- * The vendor page's route answers "Page not found" itself for a slug naming no market or a gated
+ * The market's two pages answer "Page not found" themselves for a slug naming no market or a gated
  * market's, and that is no vendor's page: the bar stands apart only while the page has not said so.
  */
 describe('when the bar stands apart', () => {
@@ -89,16 +96,16 @@ describe('when the bar stands apart', () => {
     vendorPageAnswered('other-market', false);
   });
 
-  it('does on a vendor page until it answers', () => {
+  it('does on a market page until it answers', () => {
     expect(standsApart(router.resolve('/some-market'))).toBe(true);
   });
 
-  it('does on a vendor page that found its market', () => {
+  it('does on a market page that found its market', () => {
     vendorPageAnswered('some-market', false);
     expect(standsApart(router.resolve('/some-market'))).toBe(true);
   });
 
-  it('does not on a vendor page that answered "Page not found"', () => {
+  it('does not on a market page that answered "Page not found"', () => {
     vendorPageAnswered('some-market', true);
     expect(standsApart(router.resolve('/some-market'))).toBe(false);
   });
@@ -114,10 +121,10 @@ describe('when the bar stands apart', () => {
     expect(standsApart(router.resolve('/some-market'))).toBe(true);
   });
 
-  it('does on a public map, and not once its read answered "Page not found" (T422)', () => {
-    expect(standsApart(router.resolve('/some-market/map'))).toBe(true);
+  it('does on a vendor page, and not once its read answered "Page not found" (T469)', () => {
+    expect(standsApart(router.resolve('/some-market/vendor'))).toBe(true);
     vendorPageAnswered('some-market', true);
-    expect(standsApart(router.resolve('/some-market/map'))).toBe(false);
+    expect(standsApart(router.resolve('/some-market/vendor'))).toBe(false);
   });
 
   it("is untouched by another slug's answer", () => {
