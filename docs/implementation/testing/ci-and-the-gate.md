@@ -245,7 +245,7 @@ It reads modules, not text, so a shipped file that imports the fixture or a part
 ## CodeQL
 
 [`.github/workflows/codeql.yml`](../../../.github/workflows/codeql.yml), CodeQL's advanced setup, analyses `actions`, `javascript-typescript` and `python` with the default suite and no config, on every pull request and push to `dev` or `main`, every [trial commit](#a-merge-queues-trial-commit) for `dev`, and weekly on `dev`.
-Its one job, `analyze`, makes an `Analyze (actions)`, an `Analyze (javascript-typescript)` and an `Analyze (python)` check, one runner each, none needing a build (`build-mode: none`), and uploads each analysis under the action's default category, `/language:<language>`, the one the default setup used, so the alerts the default setup found and their dismissals carry over.
+Its one job, `analyze`, makes an `Analyze (actions)`, an `Analyze (javascript-typescript)` and an `Analyze (python)` check, one runner each, none needing a build (`build-mode: none`), and sets each analysis's category to the default setup's, `/language:<language>`, so the alerts the default setup found and their dismissals carry over.
 Its token has `contents: read`, `security-events: write` for the upload and `actions: read`, its actions are pinned as [the Test workflow's](#ci) are, and its concurrency is the Test workflow's rule.
 It is the automated backstop for [a request value is a string](../conventions/a-request-value-is-a-string.md) (`py/nosql-injection`) and [an exception never reaches a client](../conventions/an-exception-never-reaches-a-client.md) (`py/stack-trace-exposure`).
 

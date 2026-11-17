@@ -51,8 +51,8 @@ jobs:
       fail-fast: false
       # The default setup's languages: its `javascript` and `typescript` are aliases of
       # `javascript-typescript`. None needs a build. The default suite and no config, so the
-      # threat model stays `remote`, and the action's default category, `/language:<language>`,
-      # which is the default setup's, so existing alerts and their dismissals carry over.
+      # threat model stays `remote`, and the category set to the default setup's,
+      # `/language:<language>`, so existing alerts and their dismissals carry over.
       matrix:
         include:
           - language: actions
@@ -70,3 +70,5 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
       - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: "/language:${{ matrix.language }}"
