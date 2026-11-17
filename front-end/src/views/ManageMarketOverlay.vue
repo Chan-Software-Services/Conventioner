@@ -577,13 +577,14 @@ async function handleHandOn(userId: string) {
 }
 
 /**
- * Its one public page, which goes with it, in words: its vendor page while it has one (ADR 0022),
- * where its vendors also check in, and which is the record once it has run (E26/F06/S02).
+ * Its public pages, which go with it, in words, while it has them (ADR 0022, T469): its market
+ * page, and its vendor page, where its vendors also check in, and which is the record once it has
+ * run (E26/F06/S02).
  */
 const publicPages = computed(() => {
   const market = marketData.value;
   if (!market || !hasVendorPage(market)) return '';
-  return 'Its vendor page will stop working for anyone who has the link.';
+  return 'Its market page and vendor page will stop working for anyone who has the links.';
 });
 
 /** One delete however often it is pressed; the confirmation holds until it answers. */

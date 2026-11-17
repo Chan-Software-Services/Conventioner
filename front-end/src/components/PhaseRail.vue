@@ -12,8 +12,9 @@
  *   beside it, with the market's position marked and completed stages filled.
  * - **The actions.** One prominent forward action; back and destructive edges behind a menu.
  *   Which is which is read off the spine, not special-cased per phase.
- * - **The vendor page's address.** The market's one public page, with Copy, from the moment it
- *   has one: nothing in the product used to tell the organizer its address existed (`E10/F01/S02`).
+ * - **The market's addresses.** Its market page, for the public, and its vendor page, for its
+ *   vendors, each with Copy, from the moment the market has them: nothing in the product used to
+ *   tell the organizer its address existed (`E10/F01/S02`, T469).
  * - **The next step** (E31/F02/S02). One sentence for the market's phase and intake path, from
  *   `utils/marketGuide.ts`, linking to where it is done. A move the server would refuse is drawn
  *   disabled and the sentence is its first blocker, so the rail says no before the click.
@@ -39,7 +40,7 @@ import { useEscapeToClose } from '@/utils/useEscapeToClose';
 import ScrollBox from '@/components/ScrollBox.vue';
 import AppDialog from '@/components/AppDialog.vue';
 import OpenApplicationsDialog from '@/components/market/OpenApplicationsDialog.vue';
-import { isHere, marketPath, resolutionPath } from '@/utils/market';
+import { isHere, marketPagePath, marketPath, resolutionPath, vendorPagePath } from '@/utils/market';
 import {
   blockersFor,
   firstInTheWay,
@@ -157,33 +158,27 @@ function stepState(index: number): 'done' | 'current' | 'todo' | 'frozen' {
   return 'todo';
 }
 
-// ── The vendor page's URL (ADR 0022) ───────────────────────────────────────
+// ── The market's addresses (ADR 0022, T469) ────────────────────────────────
 
 /**
- * A market's vendor page, `/<slug>`, from the moment it has one: the one address its vendors keep,
- * from applying, or from their results on a Google Form market, to the last market day
- * (`sharesVendorPage`).
+ * The market's public addresses, each a chip on the rail, from the moment it has them: its market
+ * page, `/<slug>`, which the organizer shares with the public, then its vendor page,
+ * `/<slug>/vendor`, the one address its vendors keep, from applying, or from their results on a
+ * Google Form market, to checking in at the door on the last market day (`sharesVendorPage`).
  *
- * Before then the page answers as a market that does not exist, and a chip would hand the
- * organizer a link to a page that deliberately tells them nothing. Archived, it stays only for a
- * market that ran: its page is then the record of where its vendors sat.
+ * Before then both pages answer as a market that does not exist, and a chip would hand the
+ * organizer a link to a page that deliberately tells them nothing. Archived, they stay only for a
+ * market that ran: its vendor page is then the record of where its vendors sat.
  */
-const vendorPageUrl = computed(() => {
-  if (!props.market || !sharesVendorPage(props.market)) return '';
-  const slug = props.market.slug;
-  if (!slug) return '';
-  return `${window.location.origin}/${slug}`;
+const addresses = computed(() => {
+  const slug = props.market?.slug;
+  if (!props.market || !slug || !sharesVendorPage(props.market)) return [];
+  const origin = window.location.origin;
+  return [
+    { id: 'market-page', label: 'Market page', url: `${origin}${marketPagePath(slug)}` },
+    { id: 'vendor-page', label: 'Vendor page', url: `${origin}${vendorPagePath(slug)}` },
+  ];
 });
-
-/**
- * The market's public addresses, each a chip on the rail: its vendor page, where its vendors also
- * check in, with the door code (ADR 0022).
- */
-const addresses = computed(() =>
-  [{ id: 'vendor-page', label: 'Vendor page', url: vendorPageUrl.value }].filter(
-    (address) => address.url,
-  ),
-);
 
 /** The app's phone break (`base.css`), where a chip names its address rather than showing it. */
 const onAPhone = useMediaQuery('(width <= 640px)');
@@ -982,7 +977,7 @@ function cancelPending() {
   flex: 1 1 34rem;
 }
 
-/* The vendor page's address, with Copy (E18/F04/S02). */
+/* A market's address, with Copy (E18/F04/S02). */
 .url-chip {
   display: flex;
   align-items: center;

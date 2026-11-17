@@ -135,12 +135,12 @@ test('Publish results says vendors read it on the vendor page, and gives its add
   await expect(page.getByTestId('applications-publish-hint')).toHaveText(
     "Vendors read whether they have a table on the market's vendor page. No email is sent.",
   );
-  // The rail's one address for vendors, the market's own.
+  // The rail's address for vendors, beside the market page's for the public (T469).
   const chip = page.getByTestId('phase-rail-vendor-page');
   await expect(chip).toContainText('Vendor page');
   await expect(page.getByTestId('phase-rail-vendor-page-link')).toHaveAttribute(
     'href',
-    new RegExp(`/${market.marketSlug}$`),
+    new RegExp(`${vendorPagePath(market.marketSlug)}$`),
   );
 
   const setup = new MarketSetupPage(page);
@@ -149,16 +149,20 @@ test('Publish results says vendors read it on the vendor page, and gives its add
     "Vendors read their result on the market's vendor page. No email is sent, so share the page's address with them.",
   );
   const address = confirm.getByTestId('publish-results-address-url');
-  await expect(address).toHaveText(new RegExp(`/${market.marketSlug}$`));
+  await expect(address).toHaveText(new RegExp(`${vendorPagePath(market.marketSlug)}$`));
+  const url = (await address.textContent()) ?? '';
+  await expect(address).toHaveAttribute('href', url);
 
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await confirm.getByTestId('publish-results-address-copy').click();
   await expect(confirm.getByTestId('publish-results-address-copy')).toHaveText('Copied');
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-    await address.textContent(),
-  );
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(url);
 
   await setup.confirmPublishResults();
+
+  // And it is the page vendors read their result on.
+  await page.goto(new URL(url).pathname);
+  await expect(page.getByTestId('vendor-page-market-name')).toBeVisible({ timeout: 15000 });
 });
 
 test("the form's old address is a page that is not there, even while the market takes applications", async ({

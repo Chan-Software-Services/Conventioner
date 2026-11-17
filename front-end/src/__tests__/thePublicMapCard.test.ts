@@ -310,7 +310,7 @@ describe('while the map is on', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     wrapper = card(market({ publicMap: ON }));
-    const address = `${window.location.origin}/riverside-spring/map`;
+    const address = `${window.location.origin}/riverside-spring`;
 
     expect(find(wrapper, 'public-map-url').text()).toBe(address);
     const open = find(wrapper, 'public-map-open');

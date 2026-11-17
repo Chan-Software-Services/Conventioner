@@ -1,9 +1,11 @@
 import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
 import { PHONE } from './helpers/screens';
+import { marketPagePath } from './helpers/marketScreens';
 import { DAY_MAP_QUESTIONS, seedMarketDayMap } from './helpers/seedMarketDayMap';
 import { LAYOUT_FLOORPLAN_PATH } from './helpers/seeds';
 import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
 import { LayoutPage } from './pages/LayoutPage';
+import { MarketPage } from './pages/MarketPage';
 import { MarketSetupPage } from './pages/MarketSetupPage';
 import { PublicMapPage } from './pages/PublicMapPage';
 import { ToolsPage } from './pages/ToolsPage';
@@ -19,7 +21,8 @@ import { ToolsPage } from './pages/ToolsPage';
  * The organizer starts North Wing's layout, which follows the plan, and places Aisle A's four tables
  * with Row of tables. On Tools, as the market's Admin, they choose the three public questions and
  * turn the map on, which waits for the results; they publish them. A visitor, signed out on a
- * phone, opens the map, finds Kiln & Co by name and reads their table. The organizer moves the
+ * phone, opens the market's address, which is now its map, finds Kiln & Co by name and reads their
+ * table. The organizer moves the
  * market to Market Days, and at the door Attendance's map draws the same table as Kiln & Co's, and
  * says Aisle B's three, in South Wing, are on no layout.
  */
@@ -76,14 +79,19 @@ test('a market past Draft with no layout gets a public map a visitor reads a ven
   await tools.savePublicMap(() => tools.publicMapSwitch.check());
   await expect(tools.publicMapSwitch).toBeChecked();
   await expect(tools.publicMapSaveError).toHaveCount(0);
-  const address = new URL(`/${seed.slug}/map`, page.url()).toString();
+  // The map's address is the market's own, its market page (T469).
+  const address = new URL(marketPagePath(seed.slug), page.url()).toString();
   await expect(tools.publicMapUrl).toHaveText(address);
 
-  // Signed out, the map is not there until the results are out.
+  // Signed out, the map is not there until the results are out: the market page says
+  // applications are closed, as it does for any market in Assignment before its results.
   const visitor = await browser.newContext({ viewport: PHONE, hasTouch: true, isMobile: true });
-  const map = new PublicMapPage(await visitor.newPage());
-  await map.goto(seed.slug);
-  await expect(map.page.getByTestId('page-not-found')).toBeVisible();
+  const visitorPage = await visitor.newPage();
+  const marketPage = new MarketPage(visitorPage);
+  const map = new PublicMapPage(visitorPage);
+  await marketPage.goto(seed.slug);
+  await expect(marketPage.noticeLine).toHaveText('Applications are closed.');
+  await expect(map.heading).toHaveCount(0);
 
   await setup.openPublishResults(seed.marketId);
   await setup.confirmPublishResults();
@@ -91,8 +99,9 @@ test('a market past Draft with no layout gets a public map a visitor reads a ven
   await expect(tools.publicMapUrl).toHaveText(address);
   await expect(tools.publicMapMissing).toHaveCount(0);
 
-  // The visitor opens the map on today, finds Kiln & Co by name and reads their table.
-  await map.goto(seed.slug);
+  // The visitor opens the address on today's map, finds Kiln & Co by name and reads their table.
+  await marketPage.goto(seed.slug);
+  await expect(visitorPage).toHaveURL(address);
   await expect(map.heading).toHaveText(seed.marketName);
   await expect(map.day(seed.today)).toHaveAttribute('aria-pressed', 'true');
   // North Wing alone is laid out, so the map has no location switch.

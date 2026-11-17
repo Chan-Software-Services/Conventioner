@@ -3,6 +3,7 @@ import { DAY_MAP_QUESTIONS, seedMarketDayMap } from './helpers/seedMarketDayMap'
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { withUser } from './helpers/withUser';
 import { PHONE } from './helpers/screens';
+import { marketPagePath } from './helpers/marketScreens';
 import { ToolsPage } from './pages/ToolsPage';
 
 /**
@@ -60,7 +61,8 @@ test('an Admin chooses the three questions and turns the map on, and anyone may 
   await tools.savePublicMap(() => tools.publicMapSwitch.check());
   await expect(tools.publicMapSwitch).toBeChecked();
   await expect(tools.publicMapSaveError).toHaveCount(0);
-  const address = new URL(`/${seed.slug}/map`, page.url()).toString();
+  // The map's address is the market's own: the market page shows the map once it is open (T469).
+  const address = new URL(marketPagePath(seed.slug), page.url()).toString();
   await expect(tools.publicMapUrl).toHaveText(address);
   await expect(tools.publicMapOpen).toHaveAttribute('href', address);
   await expect(tools.publicMapOpen).toHaveAttribute('target', '_blank');
@@ -71,6 +73,12 @@ test('an Admin chooses the three questions and turns the map on, and anyone may 
   await tools.publicMapCopy.click();
   await expect(tools.publicMapCopy).toHaveText('Copied');
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(address);
+
+  // And it opens the map, signed in or not.
+  const shopper = await page.context().browser()!.newPage();
+  await shopper.goto(address);
+  await expect(shopper.getByTestId('public-map-heading')).toBeVisible({ timeout: 15000 });
+  await shopper.close();
 
   // Signed out, the read answers with each vendor's public name, from the question chosen.
   const open = await read();
@@ -118,7 +126,9 @@ test('someone the row refuses reads the card, every control disabled, and why', 
     await expect(tools.publicMapSwitch).toBeChecked();
     await expect(tools.publicMapSwitch).toBeDisabled();
     // The address is the market's to share, whoever reads it.
-    await expect(tools.publicMapUrl).toHaveText(new URL(`/${seed.slug}/map`, editor.url()).href);
+    await expect(tools.publicMapUrl).toHaveText(
+      new URL(marketPagePath(seed.slug), editor.url()).href,
+    );
   });
 });
 
