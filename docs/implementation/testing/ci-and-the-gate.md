@@ -148,8 +148,9 @@ On it `github.base_ref` and `github.event.pull_request` are empty, since they be
 | CodeQL's `analyze`, the three `Analyze (<language>)` checks           | every step, as on a push: none has an `if:`                                                                                                                                                                        |
 
 Each workflow's concurrency group is `<its name>-<its queue branch's ref>-<its sha>` (`Test-...`, `CodeQL-...`), so no other run shares it and none is cancelled.
-The queue builds at most two trial commits at once, since one asks for 19 of [the account's 20 jobs](#the-e2e-shards), and drops an entry whose required check has not reported within 120 minutes, above the 98 the slowest of 80 recent Test runs took.
-Promotion never reads it: [`promote_check.py`](../../../scripts/promote_check.py) reads only a run on a push to `dev`, which the queue's merge starts on the same commit.
+The queue builds at most two trial commits at once: one asks for 19 of [the account's 20 jobs](#the-e2e-shards), so a third would only wait for runners, while a second fills the runners the first leaves idle in its long `e2e` tail.
+The queue drops an entry whose required check has not reported within 120 minutes, above the 98 the slowest of 80 recent Test runs took.
+Promotion never reads a trial commit's run: [`promote_check.py`](../../../scripts/promote_check.py) reads only a run on a push to `dev`, which the queue's merge starts on the same commit.
 
 ## The e2e shards
 
@@ -174,7 +175,7 @@ The first timings came from run 42493172818's list-reporter times, before the re
 **Ten shards, since the suite is the run's critical path.**
 With six, the slowest shard ended a median 21.5 minutes into a run, while every other job was done by 2.7; a shard is about 3 minutes of setup and its share of the suite, so ten bring a shard to about 12 minutes at about 13 more runner-minutes of setup a run.
 That holds while runners are free: the account is on GitHub Free, which runs 20 jobs at once across the repository.
-One pull request's run asks for 20, so it fits alone: 17 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, the ten shards and `e2e-repeat`), `e2e` only once the shards are done, and CodeQL's three; a push to `dev` or a trial commit starts 16 Test jobs, with no `e2e-repeat`, and CodeQL's three, 19 in all, and a push to `main` the 16 Test jobs alone; on `dev` `test-map` starts once the shards are done, beside `e2e`.
+One pull request's run asks for 20, so it fits alone: 17 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, the ten shards and `e2e-repeat`), `e2e` only once the shards are done, and CodeQL's three; a push to `dev` or a trial commit starts 16 Test jobs, with no `e2e-repeat`, and CodeQL's three, 19 in all, as does a push to `main`; on `dev` `test-map` starts once the shards are done, beside `e2e`.
 That is why the five short checks (drift, the real-data scan with gitleaks, zizmor offline, zizmor online and actionlint) are steps of `knowledge-graph` and `real-data-and-workflows`: as five jobs of their own they made one run ask for 24, more than the account runs at once.
 With another run going, shards still wait: on one such run four shards queued 9 to 12 minutes, and the run ended at 23 minutes while each shard's own time was 10.5 to 12.5.
 The matrix lists the shards and their `total`, which move together.
@@ -243,7 +244,7 @@ It reads modules, not text, so a shipped file that imports the fixture or a part
 
 ## CodeQL
 
-[`.github/workflows/codeql.yml`](../../../.github/workflows/codeql.yml), CodeQL's advanced setup, analyses `actions`, `javascript-typescript` and `python` with the default suite and no config, on every pull request to `dev`, every push to `dev`, every [trial commit](#a-merge-queues-trial-commit) and weekly on `dev`; never on `main`, which moves only through Promote from commits `dev` already analysed.
+[`.github/workflows/codeql.yml`](../../../.github/workflows/codeql.yml), CodeQL's advanced setup, analyses `actions`, `javascript-typescript` and `python` with the default suite and no config, on every pull request and push to `dev` or `main`, every [trial commit](#a-merge-queues-trial-commit) for `dev`, and weekly on `dev`.
 Its one job, `analyze`, makes an `Analyze (actions)`, an `Analyze (javascript-typescript)` and an `Analyze (python)` check, one runner each, none needing a build (`build-mode: none`), and uploads each analysis under the action's default category, `/language:<language>`, the one the default setup used, so the alerts the default setup found and their dismissals carry over.
 Its token has `contents: read`, `security-events: write` for the upload and `actions: read`, its actions are pinned as [the Test workflow's](#ci) are, and its concurrency is the Test workflow's rule.
 It is the automated backstop for [a request value is a string](../conventions/a-request-value-is-a-string.md) (`py/nosql-injection`) and [an exception never reaches a client](../conventions/an-exception-never-reaches-a-client.md) (`py/stack-trace-exposure`).
@@ -254,6 +255,7 @@ A pull request also gets a `CodeQL` check from `github-advanced-security` that r
 **`dev`'s ruleset's `code_scanning` rule holds the alert bar instead**: a pull request that brings in a new security alert of medium severity or above (`security_alerts_threshold` `medium_or_higher`), or a new standard alert of severity error (`alerts_threshold` `errors`), cannot enter the queue.
 Security alerts are held from medium, below GitHub's default of high, because `py/stack-trace-exposure` is a medium; standard alerts, which have a rule severity rather than a security one, at errors only.
 `main`'s six checks are unchanged: nearly every commit reaches `main` by [promotion](../../RELEASING.md#how-a-promotion-proves-itself) from `dev`, where it has already been analysed, and the others are the Release PR, merged with `--admin`, and a [hotfix](../../RELEASING.md#hotfixes).
+The workflow analyses `main` too, on every pull request and push to it, though `main`'s rules require none of its checks: a hotfix's pull request into `main` is analysed before it merges, and `main`'s alerts stay current, as under the default setup.
 
 ## Dependabot
 

@@ -7,24 +7,27 @@ name: CodeQL
 # The required roll-up check `CodeQL` this replaces is posted only on a pull request, never on a
 # trial commit; dev's ruleset holds a new alert out of the queue with its code scanning rule
 # instead (docs/implementation/testing/ci-and-the-gate.md#codeql).
+# It analyses main too, on a pull request and a push, though main's rules require none of these
+# checks: a hotfix's pull request into main is analysed before it merges, and main's alerts stay
+# current, as under the default setup.
 on:
   push:
-    branches: [dev]
+    branches: [dev, main]
   pull_request:
-    branches: [dev]
+    branches: [dev, main]
   merge_group:
     types: [checks_requested]
     branches: [dev]
-  # The default setup's weekly scan of dev, so a new query in a CodeQL release reads code that has
-  # not changed. Never main: it moves only through Promote, from commits dev already analysed.
+  # The default setup's weekly scan of dev, the default branch, so a new query in a CodeQL release
+  # reads code that has not changed.
   schedule:
     - cron: "27 4 * * 1"
 
 permissions: {}
 
 # The Test workflow's rule: a push to a pull request's branch cancels the run of its earlier head;
-# a push to dev, a trial commit and a scheduled scan each have a group of their own commit, so
-# none is ever cancelled.
+# a push to dev or main, a trial commit and a scheduled scan each have a group of their own
+# commit, so none is ever cancelled.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
