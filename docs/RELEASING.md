@@ -108,7 +108,7 @@ No checkout in them keeps git credentials (`persist-credentials: false`).
    - A version bump in `.release-please-manifest.json`
    - An updated `CHANGELOG.md` with all changes since the last release
 5. **A maintainer reviews and merges the Release PR**, squashed, as an admin: `gh pr merge <n> --squash --admin`.
-   release-please opens it with GitHub's built-in token, and GitHub runs no workflows for that token, so the PR never gets the checks branch protection asks for; it changes only the manifest and the changelog.
+   release-please opens it with GitHub's built-in token, and GitHub runs no workflows for that token, so the PR never gets the checks `main`'s rulesets ask for; it changes only the manifest and the changelog.
    On merge, release-please automatically:
    - Creates a **git tag** (e.g., `v1.0.0`)
    - Creates a **GitHub Release** with the changelog content
