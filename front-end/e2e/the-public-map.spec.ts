@@ -1,6 +1,7 @@
 import type { Page, Request } from '@playwright/test';
 import { test, expect, BACKEND_URL, TEST_USER } from './fixtures';
 import { PublicMapPage } from './pages/PublicMapPage';
+import { vendorPagePath } from './helpers/marketScreens';
 import { inTheWindow, PHONE_AND_DESK } from './helpers/phoneWindow';
 import { seedMarketDayMap, type SeededMarketDayMap } from './helpers/seedMarketDayMap';
 
@@ -272,13 +273,18 @@ for (const size of PHONE_AND_DESK) {
       await expect(page.getByTestId('page-not-found')).toContainText('Page not found');
     });
 
-    test('an organizer reads it with the logo alone in the bar', async ({ authenticatedPage }) => {
+    test("an organizer reads it with the logo and the vendor page's link alone in the bar", async ({
+      authenticatedPage,
+    }) => {
       const map = new PublicMapPage(authenticatedPage);
       await map.goto(seeded.slug);
       await expect(map.heading).toBeVisible();
       const bar = authenticatedPage.getByTestId('app-bar');
       await expect(bar.getByAltText('Conventioner', { exact: true })).toBeVisible();
-      await expect(bar.getByRole('link')).toHaveCount(0);
+      const vendorLink = bar.getByRole('link');
+      await expect(vendorLink).toHaveCount(1);
+      await expect(vendorLink).toHaveText('Vendor sign-in');
+      await expect(vendorLink).toHaveAttribute('href', vendorPagePath(seeded.slug));
       await expect(bar.getByRole('button')).toHaveCount(0);
       await expect(authenticatedPage).toHaveTitle(`${seeded.marketName} map`);
     });
