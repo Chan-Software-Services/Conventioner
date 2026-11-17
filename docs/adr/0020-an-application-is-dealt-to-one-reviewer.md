@@ -6,7 +6,7 @@ describes:
   - back-end/datatypes.py#ReviewTeam
   - back-end/application_status.py#deal
   - back-end/application_status.py#settle_waiting
-verified: 2026-11-17
+verified: 2026-11-18
 sources:
   - E38/F07
   - E38/F07/S01
@@ -77,6 +77,7 @@ One application's story is the history narrowed to its vendor, in the vendor dra
 - Being chosen is read off the market's team by address at every check, so removing a reviewer takes their verdicts away at once, with no role to take back.
 - A verdict on someone else's share is not refused: dividing the review is a soft filter, and the warning is the screen's.
 - The share is also the order a chosen reviewer is handed cards in: `review/next` hands them the open applications dealt to them, and the follow-ups they own when follow-ups are asked for, first, and with `mineOnly` nothing else, so One by one can say their share is done before offering the rest (`claim_next_for_review`, E38/F07/S04); for anyone else the hand-out is first come, first served.
+- Whose share an application is in, and whether it waits for the deal, are served on every application an organizer reads (`review.share` and `review.waiting`, read by `share_of` and `is_waiting` in [`back-end/review_team.py`](../../back-end/review_team.py), [the served review state](../implementation/data/application-document.md#the-served-review-state)), by the rule this record keeps: an unable chosen reviewer's open applications stay theirs, a follow-up is also its owner's while they hold any role on the market, and an open application whose reviewer is not chosen waits.
 - A change of reviewers can answer 409 ("The reviewers are being dealt applications right now. Try again in a moment.") when another deal holds the market longer than it waits; an arrival never does, since it leaves its application to whoever holds the market.
 
 ## Considered and rejected

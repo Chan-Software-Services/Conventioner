@@ -7,10 +7,12 @@ describes:
   - back-end/tests/test_the_review_state_table.py
   - back-end/tests/test_changed_answers_are_one_event.py
   - back-end/datatypes.py#ApplicationOrigin
-verified: 2026-11-17
+  - back-end/review_team.py#review_of
+verified: 2026-11-18
 sources:
   - T277
   - T429
+  - T452
 status: accepted
 ---
 
@@ -45,6 +47,9 @@ A rule about how an application moves between states could be kept only if every
 - [`back-end/tests/test_one_writer_of_the_review_state.py`](../../back-end/tests/test_one_writer_of_the_review_state.py) walks every back-end module by AST and fails a write to the applications collection outside the owner unless it is listed with its reason, and fails a listed write whose update, replacement or inserted document names an owned field, or that the walk cannot read.
   A filter may name an owned field, since the claim holds the status it read.
   A one-time migration an operator runs is listed and not read.
+  Its second check fails a module outside the owner, `tests/` and `migrations/` that reads a status the review no longer writes (`ApplicationStatus.UNDER_REVIEW`, the old offers flow's statuses, `CANCELLED`), so no reader spells a state out again beside `state_of`; its one exception, listed with its reason, is the offers stage's count of sent offers, which nothing enters and T277 ticket 14 removes.
+- **The state is served, and every reader outside the owner counts with it** (T277 ticket 02, phase 2): every application an organizer reads carries `review` (its state read down to four, `State.served`; whether it is undecided; whose share it is in; whether it waits for the deal), read by [`back-end/review_team.py`](../../back-end/review_team.py)'s `review_of` over one `ReviewView` of the market per request ([the served review state](../implementation/data/application-document.md#the-served-review-state)).
+  Begin assignment's guard counts with the owner's `undecided_counts`, walked off `state_of`, and the export's status and the table-share notice read `state_of`, so no stored spelling of a state reads as another anywhere.
 
 ## Consequences
 
@@ -56,6 +61,8 @@ A rule about how an application moves between states could be kept only if every
 - An application can no longer come back into open in nobody's share: the move and its mark are one update, and a request ended before its deal leaves the mark for the next.
 - The owner and `api/applications.py` import each other, and neither reads the other at import.
 - A test that patches a write patches `ReviewState`, and one that rebinds the collection still rebinds `ApplicationsApi.applications_collection`.
+- An application stored with no status, or `under_review`, holds Begin assignment like any open one, and a card in nobody's share is served so: no screen can warn that it is dealt to a reviewer who was removed.
+- Every organizer read takes the view its route built, with no default, so a test calling one directly builds a view by hand.
 
 ## Considered and rejected
 
@@ -67,3 +74,5 @@ A rule about how an application moves between states could be kept only if every
 - **Keeping origin as a reading of `added_by`**: the record of who added a vendor cannot also say they have applied since, so an added vendor a re-import brought in stayed out of the run; clearing `added_by` would lose who added them.
 - **An answers write per source** (the applicant's, the import's, the organizer's, each deciding what a change does): three writers deciding the same question three ways is what T277 found; one event with the source as a value says once which change undoes which verdict.
 - **Moving the collection's binding into the owner**: every fake and the real-MongoDB world would rebind two names, and the storage contract would leave the module that owns it.
+- **The front end deriving the state from the status**, as each screen did: the queue, One by one's counts, the All view's filters, the card's warning, the vendors list, the Stats tab, the export and the guard each held their own list, and "undecided" had four meanings among them, so the same application read differently on two screens.
+- **A served share by ableness** (an open application's share only while its reviewer may still review): it would take an unable chosen reviewer's share away silently, against the dealing rule that they keep it until an Admin removes them.

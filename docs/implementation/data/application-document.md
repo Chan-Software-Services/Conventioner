@@ -16,7 +16,13 @@ describes:
   - back-end/tests/test_the_review_state_table.py
   - back-end/tests/test_changed_answers_are_one_event.py
   - back-end/datatypes.py#ApplicationOrigin
-verified: 2026-11-17
+  - back-end/review_team.py#ReviewView
+  - back-end/review_team.py#review_view
+  - back-end/review_team.py#share_of
+  - back-end/review_team.py#is_waiting
+  - back-end/review_team.py#review_of
+  - back-end/tests/test_every_organizer_read_serves_the_review_state.py
+verified: 2026-11-18
 sources:
   - wayfinding/v0-1-0/map
   - wayfinding/real-market-readiness/01
@@ -35,6 +41,7 @@ sources:
   - T263
   - T270
   - T429
+  - T452
 ---
 
 # The application document
@@ -115,7 +122,9 @@ This section states the transition table once; every other node points here rath
 
 ### The states, and how they are stored
 
-An application is in one of six states (`State`), read off the stored fields by `state_of`, the rule the review state's own events read, while the deal's pool and the claim, and readers outside the owner such as Begin assignment's guards, the Stats tab and the export, still filter on the stored status; no state is stored itself, so no stored status changes its spelling:
+An application is in one of six states (`State`), read off the stored fields by `state_of`, the one rule every reader of the state reads: the review state's own events, Begin assignment's guard, [the export](../../business/flows/vendors.md), the table-share notice and the review state every organizer read is served ([below](#the-served-review-state)).
+The deal's pool and the claim filter on the owner's `UNDECIDED_STATUSES`, the stored spellings of open, and the Stats tab still counts the stored statuses.
+No state is stored itself, so no stored status changes its spelling:
 
 | State              | Stored as                                                                                                                                                                |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -130,12 +139,14 @@ An application is in one of six states (`State`), read off the stored fields by 
 The statuses of the old offers flow read as what it reached them from (decision 9.6 of T277's report): `unassigned`, `assigned`, `assignment_sent`, `vendor_accepted` and `vendor_refused` as the approval they carried, and `cancelled` as a person's rejection, as the table-share notice already counts it with the rejected as not taking part.
 A status no member names is refused, as reading the application would refuse it, and the table-driven test walks every member, so a status added later fails until it is placed.
 `is_undecided` (open or follow-up), `is_decided` (the other four) and `is_judgeable` (open, or a rule's rejection) are read off the state, never off a list of statuses.
+Begin assignment's guard counts with `undecided_counts`, two counts filtered on the stored spellings `state_of` reads as open (a missing or empty status among them) and as a follow-up, walked off the rule, so no spelling is written twice and none passes the guard.
+Outside the owner, no back-end module names a status the review no longer writes (`under_review`, the old offers flow's, `cancelled`): the one-writer test's second check fails one, but for the offers stage's count of sent offers, which nothing enters and T277 ticket 14 removes.
 What a reviewer saw is read by `saw_decided`, which never refuses: a `seen` whose status no member names is nothing they could have seen, so the verdict held on it matches nothing and is answered as changed since they opened it.
 Its times, `verdict_at` and `updated_at`, are read as a string or null only, and a `seen` naming one of any other type matches nothing in the same way.
 
 **Where an application came from is its own axis, apart from its verdict**: `origin` (`ApplicationOrigin`) is `applied` (the applicant's first save), `imported` (an import row's create) or `added` (adding a vendor), stored by `arrive` and `add` and moved by changed answers (below).
 `origin_of` reads it, and for one stored before the origin was kept, `added` when `added_by` is set, else `imported` on a market whose vendors are imported and `applied` on one whose vendors apply (with no intake given, `applied`, since only "added or not" changes behaviour).
-Every back-end reader asking "did they apply" asks `is_added`, never `added_by`: the run's input (`approved_solver_vendors`), the export's "Added by hand", the Stats tab's added-by-hand count and `addedByHand` on the placement read; the organizer's view serves `origin`.
+Every back-end reader asking "did they apply" asks `is_added`, never `added_by`: the run's input (`approved_solver_vendors`), the export's "Added by hand" (`state_of`'s `approved(added)`), the Stats tab's added-by-hand count and `addedByHand` on the placement read; the organizer's view serves `origin`, read with the market's intake, so an imported application stored before the origin was kept is served `imported`.
 Readers naming who added someone read `added_by`, which stays the record of it.
 
 ### The transition table
@@ -192,6 +203,31 @@ The import's preview reads the same `move` for each row it would write, so its "
 [`back-end/tests/test_changed_answers_are_one_event.py`](../../../back-end/tests/test_changed_answers_are_one_event.py) drives each source through its route: a verdict sent back or kept, a save read again under a verdict and refused after three, and a save cut short after its write.
 
 The claim on the next card is held on the status the queue read as well as on the claim (`claim_next_for_review` in `api/applications.py`), so a card decided between the queue's read and its claim is passed over, never handed as if it were open (T277 P4).
+
+### The served review state
+
+**Every application an organizer reads is served its review state, `review`, beside `origin`**, so no screen works it out again from the stored status: the list, the next card, a verdict's answer, an undo's, a follow-up hand-on's and an update of a vendor's answers (`_application_response_organizer` in [`api/applicants.py`](../../../back-end/api/applicants.py)).
+Adding a vendor answers its own dump, which the vendors page never reads as an application.
+The stored `status` stays served beside it, for the labels; `review.state` is what every rule reads.
+
+```ts
+interface ApplicationReview {
+  state: "open" | "follow_up" | "approved" | "rejected"; // State.served
+  undecided: boolean; // open or follow_up: no verdict yet
+  share: string[]; // whose share it is in, reviewer first; [] with no reviewers chosen
+  waiting: boolean; // what a deal reaching it would move
+}
+```
+
+[`back-end/review_team.py`](../../../back-end/review_team.py) reads it (`review_of`), over one `ReviewView` of the market per request (`review_view`): the chosen reviewers' addresses, the user ids of everyone holding any role on the market (`people_with_market_role`, read once, so a list of hundreds costs one read) and the market's intake.
+Every organizer read takes the view its route built, and none has a default, so no caller can forget it; a route that deals before it answers (the next card, an undo, a hand-on) reads the application after the deal, so its share is what the deal left.
+[`tests/test_every_organizer_read_serves_the_review_state.py`](../../../back-end/tests/test_every_organizer_read_serves_the_review_state.py) drives each read through its route.
+
+- **Its share** (`share_of`), each address once, as `normalized_email` spells it: with no reviewers chosen, none; an open one, its reviewer while they are one of the chosen reviewers, able or not, since a chosen reviewer who may no longer review keeps their share until an Admin removes them ([the dealing rule](../../business/rules/the-review-is-dealt-among-chosen-reviewers.md)); a follow-up, its reviewer while chosen, then its owner while the owner holds any role on the market, whether or not they may be chosen to review; a decided one, the reviewer it was dealt to, whoever they are now, as the record of whose share it was.
+- **Waiting** (`is_waiting`): reviewers are chosen, and it is open with a reviewer who is not one of them (none, or a removed one), or a follow-up whose owner holds no role on the market.
+  It is exactly what a deal reaching it would move, who is able aside, which stays the deal's own judgment while it holds the market ([below](#waiting-for-the-deal)).
+  An application is served waiting whether or not it is marked: one stored in nobody's share before every move was marked (T277 P1, P2, P3, P5) waits, and nothing marks it.
+- The claim (`claim_next_for_review`) hands a chosen reviewer their share first by the stored reviewer and owner (`_in_share_of`), since `api/applications.py` cannot import `review_team.py`, which imports it; for every chosen reviewer who may ask, that is exactly whether `share_of` holds them, which a test pins over every state.
 
 ### Waiting for the deal
 

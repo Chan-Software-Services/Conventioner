@@ -10,7 +10,7 @@ describes:
   - front-end/src/components/DiscordRoleReport.vue
   - front-end/src/components/ExportVendorsForm.vue
   - front-end/src/components/ColumnChecklist.vue
-verified: 2026-11-17
+verified: 2026-11-18
 sources:
   - wayfinding/claims-and-room/04
   - wayfinding/rejection-visibility/02
@@ -141,6 +141,7 @@ For a Google Sheet and a mail merge such as YAMM: any of the market's vendors, f
 9. "Download CSV" saves one row per vendor, the header the columns as named, a multi-select answer one cell joined by ", ", a box Yes or No. The file is UTF-8 with a byte-order mark, so a spreadsheet reads accents, and is named for the market and the organizer's day, `<market>_vendors_<YYYY-MM-DD>.csv`.
 
 The server builds the file and the preview from the filters the dialog sends ([`vendor_export.py`](../../../back-end/api/vendor_export.py)), so what is exported is what the server holds, a seat is read from the stored placements the Assignments page draws, and a Discord state as the Vendors page shows it, worked out from what the last check kept on the market and the answers now (`shown_vendors`), so the file and the page agree.
+A vendor's status is read by the review state's one rule (`state_of`, [the application document](../../implementation/data/application-document.md#the-states-and-how-they-are-stored)), so the file says what the screens say: "Added by hand" only for a vendor whose answers never arrived, an added vendor imported since reading "Approved", and every stored spelling as the state it stands for.
 An answer an organizer updated is exported, and filtered on, as updated ([an update is kept beside the vendor's answer](../rules/an-update-is-kept-beside-the-vendors-answer.md)).
 Every cell but an amount is written so a spreadsheet shows it as text: one beginning with `=`, `+`, `-`, `@`, a tab, a carriage return or a newline gains a leading quote, as the assignment's download does.
 An amount is the server's own, written from whole cents, so it is left as it is: "-$15.00" reaches the spreadsheet as the number it is, where the quote would make it text and show.

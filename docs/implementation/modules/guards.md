@@ -10,7 +10,7 @@ describes:
   - back-end/app.py#transition_market
   - front-end/src/components/BlockerPanel.vue
   - front-end/src/utils/blockerLink.ts
-verified: 2026-11-17
+verified: 2026-11-18
 sources:
   - wayfinding/readable-journey/01
   - E03/F03
@@ -164,6 +164,8 @@ The guards are where the product's rules about moving a market are kept:
 - [The form locks at the first application](../../business/rules/the-form-locks-at-the-first-application.md): `NoApplicationsYetGuard` keeps the way back to draft from being a hole in the lock.
 - [An archived market is read-only](../../business/rules/an-archived-market-is-read-only.md): no edge leaves `archived`.
 - [Why a vendor was not placed](../../business/rules/why-a-vendor-was-not-placed.md): `NoAskedForTierWithoutTablesGuard` refuses `applications -> assignment` while an approved applicant waits on a tier with no tables.
+- [Needs follow-up](../../business/rules/needs-follow-up.md): `AllApplicationsReviewedGuard` refuses `applications -> assignment` while any application is open or needs a follow-up, naming the two counts apart, its fix "Finish deciding".
+  It counts with the review state's owner (`undecided_counts`, [the application document](../data/application-document.md#the-states-and-how-they-are-stored)), whatever spelling an application is stored by, so one stored with no status, or `under_review`, holds it as any open one does.
 
 [ADR 0005](../../adr/0005-phase-is-the-only-lifecycle-state.md) records why the phase is the market's only lifecycle state, and [ADR 0016](../../adr/0016-one-stage-for-applications-and-review.md) why applications and review are one stage.
 

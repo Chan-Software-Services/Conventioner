@@ -13,7 +13,7 @@ describes:
   - front-end/src/utils/reviewers.ts
   - front-end/src/components/market/ReviewerName.vue
   - back-end/review_team.py#deal_waiting
-verified: 2026-11-17
+verified: 2026-11-18
 sources:
   - E38/F07
   - E38/F07/S01
@@ -96,6 +96,7 @@ One by one hands a chosen reviewer their own share first, and once it is done sa
 ## Where it is kept
 
 - The team, and how far the deal has gone, are `reviewTeam` on [the market document](../../implementation/data/market-document.md); whose share an application is, `reviewer` on [the application document](../../implementation/data/application-document.md); [ADR 0020](../../adr/0020-an-application-is-dealt-to-one-reviewer.md) records why.
+  Every application an organizer reads is served whose share it is in, reviewer first, and whether it waits for the deal, by this rule (`share_of` and `is_waiting` in [`back-end/review_team.py`](../../../back-end/review_team.py), [the served review state](../../implementation/data/application-document.md#the-served-review-state)): an open one waits once its reviewer is not one of the chosen reviewers, and a follow-up once its owner holds no role on the market.
 - `PUT /markets/:id/reviewers` (`choose_reviewers` in [`back-end/api/markets.py`](../../../back-end/api/markets.py)) is the one write of the team, asking [the market's actions](../../implementation/modules/market-actions.md) row `choose-reviewers`; [`back-end/review_team.py`](../../../back-end/review_team.py) deals and writes the turn, each application's reviewer written by [`back-end/application_status.py`](../../../back-end/application_status.py) only when called from there, and nothing else writes either field.
 - The market read serves every reader the reviewers, each with whether they may still review here, and serves whom the reader may choose only to someone who may choose, while the review is open ([one market, from the server](../../implementation/conventions/one-market-from-the-server.md)).
 - A choice and the deal it made are entries of [the market's history](../../implementation/data/history.md), worded on Manage market's History and, for one vendor, in their drawer ([reading the market's history](../flows/reading-the-markets-history.md)).
