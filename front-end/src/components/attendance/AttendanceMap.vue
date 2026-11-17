@@ -244,8 +244,8 @@ const mayChangeSetup = computed(() => mayTake(props.market, MarketAction.ChangeS
 /* At a desk the whole map, its zoom and its legend stand in the window under the door's head,
    about 30rem of it, as the layout page's map does; a phone keeps the day map's own height. */
 @media (width > 640px) {
-  .door-map {
-    --day-map-max-height: max(20rem, calc(100dvh - 30rem));
+  .door-map :deep(.day-map__frame) {
+    max-height: max(20rem, calc(100dvh - 30rem));
   }
 }
 

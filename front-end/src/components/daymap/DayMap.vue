@@ -202,11 +202,11 @@ const swatches = computed(() => {
 
 /* The map's box: the hall's shape across the width it is given, no taller than most of the
    window, so a long hall on a phone still leaves the page under it in reach. A caller with more
-   above the map sets `--day-map-max-height` to the room it leaves, as Attendance does. */
+   above the map caps the frame at the room it leaves, as Attendance does. */
 .day-map__frame {
   grid-area: map;
   width: 100%;
-  max-height: var(--day-map-max-height, 70dvh);
+  max-height: 70dvh;
   overflow: hidden;
   border: 1px solid var(--mm-border);
   border-radius: var(--radius-card);
