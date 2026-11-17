@@ -13,6 +13,7 @@ import { ApplicationStatus, type Application, type Market } from '@/assets/types
 import { FULL_NAME_KEY, PREFERRED_NAME_KEY } from '@/utils/essentialFields';
 import { MarketAction } from '@/utils/marketActions';
 import { answersRefusing } from './support/servedAnswers';
+import { toolsOf } from './support/reviewViewTools';
 
 const fetchMarketApplications = vi.fn();
 const reviewSelection = vi.fn();
@@ -120,11 +121,6 @@ async function allView(market: Market = MARKET) {
           template: '<div />',
         },
         FollowUpDialog: true,
-        ListFreshness: {
-          name: 'ListFreshness',
-          emits: ['refresh'],
-          template: '<div />',
-        },
         Teleport: true,
       },
     },
@@ -267,7 +263,7 @@ describe('the place in the list', () => {
       application(1, { status: ApplicationStatus.ReviewerApproved }),
       ...many(120).slice(1),
     ]);
-    wrapper.findComponent({ name: 'ListFreshness' }).vm.$emit('refresh');
+    toolsOf(wrapper).refresh();
     await flushPromises();
     expect(fetchMarketApplications).toHaveBeenCalledTimes(2);
     expect(rows(wrapper)).toHaveLength(100);
@@ -453,7 +449,7 @@ describe('the states', () => {
     expect(wrapper.find('[data-testid="applications-read-failed"]').exists()).toBe(false);
     expect(rows(wrapper)).toHaveLength(shown);
     expect(selection(wrapper).exists()).toBe(true);
-    expect(wrapper.findComponent({ name: 'ListFreshness' }).attributes('failed')).toBe(
+    expect(toolsOf(wrapper).freshness.failed).toBe(
       'Could not refresh. The list is as it was last read.',
     );
     wrapper.unmount();
@@ -464,7 +460,8 @@ describe('Export', () => {
   it('opens on the words as well as the filter and Mine', async () => {
     route.query = { status: 'undecided', mine: '1', search: '  person ' };
     const wrapper = await allView();
-    await wrapper.get('[data-testid="applications-all-export-button"]').trigger('click');
+    toolsOf(wrapper).openExport!();
+    await flushPromises();
     const seed = wrapper.findComponent({ name: 'ExportVendorsDialog' }).props('seed');
     expect(seed).toMatchObject({ statuses: ['open'], mine: true, search: 'person' });
   });

@@ -21,6 +21,9 @@
  * click or Z, until their next verdict or the window ends (E38/F10/S01); "Show N reviewed" sits
  * beside the counts and opens the reviewed list in a dialog, newest verdict first, an order that
  * holds while it is open, so a row changed there keeps its place until the next opening (T217, T262).
+ * The tab's toolbar draws the list's read time and Refresh from what this view exposes
+ * (`ReviewViewTools`, T466), and the tab's `lead` slot, its lines while applications are open,
+ * stands first in the panel.
  */
 import { MarketAction, actionRefusal, mayTake } from '@/utils/marketActions';
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
@@ -63,7 +66,6 @@ import {
   reviewerLine,
 } from '@/utils/reviewers';
 import { useMarketStore } from '@/stores/market';
-import ListFreshness from '@/components/ListFreshness.vue';
 import { useVerdictActions, type VerdictOutcome } from '@/utils/verdictActions';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import { Refusal, refusalSentence } from '@/utils/useSubmit';
@@ -71,6 +73,7 @@ import { useVerdictUndo } from '@/utils/verdictUndo';
 import VerdictUndoLine from '@/components/application/VerdictUndoLine.vue';
 import { applicantName } from '@/utils/essentialFields';
 import { getTimestampDate } from '@/utils/utils';
+import type { ReviewViewTools } from '@/components/application/reviewViewTools';
 
 const props = defineProps<{
   market: Market | null;
@@ -613,6 +616,18 @@ async function refresh() {
 }
 
 /**
+ * The tab's toolbar draws this view's read time and Refresh where the All view's stand (T466), once
+ * the first read has landed; the read stays here, held by every verdict.
+ */
+const freshness = computed<ReviewViewTools['freshness']>(() => ({
+  readAt: readAt.value,
+  refreshing: refreshing.value || saving.value,
+  failed: refreshError.value,
+  ready: !loading.value,
+}));
+defineExpose({ freshness, refresh });
+
+/**
  * After a verdict, a follow-up or a refusal on the card: what the card does next.
  *
  * The local list is kept in step with the answer rather than refetched: a refetch per verdict is 232
@@ -967,15 +982,9 @@ function submittedOn(app: Application): string {
 
 <template>
   <div v-if="visible && market" class="monitor-panel" data-testid="app-monitor-panel">
-    <ListFreshness
-      v-if="!loading"
-      class="monitor-freshness"
-      testid="applications"
-      :readAt="readAt"
-      :refreshing="refreshing || saving"
-      :failed="refreshError"
-      @refresh="refresh"
-    />
+    <!-- What the tab says over the review while applications are open, first in the panel as
+         over the All view's rows (T466). -->
+    <slot name="lead" />
     <ReadFailed
       v-if="loadError"
       name="applications"
@@ -1415,12 +1424,8 @@ function submittedOn(app: Application): string {
 
 <style scoped>
 .monitor-panel {
-  /* No top padding: it starts where the All view does, so switching views moves nothing. */
-  padding: 0 0 var(--space-4);
-}
-
-.monitor-freshness {
-  margin-bottom: var(--space-4);
+  /* Clear of the toolbar's rule over it. */
+  padding: var(--space-4) 0;
 }
 
 .loading-state,

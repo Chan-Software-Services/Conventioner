@@ -6,28 +6,41 @@ import { seedPublishedMarketWithAssignments } from './helpers/seeds';
 import type { Page } from '@playwright/test';
 
 /**
- * Wherever the review is closed, the Applications tab says why and what to do instead (T207), in
- * the server's words (`verdictsSettledReason`), over both views where the review's controls were:
- * Back to review while tables are allocated, a seat on Assignments once results are published or
- * a Google Form market that went live before it could publish them. The automatic rejections say
- * the same in their own subject.
+ * Wherever the review is closed, the automatic rejections say why and what to do instead (T207), in
+ * the server's words: Back to review while tables are allocated, a seat on Assignments once results
+ * are published or a Google Form market that went live before it could publish them. The
+ * Applications tab no longer says it over its views (T466, release walk F7): the review's controls
+ * are simply gone there, and its toolbar stands where it stands in every stage.
  */
 
 const ALLOCATING =
-  'The review is closed while tables are allocated. To change a verdict, choose Back to review under More… on the phase rail; tables are then allocated again.';
+  'The automatic rejections are closed while tables are allocated. To change a rule, choose Back to review under More… on the phase rail; tables are then allocated again.';
 const PUBLISHED =
-  'The review closed when results were published. To change who has a table, place or free a seat on Assignments.';
+  'The automatic rejections closed when results were published. To change who has a table, place or free a seat on Assignments.';
 const WENT_LIVE =
-  'The review closed when the market went live. To change who has a table, place or free a seat on Assignments.';
+  'The automatic rejections closed when the market went live. To change who has a table, place or free a seat on Assignments.';
 
-async function conditionLine(page: Page, marketId: string) {
+/** The tab says no review-closed line over either view, and offers no reviewers. */
+async function saysNoClosedLine(page: Page, marketId: string) {
   await page.goto(marketSetupPath(marketId, 'applications'));
-  const line = page.getByTestId('market-setup-applications-condition');
-  await expect(line).toBeVisible({ timeout: 15000 });
-  return line;
+  await expect(page.getByTestId('applications-all-list')).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId('applications-toolbar')).toBeVisible();
+  await expect(page.getByTestId('market-setup-applications-condition')).toHaveCount(0);
+  await expect(page.getByTestId('reviewers')).toHaveCount(0);
+  await page.getByTestId('applications-view-one').click();
+  await expect(page.getByTestId('app-monitor-panel')).toBeVisible();
+  await expect(page.getByTestId('market-setup-applications-condition')).toHaveCount(0);
+  await expect(page.getByTestId('reviewers')).toHaveCount(0);
 }
 
-test('in Assignment, the tab says the review is closed and Back to review reopens it', async ({
+/** The automatic rejections' own line, in their subject. */
+async function rulesLine(page: Page, marketId: string) {
+  await page.goto(marketSetupPath(marketId, 'form'));
+  await page.getByTestId('form-step-review').click();
+  return page.getByTestId('rejection-rules-locked');
+}
+
+test('in Assignment, the tab says no closed line and the automatic rejections say why', async ({
   authenticatedPage: page,
   request,
 }) => {
@@ -35,22 +48,11 @@ test('in Assignment, the tab says the review is closed and Back to review reopen
     intakeMode: 'form',
   });
 
-  const line = await conditionLine(page, seed.marketId);
-  await expect(line).toHaveText(ALLOCATING);
-  // Said once, over both views, where the reviewers panel was.
-  await page.getByTestId('applications-view-one').click();
-  await expect(line).toHaveText(ALLOCATING);
-  await expect(page.getByTestId('reviewers')).toHaveCount(0);
-
-  // The automatic rejections say the same, in their own subject.
-  await page.goto(marketSetupPath(seed.marketId, 'form'));
-  await page.getByTestId('form-step-review').click();
-  await expect(page.getByTestId('rejection-rules-locked')).toHaveText(
-    'The automatic rejections are closed while tables are allocated. To change a rule, choose Back to review under More… on the phase rail; tables are then allocated again.',
-  );
+  await saysNoClosedLine(page, seed.marketId);
+  await expect(await rulesLine(page, seed.marketId)).toHaveText(ALLOCATING);
 });
 
-test('once results are published, the tab says to place or free a seat instead', async ({
+test('once results are published, the tab says no closed line and the rules say to place a seat', async ({
   authenticatedPage: page,
   request,
 }) => {
@@ -60,7 +62,8 @@ test('once results are published, the tab says to place or free a seat instead',
   const published = await request.post(`${BACKEND_URL}/markets/${seed.marketId}/publish-results`);
   expect(published.ok(), await published.text()).toBe(true);
 
-  await expect(await conditionLine(page, seed.marketId)).toHaveText(PUBLISHED);
+  await saysNoClosedLine(page, seed.marketId);
+  await expect(await rulesLine(page, seed.marketId)).toHaveText(PUBLISHED);
 });
 
 test('a Google Form market that went live before it could publish says the review closed then', async ({
@@ -80,5 +83,6 @@ test('a Google Form market that went live before it could publish says the revie
     `db.markets.updateOne({id: ${JSON.stringify(seed.marketId)}}, {$unset: {resultsPublished: '', 'assignmentObject.publishedRevision': ''}})`,
   );
 
-  await expect(await conditionLine(page, seed.marketId)).toHaveText(WENT_LIVE);
+  await saysNoClosedLine(page, seed.marketId);
+  await expect(await rulesLine(page, seed.marketId)).toHaveText(WENT_LIVE);
 });

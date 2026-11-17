@@ -14,10 +14,14 @@ import { putVerdict } from './helpers/putVerdict';
  * The review says when its list was last read, and reads it again on Refresh (E38/F05/S03).
  *
  * Others decide while a reviewer works, and the list on screen is what was read: both views say how
- * old it is, and Refresh shows a second reviewer's verdict at once - keeping the ticks of rows still
- * shown and the card the reviewer holds - or says it could not, and keeps the list.
+ * old it is, in the review's toolbar where Refresh stands for both (T466), and Refresh shows a second
+ * reviewer's verdict at once - keeping the ticks of rows still shown and the card the reviewer
+ * holds - or says it could not, and keeps the list.
  */
 const SECOND = { email: 'e2e-refresh-reviewer@example.com', password: 'e2erefreshreviewer1' };
+/** The read time, Refresh or a failed refresh's line, in the toolbar that draws them for both views. */
+const inToolbar = (page: import('@playwright/test').Page, testid: string) =>
+  page.getByTestId('applications-toolbar').getByTestId(testid);
 /** The list's own read, not a write to one application under it. */
 const THE_LIST = /\/markets\/[^/]+\/applications(\?.*)?$/;
 /** The API's read of it, not the page of the same address nor a write. */
@@ -51,8 +55,8 @@ test("All: a second reviewer's verdict shows on Refresh, and the ticks stay", as
 }) => {
   const { marketId, ines } = await reviewingMarket(request);
   const all = new ApplicationsAllPage(page);
-  const updated = page.getByTestId('applications-updated');
-  const refresh = page.getByTestId('applications-refresh');
+  const updated = inToolbar(page, 'applications-updated');
+  const refresh = inToolbar(page, 'applications-refresh');
 
   await all.goto(marketId);
   await expect(all.rows).toHaveCount(3);
@@ -80,14 +84,14 @@ test("All: a second reviewer's verdict shows on Refresh, and the ticks stay", as
     isTheListRead(route.request()) ? route.abort() : route.continue(),
   );
   await refresh.click();
-  await expect(page.getByTestId('applications-refresh-error')).toHaveText(
+  await expect(inToolbar(page, 'applications-refresh-error')).toHaveText(
     'Could not refresh. The list is as it was last read.',
   );
   await expect(all.rows).toHaveCount(3);
   await expect(all.tickOf('theo@thistle.test')).toBeChecked();
   await page.unroute(THE_LIST);
   await refresh.click();
-  await expect(page.getByTestId('applications-refresh-error')).toHaveCount(0);
+  await expect(inToolbar(page, 'applications-refresh-error')).toHaveCount(0);
 });
 
 test("One by one: Refresh brings others' verdicts into the counts, and keeps the card", async ({
@@ -101,7 +105,7 @@ test("One by one: Refresh brings others' verdicts into the counts, and keeps the
   await monitor.goto(marketId);
   await monitor.waitForLoaded();
   await expect(monitor.progress).toContainText('of 3 open');
-  await expect(page.getByTestId('applications-updated')).toHaveText('Updated just now');
+  await expect(inToolbar(page, 'applications-updated')).toHaveText('Updated just now');
   // On to the second card, which the reviewer now holds; the first is let go.
   await expect(monitor.email).toHaveText('nadia@ember.test');
   await monitor.nextCard();
@@ -116,7 +120,7 @@ test("One by one: Refresh brings others' verdicts into the counts, and keeps the
   });
   await expect(monitor.progress).toContainText('of 3 open');
 
-  await page.getByTestId('applications-refresh').click();
+  await inToolbar(page, 'applications-refresh').click();
   await expect(monitor.progress).toContainText('of 2 open');
   await expect(monitor.tally).toContainText('1 reviewed · 0 approved · 1 rejected');
   await expect(monitor.email).toHaveText('theo@thistle.test');
@@ -130,7 +134,7 @@ test('Refresh recovers from a list that failed to load, in both views', async ({
   const { marketId } = await reviewingMarket(request);
   const all = new ApplicationsAllPage(page);
   const monitor = new ApplicationMonitorPage(page);
-  const refresh = page.getByTestId('applications-refresh');
+  const refresh = inToolbar(page, 'applications-refresh');
   const failRead = () =>
     page.route(THE_LIST, (route) =>
       isTheListRead(route.request()) ? route.abort() : route.continue(),
@@ -165,12 +169,12 @@ test('Refresh recovers from a list that failed to load, in both views', async ({
 
   await failRead();
   await refresh.click();
-  await expect(page.getByTestId('applications-refresh-error')).toHaveText(
+  await expect(inToolbar(page, 'applications-refresh-error')).toHaveText(
     'Could not refresh. The list is as it was last read.',
   );
   await expect(monitor.email).toHaveText(up);
   await page.unroute(THE_LIST);
   await refresh.click();
-  await expect(page.getByTestId('applications-refresh-error')).toHaveCount(0);
+  await expect(inToolbar(page, 'applications-refresh-error')).toHaveCount(0);
   await expect(monitor.email).toHaveText(up);
 });

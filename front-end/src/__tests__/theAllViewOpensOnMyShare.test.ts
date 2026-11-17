@@ -16,6 +16,7 @@ import { ApplicationStatus, type Application, type Market } from '@/assets/types
 import { MarketAction } from '@/utils/marketActions';
 import { applicationsAllSeed } from '@/utils/vendorExport';
 import { answersRefusing } from './support/servedAnswers';
+import { toolsOf } from './support/reviewViewTools';
 
 const ANA = 'ana@example.com';
 const SAM = 'sam@example.com';
@@ -107,7 +108,6 @@ async function allView(props: { market: Market }) {
           template: '<div />',
         },
         FollowUpDialog: true,
-        ListFreshness: true,
       },
     },
   });
@@ -362,7 +362,8 @@ describe('choosing in the "Assigned to" filter', () => {
     route.query = { reviewer: SAM, status: 'undecided', mine: '1' };
     const wrapper = await allView({ market: market() });
 
-    await wrapper.get('[data-testid="applications-all-export-button"]').trigger('click');
+    toolsOf(wrapper).openExport!();
+    await wrapper.vm.$nextTick();
     const dialog = wrapper.findComponent({ name: 'ExportVendorsDialog' });
     expect(dialog.props('seed')).toEqual(applicationsAllSeed({ filter: 'undecided', mine: true }));
   });

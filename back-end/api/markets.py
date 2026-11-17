@@ -346,8 +346,8 @@ def review_closed_reason(market: Market) -> Optional[str]:
     """Why the review is closed on this market and what to do instead, or None while it is open
     (T207): Back to review while tables are allocated, a seat on Assignments once results are
     published or the market went live, the archived refusal on an archived market. Served as
-    ``verdictsSettledReason``, which the Applications tab says in place of the review's controls,
-    and returned by ``verdict_refusal``."""
+    ``verdictsSettledReason``, which takes the review's controls off every screen, and returned
+    by ``verdict_refusal``."""
     archived = archived_refusal(market)
     if archived:
         return archived

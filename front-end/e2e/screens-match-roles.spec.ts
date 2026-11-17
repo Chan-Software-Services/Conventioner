@@ -91,9 +91,8 @@ test('an Editor changes the seats, but neither decides nor moves a phase once as
     await page.getByTestId('app-monitor-decided-open').click();
     await expect(page.getByTestId('app-monitor-decided-row').first()).toBeVisible();
     await expect(page.getByTestId('app-monitor-decided-reject-button')).toHaveCount(0);
-    await expect(page.getByTestId('market-setup-applications-condition')).toContainText(
-      'The review is closed',
-    );
+    // The review closed with the stage: its controls are gone, and no line says so (T466).
+    await expect(page.getByTestId('market-setup-applications-condition')).toHaveCount(0);
     // Publishing the verdicts stays an admin's.
     await expect(page.getByTestId('applications-publish-button')).toHaveCount(0);
   });

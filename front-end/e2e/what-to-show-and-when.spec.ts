@@ -171,10 +171,11 @@ test.describe('What to show, and when', () => {
     await expect(page.getByTestId('form-builder-lock-banner')).toContainText(
       'The questions are fixed: they cannot change once its responses have been imported',
     );
+    // The Applications tab draws its tools and no review-closed line (T466): the rail and the
+    // automatic rejections say where the market stands.
     await page.goto(marketSetupPath(marketId, 'applications'));
-    await expect(page.getByTestId('market-setup-applications-condition')).toContainText(
-      'The review is closed while tables are allocated.',
-    );
+    await expect(page.getByTestId('applications-toolbar')).toBeVisible();
+    await expect(page.getByTestId('market-setup-applications-condition')).toHaveCount(0);
   });
 
   test('a move the server would refuse says why in the menu', async ({
