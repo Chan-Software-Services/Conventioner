@@ -16,12 +16,12 @@
  * The server counts all of it (`utils/paymentsPage.ts`). It reads and changes nothing itself, so
  * anyone who reads the market reads it; a market that sets no prices says so, and where to set them.
  */
-import { computed, ref, watch } from 'vue';
+import { computed, provide, ref, watch } from 'vue';
 import { useRoute, useRouter, type LocationQuery } from 'vue-router';
 import { marketPath } from '@/utils/market';
 import { hasAssignment } from '@/utils/marketPage';
 import { useOpenMarket } from '@/utils/openMarket';
-import { balanceChip, balanceText, money } from '@/utils/payments';
+import { PAYMENT_WRITTEN, balanceChip, balanceText, money } from '@/utils/payments';
 import {
   loadMarketPayments,
   owingCounted,
@@ -71,6 +71,9 @@ const drawer = useVendorDrawer();
 const paymentsRead = useServerRead(() => readId.value || null, loadMarketPayments, {
   failure: 'The payments could not be loaded.',
 });
+// A payment written from the drawer that answered once its Payment tab was gone (the drawer closed,
+// another tab chosen): no event reaches the page then, so the tab calls this instead.
+provide(PAYMENT_WRITTEN, () => void paymentsRead.reread());
 /** What the server counted, or null until it answers. */
 const found = computed<MarketPayments | null>(() => paymentsRead.data.value);
 const loadError = computed(() =>
