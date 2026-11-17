@@ -728,11 +728,8 @@ def review_application(
 def _verdict_asking(reviewing: Reviewing, before: List[Dict[str, Any]]) -> Actions.Asked:
     """The asking of the table's row a reviewer's write took, which records its history entry:
     changing a verdict when any application it wrote was decided, else giving one (E38/F06/S01).
-    A reviewer the change row refuses writes only undecided ones (``unless_decided``), so theirs
-    is always giving, even when the read before the write found one decided that an undo has since
-    returned to open."""
-    if reviewing.changing.refused:
-        return reviewing.giving
+    Each is written only as its reviewer saw it (``seen``), so one read decided was seen decided,
+    and only a reviewer the change row lets in writes it."""
     if any(ReviewState.is_decided(doc) for doc in before):
         return reviewing.changing
     return reviewing.giving

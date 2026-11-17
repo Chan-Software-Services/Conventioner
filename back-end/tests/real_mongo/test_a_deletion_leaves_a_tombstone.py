@@ -381,7 +381,7 @@ class TestAWriteRacingTheDeletion:
     @pytest.mark.parametrize("after", [
         "rejection_rules.judge",
         "history.record_applicant",
-        "review_team.deal_an_applicants_own",
+        "review_team.deal_arrivals",
     ], ids=["the rules", "its history entry", "the deal"])
     def test_an_applicants_save_meeting_the_deletion_after_its_writes_is_taken_back(
             self, signed_in, market_in, interleave, real_db, applications, market_records, after):
