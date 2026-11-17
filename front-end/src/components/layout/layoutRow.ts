@@ -5,13 +5,13 @@
  *
  * A path is the points clicked so far, with the pointer's place after them while it is over the
  * map. The row shown is the row that placing would add: the smooth path through the points laid
- * alone (`smoothRuns`), lined with tables of the tool card's type on the side chosen
- * (`placeRows`), clear of the tables and no-table zones that stand already and inside the
- * floorplan. The stretch from the last point to the pointer only shows, as ghosts, what a point
- * there would lay where the row has no table; it is never placed, and one point alone places nothing (the QC walk of
- * 2026-11-16, item 17). Nothing of a pending path is in the layout: it is not saved, not a step of
- * undo, and it is dropped whole. Placed, the tables are ordinary tables, numbered on in their
- * section in the order drawn, selected, and one step of undo.
+ * alone (`smoothRuns`), lined with tables of the tool card's type on the side chosen (`placeRows`),
+ * clear of the tables and no-table zones that stand already and inside the floorplan. The stretch
+ * from the last point to the pointer only shows, as ghosts, what a point there would lay, less the
+ * tables of the row it keeps where they stand; it is never placed, and one point alone places
+ * nothing (the QC walk of 2026-11-16, item 17). Nothing of a pending path is in the layout: it is
+ * not saved, not a step of undo, and it is dropped whole. Placed, the tables are ordinary tables,
+ * numbered on in their section in the order drawn, selected, and one step of undo.
  *
  * With no path pending, a press and a drag draw the row's line by hand: a stroke. While it is in
  * hand the row is shown along the stroke as it reads (`readStroke`): the straight line between
@@ -419,7 +419,8 @@ export function useRowTool(options: RowToolOptions): RowTool {
   const nextRows = computed(() =>
     read.value || path.value.length === points.value.length ? [] : rowsAlong(runs.value),
   );
-  // Each row's tables that the point lays where none of the row's stands now.
+  // Each row's tables that the point lays, less those of the row it keeps where they stand,
+  // compared index by index.
   const ghosts = computed(() =>
     nextRows.value.flatMap((whole, k) => {
       const laid = laidRows.value[k] ?? [];

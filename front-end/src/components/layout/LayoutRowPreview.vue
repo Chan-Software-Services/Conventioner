@@ -1,16 +1,16 @@
 <script setup lang="ts">
 /**
- * What the Row of tables tool draws over the map while a path is pending (T257): the tables the
- * row would place, in their section's colour and dashed, since they are not tables yet; the
- * tables a point at the pointer would lay where the row has none, as faint dashed ghosts, never
- * placed (T422, item 17); the path through the points; each point clicked, the first ringed while a click
- * on it would close the path into a shape; how many tables it holds, written at the pointer, "3
- * tables (7 with a point here)" while ghosts show; and the crosshair the
- * keys move, with a lead from the last point to it while the path takes a further point. A line
- * being drawn by hand has no points yet: it is its line, its tables and its count, and a ring
- * where it began while letting go would close it. It is a picture of
- * `layoutRow.ts`'s state, in the map's millimetres, and takes no press: the editor finds a point
- * under the pointer by where it is.
+ * What the Row of tables tool draws over the map while a path is pending (T257): the tables the row
+ * would place, in their section's colour and dashed, since they are not tables yet; over them, the
+ * tables a point at the pointer would lay, less those of the row it keeps where they stand, as
+ * faint dashed ghosts, never placed (T422, item 17); the path through the points; each point
+ * clicked, the first ringed while a click on it would close the path into a shape; how many tables
+ * it holds, written at the pointer, "3 tables (7 with a point here)" while ghosts show; and the
+ * crosshair the keys move, with a lead from the last point to it while the path takes a further
+ * point. A line being drawn by hand has no points yet: it is its line, its tables and its count,
+ * and a ring where it began while letting go would close it. It is a picture of `layoutRow.ts`'s
+ * state, in the map's millimetres, and takes no press: the editor finds a point under the pointer
+ * by where it is.
  */
 import { computed } from 'vue';
 import { plural } from '@/utils/utils';
@@ -21,8 +21,8 @@ import type { PathPose, PointMm, Run, SizeMm } from './layoutGeometry';
 const props = defineProps<{
   runs: readonly Run[];
   poses: readonly PathPose[];
-  /** The tables a point at the pointer would lay where the row has none: drawn faint, as they
-   *  are not the row's yet. */
+  /** The tables a point at the pointer would lay, less those of the row it keeps where they
+   *  stand, compared index by index: drawn faint over the row, as they are not the row's yet. */
   ghosts?: readonly PathPose[];
   /** How many tables the row holds with a point at the pointer, while ghosts show. */
   withAPoint?: number;
@@ -80,23 +80,6 @@ const lead = computed(() => {
 <template>
   <g class="layout-row" aria-hidden="true" data-testid="layout-row-preview">
     <rect
-      v-for="(pose, index) in ghosts ?? []"
-      :key="`ghost-${index}`"
-      :transform="`translate(${pose.xMm} ${pose.yMm}) rotate(${pose.rotation})`"
-      :x="-size.widthMm / 2"
-      :y="-size.depthMm / 2"
-      :width="size.widthMm"
-      :height="size.depthMm"
-      rx="40"
-      fill="none"
-      :stroke="`var(${paint.edge})`"
-      stroke-opacity="0.6"
-      stroke-width="1"
-      stroke-dasharray="3 3"
-      vector-effect="non-scaling-stroke"
-      data-testid="layout-row-ghost"
-    />
-    <rect
       v-for="(pose, index) in poses"
       :key="index"
       :transform="`translate(${pose.xMm} ${pose.yMm}) rotate(${pose.rotation})`"
@@ -112,6 +95,24 @@ const lead = computed(() => {
       stroke-dasharray="5 3"
       vector-effect="non-scaling-stroke"
       data-testid="layout-row-table"
+    />
+    <!-- Over the row's tables, so a table the point would move shows where it would go. -->
+    <rect
+      v-for="(pose, index) in ghosts ?? []"
+      :key="`ghost-${index}`"
+      :transform="`translate(${pose.xMm} ${pose.yMm}) rotate(${pose.rotation})`"
+      :x="-size.widthMm / 2"
+      :y="-size.depthMm / 2"
+      :width="size.widthMm"
+      :height="size.depthMm"
+      rx="40"
+      fill="none"
+      :stroke="`var(${paint.edge})`"
+      stroke-opacity="0.6"
+      stroke-width="1"
+      stroke-dasharray="3 3"
+      vector-effect="non-scaling-stroke"
+      data-testid="layout-row-ghost"
     />
     <polyline
       v-for="(line, index) in lines"
