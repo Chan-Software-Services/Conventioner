@@ -799,6 +799,64 @@ const drawer = useVendorDrawer();
   font-variant-numeric: tabular-nums;
 }
 
+/* Prototype (release walk F5): the top row is one toolbar, its controls in groups.
+   The dates and List/Map are each one segmented control; the read time with Refresh, and Print
+   roster with Door code, are groups set apart by a rule. */
+.door .door-top {
+  align-items: center;
+  padding: var(--space-2);
+  border: 1px solid var(--mm-border);
+  border-radius: var(--radius-card);
+  background: white;
+}
+
+.door .door-dates,
+.door .door-view :deep(.filter-toggles) {
+  gap: 0;
+}
+
+.door .door-view {
+  gap: 0;
+  margin-inline-end: 0;
+}
+
+.door .door-dates > .btn,
+.door .door-view :deep(.filter-toggles__toggle) {
+  border-radius: 0;
+}
+
+.door .door-dates > .btn + .btn,
+.door .door-view :deep(.filter-toggles__toggle + .filter-toggles__toggle) {
+  margin-inline-start: -1px;
+}
+
+.door .door-dates > .btn:first-child,
+.door .door-view :deep(.filter-toggles__toggle:first-child) {
+  border-start-start-radius: var(--radius-control);
+  border-end-start-radius: var(--radius-control);
+}
+
+.door .door-dates > .btn:last-child,
+.door .door-view :deep(.filter-toggles__toggle:last-child) {
+  border-start-end-radius: var(--radius-control);
+  border-end-end-radius: var(--radius-control);
+}
+
+.door .door-tools {
+  gap: var(--space-3);
+}
+
+.door .door-papers {
+  margin-inline-start: 0;
+  padding-inline-start: var(--space-3);
+  border-inline-start: 1px solid var(--mm-border);
+}
+
+.door .door-view {
+  padding-inline-end: var(--space-3);
+  border-inline-end: 1px solid var(--mm-border);
+}
+
 .door-bar {
   display: flex;
   flex-wrap: wrap;
