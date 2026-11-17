@@ -883,6 +883,13 @@ const drawer = useVendorDrawer();
   min-width: 0;
 }
 
+/* The map search's list lies over the map from the field's start, as wide as a row reads rather
+   than the row's whole room, so a vendor and where they sit stand close; a phone's field is less. */
+.door-search :deep(.search-picker-list) {
+  right: auto;
+  width: min(100%, 32rem);
+}
+
 /* On the list, when it was read, over the list's right edge, 4px over its first row. */
 .door-updated {
   margin: 0 0 calc(-1 * var(--space-3));

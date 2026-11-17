@@ -206,6 +206,11 @@ for (const size of PHONE_AND_DESK) {
         [listBox.x + listBox.width / 2, listBox.y + listBox.height / 2],
       );
       expect(onTop, 'the list lies over the map, nothing over it').toBe(true);
+      // From the field's start, as wide as a row reads (32rem) rather than the row's whole room, so
+      // a name and where they sit stand close; on a phone as wide as the field.
+      const fieldBox = (await search.field.boundingBox())!;
+      expect(Math.abs(listBox.x - fieldBox.x)).toBeLessThanOrEqual(1);
+      expect(listBox.width).toBeLessThanOrEqual(Math.min(fieldBox.width, 512) + 1);
       expect(listBox.y + listBox.height).toBeGreaterThan(
         (await door.bar.boundingBox())!.y + (await door.bar.boundingBox())!.height,
       );
