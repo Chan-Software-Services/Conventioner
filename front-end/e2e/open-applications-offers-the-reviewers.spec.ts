@@ -8,7 +8,7 @@ import {
   planSetupObject,
   seedApplicantMarket,
 } from './helpers/seedApplicantMarket';
-import { marketScreenPath } from './helpers/marketScreens';
+import { marketScreenPath, vendorPagePath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { hideDevToolsPanel } from './helpers/hideDevToolsPanel';
 
@@ -57,7 +57,7 @@ async function apply(
   try {
     const page = await context.newPage();
     const login = new VendorPage(page);
-    await page.goto(`/${market.marketSlug}`);
+    await page.goto(vendorPagePath(market.marketSlug));
     await login.requestCode(vendor);
     await expect(login.codeInput).toBeVisible();
     createApplicantLoginChallenge(market.marketId, vendor, CODE);

@@ -1,4 +1,5 @@
 import { test, expect, TEST_USER, BACKEND_URL, VendorPage } from './fixtures';
+import { vendorPagePath } from './helpers/marketScreens';
 import {
   createApplicantLoginChallenge,
   planSetupObject,
@@ -41,7 +42,7 @@ test('a returning vendor sees their answers, changes one, and stays signed in th
   });
 
   const login = new VendorPage(page);
-  await page.goto(`/${market.marketSlug}`);
+  await page.goto(vendorPagePath(market.marketSlug));
   await login.requestCode(VENDOR);
   createApplicantLoginChallenge(market.marketId, VENDOR, CODE);
   await login.enterCode(CODE);
@@ -76,7 +77,7 @@ test('a returning vendor sees their answers, changes one, and stays signed in th
   await login.submit();
   await expect(login.form).toHaveCount(0, { timeout: 10000 });
   await expect(login.answers).toContainText('Mugs and bowls');
-  await expect(page).toHaveURL(new RegExp(`/${market.marketSlug}$`));
+  await expect(page).toHaveURL(new RegExp(`${vendorPagePath(market.marketSlug)}$`));
 
   // Once the market stops taking applications the answers are read, not changed (E38/F04/S02) -
   // and a direct link still finds the vendor signed in.
@@ -88,7 +89,7 @@ test('a returning vendor sees their answers, changes one, and stays signed in th
     },
   );
   expect(closed.ok(), await closed.text()).toBeTruthy();
-  await page.goto(`/${market.marketSlug}`);
+  await page.goto(vendorPagePath(market.marketSlug));
   await expect(page.getByTestId('vendor-page-answers')).toContainText('Mugs and bowls', {
     timeout: 30000,
   });
@@ -122,7 +123,7 @@ test('a saved application that does not arrive is said so, never shown as none, 
   });
   const saved = `**/public/markets/${market.marketSlug}/applicant/application`;
   const login = new VendorPage(page);
-  await page.goto(`/${market.marketSlug}`);
+  await page.goto(vendorPagePath(market.marketSlug));
   await login.requestCode('stalled-vendor@example.com');
   createApplicantLoginChallenge(market.marketId, 'stalled-vendor@example.com', CODE);
 

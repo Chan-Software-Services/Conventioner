@@ -1,5 +1,6 @@
 import type { APIRequestContext } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL, VendorPage } from './fixtures';
+import { vendorPagePath } from './helpers/marketScreens';
 import {
   createApplicantLoginChallenge,
   planSetupObject,
@@ -57,7 +58,7 @@ test('after results are published and applications close, a vendor still reads t
   await post(request, `/markets/${market.marketId}/publish-results`);
 
   const login = new VendorPage(page);
-  await page.goto(`/${market.marketSlug}`);
+  await page.goto(vendorPagePath(market.marketSlug));
   await expect(page.getByTestId('vendor-page-market-name')).toHaveText(market.marketName);
   await login.requestCode(VENDOR);
   createApplicantLoginChallenge(market.marketId, VENDOR, CODE);
@@ -72,7 +73,7 @@ test('after results are published and applications close, a vendor still reads t
   await page.getByTestId('vendor-page-sign-out-btn').click();
   // Signed out once the server has ended any remembered sign-in, and the page says so.
   await expect(login.emailInput).toBeVisible();
-  await page.goto(`/${market.marketSlug}`);
+  await page.goto(vendorPagePath(market.marketSlug));
   await login.requestCode(TURNED_AWAY);
   createApplicantLoginChallenge(market.marketId, TURNED_AWAY, CODE);
   await login.enterCode(CODE);

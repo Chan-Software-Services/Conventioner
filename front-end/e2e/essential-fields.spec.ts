@@ -1,6 +1,6 @@
 import { test, expect, BACKEND_URL, APP_API, TEST_USER, ApplicationFormPage } from './fixtures';
 import { changeASettledPlan } from './helpers/settledPlanChanged';
-import { marketSetupPath } from './helpers/marketScreens';
+import { marketSetupPath, vendorPagePath } from './helpers/marketScreens';
 import { VendorPage } from './pages/VendorPage';
 import { MarketSetupPage } from './pages/MarketSetupPage';
 import { ensureTestOrg, loginViaApi } from './helpers/seeds';
@@ -90,7 +90,7 @@ async function signInApplicant(
   });
 
   const vendor = new VendorPage(page);
-  await page.goto(`/${marketSlug}`);
+  await page.goto(vendorPagePath(marketSlug));
   await vendor.requestCode(APPLICANT_EMAIL);
   await expect(vendor.codeInput).toBeVisible({ timeout: 5000 });
   await vendor.enterCode(KNOWN_CODE);

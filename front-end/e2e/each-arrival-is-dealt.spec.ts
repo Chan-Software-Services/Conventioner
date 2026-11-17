@@ -6,7 +6,7 @@ import {
   seedApplicantMarket,
 } from './helpers/seedApplicantMarket';
 import { seedApplicationWithStatus } from './helpers/seedPhaseMarket';
-import { marketScreenPath } from './helpers/marketScreens';
+import { marketScreenPath, vendorPagePath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { withUser } from './helpers/withUser';
 
@@ -56,7 +56,7 @@ test('a vendor who applies after the deal goes to the next reviewer in turn', as
   // A fourth vendor applies on the market's own page, an address of this run's own.
   const vendor = `v4-${Date.now()}@moss.test`;
   const login = new VendorPage(page);
-  await page.goto(`/${market.marketSlug}`);
+  await page.goto(vendorPagePath(market.marketSlug));
   await login.requestCode(vendor);
   await expect(login.codeInput).toBeVisible();
   createApplicantLoginChallenge(market.marketId, vendor, CODE);

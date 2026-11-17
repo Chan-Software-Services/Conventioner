@@ -1,6 +1,6 @@
 import { test, expect, TEST_USER, BACKEND_URL, VendorPage } from './fixtures';
 import type { Browser, Page } from '@playwright/test';
-import { marketSetupPath, oneByOnePath } from './helpers/marketScreens';
+import { marketSetupPath, oneByOnePath, vendorPagePath } from './helpers/marketScreens';
 import {
   createApplicantLoginChallenge,
   planSetupObject,
@@ -26,7 +26,7 @@ async function vendorSignedIn(browser: Browser, marketId: string, slug: string) 
   await hideDevToolsPanel(context);
   const page = await context.newPage();
   const vendorPage = new VendorPage(page);
-  await page.goto(`/${slug}`);
+  await page.goto(vendorPagePath(slug));
   await vendorPage.requestCode(VENDOR);
   await expect(vendorPage.codeInput).toBeVisible();
   createApplicantLoginChallenge(marketId, VENDOR, CODE);
@@ -85,7 +85,7 @@ test('an organizer stops taking applications, a vendor is refused, and taking th
   await expect(page.getByTestId('phase-rail-action-stop-applications')).toBeVisible();
   await page.getByTestId('phase-rail-menu-button').click();
 
-  await vendor.page.goto(`/${market.marketSlug}`);
+  await vendor.page.goto(vendorPagePath(market.marketSlug));
   await apply.applyButton.click();
   await expect(apply.form).toBeVisible({ timeout: 30000 });
   await apply.fullNameInput.fill('Lena Late');
