@@ -483,9 +483,10 @@ function layoutAt(
 
 /**
  * The day map market's public map (T422), with the table `table` picked from the address when
- * given, once its floorplan has drawn and `shows` is on the card.
+ * given, once its floorplan has drawn and `shows` is on screen: the hall, or a part of the card,
+ * which shows only once a table is picked (T465).
  */
-function publicMapAt(table?: string, shows = 'public-map-card') {
+function publicMapAt(table?: string, shows = 'public-map-hall') {
   return async (page: Page, seed: TheScreensSeed) => {
     await page.goto(`/${seed.dayMap.slug}/map${table ? `?table=${table}` : ''}`);
     await expect(page.getByTestId('layout-map-image')).toHaveAttribute('href', /^blob:/, {
@@ -1873,9 +1874,10 @@ export const SCREEN_GROUPS = {
       open: at(fixed('/no/such/page'), 'page-not-found'),
     },
     {
-      // A market's public map, signed out (T422): the day buttons, North Wing's map with its location
-      // switch, zoom and legend, the card waiting for a press, and the day's vendors under "Find a
-      // vendor"; at a desk in two columns, on a phone one.
+      // A market's public map, signed out (T422, T465): one sheet filling the window, North Wing's
+      // hall under the market's name and the day and hall selects, its section legend and zoom at
+      // the hall's foot, no card before a press, and the day's vendors under "Find a vendor"; at a
+      // desk the panel beside the map, on a phone under it.
       name: 'the public map',
       who: 'nobody',
       sizes: PUBLIC,
@@ -1883,7 +1885,7 @@ export const SCREEN_GROUPS = {
     },
     {
       // The public map with a shared table picked from the address, as a shared link opens it: the
-      // card lists both halves, and the list edges the two vendors at it.
+      // card at the panel's top lists both halves, and the list edges the two vendors at it.
       name: 'the public map, a shared table picked',
       who: 'nobody',
       sizes: PUBLIC,

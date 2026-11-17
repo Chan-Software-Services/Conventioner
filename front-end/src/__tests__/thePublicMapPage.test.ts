@@ -8,8 +8,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import type { PublicMapAnswer } from '@/components/daymap/dayMap';
+import { publicDayLocations } from '@/components/daymap/dayMap';
+import PublicMapBackdrop from '@/components/publicmap/PublicMapBackdrop.vue';
 import PublicMapTableCard from '@/components/publicmap/PublicMapTableCard.vue';
 import PublicMapVendors from '@/components/publicmap/PublicMapVendors.vue';
+import { tablePaints } from '@/components/publicmap/publicMapPaint';
 import { standsApart } from '@/utils/currentPlace';
 import {
   dayInWords,
@@ -17,6 +20,7 @@ import {
   mapListing,
   mapPlace,
   openingDate,
+  shortDay,
   tableCard,
   websiteLink,
   type PublicMapRead,
@@ -91,6 +95,18 @@ describe('a day in words', () => {
   it('is its weekday, day and month, short', () => {
     expect(dayInWords('2026-11-18')).toBe('Wed 18 Nov');
     expect(dayInWords('2026-11-01')).toBe('Sun 1 Nov');
+  });
+});
+
+describe('a day as the day select says it', () => {
+  it('is its month and day, read in UTC', () => {
+    expect(shortDay('2026-11-17')).toBe('Nov 17');
+    expect(shortDay('2026-01-01')).toBe('Jan 1');
+    expect(shortDay('2026-12-31')).toBe('Dec 31');
+  });
+
+  it('is the text as it is when it is no date', () => {
+    expect(shortDay('soon')).toBe('soon');
   });
 });
 
@@ -229,7 +245,6 @@ describe("a table's card", () => {
 // ── The page ─────────────────────────────────────────────────────────────────
 
 let wrapper: VueWrapper | null = null;
-const scrolled = vi.fn();
 
 beforeEach(() => {
   routing.route.query = {};
@@ -242,8 +257,6 @@ beforeEach(() => {
   vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:map-image');
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
   vi.setSystemTime(new Date(2099, 5, 5, 12));
-  scrolled.mockClear();
-  Element.prototype.scrollIntoView = scrolled;
   // The map's box, 1,200 by 900 px.
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
     if (this.getAttribute('data-testid') !== 'layout-map') return new DOMRect(0, 0, 0, 0);
@@ -268,6 +281,10 @@ async function open(read: PublicMapRead = found(), query: Record<string, string>
 }
 
 const card = () => wrapper!.get('[data-testid="public-map-card"]');
+const daySelect = () => wrapper!.get<HTMLSelectElement>('[data-testid="public-map-day-select"]');
+const locationSelect = () =>
+  wrapper!.get<HTMLSelectElement>('[data-testid="public-map-location-select"]');
+const PAINTS = tablePaints(publicDayLocations(ANSWER, () => ''));
 const pressTable = async (id: string, half?: 'left' | 'right') => {
   const target = half
     ? wrapper!.get(`[data-table-id="${id}"] [data-half="${half}"]`)
@@ -305,13 +322,16 @@ describe('a read that failed', () => {
 });
 
 describe('the page', () => {
-  it('holds the heading, the days, the map with its legend, the card and the list, in order', async () => {
+  it('holds the heading, the day and hall selects, the hall and the list, in order', async () => {
     const page = await open();
     const order = [
       'public-map-heading',
-      'public-map-days',
+      'public-map-subtitle',
+      'public-map-day-select',
+      'public-map-location-select',
+      'public-map-hall',
       'day-map',
-      'public-map-card',
+      'public-map-legend',
       'public-map-vendors',
     ].map((id) => page.get(`[data-testid="${id}"]`).element);
     for (let i = 1; i < order.length; i++) {
@@ -320,12 +340,43 @@ describe('the page', () => {
       ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     }
     expect(page.get('[data-testid="public-map-heading"]').element.tagName).toBe('H1');
-    expect(page.get('[data-testid="public-map-subtitle"]').text()).toBe('Map');
-    expect(page.findAll('[data-testid="day-map-legend-item"]').map((i) => i.text())).toEqual([
-      'Taken',
-      'Free',
-    ]);
+    expect(page.get('[data-testid="public-map-subtitle"]').text()).toBe('Vendor map');
+    expect(page.find('[data-testid="public-map-days"]').exists()).toBe(false);
     expect(document.title).toBe('Harbour Night Market map');
+  });
+
+  it('draws the hall filling its box, with no switch and no legend list of its own', async () => {
+    const page = await open();
+    const hall = page.get('[data-testid="public-map-hall"]');
+    expect(hall.get('[data-testid="day-map"]').classes()).toContain('day-map--fills');
+    expect(page.find('[data-testid="day-map-locations"]').exists()).toBe(false);
+    expect(page.find('[data-testid="day-map-legend"]').exists()).toBe(false);
+    expect(page.getComponent(PublicMapBackdrop).props('locations')).toEqual(
+      publicDayLocations(ANSWER, () => 'blob:map-image'),
+    );
+  });
+
+  it("names the open hall's sections in the legend, and a free table on a day it has one", async () => {
+    const page = await open();
+    const items = () => page.findAll('[data-testid="public-map-legend-item"]');
+    expect(page.get('[data-testid="public-map-legend"]').attributes('aria-label')).toBe('Legend');
+    // Today Gold row 4 is free.
+    expect(items().map((item) => [item.attributes('data-kind'), item.text()])).toEqual([
+      ['section', 'Gold row'],
+      ['free', 'Free table'],
+    ]);
+    // Lower Hall's one table is taken today: no "Free table".
+    await locationSelect().setValue('loc-lower');
+    await flushPromises();
+    expect(items().map((item) => item.text())).toEqual(['Silver aisle']);
+  });
+
+  it('marks <html> as filling the window while it is mounted', async () => {
+    const page = await open();
+    expect(document.documentElement.classList.contains('fills-the-window')).toBe(true);
+    page.unmount();
+    wrapper = null;
+    expect(document.documentElement.classList.contains('fills-the-window')).toBe(false);
   });
 
   it('gives the browser its own title back on leaving', async () => {
@@ -335,11 +386,35 @@ describe('the page', () => {
     expect(document.title).toBe('Conventioner');
   });
 
-  it('opens today, its day button pressed, each day in words', async () => {
+  it('opens today in the day select, each market day read short', async () => {
     const page = await open();
-    const days = page.findAll('[data-testid="public-map-day"]');
-    expect(days.map((d) => d.text())).toEqual(['Fri 5 Jun', 'Sat 6 Jun']);
-    expect(days.map((d) => d.attributes('aria-pressed'))).toEqual(['true', 'false']);
+    expect(daySelect().element.value).toBe(TODAY);
+    expect(daySelect().attributes('name')).toBe('public-map-day');
+    expect(daySelect().element.labels?.[0]?.textContent?.trim()).toBe('Market day');
+    expect(
+      daySelect()
+        .findAll('option')
+        .map((o) => [o.attributes('value'), o.text()]),
+    ).toEqual([
+      [TODAY, 'Jun 5'],
+      [TOMORROW, 'Jun 6'],
+    ]);
+    expect(page.find('[data-testid="public-map-day"]').exists()).toBe(false);
+  });
+
+  it('offers the halls in the location select, and no select for one hall', async () => {
+    const page = await open();
+    expect(locationSelect().element.value).toBe('loc-upper');
+    expect(locationSelect().attributes('name')).toBe('public-map-location');
+    expect(locationSelect().element.labels?.[0]?.textContent?.trim()).toBe('Location');
+    expect(
+      locationSelect()
+        .findAll('option')
+        .map((o) => o.text()),
+    ).toEqual(['Upper Hall', 'Lower Hall']);
+    page.unmount();
+    await open(found({ ...ANSWER, locations: ANSWER.locations.slice(0, 1) }));
+    expect(wrapper!.find('[data-testid="public-map-location-select"]').exists()).toBe(false);
   });
 
   it("reads the open location's image through the client, as the layout page does", async () => {
@@ -348,9 +423,10 @@ describe('the page', () => {
     expect(page.get('[data-testid="layout-map-image"]').attributes('href')).toBe('blob:map-image');
   });
 
-  it('says what to do before a table is picked', async () => {
-    await open();
-    expect(card().text()).toBe('Press a table, or find a vendor below.');
+  it('shows no card before a table is picked', async () => {
+    const page = await open();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(page.text()).not.toContain('Press a table');
   });
 
   it("reads another market's map when the address moves to it, the page kept", async () => {
@@ -397,7 +473,7 @@ describe('pressing a table', () => {
       card: tableCard(ANSWER, TODAY, 'g1'),
       day: 'Fri 5 Jun',
       hallName: 'Upper Hall',
-      paint: null,
+      paint: PAINTS.get('g1'),
     });
     expect(card().get('h2').text()).toBe('Table Gold row 1');
     expect(card().text()).toContain('Kiln & Co');
@@ -417,9 +493,8 @@ describe('pressing a table', () => {
 describe('the address', () => {
   it('opens the day, the location and the table it carries', async () => {
     const page = await open(found(), { date: TOMORROW, location: 'loc-lower', table: 's1' });
-    expect(page.get('[data-testid="public-map-day"][aria-pressed="true"]').text()).toBe(
-      'Sat 6 Jun',
-    );
+    expect(daySelect().element.value).toBe(TOMORROW);
+    expect(locationSelect().element.value).toBe('loc-lower');
     expect(page.get('[data-testid="layout-map"]').attributes('aria-label')).toBe(
       'Lower Hall layout, 1 table',
     );
@@ -429,19 +504,17 @@ describe('the address', () => {
 
   it('falls back from values it does not know, saying no error', async () => {
     const page = await open(found(), { date: 'later', location: 'nowhere', table: 'x9' });
-    expect(page.get('[data-testid="public-map-day"][aria-pressed="true"]').text()).toBe(
-      'Fri 5 Jun',
-    );
+    expect(daySelect().element.value).toBe(TODAY);
     expect(page.get('[data-testid="layout-map"]').attributes('aria-label')).toBe(
       'Upper Hall layout, 4 tables',
     );
-    expect(card().text()).toBe('Press a table, or find a vendor below.');
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
     expect(page.find('[role="alert"]').exists()).toBe(false);
   });
 
   it('changes the day with replace, keeping the location and the table', async () => {
-    const page = await open(found(), { location: 'loc-upper', table: 'g1' });
-    await page.findAll('[data-testid="public-map-day"]')[1].trigger('click');
+    await open(found(), { location: 'loc-upper', table: 'g1' });
+    await daySelect().setValue(TOMORROW);
     await flushPromises();
     expect(routing.replace).toHaveBeenLastCalledWith({
       query: { date: TOMORROW, location: 'loc-upper', table: 'g1' },
@@ -450,8 +523,8 @@ describe('the address', () => {
   });
 
   it('changes the location with replace, dropping a table that is not there', async () => {
-    const page = await open(found(), { table: 'g1' });
-    await page.get('[data-testid="day-map-locations"] button:nth-child(2)').trigger('click');
+    await open(found(), { table: 'g1' });
+    await locationSelect().setValue('loc-lower');
     await flushPromises();
     expect(routing.replace).toHaveBeenLastCalledWith({
       query: { date: TODAY, location: 'loc-lower' },
@@ -468,14 +541,14 @@ describe("the list of the day's vendors", () => {
       date: TODAY,
       pickedTableId: 'g2',
       pickedSeatKey: null,
-      paints: new Map(),
+      paints: PAINTS,
     });
-    await page.findAll('[data-testid="public-map-day"]')[1].trigger('click');
+    await daySelect().setValue(TOMORROW);
     await flushPromises();
     expect(page.getComponent(PublicMapVendors).props('date')).toBe(TOMORROW);
   });
 
-  it("opens a vendor's location, picks their table and brings the map into view", async () => {
+  it("opens a vendor's location and picks their table", async () => {
     const page = await open();
     const cog = mapListing(ANSWER, TODAY).find((vendor) => vendor.name === 'Cog Prints')!;
     page.getComponent(PublicMapVendors).vm.$emit('open', cog);
@@ -487,7 +560,6 @@ describe("the list of the day's vendors", () => {
       'Lower Hall layout, 1 table',
     );
     expect(card().text()).toContain('Cog Prints');
-    expect(scrolled).toHaveBeenCalled();
-    expect(scrolled.mock.contexts.at(-1)).toBe(page.get('[data-testid="public-map-map"]').element);
+    expect(page.getComponent(PublicMapTableCard).props('paint')).toEqual(PAINTS.get('s1'));
   });
 });

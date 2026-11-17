@@ -50,8 +50,7 @@ export async function fetchPublicMapImage(slug: string, locationId: string): Pro
   return data as Blob;
 }
 
-/** What the card says before a pick, a vendor with no public name (D27), and a failed read. */
-export const PICK_A_TABLE = 'Press a table, or find a vendor below.';
+/** What the card says of a vendor with no public name (D27), and of a failed read. */
 export const DETAILS_NOT_LISTED = 'A vendor is at this table. Their details are not listed.';
 export const NO_VENDORS_LISTED = 'No vendors are listed for this day yet.';
 export const MAP_COULD_NOT_LOAD = 'The map could not be loaded.';
@@ -62,15 +61,27 @@ export const freeHalfOn = (day: string) => `This half is free on ${day}.`;
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/**
- * A market date as a visitor's day button says it: "Wed 18 Nov". A market date is a calendar day,
- * so it is read in UTC and never moved by the visitor's timezone (`utils/utils.ts` says why).
- */
-export function dayInWords(date: string): string {
+/** A market date as a day of the calendar, or null for text that is no date. A market date is a
+ *  calendar day, so it is read in UTC and never moved by the visitor's timezone (`utils/utils.ts`
+ *  says why). */
+function calendarDay(date: string): Date | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  if (!match) return date;
-  const day = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return match
+    ? new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
+    : null;
+}
+
+/** A market date as the card says it: "Wed 18 Nov". */
+export function dayInWords(date: string): string {
+  const day = calendarDay(date);
+  if (!day) return date;
   return `${WEEKDAYS[day.getUTCDay()]} ${day.getUTCDate()} ${MONTHS[day.getUTCMonth()]}`;
+}
+
+/** A market date as the day select offers it: "Nov 18". */
+export function shortDay(date: string): string {
+  const day = calendarDay(date);
+  return day ? `${MONTHS[day.getUTCMonth()]} ${day.getUTCDate()}` : date;
 }
 
 /**

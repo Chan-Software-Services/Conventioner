@@ -7,8 +7,8 @@ import { seedMarketDayMap, type SeededMarketDayMap } from './helpers/seedMarketD
  * The day's vendors on a market's public map (T422 ticket 09, T465), `/<slug>/map`, opened signed
  * out on the seam's seeded market: today five vendors are named, at North Wing's Aisle A and South
  * Wing's Aisle B, Aisle A 3 shared by Loom House and Paper Moth Press. The list names each with
- * their table and hall; a press opens the vendor's hall, picks their table and brings the map into
- * view.
+ * their table and hall; a press opens the vendor's hall and picks their table, the map in view
+ * beside or over the list, since the page never scrolls.
  */
 
 test.describe.configure({ mode: 'serial' });
@@ -47,11 +47,9 @@ for (const size of PHONE_AND_DESK) {
       await expect(map.vendors).toHaveCount(1);
       expect(page.url()).toBe(before);
 
-      // Scrolled away from the map first, so bringing it into view is seen.
-      await map.vendors.first().scrollIntoViewIfNeeded();
       await press(map.vendors.first());
       await expect(map.map).toHaveAccessibleName(/^South Wing layout/);
-      await expect(map.location(seeded.south.name)).toHaveAttribute('aria-pressed', 'true');
+      await expect(map.locationSelect).toHaveValue(seeded.south.id);
       await expect(map.card).toContainText('Aisle B 3');
       await expect(map.card).toContainText('Salt & Sage');
       await expect(page).toHaveURL(new RegExp(`location=${seeded.south.id}&table=south-table-3`));

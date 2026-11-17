@@ -1,4 +1,4 @@
-import type { Page, Request } from '@playwright/test';
+import type { Locator, Page, Request } from '@playwright/test';
 import { test, expect, BACKEND_URL, TEST_USER } from './fixtures';
 import { PublicMapPage } from './pages/PublicMapPage';
 import { inTheWindow, PHONE_AND_DESK } from './helpers/phoneWindow';
@@ -11,13 +11,23 @@ import { seedMarketDayMap, type SeededMarketDayMap } from './helpers/seedMarketD
  * whose business name was an email address, withheld. Today seven vendors are seated, tomorrow
  * two.
  *
- * The list of the day's vendors is proved in `the-public-map-vendors.spec.ts`.
+ * The page is one sheet filling the window under the app bar (T465): it never scrolls, the day and
+ * the hall are two selects at the map side's top right, and the legend names the open hall's
+ * sections. The list of the day's vendors is proved in `the-public-map-vendors.spec.ts`.
  *
  * The allowlist on the page: whatever a visitor presses, the page's text and its links hold no
  * email address and none of the seeded personal markers, and every request goes to the map's two
  * public routes or the app's own files. A market whose map is off reads exactly as an address
  * naming nothing.
  */
+
+/** A market date as the day select offers it, "Nov 18", read in UTC as the page reads it. */
+const shortDay = (date: string) =>
+  new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
 
 /** An "@" followed by a domain: an email address, wherever it stands. */
 const AN_ADDRESS = /@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+/;
@@ -70,10 +80,10 @@ for (const size of PHONE_AND_DESK) {
       // Every table and half of every location, on each day, pressed and read.
       const read: string[] = [];
       for (const date of [seeded.today, seeded.tomorrow]) {
-        await press(map.day(date));
-        await expect(map.day(date)).toHaveAttribute('aria-pressed', 'true');
+        await map.daySelect.selectOption(date);
+        await expect(map.daySelect).toHaveValue(date);
         for (const hall of [seeded.north.name, seeded.south.name]) {
-          await press(map.location(hall));
+          await map.locationSelect.selectOption({ label: hall });
           await expect(map.map).toHaveAccessibleName(new RegExp(`^${hall} layout`));
           const count = await map.targets.count();
           for (let i = 0; i < count; i++) {
@@ -108,8 +118,8 @@ for (const size of PHONE_AND_DESK) {
     }) => {
       const map = new PublicMapPage(page);
       await map.goto(seeded.slug);
-      await expect(map.card).toHaveText('Press a table, or find a vendor below.');
-      await expect(map.legend).toHaveText(['Taken', 'Free']);
+      // No card shows before a pick.
+      await expect(map.card).toHaveCount(0);
 
       await press(map.table('Aisle A 1'));
       await expect(page).toHaveURL(
@@ -172,25 +182,38 @@ for (const size of PHONE_AND_DESK) {
     }) => {
       const map = new PublicMapPage(page);
       await map.goto(seeded.slug);
-      await expect(map.day(seeded.today)).toHaveAttribute('aria-pressed', 'true');
+      await expect(map.daySelect).toHaveValue(seeded.today);
+      await expect(map.daySelect).toHaveAccessibleName('Market day');
+      await expect(map.daySelect.locator('option')).toHaveText([
+        shortDay(seeded.today),
+        shortDay(seeded.tomorrow),
+      ]);
+      await expect(map.locationSelect).toHaveAccessibleName('Location');
+      await expect(map.locationSelect.locator('option')).toHaveText([
+        seeded.north.name,
+        seeded.south.name,
+      ]);
+      await expect(map.page.getByTestId('day-map-locations')).toHaveCount(0);
+      await expect(map.dayButtons).toHaveCount(0);
       await expect(map.table('Aisle A 1')).toHaveAccessibleName(/Ember Ceramics$/);
 
-      await press(map.day(seeded.tomorrow));
+      await map.daySelect.selectOption(seeded.tomorrow);
       await expect(page).toHaveURL(new RegExp(`date=${seeded.tomorrow}`));
       await expect(map.table('Aisle A 1')).toHaveAccessibleName(/Loom House$/);
       await expect(map.table('Aisle A 2')).toHaveAccessibleName(/Ember Ceramics$/);
       await expect(map.table('Aisle A 3')).toHaveAccessibleName(/no vendor$/);
       await expect(map.vendors).toHaveCount(2);
 
-      await press(map.location(seeded.south.name));
+      await map.locationSelect.selectOption({ label: seeded.south.name });
       await expect(page).toHaveURL(new RegExp(`location=${seeded.south.id}`));
+      await expect(map.locationSelect).toHaveValue(seeded.south.id);
       await expect(map.map).toHaveAccessibleName('South Wing layout, 3 tables');
       await expect(map.targets).toHaveCount(3);
       // No one sits in South Wing tomorrow.
       for (const n of [1, 2, 3])
         await expect(map.table(`Aisle B ${n}`)).toHaveAccessibleName(/no vendor$/);
       // A vendor with no public name, today: taken, and nothing of them shown.
-      await press(map.day(seeded.today));
+      await map.daySelect.selectOption(seeded.today);
       await press(map.table('Aisle B 1'));
       await expect(map.card).toContainText('Aisle B 1');
       await expect(map.cardWhole).toHaveText(
@@ -205,6 +228,33 @@ for (const size of PHONE_AND_DESK) {
       await expect(map.card.getByRole('link')).toHaveCount(0);
     });
 
+    test("the legend names the open hall's sections, and a free table only on a day it has one", async ({
+      page,
+    }) => {
+      const map = new PublicMapPage(page);
+      await map.goto(seeded.slug);
+      await expect(map.sectionLegend).toHaveAccessibleName('Legend');
+      // Today North Wing's Aisle A 4 is free.
+      await expect(map.sectionLegendItems).toHaveText(['Aisle A', 'Free table']);
+      expect(
+        await map.sectionLegendItems.evaluateAll((items) =>
+          items.map((item) => item.getAttribute('data-kind')),
+        ),
+      ).toEqual(['section', 'free']);
+      // The stage is drawn and labelled on the map, and is no item of the legend.
+      await expect(map.map.getByTestId('layout-map-zone-label')).toHaveText('Stage');
+      await expect(map.sectionLegend).not.toContainText('Stage');
+      // No "Taken" and no "Free": the day map draws no legend of its own here.
+      await expect(map.legend).toHaveCount(0);
+
+      // Every table of South Wing is taken today: no "Free table".
+      await map.locationSelect.selectOption({ label: seeded.south.name });
+      await expect(map.sectionLegendItems).toHaveText(['Aisle B']);
+      // Tomorrow nobody sits there.
+      await map.daySelect.selectOption(seeded.tomorrow);
+      await expect(map.sectionLegendItems).toHaveText(['Aisle B', 'Free table']);
+    });
+
     test('a link opens its day, location and table, and an unknown value falls back', async ({
       page,
     }) => {
@@ -214,16 +264,16 @@ for (const size of PHONE_AND_DESK) {
         location: seeded.north.id,
         table: 'north-table-1',
       });
-      await expect(map.day(seeded.tomorrow)).toHaveAttribute('aria-pressed', 'true');
+      await expect(map.daySelect).toHaveValue(seeded.tomorrow);
       await expect(map.card).toContainText('Aisle A 1');
       await expect(map.card).toContainText('Loom House');
       await page.reload();
       await expect(map.card).toContainText('Loom House');
 
       await map.goto(seeded.slug, { date: '2001-01-01', location: 'no-such-hall', table: 'x' });
-      await expect(map.day(seeded.today)).toHaveAttribute('aria-pressed', 'true');
+      await expect(map.daySelect).toHaveValue(seeded.today);
       await expect(map.map).toHaveAccessibleName(/^North Wing layout/);
-      await expect(map.card).toHaveText('Press a table, or find a vendor below.');
+      await expect(map.card).toHaveCount(0);
       await expect(page.getByRole('alert')).toHaveCount(0);
     });
 
@@ -255,10 +305,12 @@ for (const size of PHONE_AND_DESK) {
         const map = new PublicMapPage(page);
         await map.goto(seeded.slug);
         await expect(map.mapImage).toHaveAttribute('href', /^blob:/);
+        // The sheet stands 12px in, its edge 1px: the map side over the panel.
         const box = (await map.dayMap.boundingBox())!;
+        expect(box.x).toBeCloseTo(13, 0);
+        await press(map.table('Aisle A 1'));
         const card = (await map.card.boundingBox())!;
         expect(card.y).toBeGreaterThan(box.y + box.height);
-        expect(box.x).toBeCloseTo(16, 0);
 
         // Two fingers spread to 2.5 times apart about Aisle A 2.
         const whole = (await map.view()).width;
@@ -282,22 +334,111 @@ for (const size of PHONE_AND_DESK) {
         await expect(map.card).toContainText('Kiln & Co');
       });
     } else {
-      test('at a desk the map takes the left and the card and the list a 22rem column', async ({
+      test('at a desk the map takes the left and the card and the list a 21rem panel', async ({
         page,
       }) => {
         const map = new PublicMapPage(page);
         await map.goto(seeded.slug);
+        await press(map.table('Aisle A 1'));
+        const root = (await map.root.boundingBox())!;
         const left = (await map.dayMap.boundingBox())!;
         const card = (await map.card.boundingBox())!;
-        const list = (await page.getByTestId('public-map-vendors').boundingBox())!;
+        const list = (await map.vendors.first().boundingBox())!;
+        // The panel is 21rem from the map side's end to the sheet's inner edge (the column's 16px
+        // padding and the sheet's 1px edge in from the page's).
+        expect(root.x + root.width - 16 - 1 - (left.x + left.width)).toBeCloseTo(336, 0);
         expect(card.x).toBeGreaterThan(left.x + left.width);
-        expect(card.width).toBeCloseTo(352, 0);
         expect(list.x).toBeCloseTo(card.x, 0);
         expect(list.y).toBeGreaterThan(card.y + card.height);
-        expect(card.y).toBeCloseTo(left.y, 0);
+        expect(card.y).toBeCloseTo(left.y + 16, 0);
         await map.zoomIn.click();
         await expect.poll(async () => (await map.view()).width).toBeLessThan(30_000);
       });
     }
+  });
+}
+
+/** The page's boxes, read in one go: the column, the map side, the hall, the selects, the drawn
+ *  map, the legend and the zoom. */
+async function sheetBoxes(map: PublicMapPage) {
+  const box = async (locator: Locator) => (await locator.boundingBox())!;
+  return {
+    root: await box(map.root),
+    side: await box(map.dayMap),
+    hall: await box(map.hall),
+    day: await box(map.daySelect),
+    location: await box(map.locationSelect),
+    drawn: await box(map.map),
+    legend: await box(map.sectionLegend),
+    zoom: await box(map.page.getByTestId('day-map-zoom')),
+  };
+}
+
+const WINDOWS = [
+  ...PHONE_AND_DESK,
+  { name: 'at a wide desk', phone: false, use: { viewport: { width: 1990, height: 1309 } } },
+] as const;
+
+for (const size of WINDOWS) {
+  test.describe(`the public map's sheet ${size.name}`, () => {
+    test.use(size.use);
+
+    test('fills the window under the app bar, and the page never scrolls', async ({
+      page,
+      expectAccessible,
+    }) => {
+      const map = new PublicMapPage(page);
+      await map.goto(seeded.slug);
+      await expect(map.mapImage).toHaveAttribute('href', /^blob:/);
+      await expect(page.locator('html')).toHaveClass(/(^|\s)fills-the-window(\s|$)/);
+      const { height } = size.use.viewport;
+
+      const measured = await page.evaluate(() => ({
+        scroll: document.documentElement.scrollHeight,
+        client: document.documentElement.clientHeight,
+      }));
+      expect(measured.scroll, 'the document is no taller than the window').toBe(measured.client);
+      const boxes = await sheetBoxes(map);
+      expect(boxes.root.y + boxes.root.height).toBeCloseTo(height, 0);
+
+      // The hall is inside the map side, under the selects, which cover none of it.
+      expect(boxes.hall.x).toBeGreaterThanOrEqual(boxes.side.x);
+      expect(boxes.hall.y + boxes.hall.height).toBeLessThanOrEqual(
+        boxes.side.y + boxes.side.height,
+      );
+      for (const select of [boxes.day, boxes.location]) {
+        expect(select.y + select.height, 'a select stands clear of the hall').toBeLessThanOrEqual(
+          boxes.hall.y,
+        );
+        // 12px in from the map side's top and end.
+        expect(boxes.side.x + boxes.side.width - (select.x + select.width)).toBeGreaterThanOrEqual(
+          12 - 0.5,
+        );
+      }
+      expect(boxes.day.y - boxes.side.y).toBeCloseTo(12, 0);
+
+      if (size.phone) {
+        // The legend and the zoom stand in a row under the drawn hall, covering none of it.
+        for (const pill of [boxes.legend, boxes.zoom])
+          expect(pill.y).toBeGreaterThanOrEqual(boxes.drawn.y + boxes.drawn.height);
+        expect(boxes.legend.x + boxes.legend.width).toBeLessThanOrEqual(boxes.zoom.x);
+      } else {
+        // The legend over the hall's bottom-left corner and the zoom over its bottom-right.
+        expect(boxes.legend.x - boxes.hall.x).toBeCloseTo(12, 0);
+        expect(
+          boxes.hall.y + boxes.hall.height - (boxes.legend.y + boxes.legend.height),
+        ).toBeCloseTo(12, 0);
+        expect(boxes.hall.x + boxes.hall.width - (boxes.zoom.x + boxes.zoom.width)).toBeCloseTo(
+          12,
+          0,
+        );
+      }
+
+      // Only the panel scrolls: a wheel over the map side moves no page.
+      await page.mouse.move(boxes.side.x + 40, boxes.side.y + 40);
+      await page.mouse.wheel(0, 400);
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
+      await expectAccessible(`the public map's sheet ${size.name}`);
+    });
   });
 }

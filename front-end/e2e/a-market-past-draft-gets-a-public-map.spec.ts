@@ -94,9 +94,9 @@ test('a market past Draft with no layout gets a public map a visitor reads a ven
   // The visitor opens the map on today, presses Kiln & Co's table and reads it.
   await map.goto(seed.slug);
   await expect(map.heading).toHaveText(seed.marketName);
-  await expect(map.day(seed.today)).toHaveAttribute('aria-pressed', 'true');
-  // North Wing alone is laid out, so the map has no location switch.
-  await expect(map.page.getByTestId('day-map-locations')).toHaveCount(0);
+  await expect(map.daySelect).toHaveValue(seed.today);
+  // North Wing alone is laid out, so the map has no location select.
+  await expect(map.locationSelect).toHaveCount(0);
   await expect(map.targets).toHaveCount(5);
   await map.table('Aisle A 2').tap();
   await expect(map.card).toContainText('Aisle A 2');

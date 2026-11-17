@@ -2,10 +2,12 @@
 /**
  * The day's vendors on the public map (T422, T465): every vendor with a public name seated on the
  * day, at every location, by name, each with their table and location; the find field narrows them
- * by name, and pressing one asks the page to open their table.
+ * by name, and pressing one asks the page to open their table. The page never scrolls, so the part
+ * scrolls its own list in the box the page gives it (T465).
  */
 import { computed } from 'vue';
 import ListFrame from '@/components/ListFrame.vue';
+import ScrollBox from '@/components/ScrollBox.vue';
 import type { PublicMapAnswer } from '@/components/daymap/dayMap';
 import { NO_VENDORS_LISTED, mapListing, type ListedVendor } from '@/utils/publicMap';
 import type { TablePaint } from './publicMapPaint';
@@ -30,36 +32,46 @@ const finds = (vendor: ListedVendor, words: string) =>
 </script>
 
 <template>
-  <ListFrame
-    :items="listed"
-    :finds="finds"
-    :findFrom="0"
-    findKey="find"
-    findLabel="Find a vendor"
-    :filterKey="date"
-    :itemKey="(vendor) => vendor.key"
-    :noun="{ one: 'vendor', many: 'vendors' }"
-    testid="public-map-vendors"
-  >
-    <template #row="{ item }">
-      <button
-        type="button"
-        class="public-map-vendors__vendor"
-        :aria-current="item.tableId === pickedTableId ? 'true' : undefined"
-        data-testid="public-map-vendor"
-        @click="emit('open', item)"
-      >
-        <span class="public-map-vendors__name">{{ item.name }}</span>
-        <span class="public-map-vendors__seat">Table {{ item.code }}, {{ item.locationName }}</span>
-      </button>
-    </template>
-    <template #empty>
-      <p>{{ NO_VENDORS_LISTED }}</p>
-    </template>
-  </ListFrame>
+  <ScrollBox fieldsLeaveTheStop testid="public-map-vendors-list">
+    <ListFrame
+      class="public-map-vendors__frame"
+      :items="listed"
+      :finds="finds"
+      :findFrom="0"
+      findKey="find"
+      findLabel="Find a vendor"
+      :filterKey="date"
+      :itemKey="(vendor) => vendor.key"
+      :noun="{ one: 'vendor', many: 'vendors' }"
+      testid="public-map-vendors"
+    >
+      <template #row="{ item }">
+        <button
+          type="button"
+          class="public-map-vendors__vendor"
+          :aria-current="item.tableId === pickedTableId ? 'true' : undefined"
+          data-testid="public-map-vendor"
+          @click="emit('open', item)"
+        >
+          <span class="public-map-vendors__name">{{ item.name }}</span>
+          <span class="public-map-vendors__seat"
+            >Table {{ item.code }}, {{ item.locationName }}</span
+          >
+        </button>
+      </template>
+      <template #empty>
+        <p>{{ NO_VENDORS_LISTED }}</p>
+      </template>
+    </ListFrame>
+  </ScrollBox>
 </template>
 
 <style scoped>
+/* The panel's inset, inside the scroller, so a row's focus halo is never cut at its edge. */
+.public-map-vendors__frame {
+  padding: var(--space-4);
+}
+
 /* A vendor of the list: their name over their table, the whole row the button. */
 .public-map-vendors__vendor {
   display: flex;

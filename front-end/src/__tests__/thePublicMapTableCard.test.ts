@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import type { PublicMapAnswer } from '@/components/daymap/dayMap';
 import PublicMapTableCard from '@/components/publicmap/PublicMapTableCard.vue';
+import * as publicMap from '@/utils/publicMap';
 import { dayInWords, tableCard } from '@/utils/publicMap';
 import { ANSWER, TODAY, TOMORROW } from './support/publicMapAnswer';
 
@@ -24,6 +25,10 @@ function cardOf(tableId: string, date: string = TODAY, map: PublicMapAnswer = AN
 }
 
 describe("a table's card", () => {
+  it('has no hint to stand for it: no card shows before a pick', () => {
+    expect('PICK_A_TABLE' in publicMap).toBe(false);
+  });
+
   it('names its vendor and their links', () => {
     const card = cardOf('g1');
     expect(card.get('h2').text()).toBe('Table Gold row 1');
