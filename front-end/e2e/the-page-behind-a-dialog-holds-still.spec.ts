@@ -134,15 +134,18 @@ test.describe('The page behind a dialog holds still', () => {
           }),
         );
         expect(inView, 'a Manage in view').toBeGreaterThanOrEqual(0);
-        // The card's box, so a page that moved sideways as its scroll was held shows: the gutter
-        // `base.css` keeps for the bar is there whether or not the page may scroll.
-        const card = manageButtons.nth(inView);
-        const cardAt = await card.boundingBox();
-        await card.click();
+        // A card's Manage button's box, so a page that moved sideways as its scroll was held
+        // shows: the gutter `base.css` keeps for the bar is there whether or not the page may
+        // scroll.
+        const cardManage = manageButtons.nth(inView);
+        const cardManageAt = await cardManage.boundingBox();
+        await cardManage.click();
         const manage = new ManageMarketPage(page);
         await manage.waitForOverlay();
         expect((await pageScroll(page)).y, 'opening scrolled nothing').toBe(start);
-        expect(await card.boundingBox(), 'the card behind, where it was').toEqual(cardAt);
+        expect(await cardManage.boundingBox(), 'the Manage behind, where it was').toEqual(
+          cardManageAt,
+        );
 
         await expectTheScrimMovesNothing(page, 'manage-market', start);
         await expectTheBodyScrolls(page.getByTestId('manage-market-body'), page, start);
@@ -160,7 +163,7 @@ test.describe('The page behind a dialog holds still', () => {
         await page.keyboard.press('Escape');
         await expect(page.getByTestId('manage-market-window')).toHaveCount(0);
         expect((await pageScroll(page)).y, 'the page where it was').toBe(start);
-        expect(await card.boundingBox(), 'the card, where it was').toEqual(cardAt);
+        expect(await cardManage.boundingBox(), 'the Manage, where it was').toEqual(cardManageAt);
         await page.mouse.wheel(0, 400);
         await expect
           .poll(async () => (await pageScroll(page)).y, 'the page scrolls again')

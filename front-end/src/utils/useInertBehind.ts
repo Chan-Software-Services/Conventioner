@@ -24,9 +24,10 @@ const suppressedBy = new Map<HTMLElement, number>();
  *
  * `inert` takes no scroll: with a dialog open, a wheel or a thumb's drag over its scrim, a fixed box
  * with nothing of its own to scroll, moved the page behind it (T473). While any modal is open
- * `<html>` carries this class, and `base.css` hides the page's overflow, which keeps its position and,
- * with the gutter it always keeps, its width. A count, as the marks are, so a dialog opened from a
- * dialog closing first leaves the page held for the one beneath.
+ * `<html>` carries this class, and `base.css` hides the page's overflow, which keeps its position
+ * and, with the gutter `html` keeps for the bar (`scrollbar-gutter: stable`), its width. A count, as
+ * the marks are, so a dialog opened from a dialog closing first leaves the page held for the one
+ * beneath.
  */
 const HOLDS_STILL = 'holds-still';
 let scrollHolders = 0;
