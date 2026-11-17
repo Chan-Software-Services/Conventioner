@@ -334,9 +334,10 @@ export function roundTurn(degrees: number): number {
   return turn === 360 ? 0 : turn;
 }
 
-/** The one step, in degrees from the page's axis, that a turn and a row's line hold to (the QC walk
- *  of 2026-11-16, item 16; D11: absolute, not from the last line): a selection's turn knob and R
- *  with Shift, a zone drawn's knob, and a point-to-point row's line from its last point. */
+/** The one step, 15°, that a turn and a row's line hold to (the QC walk of 2026-11-16, item 16): a
+ *  selection's turn knob and R with Shift turn by it, and a zone drawn's knob and a point-to-point
+ *  row's line from its last point hold to it from the page's axis (D11: absolute, not from the
+ *  last line). */
 export const ANGLE_STEP = 15;
 
 /** An angle held to the nearest whole `step`, as a corner's turn knob does in 15° steps. */

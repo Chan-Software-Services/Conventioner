@@ -253,7 +253,8 @@ export interface RowTool {
   crosshair: Readonly<ShallowRef<PointMm | null>>;
   /** Whether a path is being drawn: a point is laid, or a stroke is in hand. */
   pending: ComputedRef<boolean>;
-  /** Whether placing would act: a path is pending and is more than one point laid. */
+  /** Whether placing would act: a stroke is in hand, the path is drawn or closed, or two points or
+   *  more are laid. */
   placeable: ComputedRef<boolean>;
   /** Whether a stroke is in hand: a line being drawn by a drag, not yet let go. */
   stroking: ComputedRef<boolean>;
