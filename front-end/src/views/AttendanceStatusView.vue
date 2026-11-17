@@ -570,7 +570,7 @@ const drawer = useVendorDrawer();
     <PinnedTools v-if="hasRoster" testid="attendance-tools">
       <template #tools>
         <ToolRow testid="attendance-toolbar">
-          <label class="door-picker">
+          <label>
             <span class="visually-hidden">Market date</span>
             <select
               class="field field--select field--compact door-select"
@@ -584,7 +584,7 @@ const drawer = useVendorDrawer();
               </option>
             </select>
           </label>
-          <label v-if="view === 'map' && laidOut.length > 1" class="door-picker">
+          <label v-if="view === 'map' && laidOut.length > 1">
             <span class="visually-hidden">Location</span>
             <select
               class="field field--select field--compact door-select"
