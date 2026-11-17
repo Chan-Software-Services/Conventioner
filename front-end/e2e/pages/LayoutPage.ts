@@ -653,8 +653,8 @@ export class LayoutPage {
    * and zoom.
    */
   async onScreen(mm: [number, number]): Promise<{ x: number; y: number; scale: number }> {
-    // Two frames, so a view fitted again as a tool's options strip took or gave room (a resize the
-    // editor hears a frame after it) is the one read.
+    // Two frames, so a view fitted again as the window was resized (a resize the editor hears a
+    // frame after it) is the one read.
     await this.page.evaluate(
       () =>
         new Promise<void>((done) =>

@@ -584,7 +584,8 @@ test.describe('A table moves by keyboard', () => {
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('Enter');
     await expect(layout.toolAdd).toHaveAttribute('aria-pressed', 'true');
-    // Past the options strip's two fields, the map itself is the stop while it has no table.
+    // The tool card stands in the panel, so the map is the first stop after the toolbar, and
+    // the map itself is the stop while it has no table.
     await layout.tabToTheMap();
     await expect(layout.map).toBeFocused();
     await expect(layout.hint).toHaveText(

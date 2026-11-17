@@ -353,7 +353,7 @@ function layoutAt(
         await expect(layout.hint).toContainText('Picked up');
       }
       if (stage === 'row') {
-        // Row of tables on, its options strip open, and a path of three points laid by the
+        // Row of tables on, its tool card in the panel, and a path of three points laid by the
         // crosshair round a corner: the row it would place drawn dashed, with its count.
         await layout.toolRow.click();
         await layout.tabToTheMap();
@@ -1548,7 +1548,7 @@ export const SCREEN_GROUPS = {
       sizes: [PHONE],
       open: layoutAt('read'),
     },
-    // The editor (T257), at a desk alone: a table selected, and Add table's options strip.
+    // The editor (T257), at a desk alone: a table selected, and Add table's tool card.
     {
       name: 'the layout, a table selected',
       who: 'organizer',
@@ -1594,7 +1594,7 @@ export const SCREEN_GROUPS = {
       deskOnly: true,
       open: layoutAt('keys'),
     },
-    // A row along a drawn path (T257): the options strip, the pending path and the crosshair.
+    // A row along a drawn path (T257): the tool card, the pending path and the crosshair.
     {
       name: 'the layout, a row being drawn',
       who: 'organizer',
