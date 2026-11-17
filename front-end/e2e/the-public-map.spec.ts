@@ -87,8 +87,9 @@ for (const size of PHONE_AND_DESK) {
       for (const marker of seeded.personalMarkers) expect(everything).not.toContain(marker);
 
       const origin = new URL(page.url()).origin;
+      // The market page's own read (T469), which chooses the map, is public too.
       const publicRoute = new RegExp(
-        `^/api/public/markets/${seeded.slug}/map(/image/(${seeded.north.id}|${seeded.south.id}))?$`,
+        `^/api/public/markets/${seeded.slug}/(vendor-page|map(/image/(${seeded.north.id}|${seeded.south.id}))?)$`,
       );
       const strays = requests.filter((address) => {
         const url = new URL(address);
@@ -256,16 +257,19 @@ for (const size of PHONE_AND_DESK) {
       await expect(page.getByRole('alert')).toHaveCount(0);
     });
 
-    test('a market with its map off reads exactly as an address naming nothing', async ({
+    // At the market's own address a map that is off is a notice of the market page (T469); an
+    // address naming nothing, or a draft's, is still "Page not found".
+    test('a market with its map off says so, and an address naming nothing reads "Page not found"', async ({
       page,
     }) => {
       const map = new PublicMapPage(page);
       await map.goto(closed.slug);
-      await expect(map.notFound).toBeVisible();
+      await expect(page.getByTestId('market-page-notice-line')).toHaveText(
+        "The map isn't published yet.",
+      );
+      await expect(map.heading).toHaveCount(0);
+      await map.goto('no-such-market-zz');
       await expect(page.getByTestId('page-not-found')).toContainText('Page not found');
-      const gated = await map.renderedText(closed.slug);
-      const nothing = await map.renderedText('no-such-market-zz');
-      expect(gated).toBe(nothing);
     });
 
     test('an organizer reads it with the logo alone in the bar', async ({ authenticatedPage }) => {

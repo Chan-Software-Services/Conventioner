@@ -21,6 +21,8 @@ export class PublicMapPage {
     await this.heading
       .or(this.page.getByTestId('page-not-found'))
       .or(this.page.getByTestId('public-map-read-failed'))
+      // A map that is not open is a notice on the market page (T469).
+      .or(this.page.getByTestId('market-page-notice'))
       .waitFor();
   }
 
