@@ -383,137 +383,62 @@ function openVendor(vendor: ListedVendor) {
     </template>
 
     <template v-else-if="map">
-      <svg class="public-map__doodles" aria-hidden="true" focusable="false">
+      <svg
+        class="public-map__doodles"
+        viewBox="0 0 1440 900"
+        preserveAspectRatio="xMidYMid slice"
+        aria-hidden="true"
+        focusable="false"
+      >
         <defs>
-          <pattern id="public-map-marks" width="1100" height="700" patternUnits="userSpaceOnUse">
-            <path
-              class="pm-bg__blob pm-bg__blob--honey"
-              d="M180.2 44.7 Q186.0 60.0 179.7 74.6 Q173.3 89.3 157.1 94.8 Q140.8 100.3 125.0 90.0 Q109.2 79.7 112.6 61.6 Q115.9 43.6 128.8 33.6 Q141.7 23.5 158.0 26.5 Q174.4 29.4 180.2 44.7 Z"
-            />
-            <path
-              class="pm-bg__blob pm-bg__blob--mint"
-              d="M958.7 21.7 Q967.2 33.0 958.8 44.5 Q950.5 56.0 937.6 61.0 Q924.6 65.9 913.6 56.6 Q902.6 47.3 902.8 33.1 Q902.9 19.0 913.2 7.2 Q923.5 -4.7 936.9 2.9 Q950.2 10.4 958.7 21.7 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--honey"
-              d="M480.8 103.4 L484.7 109.3 L491.9 109.0 L487.5 114.7 L489.9 121.4 L483.2 118.9 L477.6 123.3 L477.9 116.2 L471.9 112.2 L478.8 110.3 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--teal"
-              d="M669.6 42.5 L674.3 49.8 L682.9 49.5 L677.6 56.2 L680.5 64.3 L672.4 61.3 L665.6 66.6 L666.0 58.0 L658.8 53.1 L667.2 50.8 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--teal"
-              d="M804 106 Q804 115 813 115 Q804 115 804 125 Q804 115 795 115 Q804 115 804 106 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--honey"
-              d="M980 113 Q980 119 986 119 Q980 119 980 125 Q980 119 974 119 Q980 119 980 113 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--teal"
-              d="M588 76 Q588 83 595 83 Q588 83 588 90 Q588 83 581 83 Q588 83 588 76 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--honey"
-              transform="translate(1041 99) rotate(-12)"
-              d="M0 0 q5.6 -5.4 11.3 0 q5.6 5.4 11.3 0 q5.6 -5.4 11.3 0 q5.6 5.4 11.3 0 q5.6 -5.4 11.3 0 q5.6 5.4 11.3 0"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--teal"
-              transform="translate(778 30) rotate(14)"
-              d="M0 0 q7.8 -7.0 15.6 0 q7.8 7.0 15.6 0 q7.8 -7.0 15.6 0 q7.8 7.0 15.6 0"
-            />
-            <circle class="pm-bg__dot pm-bg__dot--honey" cx="525" cy="24" r="3" />
-            <circle class="pm-bg__dot pm-bg__dot--teal" cx="891" cy="104" r="3" />
-            <path
-              class="pm-bg__blob pm-bg__blob--mint"
-              d="M900.9 510.0 Q905.9 519.8 901.2 530.1 Q896.6 540.5 885.8 541.4 Q875.0 542.3 867.3 536.0 Q859.6 529.7 859.0 519.5 Q858.4 509.4 866.5 502.5 Q874.6 495.6 885.2 497.9 Q895.8 500.1 900.9 510.0 Z"
-            />
-            <path
-              class="pm-bg__blob pm-bg__blob--honey"
-              d="M388.8 457.6 Q395.5 471.1 388.6 484.4 Q381.6 497.6 367.9 498.5 Q354.1 499.3 341.8 492.7 Q329.6 486.0 332.1 472.4 Q334.7 458.7 343.5 446.8 Q352.2 434.9 367.2 439.5 Q382.1 444.0 388.8 457.6 Z"
-            />
-            <path
-              class="pm-bg__blob pm-bg__blob--mint"
-              d="M802.8 531.0 Q810.4 542.1 801.9 552.2 Q793.4 562.2 782.2 566.2 Q771.0 570.2 760.6 562.8 Q750.1 555.3 750.5 542.3 Q750.9 529.4 760.7 520.4 Q770.4 511.5 782.8 515.7 Q795.2 519.8 802.8 531.0 Z"
-            />
-            <path
-              class="pm-bg__blob pm-bg__blob--honey"
-              d="M254.5 397.8 Q259.2 405.5 256.0 415.0 Q252.8 424.6 242.5 426.8 Q232.2 429.0 224.8 422.1 Q217.4 415.2 218.0 405.8 Q218.6 396.3 225.8 391.0 Q233.1 385.6 241.4 387.9 Q249.8 390.2 254.5 397.8 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--honey"
-              d="M507.2 400.7 L512.3 407.7 L520.8 407.0 L515.7 414.0 L519.0 421.9 L510.8 419.2 L504.3 424.8 L504.3 416.2 L497.0 411.7 L505.2 409.0 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--teal"
-              d="M983.1 536.8 L986.2 544.7 L994.6 546.2 L988.1 551.6 L989.3 560.0 L982.1 555.5 L974.5 559.3 L976.6 551.0 L970.6 544.9 L979.1 544.4 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--honey"
-              d="M50.0 164.4 L53.4 172.4 L62.0 173.7 L55.4 179.4 L56.8 188.0 L49.3 183.5 L41.6 187.5 L43.6 179.0 L37.4 172.9 L46.1 172.2 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--teal"
-              d="M1029.6 352.8 L1033.4 357.9 L1039.7 357.3 L1036.0 362.5 L1038.5 368.3 L1032.5 366.4 L1027.7 370.6 L1027.7 364.3 L1022.2 361.1 L1028.2 359.0 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--honey"
-              d="M199.2 294.4 L203.1 301.2 L210.9 301.5 L205.6 307.2 L207.7 314.8 L200.6 311.5 L194.1 315.9 L195.0 308.1 L188.9 303.3 L196.5 301.7 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--teal"
-              d="M594 352 Q594 360 601 360 Q594 360 594 367 Q594 360 587 360 Q594 360 594 352 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--honey"
-              d="M918 654 Q918 662 926 662 Q918 662 918 670 Q918 662 910 662 Q918 662 918 654 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--teal"
-              d="M837 419 Q837 426 844 426 Q837 426 837 434 Q837 426 829 426 Q837 426 837 419 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--honey"
-              d="M687 271 Q687 278 694 278 Q687 278 687 285 Q687 278 680 278 Q687 278 687 271 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--teal"
-              d="M48 528 Q48 537 57 537 Q48 537 48 545 Q48 537 40 537 Q48 537 48 528 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--honey"
-              d="M322 243 Q322 250 329 250 Q322 250 322 257 Q322 250 315 250 Q322 250 322 243 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--teal"
-              d="M505 294 Q505 303 514 303 Q505 303 505 312 Q505 303 496 303 Q505 303 505 294 Z"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--honey"
-              transform="translate(366 657) rotate(6)"
-              d="M0 0 q5.6 -6.8 11.1 0 q5.6 6.8 11.1 0 q5.6 -6.8 11.1 0 q5.6 6.8 11.1 0 q5.6 -6.8 11.1 0 q5.6 6.8 11.1 0"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--teal"
-              transform="translate(585 670) rotate(1)"
-              d="M0 0 q5.1 -5.9 10.2 0 q5.1 5.9 10.2 0 q5.1 -5.9 10.2 0 q5.1 5.9 10.2 0 q5.1 -5.9 10.2 0 q5.1 5.9 10.2 0"
-            />
-            <path
-              class="pm-bg__line pm-bg__line--honey"
-              transform="translate(724 653) rotate(1)"
-              d="M0 0 q6.8 -6.5 13.6 0 q6.8 6.5 13.6 0 q6.8 -6.5 13.6 0 q6.8 6.5 13.6 0 q6.8 -6.5 13.6 0 q6.8 6.5 13.6 0"
-            />
-            <circle class="pm-bg__dot pm-bg__dot--honey" cx="1047" cy="650" r="3" />
-            <circle class="pm-bg__dot pm-bg__dot--teal" cx="1025" cy="218" r="3" />
-            <circle class="pm-bg__dot pm-bg__dot--honey" cx="611" cy="196" r="3" />
-            <circle class="pm-bg__dot pm-bg__dot--teal" cx="519" cy="514" r="3" />
-            <circle class="pm-bg__dot pm-bg__dot--honey" cx="1066" cy="471" r="3" />
-            <circle class="pm-bg__dot pm-bg__dot--teal" cx="89" cy="637" r="3" />
-          </pattern>
+          <linearGradient id="pm-wave-honey" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="var(--layout-section-1-fill)" />
+            <stop offset="1" stop-color="var(--layout-section-1-fill)" stop-opacity="0.15" />
+          </linearGradient>
+          <linearGradient id="pm-wave-mint" x1="1" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="var(--layout-section-4-fill)" />
+            <stop offset="1" stop-color="var(--layout-section-6-fill)" stop-opacity="0.5" />
+          </linearGradient>
+          <linearGradient id="pm-wave-teal" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0" stop-color="var(--layout-section-4-edge)" stop-opacity="0.22" />
+            <stop offset="1" stop-color="var(--layout-section-4-fill)" stop-opacity="0.6" />
+          </linearGradient>
+          <filter id="pm-soften" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="38" />
+          </filter>
         </defs>
-        <rect width="100%" height="100%" fill="url(#public-map-marks)" />
+        <rect width="1440" height="900" fill="var(--layout-floor)" />
+        <g filter="url(#pm-soften)">
+          <path
+            d="M1080 -60 C 1260 -40, 1500 40, 1480 220 C 1460 380, 1300 330, 1210 260 C 1110 180, 960 140, 990 40 C 1010 -20, 1040 -60, 1080 -60 Z"
+            fill="var(--layout-section-4-fill)"
+          />
+          <path
+            d="M-80 300 C 40 230, 220 280, 250 400 C 280 520, 160 600, 40 580 C -80 560, -160 380, -80 300 Z"
+            fill="var(--layout-section-1-fill)"
+          />
+          <path
+            d="M560 -40 C 700 -60, 860 10, 820 110 C 780 200, 640 170, 560 120 C 480 70, 450 -20, 560 -40 Z"
+            fill="var(--mm-yellow)"
+            opacity="0.18"
+          />
+          <path
+            d="M1180 620 C 1320 560, 1500 640, 1480 780 C 1460 920, 1260 960, 1170 860 C 1090 770, 1060 670, 1180 620 Z"
+            fill="var(--layout-section-6-fill)"
+          />
+        </g>
+        <path
+          d="M0 0 H 1440 V 110 C 1320 170, 1180 60, 1020 120 C 860 180, 760 70, 600 110 C 440 150, 320 60, 160 120 C 90 145, 40 140, 0 130 Z"
+          fill="url(#pm-wave-honey)"
+        />
+        <path
+          d="M0 900 V 700 C 140 640, 280 740, 440 700 C 620 655, 700 780, 900 730 C 1080 685, 1200 600, 1440 660 V 900 Z"
+          fill="url(#pm-wave-mint)"
+        />
+        <path
+          d="M0 900 V 800 C 180 760, 300 850, 520 815 C 720 783, 860 860, 1060 820 C 1240 785, 1340 840, 1440 810 V 900 Z"
+          fill="url(#pm-wave-teal)"
+        />
       </svg>
       <header class="public-map__head">
         <div class="public-map__words">
@@ -1433,10 +1358,10 @@ function openVendor(vendor: ListedVendor) {
   }
 }
 
-/* ── Prototype (release walk F6): marks across the paper ──
-   Soft blobs, outlined stars, sparkles, squiggles and dots in honey and teal, scattered over the
-   whole page behind everything; the map's side of the sheet is paper too, so they show around
-   the hall, and the vendor panel stays a white card. */
+/* ── Prototype (release walk F6): a wavy, lumpy gradient behind the page ──
+   A honey wave along the top, mint and teal waves along the bottom, and soft blurred lumps of
+   honey, mint, pale teal and mustard, all in the app's own colours; the sheet in the middle is
+   solid, the map on its floor, the vendors on white. */
 .public-map {
   position: relative;
 }
@@ -1447,76 +1372,23 @@ function openVendor(vendor: ListedVendor) {
   z-index: 1;
 }
 
+/* Fixed to the window under the app bar, so it spans the window's whole width however wide; the
+   page's column clips nothing of it, being a box the window holds, not the column. */
 .public-map__doodles {
-  position: absolute;
-  inset: 0;
+  position: fixed;
+  top: var(--banner-h);
+  left: 0;
   z-index: 0;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: calc(100dvh - var(--banner-h));
   pointer-events: none;
 }
 
-.pm-bg__blob--honey {
-  fill: var(--layout-section-1-fill);
-  opacity: 0.55;
-}
-
-.pm-bg__blob--mint {
-  fill: var(--layout-section-4-fill);
-  opacity: 0.7;
-}
-
-.pm-bg__line {
-  fill: none;
-  stroke-width: 1.75;
-  opacity: 0.75;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.pm-bg__line--honey {
-  stroke: var(--mm-yellow);
-}
-
-.pm-bg__line--teal {
-  stroke: var(--layout-section-4-edge);
-}
-
-.pm-bg__dot--honey {
-  fill: var(--mm-yellow);
-}
-
-.pm-bg__dot--teal {
-  fill: var(--layout-section-4-edge);
-  opacity: 0.8;
-}
-
 .public-map .public-map__body {
-  background: transparent;
+  background: white;
 }
 
 .public-map .public-map__map {
-  background: transparent;
-}
-
-/* The map's own floor colour gives way to the paper, so the marks show around the hall's walls;
-   the hall's floor inside them stays. */
-.public-map__map :deep(.layout-map--read) {
-  background: transparent;
-}
-
-/* A paper margin round the hall, where the marks show. */
-.public-map__map :deep(.day-map__frame) {
-  padding: var(--space-6);
-}
-
-@media (width < 1000px) {
-  .public-map__map :deep(.day-map__frame) {
-    padding: var(--space-2);
-  }
-}
-
-.public-map .public-map__side {
-  background: white;
+  background: var(--layout-floor);
 }
 </style>
