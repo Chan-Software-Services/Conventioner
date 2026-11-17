@@ -33,7 +33,7 @@ No market in production used these addresses yet, so moving them broke nobody.
 
 1. the public map, whenever the server says it is open, in any stage;
 2. the application call, while a market whose vendors apply on its page takes applications: the market's name and dates, "Applications are open.", Apply and "Already applied? Sign in", both leading to the vendor page;
-3. otherwise a notice with the name and dates, its line chosen by `marketPageNotice` ("This market has ended." once archived, "The map isn't published yet." once the results are out, else "Applications are closed."), and "Vendor sign-in" to the vendor page.
+3. otherwise a notice with the name and dates, its line chosen by `marketPageNotice` ("This market has ended." once archived, "The map isn't published yet." once the results are out, else "Applications are closed."), and a link to the vendor page, "Vendor sign-in" ("Your vendor page" for a tab signed in for that market).
 
 On it the app bar carries "Vendor sign-in" to the vendor page ("Your vendor page" for a tab signed in for that market), so the map's own design needs no vendor control.
 
