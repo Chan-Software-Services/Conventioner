@@ -49,6 +49,7 @@ test.describe('A layout saves once', () => {
     await expect(second.saveRetry).toHaveCount(0);
     // Nothing is lost from what the tab shows: its new table still stands, the first where it was.
     await expect(second.table(GOLD_2)).toBeVisible();
+    await second.toolSelect.click();
     await expect(second.selectionPosition).toHaveText('20.0 m, 6.0 m');
     // And nothing of it reached the server: the first tab's layout stands.
     expect(await storedTables(request, market.marketId)).toEqual([theirs]);
@@ -62,6 +63,7 @@ test.describe('A layout saves once', () => {
     expect(top.y + top.height / 2).toBeCloseTo(at.y, 0);
 
     // From there the second tab saves again.
+    await second.toolAdd.click();
     await second.saved(() => second.clickAt([20_000, 6000]));
     expect(await storedTables(request, market.marketId)).toHaveLength(2);
   });

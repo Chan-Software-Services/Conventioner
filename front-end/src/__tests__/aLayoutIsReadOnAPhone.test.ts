@@ -152,12 +152,15 @@ describe('on a phone', () => {
       'LayoutPanelSelection',
       'LayoutPanelTypes',
       'LayoutPanelZones',
-      'LayoutPanelKeyboard',
+      'LayoutToolCard',
+      'AppDialog',
     ]) {
       expect(wrapper.findComponent({ name }).exists(), name).toBe(false);
     }
     expect(wrapper.findComponent({ name: 'LayoutPanelSections' }).props('editable')).toBe(false);
     expect(wrapper.find('[data-testid="layout-panel-floorplan"]').exists()).toBe(false);
+    // Nothing of the layout is set up on a phone: no Layout settings in its head.
+    expect(wrapper.find('[data-testid="layout-settings-open"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="layout-save-state"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="layout-announcement"]').exists()).toBe(false);
   });
@@ -215,8 +218,16 @@ describe('at a desk, read only', () => {
     map(wrapper).vm.$emit('activate', 's-5');
     await vi.advanceTimersByTimeAsync(0);
     expect(card(wrapper).props('table')).toMatchObject({ id: 's-5' });
-    // The Floorplan card stays at a desk, with nothing that edits.
-    expect(wrapper.find('[data-testid="layout-panel-floorplan"]').exists()).toBe(true);
+    // The Floorplan card stays at a desk, with nothing that edits: a reader has no Floorplan menu
+    // on a zoom bar, so its three ticks stay here, all ticked on a first visit (T422).
+    const floorplan = wrapper.get('[data-testid="layout-panel-floorplan"]');
+    for (const id of ['layout-show-image', 'layout-image-grey', 'layout-image-faded']) {
+      expect((floorplan.get(`[data-testid="${id}"]`).element as HTMLInputElement).checked, id).toBe(
+        true,
+      );
+    }
+    expect(floorplan.find('[data-testid="layout-replace-image"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="layout-settings-open"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="layout-phone-hint"]').exists()).toBe(false);
   });
 

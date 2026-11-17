@@ -458,9 +458,13 @@ watch(
 
 .dialog-title {
   margin: 0;
-  padding-right: var(--space-6);
+  /* A long title wraps short of the close, which spans 16px to about 54px from the window's right
+     edge at a desk: the title's lines end 64px in. */
+  padding-right: calc(var(--space-8) + var(--space-2));
   overflow-wrap: anywhere;
   font-size: var(--text-lg);
+  /* Its own, not what the dialog's parent sets: the close is placed by this line's height. */
+  line-height: var(--leading);
   color: var(--mm-black);
 }
 
@@ -509,7 +513,7 @@ watch(
 
 .dialog-window--body > .dialog-parts > .dialog-title {
   flex: none;
-  padding: var(--space-6) var(--space-12) var(--space-2) var(--space-6);
+  padding: var(--space-6) calc(var(--space-12) + var(--space-4)) var(--space-2) var(--space-6);
 }
 
 /* The parts between the title and the window's foot: 16px apart, as `.dialog-parts`' gap sets them
@@ -575,14 +579,15 @@ watch(
   padding: var(--space-2) var(--space-6);
 }
 
-/* Where `--target-min` makes the close 44px wide, a long title wraps 8px short of it. */
+/* Where `--target-min` makes the close 44px wide, 16px to 60px from the right edge, a long title
+   wraps 8px short of it, 68px in. */
 @media (width <= 640px) {
   .dialog-title {
-    padding-right: calc(var(--space-8) + var(--space-2));
+    padding-right: calc(var(--space-8) + var(--space-3));
   }
 
   .dialog-window--body > .dialog-parts > .dialog-title {
-    padding-right: calc(var(--space-12) + var(--space-4));
+    padding-right: calc(var(--space-12) + var(--space-4) + var(--space-1));
   }
 }
 
@@ -607,8 +612,15 @@ watch(
   min-height: var(--target-min);
   position: absolute;
   z-index: 1;
-  top: var(--space-2);
-  right: var(--space-3);
+  /* Its middle on the middle of the title's first line, which starts at the window's 24px inset in
+     either scroll, and its glyph as far in from the right as the title is from the left: the
+     button is 8px wider than its glyph on each side (its padding and border), so 16px from the
+     edge puts the glyph at 24px. The QC walk of 2026-11-16 found it 16.5px above the line and its
+     glyph 20px in (T422). Where `--target-min` is 44px the glyph stands centred in it, a few px
+     further in. */
+  top: calc(var(--space-6) + var(--text-lg) * var(--leading) / 2);
+  right: var(--space-4);
+  transform: translateY(-50%);
   background: white;
   border: 1px solid transparent;
   font-size: var(--text-xl);

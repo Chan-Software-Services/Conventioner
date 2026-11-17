@@ -433,7 +433,7 @@ test('every control of a vendor notes panel has a name, wherever it opens', asyn
   }
 });
 
-test("every control of a layout's types, zones and floorplan cards, and the types' dialogs, has a name", async ({
+test("every control of a layout's zones card, Floorplan menu and Layout settings, and the types' dialogs, has a name", async ({
   authenticatedPage: page,
   request,
 }) => {
@@ -448,13 +448,28 @@ test("every control of a layout's types, zones and floorplan cards, and the type
   await expect(layout.tables).toHaveCount(UPPER_HALL_TABLES.length);
   await layout.toolZone.click();
   await expect(layout.toolZone).toHaveAttribute('aria-pressed', 'true');
+  await expect(layout.zoneLabels.first()).toHaveAccessibleName('Name of zone 1');
+  await expect(layout.shortcutsToggle).toHaveAccessibleName('Keyboard shortcuts');
+  await expect(layout.viewMenuButton).toHaveAccessibleName('Floorplan');
+  expect(await namelessControls(page), 'the page, the zones card').toEqual([]);
+
+  await layout.openViewMenu();
+  await expect(layout.viewShowImage).toHaveAccessibleName('Show the floorplan');
+  await expect(layout.viewGrey).toHaveAccessibleName('Greyscale');
+  await expect(layout.viewFaded).toHaveAccessibleName('Faded');
+  expect(await namelessControls(page), 'the Floorplan menu').toEqual([]);
+  await page.keyboard.press('Escape');
+
+  await layout.showShortcuts();
+  await expect(layout.shortcutsClose).toHaveAccessibleName('Hide the keyboard shortcuts');
+  expect(await namelessControls(page), 'the shortcuts').toEqual([]);
+
+  await layout.openSettings();
   await expect(
     layout.typesCard.getByRole('button', { name: 'Edit or remove Standard 6 ft' }),
   ).toBeVisible();
-  await expect(layout.zoneLabels.first()).toHaveAccessibleName('Name of zone 1');
-  await expect(layout.showImage).toHaveAccessibleName('Show the floorplan');
   await expect(layout.replaceImage).toHaveAccessibleName('Replace the image');
-  expect(await namelessControls(page), 'the cards').toEqual([]);
+  expect(await namelessControls(page), 'Layout settings').toEqual([]);
 
   await layout.typesAdd.click();
   await expect(layout.typeDialog).toBeVisible();

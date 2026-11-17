@@ -55,7 +55,9 @@ const removeRow = (index: number | null) => {
  * How many tables a section has on its location's layout, or null where its location has none
  * (T257). A laid-out location's sections are counted from the layout, as the server counts them
  * on every write (`derive_counts` in `back-end/layout.py`), so the cell is read, not typed: a
- * typed count would be overwritten by the next save.
+ * typed count would be overwritten by the next save. A layout that follows the plan (one started
+ * after Draft, T422) is never counted: its sections keep their typed counts, so the cell stays a
+ * field.
  */
 const layoutCount = (section: SectionObject): number | null => {
   const locationId = section.location?.id;
@@ -63,7 +65,7 @@ const layoutCount = (section: SectionObject): number | null => {
   const layout = (setupObject.value.floorplans ?? []).find(
     (floorplan) => floorplan.locationId === locationId,
   );
-  if (!layout) return null;
+  if (!layout || layout.followsPlan) return null;
   return layout.tables.filter((table) => table.sectionId === section.id).length;
 };
 

@@ -16,7 +16,7 @@ verified: 2026-11-12
 
 ## Flows
 
-- [Sections](../flows/planning.md#e4-sections): a laid-out location's sections read their counts from its layout.
+- [Sections](../flows/planning.md#e4-sections): a location laid out in Draft has its sections read their counts from its layout; a layout started after Draft follows the plan, its sections keeping their typed counts.
 - [A location's layout](../flows/planning.md#e6-a-locations-layout): upload, scale, tables placed, saved as it goes, read on a phone and exported as a PNG.
 - [Edit the plan after Draft](../flows/planning.md#e7-edit-the-plan-after-draft): where a table stands still changes.
 

@@ -231,6 +231,14 @@ class EveryTierHasTablesGuard:
     section there, that tier is said alone and leads to that location's layout, as
     ``LayoutTablesHaveSectionsGuard`` names one layout at a time; otherwise Market Setup's line
     names only the tiers whose fix is there, and the others are said once those are fixed.
+
+    A market with no section of tables whose layouts hold tables is told its tables need a section
+    (T422): the fix is the layout of the plan's first section on a layout holding tables, else
+    Section Setup, where their location's sections are added; only a market with no table on a
+    layout started in Draft is told it has none.
+
+    A layout that follows the plan is no laid-out location here: it takes its sections'
+    counts from Section Setup, so on a market back in Draft its tiers are sent there (T422, D46).
     """
 
     id: str = "every_tier_has_tables"
@@ -239,12 +247,36 @@ class EveryTierHasTablesGuard:
     def evaluate(self, market: Market, _db) -> PreconditionResult:
         setup = market.setup_object
         planned = setup.sections if setup else []
-        laid_out = {
-            floorplan.location_id for floorplan in (Layout.laid_out(setup) if setup else [])}
+        # A layout that follows the plan never decides its sections' counts (D46).
+        floorplans = [
+            floorplan for floorplan in (Layout.laid_out(setup) if setup else [])
+            if not floorplan.follows_plan
+        ]
+        laid_out = {floorplan.location_id for floorplan in floorplans}
         # A plan's sections in a laid-out location, in its order: their counts are the layout's.
         on_a_layout = [s for s in planned if s.location is not None and s.location.id in laid_out]
         sections = [s for s in planned if s.count > 0]
         if not sections:
+            # Tables laid out with none in a section are not "no tables" (T422): what they lack is
+            # a section, on the layout that holds them when it has one, else on Section Setup.
+            holding = {floorplan.location_id for floorplan in floorplans if floorplan.tables}
+            if holding:
+                beside = [s for s in on_a_layout if s.location.id in holding]
+                if beside:
+                    return self._to_the_layout(
+                        beside[0],
+                        "No table is in a section yet. Put the "
+                        f"{self._location_of(setup, beside[0])} layout's tables in its sections.",
+                    )
+                return PreconditionResult(
+                    id=self.id, passed=False,
+                    resolution_link="setup", resolution_label="Add sections",
+                    resolution_action="change-setup",
+                    message=(
+                        "This market's tables are in no section yet. Add sections on Market "
+                        "Setup's Section Setup, then put the tables in them on the layout."
+                    ),
+                )
             if on_a_layout:
                 first = on_a_layout[0]
                 return self._to_the_layout(

@@ -45,6 +45,26 @@ export class AttendanceStatusPage {
   readonly newCodeConfirm: Locator;
   readonly newCodeConfirmButton: Locator;
   readonly newCodeCancel: Locator;
+  /** "List" and "Map" in the tools row (T422): the roster as its list, or as the open day's map. */
+  readonly viewList: Locator;
+  readonly viewMap: Locator;
+  /** The map of the open day, its drawing, its legend's lines and the line a free table leaves. */
+  readonly dayMap: Locator;
+  readonly map: Locator;
+  readonly legend: Locator;
+  readonly mapNote: Locator;
+  /** "<n> here with no table" and "<n> vendors are at tables not on a layout.", under the map. */
+  readonly mapUnseated: Locator;
+  readonly mapOffLayout: Locator;
+  /** "No location has a layout yet.", where nothing is laid out. */
+  readonly mapNone: Locator;
+  /**
+   * The vendor drawer, the address it is open on, and its close. The panel stays in the page when
+   * closed, slid out and `aria-hidden`, so whether it is open is read off that attribute.
+   */
+  readonly drawer: Locator;
+  readonly drawerEmail: Locator;
+  readonly drawerClose: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -77,6 +97,42 @@ export class AttendanceStatusPage {
     this.newCodeConfirm = page.getByTestId('door-code-new-confirm-window');
     this.newCodeConfirmButton = page.getByTestId('door-code-new-confirm-submit-button');
     this.newCodeCancel = page.getByTestId('door-code-new-confirm-cancel-button');
+    this.viewList = page.getByTestId('attendance-view-list');
+    this.viewMap = page.getByTestId('attendance-view-map');
+    this.dayMap = page.getByTestId('attendance-map');
+    this.map = this.dayMap.getByTestId('layout-map');
+    this.legend = this.dayMap.getByTestId('day-map-legend-item');
+    this.mapNote = page.getByTestId('attendance-map-note');
+    this.mapUnseated = page.getByTestId('attendance-map-unseated');
+    this.mapOffLayout = page.getByTestId('attendance-map-off-layout');
+    this.mapNone = page.getByTestId('attendance-map-none');
+    this.drawer = page.getByTestId('vendors-detail-panel');
+    this.drawerEmail = page.getByTestId('vendors-detail-email');
+    this.drawerClose = page.getByTestId('vendors-detail-close');
+  }
+
+  /**
+   * A table of the open location on the map, or one half of a shared table, by the start of its
+   * accessible name ("Aisle A 3, Standard 6 ft, left half, Loom House"), as a screen reader hears it.
+   */
+  mapTable(code: string, half?: 'left' | 'right'): Locator {
+    const name = half ? `${code}, Standard 6 ft, ${half} half` : `${code}, Standard 6 ft`;
+    return this.map.getByRole('button', { name });
+  }
+
+  /**
+   * How a table, or a half, is drawn: `filled` in its section's colour (here), `outlined` on white
+   * (expected) or `free` on the floor's colour (no vendor), read off its top's paint.
+   */
+  async tone(code: string, half?: 'left' | 'right'): Promise<'filled' | 'outlined' | 'free'> {
+    const target = this.mapTable(code, half);
+    const shape = half
+      ? target.locator('path').first()
+      : target.getByTestId('layout-table-top').first();
+    const fill = (await shape.getAttribute('fill')) ?? '';
+    if (fill === 'white') return 'outlined';
+    if (fill.includes('layout-floor')) return 'free';
+    return 'filled';
   }
 
   doorCodeShade(edge: 'top' | 'bottom'): Locator {

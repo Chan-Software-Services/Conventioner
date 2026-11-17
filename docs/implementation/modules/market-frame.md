@@ -14,7 +14,6 @@ sources:
   - T209
   - T277
   - T316
-  - T421
   - wayfinding/the-market-frame/map
   - wayfinding/the-market-frame/01
   - wayfinding/the-order-of-the-work/map
@@ -39,6 +38,8 @@ sources:
   - T181
   - T217
   - T263
+  - T422
+  - T421
 ---
 
 # The market frame
@@ -70,7 +71,7 @@ A tab is a place to look and never a state: the market's state is its phase, on 
 
 **Every tab stays on the bar for the market's whole life**, Attendance included: `tabsFor()` returns all seven in every phase, and a tab out of its phase says when it matters rather than disappearing.
 Stats, last, has no phase of its own and no note: it reads the market from its first application to its archive, and says "Nobody has applied yet." until someone has.
-Tools, just left of it, has none either: it holds the manual tools an organizer runs whenever they choose, each a card of a `.card-grid` on the page's inset, the [Discord card](discord.md) first ([`ToolsView.vue`](../../../front-end/src/views/ToolsView.vue)).
+Tools, just left of it, has none either: it holds the manual tools an organizer runs whenever they choose, each a card of a `.card-grid` on the page's inset, two cards today: the [Discord card](discord.md), then the [Public map card](public-map.md#the-card) ([`ToolsView.vue`](../../../front-end/src/views/ToolsView.vue)).
 
 [`front-end/src/utils/marketPage.ts`](../../../front-end/src/utils/marketPage.ts) says which tab holds which page (`TAB_PAGES`), which tab a flow stands under (import under Applications, start-from-CSV and a location's layout under Market Setup), and which page a route is (`pageOfRoute`), the one reading of it so the bar and the page row can never disagree.
 `hasAssignment` is the one statement of "an assignment is stored", read by the pages that ask whether there are rows to show: Assignments, Vendors, Payments, the run button on Settings and the Discord card.
@@ -118,7 +119,7 @@ The card is at least the height of the window under the app bar, so a short page
 
 **A page says only its own lock; the frame says the person's.**
 The plan says why its setup settled (`setupLockReason`), the form's steps why the form locked, and the Settings page why its rules settled; each disables a control on the table's answer for the action it takes (`mayTake`, [the market store](market-store.md#where-a-screens-permission-comes-from)), but none repeats `readOnlyReason`, or a Viewer reads the same sentence twice on one page.
-A location's layout offers nothing to upload or calibrate on either reason and says only the setup's.
+A location's layout offers nothing to upload or calibrate on the person's lock and says only the setup's; past Draft, on the setup's lock alone, it offers the upload, since a layout started then follows the plan ([ADR 0034](../../adr/0034-a-layout-started-after-draft-follows-the-plan.md)).
 
 **Every market screen is `--workspace-max` wide, and the frame sets it.**
 A screen in the frame sets no width of its own, or moving between a market's screens makes the frame jump.

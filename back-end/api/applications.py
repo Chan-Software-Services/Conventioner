@@ -299,15 +299,23 @@ def _names_by_address(market_id: str, name_of) -> Dict[str, str]:
 def _answers_by_address(market_id: str, keys: List[str]) -> Dict[str, Dict[str, Any]]:
     """The named answers of every application in a market, keyed by lowercased address: a
     projection of those keys alone, since 232 applications' worth of ``form_data`` is not a thing to
-    read in order to show a name."""
+    read in order to show a name.
+
+    A vendor may hold a main and a waitlist application (the unique index is the market, the
+    address and the type); the main one's answers are theirs, whichever the read returns last.
+    """
     ensure_application_indexes()
-    projection = {"_id": 0, APPLICANT_EMAIL_FIELD: 1, **{
+    projection = {"_id": 0, APPLICANT_EMAIL_FIELD: 1, APPLICATION_TYPE_FIELD: 1, **{
         f"{field}.{key}": 1 for key in keys for field in ("form_data", ANSWER_UPDATES_FIELD)}}
     answers: Dict[str, Dict[str, Any]] = {}
+    from_main: set = set()
     for doc in applications_collection.find(market_filter(market_id), projection):
         email = str(doc.get(APPLICANT_EMAIL_FIELD) or "").strip().lower()
-        if email:
-            answers[email] = effective_answers(doc)
+        if not email or email in from_main:
+            continue
+        answers[email] = effective_answers(doc)
+        if doc.get(APPLICATION_TYPE_FIELD, ApplicationType.MAIN.value) == ApplicationType.MAIN.value:
+            from_main.add(email)
     return answers
 
 
