@@ -379,7 +379,7 @@ describe('the day map', () => {
     expect(map.findAll('[data-testid="layout-map-read"]')).toHaveLength(2);
   });
 
-  it('draws no note and the switch by default, as the public map has them', () => {
+  it("draws no note and the switch by default, as the component library's door map has them", () => {
     const map = dayMap();
     expect(map.find('[data-testid="day-map-note"]').exists()).toBe(false);
     expect(map.find('[data-testid="day-map-locations"]').exists()).toBe(true);
