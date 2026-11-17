@@ -334,6 +334,10 @@ describe('the proposal ledger', () => {
       it('still counts an answer that names someone once it is ticked, since it keeps it too', async () => {
         const wrapper = ledger(proposalOf([...OPTIONS, named('Online at example.org/shop')]));
         await optionsOf(rowAt(wrapper))[2].find('input').setValue(true);
+        expect(
+          optionsOf(rowAt(wrapper))[2].find<HTMLInputElement>('input').element.checked,
+          'the tick reached the working copy',
+        ).toBe(true);
         expect(keepAllIn(rowAt(wrapper)).text()).toBe('Keep all 3, 1 names someone');
       });
 
