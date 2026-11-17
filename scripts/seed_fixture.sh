@@ -10,13 +10,9 @@ TEST_PASSWORD="${TEST_PASSWORD:-e2epassword123}"
 NO_ORG_EMAIL="${NO_ORG_EMAIL:-e2e-noorg@example.com}"
 NO_ORG_PASSWORD="${NO_ORG_PASSWORD:-e2enoorg123}"
 
-# ── Which stack: told, never guessed (scripts/lib/stack-identity.sh) ──
-# This resets the stack's database before it seeds it, so it seeds only a stack it was told:
-#   1) COMPOSE_PROJECT_NAME and the three TH_*_PORT variables, as `th-compose.sh ports` exports them
-#   2) the treehouse slot this script's checkout sits in
-#   3) --primary, the default stack: the primary checkout's, or CI's one stack, never from a slot
-# and otherwise refuses. It used to fall back to the primary stack's defaults, so a run outside a
-# slot that had not exported its own stack yet wiped the primary checkout's local database.
+# ── Which stack: told, never guessed ──
+# This resets the stack's database before it seeds it, so it seeds only a stack it was told, by the
+# rule scripts/lib/stack-identity.sh holds, which says the order it reads and when it refuses.
 refuse() {
   echo "seed_fixture: $1 - refusing to guess, since this resets the stack's database." >&2
   echo "  For a stack th-compose.sh started: eval \"\$(scripts/th-compose.sh ports)\" first, which exports" >&2

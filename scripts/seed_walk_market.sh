@@ -3,12 +3,9 @@
 # the organizer's screens (Attendance, the vendor drawer, Applications) and the public map.
 #
 # Run after scripts/seed_fixture.sh, on the same stack, which it takes exactly as that script does,
-# by the one copy of the rule both share (scripts/lib/stack-identity.sh):
-#   1) COMPOSE_PROJECT_NAME and the three TH_*_PORT variables, as `th-compose.sh ports` exports them
-#   2) the treehouse slot this script's checkout sits in
-#   3) --primary, the default stack: the primary checkout's, never from a slot
-# and otherwise refuses. It never starts a stack, and it adds to the database rather than emptying
-# it, so it refuses a stack that already holds the market: seed_fixture.sh empties it first.
+# by the rule both share, scripts/lib/stack-identity.sh, which says the order it reads and when it
+# refuses. It never starts a stack, and it adds to the database rather than emptying it, so it
+# refuses a stack that already holds the market: seed_fixture.sh empties it first.
 #
 # Every write goes through the back end's own API, signed in as the fixture organizer
 # (e2e@example.com), as the organizer's screens would make it:
