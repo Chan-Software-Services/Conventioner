@@ -3,7 +3,6 @@ layer: implementation
 kind: adr
 describes:
   - front-end/src/utils/useServerRead.ts#readStep
-  - front-end/src/__tests__/everyMarketReadIsKeyed.test.ts
 verified: 2026-11-17
 sources:
   - T277
@@ -30,7 +29,7 @@ The market store could read failed and stale at once, and nothing on screen said
 - **A write held through `holdWhile` keeps every read asked before or during it from landing**, since the server may have served that read before the write and its answer would put back what the write changed; the write's release asks again, and `holdWhile` answers `left`, saying nothing, when the key moved before the write answered.
 - A write's own answer is taken in through `adopt`, only for the key it was made on.
 - The composable has no timer and no retry of its own: a timeout is the fetcher's, a clock the screen's.
-- No new read goes on a watch of a market id: [`everyMarketReadIsKeyed.test.ts`](../../front-end/src/__tests__/everyMarketReadIsKeyed.test.ts) fails on one outside the files it lists, each with why its watches are allowed (a reset of what is shown, a write resumed, the market store opened, who is signed in asked again, or a read with its own guard: the review's queue and the history).
+- No new read goes on a watch of a market id; the rule, the test that holds it and why a watch is allowed: [one market, from the server](../implementation/conventions/one-market-from-the-server.md#the-rules).
 
 The table row by row, the interface and every screen on it: [reads keyed by market](../implementation/modules/market-store.md#reads-keyed-by-market); the rule: [one market, from the server](../implementation/conventions/one-market-from-the-server.md#the-rules).
 
