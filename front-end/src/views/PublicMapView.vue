@@ -38,7 +38,6 @@ import {
   DETAILS_NOT_LISTED,
   MAP_COULD_NOT_LOAD,
   NO_VENDORS_LISTED,
-  PICK_A_TABLE,
   dayInWords,
   fetchPublicMap,
   fetchPublicMapImage,
@@ -125,32 +124,26 @@ function chooseLocation(locationId: string) {
 }
 
 /* Prototype (release walk F6): the backdrop, waves and lumps in the market's own section colours,
-   however many sections it has: each shape takes the next colour in turn, and a market with more
+   however many sections it has: each colour takes a run of the shapes, and a market with more
    colours than shapes gets a lump for each colour over. Blurred whole by CSS, they blend. */
-const BACKDROP_SHAPES = [
+/** Prototype (release walk F6): the backdrop's shapes, four broad wavy ribbons sweeping down across
+ *  the window, from the top left to the bottom right, so a colour's run of them holds a band. */
+const BACKDROP_SHAPES: { d: string; opacity: number }[] = [
   {
-    d: 'M-100 -100 H 1540 V 150 C 1320 230, 1180 70, 980 150 C 800 220, 700 60, 500 140 C 320 210, 160 90, -100 190 Z',
-    opacity: 0.42,
+    d: 'M-200 -100 C 200 100, 500 -50, 900 150 C 1200 300, 1400 200, 1700 350 L 1700 560 C 1400 410, 1200 510, 900 360 C 500 160, 200 310, -200 110 Z',
+    opacity: 0.85,
   },
   {
-    d: 'M-100 1000 V 700 C 140 620, 300 760, 480 700 C 660 640, 760 790, 960 730 C 1140 680, 1260 590, 1540 660 V 1000 Z',
-    opacity: 0.42,
+    d: 'M-200 150 C 200 350, 500 200, 900 400 C 1200 550, 1400 450, 1700 600 L 1700 810 C 1400 660, 1200 760, 900 610 C 500 410, 200 560, -200 360 Z',
+    opacity: 0.8,
   },
   {
-    d: 'M1040 -80 C 1300 -60, 1560 60, 1520 300 C 1480 480, 1260 420, 1160 330 C 1060 240, 900 180, 940 60 C 960 -10, 990 -80, 1040 -80 Z',
-    opacity: 0.36,
+    d: 'M-200 400 C 200 600, 500 450, 900 650 C 1200 800, 1400 700, 1700 850 L 1700 1060 C 1400 910, 1200 1010, 900 860 C 500 660, 200 810, -200 610 Z',
+    opacity: 0.8,
   },
   {
-    d: 'M-120 300 C 60 220, 260 300, 290 440 C 320 580, 170 660, 30 640 C -110 620, -230 400, -120 300 Z',
-    opacity: 0.32,
-  },
-  {
-    d: 'M1160 600 C 1320 540, 1520 620, 1500 780 C 1480 940, 1260 980, 1160 880 C 1070 790, 1040 660, 1160 600 Z',
-    opacity: 0.32,
-  },
-  {
-    d: 'M560 380 C 700 340, 860 400, 840 500 C 820 600, 660 600, 580 540 C 500 480, 460 410, 560 380 Z',
-    opacity: 0.22,
+    d: 'M-200 650 C 200 850, 500 700, 900 900 C 1200 1050, 1400 950, 1700 1100 L 1700 1310 C 1400 1160, 1200 1260, 900 1110 C 500 910, 200 1060, -200 860 Z',
+    opacity: 0.85,
   },
 ];
 
@@ -159,10 +152,10 @@ const sectionColours = computed(() => {
   const seen = new Set<string>();
   for (const location of locations.value) {
     for (const { paint, tables } of layoutSections(location.layout, location.sections)) {
-      // Mostly the section's light fill with a touch of its edge, mixed in OKLCH, which keeps the
-      // colour clear where OKLab greys it: light and bright, never the edge's brown.
+      // The section's light fill, as its tags wear it, with a breath of its edge, mixed in OKLCH,
+      // which keeps the colour clear: light and airy, never darker than the tags.
       if (tables.length) {
-        seen.add(`color-mix(in oklch, ${paintValue(paint.edge)} 22%, ${paintValue(paint.fill)})`);
+        seen.add(`color-mix(in oklch, ${paintValue(paint.edge)} 12%, ${paintValue(paint.fill)})`);
       }
     }
   }
@@ -171,13 +164,16 @@ const sectionColours = computed(() => {
 
 const backdrop = computed(() => {
   const colours = sectionColours.value;
-  const shapes = BACKDROP_SHAPES.map((shape, index) => ({
+  // The shapes run from the top left to the bottom right, and each colour takes a run of them, so
+  // a colour holds a region of its own and two colours meet along a band, not greyed all over.
+  const set = BACKDROP_SHAPES;
+  const shapes = set.map((shape, index) => ({
     ...shape,
-    colour: colours[index % colours.length]!,
+    colour: colours[Math.floor((index * colours.length) / set.length) % colours.length]!,
   }));
   // A colour no shape reached gets a lump of its own, spread along the window's middle band.
-  for (let index = BACKDROP_SHAPES.length; index < colours.length; index++) {
-    const x = 120 + (((index - BACKDROP_SHAPES.length) * 520) % 1200);
+  for (let index = set.length; index < colours.length; index++) {
+    const x = 120 + (((index - set.length) * 520) % 1200);
     const y = 260 + ((index * 170) % 380);
     shapes.push({
       d: `M${x} ${y} c 120 -60, 260 0, 240 110 c -20 110, -170 110, -240 50 c -70 -60, -90 -120, 0 -160 Z`,
@@ -195,6 +191,14 @@ document.documentElement.style.scrollbarGutter = 'auto';
 onUnmounted(() => {
   document.documentElement.style.scrollbarGutter = gutterBefore;
 });
+
+/** Prototype (release walk F6): whether the vendors have scrolled under the find field, which alone
+ *  draws the field's fade, so the first vendor's ring shows whole before any scroll. */
+const listScrolled = ref(false);
+function onListScroll(event: Event) {
+  const scroller = event.target as HTMLElement;
+  if (scroller.dataset.testid === 'public-map-scroll') listScrolled.value = scroller.scrollTop > 0;
+}
 
 /** Prototype (release walk F6): a market day as the dropdown says it, "Nov 19". */
 const MONTH_NAMES = [
@@ -456,13 +460,13 @@ function openVendor(vendor: ListedVendor) {
 
     <template v-else-if="map">
       <svg
-        class="public-map__doodles"
+        class="public-map__backdrop"
         viewBox="0 0 1440 900"
         preserveAspectRatio="none"
         aria-hidden="true"
         focusable="false"
       >
-        <rect width="1440" height="900" class="pm-bg__paper" />
+        <rect width="1440" height="900" class="public-map__backdrop-paper" />
         <path
           v-for="(shape, index) in backdrop"
           :key="index"
@@ -470,171 +474,183 @@ function openVendor(vendor: ListedVendor) {
           :style="{ fill: shape.colour, opacity: shape.opacity }"
         />
       </svg>
-      <header class="public-map__head">
-        <div class="public-map__words">
-          <h1 class="public-map__title" data-testid="public-map-heading">{{ map.marketName }}</h1>
-          <p class="public-map__subtitle" data-testid="public-map-subtitle">
-            <svg class="public-map__subtitle-icon" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M8 1.5 Q8.6 7.4 14.5 8 Q8.6 8.6 8 14.5 Q7.4 8.6 1.5 8 Q7.4 7.4 8 1.5 Z" />
-            </svg>
-            Vendor map
-          </p>
-        </div>
-      </header>
 
       <div class="public-map__body">
-        <div ref="mapBox" class="public-map__map" data-testid="public-map-map">
-          <DayMap
-            :locations="locations"
-            :tableTypes="map.tableTypes"
-            :locationId="place.locationId"
-            :seats="seats"
-            :picked="markedPick"
-            :legend="LEGEND"
-            @update:locationId="chooseLocation"
-            @pick="pick"
-          />
-          <div class="public-map__pickers">
-            <label class="public-map__picker">
-              <span class="visually-hidden">Market day</span>
-              <select
-                class="field field--select public-map__select"
-                name="public-map-day"
-                :value="place.date"
-                data-testid="public-map-day-select"
-                @change="chooseDay(($event.target as HTMLSelectElement).value)"
-              >
-                <option v-for="date in map.dates" :key="date" :value="date">
-                  {{ monthDay(date) }}
-                </option>
-              </select>
-            </label>
-            <label v-if="locations.length > 1" class="public-map__picker">
-              <span class="visually-hidden">Location</span>
-              <select
-                class="field field--select public-map__select"
-                name="public-map-location"
-                :value="place.locationId"
-                data-testid="public-map-location-select"
-                @change="chooseLocation(($event.target as HTMLSelectElement).value)"
-              >
-                <option v-for="location in locations" :key="location.id" :value="location.id">
-                  {{ location.name }}
-                </option>
-              </select>
-            </label>
-          </div>
-
-          <div
-            v-if="card && bubble"
-            ref="bubbleEl"
-            class="public-map__bubble"
-            :class="`public-map__bubble--${bubble.vert}`"
-            :style="{
-              left: `${bubble.left}px`,
-              top: `${bubble.top}px`,
-              '--tail-x': `${bubble.tailX}px`,
-              visibility: bubble.shown ? 'visible' : 'hidden',
-            }"
-            role="dialog"
-            :aria-label="`Table ${card.code}`"
-            aria-live="polite"
-            data-testid="public-map-card"
-            @pointerdown.stop
-            @wheel.stop
-          >
-            <button
-              type="button"
-              class="public-map__bubble-close"
-              aria-label="Close"
-              data-testid="public-map-card-close"
-              @click="closeBubble"
-            >
-              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-                <path
-                  d="M3 3 L13 13 M13 3 L3 13"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                />
-              </svg>
-            </button>
-            <p class="public-map__bubble-eyebrow">
-              <span class="public-map__code" :style="codeStyle(place.tableId)">{{
-                card.code
-              }}</span>
-              <span>{{ hallName }}</span>
-            </p>
-
-            <div
-              v-for="part in shownParts"
-              :key="part.side"
-              class="public-map__part"
-              :data-testid="
-                part.side === 'whole' ? 'public-map-card-whole' : 'public-map-card-half'
-              "
-            >
-              <h3 v-if="part.side !== 'whole'" class="public-map__half">
-                {{ HALF_NAMES[part.side] }}
-              </h3>
-              <p v-if="!part.seat" class="public-map__note">
-                {{ part.side === 'whole' ? freeTableOn(day) : freeHalfOn(day) }}
-              </p>
-              <p v-else-if="!part.seat.name" class="public-map__note">
-                {{ DETAILS_NOT_LISTED }}
-              </p>
-              <template v-else>
-                <p class="public-map__name" data-testid="public-map-card-name">
-                  {{ part.seat.name }}
+        <div class="public-map__map" data-testid="public-map-map">
+          <div class="public-map__bar">
+            <header class="public-map__head">
+              <div class="public-map__words">
+                <h1 class="public-map__title" data-testid="public-map-heading">
+                  {{ map.marketName }}
+                </h1>
+                <p class="public-map__subtitle" data-testid="public-map-subtitle">
+                  <svg class="public-map__subtitle-icon" viewBox="0 0 16 16" aria-hidden="true">
+                    <path
+                      d="M8 1.5 Q8.6 7.4 14.5 8 Q8.6 8.6 8 14.5 Q7.4 8.6 1.5 8 Q7.4 7.4 8 1.5 Z"
+                    />
+                  </svg>
+                  Vendor map
                 </p>
-                <dl
-                  v-if="websiteLink(part.seat.website) || instagramLink(part.seat.instagram)"
-                  class="public-map__links"
+              </div>
+            </header>
+            <div class="public-map__pickers">
+              <label class="public-map__picker">
+                <span class="visually-hidden">Market day</span>
+                <select
+                  class="field field--select public-map__select"
+                  name="public-map-day"
+                  :value="place.date"
+                  data-testid="public-map-day-select"
+                  @change="chooseDay(($event.target as HTMLSelectElement).value)"
                 >
-                  <template v-if="websiteLink(part.seat.website)">
-                    <dt>Website</dt>
-                    <dd>
-                      <a
-                        :href="websiteLink(part.seat.website)!.href"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="public-map__link"
-                        data-testid="public-map-card-website"
-                        >{{ websiteLink(part.seat.website)!.text }}</a
-                      >
-                    </dd>
-                  </template>
-                  <template v-if="instagramLink(part.seat.instagram)">
-                    <dt>Instagram</dt>
-                    <dd>
-                      <a
-                        :href="instagramLink(part.seat.instagram)!.href"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="public-map__link"
-                        data-testid="public-map-card-instagram"
-                        >{{ instagramLink(part.seat.instagram)!.text }}</a
-                      >
-                    </dd>
-                  </template>
-                </dl>
-              </template>
+                  <option v-for="date in map.dates" :key="date" :value="date">
+                    {{ monthDay(date) }}
+                  </option>
+                </select>
+              </label>
+              <label v-if="locations.length > 1" class="public-map__picker">
+                <span class="visually-hidden">Location</span>
+                <select
+                  class="field field--select public-map__select"
+                  name="public-map-location"
+                  :value="place.locationId"
+                  data-testid="public-map-location-select"
+                  @change="chooseLocation(($event.target as HTMLSelectElement).value)"
+                >
+                  <option v-for="location in locations" :key="location.id" :value="location.id">
+                    {{ location.name }}
+                  </option>
+                </select>
+              </label>
             </div>
           </div>
+          <div ref="mapBox" class="public-map__hall">
+            <DayMap
+              :locations="locations"
+              :tableTypes="map.tableTypes"
+              :locationId="place.locationId"
+              :seats="seats"
+              :picked="markedPick"
+              :legend="LEGEND"
+              @update:locationId="chooseLocation"
+              @pick="pick"
+            />
+            <div
+              v-if="card && bubble"
+              ref="bubbleEl"
+              class="public-map__bubble"
+              :class="`public-map__bubble--${bubble.vert}`"
+              :style="{
+                left: `${bubble.left}px`,
+                top: `${bubble.top}px`,
+                '--tail-x': `${bubble.tailX}px`,
+                visibility: bubble.shown ? 'visible' : 'hidden',
+              }"
+              role="dialog"
+              :aria-label="`Table ${card.code}`"
+              aria-live="polite"
+              data-testid="public-map-card"
+              @pointerdown.stop
+              @wheel.stop
+            >
+              <button
+                type="button"
+                class="public-map__bubble-close"
+                aria-label="Close"
+                data-testid="public-map-card-close"
+                @click="closeBubble"
+              >
+                <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                  <path
+                    d="M3 3 L13 13 M13 3 L3 13"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </button>
+              <p class="public-map__bubble-eyebrow">
+                <span class="public-map__code" :style="codeStyle(place.tableId)">{{
+                  card.code
+                }}</span>
+                <span>{{ hallName }}</span>
+              </p>
 
-          <ul class="public-map__legend" aria-label="Legend" data-testid="public-map-legend">
-            <li v-for="item in sectionKey" :key="item.name">
-              <span class="public-map__swatch" :style="item.style" aria-hidden="true"></span>
-              Section {{ item.name }}
-            </li>
-            <li v-if="hasFree">
-              <span class="public-map__swatch public-map__swatch--free" aria-hidden="true"></span>
-              Free table
-            </li>
-          </ul>
+              <div
+                v-for="part in shownParts"
+                :key="part.side"
+                class="public-map__part"
+                :data-testid="
+                  part.side === 'whole' ? 'public-map-card-whole' : 'public-map-card-half'
+                "
+              >
+                <h3 v-if="part.side !== 'whole'" class="public-map__half">
+                  {{ HALF_NAMES[part.side] }}
+                </h3>
+                <p v-if="!part.seat" class="public-map__note">
+                  {{ part.side === 'whole' ? freeTableOn(day) : freeHalfOn(day) }}
+                </p>
+                <p v-else-if="!part.seat.name" class="public-map__note">
+                  {{ DETAILS_NOT_LISTED }}
+                </p>
+                <template v-else>
+                  <p class="public-map__name" data-testid="public-map-card-name">
+                    {{ part.seat.name }}
+                  </p>
+                  <dl
+                    v-if="websiteLink(part.seat.website) || instagramLink(part.seat.instagram)"
+                    class="public-map__links"
+                  >
+                    <template v-if="websiteLink(part.seat.website)">
+                      <dt>Website</dt>
+                      <dd>
+                        <a
+                          :href="websiteLink(part.seat.website)!.href"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="public-map__link"
+                          data-testid="public-map-card-website"
+                          >{{ websiteLink(part.seat.website)!.text }}</a
+                        >
+                      </dd>
+                    </template>
+                    <template v-if="instagramLink(part.seat.instagram)">
+                      <dt>Instagram</dt>
+                      <dd>
+                        <a
+                          :href="instagramLink(part.seat.instagram)!.href"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="public-map__link"
+                          data-testid="public-map-card-instagram"
+                          >{{ instagramLink(part.seat.instagram)!.text }}</a
+                        >
+                      </dd>
+                    </template>
+                  </dl>
+                </template>
+              </div>
+            </div>
+
+            <ul class="public-map__legend" aria-label="Legend" data-testid="public-map-legend">
+              <li v-for="item in sectionKey" :key="item.name">
+                <span class="public-map__swatch" :style="item.style" aria-hidden="true"></span>
+                Section {{ item.name }}
+              </li>
+              <li v-if="hasFree">
+                <span class="public-map__swatch public-map__swatch--free" aria-hidden="true"></span>
+                Free table
+              </li>
+            </ul>
+          </div>
         </div>
 
-        <aside class="public-map__side" aria-label="Vendors">
+        <aside
+          class="public-map__side"
+          :class="{ 'public-map__side--scrolled': listScrolled }"
+          aria-label="Vendors"
+          @scroll.capture="onListScroll"
+        >
           <ScrollBox class="public-map__scroll" fieldsLeaveTheStop testid="public-map-scroll">
             <ListFrame
               :items="listed"
@@ -684,20 +700,31 @@ function openVendor(vendor: ListedVendor) {
 
 <style scoped>
 /* ── Prototype (release walk F6): the public map, designed for visitors ──
-   A quiet header, the market's name and the days; under it one viewer: the map large on the left,
-   the hall tabs and the legend floating on it, and beside it a panel as tall as the map, the
-   picked table on top and the vendors under it. The page fills the window and never scrolls; only
-   the vendor list scrolls, inside the panel. */
-/* The page's column: the workspace's width at most, on the app bar's own inset. */
+   The page fills the window under the app bar and never scrolls; only the vendor list does. Behind
+   it a light, blurred backdrop of ribbons in the market's own section colours. In front, one sheet:
+   the map on the left, with the market's name over it and the day and hall at its top right, and
+   the vendors on the right, as tall as the map. A picked table speaks in a bubble from the map. */
 .public-map {
+  --pm-paper: #fbfaf8;
+  --pm-line: rgb(39 35 35 / 16%);
+  --pm-soft-shadow: 0 1px 2px rgb(39 35 35 / 6%), 0 8px 24px rgb(39 35 35 / 8%);
+
+  position: relative;
+  /* The window's height under the app bar, not the shell's `flex: 1`, which grows with the list. */
+  flex: none;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
   width: 100%;
   max-width: var(--workspace-max);
+  height: calc(100dvh - var(--banner-h));
   margin: 0 auto;
-  padding: var(--space-6) var(--space-4) var(--space-8);
+  padding: var(--space-4) var(--space-4) var(--space-6);
+  overflow: hidden;
   color: var(--mm-black);
+  background: var(--pm-paper);
+  /* The paper and the backdrop reach the window's edges, though the column keeps its width. */
+  box-shadow: 0 0 0 100vmax var(--pm-paper);
+  clip-path: inset(0 -100vmax);
 }
 
 .public-map__loading {
@@ -708,242 +735,83 @@ function openVendor(vendor: ListedVendor) {
   color: var(--mm-text-muted);
 }
 
-.public-map__title {
-  margin: 0;
-  font-family: 'Merge One';
-  font-size: var(--text-xl);
-  color: var(--mm-black);
-  overflow-wrap: anywhere;
+/* ── The backdrop: ribbons in the section colours the script deals, blurred into one another; the
+   layer is fixed to the window under the app bar, a tenth of it past each edge, so the blur never
+   fades at an edge. ── */
+.public-map__backdrop {
+  position: fixed;
+  top: calc(var(--banner-h) - 10vh);
+  left: -10vw;
+  z-index: 0;
+  width: 120vw;
+  height: calc(120vh - var(--banner-h));
+  pointer-events: none;
+  filter: blur(80px);
 }
 
-.public-map__subtitle {
-  margin: var(--space-1) 0 0;
-  font-size: var(--text-sm);
-  color: var(--mm-text-muted);
+.public-map__backdrop-paper {
+  fill: var(--pm-paper);
 }
 
-.public-map__days {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-/* At a desk the map takes the left and the card, the find field and the list a 22rem column on
-   the right; on a phone they stack, in that order. */
+/* ── The sheet: the map and the vendors side by side at a desk, the map over them on a phone. ── */
 .public-map__body {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 22rem;
-  align-items: start;
-  gap: var(--space-6);
-}
-
-/* The map stays in sight beside a long list, under the app bar. */
-.public-map__map {
-  position: sticky;
-  top: calc(var(--banner-h) + var(--space-4));
-  min-width: 0;
-  scroll-margin-top: calc(var(--banner-h) + var(--space-4));
-}
-
-.public-map__side {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-  min-width: 0;
-}
-
-.public-map__card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border: 1px solid var(--mm-border);
-  border-radius: var(--radius-card);
-  background: white;
-  overflow-wrap: anywhere;
-}
-
-.public-map__hint,
-.public-map__note {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--mm-text-muted);
-}
-
-.public-map__card-title {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: 600;
-}
-
-.public-map__part {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.public-map__half {
-  margin: 0;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--mm-text-muted);
-}
-
-.public-map__name {
-  margin: 0;
-  font-weight: 600;
-}
-
-.public-map__links {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--space-1) var(--space-3);
-  margin: 0;
-  font-size: var(--text-sm);
-}
-
-.public-map__links dt {
-  color: var(--mm-text-muted);
-}
-
-.public-map__links dd {
-  margin: 0;
-  min-width: 0;
-}
-
-.public-map__link {
-  color: var(--mm-text-link);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-/* Each link stands alone on its line, so on a phone it is a thumb's target, its name level with
-   its middle, as an answer that is only an address is (`AnswerValue.vue`). */
-@media (width <= 640px) {
-  .public-map__links {
-    align-items: center;
-  }
-
-  .public-map__link {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--target-min);
-  }
-}
-
-/* A vendor of the list: their name over their table, the whole row the button. */
-.public-map__vendor {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-hairline);
-  width: 100%;
-  min-height: var(--target-min);
-  /* The card's own inset, so a vendor's name stands on the card's text above it. */
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
-  background: none;
-  color: var(--mm-black);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-  overflow-wrap: anywhere;
-}
-
-/* An edge, not a tint: the muted table line would fall under AA on a hover's grey. The picked
-   vendor's edge is the map's own mark, black. */
-.public-map__vendor:hover {
-  border-color: var(--mm-border);
-}
-
-.public-map__vendor[aria-current='true'] {
-  border-color: var(--mm-black);
-}
-
-.public-map__vendor-name {
-  font-weight: 600;
-}
-
-.public-map__vendor-seat {
-  font-size: var(--text-sm);
-  color: var(--mm-text-muted);
-}
-
-@media (width < 1000px) {
-  .public-map__body {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .public-map__map {
-    position: static;
-  }
-}
-
-@media (width <= 640px) {
-  .public-map__vendor {
-    min-height: 44px;
-  }
-}
-
-/* ── Prototype (release walk F6) ── */
-/* Cute and elegant: cream paper, Merge One's soft capitals for the name, fine charcoal lines, round
-   pastel pills, a mustard sparkle; a picked table speaks in a bubble from the map itself. */
-.public-map {
-  /* The window's height under the app bar, not the shell's `flex: 1`, which grows with the list. */
-  flex: none;
-  gap: var(--space-4);
-  height: calc(100dvh - var(--banner-h));
-  padding-block: var(--space-4) var(--space-6);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
   overflow: hidden;
-  background: #ebe8e2;
-  box-shadow: 0 0 0 100vmax #ebe8e2;
-  clip-path: inset(0 -100vmax);
-  --pm-line: rgba(39, 35, 35, 0.16);
-  --pm-soft-shadow: 0 1px 2px rgba(39, 35, 35, 0.06), 0 8px 24px rgba(39, 35, 35, 0.08);
+  border: 1px solid var(--pm-line);
+  border-radius: 22px;
+  background: white;
+  box-shadow: var(--pm-soft-shadow);
 }
 
-.public-map__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-3) var(--space-6);
+@media (width >= 1000px) {
+  .public-map__body {
+    grid-template-columns: minmax(0, 1fr) 21rem;
+    grid-template-rows: minmax(0, 1fr);
+  }
 }
 
-.public-map__words {
+/* ── The map's side: the title bar, then the hall, which the bubble and the legend keep to. ── */
+.public-map__map {
   position: relative;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--layout-floor);
+}
+
+/* As far in from the sheet's edge as its rounded corner, room under "vendor map" for the hall's wall,
+   and the dropdowns' width kept clear at the end, so the name wraps short of them. */
+.public-map__bar {
+  flex: none;
+  padding: var(--space-6) calc(var(--space-3) + 17rem) var(--space-4) var(--space-6);
+}
+
+.public-map__words {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
 }
 
-/* Prototype (release walk F6): the name and "vendor map" lifted off the gradient by a subtle white
-   glow round their letters, no card. */
-.public-map__head .public-map__title,
-.public-map__head .public-map__subtitle {
-  text-shadow:
-    0 0 3px rgb(255 255 255),
-    0 0 16px rgb(255 255 255 / 95%),
-    0 0 36px rgb(255 255 255 / 85%),
-    0 0 56px rgb(255 255 255 / 60%);
-}
-
-.public-map__subtitle-icon {
-  filter: drop-shadow(0 0 10px rgb(255 255 255));
-}
-
 /* The name in bold Outfit over a honey stroke, drawn as a thick underline behind the letters so it
-   follows each line's words; under it "vendor map" in Merge One, led by a teal sparkle. */
-.public-map__head .public-map__title {
+   follows each line's words. */
+.public-map__title {
+  margin: 0;
   font-family: 'Outfit', sans-serif;
-  font-size: 1.75rem;
+  font-size: 1.875rem;
   font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.01em;
+  color: var(--mm-black);
+  overflow-wrap: anywhere;
   text-decoration: underline;
   text-decoration-color: var(--layout-section-1-fill);
   text-decoration-thickness: 0.4em;
@@ -951,13 +819,15 @@ function openVendor(vendor: ListedVendor) {
   text-decoration-skip-ink: none;
 }
 
-.public-map__head .public-map__subtitle {
+/* "vendor map" in Merge One, led by a teal sparkle. */
+.public-map__subtitle {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   margin: 0;
   font-family: 'Merge One', sans-serif;
-  font-size: var(--text-md);
+  font-size: 1.25rem;
+  line-height: 1.3;
   letter-spacing: 0.01em;
   text-transform: lowercase;
   color: var(--mm-text-muted-on-beige);
@@ -965,22 +835,24 @@ function openVendor(vendor: ListedVendor) {
 
 .public-map__subtitle-icon {
   flex: none;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   fill: none;
   stroke: var(--layout-section-4-edge);
   stroke-width: 1.5;
   stroke-linejoin: round;
+  /* The words are all lower case, so their middle is the x-height's, a little under the line's:
+     the star sits on that middle. */
+  transform: translateY(0.06em);
 }
 
-/* The day and the hall: two soft pill selects side by side on the map's top left; the map's own
-   hall tabs give way to them. */
+/* The day and the hall at the map's top right corner, as far in from its edges as the zoom and
+   the legend are from theirs. */
 .public-map__pickers {
   position: absolute;
   top: var(--space-3);
-  left: var(--space-3);
-  z-index: 1;
-  max-width: calc(100% - 2 * var(--space-3));
+  right: var(--space-3);
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
@@ -1002,37 +874,14 @@ function openVendor(vendor: ListedVendor) {
   border-color: var(--layout-section-1-edge);
 }
 
-.public-map__map :deep(.day-map__locations) {
-  display: none;
-}
-
-/* The viewer: one soft white sheet, map and panel. */
-.public-map__body {
+.public-map__hall {
+  position: relative;
   flex: 1 1 auto;
   min-height: 0;
-  gap: 0;
-  align-items: stretch;
-  overflow: hidden;
-  border: 1px solid var(--pm-line);
-  border-radius: 22px;
-  background: white;
-  box-shadow: var(--pm-soft-shadow);
 }
 
-@media (width >= 1000px) {
-  .public-map__body {
-    grid-template-columns: minmax(0, 1fr) 21rem;
-  }
-}
-
-.public-map__map {
-  position: relative;
-  top: auto;
-  height: 100%;
-  min-height: 0;
-  background: #fbfaf7;
-}
-
+/* The map fills the hall, whatever the hall's shape; its own hall buttons and legend give way to the
+   page's dropdown and legend. */
 .public-map__map :deep(.day-map),
 .public-map__map :deep(.day-map__grid) {
   height: 100%;
@@ -1054,22 +903,35 @@ function openVendor(vendor: ListedVendor) {
   background: transparent;
 }
 
-.public-map__map :deep(.day-map__locations) {
-  grid-area: map;
-  align-self: start;
-  justify-self: start;
-  position: absolute;
-  top: var(--space-3);
-  left: var(--space-3);
-  z-index: 1;
-  box-shadow: var(--pm-soft-shadow);
-}
-
-/* The map's own legend gives way to the page's: the sections in their colours. */
+.public-map__map :deep(.day-map__locations),
 .public-map__map :deep(.day-map__legend) {
   display: none;
 }
 
+.public-map__map :deep(.day-map__zoom) {
+  grid-area: map;
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-3);
+  z-index: 1;
+  padding: 4px;
+  border: 1px solid var(--pm-line);
+  border-radius: var(--radius-pill);
+  background: white;
+  box-shadow: var(--pm-soft-shadow);
+}
+
+.public-map__map :deep(.day-map__zoom-button) {
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+}
+
+.public-map__map :deep(.day-map__zoom-button:hover) {
+  background: var(--layout-floor);
+}
+
+/* The legend: the open hall's sections in their own colours, and "Free table" on a day with one. */
 .public-map__legend {
   position: absolute;
   bottom: var(--space-3);
@@ -1107,31 +969,8 @@ function openVendor(vendor: ListedVendor) {
   background: var(--layout-floor);
 }
 
-.public-map__map :deep(.day-map__zoom) {
-  grid-area: map;
-  position: absolute;
-  right: var(--space-3);
-  bottom: var(--space-3);
-  z-index: 1;
-  padding: 4px;
-  border: 1px solid var(--pm-line);
-  border-radius: var(--radius-pill);
-  background: white;
-  box-shadow: var(--pm-soft-shadow);
-}
-
-.public-map__map :deep(.day-map__zoom-button) {
-  border: none;
-  border-radius: var(--radius-pill);
-  background: transparent;
-}
-
-.public-map__map :deep(.day-map__zoom-button:hover) {
-  background: var(--layout-floor);
-}
-
-/* The speech bubble: anchored on the picked table, up and right of it by default; the tail points
-   at the table, at the bubble's corner nearest it. */
+/* ── The speech bubble: anchored on the picked table (the script places it, inside the hall),
+   its tail on the table at the bubble's edge nearest it. ── */
 .public-map__bubble {
   position: absolute;
   z-index: 2;
@@ -1213,26 +1052,44 @@ function openVendor(vendor: ListedVendor) {
   color: var(--mm-text-muted);
 }
 
-.public-map__bubble .public-map__name {
+.public-map__part {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.public-map__half {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mm-text-muted);
+}
+
+.public-map__note {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--mm-text-muted);
+}
+
+.public-map__name {
+  margin: 0;
   font-family: 'Merge One', sans-serif;
   font-size: var(--text-lg);
-  font-weight: 400;
   line-height: 1.2;
 }
 
-.public-map__bubble .public-map__half {
-  margin-block-start: var(--space-1);
-}
-
-.public-map__bubble .public-map__links {
+/* The website and the Instagram as soft pills, their labels for a screen reader alone: the
+   address and the handle say which is which. */
+.public-map__links {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+  margin: 0;
 }
 
-/* The links as soft pills, their labels for a screen reader alone: the address and the handle
-   say which is which. */
-.public-map__bubble .public-map__links dt {
+.public-map__links dt {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1241,7 +1098,12 @@ function openVendor(vendor: ListedVendor) {
   white-space: nowrap;
 }
 
-.public-map__bubble .public-map__link {
+.public-map__links dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.public-map__link {
   display: inline-flex;
   align-items: center;
   min-height: 32px;
@@ -1253,18 +1115,25 @@ function openVendor(vendor: ListedVendor) {
   text-decoration: none;
 }
 
-.public-map__bubble .public-map__link:hover {
+.public-map__link:hover {
   border-color: var(--layout-section-4-edge);
   background: var(--layout-section-4-fill);
 }
 
-/* The panel: the vendors, which alone scroll. */
+/* ── The vendors' side: the find field held at its top, the vendors scrolling under it. ── */
 .public-map__side {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  min-width: 0;
   min-height: 0;
-  border-inline-start: 1px solid var(--pm-line);
+  border-block-start: 1px solid var(--pm-line);
+}
+
+@media (width >= 1000px) {
+  .public-map__side {
+    border-block-start: none;
+    border-inline-start: 1px solid var(--pm-line);
+  }
 }
 
 .public-map__scroll {
@@ -1284,8 +1153,8 @@ function openVendor(vendor: ListedVendor) {
   background: white;
 }
 
-/* The vendors blur and fade out as they scroll up under the find field. */
-.public-map__side :deep(.list-frame__tools)::after {
+/* The vendors blur and fade out as they scroll up under the find field, once they have scrolled. */
+.public-map__side--scrolled :deep(.list-frame__tools)::after {
   content: '';
   position: absolute;
   inset-inline: 0;
@@ -1321,7 +1190,7 @@ function openVendor(vendor: ListedVendor) {
 .public-map__side :deep(.list-frame__tools .field) {
   border: 1px solid var(--pm-line);
   border-radius: var(--radius-pill);
-  background: var(--layout-floor);
+  background: white;
   padding-inline: var(--space-4);
 }
 
@@ -1329,17 +1198,23 @@ function openVendor(vendor: ListedVendor) {
   border-block-start: 1px solid var(--layout-floor);
 }
 
+/* A vendor: their table's code, then their name over their hall, the whole row the button; the
+   picked vendor ringed in mustard. */
 .public-map__vendor {
-  flex-direction: row;
+  display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-2);
+  width: 100%;
+  min-height: var(--target-min);
+  padding: var(--space-2);
   border: none;
   border-radius: 12px;
-}
-
-.public-map__vendor:hover {
-  border-color: transparent;
+  background: none;
+  color: var(--mm-black);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
 .public-map__vendor:hover .public-map__vendor-name {
@@ -1358,6 +1233,15 @@ function openVendor(vendor: ListedVendor) {
   flex-direction: column;
   gap: var(--space-hairline);
   min-width: 0;
+}
+
+.public-map__vendor-name {
+  font-weight: 600;
+}
+
+.public-map__vendor-seat {
+  font-size: var(--text-sm);
+  color: var(--mm-text-muted);
 }
 
 /* A table's code: a pill in its section's colours, as the map draws the table. */
@@ -1379,17 +1263,8 @@ function openVendor(vendor: ListedVendor) {
   white-space: nowrap;
 }
 
-/* A phone: the map over the vendors, within the window; the map the larger part. */
+/* ── A phone. ── */
 @media (width < 1000px) {
-  .public-map__body {
-    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
-  }
-
-  .public-map__side {
-    border-inline-start: none;
-    border-block-start: 1px solid var(--pm-line);
-  }
-
   .public-map__legend {
     max-width: calc(100% - 9rem);
     border-radius: 14px;
@@ -1398,47 +1273,16 @@ function openVendor(vendor: ListedVendor) {
 
 @media (width <= 640px) {
   .public-map {
-    padding-inline: var(--space-3);
-    padding-block-start: var(--space-3);
+    padding: var(--space-3) var(--space-3) var(--space-6);
   }
-}
 
-/* ── Prototype (release walk F6): a wavy, lumpy gradient behind the page ──
-   Waves along the top and bottom and lumps between, in the market's own section colours (the
-   script deals them), on warm paper, blurred together so no edge shows; the layer is larger than
-   the window so the blur never fades at its edges. The sheet in the middle is solid. */
-.public-map {
-  position: relative;
-  --pm-paper: #ebe8e2;
-}
+  /* No room beside the title, so the dropdowns keep the corner and the title starts under them. */
+  .public-map__bar {
+    padding: calc(var(--space-3) + 38px + var(--space-3)) var(--space-4) var(--space-3);
+  }
 
-.public-map__head,
-.public-map__body {
-  position: relative;
-  z-index: 1;
-}
-
-/* Fixed to the window under the app bar, a tenth of the window past each edge, and blurred whole. */
-.public-map__doodles {
-  position: fixed;
-  top: calc(var(--banner-h) - 10vh);
-  left: -10vw;
-  z-index: 0;
-  width: 120vw;
-  height: calc(120vh - var(--banner-h));
-  pointer-events: none;
-  filter: blur(70px);
-}
-
-.pm-bg__paper {
-  fill: var(--pm-paper);
-}
-
-.public-map .public-map__body {
-  background: white;
-}
-
-.public-map .public-map__map {
-  background: var(--layout-floor);
+  .public-map__title {
+    font-size: 1.5625rem;
+  }
 }
 </style>
