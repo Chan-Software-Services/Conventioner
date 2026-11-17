@@ -234,12 +234,16 @@ test.describe('Rows fill a hall', () => {
     await layout.clickAt(onWall(45));
     await layout.hoverAt(onWall(90));
     await expect(layout.rowLines).toHaveCount(1);
-    // The row along the two points, and past it the ghosts a point at the pointer would add.
+    // The row along the two points, and the ghosts of the row a point at the pointer would lay:
+    // those past the second point, and those of the row it moves, as the curve through three
+    // points is not the curve through two.
     const [laid, shown] = (await layout.rowCount.textContent())!.match(/\d+/g)!.map(Number);
     expect(laid).toBeGreaterThanOrEqual(1);
     expect(shown).toBeGreaterThan(laid);
     await expect(layout.rowTables).toHaveCount(laid);
-    await expect(layout.rowGhosts).toHaveCount(shown - laid);
+    const ghosts = await layout.rowGhosts.count();
+    expect(ghosts).toBeGreaterThanOrEqual(shown - laid);
+    expect(ghosts).toBeLessThanOrEqual(shown);
 
     // Nothing of the path is the layout's until it is placed.
     await expect(layout.tables).toHaveCount(0);
