@@ -16,6 +16,7 @@ import { RouterView } from 'vue-router';
 import router from '@/router';
 import AppBar from '@/components/AppBar.vue';
 import { IntakeMode, MarketPhase } from '@/assets/types/datatypes';
+import { useApplicationStore } from '@/stores/application';
 import { api } from '@/utils/api';
 import type { VendorPageInfo } from '@/utils/vendorPage';
 
@@ -133,6 +134,16 @@ describe('on the market page, once it found its market', () => {
 
     expect(link().text()).toBe('Your vendor page');
     expect(link().attributes('href')).toBe('/spring-market/vendor');
+  });
+
+  it('reads "Vendor sign-in" once the tab\'s sign-in ends while the page stands', async () => {
+    signInFor('spring-market');
+    await visit('/spring-market');
+
+    useApplicationStore().clearSession();
+    await flushPromises();
+
+    expect(link().text()).toBe('Vendor sign-in');
   });
 
   it('reads "Vendor sign-in" to a tab signed in for another market', async () => {

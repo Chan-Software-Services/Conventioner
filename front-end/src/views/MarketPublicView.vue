@@ -47,15 +47,24 @@ type State = 'loading' | 'not-found' | 'failed' | 'ready';
 const state = ref<State>('loading');
 const page = ref<VendorPageInfo | null>(null);
 
+const signedIn = computed(() => store.isAuthenticatedFor(marketSlug.value));
+
 // A "Page not found" here is no vendor's page, so the app bar keeps an organizer's way about on it,
 // as on the vendor page; a page that found its market (the call, a notice or the map) gives the bar
-// its link to the vendor's side. Told by the slug the page answered for, kept, since by the page's
-// unmount the route is already the next page's.
+// its link to the vendor's side, and whether this tab is signed in for it, which the bar's words
+// follow. Told by the slug the page answered for, kept, since by the page's unmount the route is
+// already the next page's.
 let answeredFor = marketSlug.value;
 watch(state, (now) => {
   answeredFor = marketSlug.value;
   vendorPageAnswered(answeredFor, now === 'not-found');
-  marketPageAnswered(answeredFor, now === 'ready');
+  marketPageAnswered(answeredFor, now === 'ready', signedIn.value);
+});
+// A sign-in that starts or ends while the page stands, for the market it answered for.
+watch(signedIn, (now) => {
+  if (state.value === 'ready' && answeredFor === marketSlug.value) {
+    marketPageAnswered(answeredFor, true, now);
+  }
 });
 
 /** Take back what the bar was told for the slug the page last answered. */
@@ -84,8 +93,6 @@ void load();
 const shows = computed(() => (page.value ? marketPageShows(page.value) : null));
 const notice = computed(() => (page.value ? marketPageNotice(page.value) : ''));
 const vendorPage = computed(() => vendorPagePath(marketSlug.value));
-const signedIn = computed(() => store.isAuthenticatedFor(marketSlug.value));
-
 /** A door code that arrived on the open page goes on to the vendor page, which takes it. */
 function forwardDoorCode(): boolean {
   if (gone || typeof route.query.door !== 'string' || route.name !== 'market-page') return false;

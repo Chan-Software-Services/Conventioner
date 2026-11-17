@@ -145,7 +145,8 @@ describe('when the bar stands apart', () => {
 
 /**
  * The bar's way to the vendor's side (T469): on a market page that has answered found, and there
- * alone, it names the slug the link goes to; anywhere else it names none.
+ * alone, it names the slug the link goes to and whether the tab is signed in for it, as the page
+ * told it; anywhere else it names none.
  */
 describe("the bar's link to the vendor page", () => {
   const link = (path: string) => vendorLinkFor(loadedRoute(router, path));
@@ -162,11 +163,22 @@ describe("the bar's link to the vendor page", () => {
 
   it('names the slug once the market page answered found', () => {
     marketPageAnswered('some-market', true);
-    expect(link('/some-market')).toBe('some-market');
+    expect(link('/some-market')).toEqual({ slug: 'some-market', signedIn: false });
+  });
+
+  it('says the tab is signed in for it when the page said so', () => {
+    marketPageAnswered('some-market', true, true);
+    expect(link('/some-market')).toEqual({ slug: 'some-market', signedIn: true });
+  });
+
+  it('takes the latest word on the sign-in from the page', () => {
+    marketPageAnswered('some-market', true, true);
+    marketPageAnswered('some-market', true, false);
+    expect(link('/some-market')).toEqual({ slug: 'some-market', signedIn: false });
   });
 
   it('names none once the page takes its answer back', () => {
-    marketPageAnswered('some-market', true);
+    marketPageAnswered('some-market', true, true);
     marketPageAnswered('some-market', false);
     expect(link('/some-market')).toBeNull();
   });
@@ -177,9 +189,9 @@ describe("the bar's link to the vendor page", () => {
   });
 
   it("is untouched by another slug's taking back", () => {
-    marketPageAnswered('some-market', true);
+    marketPageAnswered('some-market', true, true);
     marketPageAnswered('other-market', false);
-    expect(link('/some-market')).toBe('some-market');
+    expect(link('/some-market')).toEqual({ slug: 'some-market', signedIn: true });
   });
 
   it('names none once the page under it answered "Page not found", as a closing map does', () => {

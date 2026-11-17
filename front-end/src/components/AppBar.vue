@@ -28,7 +28,6 @@ import SignOutEverywhereDialog from '@/components/SignOutEverywhereDialog.vue';
 import IconCloseRound from '@/components/icons/IconCloseRound.vue';
 import IconExpandDown from '@/components/icons/IconExpandDown.vue';
 import IconMenu from '@/components/icons/IconMenu.vue';
-import { useApplicationStore } from '@/stores/application';
 import { currentPlace, standsApart, vendorLinkFor, type AppPlace } from '@/utils/currentPlace';
 import { vendorPagePath } from '@/utils/market';
 import { signOut } from '@/utils/sessionEnded';
@@ -55,13 +54,12 @@ const here = computed(() => currentPlace(route));
 /** The organizer the bar is for: none on a vendor's page, which stands apart from the app. */
 const organizer = computed(() => (standsApart(route) ? null : user.value));
 
-const applicant = useApplicationStore();
 /** The market page's way to the vendor's side, once the page found its market (T469). */
 const vendorLink = computed(() => {
-  const slug = vendorLinkFor(route);
-  if (slug === null) return null;
-  const label = applicant.isAuthenticatedFor(slug) ? 'Your vendor page' : 'Vendor sign-in';
-  return { to: vendorPagePath(slug), label };
+  const link = vendorLinkFor(route);
+  if (link === null) return null;
+  const label = link.signedIn ? 'Your vendor page' : 'Vendor sign-in';
+  return { to: vendorPagePath(link.slug), label };
 });
 
 function leave() {
