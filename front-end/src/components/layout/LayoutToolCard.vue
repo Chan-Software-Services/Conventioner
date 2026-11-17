@@ -9,11 +9,14 @@
  * Section and Table type stand once at its head and carry from one adding tool to the next. Row of
  * tables adds where its tables stand on the line, the gap, the rows, the aisle between rows of
  * more than one, and Spread evenly to the ends; their values are the app's while it is open
- * (`rowChoices`). Fill an area adds "Fill what is in view". Its last line says Escape goes back to
- * Select.
+ * (`rowChoices`). Fill an area adds "Fill what is in view". Both take Group tables, so many to a
+ * group with a spacer between groups, one choice for the two (`groupChoices`, item 15); a group
+ * field that holds no usable number says so under them (D9). Its last line says a right-click on
+ * the map or Escape goes back to Select.
  */
 import { computed, useId } from 'vue';
 import type { SectionObject, TableTypeObject } from '@/assets/types/datatypes';
+import { groupChoices, groupFieldErrors } from './layoutGroups';
 import { rowChoices, rowFieldErrors, rowsOf } from './layoutRow';
 import { TOOL_NAMES, type AddingTool } from './layoutTools';
 
@@ -40,6 +43,8 @@ const emit = defineEmits<{
 const toolCardTitleId = useId();
 /** What Gap and Aisle say of a value that is no length, each under its own id. */
 const rowErrors = computed(rowFieldErrors);
+/** What Per group and Spacer say of a value they cannot use, while grouping is on. */
+const groupErrors = computed(() => groupFieldErrors());
 /** The Aisle's sentence, only while the field stands: one row has no aisle. */
 const aisleError = computed(() => (rowsOf(rowChoices.rows) > 1 ? rowErrors.value.aisle : ''));
 </script>
@@ -168,6 +173,64 @@ const aisleError = computed(() => (rowsOf(rowChoices.rows) > 1 ? rowErrors.value
             >{{ aisleError }}</span
           >
         </p>
+      </template>
+      <template v-if="tool === 'row' || tool === 'fill'">
+        <label class="layout-tool-card__tick">
+          <input v-model="groupChoices.grouped" type="checkbox" data-testid="layout-group" />
+          Group tables
+        </label>
+        <template v-if="groupChoices.grouped">
+          <label class="layout-tool-card__name" :for="`${toolCardTitleId}-group-size`">
+            Per group
+          </label>
+          <span class="layout-tool-card__unit">
+            <input
+              :id="`${toolCardTitleId}-group-size`"
+              v-model="groupChoices.size"
+              class="field layout-tool-card__number"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              :aria-invalid="!!groupErrors.size"
+              :aria-describedby="groupErrors.size ? 'layout-group-size-error' : undefined"
+              data-testid="layout-group-size"
+            />
+            tables
+          </span>
+          <label class="layout-tool-card__name" :for="`${toolCardTitleId}-group-gap`">
+            Spacer
+          </label>
+          <span class="layout-tool-card__unit">
+            <input
+              :id="`${toolCardTitleId}-group-gap`"
+              v-model="groupChoices.gapCm"
+              class="field layout-tool-card__number"
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
+              :aria-invalid="!!groupErrors.gap"
+              :aria-describedby="groupErrors.gap ? 'layout-group-gap-error' : undefined"
+              data-testid="layout-group-gap"
+            />
+            cm between groups
+          </span>
+          <p v-if="groupErrors.size || groupErrors.gap" class="layout-tool-card__error">
+            <span
+              v-if="groupErrors.size"
+              id="layout-group-size-error"
+              role="alert"
+              data-testid="layout-group-size-error"
+              >{{ groupErrors.size }}</span
+            >
+            <span
+              v-if="groupErrors.gap"
+              id="layout-group-gap-error"
+              role="alert"
+              data-testid="layout-group-gap-error"
+              >{{ groupErrors.gap }}</span
+            >
+          </p>
+        </template>
       </template>
     </div>
     <button

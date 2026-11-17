@@ -25,7 +25,8 @@ import IconExpandDown from '@/components/icons/IconExpandDown.vue';
 import { plural } from '@/utils/utils';
 import { placeInMetres, tableCode, type LayoutSection } from './layoutDrawing';
 import type { Alignment } from './layoutGeometry';
-import { MAX_LENGTH_CM, rowFieldErrors } from './layoutRow';
+import { MAX_LENGTH_CM } from './layoutLength';
+import { rowFieldErrors } from './layoutRow';
 
 /** What the Align menu offers: an edge or a centre to line up by, or an even spacing. */
 export type Arrangement = Alignment | 'across' | 'down';

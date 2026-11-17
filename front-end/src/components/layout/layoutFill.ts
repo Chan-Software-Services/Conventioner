@@ -16,6 +16,7 @@
  * as one step of undo.
  */
 import { computed, reactive, shallowRef, type ComputedRef, type ShallowRef } from 'vue';
+import type { Grouping } from './layoutGroups';
 import type { FloorplanObject, FloorplanTable, TableTypeObject } from '@/assets/types/datatypes';
 import { api } from '@/utils/api';
 import { metres } from './layoutDrawing';
@@ -82,6 +83,8 @@ export interface FillRequest {
   area_polygon_mm?: Pair[];
   existing_mm: [Pair, Pair, Pair, Pair][];
   direction: 'across' | 'down';
+  /** Each row's tables in groups of `size`, `spacer_mm` between one group and the next. */
+  grouping?: { size: number; spacer_mm: number };
 }
 
 /** The placement's answer: each table by its centre, and whether it ran out of time. */
@@ -131,6 +134,7 @@ export function fillRequest(
   tableTypeId: string,
   area: FillArea,
   choice: FillChoice,
+  grouping: Grouping | null = null,
 ): FillRequest {
   const sizeOf = (id: string): SizeMm =>
     tableTypes.find((type) => type.id === id) ?? STANDARD_TABLE;
@@ -162,6 +166,7 @@ export function fillRequest(
     scale_px_per_mm: layout.scalePxPerUnit ?? 0,
     room_mm: { width_mm: hall?.widthMm ?? 0, height_mm: hall?.heightMm ?? 0 },
     aisle_config: { wallBufferMm: 0, tableSpacingMm: choice.aisleMm },
+    ...(grouping ? { grouping: { size: grouping.size, spacer_mm: grouping.gapMm } } : {}),
     ...(area.kind === 'box'
       ? {
           area_mm: [

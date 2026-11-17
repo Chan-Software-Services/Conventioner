@@ -185,11 +185,12 @@ AISLE = {"wall_buffer_mm": 0, "table_spacing_mm": 1200}
 
 
 def fill(count, *, area_mm=None, area_polygon_mm=None, obstacles=(), existing_mm=(),
-         direction="across", room_mm=AREA_HALL, aisle=AISLE):
+         direction="across", room_mm=AREA_HALL, aisle=AISLE, grouping=None):
     return Placement.auto_place_tables(
         walls=[], obstacles=list(obstacles), table_types=[SIX_FOOT], counts={"six": count},
         scale_px_per_mm=0.02, room_mm=room_mm, aisle_config=aisle, area_mm=area_mm,
         area_polygon_mm=area_polygon_mm, existing_mm=list(existing_mm), direction=direction,
+        grouping=grouping,
     )
 
 
@@ -327,6 +328,65 @@ class TestFillingABox:
 
         assert result.placed == []
         assert result.timed_out is False
+
+
+class TestFillingInGroups:
+    """Fill an area's grouping (T422, the QC walk's item 15): each row's tables stand in groups of
+    ``size``, end to end, with ``spacer_mm`` of floor before the next group, along each stretch of
+    the row that is clear."""
+
+    PAIRS = {"size": 2, "spacer_mm": 1200}
+
+    def test_a_row_across_stands_in_pairs_with_the_spacer_between(self, either_install):
+        placed = fill(500, area_mm=[0, 0, 12000, 750], grouping=self.PAIRS).placed
+
+        # 1.8 m tables: a pair at 0 and 1.8 m, 1.2 m of floor, the next pair at 4.8 and 6.6 m, then
+        # 9.6 m; a sixth table at 11.4 m would run past the box's 12 m.
+        assert [_footprint(table)[0] for table in placed] == pytest.approx(
+            [0, 1800, 4800, 6600, 9600], abs=0.01,
+        )
+        assert all(table["rotation"] == 0 for table in placed)
+
+    def test_a_row_down_stands_in_pairs_with_the_spacer_between(self, either_install):
+        placed = fill(500, area_mm=[0, 0, 750, 12000], direction="down", grouping=self.PAIRS).placed
+
+        assert [_footprint(table)[1] for table in placed] == pytest.approx(
+            [0, 1800, 4800, 6600, 9600], abs=0.01,
+        )
+        assert all(table["rotation"] in (90, -90, 270) for table in placed)
+
+    def test_every_row_starts_its_own_group(self, either_install):
+        placed = fill(
+            500, area_mm=[0, 0, 9000, 750 + 1200 + 750], grouping={"size": 2, "spacer_mm": 500},
+        ).placed
+
+        rows = _rows_of([_footprint(table) for table in placed])
+        # Pairs in 9 m, where five would stand end to end: 0 and 1.8 m, 0.5 m, 4.1 and 5.9 m; the
+        # second row the same, its own first pair at its start.
+        assert len(rows) == 2
+        for row in rows:
+            assert [footprint[0] for footprint in row] == pytest.approx([0, 1800, 4100, 5900], abs=0.01)
+
+    def test_a_stretch_past_a_zone_starts_its_own_group(self, either_install):
+        zone = {"polygon": [[6000, 0], [9000, 0], [9000, 750], [6000, 750]], "type": "no_table_zone"}
+
+        placed = fill(500, area_mm=[0, 0, 20000, 750], obstacles=[zone], grouping=self.PAIRS).placed
+
+        assert [_footprint(table)[0] for table in placed] == pytest.approx(
+            [0, 1800, 9000, 10800, 13800, 15600], abs=0.01,
+        )
+
+    def test_a_group_of_one_keeps_the_spacer_after_every_table(self, either_install):
+        placed = fill(500, area_mm=[0, 0, 7000, 750], grouping={"size": 1, "spacer_mm": 300}).placed
+
+        assert [_footprint(table)[0] for table in placed] == pytest.approx([0, 2100, 4200], abs=0.01)
+
+    def test_with_no_grouping_the_tables_touch_along_the_row(self, either_install):
+        placed = fill(500, area_mm=[0, 0, 12000, 750]).placed
+
+        assert [_footprint(table)[0] for table in placed] == pytest.approx(
+            [0, 1800, 3600, 5400, 7200, 9000], abs=0.01,
+        )
 
 
 class TestFillingADrawnShape:

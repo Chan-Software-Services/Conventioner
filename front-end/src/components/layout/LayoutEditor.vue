@@ -155,6 +155,7 @@ import {
   useRowTool,
   type KeptStroke,
 } from './layoutRow';
+import { groupRefusal, groupingOf } from './layoutGroups';
 import { centreOf, selectionBounds, turnSelection } from './layoutSelection';
 import { ADDING_TOOLS, TOOL_KEYS, type Tool } from './layoutTools';
 import { SHORTCUTS_WIDTH, rememberedChoice, useRoomBesideTheFrame } from './layoutViewChoices';
@@ -829,10 +830,14 @@ function runFill(choice: FillChoice) {
   const typeId = addTypeId.value || (props.tableTypes[0]?.id ?? '');
   const ask = props.fill;
   if (!area || !ask) return;
-  const request = fillRequest(layout.value, props.tableTypes, typeId, area, choice);
+  const grouping = groupingOf();
+  const request = fillRequest(layout.value, props.tableTypes, typeId, area, choice, grouping);
   const asked = layout.value.id;
+  // A group field that holds no usable number is said in the dialog, and nothing is asked (D9).
+  const refused = groupRefusal();
   void filling.submit(
     async () => {
+      if (refused) throw new Refusal(refused);
       if (!request.counts[typeId]) throw new Refusal(LAYOUT_IS_FULL);
       return ask(request);
     },

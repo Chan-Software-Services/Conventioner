@@ -47,6 +47,8 @@ import {
   type SizeMm,
   type StrokeOptions,
 } from './layoutGeometry';
+import { groupRefusal, groupingOf } from './layoutGroups';
+import { lengthMmOf, saidNoLength } from './layoutLength';
 import type { LayoutEditor, NewTable } from './useLayoutEditor';
 
 /** The most tables a layout holds: the server's `MAX_PLACED_TABLES` (`floorplan_limits.py`). */
@@ -147,22 +149,6 @@ export function rowsOf(typed: string): number {
   const rows = Math.floor(Number(String(typed).trim()));
   return Number.isFinite(rows) && rows >= 1 ? Math.min(rows, MAX_ROWS) : 1;
 }
-
-/** The widest gap or aisle a row or a fill takes, in centimetres: the placement's 10,000 mm. */
-export const MAX_LENGTH_CM = 1000;
-
-/** A gap or an aisle typed, in millimetres: a number of centimetres from 0 to 1,000, a comma for
- *  the point taken; null for anything else, which its field says rather than reading as none. */
-export function lengthMmOf(typed: string): number | null {
-  const text = String(typed).trim().replace(',', '.');
-  if (!/^\d+(\.\d+)?$/.test(text)) return null;
-  const cm = Number(text);
-  return cm <= MAX_LENGTH_CM ? Math.round(cm * 10) : null;
-}
-
-/** What a gap's or an aisle's field says of a value that is no length. */
-export const saidNoLength = (what: 'gap' | 'aisle') =>
-  `Type the ${what}'s width in centimetres, 0 to ${MAX_LENGTH_CM.toLocaleString('en')}.`;
 
 /** What the options strip's Gap and Aisle say of themselves: each one's sentence where it holds
  *  no length, else ''. */
@@ -367,7 +353,7 @@ export function useRowTool(options: RowToolOptions): RowTool {
   // The aisle is read only between rows, so it refuses only when more than one is asked.
   const refusal = computed(() => {
     const errors = rowFieldErrors();
-    return errors.gap || (rowsOf(rowChoices.rows) > 1 ? errors.aisle : '');
+    return errors.gap || (rowsOf(rowChoices.rows) > 1 ? errors.aisle : '') || groupRefusal();
   });
   const poses = computed(() => {
     const now = layout();
@@ -384,6 +370,7 @@ export function useRowTool(options: RowToolOptions): RowTool {
       aisleMm: lengthMmOf(rowChoices.aisleCm) ?? 0,
       // A closed shape's tables are always spread round it; an open path's where asked.
       spread: drawnClosed.value || rowChoices.spread,
+      group: groupingOf(),
     }).flat();
   });
 

@@ -1222,6 +1222,9 @@ export interface RowOptions {
   /** The floorplan: a table whose centre would stand outside it is left out. */
   extent?: SizeMm;
   maxCount?: number;
+  /** Tables in groups of `size` along each run, `gapMm` apart within a group and the group's own
+   *  `gapMm` between one group and the next (`layoutGroups.ts`); null or none for no groups. */
+  group?: { size: number; gapMm: number } | null;
 }
 
 type Vec = readonly [number, number];
@@ -1766,10 +1769,18 @@ function rowAlong(
       loop && s >= whole.length ? null : poseAt(run, s, widthMm, depthMm, side);
 
     const step = widthMm / 16;
-    /** Place the run's tables `gap` apart: how many, the room left past the last, and whether
-     *  the row was cut short by the most it may place. */
-    const march = (gap: number): { count: number; left: number; capped: boolean } => {
+    /** Place the run's tables `rowGap` apart, in groups where asked: how many, the room left past
+     *  the last, and whether the row was cut short by the most it may place. */
+    const march = (rowGap: number): { count: number; left: number; capped: boolean } => {
       const from = placed.length;
+      const group = options.group;
+      /** The gap before the run's `k`th table, from 0: the group's spacer before the first of each
+       *  group but the run's first, widened by as much as a spread row widens its gap; else the
+       *  row's (D10). */
+      const gapBefore = (k: number) =>
+        group && k > 0 && k % group.size === 0 ? group.gapMm + (rowGap - gapMm) : rowGap;
+      /** The gap the table being placed keeps from every table before it. */
+      let gap = rowGap;
       /**
        * The first clear place between one that is not and one that is, each with how clear it
        * stands where that is known: by where a straight line between the two would cross from
@@ -1900,6 +1911,7 @@ function rowAlong(
       let firstEnd = 0;
       let capped = false;
       for (;;) {
+        gap = gapBefore(placed.length - from);
         if (out.length >= maxCount) {
           // Cut short only where another table would have fitted.
           capped = at(s) !== null;
@@ -1955,8 +1967,9 @@ function rowAlong(
         if (placed.length - from === 1) firstEnd = pose.endS;
         lastS = pose.startS;
         lastEnd = pose.endS;
-        s = pose.endS + gap;
+        s = pose.endS + gapBefore(placed.length - from);
       }
+      gap = rowGap;
       const count = placed.length - from;
       if (!count) return { count, left: 0, capped };
       // Past the last table: the run's length left over, or round a loop the gap to the first

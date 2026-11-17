@@ -24,13 +24,13 @@ import { separation, tableCorners } from '@/components/layout/layoutGeometry';
 import {
   MAX_LAYOUT_TABLES,
   ROW_CHOICES_AT_FIRST,
-  lengthMmOf,
   rowChoices,
   rowOnFrom,
   standingShapes,
   strokeOptions,
   useRowTool,
 } from '@/components/layout/layoutRow';
+import { lengthMmOf } from '@/components/layout/layoutLength';
 import type { SavedLayout } from '@/components/layout/layoutSave';
 import { useLayoutEditor } from '@/components/layout/useLayoutEditor';
 
