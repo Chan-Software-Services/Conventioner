@@ -306,7 +306,9 @@ export function detectLayout(opts: DetectOptions): Finding[] {
       if (wrong.length) push('scroller-without-a-shade', el, wrong.join(' and '));
     }
 
-    // A child that leaves its parent's box, the parent letting it show.
+    // A child that leaves its parent's box, the parent letting it show. A negative margin is the
+    // child asking to stand out that far, as a row bled across a screen's gutter does (T466): only
+    // what leaves past it counts.
     if (cs.overflowX === 'visible' && cs.display !== 'inline' && cs.display !== 'contents') {
       for (const child of Array.from(el.children)) {
         const ccs = styleOf(child);
@@ -314,7 +316,11 @@ export function detectLayout(opts: DetectOptions): Finding[] {
           continue;
         const cr = rectOf(child);
         if (cr.width === 0 || cr.height === 0) continue;
-        const over = Math.max(cr.right - r.right, r.left - cr.left);
+        const pulled = (margin: string) => Math.max(0, -parseFloat(margin) || 0);
+        const over = Math.max(
+          cr.right - r.right - pulled(ccs.marginRight),
+          r.left - cr.left - pulled(ccs.marginLeft),
+        );
         if (over > 1)
           push('child-outside-parent', child, `${Math.round(over)}px outside ${label(el)}`);
       }

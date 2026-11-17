@@ -664,17 +664,22 @@ for (const size of PHONE_AND_DESK) {
       await press(all.assignedTo.option(last));
       await expect(all.assignedTo.field).toHaveValue(last);
 
-      // Export ends the toolbar over the filters line, at the same inner edge (T466).
-      const rowEnd = await page
+      // At a desk Export ends the toolbar over the filters line, at the same inner edge; on a phone
+      // the toolbar's end starts its own line at the start edge, as every toolbar's does (T466).
+      const toolsEnd = await page
         .getByTestId('applications-all-list-tools')
         .evaluate(
           (row) =>
             row.getBoundingClientRect().right - parseFloat(getComputedStyle(row).paddingRight),
         );
-      const exportEnd = await all.exportButton.evaluate(
-        (button) => button.getBoundingClientRect().right,
-      );
-      expect(exportEnd).toBeCloseTo(rowEnd, 0);
+      const exportBox = (await all.exportButton.boundingBox())!;
+      if (size.phone) {
+        const refresh = (await page.getByTestId('applications-refresh').boundingBox())!;
+        expect(exportBox.y, 'Export on the line of Refresh').toBeCloseTo(refresh.y, 0);
+        expect(exportBox.x + exportBox.width).toBeLessThanOrEqual(toolsEnd);
+      } else {
+        expect(exportBox.x + exportBox.width).toBeCloseTo(toolsEnd, 0);
+      }
     });
 
     if (size.phone) {
