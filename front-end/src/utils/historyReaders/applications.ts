@@ -6,12 +6,12 @@
  * - `import-applications/imported`
  * - `import-applications/started`
  * - `give-verdicts/verdict`
- * - `give-verdicts/verdicts`, its sentence, and its rows in one vendor's own history
+ * - `give-verdicts/verdicts`, its sentence and its rows
  * - `give-verdicts/verdict_undone`
- * - `give-verdicts/verdicts_undone`, its sentence, and its rows in one vendor's own history
+ * - `give-verdicts/verdicts_undone`, its sentence and its rows
  * - `give-verdicts/follow_up_owner`
  * - `change-verdicts/verdict`
- * - `change-verdicts/verdicts`, its sentence, and its rows in one vendor's own history
+ * - `change-verdicts/verdicts`, its sentence and its rows
  * - `choose-reviewers/reviewers`, its sentence and its rows
  * - `dealt` under any action, keyed with a star for its action, its sentence and its rows
  *
@@ -98,31 +98,36 @@ function dealtTo(entry: MarketHistoryEntry, reviewer: unknown): string {
   return theirs ? `, dealt to ${theirs}` : '';
 }
 
-/** In a selection's entry, the application of the vendor whose own history this is: its id, its
- * verdict before and after, and whose share it was, by the id the entry names it by. */
-interface OwnVerdict {
-  id: string;
+/** One application of a selection's verdicts: its vendor, its verdict before and after, and whose
+ * share it was. The entry names the vendors and the ids in the same order, and its detail holds
+ * each one's verdict and share by id. */
+interface SelectedVerdict {
+  vendor: string;
   before: Detail;
   after: Detail;
   dealtTo: unknown;
 }
 
-/** The own vendor's application in a selection's verdicts, when the selection holds it. */
-function ownVerdict(entry: MarketHistoryEntry, own: string): OwnVerdict | undefined {
-  const vendor = own.trim().toLowerCase();
-  const index = vendor
-    ? entry.vendors.findIndex((email) => str(email).trim().toLowerCase() === vendor)
-    : -1;
+function selectedVerdicts(entry: MarketHistoryEntry): SelectedVerdict[] {
   const ids = Array.isArray(entry.subject.application_ids) ? entry.subject.application_ids : [];
-  if (index < 0 || index >= ids.length) return undefined;
-  const id = str(ids[index]);
   const detail = asDetail(entry.detail);
-  return {
-    id,
-    before: asDetail(asDetail(detail.before)[id]),
-    after: asDetail(asDetail(detail.after)[id]),
-    dealtTo: asDetail(detail.dealt_to)[id],
-  };
+  return ids.map((each, index) => {
+    const id = str(each);
+    return {
+      vendor: str(entry.vendors[index]),
+      before: asDetail(asDetail(detail.before)[id]),
+      after: asDetail(asDetail(detail.after)[id]),
+      dealtTo: asDetail(detail.dealt_to)[id],
+    };
+  });
+}
+
+/** The application of the vendor whose own history this is, when the selection holds it. */
+function ownVerdict(entry: MarketHistoryEntry, own: string): SelectedVerdict | undefined {
+  const vendor = own.trim().toLowerCase();
+  return vendor
+    ? selectedVerdicts(entry).find((each) => each.vendor.trim().toLowerCase() === vendor)
+    : undefined;
 }
 
 /** "the application", and how many others the selection decided with it, when any. */
@@ -131,22 +136,35 @@ function andOthers(entry: MarketHistoryEntry): string {
   return `the application${others > 0 ? ` and ${plural(others, 'other', 'others')}` : ''}`;
 }
 
-/** A selection's verdict in one of its vendors' own history: their status before and after, and
- * whose share it was, as a verdict on that one application opens to. */
-function ownVerdictChanges(
-  entry: MarketHistoryEntry,
-  context: ReaderContext,
-): EntryChanges | undefined {
+/** A verdict in words: its status, and the follow-up's owner while there is one. */
+function verdictText(state: Detail): string {
+  const owner = str(state.follow_up_owner);
+  return `${statusLabel(str(state.status))}${owner ? ` (${owner})` : ''}`;
+}
+
+/** What a selection's verdicts open to: each vendor's verdict before and after, by their address,
+ * as a deal's rows are, and whose share each was. In one of its vendors' own history, their verdict
+ * alone, as a verdict on that one application opens to. */
+function verdictChanges(entry: MarketHistoryEntry, context: ReaderContext): EntryChanges {
   const mine = ownVerdict(entry, context.own);
-  if (!mine) return undefined;
-  const detail = {
-    before: mine.before,
-    after: mine.after,
-    ...(mine.dealtTo ? { dealt_to: mine.dealtTo } : {}),
-  };
+  if (mine) {
+    const detail = {
+      before: mine.before,
+      after: mine.after,
+      ...(mine.dealtTo ? { dealt_to: mine.dealtTo } : {}),
+    };
+    return {
+      changed: changedFields(mine.before, mine.after, context.path),
+      recorded: recordedFields(entry, detail, context, true),
+    };
+  }
   return {
-    changed: changedFields(mine.before, mine.after, context.path),
-    recorded: recordedFields(entry, detail, context, true),
+    changed: selectedVerdicts(entry).map((each) => ({
+      field: each.vendor,
+      before: verdictText(each.before),
+      after: verdictText(each.after),
+    })),
+    recorded: recordedFields(entry, asDetail(entry.detail), context, true),
   };
 }
 
@@ -229,8 +247,8 @@ export const readers: HistoryReaders = {
       ];
     },
   },
-  'give-verdicts/verdicts': { parts: verdicts, changes: ownVerdictChanges },
-  'change-verdicts/verdicts': { parts: verdicts, changes: ownVerdictChanges },
+  'give-verdicts/verdicts': { parts: verdicts, changes: verdictChanges },
+  'change-verdicts/verdicts': { parts: verdicts, changes: verdictChanges },
   // A verdict taken back by its giver within the window (E38/F10/S01): what it was, and what the
   // application went back to.
   'give-verdicts/verdict_undone': {
@@ -272,7 +290,7 @@ export const readers: HistoryReaders = {
       });
       return parts;
     },
-    changes: ownVerdictChanges,
+    changes: verdictChanges,
   },
   'give-verdicts/follow_up_owner': {
     parts(entry, context) {

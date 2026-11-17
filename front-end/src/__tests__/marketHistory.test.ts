@@ -1055,7 +1055,36 @@ describe('a selection’s verdict in a vendor’s own history', () => {
     expect(said(entryParts(given, { names: NAMES }))).toBe(
       `dana@ember.test set 3 applications to Approved: [Ana Rivera] (dealt to ${SAM}), [Ben Okafor], [${CAL}]`,
     );
-    expect(entryChanges(given).changed).toHaveLength(3);
+  });
+
+  it('opens, in the market’s history, to each vendor’s verdict before and after, as a deal does', () => {
+    expect(entryChanges(given)).toEqual({
+      changed: [
+        { field: 'ana@ember.test', before: 'Open', after: 'Approved' },
+        { field: 'ben@ember.test', before: 'Open', after: 'Approved' },
+        { field: CAL, before: 'Open', after: 'Approved' },
+      ],
+      recorded: [
+        { field: 'Dealt to', value: `ana@ember.test: ${SAM}, ben@ember.test: dana@ember.test` },
+      ],
+    });
+    const followUp = entry({
+      action: 'give-verdicts',
+      kind: 'verdicts_undone',
+      vendors: ['ana@ember.test', 'ben@ember.test'],
+      subject: { application_ids: ['a1', 'a2'] },
+      detail: {
+        before: { a1: { status: 'reviewer_approved' }, a2: { status: 'reviewer_rejected' } },
+        after: {
+          a1: { status: 'needs_follow_up', follow_up_owner: SAM },
+          a2: { status: 'open' },
+        },
+      },
+    });
+    expect(entryChanges(followUp).changed).toEqual([
+      { field: 'ana@ember.test', before: 'Approved', after: `Needs follow-up (${SAM})` },
+      { field: 'ben@ember.test', before: 'Rejected', after: 'Open' },
+    ]);
   });
 });
 

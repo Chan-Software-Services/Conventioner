@@ -19,8 +19,9 @@ import { putVerdict } from './helpers/putVerdict';
  * verdict, a note and a table each through the API the screens call, on a fixture market, and each
  * drawer reads its own vendor's entries and never the other's. A verdict given to a selection of
  * three reads in one vendor's drawer as their own line, naming none of the other two, and whole in
- * Manage market's History. Raised above a Viewer, the history's
- * row takes the tab from their drawer and the changes from their Permissions dialog.
+ * Manage market's History, which opens to each vendor's verdict by their address. Raised above a
+ * Viewer, the history's row takes the tab from their drawer and the changes from their Permissions
+ * dialog.
  */
 const VENDOR = { email: 'e2e-drawer-history-vera@example.com', name: 'Vera Vendor' };
 const OTHER = { email: 'e2e-drawer-history-otto@example.com', name: 'Otto Other' };
@@ -177,6 +178,13 @@ test("a verdict on a selection reads in a vendor's History tab as their own line
   await manage.openHistory();
   await expect(manage.historySentences.first()).toHaveText(
     `${me} set 3 applications to Approved: ${vendors.map((vendor) => `${vendor.name} ${vendor.email}`).join(', ')}`,
+  );
+  // It opens to each vendor's verdict by their address, never an application's id.
+  const changes = await manage.openHistoryEntry(0);
+  await expect(changes.locator('tbody tr')).toHaveText(
+    vendors.map(
+      (vendor) => new RegExp(`^\\s*${vendor.email.replace(/\./g, '\\.')}\\s*Open\\s*Approved\\s*$`),
+    ),
   );
 });
 
