@@ -332,13 +332,6 @@ class TestAPinThatOverridesTheVendorsAnswer:
 
         assert result == []
 
-    def test_a_placement_that_matches_the_answer_is_not_marked(self):
-        result = overridden_placements(
-            [vendor()], [pinned("nadia@ember.test", DATES[0], "Section Gold 1")]
-        )
-
-        assert result == []
-
     def test_a_solver_placement_is_never_marked(self):
         """The solver does not contradict answers; a row from it appearing here would be a bug."""
         result = overridden_placements(

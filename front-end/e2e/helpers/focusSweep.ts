@@ -2,8 +2,9 @@ import { expect, type Page } from '@playwright/test';
 
 /**
  * The focus sweep's machinery: the page's half that judges the focused element, the Tab walk, the
- * menu walk and the dialog windows. `focus-sweep.spec.ts` runs it over every state the sweeps
- * walk; `focus-sweep-detectors.spec.ts` shows it fixtures of the defects it is meant to catch.
+ * menu walk and the dialog windows. The screen sweeps' focus check (`screenSweeps.ts`) runs it over
+ * every state the sweeps walk; `focus-sweep-detectors.spec.ts` shows it fixtures of the defects it
+ * is meant to catch.
  */
 
 /** The halos' outer colours, as the browser computes `--focus-halo` and `--focus-halo-on-dark`. */

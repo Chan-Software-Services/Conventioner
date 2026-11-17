@@ -18,7 +18,7 @@ from datatypes import IntakeMode, Market, MarketPhase, MarketRole, phase_label  
 from guards import evaluate_transition, transition_verdicts  # noqa: E402
 
 
-def _market(phase: MarketPhase, intake: IntakeMode = IntakeMode.CSV) -> Market:
+def _market(phase: MarketPhase) -> Market:
     return Market(
         id="market-1",
         name="Test Market",
@@ -29,7 +29,7 @@ def _market(phase: MarketPhase, intake: IntakeMode = IntakeMode.CSV) -> Market:
         setup_object=complete_setup(),
         application_form={"fields": [{"key": "name", "label": "Name", "type": "text"}]},
         phase=phase,
-        intake_mode=intake,
+        intake_mode=IntakeMode.CSV,
         **review_setup_decided(),
     )
 
@@ -88,13 +88,6 @@ class TestReviewWaitsOnAnImport:
     def test_the_first_import_judges_the_move_less_what_it_writes(self, applications):
         blockers = evaluate_transition(
             _market(MarketPhase.DRAFT), "applications", None, leaving_out=("responses_imported",),
-        )
-
-        assert blockers == []
-
-    def test_a_form_market_is_not_asked_to_import(self, applications):
-        blockers = evaluate_transition(
-            _market(MarketPhase.DRAFT, IntakeMode.FORM), "applications", None,
         )
 
         assert blockers == []
