@@ -865,6 +865,11 @@ function cancelPending() {
 .phase-spine-box {
   flex: 0 0 auto;
   --scroll-box-overflow: visible;
+  /* Room for the current step's ring, its outline 4px outside the dot (below), inside the box: on a
+     phone the box scrolls, so it clips, and the first step's ring, a draft's, was cut at its left.
+     The box reaches as far into the rail's gutter as the list is padded, so the dot stays on the
+     rail's line. */
+  margin-inline-start: calc(-1 * var(--space-1));
 }
 
 .phase-spine {
@@ -873,7 +878,7 @@ function cancelPending() {
   gap: var(--space-1);
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 0 0 var(--space-1);
 }
 
 /* A phone (E29/F01): the spine keeps its full width - shrinking is what makes labels collide - and

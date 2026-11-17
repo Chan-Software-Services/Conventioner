@@ -18,6 +18,7 @@ sources:
   - E26/F10/S01
   - E31/F02/S01
   - E32/F01/S01
+  - T474
   - E32/F01/S02
   - E32/F02/S01
   - bug/8
@@ -138,6 +139,7 @@ Which chip shape draws is decided in the script (`onAPhone`, `useMediaQuery` on 
 Each chip is one line, 50px: a 44px Copy inset by the desk's 2px hairline in the chip's border, since with no inset Copy's border lay on the chip's; the step link is `--target-min` (44px) tall, and the buttons are through `.btn`.
 At the door in market days on a form market, its chip and More…, the door starts within the top 340px of 844 on first paint, which `phase-rail.spec.ts` holds it to; it started at 409px.
 The spine stands in a [`ScrollBox`](../../../front-end/src/components/ScrollBox.vue) with `axis="x"`, whose shades say which end has more (T217), the `ol` of steps inside it, so the list and its name hold; the test id `phase-rail-spine` names the scroller, and the class `phase-spine` the list.
+The list is padded at its start by the current step's ring, an outline 4px outside the dot, and the box reaches as far into the rail's gutter, so the dot stays on the rail's line and the ring stays inside the scroller, which clips on a phone: a draft's Draft step, the first, had its ring cut at the left edge, which `a-draft-market-lines-up-on-a-phone.spec.ts` holds whole on Stats at 390 and at 1440.
 While the spine scrolls that box is a keyboard stop and a region named "Phases", so the phases past the window's edge can be reached (axe's `scrollable-region-focusable`); on a desk, where it fits, it sets `--scroll-box-overflow: visible` and is neither a stop nor a region (T82).
 Focused, it wears the inset halo of every `ScrollBox` that is a stop ([the design language](../../design-system.md#the-primitive-layer)), with no rule of its own.
 The layout sweep walks the rail on Attendance at 390 in every phase the screens seed holds, both intake paths among them, so a squeezed chip, an overlap or a control past the window fails it; a link drawn on a line of its own is a tap target to it, and only a link inside a run of text is exempt.
