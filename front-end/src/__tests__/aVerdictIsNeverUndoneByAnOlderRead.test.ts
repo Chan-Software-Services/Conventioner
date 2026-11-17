@@ -342,6 +342,40 @@ describe('the list', () => {
   });
 });
 
+describe('an update of a vendor’s answers saved on A', () => {
+  it('answering after the move to B adds no row to B and changes none of B’s', async () => {
+    mounted = mount(ApplicationsAll, {
+      props: { market: market('m1') },
+      global: {
+        stubs: {
+          VendorDrawer: {
+            name: 'VendorDrawer',
+            emits: ['infoUpdated'],
+            template: '<div><slot name="actions" /></div>',
+            methods: { entryFor: () => null, loadNotes: () => undefined },
+          },
+          ExportVendorsDialog: true,
+          FollowUpDialog: true,
+        },
+      },
+    });
+    await flushPromises();
+    const wrapper = mounted;
+    await wrapper.setProps({ market: market('m2') });
+    await flushPromises();
+    expect(rowsShown(wrapper)).toHaveLength(1);
+
+    const saved = application('jo', 'm1');
+    holding = true;
+    wrapper.findComponent({ name: 'VendorDrawer' }).vm.$emit('infoUpdated', saved);
+    await flushPromises();
+
+    expect(rowsShown(wrapper)).toHaveLength(1);
+    expect(rowsShown(wrapper)[0]).toContain('bo@vendor.test');
+    expect(rowOf(wrapper, 'bo')!.text()).toContain(statusLabel(ApplicationStatus.Open));
+  });
+});
+
 describe('what a verdict on A offers', () => {
   it('is withdrawn on the move to B: no Undo of A’s verdict on B, and none sent to B', async () => {
     route.query = { vendor: 'jo@vendor.test' };

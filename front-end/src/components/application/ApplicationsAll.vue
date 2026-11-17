@@ -188,7 +188,7 @@ const { me, people, writesNotes } = verdicts;
  */
 function infoUpdated(saved: Application) {
   const wasRereading = listRead.phase.value === 'refreshing';
-  verdicts.adopt(saved);
+  verdicts.adopt(saved, saved.marketId);
   // A re-read out was asked before the update, and the adopt has already asked again past it.
   if (!wasRereading) void listRead.reread();
 }
