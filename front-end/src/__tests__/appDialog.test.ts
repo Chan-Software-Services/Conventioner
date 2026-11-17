@@ -606,6 +606,16 @@ describe('with `scroll="body"`', () => {
 
     expect(byTestId('opener')!.closest('[inert]')).toBeNull();
   });
+
+  it.each([
+    ['the body scrolls and it asks', { scroll: 'body', fitsContentOnAPhone: true }, true],
+    ['the body scrolls and it does not ask', { scroll: 'body' }, false],
+    ['the window scrolls, whatever it asks', { fitsContentOnAPhone: true }, false],
+  ] as const)('fits its content on a phone only when %s', async (_when, dialog, fits) => {
+    await openFromTheButton(dialog);
+
+    expect(byTestId('people-window')!.classList.contains('dialog-window--fits')).toBe(fits);
+  });
 });
 
 /** Gives the body a size, as a browser lays it out, and scrolls it to `top`. */

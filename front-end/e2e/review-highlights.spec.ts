@@ -45,6 +45,7 @@ const ANSWERS = {
 
 async function seedMarketWithAForm(
   request: APIRequestContext,
+  form: { fields: unknown[] } = FORM,
 ): Promise<{ marketId: string; market: unknown }> {
   await loginViaApi(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
   const orgId = await ensureTestOrg(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
@@ -64,7 +65,7 @@ async function seedMarketWithAForm(
   expect(created.ok(), await created.text()).toBeTruthy();
   const { market_id: marketId } = (await created.json()) as { market_id: string };
 
-  await saveApplicationForm(request, BACKEND_URL, marketId, FORM, headers);
+  await saveApplicationForm(request, BACKEND_URL, marketId, form, headers);
   await decideReviewSetup(request, BACKEND_URL, marketId);
   const opened = await request.post(`${BACKEND_URL}/markets/${marketId}/transition`, {
     headers,
@@ -261,25 +262,32 @@ test.describe('What a reviewer reads first', () => {
 });
 
 /**
+ * A queue of its own: a test in either describe below may give a verdict, which would move the
+ * others' cards.
+ */
+async function aQueue(
+  request: APIRequestContext,
+  page: Page,
+  form = FORM,
+): Promise<ApplicationMonitorPage> {
+  const { marketId } = await seedMarketWithAForm(request, form);
+  seedApplication(marketId, 'nadia@ember.test', ANSWERS);
+  seedApplication(marketId, 'rafi@kiln.test', { ...ANSWERS, business_name: 'Kiln & Co' });
+  seedApplication(marketId, 'sana@loom.test', { ...ANSWERS, business_name: 'Loom & Co' });
+  const monitor = new ApplicationMonitorPage(page);
+  await monitor.goto(marketId);
+  await monitor.waitForLoaded();
+  await expect(monitor.email).toBeVisible({ timeout: 15000 });
+  return monitor;
+}
+
+/**
  * The ticks open in a dialog over the card (T217), where they used to unfold between its answers and
  * its verdict buttons: the card stays where it is, the same application is up after, and a verdict
  * key never reaches a card the reviewer cannot see.
  */
 test.describe('Choosing what leads the card, in a dialog', () => {
   test.use({ viewport: { width: 1280, height: 800 } });
-
-  /** A queue of its own: a test here gives a verdict, which would move the others' cards. */
-  async function aQueue(request: APIRequestContext, page: Page): Promise<ApplicationMonitorPage> {
-    const { marketId } = await seedMarketWithAForm(request);
-    seedApplication(marketId, 'nadia@ember.test', ANSWERS);
-    seedApplication(marketId, 'rafi@kiln.test', { ...ANSWERS, business_name: 'Kiln & Co' });
-    seedApplication(marketId, 'sana@loom.test', { ...ANSWERS, business_name: 'Loom & Co' });
-    const monitor = new ApplicationMonitorPage(page);
-    await monitor.goto(marketId);
-    await monitor.waitForLoaded();
-    await expect(monitor.email).toBeVisible({ timeout: 15000 });
-    return monitor;
-  }
 
   test('it opens over the card, which does not move, with one Done and no Cancel', async ({
     authenticatedPage: page,
@@ -418,6 +426,126 @@ test.describe('Choosing what leads the card, in a dialog', () => {
     await monitor.chooseHighlightsDone.click();
     await monitor.openChooseHighlights();
     await expect(page.getByTestId('choose-highlights-error')).toHaveCount(0);
+  });
+});
+
+/** A form of thirty questions of its own, so the ticks outgrow a phone's window. */
+const LONG_FORM = {
+  fields: Array.from({ length: 30 }, (_, order) => ({
+    key: `question_${order + 1}`,
+    label: `Question ${order + 1}`,
+    type: 'text',
+    required: false,
+    order,
+  })),
+};
+
+/** A phone's window less the gutter, 24px above and below. */
+const PHONE = { width: 390, height: 844 };
+const PHONE_CAP = PHONE.height - 48;
+/** Under Done: the actions' own 8px and the window's 16px more. */
+const UNDER_DONE = 24;
+
+/**
+ * On a phone the chooser is as tall as its ticks need, up to the window less the gutter (T446):
+ * every other long dialog fills a phone's window whatever it holds, which left a usual short list
+ * with a band of white above Done.
+ */
+test.describe('Choosing what leads the card, on a phone', () => {
+  test.use({ viewport: PHONE });
+
+  async function measured(page: Page) {
+    const window = page.getByTestId('choose-highlights-window');
+    const body = page.getByTestId('choose-highlights-body');
+    const done = page.getByTestId('choose-highlights-done');
+    const [windowBox, doneBox] = await Promise.all([window.boundingBox(), done.boundingBox()]);
+    return {
+      height: windowBox!.height,
+      underDone: windowBox!.y + windowBox!.height - (doneBox!.y + doneBox!.height),
+      overflow: await body.evaluate((el) => el.scrollHeight - el.clientHeight),
+    };
+  }
+
+  test('a short list ends just under Done, with no band of white above it', async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    const monitor = await aQueue(request, page);
+    await monitor.openChooseHighlights();
+
+    const { height, underDone, overflow } = await measured(page);
+    expect(overflow, 'the ticks all show').toBeLessThanOrEqual(1);
+    expect(height, 'shorter than the window less the gutter').toBeLessThan(PHONE_CAP - 1);
+    expect(underDone, 'the window ends under Done').toBeCloseTo(UNDER_DONE, 0);
+    await expect(page.getByTestId('choose-highlights-shade-bottom')).toHaveCount(0);
+    await expect(monitor.chooseHighlightsDone).toBeInViewport({ ratio: 1 });
+  });
+
+  test('with an error it still fits, the error in view above Done', async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    const monitor = await aQueue(request, page);
+    await page.route('**/review-highlights', (route) =>
+      route.request().method() === 'PUT'
+        ? route.fulfill({ status: 500, json: { error: 'no' } })
+        : route.continue(),
+    );
+    await monitor.openChooseHighlights();
+    const before = await measured(page);
+
+    await page.getByTestId('review-highlight-instagram').locator('input').click();
+    const error = page.getByTestId('choose-highlights-error');
+    await expect(error).toBeVisible();
+
+    const { height, underDone, overflow } = await measured(page);
+    expect(overflow, 'the ticks all show').toBeLessThanOrEqual(1);
+    expect(height, 'grown by the error alone').toBeGreaterThan(before.height);
+    expect(height, 'shorter than the window less the gutter').toBeLessThan(PHONE_CAP - 1);
+    expect(underDone, 'the window ends under Done').toBeCloseTo(UNDER_DONE, 0);
+    await expect(error).toBeInViewport({ ratio: 1 });
+    const [errorBox, doneBox] = await Promise.all([
+      error.boundingBox(),
+      monitor.chooseHighlightsDone.boundingBox(),
+    ]);
+    expect(errorBox!.y + errorBox!.height).toBeLessThanOrEqual(doneBox!.y);
+  });
+
+  test('a long list stops at the window less the gutter, its title and Done in view as it scrolls', async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    const monitor = await aQueue(request, page, LONG_FORM);
+    await monitor.openChooseHighlights();
+
+    const { height, underDone, overflow } = await measured(page);
+    expect(height, 'the window less the gutter').toBeCloseTo(PHONE_CAP, 0);
+    expect(underDone, 'the window ends under Done').toBeCloseTo(UNDER_DONE, 0);
+    expect(overflow, 'the ticks scroll').toBeGreaterThan(1);
+
+    const title = monitor.chooseHighlightsDialog.getByRole('heading', { level: 2 });
+    const [titleAt, doneAt] = await Promise.all([
+      title.boundingBox(),
+      monitor.chooseHighlightsDone.boundingBox(),
+    ]);
+    const body = page.getByTestId('choose-highlights-body');
+    const box = (await body.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(async () => {
+      await page.mouse.wheel(0, 100_000);
+      expect(
+        await body.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop),
+      ).toBeLessThanOrEqual(1);
+    }, 'the wheel reaches the last tick').toPass({ timeout: 5000 });
+
+    await expect(page.getByTestId('review-highlight-question_30')).toBeInViewport({ ratio: 1 });
+    for (const [part, at] of [
+      [title, titleAt],
+      [monitor.chooseHighlightsDone, doneAt],
+    ] as const) {
+      await expect(part).toBeInViewport({ ratio: 1 });
+      expect(await part.boundingBox()).toEqual(at);
+    }
   });
 });
 
