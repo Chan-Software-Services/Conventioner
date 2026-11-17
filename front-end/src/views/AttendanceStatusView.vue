@@ -881,10 +881,12 @@ const drawer = useVendorDrawer();
    roster with Door code, are groups set apart by a rule. */
 .door .door-top {
   align-items: center;
-  padding: var(--space-2);
-  border: 1px solid var(--mm-border);
-  border-radius: var(--radius-card);
-  background: white;
+}
+
+/* Prototype (release walk F5): the toolbar set off by a rule under it, not a card round it. */
+.door .door-top {
+  padding-block-end: var(--space-3);
+  border-block-end: 1px solid var(--mm-border);
 }
 
 .door .door-dates,
