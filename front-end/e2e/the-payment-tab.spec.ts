@@ -96,11 +96,18 @@ async function paymentTab(page: Page, marketId: string) {
   return tab;
 }
 
-async function recordPayment(page: Page, amount: string, method: 'e-transfer' | 'cash') {
+/** Record a payment, paid today unless `paidOn` (YYYY-MM-DD) names another day. */
+async function recordPayment(
+  page: Page,
+  amount: string,
+  method: 'e-transfer' | 'cash',
+  paidOn?: string,
+) {
   await page.getByTestId('payment-record').click();
   const dialog = page.getByTestId('record-payment-window');
   await expect(dialog).toBeVisible();
   await dialog.getByLabel('Amount (CAD)').fill(amount);
+  if (paidOn) await dialog.getByTestId('record-payment-date').fill(paidOn);
   await dialog.getByLabel(method === 'cash' ? 'Cash' : 'E-transfer').check();
   await dialog.getByRole('button', { name: 'Record payment' }).click();
   await expect(dialog).toBeHidden();
@@ -299,6 +306,209 @@ test.describe('the Payment tab', () => {
           `${at}: the drawer is handed back`,
         ).toBe(false);
         await expect(dialog.opener, `${at}: focus goes back`).toBeFocused();
+      }
+    }
+  });
+
+  test('sets its parts apart: each a card, each table-day and payment a box, even alone', async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    const marketId = await aliceOnTwoGoldDays(request);
+    const tab = await paymentTab(page, marketId);
+    // One payment, alone in its list, beside two table-days, on a day whose name is too long to
+    // stand after "E-transfer, paid" at a desk: "Wednesday, September 30, 2099".
+    await recordPayment(page, '35', 'e-transfer', '2099-09-30');
+    await expect(tab.getByTestId('payment-entry')).toHaveCount(1);
+
+    const cards = ['payment-totals', 'payment-days', 'payment-payments'].map((id) =>
+      tab.getByTestId(id),
+    );
+    const boxes = [
+      ...(await tab.getByTestId('payment-line').all()).map((box) => ({
+        box,
+        menu: box.getByTestId('payment-line-menu-button'),
+      })),
+      ...(await tab.getByTestId('payment-entry').all()).map((box) => ({
+        box,
+        menu: box.getByTestId('payment-entry-menu-button'),
+      })),
+    ];
+    expect(boxes).toHaveLength(3);
+
+    /** Its edge on all four sides, its corners, its inset, and where it stands on the page. */
+    const drawn = (target: typeof tab) =>
+      target.evaluate((el) => {
+        const style = getComputedStyle(el);
+        const sides = ['Top', 'Right', 'Bottom', 'Left'] as const;
+        const rect = el.getBoundingClientRect();
+        return {
+          edges: sides.map(
+            (side) =>
+              `${style.getPropertyValue(`border-${side.toLowerCase()}-width`)} ${style.getPropertyValue(`border-${side.toLowerCase()}-style`)}`,
+          ),
+          corners: style.borderRadius,
+          inset: style.padding,
+          rect: { top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left },
+        };
+      });
+    const EDGES = ['1px solid', '1px solid', '1px solid', '1px solid'];
+    /** How many lines its words take: the distinct bottoms of its text's own boxes. */
+    const linesOf = (el: Element) => {
+      const bottoms = new Set<number>();
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        for (const rect of range.getClientRects())
+          if (rect.width > 0) bottoms.add(Math.round(rect.bottom));
+      }
+      return bottoms.size;
+    };
+
+    // 1440 and 390 are the final design's; at 375 and 320 a box too narrow for its words beside
+    // its amount puts the amount and "..." under the words.
+    for (const size of [
+      { width: 1440, height: 900 },
+      { width: 390, height: 844 },
+      { width: 375, height: 667 },
+      { width: 320, height: 700 },
+    ]) {
+      await page.setViewportSize(size);
+      const at = `at ${size.width}`;
+      const tabRect = (await drawn(tab)).rect;
+
+      const cardsDrawn = [];
+      for (const card of cards) cardsDrawn.push(await drawn(card));
+      for (const [i, card] of cardsDrawn.entries()) {
+        expect(card.edges, `card ${i} ${at}: its edge`).toEqual(EDGES);
+        expect(card.corners, `card ${i} ${at}: its corners`).toBe('10px');
+        expect(card.inset, `card ${i} ${at}: its inset`).toBe('16px');
+        // Nothing runs past the tab, the drawer's column, on a phone or at a desk.
+        expect(card.rect.left, `card ${i} ${at}: its left`).toBeGreaterThanOrEqual(tabRect.left);
+        expect(card.rect.right, `card ${i} ${at}: its right`).toBeLessThanOrEqual(tabRect.right);
+        if (i > 0)
+          expect(
+            card.rect.top - cardsDrawn[i - 1].rect.bottom,
+            `card ${i} ${at}: apart`,
+          ).toBeCloseTo(16, 1);
+      }
+
+      // "Record refund" and "Record payment" keep one row inside their card, under the heading
+      // where the card is too narrow for all three; narrower than 390 the card may be too narrow
+      // for the two side by side, and they stand one over the other, still inside it.
+      const refund = (await drawn(tab.getByTestId('payment-refund'))).rect;
+      const record = (await drawn(tab.getByTestId('payment-record'))).rect;
+      if (size.width >= 390)
+        expect(Math.abs(refund.top - record.top), `the buttons ${at}: one row`).toBeLessThan(1);
+      for (const [name, button] of [
+        ['refund', refund],
+        ['record', record],
+      ] as const) {
+        expect(button.left, `${name} ${at}: inside its card`).toBeGreaterThanOrEqual(
+          cardsDrawn[2].rect.left + 17 - 0.5,
+        );
+        expect(button.right, `${name} ${at}: inside its card`).toBeLessThanOrEqual(
+          cardsDrawn[2].rect.right - 17 + 0.5,
+        );
+      }
+
+      // A table-day's date and a payment's paid day break, where they must, only after the
+      // weekday: "November 17, 2026" keeps one line, its day number never torn from its month.
+      const dates = await tab.getByTestId(/^payment-(line|entry)-day$/).all();
+      expect(dates).toHaveLength(3);
+      for (const [i, day] of dates.entries()) {
+        expect(await day.evaluate(linesOf), `day ${i} ${at}: one line`).toBe(1);
+      }
+
+      // At a desk each whole date, its weekday too, keeps one line of its own: "E-transfer, paid"
+      // then "Tuesday, November 10, 2026", never "Tuesday," left behind.
+      const wholeDates = await tab.getByTestId(/^payment-(line|entry)-date$/).all();
+      expect(wholeDates).toHaveLength(3);
+      if (size.width >= 1440)
+        for (const [i, date] of wholeDates.entries())
+          expect(await date.evaluate(linesOf), `date ${i} ${at}: one line`).toBe(1);
+
+      const boxesDrawn = [];
+      for (const { box, menu } of boxes) {
+        const drawnBox = await drawn(box);
+        const menuRect = (await drawn(menu)).rect;
+        // Its date and words, its amount and its "..." each have room of their own.
+        const parts = [
+          (await drawn(box.getByTestId(/^payment-(line|entry)-main$/))).rect,
+          (await drawn(box.getByTestId(/^payment-(line|entry)-amounts$/))).rect,
+          menuRect,
+        ];
+        for (const [a, b] of [
+          [0, 1],
+          [0, 2],
+          [1, 2],
+        ]) {
+          const apart =
+            parts[a].right <= parts[b].left + 0.5 ||
+            parts[b].right <= parts[a].left + 0.5 ||
+            parts[a].bottom <= parts[b].top + 0.5 ||
+            parts[b].bottom <= parts[a].top + 0.5;
+          expect(apart, `box ${boxesDrawn.length} ${at}: parts ${a} and ${b} apart`).toBe(true);
+        }
+        // And nothing in it reaches past the date's column into the amount.
+        const reach = await box
+          .getByTestId(/^payment-(line|entry)-main$/)
+          .evaluate((el) =>
+            Math.max(...[...el.querySelectorAll('*')].map((c) => c.getBoundingClientRect().right)),
+          );
+        expect(
+          reach,
+          `box ${boxesDrawn.length} ${at}: its words stay in their column`,
+        ).toBeLessThanOrEqual(parts[0].right + 0.5);
+        boxesDrawn.push(drawnBox);
+        const i = boxesDrawn.length - 1;
+        expect(drawnBox.edges, `box ${i} ${at}: its edge`).toEqual(EDGES);
+        expect(drawnBox.corners, `box ${i} ${at}: its corners`).toBe('6px');
+        expect(drawnBox.inset, `box ${i} ${at}: its inset`).toBe('8px 12px');
+        // Its "..." sits inside it.
+        for (const side of ['top', 'left'] as const)
+          expect(menuRect[side], `box ${i} ${at}: its menu's ${side}`).toBeGreaterThan(
+            drawnBox.rect[side],
+          );
+        for (const side of ['bottom', 'right'] as const)
+          expect(menuRect[side], `box ${i} ${at}: its menu's ${side}`).toBeLessThan(
+            drawnBox.rect[side],
+          );
+        // At the box's end, its amount beside it, wherever the box puts the two.
+        expect(
+          drawnBox.rect.right - menuRect.right,
+          `box ${i} ${at}: its menu at its end`,
+        ).toBeCloseTo(13, 1);
+        // A phone's "..." is a thumb's 44px, beside an amount one text line tall (base.css).
+        expect(menuRect.bottom - menuRect.top, `box ${i} ${at}: its menu's height`).toBeCloseTo(
+          size.width <= 640 ? 44 : 24,
+          1,
+        );
+        const amounts = parts[1];
+        expect(
+          menuRect.left - amounts.right,
+          `box ${i} ${at}: its amount beside its menu`,
+        ).toBeCloseTo(16, 1);
+        expect(
+          Math.abs((amounts.top + amounts.bottom) / 2 - (menuRect.top + menuRect.bottom) / 2),
+          `box ${i} ${at}: its amount on its menu's midline`,
+        ).toBeLessThanOrEqual(1);
+      }
+      // The two table-days stand a box's gap apart, inside their card's inset.
+      expect(
+        boxesDrawn[1].rect.top - boxesDrawn[0].rect.bottom,
+        `the days ${at}: apart`,
+      ).toBeCloseTo(8, 1);
+      const days = cardsDrawn[1].rect;
+      const payments = cardsDrawn[2].rect;
+      for (const [i, box] of boxesDrawn.entries()) {
+        const card = i < 2 ? days : payments;
+        expect(box.rect.left - card.left, `box ${i} ${at}: inset from its card`).toBeCloseTo(17, 1);
+        expect(card.right - box.rect.right, `box ${i} ${at}: inset from its card`).toBeCloseTo(
+          17,
+          1,
+        );
       }
     }
   });

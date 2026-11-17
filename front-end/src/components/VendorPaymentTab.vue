@@ -272,6 +272,19 @@ function owedText(cents: number | null): string {
   return cents == null || !account.value ? 'No price' : money(cents, account.value);
 }
 
+/**
+ * A table-day's date or a payment's paid day as its weekday and the rest, "Tuesday" and
+ * "November 17, 2026", so a box too narrow for the whole breaks it only between the two. A date
+ * that reads as no weekday is all one part.
+ */
+function dateParts(date: string): { weekday: string; day: string } {
+  const label = dateLabel(date);
+  const comma = label.indexOf(', ');
+  return comma < 0
+    ? { weekday: '', day: label }
+    : { weekday: label.slice(0, comma), day: label.slice(comma + 2) };
+}
+
 /** Whether a line shows its calculated price struck beside an amount set by hand. */
 function struckPrice(line: PaymentLine): boolean {
   return !!line.owedSetBy && line.priceCents != null && line.priceCents !== line.owedCents;
@@ -284,7 +297,7 @@ function struckPrice(line: PaymentLine): boolean {
     <p v-else-if="phase === 'failed'" class="payment-note">{{ sentence }}</p>
 
     <template v-else-if="account">
-      <div class="payment-totals">
+      <div class="payment-totals" data-testid="payment-totals">
         <dl class="payment-figures">
           <div class="payment-figure">
             <dt>Owed</dt>
@@ -305,7 +318,7 @@ function struckPrice(line: PaymentLine): boolean {
         </span>
       </div>
 
-      <div class="payment-group">
+      <div class="payment-group" data-testid="payment-days">
         <h3 class="payment-heading">Table-days</h3>
         <p v-if="account.lines.length === 0" class="payment-note">
           No table yet, so nothing is owed.
@@ -318,8 +331,16 @@ function struckPrice(line: PaymentLine): boolean {
             :data-date="line.date"
             data-testid="payment-line"
           >
-            <div class="payment-line-main">
-              <span class="payment-line-date">{{ dateLabel(line.date) }}</span>
+            <div class="payment-line-main" data-testid="payment-line-main">
+              <span class="payment-line-date"
+                ><span class="payment-date" data-testid="payment-line-date"
+                  ><template v-if="dateParts(line.date).weekday"
+                    >{{ dateParts(line.date).weekday }},{{ ' ' }}</template
+                  ><span class="payment-day" data-testid="payment-line-day">{{
+                    dateParts(line.date).day
+                  }}</span></span
+                ></span
+              >
               <span class="payment-line-seat" data-testid="payment-line-source"
                 >{{ lineSource(line).text
                 }}<template v-if="lineSource(line).freedOn"
@@ -337,30 +358,34 @@ function struckPrice(line: PaymentLine): boolean {
                 }}</span>
               </span>
             </div>
-            <span class="payment-amounts">
-              <s
-                v-if="struckPrice(line)"
-                class="payment-struck"
-                data-testid="payment-line-price"
-                :aria-label="`Calculated ${owedText(line.priceCents)}`"
-                >{{ owedText(line.priceCents) }}</s
-              >
-              <span class="payment-amount" data-testid="payment-line-owed">
-                {{ owedText(line.owedCents) }}
+            <!-- Its amount and "..." stay together, beside its words or, in a box too narrow, under
+                 them at its end. -->
+            <div class="payment-end">
+              <span class="payment-amounts" data-testid="payment-line-amounts">
+                <s
+                  v-if="struckPrice(line)"
+                  class="payment-struck"
+                  data-testid="payment-line-price"
+                  :aria-label="`Calculated ${owedText(line.priceCents)}`"
+                  >{{ owedText(line.priceCents) }}</s
+                >
+                <span class="payment-amount" data-testid="payment-line-owed">
+                  {{ owedText(line.owedCents) }}
+                </span>
               </span>
-            </span>
-            <RowMenu
-              v-if="canChangeOwed"
-              :label="`Change what ${dateLabel(line.date)} owes`"
-              :items="lineItems(line)"
-              testid="payment-line-menu"
-              @select="onLineMenu(line, $event)"
-            />
+              <RowMenu
+                v-if="canChangeOwed"
+                :label="`Change what ${dateLabel(line.date)} owes`"
+                :items="lineItems(line)"
+                testid="payment-line-menu"
+                @select="onLineMenu(line, $event)"
+              />
+            </div>
           </li>
         </ul>
       </div>
 
-      <div class="payment-group">
+      <div class="payment-group" data-testid="payment-payments">
         <div class="payment-group-head">
           <h3 class="payment-heading">Payments</h3>
           <div class="payment-actions">
@@ -394,10 +419,16 @@ function struckPrice(line: PaymentLine): boolean {
             :data-kind="payment.kind"
             data-testid="payment-entry"
           >
-            <div class="payment-line-main">
+            <div class="payment-line-main" data-testid="payment-entry-main">
               <span class="payment-entry-what"
-                >{{ entryText(payment).text }}{{ ' '
-                }}<span class="payment-entry-when">{{ entryText(payment).day }}</span></span
+                >{{ entryText(payment) }}{{ ' '
+                }}<span class="payment-date" data-testid="payment-entry-date"
+                  ><template v-if="dateParts(payment.paidOn).weekday"
+                    >{{ dateParts(payment.paidOn).weekday }},{{ ' ' }}</template
+                  ><span class="payment-day" data-testid="payment-entry-day">{{
+                    dateParts(payment.paidOn).day
+                  }}</span></span
+                ></span
               >
               <span v-if="payment.note" class="payment-entry-note">{{ payment.note }}</span>
               <span class="payment-entry-who" data-testid="payment-entry-who">
@@ -417,23 +448,25 @@ function struckPrice(line: PaymentLine): boolean {
                 }}</span>
               </span>
             </div>
-            <span class="payment-amounts">
-              <component
-                :is="payment.removedAt ? 's' : 'span'"
-                class="payment-amount"
-                data-testid="payment-entry-amount"
-                >{{ money(payment.cents, account) }}</component
-              >
-            </span>
-            <RowMenu
-              v-if="canAdjustPaid && !payment.removedAt"
-              :label="`Change the ${money(Math.abs(payment.cents), account)} ${payment.kind}`"
-              :items="ENTRY_ITEMS"
-              testid="payment-entry-menu"
-              @select="onEntryMenu(payment, $event)"
-            />
-            <!-- A removed entry offers nothing, and its amount still lines up with the rest. -->
-            <span v-else-if="canAdjustPaid" class="payment-menu-room" aria-hidden="true" />
+            <div class="payment-end">
+              <span class="payment-amounts" data-testid="payment-entry-amounts">
+                <component
+                  :is="payment.removedAt ? 's' : 'span'"
+                  class="payment-amount"
+                  data-testid="payment-entry-amount"
+                  >{{ money(payment.cents, account) }}</component
+                >
+              </span>
+              <RowMenu
+                v-if="canAdjustPaid && !payment.removedAt"
+                :label="`Change the ${money(Math.abs(payment.cents), account)} ${payment.kind}`"
+                :items="ENTRY_ITEMS"
+                testid="payment-entry-menu"
+                @select="onEntryMenu(payment, $event)"
+              />
+              <!-- A removed entry offers nothing, and its amount still lines up with the rest. -->
+              <span v-else-if="canAdjustPaid" class="payment-menu-room" aria-hidden="true" />
+            </div>
           </li>
         </ul>
       </div>
@@ -490,10 +523,13 @@ function struckPrice(line: PaymentLine): boolean {
 </template>
 
 <style scoped>
+/* Each part a card, and each table-day and payment inside one a box of its own, even alone, so a
+   lone line's "..." menu sits with it (Daniel's release walk of 2026-11-17). The cards inform, so
+   they are flat (the design language's elevation). */
 .payment-tab {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-4);
 }
 
 .payment-note {
@@ -509,6 +545,13 @@ function struckPrice(line: PaymentLine): boolean {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3) var(--space-4);
+}
+
+.payment-totals,
+.payment-group {
+  padding: var(--space-4);
+  border: 1px solid var(--mm-border);
+  border-radius: var(--radius-card);
 }
 
 .payment-figures {
@@ -535,9 +578,12 @@ function struckPrice(line: PaymentLine): boolean {
   gap: var(--space-2);
 }
 
-/* The heading, with "Record payment" at its end, as the Submission's carries "Update info". */
+/* The heading, with "Record payment" at its end, as the Submission's carries "Update info". Where
+   the card is too narrow for the heading and both buttons, the buttons go under the heading, still
+   at the end, as one row where the card has room for both, rather than stacking beside it. */
 .payment-group-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
@@ -556,29 +602,30 @@ function struckPrice(line: PaymentLine): boolean {
   padding: 0;
   display: flex;
   flex-direction: column;
+  gap: var(--space-2);
 }
 
+/* A box too narrow for its words to keep 7.5rem, or their widest unbroken run (a date, a time),
+   beside its amount and "..." puts those two under the words, at its end, by its own width rather
+   than the window's (a phone narrower than about 380px): the words never run past their column. */
 .payment-line,
 .payment-entry {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--mm-border);
-}
-
-.payment-line:last-child,
-.payment-entry:last-child {
-  border-bottom: none;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--mm-border);
+  border-radius: var(--radius-control);
 }
 
 .payment-line-main {
+  flex: 1 1 7.5rem;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-hairline);
-  min-width: 0;
 }
 
 .payment-line-date,
@@ -599,6 +646,18 @@ function struckPrice(line: PaymentLine): boolean {
   white-space: nowrap;
 }
 
+/* A table-day's date and a payment's paid day: the whole date moves to a line of its own as one
+   piece, and a box too narrow for that breaks it after its weekday, "November 17, 2026" never
+   breaking; a box too narrow for even that puts its amount and "..." under its words. */
+.payment-date {
+  display: inline-block;
+  max-width: 100%;
+}
+
+.payment-day {
+  white-space: nowrap;
+}
+
 .payment-entry-note {
   font-size: var(--text-sm);
   color: var(--mm-black);
@@ -610,12 +669,26 @@ function struckPrice(line: PaymentLine): boolean {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* The amount and "..." on one midline, beside the words or under them: a phone's "..." is a thumb's
+   44px, so its dots would otherwise stand well below the amount. */
+.payment-end {
+  flex-shrink: 0;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+/* The menu's box is its button's alone, with no line's descent under it to lower the midline. */
+.payment-end > .row-menu {
+  display: flex;
 }
 
 /* A line's amount, and beside it the calculated price struck when someone set it by hand. */
 .payment-amounts {
-  flex-shrink: 0;
-  margin-left: auto;
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
