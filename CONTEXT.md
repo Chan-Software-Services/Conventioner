@@ -267,7 +267,7 @@ _Avoid_: Floorplan, seating chart
 The **day map** anyone may open at the market's address, with no sign-in, showing only the answers the organizer chose to publish: a public name, a website and an Instagram handle.
 Off until an Admin turns it on, and open only once results are out and until the market is archived.
 Its address may name one table, and one half of a shared table, so a vendor's link or QR code opens their half alone.
-_Avoid_: Vendor map, directory
+_Avoid_: Vendor map, directory; "vendor map" is only the page's subtitle to visitors (Daniel's design), never a name for the page in code or docs
 See [The public map](docs/implementation/modules/public-map.md).
 
 **Vendor search**:

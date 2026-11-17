@@ -192,6 +192,12 @@ function onScroll(event: Event) {
   flex: 1 1 auto;
 }
 
+/* The page's card over the panel's top on a phone reaches this far over the list, so a row the
+   focus reaches is scrolled clear below it. */
+.public-map-vendors__scroll :deep(.scroll-box__scroller) {
+  scroll-padding-top: var(--public-map-card-reach, 0px);
+}
+
 /* The panel's inset, inside the scroller, so a row's focus halo is never cut at its edge. */
 .public-map-vendors__rows {
   margin: 0;

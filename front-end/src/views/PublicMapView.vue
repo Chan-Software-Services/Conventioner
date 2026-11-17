@@ -291,6 +291,89 @@ function onKeydown(event: KeyboardEvent) {
 onMounted(() => window.addEventListener('keydown', onKeydown));
 onUnmounted(() => window.removeEventListener('keydown', onKeydown));
 
+// ── Nothing holding the focus lies under the card at the panel's top (WCAG 2.4.11) ──
+
+const side = ref<HTMLElement | null>(null);
+/** The box the card scrolls in at the panel's top, there only under 1000px with a card. */
+const cardBox = ref<InstanceType<typeof ScrollBox> | null>(null);
+const cardBoxEl = () => (cardBox.value?.$el as Element | undefined) ?? null;
+const vendorList = () =>
+  side.value?.querySelector<HTMLElement>('[data-testid="public-map-vendors-list"]') ?? null;
+
+/** Whether the card at the panel's top lies over the element. */
+function underTheCard(el: Element): boolean {
+  const box = cardBoxEl()?.getBoundingClientRect();
+  if (!box) return false;
+  const at = el.getBoundingClientRect();
+  return at.top < box.bottom && at.bottom > box.top && at.left < box.right && at.right > box.left;
+}
+
+/** How far the card reaches down over the list's scroller, given to the list as its scroll
+ *  padding, so a row the focus reaches is scrolled clear below the card. Set on the element, not
+ *  bound, so a scroll in the same frame reads it. */
+function measureReach() {
+  const box = cardBoxEl()?.getBoundingClientRect();
+  const list = vendorList()?.getBoundingClientRect();
+  const reach = box && list ? Math.max(0, box.bottom - list.top) : 0;
+  side.value?.style.setProperty('--public-map-card-reach', `${reach}px`);
+}
+
+let reachObserver: ResizeObserver | null = null;
+watch(
+  cardBox,
+  (box) => {
+    reachObserver?.disconnect();
+    reachObserver = null;
+    if (box && typeof ResizeObserver !== 'undefined') {
+      reachObserver = new ResizeObserver(measureReach);
+      reachObserver.observe(box.$el as Element);
+    }
+    measureReach();
+  },
+  { flush: 'post' },
+);
+onUnmounted(() => reachObserver?.disconnect());
+
+/** The focus entering the panel past the card: the search field, which the card always covers,
+ *  closes it as its Close does; a row closes it only if it is still under the card once the
+ *  browser has scrolled it into view, after this event. The focus stays where it went. */
+function onPanelFocus(event: FocusEvent) {
+  const target = event.target as Element;
+  const box = cardBoxEl();
+  if (wide.value || !card.value || !box || box.contains(target)) return;
+  if (!vendorList()?.contains(target)) {
+    void closeCard();
+    return;
+  }
+  // Judged against this card: a row pressed opens another, which `keepTheFocusInSight` answers.
+  const shown = card.value;
+  requestAnimationFrame(() => {
+    if (card.value === shown && document.activeElement === target && underTheCard(target))
+      void closeCard();
+  });
+}
+
+/** A card opened, or changed, over what holds the focus in the panel (a row pressed, the search
+ *  field after a pick): the row is scrolled clear below it, and when it cannot be, or it is the
+ *  field, the focus goes to the card's Close. */
+function keepTheFocusInSight() {
+  const focused = document.activeElement;
+  const box = cardBoxEl();
+  if (!focused || !box || box.contains(focused) || !side.value?.contains(focused)) return;
+  if (!underTheCard(focused)) return;
+  measureReach();
+  if (vendorList()?.contains(focused)) focused.scrollIntoView?.({ block: 'nearest' });
+  if (!underTheCard(focused)) return;
+  box.querySelector<HTMLElement>('[data-testid="public-map-card-close"]')?.focus();
+}
+watch(
+  card,
+  (now) => {
+    if (now && !wide.value) requestAnimationFrame(keepTheFocusInSight);
+  },
+  { flush: 'post' },
+);
+
 /** A vendor of the list: their location opened and their table picked, or their half of a shared
  *  one. The page never scrolls; a table zoomed out of view is brought back by showing the whole
  *  hall first. */
@@ -407,12 +490,17 @@ async function openVendor(vendor: ListedVendor) {
           </div>
         </div>
 
-        <div class="public-map__side">
+        <div ref="side" class="public-map__side" @focusin="onPanelFocus">
           <!-- The live region stays while the card comes and goes, so a pick is announced. It
                lies over the panel's top, the list unmoved under it, and scrolls the card in its
                own box when the card is taller than the panel. -->
           <div v-if="!wide" class="public-map__live" aria-live="polite">
-            <ScrollBox v-if="card" class="public-map__card-box" testid="public-map-card-scroller">
+            <ScrollBox
+              v-if="card"
+              ref="cardBox"
+              class="public-map__card-box"
+              testid="public-map-card-scroller"
+            >
               <PublicMapTableCard
                 ref="cardPart"
                 class="public-map__card"

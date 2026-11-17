@@ -914,6 +914,87 @@ describe("the card at the vendor panel's top, in a narrower window", () => {
   });
 });
 
+// Nothing holding the focus lies under the phone's card (WCAG 2.4.11, the coordinator's call on
+// T465 ticket 08): the search field closes it, a row is scrolled clear of it or closes it, and a
+// pick that opens it over the focus gives the focus to its Close.
+describe("the focus and the card at the vendor panel's top", () => {
+  const field = () => wrapper!.get<HTMLInputElement>('[data-testid="public-map-find-input"]');
+  const frame = () => new Promise<void>((done) => requestAnimationFrame(() => done()));
+
+  /** The card's box over the panel's top 200px, and each of `under` drawn at its own top. */
+  function drawnUnderTheCard(under: Record<string, number>) {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: Element,
+    ) {
+      if (this.getAttribute('data-testid') === 'layout-map') return new DOMRect(0, 0, 1200, 900);
+      if (this.classList.contains('public-map__card-box')) return new DOMRect(0, 0, 390, 200);
+      for (const [testid, top] of Object.entries(under))
+        if (this.getAttribute('data-testid') === testid) return new DOMRect(16, top, 358, 44);
+      return new DOMRect(0, 0, 0, 0);
+    });
+  }
+
+  it('closes as its Close does when the focus enters the search field, which keeps it', async () => {
+    narrowWindow();
+    const page = await open(found(), { table: 'g1' });
+    field().element.focus();
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper' },
+    });
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(field().element);
+  });
+
+  it('closes when the focus reaches a row it still covers after the list has scrolled', async () => {
+    narrowWindow();
+    drawnUnderTheCard({ 'public-map-vendor': 100 });
+    const page = await open(found(), { table: 'g1' });
+    await frame();
+    const row = page.get<HTMLButtonElement>('[data-testid="public-map-vendor"]');
+    row.element.focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(row.element);
+  });
+
+  it('stays when the focus reaches a row drawn clear below it', async () => {
+    narrowWindow();
+    drawnUnderTheCard({ 'public-map-vendor': 240 });
+    const page = await open(found(), { table: 'g1' });
+    await frame();
+    page.get<HTMLButtonElement>('[data-testid="public-map-vendor"]').element.focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(routing.replace).not.toHaveBeenCalled();
+  });
+
+  it('gives the focus to its Close when a pick opens it over the focused field', async () => {
+    narrowWindow();
+    drawnUnderTheCard({ 'public-map-find-input': 40 });
+    const page = await open();
+    field().element.focus();
+    const kiln = mapListing(ANSWER, TODAY).find((vendor) => vendor.name === 'Kiln & Co')!;
+    page.getComponent(PublicMapVendors).vm.$emit('open', kiln);
+    await flushPromises();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(document.activeElement).toBe(page.get('[data-testid="public-map-card-close"]').element);
+  });
+
+  it('leaves the bubble open at a desk when the focus enters the search field', async () => {
+    const page = await open(found(), { table: 'g1' });
+    field().element.focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(routing.replace).not.toHaveBeenCalled();
+  });
+});
+
 describe('closing the card', () => {
   it('Close drops the table from the address, and gives the focus back to the table', async () => {
     const page = await open(found(), { table: 'g1' });

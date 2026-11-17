@@ -143,7 +143,9 @@ for (const size of PHONE_AND_DESK) {
       await expect(map.card).toContainText('Salt & Sage');
       await expect(page).toHaveURL(new RegExp(`location=${seeded.south.id}&table=south-table-3`));
       await expect(map.searchInput).toHaveValue('');
-      await expect(map.searchInput).toBeFocused();
+      // At a desk the field keeps the focus for the next search; on a phone the card opens over
+      // the field, so the focus goes to the card's Close, never left under it (WCAG 2.4.11).
+      await expect(size.phone ? map.cardClose : map.searchInput).toBeFocused();
       await expect(map.searchList).toBeHidden();
       await expect(map.vendors).toHaveText(TODAYS_ROWS);
       await expect(map.vendors.filter({ hasText: 'Salt & Sage' })).toHaveAttribute(
