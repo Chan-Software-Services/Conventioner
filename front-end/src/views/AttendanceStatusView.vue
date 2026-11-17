@@ -194,6 +194,30 @@ function chooseDate(date: string) {
   void router.replace({ query: { ...route.query, date } });
 }
 
+/* Prototype (release walk F5): the map's location chosen in the toolbar, as AttendanceMap reads it:
+   a location with a scaled layout, in the plan's order; the address's, else the first. */
+const mapLocations = computed(() => {
+  const plan = market.value?.setupObject;
+  return (plan?.locations ?? []).filter((location) => {
+    const layout = plan?.floorplans?.find((each) => each.locationId === location.id);
+    return (
+      !!location.id &&
+      !!layout?.scalePxPerUnit &&
+      layout.scalePxPerUnit > 0 &&
+      layout.tables.length > 0
+    );
+  });
+});
+const mapLocationId = computed(() => {
+  const asked = String(route.query.location ?? '');
+  return (
+    mapLocations.value.find((each) => each.id === asked)?.id ?? mapLocations.value[0]?.id ?? ''
+  );
+});
+function chooseLocation(location: string) {
+  void router.replace({ query: { ...route.query, location } });
+}
+
 /**
  * The roster as a list, today's page, or as a map of the open day (T422, D38): the page's own
  * state, in the address as `view=map`, replaced, so a change of day and a reload keep it.
@@ -323,7 +347,6 @@ const printedSeated = computed(() => printedDay.value.filter(hasSeat).map(printe
 const printedUnseated = computed(() =>
   printedDay.value.filter((row) => !hasSeat(row)).map(printedRow),
 );
-
 
 function printRoster(): void {
   window.print();
@@ -501,20 +524,36 @@ const drawer = useVendorDrawer();
       </p>
       <template v-else-if="dates.length">
         <div class="door-top">
-          <nav class="door-dates" aria-label="Market date">
-            <button
-              v-for="date in dates"
-              :key="date"
-              type="button"
-              class="btn btn--secondary btn--compact door-date"
-              :aria-pressed="date === selectedDate"
-              :data-testid="`attendance-date-${date}`"
-              @click="chooseDate(date)"
-            >
-              {{ getShortDate(date) }}
-              <span class="door-date-count">{{ tally(date).here }}/{{ tally(date).expected }}</span>
-            </button>
-          </nav>
+          <div class="door-pickers">
+            <label class="door-picker">
+              <span class="visually-hidden">Market date</span>
+              <select
+                class="field field--select door-select"
+                name="attendance-date"
+                :value="selectedDate"
+                data-testid="attendance-date-select"
+                @change="chooseDate(($event.target as HTMLSelectElement).value)"
+              >
+                <option v-for="date in dates" :key="date" :value="date">
+                  {{ getShortDate(date) }} · {{ tally(date).here }}/{{ tally(date).expected }} in
+                </option>
+              </select>
+            </label>
+            <label v-if="view === 'map' && mapLocations.length > 1" class="door-picker">
+              <span class="visually-hidden">Location</span>
+              <select
+                class="field field--select door-select"
+                name="attendance-location"
+                :value="mapLocationId"
+                data-testid="attendance-location-select"
+                @change="chooseLocation(($event.target as HTMLSelectElement).value)"
+              >
+                <option v-for="location in mapLocations" :key="location.id" :value="location.id">
+                  {{ location.name }}
+                </option>
+              </select>
+            </label>
+          </div>
           <!-- When the roster was read, then Print roster and the door code: together at the row's
                end, or the end of a line of their own when the dates fill theirs. -->
           <div class="door-tools">
@@ -782,6 +821,25 @@ const drawer = useVendorDrawer();
   /* Figures in a column need fixed-width digits (E15/F01/S03). The button's own ink, not muted:
      muted grey is 4.26 on the chosen date's green ground, below AA. */
   font-variant-numeric: tabular-nums;
+}
+
+/* Prototype (release walk F5): the date and the location are selects at the toolbar's start, and
+   the map's own location switch is not drawn, the toolbar's select standing for it. */
+.door-pickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.door-select {
+  width: auto;
+  height: var(--control-height-compact);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.door :deep(.day-map__locations) {
+  display: none;
 }
 
 /* Prototype (release walk F5): the top row is one toolbar, its controls in groups.
