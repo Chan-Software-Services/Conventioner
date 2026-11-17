@@ -926,13 +926,13 @@ function openVendor(vendor: ListedVendor) {
 .public-map__head .public-map__title,
 .public-map__head .public-map__subtitle {
   text-shadow:
-    0 0 1px rgb(255 255 255 / 90%),
-    0 0 8px rgb(255 255 255 / 75%),
-    0 0 18px rgb(255 255 255 / 55%);
+    0 0 2px rgb(255 255 255 / 95%),
+    0 0 12px rgb(255 255 255 / 85%),
+    0 0 28px rgb(255 255 255 / 70%);
 }
 
 .public-map__subtitle-icon {
-  filter: drop-shadow(0 0 4px rgb(255 255 255 / 80%));
+  filter: drop-shadow(0 0 6px rgb(255 255 255 / 90%));
 }
 
 /* The name in bold Outfit over a honey stroke, drawn as a thick underline behind the letters so it
