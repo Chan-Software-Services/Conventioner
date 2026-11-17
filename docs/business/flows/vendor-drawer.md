@@ -37,6 +37,7 @@ sources:
   - T211
   - T224
   - T263
+  - T422
   - T411
 ---
 
@@ -79,7 +80,7 @@ The open vendor and tab are kept in the address (`?vendor=<email>&vendorTab=assi
      Each entry reads as in Manage market's History section, opening to its before and after; the vendor reads by name alone, as text, since the head shows their address, and any other vendor an entry names links to their own drawer, by name and address: on the Vendors page it opens in this drawer, a change of vendor that adds no step to Back, and on any other page it leads to Vendors.
      A run of the assignment names nobody, so it is not in a vendor's list.
      There are no filters: it is already one vendor's.
-5. Close with "×", Escape, a click outside it, or Back (a phone's back gesture, the browser's button); the address loses the vendor and the page stays as it was, its filter and scroll included.
+5. Close with "×", on the name's first line, as a dialog's close is on its title's ([dialogs](../../implementation/conventions/dialogs.md)), Escape, a click outside it, or Back (a phone's back gesture, the browser's button); the address loses the vendor and the page stays as it was, its filter and scroll included.
    Opening the drawer is a step of the browser's history and closing it takes that step back, so Back after closing goes to the page before, however the drawer was closed; changing its tab or vendor is no step, so one Back closes it.
    A drawer reached by a link or a reload closes onto the page too, never out of the site ([every market page has an address](../../implementation/conventions/every-market-page-has-an-address.md#a-pages-own-state-is-replaced-the-drawers-opening-is-pushed)).
    The drawer opens with focus on "×", and takes it there again when it shows another vendor in place, such as one its History tab names; closing gives focus back to what opened it, a row, a name or a button ([dialogs](../../implementation/conventions/dialogs.md)).

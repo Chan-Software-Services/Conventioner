@@ -8,9 +8,12 @@
  * Select: a press on a table selects it (Shift or Ctrl adds it or takes it out), a drag moves the
  * selection, snapping to the edges and centres of the tables that stand still within 8 px, with a
  * guide drawn, and freely with Alt; a press on the floor selects nothing, and a drag on it draws a
- * box that selects every table whose centre is in it (with Shift or Ctrl, beside those selected
- * already). Ctrl+A selects every table and Escape none. The handle beside the selection turns it
- * about its middle in 15° steps (Alt: freely); R turns it a quarter. A section's name is dragged
+ * box that selects every table wholly in it, as turned (with Shift or Ctrl, beside those selected
+ * already). Ctrl+A selects every table and Escape none. The selection stands in a frame, one
+ * table's hugging it and turned with it, several's square to the page, and a knob on each of the
+ * frame's corners turns it about its middle in 15° steps (Shift: by the degree); R turns it a
+ * quarter. With tables selected the arrow keys move them 10 cm, or 1 m with Shift, a key held
+ * down being one change. A section's name is dragged
  * to where it should stand. Add table: a click places a table of the options strip's section and
  * type at the point, and the tool stays on. A drag or a turn is one change, and Escape puts it
  * back.
@@ -62,13 +65,20 @@
  *
  * Past Draft (`settled`) a table's seat is settled: Add table, Row of tables and Fill an area are
  * disabled, and Delete and Ctrl+D do nothing; Select, No-table zone, undo and the view stay, so
- * tables still move and turn.
+ * tables still move and turn. A layout that follows the plan is never `settled` (T422): its tools
+ * add what fits in each section's count, and what they held back is said on the panel's status
+ * line (`heldBackSaid`).
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useId, watch } from 'vue';
 import type { FloorplanTable, SectionObject, TableTypeObject } from '@/assets/types/datatypes';
+import IconCloseRound from '@/components/icons/IconCloseRound.vue';
+import IconKeyboard from '@/components/icons/IconKeyboard.vue';
+import RowMenu from '@/components/RowMenu.vue';
+import ScrollBox from '@/components/ScrollBox.vue';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import { Refusal } from '@/utils/useSubmit';
 import LayoutFillDialog from './LayoutFillDialog.vue';
+import LayoutPanelKeyboard from './LayoutPanelKeyboard.vue';
 import LayoutFillPreview from './LayoutFillPreview.vue';
 import LayoutMap, { type MapView } from './LayoutMap.vue';
 import LayoutRowPreview from './LayoutRowPreview.vue';
@@ -103,6 +113,7 @@ import {
   angleFrom,
   boxBetween,
   cameraShowing,
+  clampMove,
   clampToHall,
   clearPlace,
   cornersOf,
@@ -139,14 +150,15 @@ import {
 import {
   keepSample,
   rowChoices,
-  rowFieldErrors,
   strokeFrom,
   strokeOptions,
   useRowTool,
   type KeptStroke,
 } from './layoutRow';
 import { centreOf, selectionBounds, turnSelection } from './layoutSelection';
-import { MAX_ZONES, type LayoutEditor } from './useLayoutEditor';
+import { ADDING_TOOLS, TOOL_KEYS, type Tool } from './layoutTools';
+import { SHORTCUTS_WIDTH, rememberedChoice, useRoomBesideTheFrame } from './layoutViewChoices';
+import { MAX_ZONES, heldBackSaid, type LayoutEditor } from './useLayoutEditor';
 
 const props = withDefaults(
   defineProps<{
@@ -158,12 +170,25 @@ const props = withDefaults(
     imageUrl?: string;
     /** Whether the venue's floorplan is drawn under the tables. */
     showImage?: boolean;
+    /** Whether that floorplan is drawn in greyscale, as it is unless told, rather than in its own
+     *  colours. */
+    imageInGrey?: boolean;
+    /** Whether that floorplan is drawn at half strength, as it is unless told. */
+    imageFaded?: boolean;
     /** Ask the placement to fill an area of this market's layout (`layoutFill.ts`). */
     fill?: (request: FillRequest) => Promise<FillAnswer>;
-    /** Whether the market has left Draft, so no table is added or removed here. */
+    /** Whether the layout's seats are settled (past Draft, on a layout started in Draft), so no
+     *  table is added or removed here. */
     settled?: boolean;
   }>(),
-  { imageUrl: '', showImage: true, fill: undefined, settled: false },
+  {
+    imageUrl: '',
+    showImage: true,
+    imageInGrey: true,
+    imageFaded: true,
+    fill: undefined,
+    settled: false,
+  },
 );
 
 const emit = defineEmits<{
@@ -173,12 +198,24 @@ const emit = defineEmits<{
   zoneAdded: [id: string];
   /** What Fill an area did, or why it did not, for the panel's status line; '' clears it. */
   status: [words: string];
+  /** The tool on, for the panel, which shows the tool's card in place of the selection's. */
+  tool: [tool: Tool];
+  /** The view's choices of the floorplan, made in the map's Floorplan menu. */
+  'update:showImage': [shown: boolean];
+  'update:imageInGrey': [inGrey: boolean];
+  'update:imageFaded': [faded: boolean];
 }>();
 const say = (words: string) => emit('announce', words);
 /** Say something on the panel's status line, and to a screen reader. */
 function tell(words: string) {
   emit('status', words);
   say(words);
+}
+/** On a layout that follows the plan, what the last add held back, told; null when nothing was. */
+function tellHeldBack(): string | null {
+  const held = heldBackSaid(props.editor, props.sections);
+  if (held) tell(held);
+  return held;
 }
 
 const layout = computed(() => props.editor.layout.value!);
@@ -200,10 +237,27 @@ const tableOf = (id: string | null) =>
 
 // ── The tools ────────────────────────────────────────────────────────────────
 
-type Tool = 'select' | 'add' | 'row' | 'fill' | 'zone';
 const tool = ref<Tool>('select');
+/** Whether the keyboard's shortcuts are shown: a choice of the person, kept in their browser. */
+const shortcutsShown = rememberedChoice('shortcutsShown', false);
+/** Whether they stand beside the market's frame, where the window has room, rather than over the
+ *  map's top-left corner. */
+const shortcutsBeside = useRoomBesideTheFrame();
+/** The map's Floorplan menu: how the venue's floorplan is drawn under the tables, each choice the
+ *  page's to keep. Greyscale and Faded do nothing while the floorplan is hidden. */
+const viewItems = computed(() => [
+  { id: 'show-image', label: 'Show the floorplan', checked: props.showImage },
+  { id: 'image-grey', label: 'Greyscale', checked: props.imageInGrey, disabled: !props.showImage },
+  { id: 'image-faded', label: 'Faded', checked: props.imageFaded, disabled: !props.showImage },
+]);
+function chooseView(id: string) {
+  if (id === 'show-image') emit('update:showImage', !props.showImage);
+  else if (id === 'image-grey') emit('update:imageInGrey', !props.imageInGrey);
+  else if (id === 'image-faded') emit('update:imageFaded', !props.imageFaded);
+}
+watch(tool, (now) => emit('tool', now), { immediate: true });
 /** The tools that add tables, which past Draft are disabled. */
-const ADDING: readonly string[] = ['add', 'row', 'fill'];
+const ADDING = ADDING_TOOLS;
 // The market left Draft with one of them on: its path or area goes, and Select is on.
 watch(
   () => props.settled,
@@ -217,8 +271,8 @@ const drawnSections = computed(() => layoutSections(layout.value, props.sections
 const ownSections = computed(() => drawnSections.value.map(({ section }) => section));
 /** The section and the type a new table takes: the first of each until another is chosen. */
 /** '' is "No section", a choice like another; null is no choice made yet. */
-const addSectionId = ref<string | null>(null);
-const addTypeId = ref('');
+const addSectionId = defineModel<string | null>('sectionId', { default: null });
+const addTypeId = defineModel<string>('typeId', { default: '' });
 watch(
   [ownSections, () => props.tableTypes],
   ([sections, types]) => {
@@ -249,8 +303,6 @@ const row = useRowTool({
   sectionId: () => addSectionId.value || null,
   tableTypeId: () => addTypeId.value || (props.tableTypes[0]?.id ?? ''),
 });
-/** What the strip's Gap and Aisle say of a value that is no length, each under its own id. */
-const rowErrors = computed(rowFieldErrors);
 /** What the pending path holds, as its sentences say it: its count, or the refusal of a field
  *  that is no length, while the path holds and places none. */
 const rowHolds = () => row.refusal.value || row.poses.value.length;
@@ -320,11 +372,17 @@ const hint = computed(() => {
     }
     return tool.value === 'add'
       ? 'Enter places a table at the middle of the view. The arrow keys move between tables.'
-      : props.settled
-        ? 'The arrow keys move between tables. Enter picks a table up to move it, and Shift and ' +
-          'Enter selects it.'
-        : 'The arrow keys move between tables. Enter picks a table up to move it, ' +
-          'Shift and Enter selects it, and Delete removes the selection.';
+      : selection.value.length
+        ? 'The arrow keys move the selection 10 cm, or 1 m with Shift, and Alt and an arrow ' +
+          (props.settled
+            ? 'moves between tables. Shift and Enter selects a table or takes it out.'
+            : 'moves between tables. Shift and Enter selects a table or takes it out, and Delete ' +
+              'removes the selection.')
+        : props.settled
+          ? 'The arrow keys move between tables. Enter picks a table up to move it, and Shift and ' +
+            'Enter selects it.'
+          : 'The arrow keys move between tables. Enter picks a table up to move it, ' +
+            'Shift and Enter selects it, and Delete removes the selection.';
   }
   if (tool.value === 'row') {
     if (row.stroking.value) {
@@ -360,7 +418,8 @@ const hint = computed(() => {
   return tool.value === 'add'
     ? 'Click the floor to place a table. Ctrl and the wheel zoom, and Space and a drag move the view.'
     : 'Drag a table to move it; Alt places it freely. Drag on the floor, or Shift and click, ' +
-        "to select several. Drag the selection's handle, or press R, to turn it.";
+        'to select several. Drag a corner of the selection to turn it in 15° steps, with Shift ' +
+        'by the degree, or press R.';
 });
 
 /** The map's description, for a screen reader that reads a group's: its keys, as the tool on has
@@ -378,7 +437,8 @@ const mapKeys = computed(() =>
       : tool.value === 'add'
         ? 'The arrow keys move between tables. Enter places a table at the middle of the view.'
         : 'The arrow keys move between tables. Enter picks a table up; then the arrow keys move it, ' +
-          'R turns it, Enter drops it and Escape puts it back.',
+          'R turns it, Enter drops it and Escape puts it back. With tables selected the arrow ' +
+          'keys move them, and Alt and an arrow moves between tables.',
 );
 
 // ── The stage and its camera ─────────────────────────────────────────────────
@@ -579,8 +639,10 @@ type Gesture =
       centre: PointMm;
       fromAngle: number;
       begun: boolean;
-      /** How far the handle has turned them, in degrees. */
+      /** How far the knob has turned them, in degrees. */
       by: number;
+      /** Where the pointer last was, so Shift pressed or let go turns again with no move. */
+      atMm: PointMm | null;
     }
   | { kind: 'pinch'; distance: number; middle: { xPx: number; yPx: number }; camera: Camera };
 
@@ -689,7 +751,7 @@ function placeRow() {
   }
   const byKeys = keysOnMap.value && Boolean(stage.value?.contains(document.activeElement));
   const added = row.place();
-  say(added.length ? saidRowAdded(added, drawnSections.value) : NO_TABLE_FITS);
+  if (!tellHeldBack()) say(added.length ? saidRowAdded(added, drawnSections.value) : NO_TABLE_FITS);
   if (!byKeys || !added.length) return;
   void focusTable(added[0].id);
   show(added);
@@ -780,7 +842,9 @@ function runFill(choice: FillChoice) {
         if (layout.value.id !== asked) return;
         const added = fillTool.add(answer);
         fillAsked.value = false;
-        tell(saidFilled(added.length, choice.count, answer.timed_out, request.counts[typeId]));
+        if (!tellHeldBack()) {
+          tell(saidFilled(added.length, choice.count, answer.timed_out, request.counts[typeId]));
+        }
       },
     },
   );
@@ -837,9 +901,10 @@ function onPointerDown(event: PointerEvent) {
   } else if (event.target instanceof Element && event.target.closest('[data-turn-handle]')) {
     const box = selectionBounds(layout.value, selection.value, props.tableTypes);
     if (!box) return;
-    // The handle is no stop of the keyboard's: the press leaves the focus where it was.
+    // A knob is no stop of the keyboard's: the press leaves the focus where it was.
     event.preventDefault();
     const centre = centreOf(box);
+    if (restingFrame.value) turning.value = { frame: restingFrame.value, by: 0 };
     gesture = {
       kind: 'turn',
       ids: [...selection.value],
@@ -847,6 +912,7 @@ function onPointerDown(event: PointerEvent) {
       fromAngle: angleFrom(centre, toMm(event)),
       begun: false,
       by: 0,
+      atMm: null,
     };
   } else if (tool.value === 'add') {
     gesture = { kind: 'add', from };
@@ -1006,7 +1072,7 @@ function onPointerMove(event: PointerEvent) {
     const drawn = boxBetween(gesture.fromMm, toMm(event));
     selectBox.value = drawn;
     // Selected as the box is drawn, so what it will take is seen before it is let go.
-    const inside = tablesInBox(layout.value.tables, drawn);
+    const inside = tablesInBox(layout.value.tables, drawn, sizeOf);
     const kept = gesture.keep ? gesture.base.filter((id) => !inside.includes(id)) : [];
     props.editor.select([...kept, ...inside]);
   } else if (gesture.kind === 'label') {
@@ -1023,18 +1089,32 @@ function onPointerMove(event: PointerEvent) {
       },
     });
   } else if (gesture.kind === 'turn') {
-    let by = angleFrom(gesture.centre, toMm(event)) - gesture.fromAngle;
-    by = ((((by + 180) % 360) + 360) % 360) - 180;
-    if (!event.altKey) by = snapAngle(by, TURN_STEP);
-    if (!gesture.begun) {
-      if (by === 0) return;
-      gesture.begun = true;
-      dragging.value = true;
-      props.editor.begin();
-    }
-    gesture.by = ((by % 360) + 360) % 360;
-    props.editor.turnTables(gesture.ids, by, gesture.centre);
+    turnTo(gesture, toMm(event), event.shiftKey);
   }
+}
+
+/** A knob's drag with the pointer at a place: the selection turned from where the drag began, in
+ *  15° steps, or with Shift (`fine`) by the whole degree, for a fine turn. */
+function turnTo(turn: Extract<Gesture, { kind: 'turn' }>, atMm: PointMm, fine: boolean) {
+  turn.atMm = atMm;
+  let by = angleFrom(turn.centre, atMm) - turn.fromAngle;
+  by = ((((by + 180) % 360) + 360) % 360) - 180;
+  by = snapAngle(by, fine ? 1 : TURN_STEP);
+  if (!turn.begun) {
+    if (by === 0) return;
+    turn.begun = true;
+    dragging.value = true;
+    props.editor.begin();
+  }
+  turn.by = ((by % 360) + 360) % 360;
+  if (turning.value) turning.value = { ...turning.value, by };
+  props.editor.turnTables(turn.ids, by, turn.centre);
+}
+
+/** Shift pressed or let go under a knob's drag turns the selection again, by the degree or back
+ *  to the step, with no move of the pointer (D11). */
+function reTurn(fine: boolean) {
+  if (gesture?.kind === 'turn' && gesture.atMm) turnTo(gesture, gesture.atMm, fine);
 }
 
 function endGesture(event: PointerEvent, cancelled: boolean) {
@@ -1045,6 +1125,7 @@ function endGesture(event: PointerEvent, cancelled: boolean) {
   // A pinch lasts while two fingers are down; the one left does nothing more.
   gesture = null;
   gesturePointer = null;
+  turning.value = null;
   guides.value = [];
   selectBox.value = null;
   zoneBox.value = null;
@@ -1172,12 +1253,13 @@ function place(at: PointMm): string | null {
     },
   ]);
   if (!ids.length) {
-    // The one way an add makes nothing: the layout holds as many tables as it may.
-    say(LAYOUT_IS_FULL);
+    // The ways an add makes nothing: the section's tables are all on a layout that follows the
+    // plan, or the layout holds as many tables as it may.
+    if (!tellHeldBack()) say(LAYOUT_IS_FULL);
     return null;
   }
   props.editor.select(ids);
-  say(saidAdded(tablesOf(ids), drawnSections.value));
+  if (!tellHeldBack()) say(saidAdded(tablesOf(ids), drawnSections.value));
   return ids[0];
 }
 
@@ -1201,6 +1283,7 @@ function addZone(box: Bounds) {
 function abandon() {
   const done = gesture;
   gesture = null;
+  turning.value = null;
   guides.value = [];
   selectBox.value = null;
   zoneBox.value = null;
@@ -1276,12 +1359,12 @@ function duplicateByKey() {
   const originals = targets();
   const copies = props.editor.duplicate(originals);
   if (!copies.length) {
-    if (originals.length) say(LAYOUT_IS_FULL);
+    if (originals.length && !tellHeldBack()) say(LAYOUT_IS_FULL);
     return;
   }
   props.editor.select(copies);
   const made = tablesOf(copies);
-  say(saidAdded(made, drawnSections.value));
+  if (!tellHeldBack()) say(saidAdded(made, drawnSections.value));
   if (hadFocus) void focusTable(copies[0]);
   show(made);
 }
@@ -1296,10 +1379,15 @@ function turnByKey(degrees: number) {
 
 function onWindowKeydown(event: KeyboardEvent) {
   // Shift pressed under a line being drawn makes it a straight row, with no pointer move.
-  if (event.key === 'Shift') showStroke(true);
+  if (event.key === 'Shift') {
+    showStroke(true);
+    reTurn(true);
+  }
   if (event.defaultPrevented || inAField(event)) return;
-  // A dialog over the page has the keys.
-  if (document.querySelector('[role="dialog"][aria-modal="true"], dialog[open]')) return;
+  // A dialog over the page has the keys; a closed side panel, whose window stays in the page
+  // hidden, has none.
+  const modalOpen = '[role="dialog"][aria-modal="true"]:not([aria-hidden="true"]), dialog[open]';
+  if (document.querySelector(modalOpen)) return;
   const command = event.ctrlKey || event.metaKey;
   const plain = !command && !event.altKey;
   const key = event.key.toLowerCase();
@@ -1320,6 +1408,22 @@ function onWindowKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape' && gesture) {
     event.preventDefault();
     abandon();
+  } else if (event.key === '?' && !command && !event.altKey && !event.repeat) {
+    event.preventDefault();
+    shortcutsShown.value = !shortcutsShown.value;
+  } else if (event.key === 'Escape' && tool.value !== 'select') {
+    // Nothing being drawn: Escape is the way back to Select, as a right-click on the map is.
+    event.preventDefault();
+    tool.value = 'select';
+  } else if (
+    plain &&
+    !event.shiftKey &&
+    !event.repeat &&
+    key in TOOL_KEYS &&
+    !(props.settled && ADDING.includes(TOOL_KEYS[key]))
+  ) {
+    event.preventDefault();
+    tool.value = TOOL_KEYS[key];
   } else if (event.key === 'Escape' && selection.value.length && mapHasTheKeys()) {
     event.preventDefault();
     props.editor.select([]);
@@ -1571,7 +1675,10 @@ function zoomByKey(direction: 1 | -1) {
 function onWindowKeyup(event: KeyboardEvent) {
   if (event.key === ' ') spaceHeld.value = false;
   // Shift let go under a line being drawn: it is read as drawn again, with no pointer move.
-  if (event.key === 'Shift') showStroke(false);
+  if (event.key === 'Shift') {
+    showStroke(false);
+    reTurn(false);
+  }
 }
 
 /** The pointer left the map: a pending row or area is shown through its points alone. */
@@ -1610,6 +1717,7 @@ function onStageKeydown(event: KeyboardEvent) {
     carriedKey(event, id);
     return;
   }
+  if (nudgeKey(event)) return;
   if (tool.value === 'row' || tool.value === 'fill') {
     // The tool's keys, before the map hears them; no table is picked up while it is on.
     if (tool.value === 'row' ? rowKey(event, true) : fillKey(event, true)) event.preventDefault();
@@ -1642,6 +1750,46 @@ function onStageKeydown(event: KeyboardEvent) {
   if (props.editor.pickUp(selection.value)) {
     say(saidPickedUp(tablesOf(pickedUp.value), drawnSections.value));
   }
+}
+
+/** An arrow held now that is moving the selection: one step of undo from its first press to its
+ *  letting go. The selection's centres at that first press, and how far it has moved since: within
+ *  one change each move is reckoned from where it began, as a drag's frames are. */
+let nudging: { from: PointMm[]; by: { dxMm: number; dyMm: number } } | null = null;
+
+/**
+ * An arrow on the map with tables selected, under Select: the selection moves 10 cm that way, or
+ * 1 m with Shift, as a picked-up table does, with no Enter first (the QC walk of 2026-11-16). A
+ * key held down is one change, said once as it is let go (`onStageKeyup`). The move counts no
+ * further than the floorplan's edge lets the selection go (D12), so a press back moves at once.
+ * Alt and an arrow is left to the map, which moves the focus between tables.
+ */
+function nudgeKey(event: KeyboardEvent): boolean {
+  const nudge = NUDGES[event.key];
+  if (!nudge || tool.value !== 'select' || !selection.value.length || gesture) return false;
+  if (event.ctrlKey || event.metaKey || event.altKey) return false;
+  event.preventDefault();
+  event.stopPropagation();
+  if (!nudging) {
+    nudging = { from: tablesOf(selection.value), by: { dxMm: 0, dyMm: 0 } };
+    props.editor.begin();
+  }
+  const step = event.shiftKey ? LONG_NUDGE_MM : NUDGE_MM;
+  nudging.by = clampMove(
+    nudging.from,
+    { dxMm: nudging.by.dxMm + nudge[0] * step, dyMm: nudging.by.dyMm + nudge[1] * step },
+    hall.value,
+  );
+  props.editor.moveTables(selection.value, nudging.by.dxMm, nudging.by.dyMm);
+  show(tablesOf(selection.value));
+  return true;
+}
+
+/** End the change an arrow held began; whether it moved anything. */
+function endNudge(): boolean {
+  if (!nudging) return false;
+  nudging = null;
+  return props.editor.end();
 }
 
 /** A key while tables are picked up: an arrow moves them, R turns them, Enter or Space drops them
@@ -1686,6 +1834,14 @@ function carriedKey(event: KeyboardEvent, focused: string | null) {
 let unsaidMove = false;
 
 function onStageKeyup(event: KeyboardEvent) {
+  if (nudging && NUDGES[event.key]) {
+    const tables = tablesOf(selection.value);
+    const lead = tableOf(tableAt(event)) ?? tables[0];
+    if (endNudge()) {
+      if (lead) say(saidMoved(tables, lead, drawnSections.value));
+    } else say(AT_THE_EDGE);
+    return;
+  }
   if (!unsaidMove || !NUDGES[event.key]) return;
   unsaidMove = false;
   if (pointTool.value) {
@@ -1763,6 +1919,8 @@ function onStageFocusIn(event: FocusEvent) {
 function onStageFocusOut(event: FocusEvent) {
   const to = event.relatedTarget;
   if (to instanceof Node && stage.value?.contains(to)) return;
+  // An arrow held as the focus leaves is let go here: its move is one change, ended.
+  endNudge();
   if (!document.hasFocus()) return;
   keysOnMap.value = false;
   dropWhatIsPickedUp(tableAt(event));
@@ -1804,7 +1962,7 @@ const effectiveStop = computed(() => {
   const off =
     (toolbarStop.value === 'undo' && !canUndo.value) ||
     (toolbarStop.value === 'redo' && !canRedo.value) ||
-    (props.settled && ADDING.includes(toolbarStop.value));
+    (props.settled && ADDING.includes(toolbarStop.value as Tool));
   return off ? 'select' : toolbarStop.value;
 });
 
@@ -1851,61 +2009,70 @@ watch([canUndo, canRedo], async ([undoable, redoable]) => {
   toolbar.value?.querySelector<HTMLButtonElement>(`[data-tool="${next}"]`)?.focus();
 });
 
-// ── The turn handle ──────────────────────────────────────────────────────────
+// ── The selection's frame ────────────────────────────────────────────────────
 
-/** How far out from the selection's box the handle reaches, and how wide it stands, in screen
- *  pixels: its stem from 5 px, its knob 24 px out with a thumb's reach of 14 px round it. */
-const HANDLE_REACH_PX = 38;
-const HANDLE_WIDTH_PX = 28;
+/** How far outside the selected tables' edges their frame is drawn, in screen pixels: clear of
+ *  each table's outline. */
+const FRAME_OUT_PX = 6;
+/** The corners of the frame a knob stands on, each by its name as the frame stands square, and
+ *  as signs of its half width and half depth. */
+const FRAME_CORNERS = [
+  ['top-left', -1, -1],
+  ['top-right', 1, -1],
+  ['bottom-right', 1, 1],
+  ['bottom-left', -1, 1],
+] as const;
 
-/** The map, for where it draws each section's name. */
-const map = ref<InstanceType<typeof LayoutMap> | null>(null);
+/** A frame about the selection: a rectangle about its centre, turned. */
+interface Frame {
+  xMm: number;
+  yMm: number;
+  widthMm: number;
+  depthMm: number;
+  rotation: number;
+}
 
 /**
- * Where the handle stands: on the middle of an edge of the selection's box (`xMm`, `yMm`) and
- * pointing out of it (`dx`, `dy`). Over the box where that covers no other table and no section's
- * name, as on a table standing alone; else under it, then right of it, then left, the first side
- * that covers none, so it never hides a neighbour's number or a name; over it when every side
- * covers one.
+ * The frame at rest. One table's frame hugs it and turns with it; several stand in a box square
+ * to the page. Its four corners hold the turn knobs, so they stand where the frame does, always
+ * all four, and never move to another side (the QC walk of 2026-11-16: a handle that searched for
+ * a side clear of the neighbours jumped as the tables moved).
  */
-const handle = computed(() => {
+const restingFrame = computed<Frame | null>(() => {
   if (tool.value !== 'select') return null;
-  const box = selectionBounds(layout.value, selection.value, props.tableTypes);
-  const cam = camera.value;
-  if (!box) return null;
-  const middle = { xMm: (box.left + box.right) / 2, yMm: (box.top + box.bottom) / 2 };
-  const sides = [
-    { xMm: middle.xMm, yMm: box.top, dx: 0, dy: -1 },
-    { xMm: middle.xMm, yMm: box.bottom, dx: 0, dy: 1 },
-    { xMm: box.right, yMm: middle.yMm, dx: 1, dy: 0 },
-    { xMm: box.left, yMm: middle.yMm, dx: -1, dy: 0 },
-  ];
-  if (!cam) return sides[0];
-  const reach = HANDLE_REACH_PX / cam.pxPerMm;
-  const half = HANDLE_WIDTH_PX / 2 / cam.pxPerMm;
-  const chosen = new Set(selection.value);
-  const others = [
-    ...layout.value.tables.filter((table) => !chosen.has(table.id)).map(boundsOf),
-    ...(map.value?.labelBounds ?? []),
-  ];
-  const clear = (side: (typeof sides)[number]) => {
-    const far = { xMm: side.xMm + side.dx * reach, yMm: side.yMm + side.dy * reach };
-    const room: Bounds = {
-      left: Math.min(side.xMm, far.xMm) - (side.dy ? half : 0),
-      right: Math.max(side.xMm, far.xMm) + (side.dy ? half : 0),
-      top: Math.min(side.yMm, far.yMm) - (side.dx ? half : 0),
-      bottom: Math.max(side.yMm, far.yMm) + (side.dx ? half : 0),
+  const chosen = tablesOf(selection.value);
+  if (!chosen.length) return null;
+  if (chosen.length === 1) {
+    const [table] = chosen;
+    const size = sizeOf(table);
+    return {
+      xMm: table.xMm,
+      yMm: table.yMm,
+      widthMm: size.widthMm,
+      depthMm: size.depthMm,
+      rotation: table.rotation,
     };
-    return !others.some(
-      (other) =>
-        other.left < room.right &&
-        other.right > room.left &&
-        other.top < room.bottom &&
-        other.bottom > room.top,
-    );
+  }
+  const box = selectionBounds(layout.value, selection.value, props.tableTypes);
+  if (!box) return null;
+  return {
+    ...centreOf(box),
+    widthMm: box.right - box.left,
+    depthMm: box.bottom - box.top,
+    rotation: 0,
   };
-  return sides.find(clear) ?? sides[0];
 });
+
+/** A drag on a knob: the frame as it stood when the drag began, and how far it has turned. While
+ *  it lasts the frame turns whole with the tables, so the knob held stays under the pointer; it
+ *  stands square again when the drag ends. */
+const turning = shallowRef<{ frame: Frame; by: number } | null>(null);
+
+const frame = computed<Frame | null>(() =>
+  turning.value
+    ? { ...turning.value.frame, rotation: turning.value.frame.rotation + turning.value.by }
+    : restingFrame.value,
+);
 
 onMounted(() => {
   measure();
@@ -1948,6 +2115,27 @@ watch(
     fit();
   },
 );
+
+// The tool's card is the page's, beside the editor: what its buttons do, and what it shows of the
+// row being drawn, are the editor's.
+/** Give the focus to the selection's first table, so the arrow keys move it at once (D13): a
+ *  selection made from the panel left the focus on the panel's button. */
+async function focusSelection() {
+  const [first] = tablesOf(selection.value);
+  if (!first) return;
+  show([first]);
+  await focusTable(first.id);
+}
+
+defineExpose({
+  focusSelection,
+  /** Swap the side of the line a row's tables stand on. */
+  flipRow,
+  /** Fill what the map shows of the floorplan. */
+  fillInView: () => openFill(true),
+  /** Whether the row being drawn is a closed shape. */
+  rowClosed: computed(() => row.closed.value),
+});
 </script>
 
 <template>
@@ -1963,63 +2151,88 @@ watch(
     >
       <button
         type="button"
-        class="btn btn--secondary btn--compact"
+        class="btn btn--secondary btn--compact layout-tool"
         data-tool="select"
         data-testid="layout-tool-select"
         :aria-pressed="tool === 'select'"
         :tabindex="effectiveStop === 'select' ? 0 : -1"
         @click="tool = 'select'"
+        :aria-keyshortcuts="'V'"
+        :title="'Select (V)'"
       >
-        Select
+        Select<kbd class="layout-tool__key" aria-hidden="true">V</kbd>
       </button>
       <button
         type="button"
-        class="btn btn--secondary btn--compact"
+        class="btn btn--secondary btn--compact layout-tool"
         data-tool="add"
         data-testid="layout-tool-add"
         :aria-pressed="tool === 'add'"
         :disabled="settled"
         :tabindex="effectiveStop === 'add' ? 0 : -1"
         @click="tool = 'add'"
+        :aria-keyshortcuts="'T'"
+        :title="'Add table (T)'"
       >
-        Add table
+        Add table<kbd class="layout-tool__key" aria-hidden="true">T</kbd>
       </button>
       <button
         type="button"
-        class="btn btn--secondary btn--compact"
+        class="btn btn--secondary btn--compact layout-tool"
         data-tool="row"
         data-testid="layout-tool-row"
         :aria-pressed="tool === 'row'"
         :disabled="settled"
         :tabindex="effectiveStop === 'row' ? 0 : -1"
         @click="tool = 'row'"
+        :aria-keyshortcuts="'W'"
+        :title="'Row of tables (W)'"
       >
-        Row of tables
+        Row of tables<kbd class="layout-tool__key" aria-hidden="true">W</kbd>
       </button>
       <button
         type="button"
-        class="btn btn--secondary btn--compact"
+        class="btn btn--secondary btn--compact layout-tool"
         data-tool="fill"
         data-testid="layout-tool-fill"
         :aria-pressed="tool === 'fill'"
         :disabled="settled"
         :tabindex="effectiveStop === 'fill' ? 0 : -1"
         @click="tool = 'fill'"
+        :aria-keyshortcuts="'A'"
+        :title="'Fill an area (A)'"
       >
-        Fill an area
+        Fill an area<kbd class="layout-tool__key" aria-hidden="true">A</kbd>
       </button>
       <button
         type="button"
-        class="btn btn--secondary btn--compact"
+        class="btn btn--secondary btn--compact layout-tool"
         data-tool="zone"
         data-testid="layout-tool-zone"
         :aria-pressed="tool === 'zone'"
         :tabindex="effectiveStop === 'zone' ? 0 : -1"
         @click="tool = 'zone'"
+        :aria-keyshortcuts="'Z'"
+        :title="'No-table zone (Z)'"
       >
-        No-table zone
+        No-table zone<kbd class="layout-tool__key" aria-hidden="true">Z</kbd>
       </button>
-      <span class="layout-toolbar__rule" role="separator" aria-orientation="vertical" />
+      <!-- The keyboard's shortcuts, shown or hidden beside the page (the QC walk of 2026-11-16). -->
+      <button
+        type="button"
+        class="btn btn--secondary btn--compact layout-tool layout-shortcuts-toggle"
+        data-tool="shortcuts"
+        data-testid="layout-shortcuts-toggle"
+        :aria-pressed="shortcutsShown"
+        aria-label="Keyboard shortcuts"
+        aria-keyshortcuts="?"
+        title="Keyboard shortcuts (?)"
+        :tabindex="effectiveStop === 'shortcuts' ? 0 : -1"
+        @click="shortcutsShown = !shortcutsShown"
+      >
+        <IconKeyboard class="layout-shortcuts-toggle__icon" />
+      </button>
+      <span class="layout-toolbar__spacer" aria-hidden="true" />
       <button
         type="button"
         class="btn btn--secondary btn--compact"
@@ -2042,303 +2255,214 @@ watch(
       >
         Redo
       </button>
-      <span class="layout-toolbar__rule" role="separator" aria-orientation="vertical" />
-      <button
-        type="button"
-        class="btn btn--secondary btn--compact"
-        data-tool="zoom-out"
-        data-testid="layout-zoom-out"
-        :tabindex="effectiveStop === 'zoom-out' ? 0 : -1"
-        @click="stepZoom(-1)"
-      >
-        Zoom out
-      </button>
-      <button
-        type="button"
-        class="btn btn--secondary btn--compact"
-        data-tool="zoom-in"
-        data-testid="layout-zoom-in"
-        :tabindex="effectiveStop === 'zoom-in' ? 0 : -1"
-        @click="stepZoom(1)"
-      >
-        Zoom in
-      </button>
-      <button
-        type="button"
-        class="btn btn--secondary btn--compact"
-        data-tool="fit"
-        data-testid="layout-fit"
-        :tabindex="effectiveStop === 'fit' ? 0 : -1"
-        @click="fit"
-      >
-        Fit
-      </button>
-      <span class="layout-toolbar__zoom" data-testid="layout-zoom">
-        <span class="visually-hidden">Zoom </span>{{ zoomText }}
-      </span>
     </div>
 
-    <div
-      v-if="tool !== 'select' && tool !== 'zone'"
-      class="layout-options"
-      :class="{ 'layout-options--row': tool === 'row' }"
-      data-testid="layout-add-options"
-    >
-      <label class="layout-option">
-        <span class="layout-option__name">Section</span>
-        <select
-          v-model="addSectionId"
-          class="field field--select layout-option__field"
-          data-testid="layout-add-section"
+    <div class="layout-stage-frame">
+      <div
+        ref="stage"
+        class="layout-stage"
+        :class="{
+          'layout-stage--drawing': tool !== 'select' && tool !== 'zone',
+          'layout-stage--zone': tool === 'zone',
+          'layout-stage--hand': spaceHeld,
+          'layout-stage--dragging': dragging,
+        }"
+        :style="{ aspectRatio: `${layout.imageWidth ?? 4} / ${layout.imageHeight ?? 3}` }"
+        data-testid="layout-stage"
+        @pointerdown="onPointerDown"
+        @pointermove="onPointerMove"
+        @pointerup="endGesture($event, false)"
+        @pointercancel="endGesture($event, true)"
+        @pointerenter="hovering = true"
+        @pointerleave="onPointerLeave"
+        @keydown.capture="onStageKeydown"
+        @keyup="onStageKeyup"
+        @focusin="onStageFocusIn"
+        @focusout="onStageFocusOut"
+      >
+        <LayoutMap
+          :layout="layout"
+          :locationName="locationName"
+          :sections="sections"
+          :tableTypes="tableTypes"
+          :imageUrl="imageUrl"
+          :showImage="showImage"
+          :imageInGrey="imageInGrey"
+          :imageFaded="imageFaded"
+          :view="view"
+          :selection="selection"
+          :guides="guides"
+          :carried="pickedUp"
+          :aria-describedby="keysId"
+          mode="edit"
         >
-          <option v-for="section in ownSections" :key="section.id" :value="section.id">
-            {{ section.name || 'Unnamed section' }}
-          </option>
-          <option value="">No section</option>
-        </select>
-      </label>
-      <label class="layout-option">
-        <span class="layout-option__name">Table type</span>
-        <select
-          v-model="addTypeId"
-          class="field field--select layout-option__field"
-          data-testid="layout-add-type"
-        >
-          <option v-for="type in tableTypes" :key="type.id" :value="type.id">
-            {{ type.name }}
-          </option>
-        </select>
-      </label>
-      <template v-if="tool === 'row'">
-        <label class="layout-option">
-          <span class="layout-option__name">Gap (cm)</span>
-          <input
-            v-model="rowChoices.gapCm"
-            class="field layout-option__field layout-option__field--number"
-            type="text"
-            inputmode="decimal"
-            autocomplete="off"
-            :aria-invalid="!!rowErrors.gap"
-            :aria-describedby="rowErrors.gap ? 'layout-row-gap-error' : undefined"
-            data-testid="layout-row-gap"
-          />
-        </label>
-        <label class="layout-option">
-          <span class="layout-option__name">Tables</span>
-          <select
-            v-model="rowChoices.centred"
-            class="field field--select layout-option__field"
-            data-testid="layout-row-stand"
-          >
-            <option :value="false">Beside the line</option>
-            <option :value="true">Centred on the line</option>
-          </select>
-        </label>
+          <template #default="{ mmPerPx }">
+            <rect
+              v-if="selectBox"
+              class="layout-select-box"
+              :x="selectBox.left"
+              :y="selectBox.top"
+              :width="selectBox.right - selectBox.left"
+              :height="selectBox.bottom - selectBox.top"
+              fill="var(--mm-blue)"
+              fill-opacity="0.08"
+              stroke="var(--mm-blue)"
+              stroke-width="1"
+              stroke-dasharray="4 4"
+              vector-effect="non-scaling-stroke"
+              aria-hidden="true"
+              data-testid="layout-select-box"
+            />
+            <rect
+              v-if="zoneBox"
+              class="layout-zone-box"
+              :x="zoneBox.left"
+              :y="zoneBox.top"
+              :width="zoneBox.right - zoneBox.left"
+              :height="zoneBox.bottom - zoneBox.top"
+              fill="var(--layout-zone-fill)"
+              fill-opacity="0.7"
+              stroke="var(--layout-zone-edge)"
+              stroke-width="1.5"
+              stroke-dasharray="6 4"
+              vector-effect="non-scaling-stroke"
+              aria-hidden="true"
+              data-testid="layout-zone-box"
+            />
+            <LayoutRowPreview
+              v-if="tool === 'row' && (row.pending.value || crosshair)"
+              :runs="row.runs.value"
+              :poses="row.poses.value"
+              :size="row.size.value"
+              :points="row.points.value"
+              :countAt="
+                row.pending.value && !row.refusal.value ? (crosshair ?? row.countAt.value) : null
+              "
+              :closeAt="row.closeAt.value"
+              :finished="row.closed.value || row.drawn.value"
+              :crosshair="crosshair"
+              :paint="rowPaint"
+              :mmPerPx="mmPerPx"
+            />
+            <LayoutFillPreview
+              v-if="tool === 'fill' && (fillTool.pending.value || fillCrosshair || fillArea)"
+              :outline="fillTool.outline.value"
+              :points="fillTool.points.value"
+              :box="fillTool.box.value"
+              :area="fillArea"
+              :closes="fillTool.closing.value && fillTool.closable.value && !fillTool.crosses.value"
+              :crosses="fillTool.crosses.value"
+              :crosshair="fillCrosshair"
+              :mmPerPx="mmPerPx"
+            />
+            <g
+              v-if="frame"
+              class="layout-selection-frame"
+              data-testid="layout-selection-frame"
+              :transform="`translate(${frame.xMm} ${frame.yMm}) rotate(${frame.rotation})`"
+              aria-hidden="true"
+            >
+              <rect
+                :x="-frame.widthMm / 2 - FRAME_OUT_PX * mmPerPx"
+                :y="-frame.depthMm / 2 - FRAME_OUT_PX * mmPerPx"
+                :width="frame.widthMm + 2 * FRAME_OUT_PX * mmPerPx"
+                :height="frame.depthMm + 2 * FRAME_OUT_PX * mmPerPx"
+                fill="none"
+                stroke="var(--mm-black)"
+                stroke-width="1"
+                vector-effect="non-scaling-stroke"
+                pointer-events="none"
+              />
+              <g
+                v-for="[corner, sx, sy] in FRAME_CORNERS"
+                :key="corner"
+                class="layout-turn-handle"
+                data-turn-handle
+                :data-corner="corner"
+                data-testid="layout-turn-handle"
+              >
+                <!-- A thumb's reach round the knob. -->
+                <circle
+                  :cx="sx * (frame.widthMm / 2 + FRAME_OUT_PX * mmPerPx)"
+                  :cy="sy * (frame.depthMm / 2 + FRAME_OUT_PX * mmPerPx)"
+                  :r="14 * mmPerPx"
+                  fill="transparent"
+                />
+                <circle
+                  :cx="sx * (frame.widthMm / 2 + FRAME_OUT_PX * mmPerPx)"
+                  :cy="sy * (frame.depthMm / 2 + FRAME_OUT_PX * mmPerPx)"
+                  :r="5 * mmPerPx"
+                  fill="white"
+                  stroke="var(--mm-black)"
+                  stroke-width="1.5"
+                  vector-effect="non-scaling-stroke"
+                  data-testid="layout-turn-knob"
+                />
+              </g>
+            </g>
+          </template>
+        </LayoutMap>
+      </div>
+      <aside
+        v-if="shortcutsShown"
+        class="layout-shortcuts"
+        :class="{ 'layout-shortcuts--beside': shortcutsBeside }"
+        aria-label="Keyboard shortcuts"
+        data-testid="layout-shortcuts"
+      >
         <button
           type="button"
-          class="btn btn--secondary btn--compact"
-          :disabled="rowChoices.centred"
-          data-testid="layout-row-flip"
-          @click="flipRow"
+          class="layout-shortcuts__close"
+          aria-label="Hide the keyboard shortcuts"
+          data-testid="layout-shortcuts-close"
+          @click="shortcutsShown = false"
         >
-          Flip side
+          <IconCloseRound />
         </button>
-        <label class="layout-option">
-          <span class="layout-option__name">Rows</span>
-          <input
-            v-model="rowChoices.rows"
-            class="field layout-option__field layout-option__field--number"
-            type="text"
-            inputmode="numeric"
-            autocomplete="off"
-            data-testid="layout-row-rows"
-          />
-        </label>
-        <label class="layout-option">
-          <span class="layout-option__name">Aisle (cm)</span>
-          <input
-            v-model="rowChoices.aisleCm"
-            class="field layout-option__field layout-option__field--number"
-            type="text"
-            inputmode="decimal"
-            autocomplete="off"
-            :aria-invalid="!!rowErrors.aisle"
-            :aria-describedby="rowErrors.aisle ? 'layout-row-aisle-error' : undefined"
-            data-testid="layout-row-aisle"
-          />
-        </label>
-        <label class="layout-option layout-option--tick">
-          <input
-            v-model="rowChoices.spread"
-            type="checkbox"
-            :disabled="row.closed.value"
-            data-testid="layout-row-spread"
-          />
-          <span class="layout-option__name">Spread evenly to the ends</span>
-        </label>
-        <p v-if="rowErrors.gap || rowErrors.aisle" class="layout-options__error">
-          <span
-            v-if="rowErrors.gap"
-            id="layout-row-gap-error"
-            role="alert"
-            data-testid="layout-row-gap-error"
-            >{{ rowErrors.gap }}</span
-          >
-          <span
-            v-if="rowErrors.aisle"
-            id="layout-row-aisle-error"
-            role="alert"
-            data-testid="layout-row-aisle-error"
-            >{{ rowErrors.aisle }}</span
-          >
-        </p>
-      </template>
-      <button
-        v-if="tool === 'fill'"
-        type="button"
-        class="btn btn--secondary btn--compact"
-        :disabled="!fill"
-        data-testid="layout-fill-view"
-        @click="openFill(true)"
-      >
-        Fill what is in view
-      </button>
-    </div>
-
-    <div
-      ref="stage"
-      class="layout-stage"
-      :class="{
-        'layout-stage--drawing': tool !== 'select' && tool !== 'zone',
-        'layout-stage--zone': tool === 'zone',
-        'layout-stage--row': tool === 'row',
-        'layout-stage--row-said': tool === 'row' && Boolean(rowErrors.gap || rowErrors.aisle),
-        'layout-stage--hand': spaceHeld,
-        'layout-stage--dragging': dragging,
-      }"
-      :style="{ aspectRatio: `${layout.imageWidth ?? 4} / ${layout.imageHeight ?? 3}` }"
-      data-testid="layout-stage"
-      @pointerdown="onPointerDown"
-      @pointermove="onPointerMove"
-      @pointerup="endGesture($event, false)"
-      @pointercancel="endGesture($event, true)"
-      @pointerenter="hovering = true"
-      @pointerleave="onPointerLeave"
-      @keydown.capture="onStageKeydown"
-      @keyup="onStageKeyup"
-      @focusin="onStageFocusIn"
-      @focusout="onStageFocusOut"
-    >
-      <LayoutMap
-        ref="map"
-        :layout="layout"
-        :locationName="locationName"
-        :sections="sections"
-        :tableTypes="tableTypes"
-        :imageUrl="imageUrl"
-        :showImage="showImage"
-        :view="view"
-        :selection="selection"
-        :guides="guides"
-        :carried="pickedUp"
-        :aria-describedby="keysId"
-        mode="edit"
-      >
-        <template #default="{ mmPerPx }">
-          <rect
-            v-if="selectBox"
-            class="layout-select-box"
-            :x="selectBox.left"
-            :y="selectBox.top"
-            :width="selectBox.right - selectBox.left"
-            :height="selectBox.bottom - selectBox.top"
-            fill="var(--mm-blue)"
-            fill-opacity="0.08"
-            stroke="var(--mm-blue)"
-            stroke-width="1"
-            stroke-dasharray="4 4"
-            vector-effect="non-scaling-stroke"
-            aria-hidden="true"
-            data-testid="layout-select-box"
-          />
-          <rect
-            v-if="zoneBox"
-            class="layout-zone-box"
-            :x="zoneBox.left"
-            :y="zoneBox.top"
-            :width="zoneBox.right - zoneBox.left"
-            :height="zoneBox.bottom - zoneBox.top"
-            fill="var(--layout-zone-fill)"
-            fill-opacity="0.7"
-            stroke="var(--layout-zone-edge)"
-            stroke-width="1.5"
-            stroke-dasharray="6 4"
-            vector-effect="non-scaling-stroke"
-            aria-hidden="true"
-            data-testid="layout-zone-box"
-          />
-          <LayoutRowPreview
-            v-if="tool === 'row' && (row.pending.value || crosshair)"
-            :runs="row.runs.value"
-            :poses="row.poses.value"
-            :size="row.size.value"
-            :points="row.points.value"
-            :countAt="
-              row.pending.value && !row.refusal.value ? (crosshair ?? row.countAt.value) : null
-            "
-            :closeAt="row.closeAt.value"
-            :finished="row.closed.value || row.drawn.value"
-            :crosshair="crosshair"
-            :paint="rowPaint"
-            :mmPerPx="mmPerPx"
-          />
-          <LayoutFillPreview
-            v-if="tool === 'fill' && (fillTool.pending.value || fillCrosshair || fillArea)"
-            :outline="fillTool.outline.value"
-            :points="fillTool.points.value"
-            :box="fillTool.box.value"
-            :area="fillArea"
-            :closes="fillTool.closing.value && fillTool.closable.value && !fillTool.crosses.value"
-            :crosses="fillTool.crosses.value"
-            :crosshair="fillCrosshair"
-            :mmPerPx="mmPerPx"
-          />
-          <g
-            v-if="handle"
-            class="layout-turn-handle"
-            data-turn-handle
-            data-testid="layout-turn-handle"
-            aria-hidden="true"
-          >
-            <line
-              :x1="handle.xMm + handle.dx * 5 * mmPerPx"
-              :y1="handle.yMm + handle.dy * 5 * mmPerPx"
-              :x2="handle.xMm + handle.dx * 17 * mmPerPx"
-              :y2="handle.yMm + handle.dy * 17 * mmPerPx"
-              stroke="var(--mm-black)"
-              stroke-width="1.5"
-              vector-effect="non-scaling-stroke"
-            />
-            <!-- A thumb's reach round a 14 px knob. -->
-            <circle
-              :cx="handle.xMm + handle.dx * 24 * mmPerPx"
-              :cy="handle.yMm + handle.dy * 24 * mmPerPx"
-              :r="14 * mmPerPx"
-              fill="transparent"
-            />
-            <circle
-              :cx="handle.xMm + handle.dx * 24 * mmPerPx"
-              :cy="handle.yMm + handle.dy * 24 * mmPerPx"
-              :r="7 * mmPerPx"
-              fill="white"
-              stroke="var(--mm-black)"
-              stroke-width="1.5"
-              vector-effect="non-scaling-stroke"
-              data-testid="layout-turn-knob"
-            />
-          </g>
-        </template>
-      </LayoutMap>
+        <ScrollBox class="layout-shortcuts__scroll" testid="layout-shortcuts-scroll">
+          <LayoutPanelKeyboard class="layout-shortcuts__list" :settled="settled" />
+        </ScrollBox>
+      </aside>
+      <div class="layout-zoom" role="group" aria-label="Zoom" data-testid="layout-zoom-controls">
+        <RowMenu
+          label="Floorplan"
+          :items="viewItems"
+          testid="layout-view-menu"
+          opens="above"
+          buttonClass="btn btn--secondary btn--compact"
+          @select="chooseView"
+        >
+          <template #trigger>Floorplan</template>
+        </RowMenu>
+        <span class="layout-zoom__rule" aria-hidden="true" />
+        <button
+          type="button"
+          class="btn btn--secondary btn--compact layout-zoom__button"
+          data-testid="layout-zoom-out"
+          @click="stepZoom(-1)"
+        >
+          <span aria-hidden="true">-</span><span class="visually-hidden">Zoom out</span>
+        </button>
+        <span class="layout-zoom__level" data-testid="layout-zoom">
+          <span class="visually-hidden">Zoom </span>{{ zoomText }}
+        </span>
+        <button
+          type="button"
+          class="btn btn--secondary btn--compact layout-zoom__button"
+          data-testid="layout-zoom-in"
+          @click="stepZoom(1)"
+        >
+          <span aria-hidden="true">+</span><span class="visually-hidden">Zoom in</span>
+        </button>
+        <button
+          type="button"
+          class="btn btn--secondary btn--compact layout-zoom__button"
+          data-testid="layout-fit"
+          @click="fit"
+        >
+          Fit
+        </button>
+      </div>
     </div>
 
     <p class="layout-hint" data-testid="layout-hint">{{ hint }}</p>
@@ -2374,75 +2498,169 @@ watch(
   gap: var(--space-2);
 }
 
-.layout-toolbar__rule {
+/* The tools on the left, the history on the right: one line at every tool, so the map under it
+   holds still. */
+.layout-toolbar__spacer {
+  flex: 1;
+}
+
+.layout-tool {
+  gap: var(--space-2);
+}
+
+.layout-tool__key {
+  font-family: inherit;
+  font-size: var(--text-xs);
+  color: var(--mm-text-muted);
+}
+
+/* The tool on is filled in the deep green, plainly the one in hand. */
+.layout-tool[aria-pressed='true'] {
+  background: var(--mm-green);
+  border-color: var(--mm-green);
+  color: white;
+}
+
+/* Its fill deepens a step under the pointer and another held down, keeping its white ink (5.23
+   and 5.91 to 1), where the toggles' tint would take it. */
+.layout-tool[aria-pressed='true']:hover:not(:disabled) {
+  background: var(--mm-green-hover);
+  border-color: var(--mm-green-hover);
+}
+
+.layout-tool[aria-pressed='true']:active:not(:disabled) {
+  background: var(--mm-green-pressed);
+  border-color: var(--mm-green-pressed);
+}
+
+/* The key in white on the green, as its name is: anything fainter falls under AA. */
+.layout-tool[aria-pressed='true'] .layout-tool__key {
+  color: white;
+}
+
+/* A tool that cannot be used keeps its key in the one disabled ink, as its name has: the prototype
+   kept it `--mm-text-muted`, which is 4.23 on the disabled control's beige, under AA for text this
+   small (`--mm-text-muted-on-beige` in base.css). */
+.layout-tool:disabled .layout-tool__key {
+  color: inherit;
+}
+
+.layout-shortcuts-toggle {
+  min-width: 2.25rem;
+  justify-content: center;
+}
+
+/* The prototype's 1.1rem is off the type scale, which stylelint and the layout sweep refuse; the
+   scale's nearest step is 16px, 1.6px smaller, and the button 2px narrower. */
+.layout-shortcuts-toggle__icon {
+  font-size: var(--text-md);
+}
+
+/* The shortcuts stand over the map's top-left corner, under the toolbar, where the window has no
+   room beside the page; with room (the market's frame, and the panel and its margins on each side,
+   `useRoomBesideTheFrame`) they stand in the empty space left of the frame, and stay put as the
+   page scrolls. */
+.layout-shortcuts {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  width: v-bind(SHORTCUTS_WIDTH);
+  max-width: calc(100% - 2 * var(--space-3));
+  max-height: calc(100% - 2 * var(--space-3));
+  overflow: hidden;
+  background: white;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.layout-shortcuts--beside {
+  position: fixed;
+  top: calc(var(--space-12) + var(--space-4));
+  left: calc((100vw - var(--workspace-max)) / 2 - v-bind(SHORTCUTS_WIDTH) - var(--space-4));
+  max-width: none;
+  max-height: calc(100vh - var(--space-12) - 2 * var(--space-4));
+}
+
+/* The list scrolls inside the panel where it is taller than the room, the close staying put. */
+.layout-shortcuts__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.layout-shortcuts__list {
+  padding: var(--space-4);
+}
+
+.layout-shortcuts__close {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-3);
+  right: var(--space-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--target-min);
+  height: var(--target-min);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--mm-text-muted);
+  font-size: var(--text-lg);
+  cursor: pointer;
+}
+
+.layout-stage-frame {
+  position: relative;
+}
+
+/* The zoom stands on the map's bottom-right corner, as a map's does. */
+.layout-zoom {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: white;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.layout-zoom__rule {
   align-self: stretch;
   width: 1px;
   margin: 0 var(--space-1);
   background: var(--mm-border);
 }
 
-.layout-toolbar__zoom {
+.layout-zoom__button {
+  min-width: 2.25rem;
+  justify-content: center;
+}
+
+.layout-zoom__level {
   min-width: 3rem;
+  text-align: center;
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   color: var(--mm-black);
 }
 
-.layout-options {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3) var(--space-4);
-}
-
-/* A field of the strip that holds no length says so on a line of its own, under the fields, the
-   Gap's and the Aisle's sentences side by side when both stand. */
-.layout-options__error {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 var(--space-4);
-  flex-basis: 100%;
-  margin: 0;
-  font-size: var(--text-xs);
-  color: var(--mm-red);
-}
-
-.layout-option {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-}
-
-.layout-option__name {
-  white-space: nowrap;
-}
-
-.layout-option__field {
-  width: 14rem;
-  max-width: 100%;
-}
-
-/* A row's strip holds eight controls: its fields are narrower, so they stand on two lines
-   beside the panel. */
-.layout-options--row .layout-option__field {
-  width: 10.5rem;
-}
-
-.layout-options--row .layout-option__field--number,
-.layout-option__field--number {
-  width: 4.5rem;
-}
-
 /* The stage is a window onto the hall, at the floorplan's shape and never taller than leaves the
-   toolbar and the hint on the screen with it (the bars, the head row and the toolbar above it and
-   the hint under it take 23.5rem between them): the hall is moved inside it, so nothing is cut off
-   that a pan does not reach. `touch-action: none`: a finger on the map moves the map. */
+   toolbar and the hint on the screen with it (T422's recount: the app bar, the market's bar and
+   rail, the head's bar with its rule, the toolbar above it, and the hint and the page's and the
+   frame's foot under it take 24rem between them, so the page fits the window whole, whatever the
+   tool, at a desk): the hall is moved inside it, so nothing is cut off that a pan does not reach.
+   `touch-action: none`: a finger on the map moves the map. */
 .layout-stage {
   position: relative;
   width: 100%;
   min-height: 20rem;
-  max-height: max(20rem, calc(100vh - 23.5rem));
+  max-height: max(20rem, calc(100vh - 24rem));
   overflow: hidden;
   background: var(--mm-beige);
   border: 1px solid var(--mm-border);
@@ -2453,22 +2671,6 @@ watch(
 
 /* Round the hall the stage is a pasteboard, a step darker than the floor, so where the floorplan
    ends reads at any pan and zoom, whatever the venue's image shows of its own edge. */
-/* With a tool's options strip above it the stage gives up the strip's height, so the hint stays on
-   the screen. */
-.layout-stage--drawing {
-  max-height: max(20rem, calc(100vh - 26.5rem));
-}
-
-/* A row's strip, of eight controls, takes a second line. */
-.layout-stage--row {
-  max-height: max(20rem, calc(100vh - 29.5rem));
-}
-
-/* And a third while a field of it says it holds no length. */
-.layout-stage--row-said {
-  max-height: max(20rem, calc(100vh - 31.5rem));
-}
-
 .layout-stage :deep(.layout-map) {
   background: var(--mm-beige);
 }
@@ -2521,8 +2723,13 @@ watch(
   cursor: grabbing;
 }
 
+/* A turning arrow, as a drawing tool's turn corner shows; grab where a custom cursor is not drawn
+   (D20: an inline image, not an icon of the app's set, since a cursor is no component). */
 .layout-turn-handle {
-  cursor: grab;
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M5 12a7 7 0 1 1 2.05 4.95' fill='none' stroke='white' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M5 12a7 7 0 1 1 2.05 4.95' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3Cpath d='M2 9l3 4 3-4z' fill='black' stroke='white' stroke-width='0.8'/%3E%3C/svg%3E")
+      12 12,
+    grab;
 }
 
 .layout-hint {

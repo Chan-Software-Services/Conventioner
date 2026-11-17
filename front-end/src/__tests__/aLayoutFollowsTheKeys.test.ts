@@ -182,7 +182,7 @@ describe('what the live region says', () => {
       '2 tables dropped, Gold row 5 at 12.4 m, 6.1 m',
     );
     expect(saidTurned([five, six], 90, sections)).toBe('2 tables turned by 90°');
-    // The handle turns either way: past a half turn is the short way round, said so.
+    // A knob turns either way: past a half turn is the short way round, said so.
     expect(saidTurned([five, six], 345, sections)).toBe('2 tables turned by 15° anticlockwise');
     expect(saidAdded([five, six], sections)).toBe('Added 2 tables');
     expect(saidRemoved([five, six, loose], sections)).toBe('Removed 3 tables');

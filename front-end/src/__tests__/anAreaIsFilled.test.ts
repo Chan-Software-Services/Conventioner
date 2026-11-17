@@ -569,9 +569,14 @@ describe("Fill an area's write, in the editor", () => {
     await flushPromises();
     byTestId('layout-tool-fill')!.click();
     await flushPromises();
-    byTestId('layout-fill-view')!.click();
-    await flushPromises();
+    await askToFillTheView();
     return wrapper;
+  }
+
+  /** What the panel's "Fill what is in view" calls: the panel is the page's, not the editor's. */
+  async function askToFillTheView() {
+    (wrapper!.vm as unknown as { fillInView: () => void }).fillInView();
+    await flushPromises();
   }
 
   async function pressFill() {
@@ -627,8 +632,7 @@ describe("Fill an area's write, in the editor", () => {
     expect(byTestId('layout-fill-error')).not.toBeNull();
     byTestId('layout-fill-cancel-button')!.click();
     await flushPromises();
-    byTestId('layout-fill-view')!.click();
-    await flushPromises();
+    await askToFillTheView();
     expect(byTestId('layout-fill-window')).not.toBeNull();
     expect(byTestId('layout-fill-error')).toBeNull();
   });

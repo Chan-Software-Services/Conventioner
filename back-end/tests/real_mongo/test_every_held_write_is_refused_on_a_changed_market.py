@@ -1,7 +1,7 @@
 """Each market write a phase rule or a read fact judged is refused when what it read moved.
 
 Publish results, Stop or take applications, the door code, the Discord check, run, decline and
-card, the saved import mapping, the CSV start and the four permission-row writes each read the
+card, the Public map card, the saved import mapping, the CSV start and the four permission-row writes each read the
 market, judge, and then write. Each test lands a second change between that read and the write
 (``interleave``), made through its own module function, and asserts what a person and a later
 reader see: the 409 and its sentence, the stored market as the other change left it, and only the
@@ -19,6 +19,7 @@ import csv_import as CsvImport
 import csv_start as CsvStart
 import discord_client as Discord
 import history as History
+import public_map as PublicMap
 from datatypes import MarketPhase, VendorAssignmentResult
 from market_documents import market_from_document
 from market_write import MARKET_CHANGED
@@ -267,6 +268,68 @@ class TestTheDiscordCard:
         assert response.get_json() == CHANGED
         assert _stored(real_db, market)["discord"]["guildId"] == OTHER_GUILD.id
         assert _kinds(market_records, market) == [History.DISCORD_CONNECTED]
+
+
+MAP_QUESTIONS = [{"key": "business_name", "label": "Business name", "type": "text"},
+                 {"key": "website", "label": "Website", "type": "text"}]
+
+
+def _mapped_market(market_in, **public_map):
+    return market_in(MarketPhase.MARKET_DAYS, intakeMode="form", applicationForm={
+        "fields": MAP_QUESTIONS, "essentialOptions": None},
+        publicMap={"enabled": False, "nameQuestion": "business_name", "websiteQuestion": None,
+                   "instagramQuestion": None, **public_map})
+
+
+class TestThePublicMapCard:
+    def test_is_refused_when_another_save_changed_the_settings_before_it_landed(
+            self, signed_in, market_in, interleave, real_db, market_records):
+        """The settings are held whole as read: a change saved meanwhile in another tab, of
+        another setting even, is never written over by one made from the copy before it."""
+        client = signed_in(ORGANIZER)
+        market = _mapped_market(market_in)
+        interleave("api.markets._load_market_to_change", lambda: PublicMap.save_settings(
+            market["id"], {"websiteQuestion": "website"}, ORGANIZER))
+
+        response = client.put(f"/markets/{market['id']}/public-map", json={"enabled": True})
+
+        assert response.status_code == 409, response.get_json()
+        assert response.get_json() == CHANGED
+        stored = _stored(real_db, market)["publicMap"]
+        assert (stored["enabled"], stored["websiteQuestion"]) == (False, "website")
+        assert _kinds(market_records, market) == [History.PUBLIC_MAP]
+
+    def test_a_first_save_is_refused_over_one_made_since_in_another_tab(
+            self, signed_in, market_in, interleave, real_db, market_records):
+        """A market the product made stores ``publicMap: null``, and its first save writes the
+        settings whole: it holds the null it read."""
+        client = signed_in(ORGANIZER)
+        market = market_in(MarketPhase.MARKET_DAYS, intakeMode="form", applicationForm={
+            "fields": MAP_QUESTIONS, "essentialOptions": None}, publicMap=None)
+        interleave("api.markets._load_market_to_change", lambda: PublicMap.save_settings(
+            market["id"], {"nameQuestion": "website"}, ORGANIZER))
+
+        response = client.put(f"/markets/{market['id']}/public-map",
+                              json={"nameQuestion": "business_name"})
+
+        assert response.status_code == 409, response.get_json()
+        assert _stored(real_db, market)["publicMap"]["nameQuestion"] == "website"
+        assert _kinds(market_records, market) == [History.PUBLIC_MAP]
+
+    def test_is_refused_when_the_market_was_archived_before_it_landed(
+            self, signed_in, market_in, interleave, real_db, market_records):
+        client = signed_in(ORGANIZER)
+        market = _mapped_market(market_in)
+        interleave("api.markets._load_market_to_change", _move(market, MarketPhase.ARCHIVED))
+
+        response = client.put(f"/markets/{market['id']}/public-map", json={"enabled": True})
+
+        assert response.status_code == 409, response.get_json()
+        assert response.get_json() == CHANGED
+        stored = _stored(real_db, market)
+        assert stored["phase"] == MarketPhase.ARCHIVED.value
+        assert stored["publicMap"]["enabled"] is False
+        assert _history(market_records, market) == []
 
 
 def _signed_in_again(email):

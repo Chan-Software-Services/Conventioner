@@ -6,7 +6,8 @@ import { seedLayout, storedLayoutTables, type SeedTable, type SeededLayout } fro
 /**
  * A layout is edited by keyboard, and heard (T257 ticket 06), on Upper Hall, 30 m by 22.5 m: Tab
  * reaches the map once, the arrow keys move between its tables, Enter picks one up, the arrow keys
- * move it and R turns it, Enter drops it and Escape puts it back; the shortcuts remove, duplicate
+ * move it and R turns it, Enter drops it and Escape puts it back; with tables selected the arrow
+ * keys move them with no Enter first, and Alt and an arrow moves between tables (T422); the shortcuts remove, duplicate
  * and select; Add table places by Enter; and a polite live region says what each key did. Every
  * key is pressed on the page as a person presses it, and what it did is read from the live
  * region, the focus and the layout the server stored, never from the page's state.
@@ -75,8 +76,9 @@ test.describe('A table moves by keyboard', () => {
     await layout.toolSelect.focus();
     await page.keyboard.press('ArrowRight');
     await expect(layout.toolAdd).toBeFocused();
+    // The last that can be pressed: with nothing to undo or redo, the keyboard button.
     await page.keyboard.press('End');
-    await expect(layout.fit).toBeFocused();
+    await expect(layout.shortcutsToggle).toBeFocused();
     await page.keyboard.press('Home');
     await expect(layout.toolSelect).toBeFocused();
 
@@ -104,7 +106,14 @@ test.describe('A table moves by keyboard', () => {
     await expect(layout.table(GOLD_1)).toBeFocused();
     await expect(layout.announcement).toHaveText('');
 
-    // Another Tab leaves the map, for the panel.
+    // Another Tab leaves the map, for the zoom bar on its corner, each of its buttons a stop, then
+    // the panel.
+    await page.keyboard.press('Tab');
+    await expect(layout.viewMenuButton).toBeFocused();
+    for (const next of [layout.zoomOut, layout.zoomIn, layout.fit]) {
+      await page.keyboard.press('Tab');
+      await expect(next).toBeFocused();
+    }
     await page.keyboard.press('Tab');
     await expect(layout.sectionColour('Gold row')).toBeFocused();
 
@@ -242,8 +251,9 @@ test.describe('A table moves by keyboard', () => {
     await expect(layout.announcement).toHaveText('Gold row 1 dropped at 0.1 m, 5.0 m');
     await expect(layout.undo).toBeDisabled();
 
-    // The first save is the next real move's, and it holds that move alone.
-    await page.keyboard.press('ArrowRight');
+    // The first save is the next real move's, and it holds that move alone. Gold row 1 is still
+    // selected, so the plain arrows would move it: Alt and an arrow goes to the next table.
+    await page.keyboard.press('Alt+ArrowRight');
     await expect(layout.table(GOLD_2)).toBeFocused();
     await layout.saved(async () => {
       await page.keyboard.press('Enter');
@@ -265,7 +275,9 @@ test.describe('A table moves by keyboard', () => {
 
     await layout.tabToTheMap();
     await page.keyboard.press('Shift+Enter');
-    await page.keyboard.press('ArrowRight');
+    // With a table selected the plain arrows move it, so Alt and an arrow goes to the next.
+    await page.keyboard.press('Alt+ArrowRight');
+    await expect(layout.table(GOLD_2)).toBeFocused();
     await page.keyboard.press('Shift+Enter');
     await expect(layout.selectionTitle).toHaveText('2 tables selected');
     // Shift+Enter again takes a table out, and once more puts it back in.
@@ -301,6 +313,72 @@ test.describe('A table moves by keyboard', () => {
       { code: 'sec-gold 1', at: [5000, 5000, 0] },
       { code: 'sec-gold 2', at: [9000, 5000, 0] },
     ]);
+  });
+
+  test('with tables selected the arrow keys move them 10 cm, or 1 m with Shift, a key held one change said once, stopping at the edge', async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    const { layout, seeded } = await open(page, request, [
+      { section: 'sec-gold', at: [5000, 5000] },
+      { section: 'sec-gold', at: [29_700, 5000] },
+    ]);
+    // Selected by a click, as a person with a mouse selects: no Enter first.
+    await layout.clickAt([5000, 5000]);
+    await expect(layout.table(GOLD_1)).toBeFocused();
+    await layout.saved(() => page.keyboard.press('ArrowRight'));
+    await expect(layout.announcement).toHaveText('Gold row 1 moved to 5.1 m, 5.0 m');
+    await layout.saved(() => page.keyboard.press('Shift+ArrowDown'));
+    await expect(layout.announcement).toHaveText('Gold row 1 moved to 5.1 m, 6.0 m');
+    expect((await stored(request, seeded.marketId))[0].at).toEqual([5100, 6000, 0]);
+    await expect(layout.map.locator('[data-carried]')).toHaveCount(0);
+
+    // Held down, the key moves the table as it repeats, and is one change: one save, said once
+    // as it is let go, and one undo takes it all back.
+    let saves = 0;
+    page.on('request', (sent) => {
+      if (sent.url().includes('/floorplans/save-to-market')) saves += 1;
+    });
+    await layout.saved(async () => {
+      await page.keyboard.down('ArrowLeft');
+      await page.keyboard.down('ArrowLeft');
+      await page.keyboard.down('ArrowLeft');
+      await expect(layout.table(GOLD_1)).toHaveAttribute('transform', /translate\(4800 6000\)/);
+      await page.keyboard.up('ArrowLeft');
+      await expect(layout.announcement).toHaveText('Gold row 1 moved to 4.8 m, 6.0 m');
+    });
+    expect(saves).toBe(1);
+    await layout.saved(() => page.keyboard.press('Control+z'));
+    expect((await stored(request, seeded.marketId))[0].at).toEqual([5100, 6000, 0]);
+
+    // At the floorplan's edge the count stops: held past it, one press back moves at once.
+    await page.keyboard.press('Alt+ArrowRight');
+    await expect(layout.table(GOLD_2)).toBeFocused();
+    await layout.clickAt([29_700, 5000]);
+    await layout.saved(async () => {
+      for (let press = 0; press < 6; press += 1) await page.keyboard.down('ArrowRight');
+      await page.keyboard.up('ArrowRight');
+    });
+    expect((await stored(request, seeded.marketId))[1].at).toEqual([30_000, 5000, 0]);
+    await page.keyboard.press('ArrowRight');
+    await expect(layout.announcement).toHaveText('At the edge of the floorplan');
+    await layout.saved(() => page.keyboard.press('ArrowLeft'));
+    expect((await stored(request, seeded.marketId))[1].at).toEqual([29_900, 5000, 0]);
+  });
+
+  test('"Select them" gives the map the focus, so the arrow keys move the tables in no section at once', async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    const { layout, seeded } = await open(page, request, HALL);
+    await layout.selectNoSection.click();
+    await expect(layout.selectionTitle).toHaveText('Table in no section');
+    await expect(layout.table(LOOSE)).toBeFocused();
+    await layout.saved(() => page.keyboard.press('ArrowUp'));
+    expect((await stored(request, seeded.marketId))[4]).toEqual({
+      code: 'none -',
+      at: [20_000, 14_900, 0],
+    });
   });
 
   test('Space picks up with the pointer left over the map, and Enter under a pointer press picks nothing up', async ({
@@ -529,16 +607,31 @@ test.describe('A table moves by keyboard', () => {
     ]);
   });
 
-  test('the panel lists the keys under "Keyboard", opened by keyboard', async ({
+  test('the keyboard button and ? show the keys, the tools first, as the person left them', async ({
     authenticatedPage: page,
     request,
   }) => {
     const { layout } = await open(page, request, HALL);
 
-    await expect(layout.keyboard.getByText('Put them back')).toBeHidden();
-    await layout.keyboardSummary.focus();
+    await expect(layout.shortcuts).toHaveCount(0);
+    await expect(layout.shortcutsToggle).toHaveAccessibleName('Keyboard shortcuts');
+    await expect(layout.shortcutsToggle).toHaveAttribute('aria-pressed', 'false');
+    // By keyboard: the button is a stop of the toolbar's, right after No-table zone.
+    await layout.toolZone.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(layout.shortcutsToggle).toBeFocused();
     await page.keyboard.press('Enter');
+    await expect(layout.shortcuts).toBeVisible();
+    await expect(layout.shortcutsToggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(layout.keyboard.locator('h3').first()).toHaveText('Tools');
     for (const line of [
+      'Select',
+      'Add table',
+      'Row of tables',
+      'Fill an area',
+      'No-table zone',
+      'Back to Select, with nothing being drawn',
+      'Show or hide these shortcuts',
       'Move to the nearest table that way',
       'Pick up the table, or the selection it is in',
       'Select the table, or take it out',
@@ -558,5 +651,21 @@ test.describe('A table moves by keyboard', () => {
     ]) {
       await expect(layout.keyboard.getByText(line, { exact: true })).toBeVisible();
     }
+
+    // ? hides them, and shows them again; a reload shows them as they were left.
+    await layout.table(GOLD_1).focus();
+    await page.keyboard.press('?');
+    await expect(layout.shortcuts).toHaveCount(0);
+    await page.keyboard.press('?');
+    await expect(layout.shortcuts).toBeVisible();
+    await page.reload();
+    await expect(layout.tables).toHaveCount(HALL.length);
+    await expect(layout.shortcuts).toBeVisible();
+    await layout.shortcutsClose.click();
+    await expect(layout.shortcuts).toHaveCount(0);
+    await expect(layout.shortcutsToggle).toHaveAttribute('aria-pressed', 'false');
+    await page.reload();
+    await expect(layout.tables).toHaveCount(HALL.length);
+    await expect(layout.shortcuts).toHaveCount(0);
   });
 });

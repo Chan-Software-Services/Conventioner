@@ -134,6 +134,8 @@ PUBLIC_VENDOR_ENDPOINTS = [
     ("post", "/public/markets/{slug}/applicant-login/request-code", {"email": VENDOR}),
     ("post", "/public/markets/{slug}/applicant-login/verify-code", {"email": VENDOR, "code": "123456"}),
     ("post", "/public/markets/{slug}/applicant-login/resume", None),
+    ("get", "/public/markets/{slug}/map", None),
+    ("get", "/public/markets/{slug}/map/image/loc-main-hall", None),
 ]
 
 

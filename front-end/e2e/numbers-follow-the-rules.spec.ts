@@ -76,14 +76,18 @@ test.describe('Numbers follow the rules', () => {
     await layout.shiftClickAt(goldAt(4));
     await layout.shiftClickAt(goldAt(7));
     await expect(layout.selectionTitle).toHaveText('3 tables selected');
-    await expect(layout.selectionCodes).toHaveText('Gold row 2, Gold row 4, Gold row 7');
+    await expect(layout.selectionCounts).toHaveText('3 in Gold row');
+    await expect
+      .poll(() => layout.pressedNames())
+      .toEqual([2, 4, 7].map((number) => `Gold row ${number}, ${SIX_FOOT}`));
     await expect(layout.selectionSection).toHaveValue('sec-gold');
 
     await layout.saved(async () => {
       await layout.selectionSection.selectOption({ label: 'Silver aisle' });
-      await expect(layout.selectionCodes).toHaveText(
-        'Silver aisle 19, Silver aisle 20, Silver aisle 21',
-      );
+      await expect(layout.selectionCounts).toHaveText('3 in Silver aisle');
+      await expect
+        .poll(() => layout.pressedNames())
+        .toEqual([19, 20, 21].map((number) => `Silver aisle ${number}, ${SIX_FOOT}`));
     });
 
     // They stand where they stood, numbered on from Silver aisle's 18 in the order they had.
@@ -212,7 +216,10 @@ test.describe('Numbers follow the rules', () => {
     await expect(layout.selectionSection).toHaveValue('');
     await layout.saved(async () => {
       await layout.selectionSection.selectOption({ label: 'Gold row' });
-      await expect(layout.selectionCodes).toHaveText('Gold row 3, Gold row 4, Gold row 5');
+      await expect(layout.selectionCounts).toHaveText('3 in Gold row');
+      await expect
+        .poll(() => layout.pressedNames())
+        .toEqual([3, 4, 5].map((number) => `Gold row ${number}, ${SIX_FOOT}`));
     });
     await expect(layout.noSection).toHaveCount(0);
     expect(await numbered(request, market.marketId, 'sec-gold')).toEqual([

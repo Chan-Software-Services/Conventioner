@@ -7,7 +7,7 @@ describes:
   - front-end/src/utils/lastMarket.ts
   - front-end/src/utils/marketActions.ts
   - front-end/src/utils/useServerRead.ts
-verified: 2026-11-11
+verified: 2026-11-17
 sources:
   - E38/F04/S02
   - wayfinding/the-market-frame/03
@@ -26,6 +26,7 @@ sources:
   - T263
   - T274
   - T421
+  - T422
 ---
 
 # The market store
@@ -79,6 +80,10 @@ A new control is one line under its screen, and a new screen is a block beside t
 **Tools, the Discord card**
 
 - Connect, Disconnect, and each choice: Connect Discord and give roles
+
+**Tools, the Public map card**
+
+- turning the map on or off, and each question chosen: Publish the map
 
 **The form tab, and the review's highlights**
 

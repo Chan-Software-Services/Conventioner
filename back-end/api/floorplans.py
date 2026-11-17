@@ -36,7 +36,7 @@ def _get_image_dimensions(image_data: bytes):
         return (0, 0)
 
 
-def _detect_mimetype(image_data: bytes) -> str:
+def detect_mimetype(image_data: bytes) -> str:
     """Detect image MIME type from raw bytes using PIL.
     Falls back to 'image/png' when detection fails.
     """
@@ -158,7 +158,7 @@ def get_floorplan(gridfs_id: str):
     if image_data is None:
         return jsonify({"error": "Image not found"}), 404
 
-    mimetype = _detect_mimetype(image_data)
+    mimetype = detect_mimetype(image_data)
     return send_file(io.BytesIO(image_data), mimetype=mimetype)
 
 

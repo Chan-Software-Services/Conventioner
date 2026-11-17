@@ -5,7 +5,7 @@ describes:
   - front-end/src/utils/useSubmit.ts
   - front-end/src/utils/useDialogSubmit.ts
   - front-end/src/components/AppDialog.vue
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - T277
   - T411
