@@ -535,7 +535,7 @@ const drawer = useVendorDrawer();
                 @change="chooseDate(($event.target as HTMLSelectElement).value)"
               >
                 <option v-for="date in dates" :key="date" :value="date">
-                  {{ getShortDate(date) }} · {{ tally(date).here }}/{{ tally(date).expected }}
+                  {{ getShortDate(date) }}
                 </option>
               </select>
             </label>
