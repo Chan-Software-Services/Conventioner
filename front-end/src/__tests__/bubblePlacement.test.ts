@@ -140,3 +140,53 @@ describe('a bubble whose table is out of view', () => {
     expect(placeBubble(AREA, tableAt(400, 605), BUBBLE).shown).toBe(true);
   });
 });
+
+// What floats over the hall (the zoom at its bottom right, the legend at its bottom left) is never
+// under the bubble where the hall has room, so nothing but a table lies under it to take the focus.
+describe('a bubble kept clear of what floats over the hall', () => {
+  const ZOOM = { left: 880, top: 548, right: 988, bottom: 588 };
+  const LEGEND = { left: 12, top: 548, right: 400, bottom: 588 };
+  const TALL = { width: 288, height: 500 };
+
+  it('stands where it would when nothing it would cover floats there', () => {
+    expect(placeBubble(AREA, tableAt(400, 400), BUBBLE, [ZOOM, LEGEND])).toEqual(
+      placeBubble(AREA, tableAt(400, 400), BUBBLE),
+    );
+  });
+
+  it('slides along clear of the zoom, a gap from it, its tail kept on the table', () => {
+    // Under a table near the top it would reach down over the zoom, from 672 to 960 across.
+    expect(placeBubble(AREA, tableAt(700, 40), TALL).left).toBe(672);
+    const placed = placeBubble(AREA, tableAt(700, 40), TALL, [ZOOM, LEGEND]);
+    expect(placed.vert).toBe('down');
+    expect(placed.top).toBe(50 + TAIL);
+    expect(placed.left + TALL.width).toBe(ZOOM.left - GAP);
+    expect(placed.left + placed.tailX).toBe(700);
+    expect(placed.side).toBe('right');
+  });
+
+  it('slides along clear of the legend the other way', () => {
+    const wideLegend = { left: 12, top: 548, right: 570, bottom: 588 };
+    // Opening right from 572 it would come within the gap of the legend's end; it slides right.
+    const placed = placeBubble(AREA, tableAt(600, 40), TALL, [wideLegend]);
+    expect(placed.left).toBe(wideLegend.right + GAP);
+    expect(placed.left + placed.tailX).toBe(600);
+    expect(placed.side).toBe('right');
+  });
+
+  it('says it opened left when the slide leaves the table past its middle', () => {
+    const placed = placeBubble(AREA, tableAt(500, 40), TALL, [
+      { left: 600, top: 548, right: 988, bottom: 588 },
+    ]);
+    expect(placed.left + TALL.width).toBe(600 - GAP);
+    expect(placed.left + placed.tailX).toBe(500);
+    expect(placed.side).toBe('left');
+  });
+
+  it('keeps its place when no slide that keeps the tail on the table clears it', () => {
+    // A table right over the zoom: every place with the tail on it covers the zoom.
+    expect(placeBubble(AREA, tableAt(930, 40), TALL, [ZOOM])).toEqual(
+      placeBubble(AREA, tableAt(930, 40), TALL),
+    );
+  });
+});

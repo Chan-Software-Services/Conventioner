@@ -2,7 +2,8 @@
 /**
  * The public map's speech bubble at a desk (T465): the card of the table picked, standing in the
  * hall at that table, its tail on it, where `placeBubble` puts it (up and to the right by default,
- * to the left near the hall's right edge, under the table near its top, always inside the hall).
+ * to the left near the hall's right edge, under the table near its top, always inside the hall, and
+ * clear of what floats over the hall where it has room).
  *
  * Its root is a layer the hall's size, the live region the card is announced in, which stays while
  * the bubble comes and goes; the bubble is drawn only while it has an anchor. It places itself again
@@ -20,6 +21,8 @@ const props = defineProps<{
   anchor: { tableId: string; half: SeatHalf } | null;
   /** Where a table, or a half of it, is drawn on the screen now; null when it is not drawn. */
   locate: (tableId: string, half: SeatHalf) => DOMRect | null;
+  /** Where what floats over the hall (its zoom, its legend) is drawn on the screen now. */
+  clearOf: () => readonly DOMRect[];
   /** Bumped by the page whenever the map shows another part of the hall. */
   moved: number;
 }>();
@@ -41,10 +44,12 @@ function place() {
   }
   const area = layer.value.getBoundingClientRect();
   const own = bubble.value.getBoundingClientRect();
-  placed.value = placeBubble({ width: area.width, height: area.height }, edgesIn(area, target), {
-    width: own.width,
-    height: own.height,
-  });
+  placed.value = placeBubble(
+    { width: area.width, height: area.height },
+    edgesIn(area, target),
+    { width: own.width, height: own.height },
+    props.clearOf().map((box) => edgesIn(area, box)),
+  );
 }
 
 // After the render, so a bubble just drawn, and a table just drawn elsewhere, are measured.

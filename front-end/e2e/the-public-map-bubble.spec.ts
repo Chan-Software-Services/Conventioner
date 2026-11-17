@@ -343,3 +343,75 @@ test.describe('the bubble in a smaller desk window', () => {
     await expectInsideTheHall(map);
   });
 });
+
+// What floats over the hall, the zoom and the legend, is never under the bubble where the hall has
+// room, so the only things under it that take the focus are tables: a press on the zoom, and Tab
+// from the picked table through Zoom out, Zoom in and Fit, leave it open.
+test.describe('the bubble in a short desk window', () => {
+  test.use({ viewport: { width: 1100, height: 560 } });
+
+  test('it keeps clear of the zoom, which a press and Tab pass without closing it', async ({
+    page,
+  }) => {
+    const map = new PublicMapPage(page);
+    await map.goto(seeded.slug);
+    // No seeded table stands over the zoom: zoom in and drag Aisle A 1, whose card is tall, left
+    // of the zoom by less than the card's width and two fifths of the way down the hall.
+    for (let i = 0; i < 3; i++) await map.zoomIn.click();
+    const zoom = page.getByTestId('day-map-zoom');
+    const ember = map.table('Aisle A 1');
+    const hall = await boxOf(map.hall);
+    const pill = await boxOf(zoom);
+    const start = await boxOf(ember);
+    await drag(
+      page,
+      map,
+      pill.x - 180 - centreX(start),
+      hall.y + hall.height * 0.4 - (start.y + start.height / 2),
+    );
+
+    await ember.click();
+    await expect(map.cardNames).toHaveText(['Ember Ceramics']);
+    await expect(map.bubble).toHaveAttribute('data-vert', 'down');
+    const at = await boxOf(ember);
+    const bubble = await boxOf(map.bubble);
+    // Where it opens with nothing to keep clear of: right of the table, under it, held in the hall.
+    expect(
+      centreX(at) - 28 + bubble.width,
+      'the precondition: opening right from Aisle A 1 keeps inside the hall',
+    ).toBeLessThanOrEqual(hall.x + hall.width - 8);
+    const opened = {
+      x: centreX(at) - 28,
+      y: Math.min(at.y + at.height + 12, hall.y + hall.height - 8 - bubble.height),
+      width: bubble.width,
+      height: bubble.height,
+    };
+    expect(overlap(opened, pill), 'the precondition: opened so, it would cover the zoom').toBe(
+      true,
+    );
+    expect(overlap(bubble, pill), 'the bubble is clear of the zoom').toBe(false);
+    expect(
+      overlap(bubble, await boxOf(page.getByTestId('public-map-legend'))),
+      'the bubble is clear of the legend',
+    ).toBe(false);
+    await expectSpeaksFor(map, ember, 'down');
+    await expectInsideTheHall(map);
+
+    // Tab from the table passes the zoom's three buttons and reaches the card, at its Close.
+    await ember.focus();
+    for (const stop of ['day-map-zoom-out', 'day-map-zoom-in', 'day-map-fit']) {
+      await page.keyboard.press('Tab');
+      await expect(page.getByTestId(stop)).toBeFocused();
+    }
+    await page.waitForTimeout(100);
+    await expect(map.card).toHaveCount(1);
+    await page.keyboard.press('Tab');
+    await expect(map.card.getByTestId('public-map-card-close')).toBeFocused();
+
+    // A press on the zoom zooms the map, the bubble following its table.
+    await map.zoomIn.click();
+    await page.waitForTimeout(100);
+    await expect(map.bubble).toBeVisible();
+    await expect(map.card).toHaveCount(1);
+  });
+});

@@ -76,12 +76,22 @@ function onActivate(tableId: string) {
   pressedSeat = null;
 }
 
+const zoom = ref<HTMLElement | null>(null);
+const legendSlot = ref<HTMLElement | null>(null);
+
+/** Where what stands over the map is drawn on the screen now: the zoom, and the legend's slot when
+ *  the map fills its box. */
+function floatingRects(): DOMRect[] {
+  return [zoom.value, legendSlot.value].flatMap((el) => (el ? [el.getBoundingClientRect()] : []));
+}
+
 // What a caller stands over a table (the public map's bubble) reads where the table is drawn, gives
-// it the focus back and shows the whole hall again, through the map (T465).
+// it the focus back, shows the whole hall again, and keeps clear of the zoom and the legend (T465).
 defineExpose({
   targetRect: (tableId: string, half: SeatHalf) => map.value?.targetRect(tableId, half) ?? null,
   focusTarget: (tableId: string, half: SeatHalf) => map.value?.focusTarget(tableId, half) ?? false,
   fit: () => map.value?.fit(),
+  floatingRects,
 });
 
 const marks = computed(() => [...(props.picked ? [props.picked] : []), ...props.marked]);
@@ -134,6 +144,7 @@ const swatches = computed(() => {
       </div>
       <div
         v-if="open"
+        ref="zoom"
         class="day-map__zoom"
         role="group"
         aria-label="Zoom"
@@ -165,7 +176,12 @@ const swatches = computed(() => {
         </button>
       </div>
 
-      <div v-if="fills" class="day-map__legend-slot">
+      <div
+        v-if="fills"
+        ref="legendSlot"
+        class="day-map__legend-slot"
+        data-testid="day-map-legend-slot"
+      >
         <slot name="legend" />
       </div>
       <ul v-else class="day-map__legend" aria-label="Legend" data-testid="day-map-legend">

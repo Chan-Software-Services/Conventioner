@@ -515,6 +515,7 @@ describe('the day map, for what a caller stands over its tables (T465)', () => {
     targetRect: (tableId: string, half: string) => DOMRect | null;
     focusTarget: (tableId: string, half: string) => boolean;
     fit: () => void;
+    floatingRects: () => DOMRect[];
   };
 
   it('tells viewed whenever its map does, as a zoom changes the part shown', async () => {
@@ -550,5 +551,26 @@ describe('the day map, for what a caller stands over its tables (T465)', () => {
     exposed.fit();
     await nextTick();
     expect(width()).toBeCloseTo(whole);
+  });
+
+  it('tells where what floats over its map stands: the zoom, and the legend slot when filling', async () => {
+    const zoom = new DOMRect(880, 548, 108, 40);
+    const legend = new DOMRect(12, 548, 300, 40);
+    // Measured after the mount, whose own measure of the map's box it replaces.
+    const floatingOf = (map: VueWrapper) => {
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+        this: Element,
+      ) {
+        const id = this.getAttribute('data-testid');
+        if (id === 'day-map-zoom') return zoom;
+        if (id === 'day-map-legend-slot') return legend;
+        return new DOMRect(0, 0, 0, 0);
+      });
+      return (map.vm as unknown as Exposed).floatingRects();
+    };
+    expect(floatingOf(dayMap({ fills: true }))).toEqual([zoom, legend]);
+    wrapper!.unmount();
+    const below = dayMap();
+    expect(floatingOf(below)).toEqual([zoom]);
   });
 });

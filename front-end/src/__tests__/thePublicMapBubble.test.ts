@@ -3,7 +3,7 @@
  * The public map's speech bubble at a desk (T465), mounted alone in a hall 1,000 by 600 px: it
  * stands where `placeBubble` puts it against the table it is given, says where it opened, places
  * itself again on its anchor, on `moved` and on a resize of the hall or of itself, with no
- * animation-frame loop, hides while its table is out of view, keeps a press and a wheel to itself,
+ * animation-frame loop, keeps clear of what floats over the hall where it can, hides while its table is out of view, keeps a press and a wheel to itself,
  * and leaves no observer behind.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -38,6 +38,10 @@ let bubbleSize = { width: 288, height: 200 };
 let tables: Record<string, DOMRect> = {};
 const locate = vi.fn((tableId: string) => tables[tableId] ?? null);
 
+/** What floats over the hall on the screen (its zoom, its legend), which the bubble keeps clear of. */
+let floating: DOMRect[] = [];
+const clearOf = () => floating;
+
 /** A table 40 by 20 px whose centre is (x, y) in the hall. */
 const inHall = (x: number, y: number) => new DOMRect(HALL.x + x - 20, HALL.y + y - 10, 40, 20);
 
@@ -47,6 +51,7 @@ beforeEach(() => {
   observers.length = 0;
   vi.stubGlobal('ResizeObserver', FakeResizeObserver);
   bubbleSize = { width: 288, height: 200 };
+  floating = [];
   tables = { a: inHall(400, 400), b: inHall(400, 250), corner: inHall(950, 40) };
   locate.mockClear();
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
@@ -67,7 +72,7 @@ afterEach(() => {
 async function bubbleAt(tableId: string | null, moved = 0) {
   wrapper = mount(PublicMapBubble, {
     attachTo: document.body,
-    props: { anchor: tableId ? { tableId, half: 'whole' } : null, locate, moved },
+    props: { anchor: tableId ? { tableId, half: 'whole' } : null, locate, clearOf, moved },
     slots: { default: '<p data-testid="said">Kiln & Co</p>' },
   });
   await flushPromises();
@@ -119,6 +124,17 @@ describe('the bubble', () => {
     await flushPromises();
     expect(bubble().attributes('data-side')).toBe('right');
     expect(styleOf('left')).toBe(`${300 - INSET}px`);
+  });
+
+  it('keeps clear of what floats over the hall, its tail on its table', async () => {
+    // A tall card under a table near the top, which would reach down over the zoom.
+    bubbleSize = { width: 288, height: 500 };
+    tables.top = inHall(700, 40);
+    floating = [new DOMRect(HALL.x + 880, HALL.y + 548, 108, 40)];
+    await bubbleAt('top');
+    expect(bubble().attributes('data-vert')).toBe('down');
+    expect(styleOf('left')).toBe(`${880 - 8 - 288}px`);
+    expect(styleOf('--tail-x')).toBe(`${700 - (880 - 8 - 288)}px`);
   });
 
   it('places itself again when the hall or the bubble is resized', async () => {

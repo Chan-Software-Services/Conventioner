@@ -3,7 +3,10 @@
  * to the right of the table by default, to the left when the right-opening box would pass the
  * hall's right edge, under the table when the room over it is too short and less than the room
  * under it; always held inside the hall, with its tail moved along to stay on the table, and not
- * shown while the table is wholly out of view. Every box is in pixels from the hall's top-left.
+ * shown while the table is wholly out of view. What floats over the hall (its zoom and its legend)
+ * is kept clear of, a gap away, by sliding the bubble along while its tail stays on the table, where
+ * the hall has room for that; where it has none, the bubble stands where it would with nothing to
+ * keep clear of. Every box is in pixels from the hall's top-left.
  */
 
 /** The bubble's least distance from the hall's edges, `--space-2`. */
@@ -58,8 +61,21 @@ export function inView(area: Size, target: Edges): boolean {
   );
 }
 
-/** The bubble's place in the `area` (the hall) for a `target` (the table's box) and its size. */
-export function placeBubble(area: Size, target: Edges, bubble: Size): BubblePlace {
+/** Whether a box comes within the gap of another. */
+const crowds = (box: Edges, other: Edges) =>
+  box.left < other.right + GAP &&
+  other.left - GAP < box.right &&
+  box.top < other.bottom + GAP &&
+  other.top - GAP < box.bottom;
+
+/** The bubble's place in the `area` (the hall) for a `target` (the table's box) and its size,
+ *  kept clear of each box in `clearOf` where the area has room. */
+export function placeBubble(
+  area: Size,
+  target: Edges,
+  bubble: Size,
+  clearOf: readonly Edges[] = [],
+): BubblePlace {
   const x = (target.left + target.right) / 2;
   const roomUp = target.top - GAP - TAIL;
   const roomDown = area.height - target.bottom - GAP - TAIL;
@@ -70,12 +86,29 @@ export function placeBubble(area: Size, target: Edges, bubble: Size): BubblePlac
   const left = Math.max(GAP, Math.min(opened, area.width - bubble.width - GAP));
   const rising = vert === 'up' ? target.top - TAIL - bubble.height : target.bottom + TAIL;
   const top = Math.max(GAP, Math.min(rising, area.height - bubble.height - GAP));
-  return {
-    left,
+  const placed = (at: number, saying: 'right' | 'left'): BubblePlace => ({
+    left: at,
     top,
-    tailX: clamp(x - left, TAIL_EDGE, bubble.width - TAIL_EDGE),
-    side,
+    tailX: clamp(x - at, TAIL_EDGE, bubble.width - TAIL_EDGE),
+    side: saying,
     vert,
     shown: inView(area, target),
-  };
+  });
+  const clear = (at: number) =>
+    !clearOf.some((box) =>
+      crowds({ left: at, top, right: at + bubble.width, bottom: top + bubble.height }, box),
+    );
+  if (clear(left)) return placed(left, side);
+
+  // Slid along, the tail still on the table and the bubble still in the area: just past one side
+  // or the other of what it would cover, the nearest of those that clears everything.
+  const low = Math.max(GAP, x - bubble.width + TAIL_EDGE);
+  const high = Math.min(area.width - bubble.width - GAP, x - TAIL_EDGE);
+  const slid = clearOf
+    .flatMap((box) => [box.left - GAP - bubble.width, box.right + GAP])
+    .filter((at) => at >= low && at <= high && clear(at))
+    .sort((a, b) => Math.abs(a - left) - Math.abs(b - left))[0];
+  if (slid === undefined) return placed(left, side);
+  // It says the way it opened by where its tail now stands: near its left corner, it opened right.
+  return placed(slid, x - slid <= bubble.width / 2 ? 'right' : 'left');
 }

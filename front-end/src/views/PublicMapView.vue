@@ -261,6 +261,7 @@ const anchor = computed(() =>
     : null,
 );
 const locate = (tableId: string, half: SeatHalf) => dayMap.value?.targetRect(tableId, half) ?? null;
+const floating = () => dayMap.value?.floatingRects() ?? [];
 
 /** Close the card: the table dropped from the address, and the focus given back to the table when
  *  it was in the card (a table that is no button leaves it where the browser puts it). */
@@ -399,15 +400,31 @@ watch(wide, async (nowWide) => {
 
 // ── Nothing holding the focus lies under the bubble at a desk (WCAG 2.4.11) ──
 
-/** The focus reaching something in the hall the shown bubble lies over (a neighbouring table, by
- *  the arrow keys) closes the card, the focus staying where it went; judged a frame later, against
- *  this card, so a table pressed, which opens its own, is left alone. */
+/** A press in the hall is under way: what it focuses is the press's, a table pressed opening its own
+ *  card. Ended on the window, wherever the pointer is let go. */
+let pressing = false;
+const onHallPress = () => (pressing = true);
+const pressEnded = () => (pressing = false);
+onMounted(() => {
+  window.addEventListener('pointerup', pressEnded, true);
+  window.addEventListener('pointercancel', pressEnded, true);
+});
+onUnmounted(() => {
+  window.removeEventListener('pointerup', pressEnded, true);
+  window.removeEventListener('pointercancel', pressEnded, true);
+});
+
+/** The keyboard bringing the focus to something in the hall the shown bubble lies over (a
+ *  neighbouring table by the arrow keys, or a zoom button by Tab where the hall had no room to keep
+ *  the bubble clear of the zoom) closes the card, the focus staying where it went; judged a frame
+ *  later, against this card. A press is left to itself: it opens its own card, or zooms the map. */
 function onHallFocus(event: FocusEvent) {
   const target = event.target as Element;
   const bubble = () =>
     hall.value?.querySelector<HTMLElement>(
       '[data-testid="public-map-bubble"]:not(.public-map-bubble--hidden)',
     ) ?? null;
+  if (pressing) return;
   if (!wide.value || !card.value || !bubble() || bubble()!.contains(target)) return;
   const shown = card.value;
   requestAnimationFrame(() => {
@@ -510,6 +527,7 @@ async function openVendor(vendor: ListedVendor) {
             ref="hall"
             class="public-map__hall"
             data-testid="public-map-hall"
+            @pointerdown.capture="onHallPress"
             @focusin="onHallFocus"
           >
             <DayMap
@@ -529,7 +547,13 @@ async function openVendor(vendor: ListedVendor) {
                 <PublicMapLegend :items="legendItems" />
               </template>
             </DayMap>
-            <PublicMapBubble v-if="wide" :anchor="anchor" :locate="locate" :moved="moved">
+            <PublicMapBubble
+              v-if="wide"
+              :anchor="anchor"
+              :locate="locate"
+              :clearOf="floating"
+              :moved="moved"
+            >
               <PublicMapTableCard
                 v-if="card"
                 ref="cardPart"

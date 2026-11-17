@@ -1062,15 +1062,19 @@ describe('the card moving as the window crosses 1000px', () => {
 });
 
 // At a desk, nothing holding the focus lies under the bubble either: the focus reaching a table
-// it covers (a neighbour, by the arrow keys) closes it, the focus staying on that table.
+// it covers (a neighbour, by the arrow keys) closes it, the focus staying on that table. Only
+// by the keyboard: a press opens its own card or zooms the map. The zoom's buttons are kept clear of
+// the bubble where the hall has room, so Tab passes them on its way into it; where it had none, a
+// zoom button the keyboard reaches under it closes it as a table does.
 describe('the focus and the bubble at a desk', () => {
   const BUBBLE = new DOMRect(200, 200, 288, 200);
-  const drawn = (g4: DOMRect) =>
+  const drawn = (g4: DOMRect, zoomIn = new DOMRect(1100, 850, 40, 28)) =>
     drawnAt([
       ['[data-testid="public-map-bubble-layer"]', new DOMRect(0, 0, 1200, 900)],
       ['[data-testid="public-map-bubble"]', BUBBLE],
       ['[data-table-id="g1"]', new DOMRect(160, 420, 60, 30)],
       ['[data-table-id="g4"]', g4],
+      ['[data-testid="day-map-zoom-in"]', zoomIn],
     ]);
 
   it('closes when the focus reaches a table it covers, which keeps the focus', async () => {
@@ -1086,6 +1090,64 @@ describe('the focus and the bubble at a desk', () => {
     });
     expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
     expect(document.activeElement).toBe(g4.element);
+  });
+
+  it('gives the bubble the zoom and the legend to keep clear of', async () => {
+    const zoom = new DOMRect(1080, 848, 108, 40);
+    const legend = new DOMRect(12, 848, 300, 40);
+    drawnAt([
+      ['[data-testid="day-map-zoom"]', zoom],
+      ['[data-testid="day-map-legend-slot"]', legend],
+    ]);
+    const page = await open(found(), { table: 'g1' });
+    const clearOf = page.getComponent(PublicMapBubble).props('clearOf') as () => DOMRect[];
+    expect(clearOf()).toEqual([zoom, legend]);
+  });
+
+  it('closes when the keyboard reaches a zoom button under it, where the hall had no room', async () => {
+    drawn(new DOMRect(900, 700, 60, 30), new DOMRect(300, 300, 40, 28));
+    const page = await open(found(), { table: 'g1' });
+    await frame();
+    const zoomIn = page.get('[data-testid="day-map-zoom-in"]').element as HTMLElement;
+    zoomIn.focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(zoomIn);
+  });
+
+  it('stays when a press on a zoom button under it takes the focus', async () => {
+    drawn(new DOMRect(900, 700, 60, 30), new DOMRect(300, 300, 40, 28));
+    const page = await open(found(), { table: 'g1' });
+    await frame();
+    const zoomIn = page.get('[data-testid="day-map-zoom-in"]').element as HTMLElement;
+    zoomIn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    zoomIn.focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(routing.replace).not.toHaveBeenCalled();
+  });
+
+  it('leaves a press on a table under it to the press, which opens its own card', async () => {
+    drawn(new DOMRect(300, 300, 60, 30));
+    const page = await open(found(), { table: 'g1' });
+    await frame();
+    const g4 = page.get('[data-table-id="g4"]').element as HTMLElement;
+    // A browser focuses what is pressed on the press, before the click opens its card.
+    g4.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    g4.focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(routing.replace).not.toHaveBeenCalled();
+    // The press ended: the keyboard reaching it next closes the card.
+    g4.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    g4.blur();
+    g4.focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
   });
 
   it('stays when the focus reaches a table clear of it', async () => {
