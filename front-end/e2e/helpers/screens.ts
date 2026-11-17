@@ -281,8 +281,8 @@ function layoutAt(
   return async (page: Page, seed: TheScreensSeed) => {
     const layout = new LayoutPage(page);
     // Each stage starts from the editor's own choices: a page that walks several (the layout
-    // sweep's `measureTheRest`) would otherwise keep the shortcuts a stage before showed, over the
-    // table the next one clicks (`layoutViewChoices.ts`).
+    // check's `measureTheRest`, in `screenSweeps.ts`) would otherwise keep the shortcuts a stage
+    // before showed, over the table the next one clicks (`layoutViewChoices.ts`).
     if (page.url().startsWith('http')) {
       await page.evaluate(() => {
         for (const key of Object.keys(localStorage)) {
@@ -1979,8 +1979,9 @@ function seatOn(date: string, checkedInAt: string | null = null) {
 
 /**
  * A vendor signed in at `market`'s page, their own read answered with `seats` (today's date given):
- * every sweep opens each state at every size, and a real sign-in each time would pass the limits a
- * caller and an address may sign in by (`sign_in_limits`). The page's own read is the server's.
+ * the screen sweeps open each state at each of its sizes, and a real sign-in each time would pass
+ * the limits a caller and an address may sign in by (`sign_in_limits`). The page's own read is the
+ * server's.
  */
 function asAVendorAt(
   market: 'big' | 'archived',
