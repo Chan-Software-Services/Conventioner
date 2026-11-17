@@ -8,6 +8,7 @@ import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { withUser } from './helpers/withUser';
 import { ApplicationMonitorPage } from './pages/ApplicationMonitorPage';
 import { ApplicationsAllPage } from './pages/ApplicationsAllPage';
+import { putVerdict } from './helpers/putVerdict';
 
 /**
  * The review says when its list was last read, and reads it again on Refresh (E38/F05/S03).
@@ -59,10 +60,9 @@ test("All: a second reviewer's verdict shows on Refresh, and the ticks stay", as
   await all.tickOf('theo@thistle.test').check();
 
   await withUser(browser, SECOND.email, SECOND.password, async (other) => {
-    const approved = await other.request.put(
-      `${APP_API}/markets/${marketId}/applications/${ines}/review`,
-      { data: { status: 'reviewer_approved' } },
-    );
+    const approved = await putVerdict(other.request, APP_API, marketId, ines, {
+      status: 'reviewer_approved',
+    });
     expect(approved.ok(), await approved.text()).toBeTruthy();
   });
   // Not on screen until the list is read again.
@@ -109,10 +109,9 @@ test("One by one: Refresh brings others' verdicts into the counts, and keeps the
 
   // The second reviewer decides the card before it, so the card up moves up the queue.
   await withUser(browser, SECOND.email, SECOND.password, async (other) => {
-    const rejected = await other.request.put(
-      `${APP_API}/markets/${marketId}/applications/${nadia}/review`,
-      { data: { status: 'reviewer_rejected' } },
-    );
+    const rejected = await putVerdict(other.request, APP_API, marketId, nadia, {
+      status: 'reviewer_rejected',
+    });
     expect(rejected.ok(), await rejected.text()).toBeTruthy();
   });
   await expect(monitor.progress).toContainText('of 3 open');

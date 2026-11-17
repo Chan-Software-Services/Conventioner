@@ -10,6 +10,7 @@ import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { withUser } from './helpers/withUser';
 import { namelessControls } from './helpers/accessibleNames';
 import { ApplicationsAllPage } from './pages/ApplicationsAllPage';
+import { putVerdict } from './helpers/putVerdict';
 
 /**
  * The All view (E34/F04/S01).
@@ -41,10 +42,9 @@ test('every application, filtered, held and decided from the drawer', async ({
     data: { user_email: SECOND.email, role: 'editor' },
   });
   expect(granted.ok(), await granted.text()).toBeTruthy();
-  const followUp = await request.put(
-    `${BACKEND_URL}/markets/${marketId}/applications/${theo}/review`,
-    { data: { status: 'needs_follow_up' } },
-  );
+  const followUp = await putVerdict(request, BACKEND_URL, marketId, theo, {
+    status: 'needs_follow_up',
+  });
   expect(followUp.ok(), await followUp.text()).toBeTruthy();
 
   const all = new ApplicationsAllPage(page);
@@ -226,10 +226,9 @@ test('a verdict on a selection: confirmed by count, held ones untickable, change
     await all.tickOf('theo@thistle.test').check();
     await all.tickOf('ines@loom.test').check();
     await expect(all.selection).toContainText('2 applications selected');
-    const rejected = await other.request.put(
-      `${APP_API}/markets/${marketId}/applications/${ines}/review`,
-      { data: { status: 'reviewer_rejected' } },
-    );
+    const rejected = await putVerdict(other.request, APP_API, marketId, ines, {
+      status: 'reviewer_rejected',
+    });
     expect(rejected.ok()).toBeTruthy();
   });
 

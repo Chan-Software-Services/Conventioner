@@ -12,17 +12,22 @@ never moves.
 
 With no reviewers chosen, everything is first come, first served, as before this existed.
 
+**Every move into open, and every hand-on of a follow-up, waits for the deal**: an arrival, an
+undo, a rule's return, a re-import's or an applicant's back to review and a follow-up's hand-on
+each mark their application (``arriving``, ``ReviewState.Arrival``) in their own write, whether
+or not reviewers are chosen and whoever its reviewer is, and the deal judges who is able. So no open application is left outside every share
+while an able reviewer exists, whichever order a change of reviewers and the move land in.
+
 **Every deal holds the market** (``reviewTeam.dealing``, a short lease, ``_hold``): a change of
-reviewers from writing its team to writing its turn, and a deal of arrivals from reading the turn
+reviewers from writing its team to writing its turn, and a deal of what waits from reading the turn
 to writing it. So the turn is only ever read and written by the one deal holding the market, and no
-interleaving of a change and an arrival can deal an application twice or skip a reviewer. An
-arrival never waits for the market: it marks its application as arriving
-(``ApplicationsApi.mark_arriving``) and deals every application so marked if it can hold the
-market; if it cannot, the deal holding it deals them when it lets go (``_settle``), since an
-application is marked before its arrival tries to hold, and every holder looks for marked ones
-after letting go. A holder the host ended never lets go: its lease runs out, and the next deal
-deals what it left, which a reviewer's next card starts (``deal_waiting``), so a quiet spell after
-it leaves no reviewer's share short. Every write a deal makes to the market names its lease and
+interleaving of a change and an arrival can deal an application twice or skip a reviewer. A move
+never waits for the market: its application is marked before it tries to hold, and it deals every
+application so marked if it can hold the market; if it cannot, the deal holding it deals them when
+it lets go (``_settle``), since every holder looks for marked ones after letting go. A holder the
+host ended never lets go: its lease runs out, and the next deal deals what it left, which a
+reviewer's next card starts (``deal_waiting``), so a quiet spell after it leaves no reviewer's share
+short. With nobody chosen able, the marks are left for the next deal once someone is. Every write a deal makes to the market names its lease and
 reads whether it matched: one that did not finds another deal holding the market, its own lease
 lapsed, so a change of reviewers is refused (``DEALING_BUSY``) and a deal of arrivals says so in
 the log.
@@ -31,11 +36,13 @@ import logging
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 import api.applications as ApplicationsApi
 import api.market_actions as Actions
 import api.organizations as OrgsApi
+import api.permissions as PermissionsApi
+import application_status as ReviewState
 import history as History
 from assignment.utils import convert_keys_to_camel_case, convert_keys_to_snake_case
 from client_errors import ConflictError
@@ -52,7 +59,8 @@ logger = logging.getLogger(__name__)
 db = get_database()
 markets_collection = db["markets"]
 
-#: Why a deal moved what it moved, in its history entry: a change of reviewers, or arrivals.
+#: Why a deal moved what it moved, in its history entry: a change of reviewers, or a move into
+#: open or follow-up that waited for the deal (an arrival, an undo, a rule's return...).
 REVIEWERS_CHANGED = "reviewers_changed"
 ARRIVED = "arrived"
 
@@ -127,12 +135,14 @@ def choose(
     Holding the market, the team is written with its turn reset, then the pool is read and dealt
     round robin from the first able reviewer (``eligible``) in arrival order, and the turn is
     written as the pool's size, so the next arrival goes to the reviewer after the last one dealt.
-    The pool is every open application, those waiting as they arrived included, and each
+    The pool is every open application, those waiting for the deal included, and each
     follow-up whose owner was a reviewer and is not one now: it keeps its status and is handed to
     the reviewer it is dealt to, as its owner and its reviewer, so someone still reaches out. A
     follow-up owned by a reviewer still chosen, or by someone who never was one, and every decided
-    application, are never written. Once it lets go of the market, it deals the arrivals that came
-    in while it held it.
+    application, are never written here. Once it lets go of the market, it deals what waits for the
+    deal: what was marked while it held it, and what it left where it was (``_settle``); a waiting
+    follow-up stays with an owner who may still own one here, whether or not they may be chosen to
+    review, and is handed on only once its owner holds no role on the market.
 
     Each write is conditioned on the application still being as the pool read it (open and dealt
     as it was, or the follow-up still owned by the removed reviewer), so a verdict or a hand-on
@@ -202,7 +212,8 @@ def _choose_holding(
     able = eligible(market.model_copy(update={"review_team": team}), organization)
     pool = ApplicationsApi.undecided_in_arrival_order(market.id, follow_ups_of=removed)
     if chosen and not able:
-        # Nobody chosen may review here: nothing is dealt until someone who can is chosen.
+        # Nobody chosen may review here: nothing is dealt, and what waits for the deal keeps
+        # waiting until someone chosen may review again.
         _finish(market.id, deal, 0)
         return Chosen(team, 0)
 
@@ -212,12 +223,12 @@ def _choose_holding(
         was = doc.get("reviewer") or None
         if doc.get("status") == ApplicationStatus.NEEDS_FOLLOW_UP.value:
             owner = doc.get("follow_up_owner")
-            if ApplicationsApi.deal_follow_up(doc["id"], to, owner):
+            if ReviewState.deal_follow_up(doc["id"], to, owner):
                 moved.append((doc, was, to, owner))
             continue
         if was == (to.model_dump() if to else None):
             continue
-        if ApplicationsApi.deal(doc["id"], to, was):
+        if ReviewState.deal(doc["id"], to, was):
             moved.append((doc, was, to, None))
     turn = len(pool) if able else 0
 
@@ -270,40 +281,25 @@ def _address(person: Optional[Dict[str, Any]]) -> Optional[str]:
     return (person or {}).get("email") or None
 
 
-def deal_arrivals(
-    market: Market, actor: Optional[str], action: Union[Actions.Action, str],
-    only: Optional[str] = None,
-) -> int:
-    """Deal every open application that has no reviewer to the next reviewer in turn, in the
-    order they arrived (E38/F07/S03), and record the deal under ``action`` and ``actor``. ``only``
-    narrows it to one application: an applicant's save deals theirs and no one else's, so the
-    record never names a vendor as dealing another's. Answers how many it dealt.
+def deal_arrivals(market: Market) -> int:
+    """Deal every application waiting for the deal (E38/F07/S03), as a write that marked one ends,
+    for a caller holding the market alone: an applicant's save, an import, and the writes whose
+    automatic rejections can return one to open, once that write's rules have judged. Each is
+    recorded under the write that marked it, never the one dealing. Answers how many it dealt.
 
-    Called after every write that can leave an application open and undealt - an applicant's save,
-    an import, and the writes whose automatic rejections can return one to open - once that
-    write's rules have judged, so an application a rule rejected on arrival is not dealt. With no
-    reviewers chosen it reads and writes nothing.
-
-    Each application is marked as arriving, by this write, and then dealt by whichever deal next
-    holds the market: this one, or the one holding it now, once it lets go (``_settle``).
-    """
-    if not team_of(market).reviewers:
-        return 0
-    action_id = action if isinstance(action, str) else action.id
-    if only is not None:
-        ApplicationsApi.mark_arriving(only, actor, action_id)
-    else:
-        ApplicationsApi.mark_all_arriving(market.id, actor, action_id)
-    return _settle(market, _organization(market))
+    With no reviewers chosen it reads and writes nothing, and the marks wait for the next deal,
+    which a choice of reviewers makes."""
+    return deal_waiting(market, _organization(market))
 
 
 def deal_waiting(market: Market, organization: Optional[Organization]) -> int:
-    """Deal every application left waiting as it arrived, holding the market, as the next card a
-    reviewer asks for does: a deal the host ended while it held the market never let go, so the
-    arrivals that found it holding wait for whichever deal comes next, and a quiet spell brings
-    none. Each is recorded under the write it arrived by, never the one asking. While a live deal
-    holds the market it answers at once, and that deal deals them as it lets go. With no reviewers
-    chosen, or on an archived market, it reads and writes nothing. Answers how many it dealt.
+    """Deal every application waiting for the deal, holding the market, as the next card a reviewer
+    asks for does: a deal the host ended while it held the market never let go, a request the host
+    ended between its move and its deal never dealt, and nobody may have been able when one was
+    marked, so the marks wait for whichever deal comes next, and a quiet spell brings none. Each is
+    recorded under the write that marked it, never the one asking. While a live deal holds the
+    market it answers at once, and that deal deals them as it lets go. With no reviewers chosen,
+    or on an archived market, it reads and writes nothing. Answers how many it dealt.
 
     Only a write calls it: ``utils/request_origin.py`` lets a ``GET`` through on the promise that
     it changes nothing, so no read deals."""
@@ -313,70 +309,134 @@ def deal_waiting(market: Market, organization: Optional[Organization]) -> int:
 
 
 def _settle(market: Market, organization: Optional[Organization], again: bool = True) -> int:
-    """Deal every application waiting as it arrived, holding the market, and look again each time
-    it lets go, for as long as any waits and it can hold the market: an arrival that found the
-    market held marked its application before it tried, so the holder that looks after letting go
-    finds it, however long a burst of arrivals runs. Stops only when none waits, or another deal
-    holds the market, which looks again itself when it lets go. A round that fails lets go and
-    looks again once before its error goes on, so an arrival that came in meanwhile is not left.
-    Answers how many it dealt."""
+    """Deal every application waiting for the deal, holding the market, and look again each time
+    it lets go, for as long as any waits, it can hold the market and its last round dealt or
+    settled one: a move that found the market held marked its application before it tried, so the
+    holder that looks after letting go finds it, however long a burst of arrivals runs. Stops when
+    none waits, when another deal holds the market, which looks again itself when it lets go, and
+    after a round that did nothing, which leaves marks nobody chosen can take for the next deal. A
+    round that fails lets go and looks again once before its error goes on, so an arrival that came
+    in meanwhile is not left. Answers how many it dealt."""
     dealt = 0
     while ApplicationsApi.any_arriving(market.id):
         deal = str(uuid.uuid4())
         if not _hold(market.id, deal):
             return dealt
         try:
-            dealt += _deal_arriving(market, organization, deal)
+            round_ = _deal_arriving(market, organization, deal)
         except Exception:
             _let_go(market.id, deal)
             if again:
                 _settle(market, organization, again=False)
             raise
         _let_go(market.id, deal)
+        dealt += round_.dealt
+        if not round_.dealt and not round_.settled:
+            return dealt
     return dealt
 
 
-def _deal_arriving(market: Market, organization: Optional[Organization], deal: str) -> int:
-    """Deal the applications waiting as they arrived, holding the market: each to the able
-    reviewer the turn names, the turn moving on by one for each dealt, written once at the end.
-    One decided meanwhile is let go with its verdict; with nobody able, every one is let go
-    undealt. Records one entry per write they arrived by, under its action and actor."""
+class _Dealt(NamedTuple):
+    """One waiting application a deal dealt: as it read it, whom it was dealt to before, as stored,
+    and whom to now; a follow-up's owner before too, as the owner and the reviewer both become
+    ``to``."""
+    doc: Dict[str, Any]
+    was: Optional[Dict[str, Any]]
+    to: MarketPerson
+    follow_up: bool = False
+    owner_was: Optional[Dict[str, Any]] = None
+
+    def before(self) -> Dict[str, Any]:
+        return {"reviewer": _address(self.was),
+                **({"follow_up_owner": _address(self.owner_was)} if self.follow_up else {})}
+
+    def after(self) -> Dict[str, Any]:
+        return {"reviewer": self.to.email,
+                **({"follow_up_owner": self.to.email} if self.follow_up else {})}
+
+
+class _Round(NamedTuple):
+    """What one deal of the waiting applications did: how many it dealt, and how many it left where
+    they were, their wait ended."""
+    dealt: int
+    settled: int
+
+
+def _deal_arriving(market: Market, organization: Optional[Organization], deal: str) -> _Round:
+    """Deal the applications waiting for the deal, holding the market, in arrival order, reading the
+    roles with the turn:
+
+    - one decided since it was marked waits no longer, its verdict kept;
+    - an open one whose reviewer is an able chosen reviewer keeps them, the turn unmoved;
+    - any other open one is dealt to the able reviewer the turn names, the turn moving on by one;
+    - a follow-up whose owner may still own one here keeps its owner: anyone with a role on the
+      market, who may be picked as a follow-up's owner (``PermissionsApi.people_with_market_role``),
+      whether or not they may be chosen to review, so the person an organizer picked keeps it;
+    - any other follow-up, its owner no longer able to own one here, is handed on, as its owner and
+      its reviewer, to the able reviewer the turn names, the turn moving on by one;
+    - with nobody able, an undecided one is left waiting, never let go (T277 P5).
+
+    The turn is written once at the end. Records one entry per write they were marked by, under its
+    action and actor, each application's reviewer and a follow-up's owner before as stored."""
     stored = markets_collection.find_one(live({"id": market.id})) or {}
     team = _team_of_document(stored)
+    if not team.reviewers:
+        return _Round(0, 0)
     # The roles and the table as they stand now, read with the turn: someone whose role was taken,
     # or whose role the table no longer lets be chosen, is skipped.
     now = (market_from_document(stored) if stored else market).model_copy(
         update={"review_team": team})
     able = eligible(now, organization)
+    able_ids = {person.user_id for person in able}
+    may_own = set(PermissionsApi.people_with_market_role(now, organization))
     turn = team.turn
-    dealt: List[Tuple[Dict[str, Any], MarketPerson]] = []
+    settled = 0
+    dealt: List[_Dealt] = []
     for doc in ApplicationsApi.arriving_in_arrival_order(market.id):
-        to = able[turn % len(able)] if able else None
-        if ApplicationsApi.deal_arrival(doc["id"], to):
-            dealt.append((doc, to))
+        state = ReviewState.state_of(doc)
+        was = doc.get("reviewer") or None
+        owner = doc.get("follow_up_owner") or None
+        if not state.undecided:
+            keep = True
+        elif state is ReviewState.State.OPEN:
+            keep = bool(was) and was.get("user_id") in able_ids
+        else:
+            keep = bool(owner) and owner.get("user_id") in may_own
+        if keep:
+            settled += ReviewState.settle_waiting(doc)
+            continue
+        if not able:
+            continue
+        to = able[turn % len(able)]
+        if state is ReviewState.State.OPEN:
+            if ReviewState.deal(doc["id"], to, was):
+                dealt.append(_Dealt(doc, was, to))
+                turn += 1
+        elif ReviewState.deal_follow_up(doc["id"], to, owner):
+            dealt.append(_Dealt(doc, was, to, follow_up=True, owner_was=owner))
             turn += 1
     if dealt and markets_collection.update_one(
             live({"id": market.id, _DEALING_BY: deal}), {"$set": {_TURN: turn}}).matched_count == 0:
         # Its lease lapsed and another deal holds the market: the applications are dealt, and the
         # next deal reads a turn that has not moved on, so one turn of fairness is lost.
         logger.warning(
-            "A deal of arrivals on market %s lost its hold before writing the turn; it dealt "
-            "%d application(s), and the turn did not move on.", market.id, len(dealt))
-    by_write: Dict[Tuple[Optional[str], str], List[Tuple[Dict[str, Any], MarketPerson]]] = {}
-    for doc, to in dealt:
-        arrived = doc.get(ApplicationsApi.ARRIVING_FIELD) or {}
-        by_write.setdefault((arrived.get("actor"), arrived.get("action")), []).append((doc, to))
+            "A deal of waiting applications on market %s lost its hold before writing the turn; it "
+            "dealt %d application(s), and the turn did not move on.", market.id, len(dealt))
+    by_write: Dict[Tuple[Optional[str], str], List[_Dealt]] = {}
+    for one in dealt:
+        marked = one.doc.get(ApplicationsApi.ARRIVING_FIELD) or {}
+        by_write.setdefault((marked.get("actor"), marked.get("action")), []).append(one)
     for (actor, action), deals in by_write.items():
         History.record(
             market.id, actor, action or History.APPLY, kind=History.DEALT,
-            vendors=[doc.get("applicant_email") for doc, _to in deals],
-            subject={"application_ids": [doc["id"] for doc, _to in deals]},
+            vendors=[one.doc.get("applicant_email") for one in deals],
+            subject={"application_ids": [one.doc["id"] for one in deals]},
             detail=lambda deals=deals: {
                 "cause": ARRIVED,
-                "before": {doc["id"]: {"reviewer": None} for doc, _to in deals},
-                "after": {doc["id"]: {"reviewer": to.email} for doc, to in deals},
+                "before": {one.doc["id"]: one.before() for one in deals},
+                "after": {one.doc["id"]: one.after() for one in deals},
             })
-    return len(dealt)
+    return _Round(len(dealt), settled)
 
 
 def _team_of_document(stored: Dict[str, Any]) -> ReviewTeam:

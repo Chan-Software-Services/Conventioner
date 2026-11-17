@@ -439,6 +439,21 @@ describe('what an entry says', () => {
     );
   });
 
+  it('says when an applicant’s edit sent their application back to Open', () => {
+    const edited = (detail: Record<string, unknown>) =>
+      entry({ actor: 'ana@ember.test', action: 'apply', kind: 'edited', detail });
+    const changed = { before: { business_name: 'Ember' }, after: { business_name: 'Kiln' } };
+
+    expect(
+      said(entryParts(edited({ ...changed, returned_to_review: true }), { names: NAMES })),
+    ).toBe('[Ana Rivera] edited their application, which sent it back to Open');
+    expect(said(entryParts(edited(changed), { names: NAMES }))).toBe(
+      '[Ana Rivera] edited their application',
+    );
+    // Said in its sentence, so not again among what it recorded.
+    expect(entryChanges(edited({ ...changed, returned_to_review: true })).recorded).toEqual([]);
+  });
+
   it('words keeping an update over a changed answer as keeping it', () => {
     expect(
       sentence({ action: 'update-vendor-info', kind: 'kept', vendors: ['ben@ember.test'] }),

@@ -22,6 +22,7 @@ import api.markets as MarketsApi  # noqa: E402
 import market_write as MarketWrite  # noqa: E402
 import api.permissions as PermissionsApi  # noqa: E402
 import api.users as UsersApi  # noqa: E402
+import application_status as ReviewState  # noqa: E402
 import rejection_rules as Rules  # noqa: E402
 from conftest import client_market, complete_setup, sessions_load_through_get_user, stored_market  # noqa: E402
 from datatypes import (  # noqa: E402
@@ -46,6 +47,8 @@ ROLES = {"user-owner": "owner", "user-admin": "admin", "user-editor": "editor",
          "user-viewer": "viewer"}
 RULE = {"kind": "rule", "user_id": None, "email": None, "rule": "no_shows"}
 KAI = {"kind": "person", "user_id": "user-kai", "email": "kai@market.test", "rule": None}
+#: The write whose rules judge here, which marks for the deal what they return to open.
+BY = ReviewState.Arrival("kai@market.test", "change-form")
 
 OPEN = ApplicationStatus.OPEN
 APPROVED = ApplicationStatus.REVIEWER_APPROVED
@@ -224,12 +227,14 @@ class TestAnEditor:
         assert response.get_json() == {"error": CHANGE_REFUSED}
         assert client.stored[app_id] == before
 
-    def test_is_refused_a_change_without_saying_what_they_saw(self, client):
+    def test_is_refused_a_verdict_without_saying_what_they_saw(self, client):
         _as(client, "editor@market.test")
 
         response = _review(client, "approved", REJECTED, seen=False)
 
-        assert response.status_code == 403
+        assert response.status_code == 400
+        assert response.get_json() == {
+            "error": "Say what the application was when you opened it."}
         assert client.stored["approved"]["status"] == APPROVED.value
 
     def test_who_saw_it_open_is_told_who_decided_it_in_between_and_nothing_is_written(
@@ -373,12 +378,13 @@ def holding(monkeypatch):
 
 class TestJudgingAgain:
     def test_returns_a_rule_rejection_no_rule_meets_when_it_may(self, ruled_out):
-        Rules.judge(Rules.Rulebook(_rules_market()), "market-1")
+        Rules.judge(Rules.Rulebook(_rules_market()), "market-1", arrival=BY)
 
         assert ruled_out["status"] == OPEN.value
 
     def test_leaves_it_standing_when_it_may_not(self, ruled_out):
-        verdicts = Rules.judge(Rules.Rulebook(_rules_market()), "market-1", overturns=False)
+        verdicts = Rules.judge(Rules.Rulebook(_rules_market()), "market-1", overturns=False,
+                               arrival=BY)
 
         assert ruled_out["status"] == REJECTED.value
         assert ruled_out["verdict_by"] == RULE
@@ -387,7 +393,8 @@ class TestJudgingAgain:
     def test_still_rejects_an_undecided_one_when_it_may_not_return(self, applications):
         applications.documents = [_application("open", OPEN, no_shows=False)]
 
-        Rules.judge(Rules.Rulebook(_rules_market(NO_SHOW_RULE)), "market-1", overturns=False)
+        Rules.judge(Rules.Rulebook(_rules_market(NO_SHOW_RULE)), "market-1", overturns=False,
+                    arrival=BY)
 
         assert applications.documents[0]["status"] == REJECTED.value
 
@@ -483,7 +490,8 @@ class TestAWriteThatJudgesAgain:
         """The applicant changed the answer the rule read; nobody overturned a decision."""
         ruled_out["form_data"] = {"no_shows": True}
 
-        Rules.judge(Rules.Rulebook(_rules_market(NO_SHOW_RULE)), "market-1", "ruled-out")
+        Rules.judge(Rules.Rulebook(_rules_market(NO_SHOW_RULE)), "market-1", "ruled-out",
+                    arrival=BY)
 
         assert ruled_out["status"] == OPEN.value
 
@@ -553,3 +561,94 @@ class TestAnImport:
 
         assert ruled_out["status"] == OPEN.value
         assert body["returnedByRules"] == 1
+
+
+class TestASeenNoStateNames:
+    """A ``seen`` whose status no state names is nothing a reviewer could have seen: the write held
+    on it matches nothing, as any stale ``seen`` does, and never fails the request."""
+
+    @pytest.mark.parametrize("who", ["editor@market.test", "admin@market.test"])
+    def test_a_verdict_on_it_is_refused_as_changed_since_and_nothing_is_written(self, client, who):
+        _as(client, who)
+        before = dict(client.stored["open"])
+
+        response = client.put("/markets/market-1/applications/open/review", json={
+            "status": APPROVED.value, "seen": {"status": "bogus", "verdictAt": None}})
+
+        assert response.status_code == 409
+        assert response.get_json()["application"]["status"] == OPEN.value
+        assert client.stored["open"] == before
+
+    def test_a_selection_writes_the_good_entries_and_skips_that_one_saying_why(
+        self, client, market_records,
+    ):
+        _as(client, "admin@market.test")
+        before = dict(client.stored["approved"])
+
+        response = client.post("/markets/market-1/applications/verdicts", json={
+            "status": REJECTED.value,
+            "applications": [
+                {"id": "open", "seen": _seen(client.stored["open"])},
+                {"id": "follow-up", "seen": _seen(client.stored["follow-up"])},
+                {"id": "approved", "seen": {"status": "bogus", "verdictAt": None}},
+            ],
+        })
+
+        assert response.status_code == 200
+        body = response.get_json()
+        assert body["written"] == ["open", "follow-up"]
+        assert body["skipped"] == [{
+            "id": "approved", "email": "approved@example.com",
+            "reason": "kai@market.test approved this application since you opened it."}]
+        assert client.stored["approved"] == before
+        [entry] = market_records.history.documents
+        assert entry["subject"] == {"application_ids": ["open", "follow-up"]}
+
+
+#: Values of every JSON type but a string, for a time a reviewer saw.
+NOT_A_TIME = [{"$ne": None}, ["2026-10-01T00:00:00Z"], 20261001, True]
+
+
+class TestASeenTimeIsAStringOrNull:
+    """The times a ``seen`` names, ``verdictAt`` and ``updatedAt``, are read as a string or null
+    only: a value of any other type is nothing a reviewer could have seen, so the verdict held on
+    it matches nothing, as a ``seen`` whose status no state names does."""
+
+    @pytest.mark.parametrize("value", NOT_A_TIME)
+    @pytest.mark.parametrize("field", ["updatedAt", "verdictAt"])
+    def test_a_verdict_naming_one_is_refused_and_nothing_is_written(self, client, field, value):
+        _as(client, "editor@market.test")
+        client.stored["open"]["updated_at"] = "2026-10-05T00:00:00Z"
+        before = dict(client.stored["open"])
+        seen = {"status": OPEN.value, "verdictAt": None, "updatedAt": "2026-10-05T00:00:00Z",
+                field: value}
+
+        response = client.put("/markets/market-1/applications/open/review", json={
+            "status": APPROVED.value, "seen": seen})
+
+        assert response.status_code == 409
+        assert response.get_json()["application"]["status"] == OPEN.value
+        assert client.stored["open"] == before
+
+    @pytest.mark.parametrize("value", NOT_A_TIME)
+    def test_a_selection_writes_the_good_entries_and_skips_that_one_saying_why(
+        self, client, market_records, value,
+    ):
+        _as(client, "admin@market.test")
+        client.stored["open"]["updated_at"] = "2026-10-05T00:00:00Z"
+        before = dict(client.stored["open"])
+
+        response = client.post("/markets/market-1/applications/verdicts", json={
+            "status": REJECTED.value,
+            "applications": [
+                {"id": "follow-up", "seen": _seen(client.stored["follow-up"])},
+                {"id": "open", "seen": {**_seen(client.stored["open"]), "updatedAt": value}},
+            ],
+        })
+
+        assert response.status_code == 200
+        body = response.get_json()
+        assert body["written"] == ["follow-up"]
+        assert body["skipped"] == [{"id": "open", "email": "open@example.com",
+                                    "reason": "Its answers changed since you opened it."}]
+        assert client.stored["open"] == before

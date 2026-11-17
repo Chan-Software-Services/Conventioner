@@ -109,8 +109,10 @@ class TestAVerdictBetweenTheReadAndTheWrite:
         stored = _imported_and_approved(markets, applications)
 
         def a_reviewer_reopens(call):
-            if call == 1:
-                ApplicationsApi.update_application_status(stored["id"], ApplicationStatus.OPEN)
+            if call == 1:  # their undo, as it stores the application open again
+                applications.update_one({"id": stored["id"]}, {
+                    "$set": {"status": ApplicationStatus.OPEN.value},
+                    "$unset": {"verdict_by": "", "verdict_at": ""}})
 
         _before_each_answers_write(monkeypatch, applications, a_reviewer_reopens)
         body, _ = CsvImport.import_applications(markets, markets.doc, _csv(CHANGED_ROW), MAPPING)

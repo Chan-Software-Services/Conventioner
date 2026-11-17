@@ -12,10 +12,12 @@ import pytest
 from conftest import REVIEW_SETUP_DECIDED, FakeMarketsCollection, stored_market
 
 import api.markets as MarketsApi
+import application_status as ReviewState
 import csv_import as CsvImport
 import guards
 import market_write as MarketWrite
 import essential_fields as EssentialFields
+from application_write import Recorded
 from datatypes import ApplicationStatus, MarketPhase
 
 
@@ -1411,9 +1413,10 @@ class TestMergingAgainstWhatIsAlreadyHere:
 class TestReviewsInvalidatedByAReImport:
     """An organizer approved a vendor on the strength of what they saw.
 
-    If an answer the solver reads moves afterwards, that approval is stale: the solver would place
-    someone against constraints nobody accepted. If anything else moves, the approval stands - a
-    corrected business name must not undo a review.
+    If any answer moves afterwards, that approval is stale: nobody judged the answers as they read
+    now, so the application goes back to open (Daniel's decision 9.1, T277), as it does when the
+    applicant changes their own. Answers compared after normalisation are no change: a re-export
+    that merely reformats a value un-approves nobody.
     """
 
     def _approved(self, markets, applications, row=GOOD_ROW):
@@ -1435,17 +1438,29 @@ class TestReviewsInvalidatedByAReImport:
         assert body["returnedToReview"] == 1
         assert applications.find_one({"id": app_id})["status"] == ApplicationStatus.OPEN.value
 
-    def test_a_changed_custom_answer_leaves_the_approval_alone(self, markets, applications):
+    def test_a_changed_custom_answer_returns_an_approval_to_review(self, markets, applications):
         app_id = self._approved(markets, applications)
         changed = GOOD_ROW.replace("Ember Ceramics", "Ember Ceramics Studio")
 
         body, _ = CsvImport.import_applications(markets, markets.doc, _csv(changed), MAPPING)
 
-        assert body["returnedToReview"] == 0
+        assert body["returnedToReview"] == 1
         stored = applications.find_one({"id": app_id})
-        assert stored["status"] == ApplicationStatus.REVIEWER_APPROVED.value
-        # ...and the answer is still updated.
+        assert stored["status"] == ApplicationStatus.OPEN.value
         assert stored["form_data"]["business_name"] == "Ember Ceramics Studio"
+
+    def test_a_persons_rejection_returns_to_review_too(self, markets, applications):
+        app_id = self._approved(markets, applications)
+        applications.update_one({"id": app_id}, {"$set": {
+            "status": ApplicationStatus.REVIEWER_REJECTED.value,
+            "verdict_by": {"kind": "person", "email": "alex@market.test"}}})
+        changed = GOOD_ROW.replace("Ember Ceramics", "Ember Ceramics Studio")
+
+        preview, _ = CsvImport.preview_values(markets.doc, _csv(changed), MAPPING)
+        body, _ = CsvImport.import_applications(markets, markets.doc, _csv(changed), MAPPING)
+
+        assert (preview["returningToReview"], body["returnedToReview"]) == (1, 1)
+        assert applications.find_one({"id": app_id})["status"] == ApplicationStatus.OPEN.value
 
     def test_an_unchanged_re_import_changes_nothing(self, markets, applications):
         app_id = self._approved(markets, applications)
@@ -1509,7 +1524,8 @@ class TestThePreviewSaysWhichVerdictsAreKept:
     HALF_REASON = "Answered “Half a table, shared” to “Table choice”"
     PERSON = {"kind": "person", "user_id": "user-alex", "email": "alex@market.test"}
     RULE = {"kind": "rule", "rule": EssentialFields.TABLE_CHOICE_KEY}
-    # A new business name changes nothing the solver reads, so a verdict stands.
+    ADDER = {"user_id": "user-alex", "email": "alex@market.test"}
+    # A new business name: an answer changed, which a person's verdict does not survive (9.1).
     RENAMED = GOOD_ROW.replace("Ember Ceramics", "Ember Ceramics Studio")
     FULL = GOOD_ROW.replace(",half,", ",full,")
 
@@ -1527,17 +1543,44 @@ class TestThePreviewSaysWhichVerdictsAreKept:
         assert status == 200, body
         return body["keptVerdicts"]
 
-    def test_an_approval_whose_table_does_not_move_is_kept(self, markets, applications):
+    @pytest.mark.parametrize("status", [ApplicationStatus.REVIEWER_APPROVED,
+                                        ApplicationStatus.REVIEWER_REJECTED])
+    def test_a_persons_verdict_on_changed_answers_is_returned_not_kept(
+        self, markets, applications, status,
+    ):
+        self._decided(markets, applications, status, verdict_by=self.PERSON)
+
+        body, _ = CsvImport.preview_values(markets.doc, _csv(self.RENAMED), MAPPING)
+
+        assert (body["returningToReview"], body["keptVerdicts"]) == (1, 0)
+
+    def test_an_added_vendors_approval_is_kept(self, markets, applications):
         self._decided(markets, applications, ApplicationStatus.REVIEWER_APPROVED,
-                      verdict_by=self.PERSON)
+                      verdict_by=self.PERSON, added_by=self.ADDER, origin="added")
 
-        assert self._kept(markets, self.RENAMED) == 1
+        body, _ = CsvImport.preview_values(markets.doc, _csv(self.RENAMED), MAPPING)
 
-    def test_a_persons_rejection_is_kept(self, markets, applications):
-        self._decided(markets, applications, ApplicationStatus.REVIEWER_REJECTED,
-                      verdict_by=self.PERSON)
+        assert (body["returningToReview"], body["keptVerdicts"]) == (0, 1)
 
-        assert self._kept(markets, self.FULL) == 1
+    @pytest.mark.parametrize("decided", [
+        {"status": ApplicationStatus.REVIEWER_APPROVED, "verdict_by": PERSON},
+        {"status": ApplicationStatus.REVIEWER_REJECTED, "verdict_by": PERSON},
+        {"status": ApplicationStatus.REVIEWER_APPROVED, "verdict_by": PERSON,
+         "added_by": ADDER, "origin": "added"},
+        {"status": ApplicationStatus.NEEDS_FOLLOW_UP, "verdict_by": PERSON},
+    ], ids=["approved", "rejected", "added", "follow-up"])
+    def test_the_preview_counts_what_the_import_then_does(self, markets, applications, decided):
+        decided = dict(decided)
+        self._decided(markets, applications, decided.pop("status"), **decided)
+        before = dict(applications.documents[0])
+
+        preview, _ = CsvImport.preview_values(markets.doc, _csv(self.RENAMED), MAPPING)
+        body, _ = CsvImport.import_applications(markets, markets.doc, _csv(self.RENAMED), MAPPING)
+
+        after = applications.documents[0]
+        assert preview["returningToReview"] == body["returnedToReview"]
+        assert preview["keptVerdicts"] == int(
+            ReviewState.is_decided(before) and after["status"] == before["status"])
 
     def test_an_approval_the_import_returns_to_review_is_not_kept(self, markets, applications):
         self._decided(markets, applications, ApplicationStatus.REVIEWER_APPROVED,
@@ -1698,7 +1741,8 @@ class TestImportingOnlyWhatItImports:
         """The check and the write judge alike unless the offering froze in between; if it did,
         the application just created must not outlive the answers it was created for."""
         monkeypatch.setattr(
-            CsvImport, "record_application_answers", lambda *_args, **_kwargs: ("Refused.", None),
+            CsvImport, "record_application_answers",
+            lambda *_args, **_kwargs: Recorded("Refused.", None),
         )
 
         body, _ = CsvImport.import_applications(markets, markets.doc, _csv(GOOD_ROW), MAPPING)

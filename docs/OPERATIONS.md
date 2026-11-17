@@ -18,7 +18,7 @@ describes:
   - back-end/migrations/migrate_owed_day_state.py
   - back-end/host_limits.py
   - back-end/organizer_sessions.py#ensure_organizer_session_indexes
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - E32/F03/S03
   - T15

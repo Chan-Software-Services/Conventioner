@@ -1003,6 +1003,17 @@ class ApplicationType(str, Enum):
     WAITLIST = "waitlist"
 
 
+class ApplicationOrigin(str, Enum):
+    """How an application came to the market, apart from its verdict: applied on the market's own
+    page, imported from a file, or added by hand by an organizer (E36/F03/S01). An added vendor
+    whose answers later arrive by an import or their own save becomes ``imported`` or ``applied``,
+    and is read like any applicant from then on (T277 P7). Written only by
+    ``application_status``; ``origin_of`` reads one stored before it was."""
+    APPLIED = "applied"
+    IMPORTED = "imported"
+    ADDED = "added"
+
+
 class FormField(BaseModel):
     key: str                       # machine name (e.g., "business_name"); must not use the reserved "essential_" prefix
     label: str                     # human label (e.g., "Business Name")
@@ -1263,9 +1274,12 @@ class Application(BaseModel):
     held_by: Optional[MarketPerson] = None
     held_until: Optional[str] = None
     # Who recorded a vendor who never applied, and when (E36/F03/S01): approved by the adding, and
-    # never an input to the run.
+    # never an input to the run while their origin is still ``added``. Kept once it moves.
     added_by: Optional[MarketPerson] = None
     added_at: Optional[str] = None
+    # How it came to the market (``ApplicationOrigin``); absent on one stored before it was kept,
+    # which ``application_status.origin_of`` reads. Who added a vendor stays ``added_by``.
+    origin: Optional[ApplicationOrigin] = None
     # The organizer's updates of the vendor's answers, by question (E41/F01/S01): read in the place
     # of the answer in ``form_data``, which stays as the vendor gave it.
     answer_updates: Dict[str, AnswerUpdate] = Field(default_factory=dict)

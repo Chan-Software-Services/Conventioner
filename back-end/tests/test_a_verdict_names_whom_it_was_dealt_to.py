@@ -7,6 +7,7 @@ every verdict, follow-up, hand-on and change is still recorded either way.
 """
 import pytest
 
+from conftest import seen_as_stored
 from test_choosing_reviewers_deals_the_open_applications import (  # noqa: F401  (the fixture)
     ADMIN, ANA, BEN, CAT, EDITOR, MARKET, _choose, _client, world,
 )
@@ -16,13 +17,14 @@ import history as History
 
 def _review(app_id, status, who=ADMIN, **body):
     response = _client(who).put(f"/markets/{MARKET}/applications/{app_id}/review",
-                                json={"status": status, **body})
+                                json={"status": status, "seen": seen_as_stored(app_id), **body})
     assert response.status_code == 200, response.get_json()
 
 
 def _select(app_ids, status, who=ADMIN):
     response = _client(who).post(f"/markets/{MARKET}/applications/verdicts", json={
-        "status": status, "applications": [{"id": app_id} for app_id in app_ids]})
+        "status": status,
+        "applications": [{"id": app_id, "seen": seen_as_stored(app_id)} for app_id in app_ids]})
     assert response.status_code == 200, response.get_json()
     assert response.get_json()["written"] == app_ids
 

@@ -18,7 +18,8 @@ import pytest
 
 from conftest import (
     COMPLETE_PLAN, FakeApplicationsCollection, a_solver_vendor, mongo_matches, mongo_project, reject_malformed_update,
-    accounts_by_id, sessions_load_through_get_user, skip_without_real_dependencies, stored_market,
+    accounts_by_id, seen_as_stored, sessions_load_through_get_user, skip_without_real_dependencies,
+    stored_market,
 )
 
 skip_without_real_dependencies()
@@ -376,7 +377,7 @@ def _verdict(client, world):
     world.market(MarketPhase.APPLICATIONS)
     world.applications.insert_one(_application("app-1", VENDOR))
     return client.put(f"/markets/{MARKET}/applications/app-1/review",
-                      json={"status": "reviewer_approved"})
+                      json={"status": "reviewer_approved", "seen": seen_as_stored("app-1")})
 
 
 def _verdicts(client, world):
@@ -384,7 +385,9 @@ def _verdicts(client, world):
     world.applications.insert_one(_application("app-1", VENDOR))
     world.applications.insert_one(_application("app-2", "ben@example.com"))
     return client.post(f"/markets/{MARKET}/applications/verdicts", json={
-        "status": "reviewer_rejected", "applications": [{"id": "app-1"}, {"id": "app-2"}]})
+        "status": "reviewer_rejected",
+        "applications": [{"id": "app-1", "seen": seen_as_stored("app-1")},
+                         {"id": "app-2", "seen": seen_as_stored("app-2")}]})
 
 
 def _changed_verdict(client, world):
@@ -393,7 +396,7 @@ def _changed_verdict(client, world):
         "app-1", VENDOR, status="reviewer_approved", verdict_at="2026-10-02T00:00:00+00:00",
         verdict_by={"kind": "person", "user_id": "user-owner", "email": OWNER}))
     return client.put(f"/markets/{MARKET}/applications/app-1/review",
-                      json={"status": "reviewer_rejected"})
+                      json={"status": "reviewer_rejected", "seen": seen_as_stored("app-1")})
 
 
 def _just_given(app_id, email):
@@ -1106,7 +1109,7 @@ class TestWhatAnEntryHolds:
         """Each verdict is recorded, not only the latest."""
         _verdict(client, world)
         client.put(f"/markets/{MARKET}/applications/app-1/review",
-                   json={"status": "reviewer_rejected"})
+                   json={"status": "reviewer_rejected", "seen": seen_as_stored("app-1")})
 
         assert [entry["detail"]["after"]["status"] for entry in world.history.documents] == [
             "reviewer_approved", "reviewer_rejected"]
@@ -1116,7 +1119,8 @@ class TestWhatAnEntryHolds:
         world.applications.insert_one(_application("app-1", VENDOR))
 
         client.post(f"/markets/{MARKET}/applications/verdicts", json={
-            "status": "needs_follow_up", "applications": [{"id": "app-1"}]})
+            "status": "needs_follow_up",
+            "applications": [{"id": "app-1", "seen": seen_as_stored("app-1")}]})
 
         [entry] = world.history.documents
         assert entry["detail"] == {
@@ -1131,7 +1135,8 @@ class TestWhatAnEntryHolds:
             follow_up_owner={"user_id": "user-sam", "email": SAM}))
 
         client.post(f"/markets/{MARKET}/applications/verdicts", json={
-            "status": "reviewer_approved", "applications": [{"id": "app-1"}]})
+            "status": "reviewer_approved",
+            "applications": [{"id": "app-1", "seen": seen_as_stored("app-1")}]})
 
         [entry] = world.history.documents
         assert entry["detail"] == {

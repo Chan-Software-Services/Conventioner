@@ -54,6 +54,7 @@ from assignment.assignment import (
 )
 from assignment.vendor_input import SolverVendor, outside_solver_vendors
 from assignment.utils import convert_keys_to_snake_case, convert_keys_to_camel_case, snake_to_camel
+import application_status as ReviewState
 import api.applications as ApplicationsApi
 import api.applicants as ApplicantsApi
 import result_outcome as ResultOutcome
@@ -1908,7 +1909,7 @@ def _placeable(vendor: SolverVendor, outside: Optional[Application]) -> Dict[str
         # And whether they need a table, said apart (E38/F08/S02): a vendor added by hand is out
         # of the run and unassigned like anyone until seated.
         "needsATable": needs_a_table(outside),
-        "addedByHand": bool(outside is not None and outside.added_by),
+        "addedByHand": bool(outside is not None and ReviewState.is_added(outside.model_dump())),
         "email": vendor.email,
         "tableChoice": vendor.table_choice,
         "availableDates": sorted(vendor.available_dates),
@@ -2209,7 +2210,7 @@ def take_move(context: MarketContext, to_phase: str, by: Optional[str] = None) -
     swept: Dict[str, int] = {}
     if from_phase == MarketPhase.OFFERS.value and to_phase == MarketPhase.MARKET_DAYS.value:
         try:
-            swept["swept"] = ApplicationsApi.sweep_unanswered_offers(market_id)
+            swept["swept"] = ReviewState.sweep_offers(market_id)
             logger.info(
                 "Swept %d assignment_sent applications to vendor_refused for market %s",
                 swept["swept"],
@@ -3260,8 +3261,9 @@ def save_rejection_rules(
     }})
     # Every undecided application, and every one a rule rejected, is judged again (E33/F03/S02).
     judged = market.model_copy(update={"rejection_rules": [RejectionRule(**r) for r in prepared]})
-    verdicts = RejectionRules.judge(RejectionRules.Rulebook(judged), market_id,
-                                    overturns=may_overturn(requesting_user, market))
+    verdicts = RejectionRules.judge(
+        RejectionRules.Rulebook(judged), market_id, overturns=may_overturn(requesting_user, market),
+        arrival=ReviewState.Arrival(requesting_user, Actions.CHANGE_FORM.id))
     History.record(market_id, requesting_user, Actions.CHANGE_FORM, kind=History.REJECTION_RULES,
                    detail=lambda: _with_counts(History.changes(
                        {"rejection_rules": [rule.model_dump() for rule in market.rejection_rules or []],
@@ -3269,9 +3271,9 @@ def save_rejection_rules(
                        {"rejection_rules": [rule.model_dump() for rule in judged.rejection_rules or []],
                         "no_automatic_rejections": no_automatic_rejections},
                    ), verdicts))
-    # What the rules returned to open is an arrival, dealt to the next reviewer (E38/F07/S03).
+    # What the rules returned to open waits for the deal (E38/F07/S03).
     if verdicts.returned:
-        ReviewTeam.deal_arrivals(judged, requesting_user, Actions.CHANGE_FORM)
+        ReviewTeam.deal_arrivals(judged)
     return {"rejectionRules": prepared, "noAutomaticRejections": no_automatic_rejections}
 
 
@@ -3305,11 +3307,11 @@ def save_application_form(market_id: str, application_form_data: dict, requestin
     written = write_application_form(
         market, form_data,
         _revision_in(application_form_data, "form_revision", FORM_REVISION_NOT_A_COUNT),
-        overturns=may_overturn(requesting_user, market))
+        overturns=may_overturn(requesting_user, market), by=requesting_user)
     History.record(market_id, requesting_user, Actions.CHANGE_FORM, kind=History.FORM,
                    detail=lambda: _with_counts(form_changes(market, written.form), written.verdicts))
     if written.verdicts.returned:
-        ReviewTeam.deal_arrivals(market, requesting_user, Actions.CHANGE_FORM)
+        ReviewTeam.deal_arrivals(market)
     return {"application_form": written.form, "formRevision": written.revision}
 
 
@@ -3346,12 +3348,14 @@ class FormWritten(NamedTuple):
 
 def write_application_form(
     market: Market, application_form_data: dict, form_revision: Any, overturns: bool = True,
+    *, by: Optional[str],
 ) -> FormWritten:
     """Judge and store the form on ``market``, loaded and asked by the caller, and return it as
     stored with what the rules decided against it; the caller records it. ``form_revision`` is the
     revision the writer's copy was read at (``_NO_REVISION`` when it named none), and
     ``overturns`` whether the writer may overturn an automatic rejection, as
-    ``RejectionRules.judge`` takes it.
+    ``RejectionRules.judge`` takes it, and ``by`` the writer, whose write marks for the deal what the
+    rules return to open.
 
     The write sets the questions and the unasked essentials alone, never the published stamp or the
     frozen offering, which Open applications and the first application write while the market is
@@ -3385,7 +3389,8 @@ def write_application_form(
     rewritten = load_market_context(market.id)
     if rewritten is not None and rewritten.market is not None:
         return FormWritten(form_dict, RejectionRules.judge(
-            RejectionRules.Rulebook(rewritten.market), market.id, overturns=overturns), revision)
+            RejectionRules.Rulebook(rewritten.market), market.id, overturns=overturns,
+            arrival=ReviewState.Arrival(by, Actions.CHANGE_FORM.id)), revision)
     return FormWritten(form_dict, RejectionRules.Judged(), revision)
 
 

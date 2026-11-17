@@ -9,6 +9,7 @@ import { marketScreenPath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { withUser } from './helpers/withUser';
 import { ManageMarketPage } from './pages/ManageMarketPage';
+import { putVerdict } from './helpers/putVerdict';
 
 /**
  * A vendor's own history, in their drawer's History tab (E40/F01/S04).
@@ -50,8 +51,8 @@ async function seedTwoVendors(
   await transitionMarket(request, BACKEND_URL, TEST_USER.email, seed.marketId, 'applications');
   for (const application of applications) {
     await ok(
-      await request.put(`${market}/applications/${application.id}/review`, {
-        data: { status: 'reviewer_approved' },
+      await putVerdict(request, BACKEND_URL, seed.marketId, application.id, {
+        status: 'reviewer_approved',
       }),
     );
   }

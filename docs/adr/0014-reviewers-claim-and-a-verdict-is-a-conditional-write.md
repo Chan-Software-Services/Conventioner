@@ -2,12 +2,13 @@
 layer: implementation
 kind: adr
 describes:
-  - back-end/api/applications.py#update_application_status
+  - back-end/application_status.py#give_verdict
+  - back-end/application_status.py#change_verdict
   - back-end/api/applications.py#claim_next_for_review
   - back-end/api/applications.py#CLAIM_LEASE
   - back-end/api/applicants.py#review_selection
   - front-end/src/utils/reviewClaims.ts
-verified: 2026-11-11
+verified: 2026-11-17
 sources:
   - brain-dump/2026-10-19#11
   - brain-dump/2026-10-19#23
@@ -38,16 +39,17 @@ The [automatic rejections](../business/rules/automatic-rejections.md) and an imp
 
 **A reviewer holds the card they look at.**
 A claim is `held_by` and `held_until` on the application, a five-minute lease (`CLAIM_LEASE` in [`back-end/api/applications.py`](../../back-end/api/applications.py)).
-`POST /markets/:id/review/next` hands the reviewer the next undecided application, in arrival order after the one they moved on from (which keeps its place when a verdict on it was what moved them on), that nobody else holds (`claim_next_for_review`); taking it is a write conditioned on the claim it read, so two reviewers asking at once are handed different cards, and the reviewer's other claims are let go.
+`POST /markets/:id/review/next` hands the reviewer the next undecided application, in arrival order after the one they moved on from (which keeps its place when a verdict on it was what moved them on), that nobody else holds (`claim_next_for_review`); taking it is a write conditioned on the claim and the status it read, so two reviewers asking at once are handed different cards, a card decided between the read and the claim is passed over rather than handed as if it were open (T277 P4), and the reviewer's other claims are let go.
+One by one puts up the card the server handed, found by its id, rather than the queue's card at its place, while that card is still to decide, so the card shown is the card held; once a verdict takes it out of the queue, the queue's next card shows until the next hand-out answers.
 The open card renews its claim every minute while the reviewer is active and stops after five idle minutes, so a card left open on an unattended screen lapses ([`front-end/src/utils/reviewClaims.ts`](../../front-end/src/utils/reviewClaims.ts)); leaving the review lets it go, and any new status lets it go on the server.
 Hand-outs can overlap (a Next pressed again, a verdict, a refresh), and their answers can come back in either order, so only the newest is taken: an answer to one a later hand-out overtook holds nothing and is not put up, and its card, claimed on the server all the same, is let go once the newest hand-out has answered, unless that is the card now held; one that answers after the reviewer has left lets its card go (E38/F07/S04).
 Someone who gives no verdicts walks the queue locally and holds nothing.
 
 **A verdict is written only on what the reviewer saw.**
-Every review sends `seen` with its verdict: the status, the verdict's time and the answers' time it showed.
-`update_application_status` writes only if all three are still those (`if_unchanged_since`); otherwise the verdict is refused with a 409 naming who changed it and to what ("<email> approved this application since you opened it.", an automatic rejection, or "Its answers changed since you opened it."), with the application as it stands, and the card stays on it until the reviewer decides again.
+Every review sends `seen` with its verdict: the status, the verdict's time and the answers' time it showed, and a verdict naming none is refused ("Say what the application was when you opened it.").
+`give_verdict` and `change_verdict` in [`back-end/application_status.py`](../../back-end/application_status.py), the one writer of the review state ([ADR 0037](0037-an-applications-review-state-has-one-owner.md)), write only if all three are still those; otherwise the verdict is refused with a 409 naming who changed it and to what ("<email> approved this application since you opened it.", an automatic rejection, or "Its answers changed since you opened it."), with the application as it stands, and the card stays on it until the reviewer decides again.
 The automatic rejections write through the same condition, so a person's verdict that lands while a rule is judging is never overwritten.
-For a reviewer who may not change a verdict (E38/F06/S01), the write also refuses an application already approved or rejected (`unless_decided`), so one decided between their look and their write is this same 409, never written over.
+What they saw also says which event it is: a verdict on one they saw undecided gives, held on that status, so for a reviewer who may not change a verdict (E38/F06/S01) one decided between their look and their write is this same 409, never written over; one they saw decided is a change, the change row's ([the transition table](../implementation/data/application-document.md#the-transition-table)).
 
 **A claim never refuses a verdict; the condition is the guarantee.**
 The claim keeps reviewers apart in the ordinary case, and says who holds a card ("<email> is looking at this."); the conditional write is what holds when a claim has lapsed, when a card was opened from a link, or when a verdict comes from the All view.

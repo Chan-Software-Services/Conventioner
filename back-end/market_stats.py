@@ -42,6 +42,7 @@ import api.applications as ApplicationsApi
 import api.attendance as AttendanceApi
 import api.markets as MarketsApi
 import api.payments as PaymentsApi
+import application_status as ReviewState
 import essential_fields as EF
 import result_outcome as ResultOutcome
 from assignment.vendor_input import SolverVendor, solver_vendors_from_applications
@@ -185,7 +186,7 @@ def count_applicants(applications: List[Dict[str, Any]]) -> Dict[str, Any]:
     for application in applications:
         status = str(application.get("status") or "")
         statuses[status] = statuses.get(status, 0) + 1
-        if application.get("added_by"):
+        if ReviewState.is_added(application):
             added += 1
         elif application.get("submitted_at"):
             submitted.append(str(application["submitted_at"]))

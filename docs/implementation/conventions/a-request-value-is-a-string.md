@@ -35,6 +35,8 @@ It never raises, so each handler keeps its own words and status, and answers Non
 - saving a floorplan to a market and placing its tables (`back-end/api/floorplans_save.py`, `back-end/api/floorplans_placement.py`) answer 400 for the market id they name;
 - creating and updating a floorplan template (`back-end/api/floorplans_templates.py`) answer 400 for an `organizationId` that is neither a string nor null.
 
+A reviewer's verdict reads the times its `seen` names, `verdictAt` and `updatedAt`, as a string or null in the review state's owner (`_as_seen` in [`back-end/application_status.py`](../../../back-end/application_status.py)), not through `string_field`: a missing `updatedAt` falls back to the one the server read, and a missing `verdictAt` reads as null, so a time of any other type is answered as a `seen` that matches nothing instead, 409 on one verdict and a skip with its reason in a selection.
+
 The body itself is read with `json_object()` in [`back-end/utils/request_body.py`](../../../back-end/utils/request_body.py), which every route in `back-end/app.py` that reads its body in the view calls, and the vendor's own check-in too; it refuses one that is not a JSON object before any value is read from it ([an exception never reaches a client](an-exception-never-reaches-a-client.md)).
 The floorplan templates' create and update read theirs with it too; saving a floorplan to a market refuses such a body in the same words, and registration answers it as a missing address and password.
 
