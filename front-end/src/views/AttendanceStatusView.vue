@@ -885,7 +885,11 @@ const drawer = useVendorDrawer();
 
 /* Prototype (release walk F5): the toolbar set off by a rule under it, not a card round it. */
 .door .door-top {
-  padding-block-end: var(--space-3);
+  /* Across the whole area, edge to edge as the phase header's rule above, the controls as far
+     above it as the area's own padding puts them under that rule. */
+  margin-inline: calc(-1 * var(--space-6));
+  padding-inline: var(--space-6);
+  padding-block-end: var(--space-6);
   border-block-end: 1px solid var(--mm-border);
 }
 
