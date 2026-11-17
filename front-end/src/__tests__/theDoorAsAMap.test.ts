@@ -11,6 +11,7 @@ import { reactive, ref } from 'vue';
 import type { LocationQuery } from 'vue-router';
 
 import AttendanceStatusView, { REREAD_MS } from '@/views/AttendanceStatusView.vue';
+import AttendanceMap from '@/components/attendance/AttendanceMap.vue';
 import { MarketPhase, type FloorplanTable, type Market } from '@/assets/types/datatypes';
 import { MarketAction } from '@/utils/marketActions';
 import { calendarToday } from '@/utils/marketGuide';
@@ -318,13 +319,55 @@ describe("the open day's seats", () => {
     );
   });
 
-  it('the legend reads Here, Expected and No vendor', async () => {
+  it('the legend reads Here, Expected and No vendor on a day with a table nobody sits at', async () => {
     const wrapper = await openOnMap();
     expect(wrapper.findAll(testid('day-map-legend-item')).map((item) => item.text())).toEqual([
       'Here',
       'Expected',
       'No vendor',
     ]);
+  });
+
+  it('the legend leaves No vendor out on a day every table is held, the zones still drawn', async () => {
+    // Fay sits at Aisle A 4 today: every table, and both halves of the shared one, are held.
+    answer = day({ [FAY]: { tableCode: 'Aisle A 4', section: 'Aisle A', location: NORTH.name } });
+    const stage = { id: 'z1', label: 'Stage', xMm: 14_000, yMm: 500, widthMm: 6000, depthMm: 2000 };
+    marketNow = market(
+      {},
+      { ...LAID_OUT, floorplans: [{ ...LAID_OUT.floorplans[0], zones: [stage] }] },
+    );
+    const wrapper = await openOnMap();
+    expect(wrapper.findAll(testid('day-map-legend-item')).map((item) => item.text())).toEqual([
+      'Here',
+      'Expected',
+    ]);
+    expect(wrapper.get(testid('layout-map-zone-label')).text()).toBe('Stage');
+  });
+
+  it('a free half counts: the legend names No vendor while one half of a shared table has nobody', async () => {
+    // Fay holds Aisle A 4, and Dee is not seated today, so Aisle A 3's right half is free.
+    answer = day({
+      [FAY]: { tableCode: 'Aisle A 4', section: 'Aisle A', location: NORTH.name },
+      [DEE]: { date: '2099-01-01' },
+    });
+    const wrapper = await openOnMap();
+    expect(halfFill(wrapper, 't3', 'right')).toBe('var(--layout-floor)');
+    expect(wrapper.findAll(testid('day-map-legend-item')).map((item) => item.text())).toEqual([
+      'Here',
+      'Expected',
+      'No vendor',
+    ]);
+  });
+
+  it('the legend follows the re-read: No vendor goes once the free table is given', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+    const wrapper = await openOnMap();
+    const legend = () => wrapper.findAll(testid('day-map-legend-item')).map((item) => item.text());
+    expect(legend()).toContain('No vendor');
+    answer = day({ [FAY]: { tableCode: 'Aisle A 4', section: 'Aisle A', location: NORTH.name } });
+    vi.advanceTimersByTime(REREAD_MS);
+    await flushPromises();
+    expect(legend()).toEqual(['Here', 'Expected']);
   });
 
   it('on an archived market, where the list says "Did not come", so does the legend', async () => {
@@ -334,6 +377,16 @@ describe("the open day's seats", () => {
       'Here',
       'Did not come',
       'No vendor',
+    ]);
+  });
+
+  it('on an archived market with every table held, the legend is Here and Did not come', async () => {
+    marketNow = market({ phase: MarketPhase.Archived });
+    answer = day({ [FAY]: { tableCode: 'Aisle A 4', section: 'Aisle A', location: NORTH.name } });
+    const wrapper = await openOnMap();
+    expect(wrapper.findAll(testid('day-map-legend-item')).map((item) => item.text())).toEqual([
+      'Here',
+      'Did not come',
     ]);
   });
 
@@ -516,5 +569,35 @@ describe('a Viewer', () => {
     expect(api.post).not.toHaveBeenCalled();
     expect(api.put).not.toHaveBeenCalled();
     expect(api.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe("the map's note", () => {
+  function mapAlone(props: Record<string, unknown> = {}) {
+    return mount(AttendanceMap, {
+      attachTo: document.body,
+      props: {
+        market: marketNow,
+        rows: day().data.roster,
+        date: TODAY,
+        found: [],
+        openVendor: null,
+        notHere: 'Not yet',
+        hereWithoutSeat: 0,
+        ...props,
+      },
+    });
+  }
+
+  it("stands the read time it is given under the map, as the day map's note", () => {
+    const wrapper = mapAlone({ updated: 'Updated just now' });
+    expect(wrapper.get(testid('day-map')).get(testid('day-map-note')).text()).toBe(
+      'Updated just now',
+    );
+  });
+
+  it('draws no note when it is given none', () => {
+    const wrapper = mapAlone();
+    expect(wrapper.find(testid('day-map-note')).exists()).toBe(false);
   });
 });

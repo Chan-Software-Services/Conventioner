@@ -378,6 +378,69 @@ describe('the day map', () => {
     expect(map.findAll('[data-testid="layout-map-read"]')).toHaveLength(2);
   });
 
+  it('draws no note and the switch by default, as the public map has them', () => {
+    const map = dayMap();
+    expect(map.find('[data-testid="day-map-note"]').exists()).toBe(false);
+    expect(map.find('[data-testid="day-map-locations"]').exists()).toBe(true);
+  });
+
+  it("draws its note after the legend, the legend row's end", () => {
+    const map = dayMap({ note: 'Updated just now' });
+    const note = map.get('[data-testid="day-map-note"]');
+    expect(note.text()).toBe('Updated just now');
+    expect(note.element.tagName).toBe('P');
+    expect(note.element.previousElementSibling).toBe(
+      map.get('[data-testid="day-map-legend"]').element,
+    );
+  });
+
+  it('draws no switch with locationSwitch off, for a page that draws its own', () => {
+    const map = dayMap({ locationSwitch: false });
+    expect(map.find('[data-testid="day-map-locations"]').exists()).toBe(false);
+    expect(map.get('[data-testid="layout-map"]').attributes('aria-label')).toBe(
+      'Upper Hall layout, 2 tables',
+    );
+  });
+
+  it("stands the note at the legend row's end, 4px under the map, small and muted, and under the legend in a phone's box", () => {
+    const source = readFileSync(
+      resolvePath(process.cwd(), 'src/components/daymap/DayMap.vue'),
+      'utf8',
+    );
+    const style = source.slice(source.indexOf('<style'));
+    const rule = (selector: string, from = 0) => {
+      const at = style.indexOf(`${selector} {`, from);
+      expect(at, selector).toBeGreaterThan(-1);
+      return style.slice(at, style.indexOf('}', at)).replace(/\s+/g, ' ');
+    };
+    // With no note the legend keeps the whole row, and a phone's box adds no row for it.
+    expect(rule('.day-map__grid')).toContain(
+      "grid-template-areas: 'switch switch' 'map map' 'legend legend';",
+    );
+    expect(rule('.day-map__grid:has(> .day-map__note)')).toContain(
+      "grid-template-areas: 'switch switch' 'map map' 'legend note';",
+    );
+    const phone = style.indexOf('@container (width < 30rem)');
+    expect(rule('.day-map__grid', phone)).toContain(
+      "grid-template-areas: 'switch switch' 'map map' 'legend zoom';",
+    );
+    expect(rule('.day-map__grid:has(> .day-map__note)', phone)).toContain(
+      "grid-template-areas: 'switch switch' 'map map' 'legend zoom' 'note note';",
+    );
+    const note = rule('.day-map__note');
+    for (const declaration of [
+      'grid-area: note;',
+      'align-self: start;',
+      // The grid's 12px gap less 8px leaves the note 4px under the map.
+      'margin: calc(-1 * var(--space-2)) 0 0;',
+      'text-align: end;',
+      'font-size: var(--text-xs);',
+      'color: var(--mm-text-muted);',
+    ]) {
+      expect(note).toContain(declaration);
+    }
+  });
+
   it('reads no store and no API: its data is all handed to it', () => {
     for (const file of ['DayMap.vue', 'dayMap.ts']) {
       const source = readFileSync(

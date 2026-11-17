@@ -62,6 +62,7 @@ describes:
   - front-end/src/components/layout/layoutViewChoices.ts
   - front-end/src/components/daymap/DayMap.vue
   - front-end/src/components/daymap/dayMap.ts
+  - front-end/src/components/daymap/freeParts.ts
 verified: 2026-11-17
 sources:
   - bug/38
@@ -79,6 +80,7 @@ sources:
   - T315
   - T422
   - T411
+  - T466
 ---
 
 # A location's layout
@@ -166,12 +168,16 @@ The geometry is pure, in [`layoutGeometry.ts`](../../../front-end/src/components
 ### The day map
 
 [`DayMap.vue`](../../../front-end/src/components/daymap/DayMap.vue) is a location's layout drawn on one market date, for the public map page and for Attendance (T422).
-Its props are the locations (each its id, name, layout, the plan's sections of it and its image's address), the table types, the open location's id (`v-model:locationId`), the day's seats, the picked seat's key or table's id, `marked`, and the legend (each a tone and the page's word for it).
-It draws the location switch as [filter toggles](../../design-system.md#the-primitive-layer) for two locations or more, the drawing in `read` with the seats and the picked and marked outlined, Zoom out, Zoom in and Fit on the map's bottom-right corner, and the legend under the map; it emits the location chosen and `pick` with the table pressed and the seat pressed on it, or null.
+Its props are the locations (each its id, name, layout, the plan's sections of it and its image's address), the table types, the open location's id (`v-model:locationId`), the day's seats, the picked seat's key or table's id, `marked`, the legend (each a tone and the page's word for it), and two a page may leave out: `note`, a short line for the legend row's end, and `locationSwitch` (on unless a page turns it off).
+It draws the location switch as [filter toggles](../../design-system.md#the-primitive-layer) for two locations or more unless `locationSwitch` is off, the drawing in `read` with the seats and the picked and marked outlined, Zoom out, Zoom in and Fit on the map's bottom-right corner, and the legend under the map; it emits the location chosen and `pick` with the table pressed and the seat pressed on it, or null.
 Its frame takes the open hall's shape, no taller than 70% of the window unless its caller caps the frame lower, as Attendance does at a desk; in a box narrower than 30rem (a container query) the zoom stands under the map, at the legend's end, rather than over it.
+A note (`day-map-note`, Attendance's read time) stands at the legend row's end, right-aligned, 4px under the map, in `--text-xs` and the muted ink, and on a line of its own under the legend in a box narrower than 30rem; with no note the legend keeps the whole row and the grid gains no row (T466).
 It holds no market state and reads no store and no API: each page hands it its own data.
 
 [`dayMap.ts`](../../../front-end/src/components/daymap/dayMap.ts) holds the public map's answer as the server serves it (`PublicMapAnswer`) and turns it and Attendance's roster into what the day map draws, purely: `publicDayLocations` makes each public location a layout the drawing takes, its image at the address the page gives; `publicSeats` gives a date's seats, each taken (`filled`), keyed by its table and half, a seat with no public name named "vendor not listed"; `rosterSeats` gives a date's roster rows as seats, here and here at another table `filled` and expected `outlined`, keyed by the vendor's email, each matched to a table by its code built from its section's name and its number as the server's `table_code_for` builds it, with the rows whose table is on no layout returned apart and a check-in with no seat left out.
+
+[`freeParts.ts`](../../../front-end/src/components/daymap/freeParts.ts) says whether a location's map draws a free part on a day (`drawsAFreePart`): a table numbered in one of the location's sections (`layoutSections`) with no whole seat and no seat on at least one half, exactly the parts `LayoutMap` paints `free`, a free half of a shared table included; a table in no section or with no number is drawn by no seat and never counts.
+Attendance's legend names "No vendor" only when it holds (T466).
 
 ## Export PNG
 
