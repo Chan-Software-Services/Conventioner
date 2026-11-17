@@ -480,14 +480,20 @@ test.describe('the Payment tab', () => {
           drawnBox.rect.right - menuRect.right,
           `box ${i} ${at}: its menu at its end`,
         ).toBeCloseTo(13, 1);
+        // A phone's "..." is a thumb's 44px, beside an amount one text line tall (base.css).
+        expect(menuRect.bottom - menuRect.top, `box ${i} ${at}: its menu's height`).toBeCloseTo(
+          size.width <= 640 ? 44 : 24,
+          1,
+        );
         const amounts = parts[1];
         expect(
           menuRect.left - amounts.right,
           `box ${i} ${at}: its amount beside its menu`,
         ).toBeCloseTo(16, 1);
-        expect(amounts.top, `box ${i} ${at}: its amount on its menu's row`).toBeGreaterThanOrEqual(
-          menuRect.top - 0.5,
-        );
+        expect(
+          Math.abs((amounts.top + amounts.bottom) / 2 - (menuRect.top + menuRect.bottom) / 2),
+          `box ${i} ${at}: its amount on its menu's midline`,
+        ).toBeLessThanOrEqual(1);
       }
       // The two table-days stand a box's gap apart, inside their card's inset.
       expect(

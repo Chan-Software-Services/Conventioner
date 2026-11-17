@@ -606,8 +606,8 @@ function struckPrice(line: PaymentLine): boolean {
 }
 
 /* A box too narrow for its words to keep 7.5rem, or their widest unbroken run (a date, a time),
-   beside its amount and "..." (a phone under about 360px) puts those two under the words, at its
-   end, by its own width rather than the window's: the words never run past their column. */
+   beside its amount and "..." puts those two under the words, at its end, by its own width rather
+   than the window's (a phone narrower than about 380px): the words never run past their column. */
 .payment-line,
 .payment-entry {
   display: flex;
@@ -672,12 +672,19 @@ function struckPrice(line: PaymentLine): boolean {
   margin-left: auto;
 }
 
+/* The amount and "..." on one midline, beside the words or under them: a phone's "..." is a thumb's
+   44px, so its dots would otherwise stand well below the amount. */
 .payment-end {
   flex-shrink: 0;
   margin-left: auto;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-4);
+}
+
+/* The menu's box is its button's alone, with no line's descent under it to lower the midline. */
+.payment-end > .row-menu {
+  display: flex;
 }
 
 /* A line's amount, and beside it the calculated price struck when someone set it by hand. */
