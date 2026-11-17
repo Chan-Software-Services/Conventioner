@@ -290,7 +290,7 @@ class TestThePublicMapCard:
         another setting even, is never written over by one made from the copy before it."""
         client = signed_in(ORGANIZER)
         market = _mapped_market(market_in)
-        interleave("api.markets._load_market_to_change", lambda: PublicMap.save_settings(
+        interleave("api.markets._market_change", lambda: PublicMap.save_settings(
             market["id"], {"websiteQuestion": "website"}, ORGANIZER))
 
         response = client.put(f"/markets/{market['id']}/public-map", json={"enabled": True})
@@ -308,7 +308,7 @@ class TestThePublicMapCard:
         client = signed_in(ORGANIZER)
         market = market_in(MarketPhase.MARKET_DAYS, intakeMode="form", applicationForm={
             "fields": MAP_QUESTIONS, "essentialOptions": None}, publicMap=None)
-        interleave("api.markets._load_market_to_change", lambda: PublicMap.save_settings(
+        interleave("api.markets._market_change", lambda: PublicMap.save_settings(
             market["id"], {"nameQuestion": "website"}, ORGANIZER))
 
         response = client.put(f"/markets/{market['id']}/public-map",
@@ -322,7 +322,7 @@ class TestThePublicMapCard:
             self, signed_in, market_in, interleave, real_db, market_records):
         client = signed_in(ORGANIZER)
         market = _mapped_market(market_in)
-        interleave("api.markets._load_market_to_change", _move(market, MarketPhase.ARCHIVED))
+        interleave("api.markets._market_change", _move(market, MarketPhase.ARCHIVED))
 
         response = client.put(f"/markets/{market['id']}/public-map", json={"enabled": True})
 

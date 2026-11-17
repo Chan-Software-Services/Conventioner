@@ -189,14 +189,14 @@ class TestItsRefusals:
     def test_a_market_whose_settings_changed_since_they_were_read_refuses_it(
             self, client, world, monkeypatch):
         world.market(MarketPhase.MARKET_DAYS, publicMap=copy.deepcopy(ON), **FORM)
-        load = MarketsApi._load_market_to_change
+        load = MarketsApi._market_change
 
         def read_then_changed_in_another_tab(*args):
-            market = load(*args)
+            change = load(*args)
             world.markets.doc["publicMap"]["websiteQuestion"] = None
-            return market
+            return change
 
-        monkeypatch.setattr(MarketsApi, "_load_market_to_change", read_then_changed_in_another_tab)
+        monkeypatch.setattr(MarketsApi, "_market_change", read_then_changed_in_another_tab)
 
         response = _save(client, {"instagramQuestion": None})
 
