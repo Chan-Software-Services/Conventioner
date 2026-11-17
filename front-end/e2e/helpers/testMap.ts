@@ -7,8 +7,8 @@
  *
  *  - every request each browser context makes under `/src/` (the app's modules, which Vite's dev
  *    server serves one by one, each at its file's path) and `/api/` (the pages' own API calls);
- *  - the V8 block coverage of each page's `/src/` modules (`page.coverage`, Chromium), as the
- *    stretches that ran, taken before a page or its context closes;
+ *  - the V8 block coverage of each page's `/src/` modules (through a DevTools session of its own,
+ *    Chromium), as the stretches that ran, taken before a page or its context closes;
  *  - its start and end on the wall clock, so the back end's own log (`docker compose logs
  *    --timestamps`) can be laid against the one test running then (`workers: 1`), its calls from
  *    Node's helpers included.
@@ -19,7 +19,13 @@
  */
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { Browser, BrowserContext, Page, test as playwrightTest } from '@playwright/test';
+import type {
+  Browser,
+  BrowserContext,
+  CDPSession,
+  Page,
+  test as playwrightTest,
+} from '@playwright/test';
 
 type Range = { startOffset: number; endOffset: number; count: number };
 type CoveredFunction = { ranges: readonly Range[] };
@@ -96,11 +102,31 @@ const patched = new WeakSet<Browser>();
 /** The contexts attached during the running test, so a context it never closed is read too. */
 let contexts = new Set<BrowserContext>();
 
+/**
+ * Each recording page's own DevTools session, which its V8 coverage is taken through.
+ *
+ * Not `page.coverage`: Playwright's fetches the source of every script the page parses, as it is
+ * parsed, and keeps it to hand back at the end. Vite's dev server serves each module as a script
+ * of its own, so a page load is hundreds of those round trips: a run recorded through it took some
+ * 40% longer in CI than one that recorded nothing, and a test of twenty page loads overran its 30
+ * seconds. The map reads only each script's address and the blocks that ran, so this session asks
+ * for nothing else.
+ */
+const sessions = new WeakMap<Page, CDPSession>();
+
 async function startPage(page: Page) {
   if (started.has(page)) return;
   started.add(page);
   try {
-    await page.coverage.startJSCoverage({ resetOnNavigation: false });
+    const session = await page.context().newCDPSession(page);
+    await session.send('Profiler.enable');
+    await session.send('Profiler.startPreciseCoverage', { callCount: true, detailed: true });
+    // With the debugger off, V8 counts some functions only whole, so a block in them that never ran
+    // (an untaken `catch`, an early `return`) reads as run; on, it counts every block, as
+    // `page.coverage` did. Skipping pauses keeps a `debugger;` statement from stopping the page.
+    await session.send('Debugger.enable');
+    await session.send('Debugger.setSkipAllPauses', { skip: true });
+    sessions.set(page, session);
   } catch {
     // A page closing as it opens has nothing to record.
   }
@@ -112,11 +138,14 @@ async function startPage(page: Page) {
 }
 
 async function stopPage(page: Page) {
-  if (!started.has(page) || stopped.has(page) || page.isClosed()) return;
+  const session = sessions.get(page);
+  if (!session || stopped.has(page) || page.isClosed()) return;
   stopped.add(page);
   let entries: { url: string; functions: CoveredFunction[] }[];
   try {
-    entries = await page.coverage.stopJSCoverage();
+    ({ result: entries } = await session.send('Profiler.takePreciseCoverage'));
+    await session.send('Profiler.stopPreciseCoverage');
+    await session.detach();
   } catch {
     return; // the page or its context went first
   }
