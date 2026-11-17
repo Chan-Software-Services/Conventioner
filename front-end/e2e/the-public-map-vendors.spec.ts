@@ -12,7 +12,7 @@ import { seedMarketDayMap, type SeededMarketDayMap } from './helpers/seedMarketD
  * "Find a vendor" drops down the vendors the words find by the public name, the website's host, the
  * Instagram handle, the table code or the section name, and never by an email address, a full name
  * or a preferred name, none of which reaches the browser; a pick opens the vendor's hall and card
- * and empties the field. Under it every vendor of the day is listed, unfiltered and uncounted, each
+ * and empties the field. Under it every named vendor of the day is listed, unfiltered and uncounted, each
  * led by their table's code; the list blurs under the field only once it has scrolled.
  */
 
@@ -155,7 +155,7 @@ for (const size of PHONE_AND_DESK) {
       await expect(map.dayMap).toBeInViewport();
     });
 
-    test('lists every vendor of the day with no count, and a press opens their table', async ({
+    test('lists every named vendor of the day with no count, and a press opens their table', async ({
       page,
     }) => {
       const map = new PublicMapPage(page);

@@ -4,7 +4,7 @@ import type { Locator, Page } from '@playwright/test';
  * A market's public map, `/<slug>/map` (T422, T465): one sheet filling the window, its map side
  * (the market's name, the day and hall selects, the hall the day map fills, the legend and the
  * zoom), the card of the table picked (a speech bubble at a desk, the vendor panel's top on a
- * phone), and the vendor panel (the "Find a vendor" search over every vendor of the day). Its
+ * phone), and the vendor panel (the "Find a vendor" search over every named vendor of the day). Its
  * tables and halves are found by their accessible names, as a layout's are ("Aisle A 3, Standard
  * 6 ft, left half, Loom House"), since what the spec proves is what a screen reader hears.
  */

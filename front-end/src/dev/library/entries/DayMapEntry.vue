@@ -293,10 +293,11 @@ const FILLS_LEGEND = [
       "vendor not listed" where the name would be.
     </li>
     <li>
-      <strong>Filling its box:</strong> the public map's hall is the window less its title, whatever
-      shape the hall is, so the map takes that box and the drawing centres the hall in it, rather
-      than the box taking the hall's shape. On a phone's width the legend and the zoom leave the map
-      for a row under it, since over it the two pills covered the small hall's bottom third.
+      <strong>Filling its box:</strong> the public map's hall is the box the sheet leaves it under
+      its title, whatever shape the hall is, so the map takes that box and the drawing centres the
+      hall in it, rather than the box taking the hall's shape. On a phone's width the legend and the
+      zoom leave the map for a row under it, since over it the two pills covered the small hall's
+      bottom third.
     </li>
   </ChoicesForYou>
 </template>

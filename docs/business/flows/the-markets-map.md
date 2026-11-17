@@ -51,7 +51,7 @@ Covered by:
 1. Open the map's address ([`PublicMapView.vue`](../../../front-end/src/views/PublicMapView.vue)); it opens on today when today is a market date, else the next, else the last.
    Expect one sheet filling the window on a soft backdrop in the market's own section colours, the page never scrolling: the market's name in bold over a marker stroke with "vendor map" under it, the day ("Nov 18") and, at a market of two halls or more, the hall as two dropdowns at the map's top right, and the hall filling the rest, each table taken drawn in its section's colours and each free one a grey dashed outline, with a legend naming the hall's sections ("Section A") and "Free table" on a day the hall has one.
    The no-table zones and their labels ("Stage") are drawn to orient by, with no legend item.
-2. "Find a vendor", over every vendor of the day: type part of their public name, their website, their Instagram handle, their table's code or their section's name, and pick them from the dropdown.
+2. "Find a vendor", over every named vendor of the day: type part of their public name, their website, their Instagram handle, their table's code or their section's name, and pick them from the dropdown.
    Expect the map to open their hall and outline their table, or their half of a shared one, the card to read their table's code in its section's colours, the hall, their public name, and their website and Instagram as links that open in a new tab, and the field to empty for the next search.
    An email address or a full name finds nobody.
    Or browse the list under the field, each vendor led by their table's code, and press one; their row is ringed in mustard.

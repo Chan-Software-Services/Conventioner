@@ -1878,8 +1878,8 @@ export const SCREEN_GROUPS = {
       // A market's public map, signed out (T422, T465): one sheet filling the window on its
       // blurred backdrop, the map side holding the market's name, the day and hall selects at its
       // top right and North Wing's hall filling the rest, its section legend and zoom at the hall's
-      // foot, no card before a press; and the vendor panel, "Find a vendor" over every vendor of
-      // the day, beside the map at a desk and under it on a phone.
+      // foot, no card before a press; and the vendor panel, "Find a vendor" over every named
+      // vendor of the day, beside the map at a desk and under it on a phone.
       name: 'the public map',
       who: 'nobody',
       sizes: PUBLIC,

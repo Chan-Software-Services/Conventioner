@@ -55,7 +55,7 @@ A change of day keeps the location, the table and the half, so a table's card th
 ## The page
 
 **One sheet fills the window under the app bar, and the page never scrolls.**
-The page's column is `calc(100dvh - var(--banner-h))` tall, `overflow: hidden`, no wider than `--workspace-max`, in every state.
+The page's column is `calc(100dvh - var(--banner-h))` tall, `overflow: hidden`, no wider than `--workspace-max`, while it loads, after a failed read and once the map is drawn.
 While it is mounted `useFillsTheWindow` ([`useFillsTheWindow.ts`](../../../front-end/src/utils/useFillsTheWindow.ts)) puts `fills-the-window` on `<html>`, counting the pages that hold it, and `base.css` then gives the window no scroll bar gutter and gives `body` and `.app-container` a `min-height` of `100dvh` in place of every other page's `100vh`, which a phone's browser measures with its bars hidden, so the document would scroll by the bars' height.
 The sheet is a grid on a white ground with `--radius-sheet` corners and `--shadow-float`: at 1,000px and wider the map side left of a 21rem vendor panel, narrower the map over the panel, three to two.
 

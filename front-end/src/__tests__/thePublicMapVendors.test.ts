@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 /**
  * The public map's vendor panel (T422 ticket 09, T465 ticket 06), mounted alone: "Find a vendor", a
- * search whose dropdown offers the vendors the words find, over every vendor of the day, each led
+ * search whose dropdown offers the vendors the words find, over every named vendor of the day, each led
  * by their table's code in their section's colours; a pick or a row's press asks the page to open
  * the vendor, and the list fades under the field only once it has scrolled.
  */
@@ -97,7 +97,7 @@ describe('the vendor panel', () => {
     expect(panel.get('label[for]').text()).toBe('Find a vendor');
   });
 
-  it('lists every vendor of the day, each led by their code, then their name over their hall', () => {
+  it('lists every named vendor of the day, each led by their code, then their name over their hall', () => {
     open();
     expect(rows().map((row) => row.text())).toEqual([
       'Gold row 2Acme CeramicsTable Gold row 2, Upper Hall',
