@@ -221,6 +221,20 @@ function openVendor(vendor: ListedVendor) {
       <header class="public-map__head">
         <div class="public-map__words">
           <h1 class="public-map__title" data-testid="public-map-heading">{{ map.marketName }}</h1>
+          <svg
+            class="public-map__squiggle"
+            viewBox="0 0 120 10"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M2 6 C 12 1, 22 9, 32 5 S 52 1, 62 5 S 82 9, 92 5 S 112 1, 118 5"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+            />
+          </svg>
           <p class="public-map__subtitle" data-testid="public-map-subtitle">
             Vendor map · {{ listed.length }} {{ listed.length === 1 ? 'vendor' : 'vendors' }}
           </p>
@@ -572,16 +586,21 @@ function openVendor(vendor: ListedVendor) {
 }
 
 /* ── Prototype (release walk F6) ── */
+/* The look of a makers' market poster: paper, heavy black type, mustard and teal, flat outlined
+   shapes with a solid offset shadow rather than a soft one. */
 .public-map {
   /* The window's height under the app bar, not the shell's `flex: 1`, which grows with the list. */
   flex: none;
   gap: var(--space-4);
   height: calc(100dvh - var(--banner-h));
-  padding-block: var(--space-4);
+  padding-block: var(--space-4) var(--space-6);
   overflow: hidden;
+  /* Paper to the window's edges, though the column keeps the workspace's width. */
+  background: var(--mm-beige);
+  box-shadow: 0 0 0 100vmax var(--mm-beige);
+  clip-path: inset(0 -100vmax);
 }
 
-/* The header: the name and how many vendors, the days at its end. */
 .public-map__head {
   display: flex;
   flex-wrap: wrap;
@@ -598,36 +617,52 @@ function openVendor(vendor: ListedVendor) {
 }
 
 .public-map__head .public-map__title {
-  font-size: var(--text-lg);
-  line-height: 1.2;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.875rem;
+  font-weight: 850;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+
+.public-map__squiggle {
+  width: 7.5rem;
+  height: 0.625rem;
+  color: var(--mm-yellow);
 }
 
 .public-map__head .public-map__subtitle {
   margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mm-black);
 }
 
-/* A segmented control: the days on a beige track, the chosen one a raised white chip. */
+/* The days and the halls: outlined pills in bold capitals; the chosen day mustard, the chosen hall
+   teal. */
 .public-map__days,
 .public-map__map :deep(.filter-toggles) {
   display: inline-flex;
   flex-wrap: nowrap;
-  gap: 2px;
-  padding: 3px;
-  border-radius: var(--radius-pill);
-  background: var(--mm-beige);
+  gap: var(--space-2);
 }
 
 .public-map__day,
 .public-map__map :deep(.filter-toggles__toggle) {
-  min-height: 32px;
-  height: 32px;
+  min-height: 34px;
+  height: 34px;
   padding: 0 var(--space-4);
-  border: none;
+  border: 2px solid var(--mm-black);
   border-radius: var(--radius-pill);
-  background: transparent;
+  background: white;
   color: var(--mm-black);
   font: inherit;
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   white-space: nowrap;
   cursor: pointer;
   box-shadow: none;
@@ -635,28 +670,31 @@ function openVendor(vendor: ListedVendor) {
 
 .public-map__day:hover,
 .public-map__map :deep(.filter-toggles__toggle:hover) {
-  background: var(--mm-beige-hover);
+  background: var(--mm-beige);
 }
 
-.public-map__day[aria-pressed='true'],
+.public-map__day[aria-pressed='true'] {
+  background: var(--mm-yellow);
+  box-shadow: 2px 2px 0 var(--mm-black);
+}
+
 .public-map__map :deep(.filter-toggles__toggle[aria-pressed='true']) {
-  background: white;
-  color: var(--mm-black);
-  font-weight: 600;
-  box-shadow: var(--shadow-card);
+  background: var(--mm-green);
+  color: white;
+  box-shadow: 2px 2px 0 var(--mm-black);
 }
 
-/* The viewer: map and panel side by side, one height, in one framed box. */
+/* The viewer: one outlined sheet, map and panel, with a solid shadow. */
 .public-map__body {
   flex: 1 1 auto;
   min-height: 0;
   gap: 0;
   align-items: stretch;
   overflow: hidden;
-  border: 1px solid var(--mm-border);
-  border-radius: var(--radius-card);
+  border: 2px solid var(--mm-black);
+  border-radius: 14px;
   background: white;
-  box-shadow: var(--shadow-card);
+  box-shadow: 5px 5px 0 var(--mm-black);
 }
 
 @media (width >= 1000px) {
@@ -665,7 +703,6 @@ function openVendor(vendor: ListedVendor) {
   }
 }
 
-/* The map fills its side of the viewer, whatever the hall's shape. */
 .public-map__map {
   position: relative;
   top: auto;
@@ -694,7 +731,8 @@ function openVendor(vendor: ListedVendor) {
   border-radius: 0;
 }
 
-/* The hall tabs float on the map's top left, the legend on its bottom left. */
+/* The hall tabs float on the map's top left, the legend on its bottom left, the zoom on its
+   bottom right, each outlined as the sheet is. */
 .public-map__map :deep(.day-map__locations) {
   grid-area: map;
   align-self: start;
@@ -703,8 +741,6 @@ function openVendor(vendor: ListedVendor) {
   top: var(--space-3);
   left: var(--space-3);
   z-index: 1;
-  background: white;
-  box-shadow: var(--shadow-card);
 }
 
 .public-map__map :deep(.day-map__legend) {
@@ -716,49 +752,64 @@ function openVendor(vendor: ListedVendor) {
   bottom: var(--space-3);
   left: var(--space-3);
   z-index: 1;
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-1) var(--space-3);
+  border: 2px solid var(--mm-black);
   border-radius: var(--radius-pill);
   background: white;
-  box-shadow: var(--shadow-card);
   font-size: var(--text-xs);
+  font-weight: 600;
 }
 
-/* The zoom stays on the map's bottom right at every width, a phone's too. */
 .public-map__map :deep(.day-map__zoom) {
   grid-area: map;
   position: absolute;
   right: var(--space-3);
   bottom: var(--space-3);
   z-index: 1;
-  padding: var(--space-1);
-  box-shadow: var(--shadow-card);
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-/* The panel: the picked table over the vendors, which scroll inside it. */
+.public-map__map :deep(.day-map__zoom-button) {
+  border: 2px solid var(--mm-black);
+  border-radius: var(--radius-pill);
+  background: white;
+  font-weight: 700;
+}
+
+/* The panel: the picked table over the vendors, which alone scroll. */
 .public-map__side {
   display: flex;
   flex-direction: column;
   gap: 0;
   min-height: 0;
-  border-inline-start: 1px solid var(--mm-border);
+  border-inline-start: 2px solid var(--mm-black);
 }
 
 .public-map__card {
   flex: none;
   padding: var(--space-4);
   border: none;
-  border-block-end: 1px solid var(--mm-border);
+  border-block-end: 2px solid var(--mm-black);
   border-radius: 0;
   background: white;
 }
 
 .public-map__card--picked {
-  box-shadow: inset 4px 0 0 var(--mm-green);
+  background: var(--layout-section-1-fill);
 }
 
 .public-map__card-title {
-  font-family: 'Merge One';
-  font-weight: 400;
+  font-family: 'Outfit', sans-serif;
+  font-size: var(--text-lg);
+  font-weight: 850;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+.public-map__card--picked .public-map__links dt {
+  color: var(--mm-black);
 }
 
 .public-map__scroll {
@@ -779,8 +830,22 @@ function openVendor(vendor: ListedVendor) {
   background: white;
 }
 
+.public-map__side :deep(.list-frame__tools .field-label) {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mm-black);
+}
+
+.public-map__side :deep(.list-frame__tools .field) {
+  border: 2px solid var(--mm-black);
+  border-radius: var(--radius-pill);
+  padding-inline: var(--space-4);
+}
+
 .public-map__side :deep(.list-frame__rows > li + li) {
-  border-block-start: 1px solid var(--mm-border);
+  border-block-start: 1px dashed var(--mm-border);
 }
 
 /* A vendor: their table's code, then their name over their hall. */
@@ -799,12 +864,14 @@ function openVendor(vendor: ListedVendor) {
 
 .public-map__vendor:hover .public-map__vendor-name {
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-decoration-color: var(--mm-yellow);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 3px;
 }
 
-.public-map__vendor[aria-current='true'] {
-  box-shadow: inset 3px 0 0 var(--mm-green);
-  padding-inline-start: var(--space-3);
+.public-map__vendor[aria-current='true'] .public-map__code {
+  background: var(--mm-yellow);
+  box-shadow: 2px 2px 0 var(--mm-black);
 }
 
 .public-map__vendor-words {
@@ -822,19 +889,25 @@ function openVendor(vendor: ListedVendor) {
   min-width: 3rem;
   height: 1.75rem;
   padding-inline: var(--space-2);
+  border: 2px solid var(--mm-black);
   border-radius: var(--radius-pill);
-  background: var(--mm-fill-third);
+  background: white;
   color: var(--mm-black);
   font-size: var(--text-xs);
-  font-weight: 600;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-/* A phone: the map over the panel, the map the larger part, both within the window. */
+/* A phone: the map over the panel, half the viewer each, within the window. */
 @media (width < 1000px) {
   .public-map__body {
     grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .public-map__side {
+    border-inline-start: none;
+    border-block-start: 2px solid var(--mm-black);
   }
 
   .public-map__card {
@@ -842,24 +915,32 @@ function openVendor(vendor: ListedVendor) {
     padding: var(--space-3) var(--space-4);
   }
 
-  .public-map__card-title {
-    font-size: var(--text-md);
+  /* The links side by side on one line, their labels for a screen reader alone: the handle and the
+     address say which is which. */
+  .public-map__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-4);
   }
 
-  .public-map__side {
-    border-inline-start: none;
-    border-block-start: 1px solid var(--mm-border);
+  .public-map__links dt {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 
 @media (width <= 640px) {
   .public-map {
     padding-inline: var(--space-3);
-    padding-block-start: var(--space-4);
+    padding-block-start: var(--space-3);
   }
 
-  .public-map__days {
-    max-width: 100%;
+  .public-map__head .public-map__title {
+    font-size: 1.375rem;
   }
 
   .public-map__day {
