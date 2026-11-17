@@ -523,6 +523,20 @@ function struckPrice(line: PaymentLine): boolean {
   gap: var(--space-4);
 }
 
+/* Prototype (release walk F1): each table-day and each payment is a box of its own, even alone. */
+.payment-list {
+  gap: var(--space-2);
+}
+
+.payment-tab .payment-line,
+.payment-tab .payment-entry,
+.payment-tab .payment-line:last-child,
+.payment-tab .payment-entry:last-child {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--mm-border);
+  border-radius: var(--radius-control);
+}
+
 .payment-figures {
   display: flex;
   gap: var(--space-6);
