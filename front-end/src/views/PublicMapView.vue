@@ -124,6 +124,26 @@ function chooseLocation(locationId: string) {
   goTo({ ...place.value, locationId, tableId: keeps ? place.value.tableId : null });
 }
 
+/** Prototype (release walk F6): a market day as the dropdown says it, "Nov 19". */
+const MONTH_NAMES = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+function monthDay(date: string): string {
+  const match = /^\d{4}-(\d{2})-(\d{2})$/.exec(date);
+  return match ? `${MONTH_NAMES[Number(match[1]) - 1]} ${Number(match[2])}` : date;
+}
+
 /** Prototype (release walk F6): the seat pressed, so a half table's half is picked alone. */
 const pickedSeat = ref<string | null>(null);
 
@@ -384,37 +404,6 @@ function openVendor(vendor: ListedVendor) {
             Vendor map · {{ listed.length }} {{ listed.length === 1 ? 'vendor' : 'vendors' }}
           </p>
         </div>
-
-        <div class="public-map__pickers">
-          <label class="public-map__picker">
-            <span class="visually-hidden">Market day</span>
-            <select
-              class="field field--select public-map__select"
-              name="public-map-day"
-              :value="place.date"
-              data-testid="public-map-day-select"
-              @change="chooseDay(($event.target as HTMLSelectElement).value)"
-            >
-              <option v-for="date in map.dates" :key="date" :value="date">
-                {{ dayInWords(date) }}
-              </option>
-            </select>
-          </label>
-          <label v-if="locations.length > 1" class="public-map__picker">
-            <span class="visually-hidden">Location</span>
-            <select
-              class="field field--select public-map__select"
-              name="public-map-location"
-              :value="place.locationId"
-              data-testid="public-map-location-select"
-              @change="chooseLocation(($event.target as HTMLSelectElement).value)"
-            >
-              <option v-for="location in locations" :key="location.id" :value="location.id">
-                {{ location.name }}
-              </option>
-            </select>
-          </label>
-        </div>
       </header>
 
       <div class="public-map__body">
@@ -429,6 +418,36 @@ function openVendor(vendor: ListedVendor) {
             @update:locationId="chooseLocation"
             @pick="pick"
           />
+          <div class="public-map__pickers">
+            <label class="public-map__picker">
+              <span class="visually-hidden">Market day</span>
+              <select
+                class="field field--select public-map__select"
+                name="public-map-day"
+                :value="place.date"
+                data-testid="public-map-day-select"
+                @change="chooseDay(($event.target as HTMLSelectElement).value)"
+              >
+                <option v-for="date in map.dates" :key="date" :value="date">
+                  {{ monthDay(date) }}
+                </option>
+              </select>
+            </label>
+            <label v-if="locations.length > 1" class="public-map__picker">
+              <span class="visually-hidden">Location</span>
+              <select
+                class="field field--select public-map__select"
+                name="public-map-location"
+                :value="place.locationId"
+                data-testid="public-map-location-select"
+                @change="chooseLocation(($event.target as HTMLSelectElement).value)"
+              >
+                <option v-for="location in locations" :key="location.id" :value="location.id">
+                  {{ location.name }}
+                </option>
+              </select>
+            </label>
+          </div>
 
           <div
             v-if="card && bubble"
@@ -858,9 +877,14 @@ function openVendor(vendor: ListedVendor) {
   color: var(--mm-yellow);
 }
 
-/* The day and the hall: two soft pill selects side by side at the header's end; the map's own
+/* The day and the hall: two soft pill selects side by side on the map's top left; the map's own
    hall tabs give way to them. */
 .public-map__pickers {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: 1;
+  max-width: calc(100% - 2 * var(--space-3));
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
@@ -868,7 +892,7 @@ function openVendor(vendor: ListedVendor) {
 
 .public-map__select {
   width: auto;
-  min-width: 9rem;
+  min-width: 7.5rem;
   height: 38px;
   padding-inline-start: var(--space-4);
   border: 1px solid var(--pm-line);
