@@ -1929,8 +1929,8 @@ def _reviewing(reviewer: Reviewer) -> ApplicantsApi.Reviewing:
 
 
 def _view(reviewer: Reviewer) -> ReviewTeam.ReviewView:
-    """The one view of the market a review write's answer serves each application's review state
-    over (``ReviewTeam.review_view``), from the market and organization ``_reviewer_on`` loaded."""
+    """The one view of the market a review route serves each application's review state over
+    (``ReviewTeam.review_view``), from the market and organization ``_reviewer_on`` loaded."""
     return ReviewTeam.review_view(reviewer.context.market, reviewer.context.organization)
 
 
@@ -2099,10 +2099,9 @@ def next_for_review(market_id: str) -> Response:
         market_id, person, data.get('after'), bool(data.get('includeFollowUps')),
         want=data.get('want'), chosen=Actions.is_chosen(person.email, context.market),
         mine_only=data.get('mineOnly') is True)
-    # Built after the deal, so the card's share is what the deal left.
-    view = _view(reviewer)
-    return jsonify({"application": ApplicantsApi.organizer_view(doc, view) if doc else None,
-                    "dealt": dealt}), 200
+    # The card is claimed after the deal, so its served share is what the deal left.
+    card = ApplicantsApi.organizer_view(doc, _view(reviewer)) if doc else None
+    return jsonify({"application": card, "dealt": dealt}), 200
 
 
 @app.route('/markets/<market_id>/applications/<application_id>/claim', methods=['PUT', 'DELETE'])
