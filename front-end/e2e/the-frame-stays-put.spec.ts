@@ -59,8 +59,9 @@ test.describe('The frame stays put', () => {
   test('on every tab, scrolling leaves the name, the tabs and the whole rail under the app bar', async ({
     authenticatedPage: page,
   }) => {
-    // Short enough that every tab is taller than the window, so each one genuinely scrolls.
-    await page.setViewportSize({ width: 1920, height: 500 });
+    // Short enough that every tab is taller than the window, so each one genuinely scrolls:
+    // Applications, its seed's two applications under its toolbar, fits a 500px window whole.
+    await page.setViewportSize({ width: 1920, height: 400 });
 
     for (const tab of ['setup', 'form', 'applications', 'settings']) {
       await page.goto(marketSetupPath(marketId, tab));
