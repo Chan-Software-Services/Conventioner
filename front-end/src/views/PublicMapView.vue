@@ -124,6 +124,70 @@ function chooseLocation(locationId: string) {
   goTo({ ...place.value, locationId, tableId: keeps ? place.value.tableId : null });
 }
 
+/* Prototype (release walk F6): the backdrop, waves and lumps in the market's own section colours,
+   however many sections it has: each shape takes the next colour in turn, and a market with more
+   colours than shapes gets a lump for each colour over. Blurred whole by CSS, they blend. */
+const BACKDROP_SHAPES = [
+  {
+    d: 'M-100 -100 H 1540 V 150 C 1320 230, 1180 70, 980 150 C 800 220, 700 60, 500 140 C 320 210, 160 90, -100 190 Z',
+    opacity: 0.42,
+  },
+  {
+    d: 'M-100 1000 V 700 C 140 620, 300 760, 480 700 C 660 640, 760 790, 960 730 C 1140 680, 1260 590, 1540 660 V 1000 Z',
+    opacity: 0.42,
+  },
+  {
+    d: 'M1040 -80 C 1300 -60, 1560 60, 1520 300 C 1480 480, 1260 420, 1160 330 C 1060 240, 900 180, 940 60 C 960 -10, 990 -80, 1040 -80 Z',
+    opacity: 0.36,
+  },
+  {
+    d: 'M-120 300 C 60 220, 260 300, 290 440 C 320 580, 170 660, 30 640 C -110 620, -230 400, -120 300 Z',
+    opacity: 0.32,
+  },
+  {
+    d: 'M1160 600 C 1320 540, 1520 620, 1500 780 C 1480 940, 1260 980, 1160 880 C 1070 790, 1040 660, 1160 600 Z',
+    opacity: 0.32,
+  },
+  {
+    d: 'M560 380 C 700 340, 860 400, 840 500 C 820 600, 660 600, 580 540 C 500 480, 460 410, 560 380 Z',
+    opacity: 0.22,
+  },
+];
+
+/** The market's section colours, each once, in the order its halls draw them. */
+const sectionColours = computed(() => {
+  const seen = new Set<string>();
+  for (const location of locations.value) {
+    for (const { paint, tables } of layoutSections(location.layout, location.sections)) {
+      // Mostly the section's light fill with a touch of its edge, mixed in OKLCH, which keeps the
+      // colour clear where OKLab greys it: light and bright, never the edge's brown.
+      if (tables.length) {
+        seen.add(`color-mix(in oklch, ${paintValue(paint.edge)} 22%, ${paintValue(paint.fill)})`);
+      }
+    }
+  }
+  return seen.size ? [...seen] : ['var(--mm-green)'];
+});
+
+const backdrop = computed(() => {
+  const colours = sectionColours.value;
+  const shapes = BACKDROP_SHAPES.map((shape, index) => ({
+    ...shape,
+    colour: colours[index % colours.length]!,
+  }));
+  // A colour no shape reached gets a lump of its own, spread along the window's middle band.
+  for (let index = BACKDROP_SHAPES.length; index < colours.length; index++) {
+    const x = 120 + (((index - BACKDROP_SHAPES.length) * 520) % 1200);
+    const y = 260 + ((index * 170) % 380);
+    shapes.push({
+      d: `M${x} ${y} c 120 -60, 260 0, 240 110 c -20 110, -170 110, -240 50 c -70 -60, -90 -120, 0 -160 Z`,
+      opacity: 0.75,
+      colour: colours[index]!,
+    });
+  }
+  return shapes;
+});
+
 /* Prototype (release walk F6): the page never scrolls, so the window keeps no gutter for a bar
    the page will never show, and the background reaches the window's right edge. */
 const gutterBefore = document.documentElement.style.scrollbarGutter;
@@ -400,28 +464,10 @@ function openVendor(vendor: ListedVendor) {
       >
         <rect width="1440" height="900" class="pm-bg__paper" />
         <path
-          class="pm-bg__mustard"
-          d="M-100 -100 H 1540 V 150 C 1320 230, 1180 70, 980 150 C 800 220, 700 60, 500 140 C 320 210, 160 90, -100 190 Z"
-        />
-        <path
-          class="pm-bg__teal"
-          d="M1040 -80 C 1300 -60, 1560 60, 1520 300 C 1480 480, 1260 420, 1160 330 C 1060 240, 900 180, 940 60 C 960 -10, 990 -80, 1040 -80 Z"
-        />
-        <path
-          class="pm-bg__mustard pm-bg__soft"
-          d="M-120 300 C 60 220, 260 300, 290 440 C 320 580, 170 660, 30 640 C -110 620, -230 400, -120 300 Z"
-        />
-        <path
-          class="pm-bg__teal"
-          d="M-100 1000 V 700 C 140 620, 300 760, 480 700 C 660 640, 760 790, 960 730 C 1140 680, 1260 590, 1540 660 V 1000 Z"
-        />
-        <path
-          class="pm-bg__mustard pm-bg__soft"
-          d="M1160 600 C 1320 540, 1520 620, 1500 780 C 1480 940, 1260 980, 1160 880 C 1070 790, 1040 660, 1160 600 Z"
-        />
-        <path
-          class="pm-bg__teal pm-bg__soft"
-          d="M560 380 C 700 340, 860 400, 840 500 C 820 600, 660 600, 580 540 C 500 480, 460 410, 560 380 Z"
+          v-for="(shape, index) in backdrop"
+          :key="index"
+          :d="shape.d"
+          :style="{ fill: shape.colour, opacity: shape.opacity }"
         />
       </svg>
       <header class="public-map__head">
@@ -873,6 +919,17 @@ function openVendor(vendor: ListedVendor) {
   flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
+}
+
+/* Prototype (release walk F6): the name on a frosted card, so it reads over the gradient; white at
+   two thirds with the gradient blurred behind it, as soft as the dropdowns and the bubble. */
+.public-map__head .public-map__words {
+  padding: var(--space-3) var(--space-6) var(--space-3) var(--space-4);
+  border: 1px solid rgb(255 255 255 / 70%);
+  border-radius: 18px;
+  background: rgb(255 255 255 / 62%);
+  box-shadow: var(--pm-soft-shadow);
+  backdrop-filter: blur(14px);
 }
 
 /* The name in bold Outfit over a honey stroke, drawn as a thick underline behind the letters so it
@@ -1343,14 +1400,12 @@ function openVendor(vendor: ListedVendor) {
 }
 
 /* ── Prototype (release walk F6): a wavy, lumpy gradient behind the page ──
-   The makers' market poster's colours, its warm paper, mustard and bright teal, in waves along the
-   top and bottom and lumps between, blurred together so no edge shows; the layer is larger than
+   Waves along the top and bottom and lumps between, in the market's own section colours (the
+   script deals them), on warm paper, blurred together so no edge shows; the layer is larger than
    the window so the blur never fades at its edges. The sheet in the middle is solid. */
 .public-map {
   position: relative;
   --pm-paper: #ebe8e2;
-  --pm-mustard: #e8a72b;
-  --pm-teal: #4bb39a;
 }
 
 .public-map__head,
@@ -1373,20 +1428,6 @@ function openVendor(vendor: ListedVendor) {
 
 .pm-bg__paper {
   fill: var(--pm-paper);
-}
-
-.pm-bg__mustard {
-  fill: var(--pm-mustard);
-  opacity: 0.5;
-}
-
-.pm-bg__teal {
-  fill: var(--pm-teal);
-  opacity: 0.42;
-}
-
-.pm-bg__soft {
-  opacity: 0.32;
 }
 
 .public-map .public-map__body {
