@@ -965,8 +965,9 @@ function cancelPending() {
  * they are. With an address it asks for room enough to show a useful part of one beside them, and
  * takes a row of its own where the row has less - so at the workspace width the rail is one row, and
  * below it the second row is designed: addresses at its start, actions at its end. With both
- * addresses it asks for room to show each whole, which takes the second row: 34rem fitted beside
- * the spine and squeezed the two into "localhost:5…" (E30/F01/S03).
+ * addresses it asks for room to show each whole, so it stays beside the spine only where both whole
+ * addresses and the actions fit there, and takes the second row for a long address: 34rem fitted
+ * beside the spine and squeezed the two into "localhost:5…" (E30/F01/S03).
  */
 .phase-rail-end {
   display: flex;
