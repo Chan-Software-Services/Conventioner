@@ -39,10 +39,10 @@ The page keeps the reads, the address, the title, the images and the state, and 
 
 ## The route
 
-**The market page, `/:marketSlug`, renders `PublicMapView` as its whole output while the vendor page's read says `mapOpen`**, keyed by the slug; that route is `public` and `vendorFacing` ([every market page has an address](../conventions/every-market-page-has-an-address.md)).
+**The market page, `/:marketSlug`, shows `PublicMapView` as its map while the vendor page's read says `mapOpen`**, and otherwise the application call or a notice ([ADR 0039](../../adr/0039-a-markets-address-is-its-public-page.md)), keyed by the slug; that route is `public` and `vendorFacing` ([every market page has an address](../conventions/every-market-page-has-an-address.md)).
 As a public page it fits a phone, and as a vendor-facing one the bar shows the logo and the market page's "Vendor sign-in" alone, to an organizer too ([the app bar](app-bar.md)).
 A 404 from the read, which the server answers alike for a slug naming no market and for a market whose map is not open, shows the app's "Page not found", and the page tells the bar its slug answered absent (`vendorPageAnswered`), as the vendor page does, so an organizer keeps the full bar there.
-A read that never answered says "The map could not be loaded." with "Try again"; the bar stands apart meanwhile.
+A read that never answered says "This page could not be loaded. Check your connection and try again." with "Try again"; the bar stands apart meanwhile.
 The browser's title is "<Market name> map" while the page is open, and is given back as it goes.
 The market page keys it by the slug, and reads a market afresh in "Loading…" before choosing its map, so a move in the app from one market's map to another's mounts a new page that reads its own; the page reads its market once, again only on Try again, keeps only its latest read, and drops one that answers after it has gone.
 `/<market-slug>/map` is a redirect to the market page with the query and the hash, so a link made to the map's old address opens the same day, location, table and half; only the redirect's own tests open it.
