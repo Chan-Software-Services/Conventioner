@@ -50,6 +50,12 @@ const LOCALLY_DEFINED = new Set([
   '--scroll-box-shade',
   // A picker row's space over and under, read by the row and its tick alike (SearchPicker).
   '--row-inset',
+  // The bubble's tail's offset, set on the bubble by its placement and read by its tail
+  // (PublicMapBubble).
+  '--tail-x',
+  // How far the phone's card reaches over the vendor list, set on the public map's panel and read
+  // by the list's scroll padding (PublicMapView, PublicMapVendors).
+  '--public-map-card-reach',
 ]);
 
 function sourceFiles(dir: string, extensions: string[]): string[] {
@@ -123,7 +129,10 @@ describe('the scale exists as tokens', () => {
     '--radius-control',
     '--radius-card',
     '--radius-pill',
+    '--radius-sheet',
+    '--radius-bubble',
     '--shadow-card',
+    '--shadow-float',
   ];
 
   it('defines every step the design language names', () => {

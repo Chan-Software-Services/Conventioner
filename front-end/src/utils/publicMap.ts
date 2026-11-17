@@ -50,8 +50,8 @@ export async function fetchPublicMapImage(slug: string, locationId: string): Pro
   return data as Blob;
 }
 
-/** What the card says before a pick, a vendor with no public name (D27), and a failed read. */
-export const PICK_A_TABLE = 'Press a table, or find a vendor below.';
+/** What the page says of a vendor with no public name (D27), of a day with no vendor listed, and of
+ *  a failed read. */
 export const DETAILS_NOT_LISTED = 'A vendor is at this table. Their details are not listed.';
 export const NO_VENDORS_LISTED = 'No vendors are listed for this day yet.';
 export const MAP_COULD_NOT_LOAD = 'The map could not be loaded.';
@@ -62,15 +62,27 @@ export const freeHalfOn = (day: string) => `This half is free on ${day}.`;
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/**
- * A market date as a visitor's day button says it: "Wed 18 Nov". A market date is a calendar day,
- * so it is read in UTC and never moved by the visitor's timezone (`utils/utils.ts` says why).
- */
-export function dayInWords(date: string): string {
+/** A market date as a day of the calendar, or null for text that is no date. A market date is a
+ *  calendar day, so it is read in UTC and never moved by the visitor's timezone (`utils/utils.ts`
+ *  says why). */
+function calendarDay(date: string): Date | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  if (!match) return date;
-  const day = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return match
+    ? new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
+    : null;
+}
+
+/** A market date as the card says it: "Wed 18 Nov". */
+export function dayInWords(date: string): string {
+  const day = calendarDay(date);
+  if (!day) return date;
   return `${WEEKDAYS[day.getUTCDay()]} ${day.getUTCDate()} ${MONTHS[day.getUTCMonth()]}`;
+}
+
+/** A market date as the day select offers it: "Nov 18". */
+export function shortDay(date: string): string {
+  const day = calendarDay(date);
+  return day ? `${MONTHS[day.getUTCMonth()]} ${day.getUTCDate()}` : date;
 }
 
 /**
@@ -82,19 +94,26 @@ export function openingDate(dates: readonly string[], asked: unknown, today: str
   return dates.find((date) => date >= today) ?? dates[dates.length - 1] ?? '';
 }
 
-/** Where on the map the page stands: the day, the open location, and the table picked or none. */
+/** A side of a shared table, picked alone (T465). */
+export type PickedHalf = 'left' | 'right';
+
+/** Where on the map the page stands: the day, the open location, the table picked or none, and
+ *  the half of it picked alone or none. */
 export interface MapPlace {
   date: string;
   locationId: string;
   tableId: string | null;
+  half: PickedHalf | null;
 }
 
 const asString = (value: unknown) => (typeof value === 'string' ? value : undefined);
 
 /**
- * The place the address names (`?date=&location=&table=`), every value it does not know falling
- * back to the default without an error: the opening day, the asked table's own location or the
- * first, and no pick for a table that is not at the open location.
+ * The place the address names (`?date=&location=&table=&half=`), every value it does not know
+ * falling back to the default without an error: the opening day, the asked table's own location or
+ * the first, no pick for a table that is not at the open location, and no half that is not `left`
+ * or `right` or that names no picked table. A half is read whatever the day: `shownParts` shows the
+ * whole table on a day it is not split.
  */
 export function mapPlace(
   map: Pick<PublicMapAnswer, 'dates' | 'locations'>,
@@ -113,10 +132,13 @@ export function mapPlace(
   const listed = map.locations.find((location) => location.id === askedLocation);
   const ofTable = map.locations.find((location) => holds(location.id, askedTable));
   const locationId = (listed ?? ofTable ?? map.locations[0])?.id ?? '';
+  const tableId = askedTable && holds(locationId, askedTable) ? askedTable : null;
+  const askedHalf = asString(query.half);
   return {
     date: openingDate(map.dates, query.date, today),
     locationId,
-    tableId: askedTable && holds(locationId, askedTable) ? askedTable : null,
+    tableId,
+    half: tableId && (askedHalf === 'left' || askedHalf === 'right') ? askedHalf : null,
   };
 }
 
@@ -235,4 +257,14 @@ export function tableCard(
         ]
       : [{ side: 'whole', seat: whole }],
   };
+}
+
+/**
+ * The parts of a card shown for the half picked (T465): that half alone when the table is split on
+ * the card's day, a half with nobody at it free; else the card as it is, so a half the table is not
+ * split into that day (an old link, a day changed) shows the whole table.
+ */
+export function shownParts(card: TableCard, half: PickedHalf | null): TableCard {
+  const part = half ? card.halves.find((h) => h.side === half) : undefined;
+  return part ? { ...card, halves: [part] } : card;
 }

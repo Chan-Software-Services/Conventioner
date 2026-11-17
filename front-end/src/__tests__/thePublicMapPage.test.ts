@@ -8,6 +8,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import type { PublicMapAnswer } from '@/components/daymap/dayMap';
+import { publicDayLocations } from '@/components/daymap/dayMap';
+import DayMap from '@/components/daymap/DayMap.vue';
+import PublicMapBackdrop from '@/components/publicmap/PublicMapBackdrop.vue';
+import PublicMapBubble from '@/components/publicmap/PublicMapBubble.vue';
+import PublicMapTableCard from '@/components/publicmap/PublicMapTableCard.vue';
+import PublicMapVendors from '@/components/publicmap/PublicMapVendors.vue';
+import { tablePaints } from '@/components/publicmap/publicMapPaint';
 import { standsApart } from '@/utils/currentPlace';
 import {
   dayInWords,
@@ -15,11 +22,15 @@ import {
   mapListing,
   mapPlace,
   openingDate,
+  shortDay,
+  shownParts,
   tableCard,
   websiteLink,
   type PublicMapRead,
+  type TableCard,
 } from '@/utils/publicMap';
 import PublicMapView from '@/views/PublicMapView.vue';
+import { ANSWER, TODAY, TOMORROW } from './support/publicMapAnswer';
 
 const fetchPublicMap = vi.fn<(slug: string) => Promise<PublicMapRead>>();
 const fetchPublicMapImage = vi.fn<(slug: string, locationId: string) => Promise<Blob>>();
@@ -56,108 +67,6 @@ vi.mock('vue-router', async () => {
   };
 });
 
-const TODAY = '2099-06-05';
-const TOMORROW = '2099-06-06';
-
-const table = (id: string, sectionId: string, number: number, xMm: number) => ({
-  id,
-  sectionId,
-  number,
-  tableTypeId: 'type-6ft',
-  xMm,
-  yMm: 3000,
-  rotation: 0,
-});
-
-/** Two halls; Gold row 2 shared as its left and right halves; one vendor with no public name. */
-const ANSWER: PublicMapAnswer = {
-  marketName: 'Harbour Night Market',
-  dates: [TODAY, TOMORROW],
-  tableTypes: [{ id: 'type-6ft', name: 'Standard 6 ft', widthMm: 1830, depthMm: 760 }],
-  locations: [
-    {
-      id: 'loc-upper',
-      name: 'Upper Hall',
-      sections: [{ id: 'sec-gold', name: 'Gold row' }],
-      layout: {
-        id: 'fp-upper',
-        locationId: 'loc-upper',
-        imageWidth: 800,
-        imageHeight: 600,
-        scalePxPerUnit: 800 / 30_000,
-        hasImage: true,
-        tables: [
-          table('g1', 'sec-gold', 1, 5000),
-          table('g2', 'sec-gold', 2, 8000),
-          table('g3', 'sec-gold', 3, 11_000),
-          table('g4', 'sec-gold', 4, 14_000),
-        ],
-        zones: [],
-        sectionStyles: [],
-      },
-    },
-    {
-      id: 'loc-lower',
-      name: 'Lower Hall',
-      sections: [{ id: 'sec-silver', name: 'Silver aisle' }],
-      layout: {
-        id: 'fp-lower',
-        locationId: 'loc-lower',
-        imageWidth: 800,
-        imageHeight: 400,
-        scalePxPerUnit: 800 / 20_000,
-        hasImage: false,
-        tables: [table('s1', 'sec-silver', 1, 4000)],
-        zones: [],
-        sectionStyles: [],
-      },
-    },
-  ],
-  seats: [
-    {
-      date: TODAY,
-      tableId: 'g1',
-      half: 'whole',
-      name: 'Kiln & Co',
-      website: 'https://www.kiln-and-co.example/shop',
-      instagram: 'example_kiln',
-    },
-    {
-      date: TODAY,
-      tableId: 'g2',
-      half: 'right',
-      name: 'Bee Candles',
-      website: null,
-      instagram: null,
-    },
-    {
-      date: TODAY,
-      tableId: 'g2',
-      half: 'left',
-      name: 'Acme Ceramics',
-      website: null,
-      instagram: 'example_acme',
-    },
-    { date: TODAY, tableId: 'g3', half: 'whole', name: null, website: null, instagram: null },
-    {
-      date: TODAY,
-      tableId: 's1',
-      half: 'whole',
-      name: 'Cog Prints',
-      website: null,
-      instagram: null,
-    },
-    {
-      date: TOMORROW,
-      tableId: 'g4',
-      half: 'whole',
-      name: 'Dune Glass',
-      website: null,
-      instagram: null,
-    },
-  ],
-};
-
 const found = (map: PublicMapAnswer = ANSWER): PublicMapRead => ({
   map,
   notFound: false,
@@ -193,10 +102,22 @@ describe('a day in words', () => {
   });
 });
 
+describe('a day as the day select says it', () => {
+  it('is its month and day, read in UTC', () => {
+    expect(shortDay('2026-11-17')).toBe('Nov 17');
+    expect(shortDay('2026-01-01')).toBe('Jan 1');
+    expect(shortDay('2026-12-31')).toBe('Dec 31');
+  });
+
+  it('is the text as it is when it is no date', () => {
+    expect(shortDay('soon')).toBe('soon');
+  });
+});
+
 describe('the place the address names', () => {
   it('is the day, the location and the table it carries', () => {
     expect(mapPlace(ANSWER, { date: TOMORROW, location: 'loc-lower', table: 's1' }, TODAY)).toEqual(
-      { date: TOMORROW, locationId: 'loc-lower', tableId: 's1' },
+      { date: TOMORROW, locationId: 'loc-lower', tableId: 's1', half: null },
     );
   });
 
@@ -205,20 +126,50 @@ describe('the place the address names', () => {
       date: TODAY,
       locationId: 'loc-lower',
       tableId: 's1',
+      half: null,
     });
   });
 
   it('falls back from every value it does not know, without an error', () => {
     expect(
       mapPlace(ANSWER, { date: '1999-01-01', location: 'nowhere', table: 'x9' }, TODAY),
-    ).toEqual({ date: TODAY, locationId: 'loc-upper', tableId: null });
+    ).toEqual({ date: TODAY, locationId: 'loc-upper', tableId: null, half: null });
     // A table at another location than the open one is no pick there.
     expect(mapPlace(ANSWER, { location: 'loc-upper', table: 's1' }, TODAY)).toEqual({
       date: TODAY,
       locationId: 'loc-upper',
       tableId: null,
+      half: null,
     });
     expect(mapPlace(ANSWER, { date: ['a', 'b'] as unknown as string }, TODAY).date).toBe(TODAY);
+  });
+
+  it('carries the half named beside a table, left or right (T465)', () => {
+    expect(mapPlace(ANSWER, { table: 'g2', half: 'left' }, TODAY).half).toBe('left');
+    expect(mapPlace(ANSWER, { table: 'g2', half: 'right' }, TODAY).half).toBe('right');
+    // Read whatever the day: the card shows the whole table on a day it is not split.
+    expect(mapPlace(ANSWER, { date: TOMORROW, table: 'g2', half: 'right' }, TODAY).half).toBe(
+      'right',
+    );
+  });
+
+  it('reads no half that is no side, nor one with no table picked, without an error', () => {
+    for (const half of ['middle', 'whole', '', 'LEFT', ['left', 'right']]) {
+      expect(mapPlace(ANSWER, { table: 'g2', half: half as unknown as string }, TODAY)).toEqual({
+        date: TODAY,
+        locationId: 'loc-upper',
+        tableId: 'g2',
+        half: null,
+      });
+    }
+    expect(mapPlace(ANSWER, { half: 'left' }, TODAY).half).toBeNull();
+    expect(mapPlace(ANSWER, { table: 'x9', half: 'left' }, TODAY).half).toBeNull();
+    expect(mapPlace(ANSWER, { location: 'loc-lower', table: 'g2', half: 'left' }, TODAY)).toEqual({
+      date: TODAY,
+      locationId: 'loc-lower',
+      tableId: null,
+      half: null,
+    });
   });
 });
 
@@ -325,10 +276,41 @@ describe("a table's card", () => {
   });
 });
 
+describe('the parts of a card shown for a half picked (T465)', () => {
+  const shared = tableCard(ANSWER, TODAY, 'g2')!;
+  const sides = (card: TableCard) => card.halves.map((h) => [h.side, h.seat?.name]);
+
+  it('are the half alone when the table is split that day', () => {
+    expect(sides(shownParts(shared, 'left'))).toEqual([['left', 'Acme Ceramics']]);
+    expect(sides(shownParts(shared, 'right'))).toEqual([['right', 'Bee Candles']]);
+    expect(shownParts(shared, 'right').code).toBe('Gold row 2');
+  });
+
+  it('are every part with no half picked', () => {
+    expect(shownParts(shared, null)).toEqual(shared);
+  });
+
+  it('are the whole table when it is not split that day, as an old link names it', () => {
+    const whole = tableCard(ANSWER, TOMORROW, 'g2')!;
+    expect(shownParts(whole, 'right')).toEqual(whole);
+    const kiln = tableCard(ANSWER, TODAY, 'g1')!;
+    expect(shownParts(kiln, 'left')).toEqual(kiln);
+  });
+
+  it('are a free half alone, with nobody at it', () => {
+    const rightFree = {
+      ...ANSWER,
+      seats: ANSWER.seats.filter((s) => !(s.tableId === 'g2' && s.half === 'right')),
+    };
+    expect(sides(shownParts(tableCard(rightFree, TODAY, 'g2')!, 'right'))).toEqual([
+      ['right', undefined],
+    ]);
+  });
+});
+
 // ── The page ─────────────────────────────────────────────────────────────────
 
 let wrapper: VueWrapper | null = null;
-const scrolled = vi.fn();
 
 beforeEach(() => {
   routing.route.query = {};
@@ -341,8 +323,6 @@ beforeEach(() => {
   vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:map-image');
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
   vi.setSystemTime(new Date(2099, 5, 5, 12));
-  scrolled.mockClear();
-  Element.prototype.scrollIntoView = scrolled;
   // The map's box, 1,200 by 900 px.
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
     if (this.getAttribute('data-testid') !== 'layout-map') return new DOMRect(0, 0, 0, 0);
@@ -367,6 +347,10 @@ async function open(read: PublicMapRead = found(), query: Record<string, string>
 }
 
 const card = () => wrapper!.get('[data-testid="public-map-card"]');
+const daySelect = () => wrapper!.get<HTMLSelectElement>('[data-testid="public-map-day-select"]');
+const locationSelect = () =>
+  wrapper!.get<HTMLSelectElement>('[data-testid="public-map-location-select"]');
+const PAINTS = tablePaints(publicDayLocations(ANSWER, () => ''));
 const pressTable = async (id: string, half?: 'left' | 'right') => {
   const target = half
     ? wrapper!.get(`[data-table-id="${id}"] [data-half="${half}"]`)
@@ -404,13 +388,16 @@ describe('a read that failed', () => {
 });
 
 describe('the page', () => {
-  it('holds the heading, the days, the map with its legend, the card and the list, in order', async () => {
+  it('holds the heading, the day and hall selects, the hall and the list, in order', async () => {
     const page = await open();
     const order = [
       'public-map-heading',
-      'public-map-days',
+      'public-map-subtitle',
+      'public-map-day-select',
+      'public-map-location-select',
+      'public-map-hall',
       'day-map',
-      'public-map-card',
+      'public-map-legend',
       'public-map-vendors',
     ].map((id) => page.get(`[data-testid="${id}"]`).element);
     for (let i = 1; i < order.length; i++) {
@@ -419,12 +406,43 @@ describe('the page', () => {
       ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     }
     expect(page.get('[data-testid="public-map-heading"]').element.tagName).toBe('H1');
-    expect(page.get('[data-testid="public-map-subtitle"]').text()).toBe('Map');
-    expect(page.findAll('[data-testid="day-map-legend-item"]').map((i) => i.text())).toEqual([
-      'Taken',
-      'Free',
-    ]);
+    expect(page.get('[data-testid="public-map-subtitle"]').text()).toBe('Vendor map');
+    expect(page.find('[data-testid="public-map-days"]').exists()).toBe(false);
     expect(document.title).toBe('Harbour Night Market map');
+  });
+
+  it('draws the hall filling its box, with no switch and no legend list of its own', async () => {
+    const page = await open();
+    const hall = page.get('[data-testid="public-map-hall"]');
+    expect(hall.get('[data-testid="day-map"]').classes()).toContain('day-map--fills');
+    expect(page.find('[data-testid="day-map-locations"]').exists()).toBe(false);
+    expect(page.find('[data-testid="day-map-legend"]').exists()).toBe(false);
+    expect(page.getComponent(PublicMapBackdrop).props('locations')).toEqual(
+      publicDayLocations(ANSWER, () => 'blob:map-image'),
+    );
+  });
+
+  it("names the open hall's sections in the legend, and a free table on a day it has one", async () => {
+    const page = await open();
+    const items = () => page.findAll('[data-testid="public-map-legend-item"]');
+    expect(page.get('[data-testid="public-map-legend"]').attributes('aria-label')).toBe('Legend');
+    // Today Gold row 4 is free.
+    expect(items().map((item) => [item.attributes('data-kind'), item.text()])).toEqual([
+      ['section', 'Gold row'],
+      ['free', 'Free table'],
+    ]);
+    // Lower Hall's one table is taken today: no "Free table".
+    await locationSelect().setValue('loc-lower');
+    await flushPromises();
+    expect(items().map((item) => item.text())).toEqual(['Silver aisle']);
+  });
+
+  it('marks <html> as filling the window while it is mounted', async () => {
+    const page = await open();
+    expect(document.documentElement.classList.contains('fills-the-window')).toBe(true);
+    page.unmount();
+    wrapper = null;
+    expect(document.documentElement.classList.contains('fills-the-window')).toBe(false);
   });
 
   it('gives the browser its own title back on leaving', async () => {
@@ -434,11 +452,35 @@ describe('the page', () => {
     expect(document.title).toBe('Conventioner');
   });
 
-  it('opens today, its day button pressed, each day in words', async () => {
+  it('opens today in the day select, each market day read short', async () => {
     const page = await open();
-    const days = page.findAll('[data-testid="public-map-day"]');
-    expect(days.map((d) => d.text())).toEqual(['Fri 5 Jun', 'Sat 6 Jun']);
-    expect(days.map((d) => d.attributes('aria-pressed'))).toEqual(['true', 'false']);
+    expect(daySelect().element.value).toBe(TODAY);
+    expect(daySelect().attributes('name')).toBe('public-map-day');
+    expect(daySelect().element.labels?.[0]?.textContent?.trim()).toBe('Market day');
+    expect(
+      daySelect()
+        .findAll('option')
+        .map((o) => [o.attributes('value'), o.text()]),
+    ).toEqual([
+      [TODAY, 'Jun 5'],
+      [TOMORROW, 'Jun 6'],
+    ]);
+    expect(page.find('[data-testid="public-map-day"]').exists()).toBe(false);
+  });
+
+  it('offers the halls in the location select, and no select for one hall', async () => {
+    const page = await open();
+    expect(locationSelect().element.value).toBe('loc-upper');
+    expect(locationSelect().attributes('name')).toBe('public-map-location');
+    expect(locationSelect().element.labels?.[0]?.textContent?.trim()).toBe('Location');
+    expect(
+      locationSelect()
+        .findAll('option')
+        .map((o) => o.text()),
+    ).toEqual(['Upper Hall', 'Lower Hall']);
+    page.unmount();
+    await open(found({ ...ANSWER, locations: ANSWER.locations.slice(0, 1) }));
+    expect(wrapper!.find('[data-testid="public-map-location-select"]').exists()).toBe(false);
   });
 
   it("reads the open location's image through the client, as the layout page does", async () => {
@@ -447,9 +489,10 @@ describe('the page', () => {
     expect(page.get('[data-testid="layout-map-image"]').attributes('href')).toBe('blob:map-image');
   });
 
-  it('says what to do before a table is picked', async () => {
-    await open();
-    expect(card().text()).toBe('Press a table, or find a vendor below.');
+  it('shows no card before a table is picked', async () => {
+    const page = await open();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(page.text()).not.toContain('Press a table');
   });
 
   it("reads another market's map when the address moves to it, the page kept", async () => {
@@ -485,98 +528,187 @@ describe('the page', () => {
 });
 
 describe('pressing a table', () => {
-  it('writes it to the address, and the card names its vendor and their links', async () => {
-    await open();
+  it("writes it to the address, and the card is mounted with the page's place", async () => {
+    const page = await open();
     await pressTable('g1');
     expect(routing.replace).toHaveBeenLastCalledWith({
       query: { date: TODAY, location: 'loc-upper', table: 'g1' },
     });
+    const part = page.getComponent(PublicMapTableCard);
+    expect(part.props()).toEqual({
+      card: tableCard(ANSWER, TODAY, 'g1'),
+      day: 'Fri 5 Jun',
+      hallName: 'Upper Hall',
+      paint: PAINTS.get('g1'),
+    });
     expect(card().get('h2').text()).toBe('Table Gold row 1');
     expect(card().text()).toContain('Kiln & Co');
-    const links = card().findAll('a');
-    expect(links.map((a) => [a.text(), a.attributes('href')])).toEqual([
-      ['www.kiln-and-co.example', 'https://www.kiln-and-co.example/shop'],
-      ['@example_kiln', 'https://www.instagram.com/example_kiln/'],
-    ]);
-    for (const link of links) {
-      expect(link.attributes('target')).toBe('_blank');
-      expect(link.attributes('rel')).toBe('noopener noreferrer');
-    }
-    expect(card().text()).toContain('Website');
-    expect(card().text()).toContain('Instagram');
   });
 
-  it('lists both vendors of a shared table, left then right, whichever half is pressed', async () => {
-    await open();
+  it("picks a shared table's seated half alone, its side written beside the table (T465)", async () => {
+    const page = await open();
     for (const half of ['left', 'right'] as const) {
       await pressTable('g2', half);
-      const halves = card().findAll('[data-testid="public-map-card-half"]');
-      expect(halves.map((h) => h.get('h3').text())).toEqual(['Left half', 'Right half']);
-      expect(halves[0].text()).toContain('Acme Ceramics');
-      expect(halves[0].get('a').text()).toBe('@example_acme');
-      expect(halves[1].text()).toContain('Bee Candles');
-      expect(halves[1].find('a').exists()).toBe(false);
+      expect(routing.replace).toHaveBeenLastCalledWith({
+        query: { date: TODAY, location: 'loc-upper', table: 'g2', half },
+      });
+      expect(page.getComponent(PublicMapTableCard).props('card')).toEqual(
+        shownParts(tableCard(ANSWER, TODAY, 'g2')!, half),
+      );
+      expect(page.getComponent(DayMap).props('picked')).toBe(`g2:${half}`);
+      expect(page.getComponent(PublicMapVendors).props('pickedSeatKey')).toBe(`g2:${half}`);
+      expect(page.getComponent(PublicMapBubble).props('anchor')).toEqual({ tableId: 'g2', half });
     }
+    expect(card().findAll('[data-testid="public-map-card-half"]')).toHaveLength(1);
+    expect(card().get('h3').text()).toBe('Right half');
+    expect(card().text()).toContain('Bee Candles');
+    expect(card().text()).not.toContain('Acme Ceramics');
   });
 
-  it('says a half with nobody is free on the day, in words, beside the half that is taken', async () => {
-    await open({
-      map: {
-        ...ANSWER,
-        seats: ANSWER.seats.filter((s) => !(s.tableId === 'g2' && s.half === 'right')),
-      },
-      notFound: false,
-      failed: false,
+  it('writes no half for a whole table, and drops the half picked before', async () => {
+    const page = await open(found(), { table: 'g2', half: 'left' });
+    await pressTable('g1');
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper', table: 'g1' },
     });
-    await pressTable('g2', 'left');
-    const halves = card().findAll('[data-testid="public-map-card-half"]');
-    expect(halves.map((h) => h.get('h3').text())).toEqual(['Left half', 'Right half']);
-    expect(halves[0].text()).toContain('Acme Ceramics');
-    expect(halves[1].text()).toBe('Right halfThis half is free on Fri 5 Jun.');
+    expect(page.getComponent(DayMap).props('picked')).toBe('g1');
+    expect(page.getComponent(PublicMapVendors).props('pickedSeatKey')).toBeNull();
+    expect(page.getComponent(PublicMapBubble).props('anchor')).toEqual({
+      tableId: 'g1',
+      half: 'whole',
+    });
   });
 
-  it('says a vendor with no public name is there, and nothing of them', async () => {
-    await open();
-    await pressTable('g3');
-    expect(card().text()).toBe(
-      'Table Gold row 3A vendor is at this table. Their details are not listed.',
-    );
-  });
-
-  it('says a free table is free on the day, in words', async () => {
-    await open({ map: ANSWER, notFound: false, failed: false }, { date: TOMORROW });
-    await pressTable('g1');
-    expect(card().text()).toBe('Table Gold row 1This table is free on Sat 6 Jun.');
-  });
-
-  it('renders nothing a vendor typed as markup', async () => {
-    const hostile = {
+  it('opens the whole table for a free half pressed, both its parts', async () => {
+    const rightFree = {
       ...ANSWER,
-      seats: [
-        {
-          date: TODAY,
-          tableId: 'g1',
-          half: 'whole' as const,
-          name: '<img src=x onerror=alert(1)>Shop',
-          website: 'javascript:alert(1)',
-          instagram: 'a"b',
-        },
-      ],
+      seats: ANSWER.seats.filter((s) => !(s.tableId === 'g2' && s.half === 'right')),
     };
-    await open(found(hostile));
-    await pressTable('g1');
-    expect(card().find('img').exists()).toBe(false);
-    expect(card().text()).toContain('<img src=x onerror=alert(1)>Shop');
-    expect(card().find('a').exists()).toBe(false);
+    const page = await open(found(rightFree));
+    await pressTable('g2', 'right');
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper', table: 'g2' },
+    });
+    expect(page.getComponent(PublicMapTableCard).props('card')).toEqual(
+      tableCard(rightFree, TODAY, 'g2'),
+    );
+    expect(page.getComponent(DayMap).props('picked')).toBe('g2');
+    expect(page.getComponent(PublicMapVendors).props('pickedSeatKey')).toBeNull();
+  });
+});
+
+describe('a half in the address (T465)', () => {
+  it('opens that half alone, outlined, and its vendor ringed', async () => {
+    const page = await open(found(), { table: 'g2', half: 'left' });
+    expect(page.getComponent(PublicMapTableCard).props('card')).toEqual(
+      shownParts(tableCard(ANSWER, TODAY, 'g2')!, 'left'),
+    );
+    expect(card().get('h3').text()).toBe('Left half');
+    expect(page.getComponent(DayMap).props('picked')).toBe('g2:left');
+    expect(page.getComponent(PublicMapVendors).props('pickedSeatKey')).toBe('g2:left');
+  });
+
+  it('shows the whole table on a day it is not split, outlined whole, with no error', async () => {
+    const page = await open(found(), { date: TOMORROW, table: 'g2', half: 'right' });
+    expect(page.getComponent(PublicMapTableCard).props('card')).toEqual(
+      tableCard(ANSWER, TOMORROW, 'g2'),
+    );
+    expect(page.getComponent(DayMap).props('picked')).toBe('g2');
+    expect(page.getComponent(PublicMapVendors).props('pickedSeatKey')).toBeNull();
+    expect(page.getComponent(PublicMapBubble).props('anchor')).toEqual({
+      tableId: 'g2',
+      half: 'whole',
+    });
+    expect(page.find('[role="alert"]').exists()).toBe(false);
+  });
+
+  it('shows the whole table for a half that is no side, with no error', async () => {
+    const page = await open(found(), { table: 'g2', half: 'middle' });
+    expect(page.getComponent(PublicMapTableCard).props('card')).toEqual(
+      tableCard(ANSWER, TODAY, 'g2'),
+    );
+    expect(page.getComponent(DayMap).props('picked')).toBe('g2');
+    expect(page.find('[role="alert"]').exists()).toBe(false);
+  });
+
+  it('outlines the whole table for a half with nobody at it, its card saying it is free', async () => {
+    const rightFree = {
+      ...ANSWER,
+      seats: ANSWER.seats.filter((s) => !(s.tableId === 'g2' && s.half === 'right')),
+    };
+    const page = await open(found(rightFree), { table: 'g2', half: 'right' });
+    expect(card().text()).toContain('Right half');
+    expect(card().text()).toContain('This half is free on Fri 5 Jun.');
+    expect(page.getComponent(DayMap).props('picked')).toBe('g2');
+    expect(page.getComponent(PublicMapVendors).props('pickedSeatKey')).toBeNull();
+    expect(page.getComponent(PublicMapBubble).props('anchor')).toEqual({
+      tableId: 'g2',
+      half: 'right',
+    });
+  });
+
+  it('rings no vendor in the list for a half with nobody at it, though the other half is seated', async () => {
+    const rightFree = {
+      ...ANSWER,
+      seats: ANSWER.seats.filter((s) => !(s.tableId === 'g2' && s.half === 'right')),
+    };
+    const page = await open(found(rightFree), { table: 'g2', half: 'right' });
+    const rows = page.findAll('[data-testid="public-map-vendor"]');
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.filter((row) => row.attributes('aria-current') === 'true')).toHaveLength(0);
+  });
+
+  it('keeps the half on a change of day', async () => {
+    await open(found(), { location: 'loc-upper', table: 'g2', half: 'right' });
+    await daySelect().setValue(TOMORROW);
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TOMORROW, location: 'loc-upper', table: 'g2', half: 'right' },
+    });
+  });
+
+  it('drops the half with the table, on a change of hall and on Close', async () => {
+    await open(found(), { table: 'g2', half: 'right' });
+    await locationSelect().setValue('loc-lower');
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-lower' },
+    });
+    routing.route.query = { table: 'g2', half: 'right' };
+    await flushPromises();
+    await wrapper!.get('[data-testid="public-map-card-close"]').trigger('click');
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper' },
+    });
+  });
+
+  it('keeps every other key of the query, and writes no half key it did not read', async () => {
+    await open(found(), { table: 'g2', half: 'middle', utm: 'qr' });
+    await daySelect().setValue(TOMORROW);
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { utm: 'qr', date: TOMORROW, location: 'loc-upper', table: 'g2' },
+    });
+  });
+
+  it("Close from a half's card gives the focus back to that half", async () => {
+    const page = await open(found(), { table: 'g2', half: 'right' });
+    const close = page.get<HTMLButtonElement>('[data-testid="public-map-card-close"]');
+    close.element.focus();
+    await close.trigger('click');
+    await flushPromises();
+    expect(document.activeElement).toBe(
+      page.get('[data-table-id="g2"] [data-half="right"]').element,
+    );
   });
 });
 
 describe('the address', () => {
   it('opens the day, the location and the table it carries', async () => {
     const page = await open(found(), { date: TOMORROW, location: 'loc-lower', table: 's1' });
-    expect(page.get('[data-testid="public-map-day"][aria-pressed="true"]').text()).toBe(
-      'Sat 6 Jun',
-    );
+    expect(daySelect().element.value).toBe(TOMORROW);
+    expect(locationSelect().element.value).toBe('loc-lower');
     expect(page.get('[data-testid="layout-map"]').attributes('aria-label')).toBe(
       'Lower Hall layout, 1 table',
     );
@@ -586,29 +718,27 @@ describe('the address', () => {
 
   it('falls back from values it does not know, saying no error', async () => {
     const page = await open(found(), { date: 'later', location: 'nowhere', table: 'x9' });
-    expect(page.get('[data-testid="public-map-day"][aria-pressed="true"]').text()).toBe(
-      'Fri 5 Jun',
-    );
+    expect(daySelect().element.value).toBe(TODAY);
     expect(page.get('[data-testid="layout-map"]').attributes('aria-label')).toBe(
       'Upper Hall layout, 4 tables',
     );
-    expect(card().text()).toBe('Press a table, or find a vendor below.');
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
     expect(page.find('[role="alert"]').exists()).toBe(false);
   });
 
   it('changes the day with replace, keeping the location and the table', async () => {
-    const page = await open(found(), { location: 'loc-upper', table: 'g1' });
-    await page.findAll('[data-testid="public-map-day"]')[1].trigger('click');
+    await open(found(), { location: 'loc-upper', table: 'g1' });
+    await daySelect().setValue(TOMORROW);
     await flushPromises();
     expect(routing.replace).toHaveBeenLastCalledWith({
       query: { date: TOMORROW, location: 'loc-upper', table: 'g1' },
     });
-    expect(card().text()).toBe('Table Gold row 1This table is free on Sat 6 Jun.');
+    expect(card().text()).toBe('Table Gold row 1Upper HallThis table is free on Sat 6 Jun.');
   });
 
   it('changes the location with replace, dropping a table that is not there', async () => {
-    const page = await open(found(), { table: 'g1' });
-    await page.get('[data-testid="day-map-locations"] button:nth-child(2)').trigger('click');
+    await open(found(), { table: 'g1' });
+    await locationSelect().setValue('loc-lower');
     await flushPromises();
     expect(routing.replace).toHaveBeenLastCalledWith({
       query: { date: TODAY, location: 'loc-lower' },
@@ -618,34 +748,24 @@ describe('the address', () => {
 });
 
 describe("the list of the day's vendors", () => {
-  const rows = () => wrapper!.findAll('[data-testid="public-map-vendors-row"]');
-
-  it('lists the named vendors by name, each with its table and location, and counts them', async () => {
-    const page = await open();
-    expect(rows().map((r) => r.text())).toEqual([
-      'Acme CeramicsTable Gold row 2, Upper Hall',
-      'Bee CandlesTable Gold row 2, Upper Hall',
-      'Cog PrintsTable Silver aisle 1, Lower Hall',
-      'Kiln & CoTable Gold row 1, Upper Hall',
-    ]);
-    expect(page.get('[data-testid="public-map-vendors-count"]').text()).toBe('4 vendors');
-    expect(page.get('label[for]').text()).toBe('Find a vendor');
-  });
-
-  it('narrows as the find field is typed in, and does nothing on Enter', async () => {
-    const page = await open();
-    const find = page.get('[data-testid="public-map-vendors-find"]');
-    await find.setValue('cog');
+  it("is mounted with the page's day and table", async () => {
+    const page = await open(found(), { table: 'g2' });
+    expect(page.getComponent(PublicMapVendors).props()).toEqual({
+      map: ANSWER,
+      date: TODAY,
+      pickedTableId: 'g2',
+      pickedSeatKey: null,
+      paints: PAINTS,
+    });
+    await daySelect().setValue(TOMORROW);
     await flushPromises();
-    expect(rows().map((r) => r.text())).toEqual(['Cog PrintsTable Silver aisle 1, Lower Hall']);
-    const enter = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
-    find.element.dispatchEvent(enter);
-    expect(enter.defaultPrevented).toBe(true);
+    expect(page.getComponent(PublicMapVendors).props('date')).toBe(TOMORROW);
   });
 
-  it("opens a vendor's location, picks their table and brings the map into view", async () => {
+  it("opens a vendor's location and picks their table", async () => {
     const page = await open();
-    await rows()[2].get('button').trigger('click');
+    const cog = mapListing(ANSWER, TODAY).find((vendor) => vendor.name === 'Cog Prints')!;
+    page.getComponent(PublicMapVendors).vm.$emit('open', cog);
     await flushPromises();
     expect(routing.replace).toHaveBeenLastCalledWith({
       query: { date: TODAY, location: 'loc-lower', table: 's1' },
@@ -654,14 +774,552 @@ describe("the list of the day's vendors", () => {
       'Lower Hall layout, 1 table',
     );
     expect(card().text()).toContain('Cog Prints');
-    expect(scrolled).toHaveBeenCalled();
-    expect(scrolled.mock.contexts.at(-1)).toBe(page.get('[data-testid="public-map-map"]').element);
+    expect(page.getComponent(PublicMapTableCard).props('paint')).toEqual(PAINTS.get('s1'));
   });
 
-  it('says so when no vendor is listed for the day', async () => {
-    const page = await open(found({ ...ANSWER, seats: [] }));
-    expect(page.get('[data-testid="public-map-vendors-empty"]').text()).toBe(
-      'No vendors are listed for this day yet.',
-    );
+  it('writes the half of a vendor at a shared table, and none for a whole seat (T465)', async () => {
+    const page = await open();
+    const named = (name: string) => mapListing(ANSWER, TODAY).find((v) => v.name === name)!;
+    page.getComponent(PublicMapVendors).vm.$emit('open', named('Bee Candles'));
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper', table: 'g2', half: 'right' },
+    });
+    expect(card().text()).toContain('Bee Candles');
+    expect(card().text()).not.toContain('Acme Ceramics');
+    page.getComponent(PublicMapVendors).vm.$emit('open', named('Kiln & Co'));
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper', table: 'g1' },
+    });
+  });
+});
+
+// ── The card's place, closing it, and a vendor out of view (T465 ticket 05) ──
+
+/** A window as wide as the sheet's two columns or narrower, its `matchMedia` answering so until
+ *  `widen` or `narrow` says the window crossed 1000px. */
+function windowAt(wide: boolean) {
+  const heard: ((event: { matches: boolean }) => void)[] = [];
+  vi.spyOn(window, 'matchMedia').mockImplementation(
+    (query: string) =>
+      ({
+        media: query,
+        matches: wide,
+        addEventListener: (_: string, listener: (event: { matches: boolean }) => void) =>
+          heard.push(listener),
+        removeEventListener: (_: string, listener: (event: { matches: boolean }) => void) =>
+          heard.splice(heard.indexOf(listener), 1),
+      }) as unknown as MediaQueryList,
+  );
+  const tell = (matches: boolean) => heard.forEach((listener) => listener({ matches }));
+  return { heard, widen: () => tell(true), narrow: () => tell(false) };
+}
+const narrowWindow = () => windowAt(false);
+const frame = () => new Promise<void>((done) => requestAnimationFrame(() => done()));
+
+/** Each element matching a selector drawn at its box, the map's box 1,200 by 900 px, the rest at
+ *  none. */
+function drawnAt(boxes: [selector: string, box: DOMRect][]) {
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    if (this.getAttribute('data-testid') === 'layout-map') return new DOMRect(0, 0, 1200, 900);
+    return boxes.find(([selector]) => this.matches(selector))?.[1] ?? new DOMRect(0, 0, 0, 0);
+  });
+}
+
+/** An element focused by a press, as the browser says: no `:focus-visible` on it (happy-dom
+ *  answers it as `:focus`, so the browser's answer is given here). */
+function pressed(el: Element) {
+  const matches = Element.prototype.matches;
+  return vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+    this: Element,
+    selector: string,
+  ) {
+    return this === el && selector === ':focus-visible' ? false : matches.call(this, selector);
+  });
+}
+
+const side = () => wrapper!.get('.public-map__side');
+const escape = (on: EventTarget = document.body) =>
+  on.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+  );
+
+describe("the card's place", () => {
+  it('is the speech bubble in the hall at a desk, one card in the page', async () => {
+    const page = await open(found(), { table: 'g1' });
+    expect(page.findAll('[data-testid="public-map-card"]')).toHaveLength(1);
+    const bubble = page.get('[data-testid="public-map-hall"] [data-testid="public-map-bubble"]');
+    expect(bubble.find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(side().find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(page.getComponent(PublicMapBubble).props('anchor')).toEqual({
+      tableId: 'g1',
+      half: 'whole',
+    });
+  });
+
+  it('is placed again whenever the day map shows another part of the hall', async () => {
+    const page = await open(found(), { table: 'g1' });
+    const moved = () => page.getComponent(PublicMapBubble).props('moved');
+    const before = moved();
+    page.getComponent(DayMap).vm.$emit('viewed');
+    await flushPromises();
+    expect(moved()).toBe(before + 1);
+  });
+
+  it("is the vendor panel's top in a narrower window, and the bubble once it widens", async () => {
+    const window = narrowWindow();
+    const page = await open(found(), { table: 'g1' });
+    expect(page.findAll('[data-testid="public-map-card"]')).toHaveLength(1);
+    expect(side().find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(page.find('[data-testid="public-map-bubble-layer"]').exists()).toBe(false);
+    window.widen();
+    await flushPromises();
+    expect(page.findAll('[data-testid="public-map-card"]')).toHaveLength(1);
+    expect(
+      page.find('[data-testid="public-map-bubble"] [data-testid="public-map-card"]').exists(),
+    ).toBe(true);
+    page.unmount();
+    wrapper = null;
+    expect(window.heard).toHaveLength(0);
+  });
+
+  it('is the bubble in a window with no matchMedia', async () => {
+    vi.stubGlobal('matchMedia', undefined);
+    try {
+      const page = await open(found(), { table: 'g1' });
+      expect(
+        page.find('[data-testid="public-map-bubble"] [data-testid="public-map-card"]').exists(),
+      ).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+// ── The phone's card (T465 ticket 08, Daniel's Q1, option (c)) ──
+
+describe("the card at the vendor panel's top, in a narrower window", () => {
+  const live = () => side().get('.public-map__live');
+  const scroller = () => side().find('[data-testid="public-map-card-scroller"]');
+  const rows = () => side().findAll('[data-testid="public-map-vendor"]');
+
+  it('stands first in the panel, in a scroller of its own, over the list, which stays whole', async () => {
+    narrowWindow();
+    const page = await open();
+    const all = rows().length;
+    expect(all).toBeGreaterThan(0);
+    expect(scroller().exists()).toBe(false);
+
+    await routing.replace({ query: { date: TODAY, location: 'loc-upper', table: 'g1' } });
+    await flushPromises();
+    expect(scroller().exists()).toBe(true);
+    expect(scroller().find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(page.findAll('[data-testid="public-map-card"]')).toHaveLength(1);
+    // The live region holds it, ahead of the list, and the list keeps every row under it.
+    expect(live().attributes('aria-live')).toBe('polite');
+    expect(live().element.contains(scroller().element)).toBe(true);
+    expect(side().element.firstElementChild).toBe(live().element);
+    expect(rows()).toHaveLength(all);
+    // No tail: the card is no bubble here.
+    expect(page.find('[data-testid="public-map-bubble"]').exists()).toBe(false);
+  });
+
+  it('closes with its Close, the list whole again, the live region kept and the focus on the table', async () => {
+    narrowWindow();
+    const page = await open(found(), { table: 'g1' });
+    const region = live().element;
+    const all = rows().length;
+    expect(scroller().exists()).toBe(true);
+    const close = page.get<HTMLButtonElement>('[data-testid="public-map-card-close"]');
+    close.element.focus();
+    await close.trigger('click');
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper' },
+    });
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(scroller().exists()).toBe(false);
+    expect(live().element).toBe(region);
+    expect(rows()).toHaveLength(all);
+    expect(document.activeElement).toBe(page.get('[data-table-id="g1"]').element);
+  });
+});
+
+// Nothing holding the focus lies under the phone's card (WCAG 2.4.11, the coordinator's call on
+// T465 ticket 08): the search field closes it, a row is scrolled clear of it or closes it, and a
+// pick that opens it over the focus gives the focus to its Close.
+describe("the focus and the card at the vendor panel's top", () => {
+  const field = () => wrapper!.get<HTMLInputElement>('[data-testid="public-map-find-input"]');
+
+  /** The card's box over the panel's top 200px, and each of `under` drawn at its own top. */
+  function drawnUnderTheCard(under: Record<string, number>) {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: Element,
+    ) {
+      if (this.getAttribute('data-testid') === 'layout-map') return new DOMRect(0, 0, 1200, 900);
+      if (this.classList.contains('public-map__card-box')) return new DOMRect(0, 0, 390, 200);
+      for (const [testid, top] of Object.entries(under))
+        if (this.getAttribute('data-testid') === testid) return new DOMRect(16, top, 358, 44);
+      return new DOMRect(0, 0, 0, 0);
+    });
+  }
+
+  it('closes as its Close does when the focus enters the search field, which keeps it', async () => {
+    narrowWindow();
+    const page = await open(found(), { table: 'g1' });
+    field().element.focus();
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper' },
+    });
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(field().element);
+  });
+
+  it('closes when the focus reaches a row it still covers after the list has scrolled', async () => {
+    narrowWindow();
+    drawnUnderTheCard({ 'public-map-vendor': 100 });
+    const page = await open(found(), { table: 'g1' });
+    await frame();
+    const row = page.get<HTMLButtonElement>('[data-testid="public-map-vendor"]');
+    row.element.focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(row.element);
+  });
+
+  it('stays when the focus reaches a row drawn clear below it', async () => {
+    narrowWindow();
+    drawnUnderTheCard({ 'public-map-vendor': 240 });
+    const page = await open(found(), { table: 'g1' });
+    await frame();
+    page.get<HTMLButtonElement>('[data-testid="public-map-vendor"]').element.focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(routing.replace).not.toHaveBeenCalled();
+  });
+
+  it('gives the focus to its Close when a pick opens it over the focused field', async () => {
+    narrowWindow();
+    drawnUnderTheCard({ 'public-map-find-input': 40 });
+    const page = await open();
+    field().element.focus();
+    const kiln = mapListing(ANSWER, TODAY).find((vendor) => vendor.name === 'Kiln & Co')!;
+    page.getComponent(PublicMapVendors).vm.$emit('open', kiln);
+    await flushPromises();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(document.activeElement).toBe(page.get('[data-testid="public-map-card-close"]').element);
+  });
+
+  it('leaves the bubble open at a desk when the focus enters the search field', async () => {
+    const page = await open(found(), { table: 'g1' });
+    field().element.focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(routing.replace).not.toHaveBeenCalled();
+  });
+});
+
+// The card moves between the bubble and the panel's top as the window crosses 1000px (a tablet
+// turned, a window resized): the focus in it follows it, and the panel's rule holds where it lands.
+describe('the card moving as the window crosses 1000px', () => {
+  const field = () => wrapper!.get<HTMLInputElement>('[data-testid="public-map-find-input"]');
+  const control = (testid: string) => wrapper!.get<HTMLElement>(`[data-testid="${testid}"]`);
+  const inThePanel = () => side().find('[data-testid="public-map-card"]').exists();
+
+  it("gives the focus to the panel card's Close when it lands over the focused search field", async () => {
+    const window = windowAt(true);
+    drawnAt([
+      ['.public-map__card-box', new DOMRect(0, 0, 390, 200)],
+      ['[data-testid="public-map-find-input"]', new DOMRect(16, 40, 358, 44)],
+    ]);
+    const page = await open();
+    field().element.focus();
+    const kiln = mapListing(ANSWER, TODAY).find((vendor) => vendor.name === 'Kiln & Co')!;
+    page.getComponent(PublicMapVendors).vm.$emit('open', kiln);
+    await flushPromises();
+    await frame();
+    expect(document.activeElement).toBe(field().element);
+
+    window.narrow();
+    await flushPromises();
+    await frame();
+    await flushPromises();
+    expect(inThePanel()).toBe(true);
+    expect(document.activeElement).toBe(control('public-map-card-close').element);
+  });
+
+  it("keeps the focus on the same control of the card, from the bubble to the panel's top", async () => {
+    const window = windowAt(true);
+    const page = await open(found(), { table: 'g1' });
+    control('public-map-card-close').element.focus();
+    window.narrow();
+    await flushPromises();
+    await frame();
+    expect(inThePanel()).toBe(true);
+    expect(document.activeElement).toBe(control('public-map-card-close').element);
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
+  });
+
+  it("keeps the focus on the same link, from the panel's top to the bubble", async () => {
+    const window = windowAt(false);
+    await open(found(), { table: 'g1' });
+    control('public-map-card-instagram').element.focus();
+    window.widen();
+    await flushPromises();
+    await frame();
+    expect(inThePanel()).toBe(false);
+    expect(
+      wrapper!
+        .get('[data-testid="public-map-bubble"]')
+        .element.contains(control('public-map-card-instagram').element),
+    ).toBe(true);
+    expect(document.activeElement).toBe(control('public-map-card-instagram').element);
+  });
+});
+
+// At a desk, nothing holding the focus lies under the bubble either: the focus reaching a table
+// it covers (a neighbour, by the arrow keys) closes it, the focus staying on that table. Only by
+// the keyboard, as the browser's `:focus-visible` says: a press opens its own card or zooms the
+// map. The zoom's buttons are kept clear of the bubble where the hall has room, so Tab passes them
+// on its way into it; where it had none, a zoom button the keyboard reaches under it closes it as
+// a table does.
+describe('the focus and the bubble at a desk', () => {
+  const BUBBLE = new DOMRect(200, 200, 288, 200);
+  const drawn = (g4: DOMRect, zoomIn = new DOMRect(1100, 850, 40, 28)) =>
+    drawnAt([
+      ['[data-testid="public-map-bubble-layer"]', new DOMRect(0, 0, 1200, 900)],
+      ['[data-testid="public-map-bubble"]', BUBBLE],
+      ['[data-table-id="g1"]', new DOMRect(160, 420, 60, 30)],
+      ['[data-table-id="g4"]', g4],
+      ['[data-testid="day-map-zoom-in"]', zoomIn],
+    ]);
+
+  it('closes when the focus reaches a table it covers, which keeps the focus', async () => {
+    drawn(new DOMRect(300, 300, 60, 30));
+    const page = await open(found(), { table: 'g1' });
+    await frame();
+    const g4 = page.get('[data-table-id="g4"]');
+    (g4.element as HTMLElement).focus();
+    await frame();
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper' },
+    });
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(g4.element);
+  });
+
+  it('gives the bubble the zoom and the legend to keep clear of', async () => {
+    const zoom = new DOMRect(1080, 848, 108, 40);
+    const legend = new DOMRect(12, 848, 300, 40);
+    drawnAt([
+      ['[data-testid="day-map-zoom"]', zoom],
+      ['[data-testid="day-map-legend-slot"]', legend],
+    ]);
+    const page = await open(found(), { table: 'g1' });
+    const clearOf = page.getComponent(PublicMapBubble).props('clearOf') as () => DOMRect[];
+    expect(clearOf()).toEqual([zoom, legend]);
+  });
+
+  it('closes when the keyboard reaches a zoom button under it, where the hall had no room', async () => {
+    drawn(new DOMRect(900, 700, 60, 30), new DOMRect(300, 300, 40, 28));
+    const page = await open(found(), { table: 'g1' });
+    await frame();
+    const zoomIn = page.get('[data-testid="day-map-zoom-in"]').element as HTMLElement;
+    zoomIn.focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(zoomIn);
+  });
+
+  it('stays when a press on a zoom button under it takes the focus', async () => {
+    drawn(new DOMRect(900, 700, 60, 30), new DOMRect(300, 300, 40, 28));
+    const page = await open(found(), { table: 'g1' });
+    await frame();
+    const zoomIn = page.get('[data-testid="day-map-zoom-in"]').element as HTMLElement;
+    pressed(zoomIn);
+    zoomIn.focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(routing.replace).not.toHaveBeenCalled();
+  });
+
+  it('leaves a press on a table under it to the press, which opens its own card', async () => {
+    drawn(new DOMRect(300, 300, 60, 30));
+    const page = await open(found(), { table: 'g1' });
+    await frame();
+    const g4 = page.get('[data-table-id="g4"]').element as HTMLElement;
+    const press = pressed(g4);
+    g4.focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(routing.replace).not.toHaveBeenCalled();
+    // The keyboard bringing the focus there next closes the card.
+    press.mockRestore();
+    g4.blur();
+    g4.focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+  });
+
+  it('closes when the keyboard reaches a table under it after a press that never ended', async () => {
+    drawn(new DOMRect(300, 300, 60, 30));
+    const page = await open(found(), { table: 'g1' });
+    await frame();
+    // A right press whose release the browser's menu took: no pointerup ever comes.
+    page
+      .get('[data-testid="public-map-hall"]')
+      .element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 2 }));
+    (page.get('[data-table-id="g4"]').element as HTMLElement).focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+  });
+
+  it('stays when the focus reaches a table clear of it', async () => {
+    drawn(new DOMRect(900, 700, 60, 30));
+    const page = await open(found(), { table: 'g1' });
+    await frame();
+    (page.get('[data-table-id="g4"]').element as HTMLElement).focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(routing.replace).not.toHaveBeenCalled();
+  });
+});
+
+describe('closing the card', () => {
+  it('Close drops the table from the address, and gives the focus back to the table', async () => {
+    const page = await open(found(), { table: 'g1' });
+    const close = page.get<HTMLButtonElement>('[data-testid="public-map-card-close"]');
+    close.element.focus();
+    await close.trigger('click');
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper' },
+    });
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(page.get('[data-table-id="g1"]').element);
+  });
+
+  it('Escape closes it at any width, leaving the focus where it was outside the card', async () => {
+    narrowWindow();
+    const page = await open(found(), { table: 'g1' });
+    escape();
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper' },
+    });
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('Escape from inside the card gives the focus back to the table', async () => {
+    const page = await open(found(), { table: 'g1' });
+    const close = page.get<HTMLButtonElement>('[data-testid="public-map-card-close"]');
+    close.element.focus();
+    escape(close.element);
+    await flushPromises();
+    expect(document.activeElement).toBe(page.get('[data-table-id="g1"]').element);
+  });
+
+  it('Escape does nothing once something else has handled it', async () => {
+    await open(found(), { table: 'g1' });
+    const handled = (event: Event) => event.preventDefault();
+    document.body.addEventListener('keydown', handled);
+    try {
+      escape();
+      await flushPromises();
+    } finally {
+      document.body.removeEventListener('keydown', handled);
+    }
+    expect(routing.replace).not.toHaveBeenCalled();
+  });
+
+  it('Escape in a combobox whose list is open closes the list, not the card', async () => {
+    const page = await open(found(), { table: 'g1' });
+    const field = document.createElement('input');
+    field.setAttribute('role', 'combobox');
+    field.setAttribute('aria-expanded', 'true');
+    document.body.append(field);
+    try {
+      field.focus();
+      escape(field);
+      await flushPromises();
+      expect(routing.replace).not.toHaveBeenCalled();
+      expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
+      // Its list shut, Escape closes the card.
+      field.setAttribute('aria-expanded', 'false');
+      escape(field);
+      await flushPromises();
+      expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    } finally {
+      field.remove();
+    }
+  });
+
+  it('Escape does nothing with no card, nor once the page has left', async () => {
+    const page = await open();
+    escape();
+    await flushPromises();
+    expect(routing.replace).not.toHaveBeenCalled();
+    page.unmount();
+    wrapper = null;
+    routing.route.query = { table: 'g1' };
+    escape();
+    await flushPromises();
+    expect(routing.replace).not.toHaveBeenCalled();
+  });
+});
+
+describe('a vendor opened from the list', () => {
+  /** The hall and the map 1,200 by 900 px at the window's top-left, Gold row 1 drawn at `g1`. */
+  function drawn(g1: DOMRect) {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: Element,
+    ) {
+      const id = this.getAttribute('data-testid');
+      if (id === 'layout-map' || id === 'public-map-hall') return new DOMRect(0, 0, 1200, 900);
+      if (this.getAttribute('data-table-id') === 'g1') return g1;
+      return new DOMRect(0, 0, 0, 0);
+    });
+  }
+  const viewWidth = () =>
+    Number(wrapper!.get('[data-testid="layout-map"]').attributes('viewBox')!.split(' ')[2]);
+  const kiln = () => mapListing(ANSWER, TODAY).find((vendor) => vendor.name === 'Kiln & Co')!;
+
+  it('fits the map first when their table is out of view', async () => {
+    const page = await open();
+    const whole = viewWidth();
+    await page.get('[data-testid="day-map-zoom-in"]').trigger('click');
+    expect(viewWidth()).toBeLessThan(whole);
+    drawn(new DOMRect(1500, 300, 40, 20));
+    page.getComponent(PublicMapVendors).vm.$emit('open', kiln());
+    await flushPromises();
+    expect(viewWidth()).toBeCloseTo(whole);
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper', table: 'g1' },
+    });
+  });
+
+  it('keeps the zoom when their table is in view', async () => {
+    const page = await open();
+    await page.get('[data-testid="day-map-zoom-in"]').trigger('click');
+    const zoomed = viewWidth();
+    drawn(new DOMRect(500, 300, 40, 20));
+    page.getComponent(PublicMapVendors).vm.$emit('open', kiln());
+    await flushPromises();
+    expect(viewWidth()).toBeCloseTo(zoomed);
   });
 });

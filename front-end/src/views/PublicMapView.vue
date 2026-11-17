@@ -4,55 +4,74 @@
  * a market day and a location, presses a table or finds a vendor by name, and reads the public
  * name, website and Instagram the organizer chose to publish, and nothing else of them (D26).
  *
+ * It is one sheet filling the window under the app bar, on the paper of its backdrop, and the page
+ * never scrolls (T465): the map side holds the market's name, the day and hall selects at its top
+ * right and the hall filling the rest, with the open hall's legend and the zoom at its bottom
+ * corners; the vendor panel stands beside it at a desk and under it on a phone. The card of the
+ * table picked speaks from that table in a bubble at a desk, and stands at the panel's top on
+ * anything narrower; one card is ever in the page. Close and Escape shut it, giving the focus back
+ * to the table when it was in the card. The parts are in `components/publicmap/`.
+ *
  * It reads the map before drawing anything, so a slug is never printed back before the server has
  * said there is a map here. A market whose map is not open answers as a slug naming nothing, and
  * reads "Page not found", the bar falling back as on the vendor page; a request that never answered
  * is neither, and says so with "Try again".
  *
- * The day, the open location and the picked table live in the address (`date`, `location`,
- * `table`), each changed with `router.replace`, so a link or a QR code opens one table on one day;
- * a value the map does not know falls back to the default without an error. The floorplan image
+ * The day, the open location, the picked table and the half of a shared table picked alone live in
+ * the address (`date`, `location`, `table`, `half`), each changed with `router.replace`, so a link
+ * or a QR code opens one table, or one half, on one day; a value the map does not know falls back
+ * to the default without an error, and a half the table is not split into that day shows the whole
+ * table. The floorplan image
  * is read through the API client as bytes and drawn from an object URL, since the
  * Content-Security-Policy draws images only from the app and from blobs.
  *
  * Nothing a vendor typed is rendered as markup: their three answers, cleaned by the server, are
  * text, and a link is built from them only as an `http`/`https` address or an Instagram handle.
  */
-import { computed, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import DayMap from '@/components/daymap/DayMap.vue';
-import ListFrame from '@/components/ListFrame.vue';
+import IconSparkle from '@/components/icons/IconSparkle.vue';
 import PageNotFound from '@/components/PageNotFound.vue';
 import ReadFailed from '@/components/ReadFailed.vue';
+import ScrollBox from '@/components/ScrollBox.vue';
+import PublicMapBackdrop from '@/components/publicmap/PublicMapBackdrop.vue';
+import PublicMapBubble from '@/components/publicmap/PublicMapBubble.vue';
+import PublicMapLegend from '@/components/publicmap/PublicMapLegend.vue';
+import PublicMapTableCard from '@/components/publicmap/PublicMapTableCard.vue';
+import PublicMapVendors from '@/components/publicmap/PublicMapVendors.vue';
+import { edgesIn, inView } from '@/components/publicmap/bubblePlacement';
+import { hallLegend, tablePaints } from '@/components/publicmap/publicMapPaint';
+import { useWideSheet } from '@/components/publicmap/useWideSheet';
 import {
   publicDayLocations,
+  publicSeatKey,
   publicSeats,
   type DayMapLegendItem,
   type PublicMapAnswer,
 } from '@/components/daymap/dayMap';
+import type { SeatHalf } from '@/components/layout/layoutDrawing';
 import { vendorPageAnswered } from '@/utils/currentPlace';
 import { calendarToday } from '@/utils/marketGuide';
 import {
-  DETAILS_NOT_LISTED,
   MAP_COULD_NOT_LOAD,
-  NO_VENDORS_LISTED,
-  PICK_A_TABLE,
   dayInWords,
   fetchPublicMap,
   fetchPublicMapImage,
-  freeHalfOn,
-  freeTableOn,
-  instagramLink,
-  mapListing,
   mapPlace,
+  shortDay,
+  shownParts,
   tableCard,
-  websiteLink,
   type ListedVendor,
   type MapPlace,
+  type PickedHalf,
 } from '@/utils/publicMap';
+import { useFillsTheWindow } from '@/utils/useFillsTheWindow';
 
 const route = useRoute();
 const router = useRouter();
+
+useFillsTheWindow();
 
 const marketSlug = computed(() => String(route.params.marketSlug ?? ''));
 
@@ -94,36 +113,50 @@ void load();
 const today = calendarToday();
 
 const place = computed<MapPlace>(() =>
-  map.value ? mapPlace(map.value, route.query, today) : { date: '', locationId: '', tableId: null },
+  map.value
+    ? mapPlace(map.value, route.query, today)
+    : { date: '', locationId: '', tableId: null, half: null },
 );
 
-/** Write the place to the address, replacing it, every other key of the query kept. */
-function goTo(next: MapPlace) {
+/** Write the place to the address, replacing it, every other key of the query kept, and the half
+ *  only beside a table; settled once the address has moved. */
+async function goTo(next: MapPlace) {
   const rest = Object.fromEntries(
-    Object.entries(route.query).filter(([key]) => !['date', 'location', 'table'].includes(key)),
+    Object.entries(route.query).filter(
+      ([key]) => !['date', 'location', 'table', 'half'].includes(key),
+    ),
   );
-  void router.replace({
+  await router.replace({
     query: {
       ...rest,
       date: next.date,
       location: next.locationId,
       ...(next.tableId ? { table: next.tableId } : {}),
+      ...(next.tableId && next.half ? { half: next.half } : {}),
     },
   });
 }
 
 function chooseDay(date: string) {
-  goTo({ ...place.value, date });
+  void goTo({ ...place.value, date });
 }
 
 function chooseLocation(locationId: string) {
   const location = map.value?.locations.find((l) => l.id === locationId);
   const keeps = location?.layout.tables.some((t) => t.id === place.value.tableId);
-  goTo({ ...place.value, locationId, tableId: keeps ? place.value.tableId : null });
+  void goTo({ ...place.value, locationId, tableId: keeps ? place.value.tableId : null });
 }
 
-function pick(tableId: string) {
-  goTo({ ...place.value, tableId });
+/** The side of the day's seat with this key, when it holds a half; none for a whole seat or none. */
+function halfOfSeat(seatKey: string | null): PickedHalf | null {
+  const half = seatKey ? seats.value.find((seat) => seat.key === seatKey)?.half : undefined;
+  return half === 'left' || half === 'right' ? half : null;
+}
+
+/** A table pressed: a seated half picks that half alone; a whole table, or a half with nobody at
+ *  it, which the map gives no seat, picks the whole table. */
+function pick(tableId: string, seatKey: string | null) {
+  void goTo({ ...place.value, tableId, half: halfOfSeat(seatKey) });
 }
 
 // ── The floorplan images, one object URL per location, read as each location opens ──
@@ -176,29 +209,243 @@ const locations = computed(() =>
   map.value ? publicDayLocations(map.value, (id) => imageUrls[id] ?? '') : [],
 );
 const seats = computed(() => (map.value ? publicSeats(map.value.seats, place.value.date) : []));
-const LEGEND: DayMapLegendItem[] = [
-  { tone: 'filled', label: 'Taken' },
-  { tone: 'free', label: 'Free' },
-];
+/** The day map draws no legend of its own here: its `legend` slot holds the page's. */
+const NO_LEGEND: readonly DayMapLegendItem[] = [];
+const openLocation = computed(
+  () => locations.value.find((l) => l.id === place.value.locationId) ?? locations.value[0],
+);
+const legendItems = computed(() => hallLegend(openLocation.value, seats.value));
+const paints = computed(() => tablePaints(locations.value));
 
 const day = computed(() => dayInWords(place.value.date));
-const card = computed(() =>
-  map.value && place.value.tableId
-    ? tableCard(map.value, place.value.date, place.value.tableId)
+/** The picked table's card, narrowed to the half picked when the table is split that day. */
+const card = computed(() => {
+  const whole =
+    map.value && place.value.tableId
+      ? tableCard(map.value, place.value.date, place.value.tableId)
+      : null;
+  return whole ? shownParts(whole, place.value.half) : null;
+});
+/** The half the card shows alone, or none when it shows the whole table. */
+const shownHalf = computed<PickedHalf | null>(() => {
+  const parts = card.value?.halves ?? [];
+  const side = parts.length === 1 ? parts[0]!.side : 'whole';
+  return side === 'whole' ? null : side;
+});
+/** The key of the seat at the half shown alone, or none: a half with nobody at it is outlined
+ *  by its whole table, and rings nothing in the list. */
+const pickedSeatKey = computed(() =>
+  place.value.tableId && shownHalf.value && card.value?.halves[0]?.seat
+    ? publicSeatKey({ tableId: place.value.tableId, half: shownHalf.value })
     : null,
 );
-const HALF_NAMES = { left: 'Left half', right: 'Right half' } as const;
+const hallName = computed(() => openLocation.value?.name ?? '');
+const cardPaint = computed(() =>
+  place.value.tableId ? (paints.value.get(place.value.tableId) ?? null) : null,
+);
 
-const listed = computed(() => (map.value ? mapListing(map.value, place.value.date) : []));
-const finds = (vendor: ListedVendor, words: string) =>
-  vendor.name.toLowerCase().includes(words.toLowerCase());
+// ── The card: in the bubble at a desk, at the panel's top when narrower ──
 
-const mapBox = ref<HTMLElement>();
+const wide = useWideSheet();
+const dayMap = ref<InstanceType<typeof DayMap> | null>(null);
+const hall = ref<HTMLElement | null>(null);
+/** The card's part, wherever it stands, to tell whether the focus is in it. */
+const cardPart = ref<InstanceType<typeof PublicMapTableCard> | null>(null);
+/** Bumped on each `viewed` of the day map, so the bubble places itself again. */
+const moved = ref(0);
 
-/** A vendor of the list: their location opened, their table picked, and the map in view. */
-function openVendor(vendor: ListedVendor) {
-  goTo({ ...place.value, locationId: vendor.locationId, tableId: vendor.tableId });
-  mapBox.value?.scrollIntoView({ block: 'nearest' });
+/** The table, or the half shown alone, the bubble speaks for. */
+const anchor = computed(() =>
+  card.value && place.value.tableId
+    ? { tableId: place.value.tableId, half: shownHalf.value ?? ('whole' as const) }
+    : null,
+);
+const locate = (tableId: string, half: SeatHalf) => dayMap.value?.targetRect(tableId, half) ?? null;
+const floating = () => dayMap.value?.floatingRects() ?? [];
+
+/** Close the card: the table dropped from the address, and the focus given back to the table when
+ *  it was in the card (a table that is no button leaves it where the browser puts it). */
+async function closeCard() {
+  const picked = anchor.value;
+  if (!picked) return;
+  const el = (cardPart.value?.$el as Element | undefined) ?? null;
+  const focusWasIn = Boolean(el?.contains(document.activeElement));
+  await goTo({ ...place.value, tableId: null });
+  if (!focusWasIn) return;
+  await nextTick();
+  dayMap.value?.focusTarget(picked.tableId, picked.half);
+}
+
+// Escape closes the card at any width, unless something already took it, or the focus is in a
+// combobox whose list is open, which Escape closes first.
+function onKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || event.defaultPrevented || !card.value) return;
+  const focused = document.activeElement;
+  if (
+    focused?.getAttribute('role') === 'combobox' &&
+    focused.getAttribute('aria-expanded') === 'true'
+  )
+    return;
+  event.preventDefault();
+  void closeCard();
+}
+onMounted(() => window.addEventListener('keydown', onKeydown));
+onUnmounted(() => window.removeEventListener('keydown', onKeydown));
+
+// ── Nothing holding the focus lies under the card at the panel's top (WCAG 2.4.11) ──
+
+const side = ref<HTMLElement | null>(null);
+/** The box the card scrolls in at the panel's top, there only under 1000px with a card. */
+const cardBox = ref<InstanceType<typeof ScrollBox> | null>(null);
+const cardBoxEl = () => (cardBox.value?.$el as Element | undefined) ?? null;
+const vendorList = () =>
+  side.value?.querySelector<HTMLElement>('[data-testid="public-map-vendors-list"]') ?? null;
+
+/** Whether two screen boxes overlap at all. */
+function overlap(box: DOMRect, at: DOMRect): boolean {
+  return at.top < box.bottom && at.bottom > box.top && at.left < box.right && at.right > box.left;
+}
+
+/** Whether the card at the panel's top lies over the element. */
+function underTheCard(el: Element): boolean {
+  const box = cardBoxEl()?.getBoundingClientRect();
+  return Boolean(box && overlap(box, el.getBoundingClientRect()));
+}
+
+/** How far the card reaches down over the list's scroller, given to the list as its scroll
+ *  padding, so a row the focus reaches is scrolled clear below the card. Set on the element, not
+ *  bound, so a scroll in the same frame reads it. */
+function measureReach() {
+  const box = cardBoxEl()?.getBoundingClientRect();
+  const list = vendorList()?.getBoundingClientRect();
+  const reach = box && list ? Math.max(0, box.bottom - list.top) : 0;
+  side.value?.style.setProperty('--public-map-card-reach', `${reach}px`);
+}
+
+let reachObserver: ResizeObserver | null = null;
+watch(
+  cardBox,
+  (box) => {
+    reachObserver?.disconnect();
+    reachObserver = null;
+    if (box && typeof ResizeObserver !== 'undefined') {
+      reachObserver = new ResizeObserver(measureReach);
+      reachObserver.observe(box.$el as Element);
+    }
+    measureReach();
+  },
+  { flush: 'post' },
+);
+onUnmounted(() => reachObserver?.disconnect());
+
+/** The focus entering the panel past the card: the search field, which the card always covers,
+ *  closes it as its Close does; a row closes it only if it is still under the card once the
+ *  browser has scrolled it into view, after this event. The focus stays where it went. */
+function onPanelFocus(event: FocusEvent) {
+  const target = event.target as Element;
+  const box = cardBoxEl();
+  if (wide.value || !card.value || !box || box.contains(target)) return;
+  if (!vendorList()?.contains(target)) {
+    void closeCard();
+    return;
+  }
+  // Judged against this card: a row pressed opens another, which `keepTheFocusInSight` answers.
+  const shown = card.value;
+  requestAnimationFrame(() => {
+    if (card.value === shown && document.activeElement === target && underTheCard(target))
+      void closeCard();
+  });
+}
+
+/** A card opened, or changed, over what holds the focus in the panel (a row pressed, the search
+ *  field after a pick): the row is scrolled clear below it, and when it cannot be, or it is the
+ *  field, the focus goes to the card's Close. */
+function keepTheFocusInSight() {
+  const focused = document.activeElement;
+  const box = cardBoxEl();
+  if (!focused || !box || box.contains(focused) || !side.value?.contains(focused)) return;
+  if (!underTheCard(focused)) return;
+  measureReach();
+  if (vendorList()?.contains(focused)) focused.scrollIntoView?.({ block: 'nearest' });
+  if (!underTheCard(focused)) return;
+  box.querySelector<HTMLElement>('[data-testid="public-map-card-close"]')?.focus();
+}
+watch(
+  card,
+  (now) => {
+    if (now && !wide.value) requestAnimationFrame(keepTheFocusInSight);
+  },
+  { flush: 'post' },
+);
+
+/** What takes the focus in the card, in its order. */
+const cardControls = (el: Element | undefined) =>
+  el ? [...el.querySelectorAll<HTMLElement>('a[href], button')] : [];
+
+// The card moves between the bubble and the panel's top as the window crosses 1000px. The focus in
+// it goes to the same control of the card where it lands; at the panel's top, what holds the focus
+// outside it is kept in sight, as when a card opens there.
+watch(wide, async (nowWide) => {
+  if (!card.value) return;
+  const focused = document.activeElement;
+  const at = cardControls(cardPart.value?.$el as Element | undefined).findIndex(
+    (control) => control === focused,
+  );
+  await nextTick();
+  if (at >= 0) {
+    const controls = cardControls(cardPart.value?.$el as Element | undefined);
+    (controls[at] ?? controls[0])?.focus();
+  } else if (!nowWide) requestAnimationFrame(keepTheFocusInSight);
+});
+
+// ── Nothing holding the focus lies under the bubble at a desk (WCAG 2.4.11) ──
+
+/** The keyboard bringing the focus to something in the hall the shown bubble lies over (a
+ *  neighbouring table by the arrow keys, or a zoom button by Tab where the hall had no room to keep
+ *  the bubble clear of the zoom) closes the card, the focus staying where it went; judged a frame
+ *  later, against this card. A press is left to itself: it opens its own card, or zooms the map.
+ *  The keyboard's focus is told from a press's by the browser's own rule, `:focus-visible`, with
+ *  nothing here tracking the pointer. Its limit is that rule's: where a browser's heuristic gives
+ *  a press's focus `:focus-visible`, the card closes on that press, and where it denies it to the
+ *  keyboard's, the card stays over the focus. That is WCAG 2.4.11's exception: the bubble is
+ *  content the visitor opened, and Escape closes it without moving the focus. */
+function onHallFocus(event: FocusEvent) {
+  const target = event.target as Element;
+  const bubble = () =>
+    hall.value?.querySelector<HTMLElement>(
+      '[data-testid="public-map-bubble"]:not(.public-map-bubble--hidden)',
+    ) ?? null;
+  if (!target.matches(':focus-visible')) return;
+  if (!wide.value || !card.value || !bubble() || bubble()!.contains(target)) return;
+  const shown = card.value;
+  requestAnimationFrame(() => {
+    const over = bubble();
+    if (
+      card.value === shown &&
+      over &&
+      document.activeElement === target &&
+      overlap(over.getBoundingClientRect(), target.getBoundingClientRect())
+    )
+      void closeCard();
+  });
+}
+
+/** A vendor of the list: their location opened and their table picked, or their half of a shared
+ *  one. The page never scrolls; a table zoomed out of view is brought back by showing the whole
+ *  hall first. */
+async function openVendor(vendor: ListedVendor) {
+  await goTo({
+    ...place.value,
+    locationId: vendor.locationId,
+    tableId: vendor.tableId,
+    half: halfOfSeat(vendor.key),
+  });
+  await nextTick();
+  const area = hall.value?.getBoundingClientRect();
+  const table = dayMap.value?.targetRect(vendor.tableId, 'whole');
+  if (!area || !table) return;
+  const seen = inView({ width: area.width, height: area.height }, edgesIn(area, table));
+  if (!seen) dayMap.value?.fit();
 }
 </script>
 
@@ -217,131 +464,131 @@ function openVendor(vendor: ListedVendor) {
     </template>
 
     <template v-else-if="map">
-      <header class="public-map__head">
-        <h1 class="public-map__title" data-testid="public-map-heading">{{ map.marketName }}</h1>
-        <p class="public-map__subtitle" data-testid="public-map-subtitle">Map</p>
-      </header>
+      <PublicMapBackdrop :locations="locations" />
 
-      <nav class="public-map__days" aria-label="Market day" data-testid="public-map-days">
-        <button
-          v-for="date in map.dates"
-          :key="date"
-          type="button"
-          class="btn btn--secondary btn--compact public-map__day"
-          :aria-pressed="date === place.date"
-          :data-date="date"
-          data-testid="public-map-day"
-          @click="chooseDay(date)"
-        >
-          {{ dayInWords(date) }}
-        </button>
-      </nav>
+      <div class="public-map__sheet">
+        <div class="public-map__map" data-testid="public-map-map">
+          <div class="public-map__bar">
+            <!-- The title first, so a screen reader meets the heading before the controls; on a
+                 phone the grid puts the selects above it. -->
+            <div class="public-map__words">
+              <h1 class="public-map__title" data-testid="public-map-heading">
+                {{ map.marketName }}
+              </h1>
+              <p class="public-map__subtitle" data-testid="public-map-subtitle">
+                <IconSparkle class="public-map__sparkle" />
+                Vendor map
+              </p>
+            </div>
+            <div class="public-map__pickers">
+              <!-- Each label stands beside its select, not round it, so the select's name is the
+                   label's words alone, without the chosen option's. -->
+              <label for="public-map-day" class="visually-hidden">Market day</label>
+              <select
+                id="public-map-day"
+                class="field field--select public-map__select"
+                name="public-map-day"
+                :value="place.date"
+                data-testid="public-map-day-select"
+                @change="chooseDay(($event.target as HTMLSelectElement).value)"
+              >
+                <option v-for="date in map.dates" :key="date" :value="date">
+                  {{ shortDay(date) }}
+                </option>
+              </select>
+              <template v-if="locations.length > 1">
+                <label for="public-map-location" class="visually-hidden">Location</label>
+                <select
+                  id="public-map-location"
+                  class="field field--select public-map__select"
+                  name="public-map-location"
+                  :value="openLocation?.id"
+                  data-testid="public-map-location-select"
+                  @change="chooseLocation(($event.target as HTMLSelectElement).value)"
+                >
+                  <option v-for="location in locations" :key="location.id" :value="location.id">
+                    {{ location.name }}
+                  </option>
+                </select>
+              </template>
+            </div>
+          </div>
 
-      <div class="public-map__body">
-        <div ref="mapBox" class="public-map__map" data-testid="public-map-map">
-          <DayMap
-            :locations="locations"
-            :tableTypes="map.tableTypes"
-            :locationId="place.locationId"
-            :seats="seats"
-            :picked="place.tableId"
-            :legend="LEGEND"
-            @update:locationId="chooseLocation"
-            @pick="pick"
-          />
+          <div
+            ref="hall"
+            class="public-map__hall"
+            data-testid="public-map-hall"
+            @focusin="onHallFocus"
+          >
+            <DayMap
+              ref="dayMap"
+              fills
+              :locations="locations"
+              :tableTypes="map.tableTypes"
+              :locationId="place.locationId"
+              :seats="seats"
+              :picked="pickedSeatKey ?? place.tableId"
+              :legend="NO_LEGEND"
+              @update:locationId="chooseLocation"
+              @pick="pick"
+              @viewed="moved++"
+            >
+              <template #legend>
+                <PublicMapLegend :items="legendItems" />
+              </template>
+            </DayMap>
+            <PublicMapBubble
+              v-if="wide"
+              :anchor="anchor"
+              :locate="locate"
+              :clearOf="floating"
+              :moved="moved"
+            >
+              <PublicMapTableCard
+                v-if="card"
+                ref="cardPart"
+                :card="card"
+                :day="day"
+                :hallName="hallName"
+                :paint="cardPaint"
+                @close="closeCard"
+              />
+            </PublicMapBubble>
+          </div>
         </div>
 
-        <div class="public-map__side">
-          <section class="public-map__card" aria-live="polite" data-testid="public-map-card">
-            <p v-if="!card" class="public-map__hint">{{ PICK_A_TABLE }}</p>
-            <template v-else>
-              <h2 class="public-map__card-title">Table {{ card.code }}</h2>
-              <div
-                v-for="part in card.halves"
-                :key="part.side"
-                class="public-map__part"
-                :data-testid="
-                  part.side === 'whole' ? 'public-map-card-whole' : 'public-map-card-half'
-                "
-              >
-                <h3 v-if="part.side !== 'whole'" class="public-map__half">
-                  {{ HALF_NAMES[part.side] }}
-                </h3>
-                <p v-if="!part.seat" class="public-map__note">
-                  {{ part.side === 'whole' ? freeTableOn(day) : freeHalfOn(day) }}
-                </p>
-                <p v-else-if="!part.seat.name" class="public-map__note">
-                  {{ DETAILS_NOT_LISTED }}
-                </p>
-                <template v-else>
-                  <p class="public-map__name" data-testid="public-map-card-name">
-                    {{ part.seat.name }}
-                  </p>
-                  <dl
-                    v-if="websiteLink(part.seat.website) || instagramLink(part.seat.instagram)"
-                    class="public-map__links"
-                  >
-                    <template v-if="websiteLink(part.seat.website)">
-                      <dt>Website</dt>
-                      <dd>
-                        <a
-                          :href="websiteLink(part.seat.website)!.href"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="public-map__link"
-                          data-testid="public-map-card-website"
-                          >{{ websiteLink(part.seat.website)!.text }}</a
-                        >
-                      </dd>
-                    </template>
-                    <template v-if="instagramLink(part.seat.instagram)">
-                      <dt>Instagram</dt>
-                      <dd>
-                        <a
-                          :href="instagramLink(part.seat.instagram)!.href"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="public-map__link"
-                          data-testid="public-map-card-instagram"
-                          >{{ instagramLink(part.seat.instagram)!.text }}</a
-                        >
-                      </dd>
-                    </template>
-                  </dl>
-                </template>
-              </div>
-            </template>
-          </section>
+        <div ref="side" class="public-map__side" @focusin="onPanelFocus">
+          <!-- The live region stays while the card comes and goes, so a pick is announced. It
+               lies over the panel's top, the list unmoved under it, and scrolls the card in its
+               own box when the card is taller than the panel. -->
+          <div v-if="!wide" class="public-map__live" aria-live="polite">
+            <ScrollBox
+              v-if="card"
+              ref="cardBox"
+              class="public-map__card-box"
+              testid="public-map-card-scroller"
+            >
+              <PublicMapTableCard
+                ref="cardPart"
+                class="public-map__card"
+                :card="card"
+                :day="day"
+                :hallName="hallName"
+                :paint="cardPaint"
+                @close="closeCard"
+              />
+            </ScrollBox>
+          </div>
 
-          <ListFrame
-            :items="listed"
-            :finds="finds"
-            :findFrom="0"
-            findKey="find"
-            findLabel="Find a vendor"
-            :filterKey="place.date"
-            :itemKey="(vendor) => vendor.key"
-            :noun="{ one: 'vendor', many: 'vendors' }"
-            testid="public-map-vendors"
-          >
-            <template #row="{ item }">
-              <button
-                type="button"
-                class="public-map__vendor"
-                :aria-current="item.tableId === place.tableId ? 'true' : undefined"
-                data-testid="public-map-vendor"
-                @click="openVendor(item)"
-              >
-                <span class="public-map__vendor-name">{{ item.name }}</span>
-                <span class="public-map__vendor-seat"
-                  >Table {{ item.code }}, {{ item.locationName }}</span
-                >
-              </button>
-            </template>
-            <template #empty>
-              <p>{{ NO_VENDORS_LISTED }}</p>
-            </template>
-          </ListFrame>
+          <PublicMapVendors
+            class="public-map__vendors"
+            :map="map"
+            :date="place.date"
+            :pickedTableId="shownHalf && !pickedSeatKey ? null : place.tableId"
+            :pickedSeatKey="pickedSeatKey"
+            :paints="paints"
+            @open="openVendor"
+          />
         </div>
       </div>
     </template>
@@ -349,15 +596,18 @@ function openVendor(vendor: ListedVendor) {
 </template>
 
 <style scoped>
-/* The page's column: the workspace's width at most, on the app bar's own inset. */
+/* The page's column: the window's height under the app bar, never more, so the page never
+   scrolls (the shell's `flex: 1` would grow it with the list); the workspace's width at most. */
 .public-map {
   display: flex;
+  flex: none;
   flex-direction: column;
-  gap: var(--space-4);
   width: 100%;
   max-width: var(--workspace-max);
+  height: calc(100dvh - var(--banner-h));
   margin: 0 auto;
-  padding: var(--space-6) var(--space-4) var(--space-8);
+  padding: var(--space-4) var(--space-4) var(--space-6);
+  overflow: hidden;
   color: var(--mm-black);
 }
 
@@ -369,183 +619,194 @@ function openVendor(vendor: ListedVendor) {
   color: var(--mm-text-muted);
 }
 
+/* The sheet, over the backdrop: the map left of a 21rem panel at a desk, over it three to two
+   on anything narrower. */
+.public-map__sheet {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--mm-border-soft);
+  border-radius: var(--radius-sheet);
+  background: white;
+  box-shadow: var(--shadow-float);
+}
+
+/* The map side: the title bar, then the hall, which takes the rest. */
+.public-map__map {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--layout-floor);
+}
+
+/* The name wraps short of the selects, which stand 12px from the side's top and end edges, as
+   the zoom and the legend stand from theirs. */
+.public-map__bar {
+  display: grid;
+  flex: none;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'title pickers';
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-6) var(--space-3) var(--space-4) var(--space-6);
+}
+
+.public-map__words {
+  display: flex;
+  grid-area: title;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* The name over a honey marker stroke, a thick underline behind the letters, so it follows each
+   line's words. */
 .public-map__title {
   margin: 0;
-  font-family: 'Merge One';
-  font-size: var(--text-xl);
+  font-family: Outfit, sans-serif;
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  line-height: 1.15;
   color: var(--mm-black);
   overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-decoration-color: var(--layout-section-1-fill);
+  text-decoration-thickness: 0.4em;
+  text-underline-offset: -0.22em;
+  text-decoration-skip-ink: none;
 }
 
 .public-map__subtitle {
-  margin: var(--space-1) 0 0;
-  font-size: var(--text-sm);
-  color: var(--mm-text-muted);
-}
-
-.public-map__days {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
+  margin: 0;
+  font-family: 'Merge One', sans-serif;
+  font-size: var(--text-lg);
+  line-height: 1.3;
+  text-transform: lowercase;
+  color: var(--mm-text-muted-on-beige);
 }
 
-/* At a desk the map takes the left and the card, the find field and the list a 22rem column on
-   the right; on a phone they stack, in that order. */
-.public-map__body {
+/* The words are lower case, so their middle is the x-height's, a little under the line's: the
+   star sits on that middle. */
+.public-map__sparkle {
+  flex: none;
+  width: 0.9em;
+  height: 0.9em;
+  color: var(--layout-section-4-edge);
+  transform: translateY(0.06em);
+}
+
+.public-map__pickers {
+  display: flex;
+  grid-area: pickers;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: calc(-1 * var(--space-3));
+}
+
+/* A pill floating over the floor; the app's select keeps its own padding, ground and chevron. */
+.public-map__select {
+  width: auto;
+  min-width: 7.5rem;
+  height: var(--control-height);
+  border: 1px solid var(--mm-border-soft);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-float);
+  font-size: var(--text-sm);
+}
+
+.public-map__select:hover {
+  border-color: var(--layout-section-1-edge);
+}
+
+/* The hall takes what the bar leaves, a definite box the filling day map takes whole. */
+.public-map__hall {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 22rem;
-  align-items: start;
-  gap: var(--space-6);
+  flex: 1 1 auto;
+  grid-template-rows: minmax(0, 1fr);
+  position: relative;
+  min-height: 0;
 }
 
-/* The map stays in sight beside a long list, under the app bar. */
-.public-map__map {
-  position: sticky;
-  top: calc(var(--banner-h) + var(--space-4));
-  min-width: 0;
-  scroll-margin-top: calc(var(--banner-h) + var(--space-4));
-}
-
+/* The vendor panel: the day's vendors take it whole, and the card of the table picked lies over
+   its top on anything narrower than a desk. The panel itself never scrolls: the vendors' part
+   scrolls its own list in the box it is given, and keeps the panel's inset inside its scroller. */
 .public-map__side {
+  /* How far the phone's card reaches over the list, which the list reads as its scroll padding;
+     none until `measureReach` measures it. */
+  --public-map-card-reach: 0px;
+
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-block-start: 1px solid var(--mm-border-soft);
+}
+
+/* The card's place under 1000px (Daniel's Q1, option (c)): over the panel's top, its full width,
+   no taller than the panel, so the hall above is never covered and the list shows below it; above
+   the search field and its list, which stand at `z-index: 2` inside the vendors' part. */
+.public-map__live {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+}
+
+.public-map__card-box {
+  flex: 0 1 auto;
+  border-block-end: 1px solid var(--mm-border-soft);
+  background: white;
 }
 
 .public-map__card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
   padding: var(--space-4);
-  border: 1px solid var(--mm-border);
-  border-radius: var(--radius-card);
-  background: white;
-  overflow-wrap: anywhere;
 }
 
-.public-map__hint,
-.public-map__note {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--mm-text-muted);
+.public-map__vendors {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
-.public-map__card-title {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: 600;
+@media (width >= 1000px) {
+  .public-map__sheet {
+    grid-template-columns: minmax(0, 1fr) 21rem;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .public-map__side {
+    border-block-start: none;
+    border-inline-start: 1px solid var(--mm-border-soft);
+  }
 }
 
-.public-map__part {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.public-map__half {
-  margin: 0;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--mm-text-muted);
-}
-
-.public-map__name {
-  margin: 0;
-  font-weight: 600;
-}
-
-.public-map__links {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--space-1) var(--space-3);
-  margin: 0;
-  font-size: var(--text-sm);
-}
-
-.public-map__links dt {
-  color: var(--mm-text-muted);
-}
-
-.public-map__links dd {
-  margin: 0;
-  min-width: 0;
-}
-
-.public-map__link {
-  color: var(--mm-text-link);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-/* Each link stands alone on its line, so on a phone it is a thumb's target, its name level with
-   its middle, as an answer that is only an address is (`AnswerValue.vue`). */
+/* A phone: the selects keep the top end, and the title starts under them. */
 @media (width <= 640px) {
-  .public-map__links {
-    align-items: center;
+  .public-map {
+    padding: var(--space-3) var(--space-3) var(--space-6);
   }
 
-  .public-map__link {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--target-min);
-  }
-}
-
-/* A vendor of the list: their name over their table, the whole row the button. */
-.public-map__vendor {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-hairline);
-  width: 100%;
-  min-height: var(--target-min);
-  /* The card's own inset, so a vendor's name stands on the card's text above it. */
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
-  background: none;
-  color: var(--mm-black);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-  overflow-wrap: anywhere;
-}
-
-/* An edge, not a tint: the muted table line would fall under AA on a hover's grey. The picked
-   vendor's edge is the map's own mark, black. */
-.public-map__vendor:hover {
-  border-color: var(--mm-border);
-}
-
-.public-map__vendor[aria-current='true'] {
-  border-color: var(--mm-black);
-}
-
-.public-map__vendor-name {
-  font-weight: 600;
-}
-
-.public-map__vendor-seat {
-  font-size: var(--text-sm);
-  color: var(--mm-text-muted);
-}
-
-@media (width < 1000px) {
-  .public-map__body {
+  .public-map__bar {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'pickers'
+      'title';
   }
 
-  .public-map__map {
-    position: static;
-  }
-}
-
-@media (width <= 640px) {
-  .public-map__vendor {
-    min-height: 44px;
+  .public-map__title {
+    font-size: var(--text-xl);
   }
 }
 </style>

@@ -5,7 +5,6 @@ describes:
   - back-end/public_map.py
   - back-end/public_answers.py
   - back-end/market_documents.py#public_map_market_by_slug
-  - back-end/market_documents.py#public_map_is_open
   - back-end/datatypes.py#PublicMapSettings
   - back-end/tests/test_the_public_map.py
   - back-end/tests/test_the_public_map_settings.py
@@ -15,6 +14,7 @@ describes:
   - front-end/src/utils/historyReaders/publicMap.ts
   - front-end/src/__tests__/thePublicMapCard.test.ts
   - front-end/e2e/the-public-map-card.spec.ts
+  - back-end/market_documents.py#public_map_is_open
 verified: 2026-11-17
 sources:
   - T422
@@ -98,6 +98,6 @@ A layout stores `followsPlan`, whether it was started after Draft: true on one s
 - The walks every write joins hold it too: it records (`test_every_write_records.py`), names its row (`test_every_check_names_an_action.py`), is refused on an archived market (`test_an_archive_is_read_only.py`), and is refused on a changed market against a real MongoDB (`test_every_held_write_is_refused_on_a_changed_market.py`).
 - [`front-end/src/__tests__/thePublicMapCard.test.ts`](../../../front-end/src/__tests__/thePublicMapCard.test.ts): the card's text and pickers, each save and its refusal, the switch's reason, a refused person and an archived market, the address and its copy, and what is still missing, case by case; `historyReaders.test.ts` holds the history's words.
 - [`front-end/e2e/the-public-map-card.spec.ts`](../../../front-end/e2e/the-public-map-card.spec.ts), on the seam's market: an Admin chooses the three questions and turns the map on, a signed-out read then answers a vendor's public name and the card's address opens the map, and turned off it answers 404; an Editor reads the card disabled with the row's sentence; the card fits a phone; each state passes the accessibility check.
-- [`front-end/e2e/a-market-past-draft-gets-a-public-map.spec.ts`](../../../front-end/e2e/a-market-past-draft-gets-a-public-map.spec.ts), the journey: on a market in Assignment with no layout, the organizer starts North Wing's layout and places Aisle A with Row of tables, chooses the questions and turns the map on, which waits for the results while the market page reads "Applications are closed.", publishes them, and a signed-out visitor on a phone finds a vendor by name and reads their table, which Attendance's map then draws as that vendor's.
-- The four sweeps walk the public map before a pick and with a shared table picked, Attendance's map and the card turned on (`SCREENS` in [`front-end/e2e/helpers/screens.ts`](../../../front-end/e2e/helpers/screens.ts)).
+- [`front-end/e2e/a-market-past-draft-gets-a-public-map.spec.ts`](../../../front-end/e2e/a-market-past-draft-gets-a-public-map.spec.ts), the journey: on a market in Assignment with no layout, the organizer starts North Wing's layout and places Aisle A with Row of tables, chooses the questions and turns the map on, which waits for the results while the market page reads "Applications are closed.", publishes them, and a signed-out visitor on a phone opens the market's address, presses a vendor's table and reads it, which Attendance's map then draws as that vendor's.
+- The four sweeps walk the public map before a pick, with a shared table picked and with one half of it picked, Attendance's map and the card turned on (`SCREENS` in [`front-end/e2e/helpers/screens.ts`](../../../front-end/e2e/helpers/screens.ts)).
 - [`front-end/e2e/helpers/seedMarketDayMap.ts`](../../../front-end/e2e/helpers/seedMarketDayMap.ts) seeds a market on its days with a map to draw, for every spec of the map ([E2E seeds](../testing/e2e-seeds.md)).
