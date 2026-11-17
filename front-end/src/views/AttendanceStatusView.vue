@@ -38,6 +38,10 @@ export const REREAD_MS = 15_000;
  * release walk F5): the date and, on the map, the location as selects, List and Map, the paper
  * tools and Refresh last, in the markup's order, which is the Tab order; then the count, the list's
  * filters and the search. When the roster was read stands over the list, or under the map.
+ *
+ * On the map the search finds one vendor of the day and picking them opens their drawer, so the
+ * map outlines their seat, on their location when it is the other one (T466, release walk F3);
+ * typing alone outlines nothing. On the list the search filters the rows.
  */
 import { MarketAction, mayTake } from '@/utils/marketActions';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
@@ -49,9 +53,12 @@ import { getShortDate, getTimestampTime } from '@/utils/utils';
 import { tableInWords } from '@/utils/placementChange';
 import { vendorMatches, type VendorNames } from '@/utils/vendorIdentity';
 import MarketFrame from '@/components/MarketFrame.vue';
+import SearchPicker, { type PickerGroup, type PickerOption } from '@/components/SearchPicker.vue';
 import VendorDrawer from '@/components/VendorDrawer.vue';
 import AttendanceMap from '@/components/attendance/AttendanceMap.vue';
 import { laidOutLocations, openLocationId } from '@/components/attendance/laidOutLocations';
+import { rosterSeats } from '@/components/daymap/dayMap';
+import { PEOPLE_CAP } from '@/utils/personChoice';
 import PinnedTools from '@/components/PinnedTools.vue';
 import SegmentedControl, { type SegmentedOption } from '@/components/SegmentedControl.vue';
 import ToolGroup from '@/components/ToolGroup.vue';
@@ -298,20 +305,6 @@ const shownToday = computed(() => {
   });
 });
 const shown = computed(() => shownToday.value.filter(hasSeat));
-/** The seated vendors the search finds on the chosen date, which the map marks; the Show toggles
- *  are the list's alone. */
-const foundOnMap = computed(() => {
-  const term = search.value.trim().toLowerCase();
-  if (!term) return [];
-  return roster.value
-    .filter((row) => row.date === selectedDate.value && hasSeat(row))
-    .filter(
-      (row) =>
-        (row.tableCode ?? '').toLowerCase().includes(term) ||
-        vendorMatches(term, row.vendorEmail, names.value),
-    )
-    .map((row) => row.vendorEmail);
-});
 /** Checked in on the chosen date with no table that day, under the seats, by the same filters. */
 const shownWithoutSeat = computed(() => shownToday.value.filter((row) => !hasSeat(row)));
 const withoutSeatToday = computed(
@@ -342,11 +335,55 @@ function printedRow(row: RosterRow): PrintedRow {
     here: row.checkedInAt ? status(row) : null,
   };
 }
-const printedDay = computed(() => roster.value.filter((row) => row.date === selectedDate.value));
-const printedSeated = computed(() => printedDay.value.filter(hasSeat).map(printedRow));
+/** The chosen date's every row: seated, and here with no table. */
+const dayRows = computed(() => roster.value.filter((row) => row.date === selectedDate.value));
+const printedSeated = computed(() => dayRows.value.filter(hasSeat).map(printedRow));
 const printedUnseated = computed(() =>
-  printedDay.value.filter((row) => !hasSeat(row)).map(printedRow),
+  dayRows.value.filter((row) => !hasSeat(row)).map(printedRow),
 );
+
+/**
+ * The map's search (T466, release walk F3): every vendor of the chosen date, one row each, named as
+ * their row is and saying where they sit, so two like names are told apart.
+ */
+const mapSearchGroups = computed<PickerGroup[]>(() => [
+  {
+    options: dayRows.value.map((row) => ({
+      value: row.vendorEmail,
+      label: row.vendorName || row.vendorEmail,
+      address: !row.vendorName,
+      detail: whereTheySit(row),
+    })),
+  },
+]);
+const dayRowByEmail = computed(() => new Map(dayRows.value.map((row) => [row.vendorEmail, row])));
+
+/** The list search's own terms: the table, the vendor's name and their address. */
+function findsOnMap(option: PickerOption, words: string): boolean {
+  const term = words.toLowerCase();
+  const tableCode = dayRowByEmail.value.get(option.value)?.tableCode ?? '';
+  return tableCode.toLowerCase().includes(term) || vendorMatches(term, option.value, names.value);
+}
+
+/**
+ * A vendor picked on the map opens their drawer, as a press on their table does, so the map
+ * outlines their seat. A seat on the other laid-out location moves the map there first, replacing
+ * the address's location before the drawer takes its own step, so Back closes the drawer and leaves
+ * the map where the vendor sits. A vendor with no seat the map draws opens with nothing outlined.
+ */
+async function pickOnMap(email: string): Promise<void> {
+  if (!email) return;
+  const seat = rosterSeats(roster.value, selectedDate.value, laidOut.value).seats.find(
+    (each) => each.key === email,
+  );
+  const location = seat
+    ? laidOut.value.find((each) => each.layout.tables.some((one) => one.id === seat.tableId))?.id
+    : undefined;
+  if (location && location !== locationId.value) {
+    await router.replace({ query: { ...route.query, location } });
+  }
+  drawer.open(email);
+}
 
 function printRoster(): void {
   window.print();
@@ -633,7 +670,24 @@ const drawer = useVendorDrawer();
               Checked in {{ today.here }}
             </button>
           </div>
+          <SearchPicker
+            v-if="view === 'map'"
+            class="door-search"
+            label="Find a vendor"
+            hideLabel
+            placeholder="Name, email or table"
+            testid="attendance-map-search"
+            compact
+            listOver
+            clearsOnChoice
+            :cap="PEOPLE_CAP"
+            :groups="mapSearchGroups"
+            :finds="findsOnMap"
+            modelValue=""
+            @update:modelValue="pickOnMap($event as string)"
+          />
           <input
+            v-else
             v-model="search"
             type="search"
             name="attendance-search"
@@ -652,7 +706,6 @@ const drawer = useVendorDrawer();
           :market="market"
           :rows="roster"
           :date="selectedDate"
-          :found="foundOnMap"
           :openVendor="drawer.email.value"
           :notHere="notHere"
           :hereWithoutSeat="withoutSeatToday"

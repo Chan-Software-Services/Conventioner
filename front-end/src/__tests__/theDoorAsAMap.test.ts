@@ -3,7 +3,9 @@
  * each table drawn by whether its vendor is here, expected or absent from the plan, kept fresh as
  * the list is. A press on a vendor's table opens their drawer as a press on their row does, each
  * half of a shared table its own vendor; a table with no vendor says so and opens nothing. The
- * search marks a vendor's table, and the vendors the map cannot draw are counted under it.
+ * map's search finds one vendor of the day, and picking them opens their drawer and outlines their
+ * table, in the other location when they sit there (T466); the vendors the map cannot draw are
+ * counted under it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
@@ -287,7 +289,7 @@ describe('List and Map', () => {
     const wrapper = await openOnMap();
     expect(wrapper.find(testid('attendance-map')).exists()).toBe(true);
     expect(wrapper.find(testid('attendance-show-all')).exists()).toBe(false);
-    expect(wrapper.find(testid('attendance-search')).exists()).toBe(true);
+    expect(wrapper.find(testid('attendance-map-search')).exists()).toBe(true);
     expect(wrapper.get(testid('attendance-summary')).text()).toBe('2 of 5 checked in');
   });
 });
@@ -452,26 +454,257 @@ describe('a press on the map', () => {
     );
     expect(router.push).not.toHaveBeenCalled();
     expect(marks(wrapper)).toHaveLength(1);
-
-    // A search marks what it finds in its place.
-    await wrapper.get(testid('attendance-search')).setValue('Ben');
-    expect(wrapper.find(testid('attendance-map-note')).exists()).toBe(false);
-    expect(marks(wrapper)).toHaveLength(1);
   });
 });
 
-describe('the search on the map', () => {
-  it("marks the matching vendors' seats and opens nothing", async () => {
+/*
+ * On the map the count row's search finds one vendor of the day (T466, release walk F3): a search
+ * with a dropdown, each row saying where the vendor sits. Picking one opens their drawer, as a
+ * press on their table does, so their seat is outlined, in the other location when they sit there.
+ * Typing alone outlines nothing (Q2), which replaces the outline of every match (D40).
+ */
+describe("the map's search (T466)", () => {
+  const SOUTH = { id: 'loc-south', name: 'South Wing' };
+  const AISLE_B = { id: 'sec-aisle-b', name: 'Aisle B' };
+  const GIL = 'gil@example.com';
+
+  /** North Wing as before, and South Wing laid out with Aisle B's one table. */
+  const TWO_LAID_OUT = {
+    ...LAID_OUT,
+    locations: [NORTH, SOUTH],
+    sections: [...LAID_OUT.sections, { ...AISLE_B, location: SOUTH, tier: null, count: 1 }],
+    floorplans: [
+      ...LAID_OUT.floorplans,
+      {
+        ...LAID_OUT.floorplans[0],
+        id: 'fp-south',
+        locationId: SOUTH.id,
+        tables: [{ ...table('s1', 1, 4000), sectionId: AISLE_B.id }],
+      },
+    ],
+  };
+  /** The day, with Gil Glass expected at South Wing's Aisle B 1. */
+  function twoHalls() {
+    const answered = day();
+    answered.data.roster.push(
+      row(GIL, 'Gil Glass', 'Aisle B 1', { section: 'Aisle B', location: SOUTH.name }),
+    );
+    return answered;
+  }
+
+  const picker = (wrapper: VueWrapper) => wrapper.get(testid('attendance-map-search'));
+  const field = (wrapper: VueWrapper) => wrapper.get(testid('attendance-map-search-input'));
+  const value = (wrapper: VueWrapper) => (field(wrapper).element as HTMLInputElement).value;
+  const listed = (wrapper: VueWrapper) =>
+    wrapper
+      .findAll(testid('attendance-map-search-option'))
+      .map((option) => option.attributes('data-value'));
+  /** Each row as it reads: the vendor, then where they sit. */
+  const rows = (wrapper: VueWrapper) =>
+    wrapper
+      .findAll(testid('attendance-map-search-option'))
+      .map((option) => [
+        option.get('.search-picker-option-label').text(),
+        option.get('.search-picker-option-detail').text(),
+      ]);
+  async function type(wrapper: VueWrapper, words: string) {
+    await field(wrapper).setValue(words);
+    await field(wrapper).trigger('input');
+  }
+
+  it('is a search named "Find a vendor", compact, its list over the map, in place of the list\'s field', async () => {
     const wrapper = await openOnMap();
-    expect(marks(wrapper)).toHaveLength(0);
-    await wrapper.get(testid('attendance-search')).setValue('Ben');
+    const bar = wrapper.get(testid('attendance-bar'));
+    expect(bar.find(testid('attendance-map-search')).exists()).toBe(true);
+    expect(wrapper.find(testid('attendance-search')).exists()).toBe(false);
+    expect(field(wrapper).attributes('role')).toBe('combobox');
+    expect(field(wrapper).attributes('placeholder')).toBe('Name, email or table');
+    expect(field(wrapper).classes()).toEqual(['field', 'field--compact']);
+    const label = picker(wrapper).get(`label[for="${field(wrapper).attributes('id')}"]`);
+    expect(label.text()).toBe('Find a vendor');
+    expect(label.classes()).toContain('visually-hidden');
+    expect(picker(wrapper).classes()).toContain('search-picker--list-over');
+    expect(picker(wrapper).classes()).toContain('door-search');
+  });
+
+  it("is the map's alone: the list keeps its own field", async () => {
+    const wrapper = await open();
+    expect(wrapper.find(testid('attendance-search')).exists()).toBe(true);
+    expect(wrapper.find(testid('attendance-map-search')).exists()).toBe(false);
+  });
+
+  it('lists every vendor of the day once, seated or here with no table, each saying where they sit', async () => {
+    answer = day({ [BEN]: { vendorName: '' } });
+    answer.data.roster.push(
+      row('zed@example.com', 'Zed Tomorrow', 'Aisle A 4', { date: '2099-01-01' }),
+    );
+    const wrapper = await openOnMap();
+    await field(wrapper).trigger('click');
+    expect(rows(wrapper)).toEqual([
+      ['Ana Pottery', 'Table Aisle A 1, a whole table'],
+      [BEN, 'Table Aisle A 2, a whole table'],
+      ['Cal Knits', 'Table Aisle A 3, left half'],
+      ['Dee Soaps', 'Table Aisle A 3, right half'],
+      ['Eve Jams', 'No table'],
+      ['Fay Candles', 'Table Annex 7, a whole table'],
+    ]);
+    expect(listed(wrapper)).toEqual([ANA, BEN, CAL, DEE, EVE, FAY]);
+  });
+
+  it.each([
+    ['their name, as the roster gives it (a preferred name, else the full name)', 'pottery', [ANA]],
+    ['a preferred name standing for a full one', 'bee', [BEN]],
+    ['their address', 'dee@', [DEE]],
+    ['their table', 'aisle a 3', [CAL, DEE]],
+    ['a table on no layout', 'Annex', [FAY]],
+    ['words with spaces round them', '  knits ', [CAL]],
+  ])('finds a vendor by %s', async (_what, words, found) => {
+    answer = day({ [BEN]: { vendorName: 'Bee' } });
+    const wrapper = await openOnMap();
+    await type(wrapper, words);
+    expect(listed(wrapper)).toEqual(found);
+  });
+
+  it('draws at most 50 rows, then says how many more and to type to narrow them', async () => {
+    answer = day();
+    for (let n = 0; n < 55; n += 1) {
+      answer.data.roster.push(row(`v${n}@example.com`, `Vendor ${n}`, `Annex ${n + 10}`));
+    }
+    const wrapper = await openOnMap();
+    await field(wrapper).trigger('click');
+    expect(listed(wrapper)).toHaveLength(50);
+    expect(wrapper.get(testid('attendance-map-search-more')).text()).toBe(
+      '11 more, type to narrow',
+    );
+  });
+
+  it('typing outlines nothing on the map and opens nothing', async () => {
+    const wrapper = await openOnMap();
+    for (const words of ['Ben', 'knits', 'Aisle A']) {
+      await type(wrapper, words);
+      expect(listed(wrapper).length).toBeGreaterThan(0);
+      expect(marks(wrapper)).toHaveLength(0);
+    }
+    expect(router.push).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("a pick by the keys opens the vendor's drawer and outlines their seat, the field emptied", async () => {
+    route.query = { view: 'map', date: TODAY };
+    const wrapper = await open();
+    await type(wrapper, 'prints');
+    await field(wrapper).trigger('keydown', { key: 'ArrowDown' });
+    await field(wrapper).trigger('keydown', { key: 'Enter' });
+    expect(router.push).toHaveBeenCalledWith(
+      expect.objectContaining({ query: { view: 'map', date: TODAY, vendor: BEN } }),
+    );
+    expect(router.replace).not.toHaveBeenCalled();
+    await flushPromises();
     expect(marks(wrapper)).toHaveLength(1);
-    await wrapper.get(testid('attendance-search')).setValue('knits');
+    expect(marks(wrapper)[0]!.find('rect').exists()).toBe(true);
+    expect(value(wrapper)).toBe('');
+    expect(wrapper.find(testid('attendance-map-search-list')).exists()).toBe(false);
+  });
+
+  it('a pick by a click on half a shared table outlines that half', async () => {
+    const wrapper = await openOnMap();
+    await type(wrapper, 'soaps');
+    await wrapper.get(testid('attendance-map-search-option')).trigger('click');
+    await flushPromises();
+    expect(route.query.vendor).toBe(DEE);
     expect(marks(wrapper)).toHaveLength(1);
     expect(marks(wrapper)[0]!.find('path').exists()).toBe(true);
-    await wrapper.get(testid('attendance-search')).setValue('Aisle A');
-    expect(marks(wrapper)).toHaveLength(4);
-    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it("a pick in the other location replaces the address's location and outlines there", async () => {
+    marketNow = market({}, TWO_LAID_OUT);
+    answer = twoHalls();
+    route.query = { view: 'map', date: TODAY };
+    const wrapper = await open();
+    expect(wrapper.find('[data-table-id="s1"]').exists()).toBe(false);
+    await type(wrapper, 'glass');
+    await field(wrapper).trigger('keydown', { key: 'Enter' });
+    await flushPromises();
+    // The location first, replaced, then the drawer's own step, so Back closes the drawer and
+    // leaves the map on the vendor's location.
+    expect(router.replace).toHaveBeenCalledWith({
+      query: { view: 'map', date: TODAY, location: SOUTH.id },
+    });
+    expect(router.push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: { view: 'map', date: TODAY, location: SOUTH.id, vendor: GIL },
+      }),
+    );
+    expect(router.replace.mock.invocationCallOrder[0]!).toBeLessThan(
+      router.push.mock.invocationCallOrder[0]!,
+    );
+    expect(
+      (wrapper.get(testid('attendance-location-select')).element as HTMLSelectElement).value,
+    ).toBe(SOUTH.id);
+    expect(wrapper.find('[data-table-id="s1"]').exists()).toBe(true);
+    expect(marks(wrapper)).toHaveLength(1);
+  });
+
+  it('a pick in the open location keeps the address as it is', async () => {
+    marketNow = market({}, TWO_LAID_OUT);
+    answer = twoHalls();
+    route.query = { view: 'map', location: SOUTH.id };
+    const wrapper = await open();
+    await type(wrapper, 'glass');
+    await field(wrapper).trigger('keydown', { key: 'Enter' });
+    await flushPromises();
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(route.query).toEqual({ view: 'map', location: SOUTH.id, vendor: GIL });
+    expect(marks(wrapper)).toHaveLength(1);
+  });
+
+  it.each([
+    ['here with no table', 'jams', EVE],
+    ['at a table on no layout', 'candles', FAY],
+  ])(
+    'a pick of a vendor %s opens their drawer and outlines nothing',
+    async (_what, words, email) => {
+      marketNow = market({}, TWO_LAID_OUT);
+      answer = twoHalls();
+      const wrapper = await openOnMap();
+      await type(wrapper, words);
+      await field(wrapper).trigger('keydown', { key: 'Enter' });
+      await flushPromises();
+      expect(route.query).toEqual({ view: 'map', vendor: email });
+      expect(router.replace).not.toHaveBeenCalled();
+      expect(marks(wrapper)).toHaveLength(0);
+    },
+  );
+
+  it('closing the drawer clears the outline', async () => {
+    const wrapper = await openOnMap();
+    await type(wrapper, 'prints');
+    await field(wrapper).trigger('keydown', { key: 'Enter' });
+    await flushPromises();
+    expect(marks(wrapper)).toHaveLength(1);
+    wrapper.findComponent({ name: 'VendorDrawer' }).vm.$emit('close');
+    await flushPromises();
+    expect(route.query.vendor).toBeUndefined();
+    expect(marks(wrapper)).toHaveLength(0);
+  });
+
+  it('a re-read with the list open keeps the words and the list, its rows as read', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+    const wrapper = await openOnMap();
+    await type(wrapper, 'a');
+    expect(listed(wrapper)).toContain(ANA);
+    const before = listed(wrapper);
+
+    answer = day();
+    answer.data.roster.push(row('hal@example.com', 'Hal Candles', 'Aisle A 4'));
+    vi.advanceTimersByTime(REREAD_MS);
+    await flushPromises();
+
+    expect(api.get.mock.calls.filter(([url]) => url === ROSTER_URL).length).toBeGreaterThan(1);
+    expect(value(wrapper)).toBe('a');
+    expect(field(wrapper).attributes('aria-expanded')).toBe('true');
+    expect(listed(wrapper)).toEqual([...before, 'hal@example.com']);
+    expect(marks(wrapper)).toHaveLength(0);
   });
 });
 
@@ -698,7 +931,6 @@ describe("the map's note", () => {
         market: marketNow,
         rows: day().data.roster,
         date: TODAY,
-        found: [],
         openVendor: null,
         notHere: 'Not yet',
         hereWithoutSeat: 0,

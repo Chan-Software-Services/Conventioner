@@ -1,5 +1,6 @@
 import { marketScreenPath } from '../helpers/marketScreens';
 import type { Locator, Page } from '@playwright/test';
+import { PersonChooser } from './PersonChooser';
 
 /**
  * Page object for the organizer's Attendance page (/markets/:marketId/attendance): one market date
@@ -9,7 +10,13 @@ export class AttendanceStatusPage {
   readonly page: Page;
   readonly summary: Locator;
   readonly rows: Locator;
+  /** The list's search, which filters its rows. */
   readonly search: Locator;
+  /**
+   * The map's search in its place (T466): a search with a dropdown of the day's vendors, by
+   * address, a pick opening that vendor's drawer.
+   */
+  readonly mapSearch: PersonChooser;
   /**
    * The tools pinned under the market's frame at a desk (T466): the toolbar, then the count row of
    * the count, the list's Show buttons and the search.
@@ -83,6 +90,7 @@ export class AttendanceStatusPage {
     this.summary = page.getByTestId('attendance-summary');
     this.rows = page.getByTestId('attendance-row');
     this.search = page.getByTestId('attendance-search');
+    this.mapSearch = new PersonChooser(page, 'attendance-map-search');
     this.tools = page.getByTestId('attendance-tools');
     this.toolbar = page.getByTestId('attendance-toolbar');
     this.bar = page.getByTestId('attendance-bar');

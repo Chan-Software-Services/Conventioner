@@ -6,8 +6,9 @@
  *
  * A press on a vendor's table, or on their half of a shared one, asks the page to open their drawer,
  * as a press on their row does; the open vendor's seat is the picked one. A press on a table with no
- * vendor says so under the map and opens nothing. The search marks the vendors it finds. The
- * vendors the map cannot draw are counted under it, with the way back to the list: those here with
+ * vendor says so under the map and opens nothing. A vendor picked in the page's search opens the
+ * same way, so their seat is the picked one; typing alone marks nothing (T466). The vendors the map
+ * cannot draw are counted under it, with the way back to the list: those here with
  * no table, and those whose table is on no layout. The legend names "No vendor" only on a day the
  * open location draws a table or half nobody sits at (`drawsAFreePart`), and the read time the page
  * gives stands under the map as the day map's note.
@@ -39,8 +40,6 @@ const props = defineProps<{
   /** The roster's rows, every date's; the map draws `date`'s. */
   rows: readonly RosterSeatRow[];
   date: string;
-  /** The vendors the search finds on `date`, by email; empty with nothing typed. */
-  found: readonly string[];
   /** The vendor whose drawer is open, by email, or null. */
   openVendor: string | null;
   /** What the list calls a vendor not here: "Not yet", or "Did not come" once the day is over. */
@@ -103,11 +102,10 @@ const legend = computed<DayMapLegendItem[]>(() => [
     : []),
 ]);
 
-/** A table with no vendor pressed, which the note under the map names; none once a vendor opens,
- *  or the search marks what it finds. */
+/** A table with no vendor pressed, which the note under the map names; none once a vendor opens. */
 const freeTable = ref<string | null>(null);
 watch(
-  () => [props.date, openId.value, props.openVendor, props.found.join('\n')],
+  () => [props.date, openId.value, props.openVendor],
   () => (freeTable.value = null),
 );
 
@@ -116,9 +114,6 @@ const seatKeyOf = (email: string) =>
 
 const picked = computed(
   () => (props.openVendor ? seatKeyOf(props.openVendor) : null) ?? freeTable.value,
-);
-const marked = computed(() =>
-  props.found.map(seatKeyOf).filter((key): key is string => key !== null),
 );
 
 /** "Table Aisle A 4: no vendor on Nov 18, 2026.", for the table pressed with nobody at it, the day
@@ -175,7 +170,6 @@ const mayChangeSetup = computed(() => mayTake(props.market, MarketAction.ChangeS
         :locationId="openId"
         :seats="seats"
         :picked="picked"
-        :marked="marked"
         :legend="legend"
         :note="updated"
         :locationSwitch="false"

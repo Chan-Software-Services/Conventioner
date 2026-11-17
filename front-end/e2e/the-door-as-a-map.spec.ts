@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { test, expect, BACKEND_URL, TEST_USER } from './fixtures';
 import { inTheWindow, PHONE_AND_DESK } from './helpers/phoneWindow';
 import { seedMarketDayMap, type SeededMarketDayMap } from './helpers/seedMarketDayMap';
@@ -17,6 +17,10 @@ import { LoginPage } from './pages/LoginPage';
  * made on the list, and one made elsewhere, which the roster's re-read brings with no reload. The
  * legend names "No vendor" on North Wing, where Aisle A 4 is free, and not on South Wing, whose
  * tables are all held. The drawer holds no check-in (D39): a check-in is the list's.
+ *
+ * The map's search finds one vendor of the day in a dropdown, each row saying where they sit, and
+ * picking one opens their drawer and outlines their table, on South Wing when they sit there; typing
+ * alone outlines nothing (T466, release walk F3).
  */
 
 const VIEWER = { email: 'e2e-door-map-viewer@example.com', password: 'e2epassword123' };
@@ -28,6 +32,18 @@ const REREAD = 20_000;
 function aisleA(seeded: SeededMarketDayMap) {
   const [ember, kiln, loom, moth] = seeded.vendors;
   return { ember: ember!.email, kiln: kiln!.email, loom: loom!.email, moth: moth!.email };
+}
+
+/** The map's one outline stands round `target`: its box holds the target's middle, and no more. */
+async function expectAround(mark: Locator, target: Locator): Promise<void> {
+  const round = (await mark.boundingBox())!;
+  const box = (await target.boundingBox())!;
+  const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+  expect(x).toBeGreaterThan(round.x);
+  expect(x).toBeLessThan(round.x + round.width);
+  expect(y).toBeGreaterThan(round.y);
+  expect(y).toBeLessThan(round.y + round.height);
+  expect(round.width).toBeLessThan(box.width * 1.5);
 }
 
 async function openTheMap(page: Page, seeded: SeededMarketDayMap): Promise<AttendanceStatusPage> {
@@ -151,7 +167,7 @@ for (const size of PHONE_AND_DESK) {
       await expectFits(page, 'The door as a map, South Wing');
     });
 
-    test('the search marks the vendor it finds, and opens nothing', async ({
+    test('the search finds one vendor, and a pick opens their drawer and outlines their table', async ({
       authenticatedPage: page,
       request,
     }) => {
@@ -161,14 +177,83 @@ for (const size of PHONE_AND_DESK) {
         TEST_USER.email,
         TEST_USER.password,
       );
+      const vendors = aisleA(seeded);
       const door = await openTheMap(page, seeded);
+      const search = door.mapSearch;
       const marks = door.map.getByTestId('layout-map-read');
+      await expect(search.field).toHaveAttribute('placeholder', 'Name, email or table');
+      await expect(page.getByRole('combobox', { name: 'Find a vendor' })).toBeVisible();
+      await expect(door.search).toHaveCount(0);
+
+      // Typing finds the day's vendors at a table, each row saying where they sit, its list lying
+      // over the map, and outlines nothing.
+      await search.field.fill('Aisle A');
+      await expect(search.options).toHaveCount(4);
+      expect(await search.offered()).toEqual(
+        [vendors.ember, vendors.kiln, vendors.loom, vendors.moth].sort(),
+      );
+      await expect(search.option(vendors.moth)).toContainText('Table Aisle A 3, right half');
       await expect(marks).toHaveCount(0);
-      await door.search.fill(aisleA(seeded).kiln);
-      await expect(marks).toHaveCount(1);
       await expect(door.drawer).toHaveAttribute('aria-hidden', 'true');
-      await door.search.fill('Aisle A');
-      await expect(marks).toHaveCount(4);
+      const listBox = (await search.list.boundingBox())!;
+      const onTop = await page.evaluate(
+        ([x, y]) =>
+          Boolean(
+            document
+              .elementFromPoint(x!, y!)
+              ?.closest('[data-testid="attendance-map-search-list"]'),
+          ),
+        [listBox.x + listBox.width / 2, listBox.y + listBox.height / 2],
+      );
+      expect(onTop, 'the list lies over the map, nothing over it').toBe(true);
+      expect(listBox.y + listBox.height).toBeGreaterThan(
+        (await door.bar.boundingBox())!.y + (await door.bar.boundingBox())!.height,
+      );
+      await expectFits(page, 'The door as a map, its search open');
+
+      // The arrow keys and Enter pick the second of the shared table's two, outlining their half.
+      await search.field.fill('Aisle A 3');
+      await expect(search.options).toHaveCount(2);
+      const second = await search.options.nth(1).getAttribute('data-value');
+      await search.field.press('ArrowDown');
+      await expect(search.field).toHaveAttribute(
+        'aria-activedescendant',
+        (await search.options.nth(1).getAttribute('id'))!,
+      );
+      await search.field.press('Enter');
+      await expect(door.drawer).toHaveAttribute('aria-hidden', 'false');
+      await expect(door.drawerEmail).toHaveText(second!);
+      await expect(marks).toHaveCount(1);
+      await expectAround(
+        marks,
+        door.mapTable('Aisle A 3', second === vendors.moth ? 'right' : 'left'),
+      );
+      await expect(search.field).toHaveValue('');
+      await expect(search.list).toHaveCount(0);
+
+      // Closing the drawer clears the outline.
+      await door.drawerClose.click();
+      await expect(door.drawer).toHaveAttribute('aria-hidden', 'true');
+      await expect(marks).toHaveCount(0);
+
+      // A vendor of South Wing, by their name: the map switches there and outlines their table.
+      const femi = seeded.vendors.find((one) => one.today.tableCode === 'Aisle B 3')!;
+      await search.field.fill(femi.preferredName);
+      await expect(search.options).toHaveCount(1);
+      await expect(search.option(femi.email)).toContainText('Table Aisle B 3, a whole table');
+      await search.field.press('Enter');
+      await expect(door.drawerEmail).toHaveText(femi.email);
+      await expect(page).toHaveURL(/[?&]location=loc-south-wing(&|$)/);
+      await expect(door.locationSelect).toHaveValue('loc-south-wing');
+      await expect(marks).toHaveCount(1);
+      await expectAround(marks, door.mapTable('Aisle B 3'));
+
+      // Back closes the drawer and leaves the map on South Wing, where the vendor sits.
+      await page.goBack();
+      await expect(door.drawer).toHaveAttribute('aria-hidden', 'true');
+      await expect(door.locationSelect).toHaveValue('loc-south-wing');
+      await expect(door.mapTable('Aisle B 3')).toBeVisible();
+      await expect(marks).toHaveCount(0);
     });
   });
 }
