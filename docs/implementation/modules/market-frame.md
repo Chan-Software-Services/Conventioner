@@ -9,11 +9,12 @@ describes:
   - front-end/src/utils/marketPage.ts
   - front-end/src/views/ToolsView.vue
   - front-end/src/views/PaymentsView.vue
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - T209
   - T277
   - T316
+  - T421
   - wayfinding/the-market-frame/map
   - wayfinding/the-market-frame/01
   - wayfinding/the-order-of-the-work/map
@@ -39,7 +40,6 @@ sources:
   - T217
   - T263
   - T422
-  - T421
 ---
 
 # The market frame

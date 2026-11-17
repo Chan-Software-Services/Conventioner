@@ -435,11 +435,28 @@ describe('the states', () => {
     await selectAll(wrapper).trigger('click');
     expect(selection(wrapper).exists()).toBe(true);
     fetchMarketApplications.mockRejectedValue({ isAxiosError: true, request: {} });
-    wrapper.findComponent({ name: 'VendorDrawer' }).vm.$emit('infoUpdated', application(1));
+    // Another market's first read fails: there is nothing of it to show, so no rows and no ticks.
+    await wrapper.setProps({ market: { ...MARKET, id: 'm2' } as Market });
     await flushPromises();
     expect(wrapper.find('[data-testid="applications-read-failed"]').exists()).toBe(true);
     expect(rows(wrapper)).toHaveLength(0);
     expect(selection(wrapper).exists()).toBe(false);
+  });
+
+  it('keeps the rows and the ticks when a re-read fails, and says so beside Refresh', async () => {
+    const wrapper = await allView();
+    await selectAll(wrapper).trigger('click');
+    const shown = rows(wrapper).length;
+    fetchMarketApplications.mockRejectedValue({ isAxiosError: true, request: {} });
+    wrapper.findComponent({ name: 'VendorDrawer' }).vm.$emit('infoUpdated', application(1));
+    await flushPromises();
+    expect(wrapper.find('[data-testid="applications-read-failed"]').exists()).toBe(false);
+    expect(rows(wrapper)).toHaveLength(shown);
+    expect(selection(wrapper).exists()).toBe(true);
+    expect(wrapper.findComponent({ name: 'ListFreshness' }).attributes('failed')).toBe(
+      'Could not refresh. The list is as it was last read.',
+    );
+    wrapper.unmount();
   });
 });
 

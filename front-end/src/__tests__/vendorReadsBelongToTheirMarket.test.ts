@@ -11,7 +11,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { computed, defineComponent, reactive, ref } from 'vue';
+import { computed, defineComponent, inject, reactive, ref } from 'vue';
 
 import AttendanceStatusView from '@/views/AttendanceStatusView.vue';
 import PaymentsView from '@/views/PaymentsView.vue';
@@ -22,6 +22,7 @@ import { calendarToday } from '@/utils/marketGuide';
 import { useVendorDetails } from '@/utils/vendorDetails';
 import { useVendorNotes } from '@/utils/vendorNotes';
 import type { MarketPayments } from '@/utils/paymentsPage';
+import { PAYMENT_WRITTEN } from '@/utils/payments';
 import { answersRefusing } from './support/servedAnswers';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
@@ -203,6 +204,35 @@ describe('Payments never shows another market', () => {
     await w.vm.$nextTick();
     expect(w.text()).toContain('Loading payments…');
     expect(emails(w)).toEqual([]);
+  });
+
+  it('reads its payments again when a payment written from the drawer answers once the tab is gone', async () => {
+    loadMarketPayments.mockResolvedValue(paymentsOf(ANA));
+    fetchMarketApplications.mockResolvedValue([]);
+    // The drawer, closed: what the Payment tab calls for a write that answered once it was gone.
+    const ClosedDrawer = defineComponent({
+      setup: () => ({ written: inject(PAYMENT_WRITTEN, null) }),
+      template: '<button data-testid="drawer-written" @click="written?.()" />',
+    });
+    const w = mount(PaymentsView, {
+      attachTo: document.body,
+      global: {
+        stubs: {
+          MarketFrame: { template: '<div><slot name="pinned" /><slot /></div>' },
+          NothingAssigned: true,
+          RouterLink: true,
+          VendorDrawer: ClosedDrawer,
+        },
+      },
+    });
+    await flushPromises();
+    expect(loadMarketPayments).toHaveBeenCalledTimes(1);
+
+    await w.get('[data-testid="drawer-written"]').trigger('click');
+    await flushPromises();
+
+    expect(loadMarketPayments).toHaveBeenCalledTimes(2);
+    expect(loadMarketPayments).toHaveBeenLastCalledWith('market-a');
   });
 
   it("waits for B's names, never drawing B's list under A's", async () => {
