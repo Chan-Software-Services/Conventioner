@@ -76,6 +76,23 @@ test.describe('The layout detectors', () => {
     ]);
   });
 
+  test('a negative margin that carries a row past the padded box round it is still a child outside its parent', async ({
+    page,
+  }) => {
+    // A row pulled 40px across a card that pads it by 16px: the margin asks for it, but no gutter
+    // gives that room, so it stands past the card's own edge.
+    const found = await findingsOn(
+      page,
+      `<div style="padding: 0 16px; margin: 0 48px"><div style="display: flex; flex-direction: column">
+         <div data-testid="carried" style="margin-inline: -40px">Past its card</div>
+       </div></div>`,
+      390,
+    );
+    expect(of(found, 'child-outside-parent').map((f) => `${f.el}: ${f.detail}`)).toEqual([
+      'div > div > div[carried]: 40px outside div',
+    ]);
+  });
+
   test('text cut off by its box is clipped', async ({ page }) => {
     const found = await findingsOn(
       page,
