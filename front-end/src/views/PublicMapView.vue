@@ -921,15 +921,18 @@ function openVendor(vendor: ListedVendor) {
   min-width: 0;
 }
 
-/* Prototype (release walk F6): the name on a frosted card, so it reads over the gradient; white at
-   two thirds with the gradient blurred behind it, as soft as the dropdowns and the bubble. */
-.public-map__head .public-map__words {
-  padding: var(--space-3) var(--space-6) var(--space-3) var(--space-4);
-  border: 1px solid rgb(255 255 255 / 70%);
-  border-radius: 18px;
-  background: rgb(255 255 255 / 62%);
-  box-shadow: var(--pm-soft-shadow);
-  backdrop-filter: blur(14px);
+/* Prototype (release walk F6): the name and "vendor map" lifted off the gradient by a subtle white
+   glow round their letters, no card. */
+.public-map__head .public-map__title,
+.public-map__head .public-map__subtitle {
+  text-shadow:
+    0 0 1px rgb(255 255 255 / 90%),
+    0 0 8px rgb(255 255 255 / 75%),
+    0 0 18px rgb(255 255 255 / 55%);
+}
+
+.public-map__subtitle-icon {
+  filter: drop-shadow(0 0 4px rgb(255 255 255 / 80%));
 }
 
 /* The name in bold Outfit over a honey stroke, drawn as a thick underline behind the letters so it
