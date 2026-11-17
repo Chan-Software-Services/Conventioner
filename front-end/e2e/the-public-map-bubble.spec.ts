@@ -415,3 +415,96 @@ test.describe('the bubble in a short desk window', () => {
     await expect(map.card).toHaveCount(1);
   });
 });
+
+/**
+ * A table over the day map's zoom at the whole hall's view, held today by a fixture vendor with a
+ * website and an Instagram (so a tall card): Aisle A 4 copied in North Wing's answer as the server
+ * sent it, placed by the screen scale the seeded Aisle A 1 and Aisle A 4 give, its middle over the
+ * zoom's and its top two fifths of the way down the hall. Its code is returned.
+ */
+async function addATableOverTheZoom(page: Page, map: PublicMapPage): Promise<string> {
+  let north: { layout: { tables: { id: string; xMm: number; yMm: number }[] } } | null = null;
+  await page.route(
+    (url) => new URL(url.href).pathname.endsWith(`/public/markets/${seeded.slug}/map`),
+    async (route) => {
+      const response = await route.fetch();
+      const answer = await response.json();
+      north = answer.locations.find((location: { id: string }) => location.id === seeded.north.id);
+      await route.fulfill({ response, json: answer });
+    },
+  );
+  await map.goto(seeded.slug);
+  const [first, fourth] = [north!.layout.tables[0], north!.layout.tables[3]];
+  const a1 = await boxOf(map.table('Aisle A 1'));
+  const a4 = await boxOf(map.table('Aisle A 4'));
+  const perMm = (a4.x - a1.x) / (fourth.xMm - first.xMm);
+  const hall = await boxOf(map.hall);
+  const pill = await boxOf(page.getByTestId('day-map-zoom'));
+  const left = centreX(pill) - a4.width / 2;
+  const top = hall.y + hall.height * 0.4;
+  const placed = {
+    xMm: first.xMm + (left - a1.x) / perMm,
+    yMm: first.yMm + (top - a1.y) / perMm,
+  };
+
+  await page.unrouteAll({ behavior: 'wait' });
+  await page.route(
+    (url) => new URL(url.href).pathname.endsWith(`/public/markets/${seeded.slug}/map`),
+    async (route) => {
+      const response = await route.fetch();
+      const answer = await response.json();
+      const wing = answer.locations.find(
+        (location: { id: string }) => location.id === seeded.north.id,
+      );
+      const model = wing.layout.tables[3];
+      wing.layout.tables.push({ ...model, id: 'over-the-zoom', number: 9, ...placed });
+      answer.seats.push({
+        date: seeded.today,
+        tableId: 'over-the-zoom',
+        half: 'whole',
+        name: 'Zoomfixture Stall',
+        website: 'zoomfixture-stall.test',
+        instagram: 'example_zoomfixture',
+      });
+      await route.fulfill({ response, json: answer });
+    },
+  );
+  await page.reload();
+  return 'Aisle A 9';
+}
+
+// Where the hall has no room to keep the bubble clear of the zoom, a tap on the zoom's uncovered
+// part leaves the card open: a touch screen focuses the tapped button only after the tap has
+// ended, and that focus is no keyboard's (`:focus-visible`), so it closes nothing.
+test.describe('the bubble over the zoom, on a touch screen at a desk width', () => {
+  test.use({ viewport: { width: 1100, height: 560 }, hasTouch: true });
+
+  test('a tap on a zoom button it partly covers leaves it open', async ({ page }) => {
+    const map = new PublicMapPage(page);
+    const over = map.table(await addATableOverTheZoom(page, map));
+    await over.tap();
+    await expect(map.cardNames).toHaveText(['Zoomfixture Stall']);
+    const bubble = await boxOf(map.bubble);
+    expect(
+      overlap(bubble, await boxOf(page.getByTestId('day-map-zoom'))),
+      'the precondition: the bubble covers part of the zoom',
+    ).toBe(true);
+    // At the whole hall's view Fit and Zoom out move nothing, so the bubble stays where it is.
+    const fit = page.getByTestId('day-map-fit');
+    const button = await boxOf(fit);
+    const clearFrom = bubble.x + bubble.width;
+    expect(overlap(bubble, button), 'the precondition: the bubble covers part of Fit').toBe(true);
+    expect(
+      button.x + button.width - clearFrom,
+      'the precondition: part of Fit is clear of it',
+    ).toBeGreaterThan(4);
+
+    await fit.tap({
+      position: { x: (clearFrom + button.x + button.width) / 2 - button.x, y: button.height / 2 },
+    });
+    await expect(fit).toBeFocused();
+    await page.waitForTimeout(100);
+    await expect(map.card).toHaveCount(1);
+    expect(overlap(await boxOf(map.bubble), button), 'the bubble stayed over Fit').toBe(true);
+  });
+});

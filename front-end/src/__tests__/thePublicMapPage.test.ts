@@ -816,6 +816,18 @@ function drawnAt(boxes: [selector: string, box: DOMRect][]) {
   });
 }
 
+/** An element focused by a press, as the browser says: no `:focus-visible` on it (happy-dom
+ *  answers it as `:focus`, so the browser's answer is given here). */
+function pressed(el: Element) {
+  const matches = Element.prototype.matches;
+  return vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+    this: Element,
+    selector: string,
+  ) {
+    return this === el && selector === ':focus-visible' ? false : matches.call(this, selector);
+  });
+}
+
 const side = () => wrapper!.get('.public-map__side');
 const escape = (on: EventTarget = document.body) =>
   on.dispatchEvent(
@@ -1062,10 +1074,11 @@ describe('the card moving as the window crosses 1000px', () => {
 });
 
 // At a desk, nothing holding the focus lies under the bubble either: the focus reaching a table
-// it covers (a neighbour, by the arrow keys) closes it, the focus staying on that table. Only
-// by the keyboard: a press opens its own card or zooms the map. The zoom's buttons are kept clear of
-// the bubble where the hall has room, so Tab passes them on its way into it; where it had none, a
-// zoom button the keyboard reaches under it closes it as a table does.
+// it covers (a neighbour, by the arrow keys) closes it, the focus staying on that table. Only by
+// the keyboard, as the browser's `:focus-visible` says: a press opens its own card or zooms the
+// map. The zoom's buttons are kept clear of the bubble where the hall has room, so Tab passes them
+// on its way into it; where it had none, a zoom button the keyboard reaches under it closes it as
+// a table does.
 describe('the focus and the bubble at a desk', () => {
   const BUBBLE = new DOMRect(200, 200, 288, 200);
   const drawn = (g4: DOMRect, zoomIn = new DOMRect(1100, 850, 40, 28)) =>
@@ -1121,7 +1134,7 @@ describe('the focus and the bubble at a desk', () => {
     const page = await open(found(), { table: 'g1' });
     await frame();
     const zoomIn = page.get('[data-testid="day-map-zoom-in"]').element as HTMLElement;
-    zoomIn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    pressed(zoomIn);
     zoomIn.focus();
     await frame();
     await flushPromises();
@@ -1134,17 +1147,30 @@ describe('the focus and the bubble at a desk', () => {
     const page = await open(found(), { table: 'g1' });
     await frame();
     const g4 = page.get('[data-table-id="g4"]').element as HTMLElement;
-    // A browser focuses what is pressed on the press, before the click opens its card.
-    g4.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    const press = pressed(g4);
     g4.focus();
     await frame();
     await flushPromises();
     expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
     expect(routing.replace).not.toHaveBeenCalled();
-    // The press ended: the keyboard reaching it next closes the card.
-    g4.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    // The keyboard bringing the focus there next closes the card.
+    press.mockRestore();
     g4.blur();
     g4.focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+  });
+
+  it('closes when the keyboard reaches a table under it after a press that never ended', async () => {
+    drawn(new DOMRect(300, 300, 60, 30));
+    const page = await open(found(), { table: 'g1' });
+    await frame();
+    // A right press whose release the browser's menu took: no pointerup ever comes.
+    page
+      .get('[data-testid="public-map-hall"]')
+      .element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 2 }));
+    (page.get('[data-table-id="g4"]').element as HTMLElement).focus();
     await frame();
     await flushPromises();
     expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
