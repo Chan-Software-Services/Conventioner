@@ -15,12 +15,14 @@ sources:
   - T202
   - T271
   - T411
+  - T469
 ---
 
 # Applying online
 
 **Who:** a vendor, with no account; they sign in to one market with a code sent to their email.
-**Where they start:** the market's vendor page, `/<market-slug>`, which the organizer shares from the rail's "Vendor page" ([H1](taking-applications.md#h1-open-applications)); it is the one page a vendor uses at the market ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)).
+**Where they start:** the market page, `/<market-slug>`, whose application call leads to the vendor page, or the vendor page itself, `/<market-slug>/vendor`; the organizer shares each from the rail, "Market page" and "Vendor page" ([H1](taking-applications.md#h1-open-applications)).
+The vendor page is the one page a vendor uses at the market ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)), and the market page is the market's own address for anyone ([ADR 0039](../../adr/0039-a-markets-address-is-its-public-page.md)).
 **Serves:** [Vendors apply on the market's own page](../intents/vendors-apply-on-the-markets-own-page.md) and [Results go out once, and settle the allocation](../intents/results-go-out-once-and-settle-the-allocation.md).
 
 Only a market whose vendors apply on its own page ("Vendors apply on this market's page", chosen in Draft) has these pages, and only after Draft; applying and changing answers are open only while applications are open ([intake mode decides how vendors arrive](../rules/intake-mode-decides-how-vendors-arrive.md)).
@@ -39,7 +41,9 @@ Covered by:
 - `intake-mode.spec.ts`
 - `results-wait-for-the-allocation.spec.ts`
 - `returning-vendors-edit-their-answers.spec.ts`
+- `the-market-page.spec.ts`
 - `the-vendor-page.spec.ts`
+- `the-ways-between-the-two-pages.spec.ts`
 - `vendors-see-their-application-after-close.spec.ts`
 
 ### H3a. A new vendor applies
@@ -47,8 +51,10 @@ Covered by:
 **Status:** Works (re-walked live on 2026-10-03 on a phone-sized window, bug 6; the form on the vendor page itself read from the code as of T202).
 **Task (vendor):** "Apply to this market."
 
-1. The vendor opens the shared link `/<market-slug>`; the page names the market over "Sign in": "Enter your email address. We'll send you a code to sign in with."
-2. They enter their email and "Send code"; the page says "We've sent a code to <email>. Only the newest one works." whatever the address, and the code is sent before the page answers (E32/F03/S02); its email links back to the page, "your page for <market>".
+1. The vendor opens the shared link.
+   At the market page, `/<market-slug>`, the application call names the market and its dates, says "Applications are open." and offers "Apply" and "Already applied? Sign in", both to the vendor page.
+   The vendor page, `/<market-slug>/vendor`, names the market and its dates over "Sign in": "Enter your email address. We'll send you a code to sign in with."
+2. They enter their email and "Send code"; the page says "We've sent a code to <email>. Only the newest one works." whatever the address, and the code is sent before the page answers (E32/F03/S02); its email links back to the vendor page, "your page for <market>".
 3. The code arrives; they enter it under "Sign-in code" and choose "Sign in".
    Each press sends one request, the page moves to the code step on that request's own answer, and "Use a different email" is disabled while one is out, so a late answer never lands on the email step ([dialogs](../../implementation/conventions/dialogs.md), T411).
 4. The page reads "You have not applied to this market yet." with "Apply", which opens the form in its place, on the same page and address: "Apply", the essential questions, then "More questions" (the custom ones); "Save application" and "Cancel".
@@ -114,7 +120,8 @@ Covered by:
 ### H3e. A Google Form market's public pages
 
 **Status:** Works (walked live; the vendor page read from the code as of T202).
-`/<slug>` of a market whose vendors apply on the organizer's own Google Form answers exactly as for a market that does not exist; the vendor page says the page does not exist rather than taking an address ([a gated market answers as absent](../rules/a-gated-market-answers-as-absent.md)).
+Before its results are published, `/<slug>` and `/<slug>/vendor` of a market whose vendors apply on the organizer's own Google Form answer exactly as for a market that does not exist; both say the page does not exist, and the vendor page never takes an address ([a gated market answers as absent](../rules/a-gated-market-answers-as-absent.md)).
+From its results its vendors sign in at the vendor page ([the Google Form path](the-google-form-path.md)).
 Covered by:
 
 - `intake-mode.spec.ts`

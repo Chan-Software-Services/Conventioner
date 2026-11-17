@@ -7,20 +7,21 @@ describes:
   - front-end/src/__tests__/thePublicMapPage.test.ts
   - front-end/e2e/the-public-map.spec.ts
   - front-end/e2e/pages/PublicMapPage.ts
-verified: 2026-11-17
+verified: 2026-11-18
 sources:
   - T422
+  - T469
 ---
 
 # The public map page
 
-A market's public map is a page anyone opens with no sign-in, at `/<market-slug>/map`, to find a vendor's table on a market day ([ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md)).
+A market's public map is a page anyone opens with no sign-in, at the market's own address, `/<market-slug>`, where the market page shows it while it is open, to find a vendor's table on a market day ([ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md), [ADR 0039](../../adr/0039-a-markets-address-is-its-public-page.md)); `/<market-slug>/map` lands there with its query.
 [`PublicMapView.vue`](../../../front-end/src/views/PublicMapView.vue) draws it from [the public map's read](public-map.md), with the day map that Attendance draws too ([the component library](component-library.md) has its entry); [`utils/publicMap.ts`](../../../front-end/src/utils/publicMap.ts) holds its two reads and what it makes of the answer, pure but for the reads.
 
 ## The route
 
-**`/:marketSlug/map` is `public` and `vendorFacing`, its view a lazy import**, above the catch-all ([every market page has an address](../conventions/every-market-page-has-an-address.md)).
-As a public page it fits a phone, and as a vendor-facing one the bar shows the logo alone, to an organizer too ([the app bar](app-bar.md)).
+**The market page, `/:marketSlug`, renders `PublicMapView` as its whole output while the vendor page's read says `mapOpen`**, keyed by the slug; that route is `public` and `vendorFacing` ([every market page has an address](../conventions/every-market-page-has-an-address.md)).
+As a public page it fits a phone, and as a vendor-facing one the bar shows the logo and the market page's "Vendor sign-in" alone, to an organizer too ([the app bar](app-bar.md)).
 A 404 from the read, which the server answers alike for a slug naming no market and for a market whose map is not open, shows the app's "Page not found", and the page tells the bar its slug answered absent (`vendorPageAnswered`), as the vendor page does, so an organizer keeps the full bar there.
 A read that never answered says "The map could not be loaded." with "Try again"; the bar stands apart meanwhile.
 The browser's title is "<Market name> map" while the page is open, and is given back as it goes.

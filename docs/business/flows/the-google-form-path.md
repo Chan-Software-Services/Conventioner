@@ -22,6 +22,7 @@ sources:
   - bug/23
   - bug/24
   - T202
+  - T469
 ---
 
 # The Google Form path
@@ -92,8 +93,8 @@ Covered by:
 
 **Status:** Works, read from the code at T202 ticket 05 ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)).
 
-1. Before the organizer publishes results, the market's address, `/<slug>`, reads "page not found", exactly as an address that names no market ([a gated market answers as absent](../rules/a-gated-market-answers-as-absent.md)).
-2. Once results are published (or the market reached its market days), the address names the market and asks for an email address, then the six-digit code sent to it ([a vendor signs in before they have applied](../rules/a-vendor-signs-in-before-applying.md)).
+1. Before the organizer publishes results, the market's address, `/<slug>`, and its vendor page's, `/<slug>/vendor`, read "page not found", exactly as an address that names no market ([a gated market answers as absent](../rules/a-gated-market-answers-as-absent.md)).
+2. Once results are published (or the market reached its market days), the market page reads "The map isn't published yet.", or shows the map once it is open, with "Vendor sign-in"; the vendor page names the market and its dates and asks for an email address, then the six-digit code sent to it ([a vendor signs in before they have applied](../rules/a-vendor-signs-in-before-applying.md)).
 3. With the address their response gave, the vendor reads "You have a table" and each day's table, or "You did not get assigned"; the page shows no application, and no "Submitted" date, since nobody applies on it.
 4. An address the market has no vendor for reads "There's no application from this address at <market>. Use the address you gave on the market's form, or ask the organizer."
 

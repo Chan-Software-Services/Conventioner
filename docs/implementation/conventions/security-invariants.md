@@ -37,7 +37,7 @@ describes:
   - back-end/organizer_sessions.py
   - back-end/app.py#browser_identifier
   - back-end/tests/test_a_changed_network_keeps_the_session.py
-verified: 2026-11-16
+verified: 2026-11-18
 sources:
   - T74
   - T109

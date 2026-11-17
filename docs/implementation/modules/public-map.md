@@ -5,6 +5,7 @@ describes:
   - back-end/public_map.py
   - back-end/public_answers.py
   - back-end/market_documents.py#public_map_market_by_slug
+  - back-end/market_documents.py#public_map_is_open
   - back-end/datatypes.py#PublicMapSettings
   - back-end/tests/test_the_public_map.py
   - back-end/tests/test_the_public_map_settings.py
@@ -17,11 +18,12 @@ describes:
 verified: 2026-11-17
 sources:
   - T422
+  - T469
 ---
 
 # The public map
 
-A market's public map shows anyone, with no sign-in, each market day's tables and who is at them, at `/<slug>/map` ([ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md)).
+A market's public map shows anyone, with no sign-in, each market day's tables and who is at them, on the market page at the market's own address, `/<slug>`, while it is open ([ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md), [ADR 0039](../../adr/0039-a-markets-address-is-its-public-page.md)); `/<slug>/map` lands there.
 [`back-end/public_map.py`](../../../back-end/public_map.py) holds its settings' write, its gate's own conditions, its read and its image; [`back-end/public_answers.py`](../../../back-end/public_answers.py) cleans the three answers it publishes.
 The page that draws it, and Attendance's map beside the list, read what this answers.
 How an Admin opens it and a visitor uses it is [the market's map](../../business/flows/the-markets-map.md).
@@ -45,7 +47,7 @@ It says what the map shows and never shows, offers three pickers of the form's s
 - A stored question the form no longer asks as short text shows as "Not shown", as the server reads it (`chosen_question`).
 - Off with no public name chosen, the switch is disabled with "Choose the public name's question first." under it; on, it can always be turned off, even after the form lost the name's question.
 - Someone the "Publish the map" row refuses reads the same controls, disabled, with the row's sentence; on an archived market the card says "An archived market's map is closed." in its place.
-- While on, it shows the address, `/<slug>/map` under the app's origin, built as the rail and Publish results build the vendor page's, with "Copy link" (`useCopyAddress`, "Copied" for two seconds) and "Open the map", a new tab with `rel="noopener noreferrer"`.
+- While on, it shows the address, the market page's `/<slug>` under the app's origin (`marketPagePath`), built as the rail builds its two addresses, with "Copy link" (`useCopyAddress`, "Copied" for two seconds) and "Open the map", a new tab with `rel="noopener noreferrer"`.
 - It says the first thing the map still lacks, the archived market's sentence above first, then: "Lay out a location first: the map draws the market's layouts." with "Open the layout", while no location is laid out as `mapped_locations` reads it (a scale, and a table numbered in one of the location's sections); then "The map opens once results are published." until `vendorsWereTold` ([`vendorPage.ts`](../../../front-end/src/utils/vendorPage.ts), the server's `results_are_out`).
 
 The market's history reads each change in words ([the market's history](../data/history.md), [`historyReaders/publicMap.ts`](../../../front-end/src/utils/historyReaders/publicMap.ts)).
@@ -53,7 +55,8 @@ The market's history reads each change in words ([the market's history](../data/
 ## The gate
 
 **`public_map_market_by_slug`, in [`back-end/market_documents.py`](../../../back-end/market_documents.py) beside the vendor page's lookup, is the one gate** of the read and the image ([a gated market answers as absent](../../business/rules/a-gated-market-answers-as-absent.md)).
-The market is found by its slug as the vendor page finds it (`vendor_page_market_by_slug`), its results are out (`results_are_out`), it is not archived, and `is_open` holds: the switch on, its name question still a `text` question of the form (`chosen_question`, which reads a key the form lost as not chosen), and at least one location the map draws (`mapped_locations`).
+The market is found by its slug as the vendor page finds it (`vendor_page_market_by_slug`), and `public_map_is_open` holds of its document: its results are out (`results_are_out`), it is not archived, it reads as a `Market`, and `is_open` holds: the switch on, its name question still a `text` question of the form (`chosen_question`, which reads a key the form lost as not chosen), and at least one location the map draws (`mapped_locations`).
+The vendor page's read answers `public_map_is_open` as `mapOpen`, which is how the market page chooses the map, so the two can never disagree; `test_the_vendor_page.py` closes the map one condition at a time and asserts `mapOpen` is whether the map's read answers 200.
 A location is drawn when its layout has a scale and at least one table in one of the location's sections with a number.
 A market that fails answers 404 with the vendor page's own not-found body, byte for byte as a slug naming no market, and both routes are classed "the public map" in `test_every_route_asks.py` and listed with the public vendor endpoints in `test_a_google_form_markets_page.py`.
 
@@ -94,7 +97,7 @@ A layout stores `followsPlan`, whether it was started after Draft: true on one s
 - [`back-end/tests/test_public_answers.py`](../../../back-end/tests/test_public_answers.py): the cleaning's table for each value, hostile inputs included.
 - The walks every write joins hold it too: it records (`test_every_write_records.py`), names its row (`test_every_check_names_an_action.py`), is refused on an archived market (`test_an_archive_is_read_only.py`), and is refused on a changed market against a real MongoDB (`test_every_held_write_is_refused_on_a_changed_market.py`).
 - [`front-end/src/__tests__/thePublicMapCard.test.ts`](../../../front-end/src/__tests__/thePublicMapCard.test.ts): the card's text and pickers, each save and its refusal, the switch's reason, a refused person and an archived market, the address and its copy, and what is still missing, case by case; `historyReaders.test.ts` holds the history's words.
-- [`front-end/e2e/the-public-map-card.spec.ts`](../../../front-end/e2e/the-public-map-card.spec.ts), on the seam's market: an Admin chooses the three questions and turns the map on, a signed-out read then answers a vendor's public name, and turned off it answers 404; an Editor reads the card disabled with the row's sentence; the card fits a phone; each state passes the accessibility check.
-- [`front-end/e2e/a-market-past-draft-gets-a-public-map.spec.ts`](../../../front-end/e2e/a-market-past-draft-gets-a-public-map.spec.ts), the journey: on a market in Assignment with no layout, the organizer starts North Wing's layout and places Aisle A with Row of tables, chooses the questions and turns the map on, which waits for the results, publishes them, and a signed-out visitor on a phone finds a vendor by name and reads their table, which Attendance's map then draws as that vendor's.
+- [`front-end/e2e/the-public-map-card.spec.ts`](../../../front-end/e2e/the-public-map-card.spec.ts), on the seam's market: an Admin chooses the three questions and turns the map on, a signed-out read then answers a vendor's public name and the card's address opens the map, and turned off it answers 404; an Editor reads the card disabled with the row's sentence; the card fits a phone; each state passes the accessibility check.
+- [`front-end/e2e/a-market-past-draft-gets-a-public-map.spec.ts`](../../../front-end/e2e/a-market-past-draft-gets-a-public-map.spec.ts), the journey: on a market in Assignment with no layout, the organizer starts North Wing's layout and places Aisle A with Row of tables, chooses the questions and turns the map on, which waits for the results while the market page reads "Applications are closed.", publishes them, and a signed-out visitor on a phone finds a vendor by name and reads their table, which Attendance's map then draws as that vendor's.
 - The four sweeps walk the public map before a pick and with a shared table picked, Attendance's map and the card turned on (`SCREENS` in [`front-end/e2e/helpers/screens.ts`](../../../front-end/e2e/helpers/screens.ts)).
 - [`front-end/e2e/helpers/seedMarketDayMap.ts`](../../../front-end/e2e/helpers/seedMarketDayMap.ts) seeds a market on its days with a map to draw, for every spec of the map ([E2E seeds](../testing/e2e-seeds.md)).

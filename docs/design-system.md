@@ -107,6 +107,7 @@ sources:
   - T201
   - T315
   - T422
+  - T469
 ---
 
 # Conventioner's design language
@@ -226,7 +227,7 @@ The market screen's `height: 80%`, which pinned it to most of the window and hid
 `.app-container` used to be `position: absolute; height: 100vh`, which is why no screen could scroll the page and every tall screen grew nested scrollers of its own; do not reintroduce a viewport-height shell.
 
 **The organizer's screens are designed for 1920x1080**, and since T79 the [layout sweep](#what-keeps-this-true) also measures them at 1440x900; no other width is a layout requirement new work is held to (wayfinding/readable-journey/06), though the focus sweep walks every state at a phone's width but those marked `deskOnly` ([what keeps this true](#what-keeps-this-true)).
-The vendor page, where vendors check in, is the carve-out: it is not an organizer screen, it is held in a hand at a door, and it works on a phone ([attendance and the door](implementation/modules/attendance-and-door.md#sharp-edges)).
+The vendor page, where vendors check in, and the market page are the carve-out: neither is an organizer screen, the vendor page it is held in a hand at a door, and it works on a phone ([attendance and the door](implementation/modules/attendance-and-door.md#sharp-edges)).
 The [account pages](business/flows/accounts.md) are the way to it, so they work on a phone too: sign in with its tabs, both password-reset pages and email verification stand in one [`AuthCard`](../front-end/src/components/AuthCard.vue), 600px wide at most, with a 16px page gutter at each side, and `sign-in-fits-a-phone.spec.ts` fails on any of them that scrolls sideways at 390px (T73).
 `the-sign-in-fits-a-small-phone.spec.ts` holds the sign-in's tabs and fields inside their column and their boxes at 320px, at 390px and at a desk (T211).
 Some organizer places lift the desktop floor too, by `meta.fitsAPhone`, each with the dialogs, menus and drawers that open over it; listed in the router's order, one place a line:
@@ -270,7 +271,7 @@ A location's layout on a phone narrows its gutter to 16px too and only reads: th
 | `--workspace-max` | 1440px | Every market page and flow: Market Setup to Attendance, Import, a location's layout |
 | `--list-max`      | 1100px | Markets, Organizations                                                              |
 
-The applicant's own pages are a reading column, not a screen of cards: `--applicant-max` (640px), the vendor page, its application form included.
+The applicant's own pages are a reading column, not a screen of cards: `--applicant-max` (640px), the vendor page, its application form included, and the market page's application call and notice.
 The form tab's preview is drawn at the same width, so it is the form as an applicant sees it (E33/F01/S01).
 
 Two widths rather than one because the content clusters into two groups and **nothing wants the 1536 the workspace was given before**: the plan's widest row needs 1316, the statistics need 1129, and the single-column lists need ~1035. One width for both puts a 1,035px list in a 1,440px page.
@@ -841,6 +842,7 @@ The list holds these states, one a line, each beside the state it is most like, 
 - a location's layout with a no-table zone drawn and turned, waiting for Enter (T422)
 - a location's layout drawn as its map, with 20 tables
 - the signed-out pages
+- the market page signed out, its application call and with applications closed (T469)
 - the public map signed out, before a pick and with a shared table picked, at a desk and on a phone (T422)
 
 They are walked over a stress seed ([`e2e/helpers/seedTheScreens.ts`](../front-end/e2e/helpers/seedTheScreens.ts)) of long names, 40 applications in every review state, a review divided between two reviewers and 36 vendors over four dates and three sections, since a layout that holds on three short names breaks on a real market.

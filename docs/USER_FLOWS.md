@@ -54,7 +54,7 @@ A bug the status once named is cited where its fix changed what a step says.
 - [J. Assigning tables](business/flows/assignment-and-result.md) - I7, J1 to J5, J2a, J3a, J3b, J14; [placing by hand](business/flows/placing-by-hand.md) - J6 to J10, J13, J19; [vendors](business/flows/vendors.md) - J11, J12, J15, J16, J18, J20; [payments](business/flows/payments.md) - J17; and [the vendor drawer](business/flows/vendor-drawer.md)
 - [K. Publishing and market days](business/flows/market-day-door.md) - K1 to K5; [the market's map](business/flows/the-markets-map.md) - K7 to K9; [K6](#k6-send-offers-instead-of-publishing) is planned, below
 - [L. Ending and managing a market](business/flows/ending-and-managing-a-market.md) - L1 to L5, with P6; [reading the market's history](business/flows/reading-the-markets-history.md) - L6
-- [M. Offers and outcomes (planned)](#m-offers-and-outcomes-planned) - M1 to M5; planned, below
+- [M. Offers and outcomes (planned)](#m-offers-and-outcomes-planned) - M1 to M5; planned but M5, below
 - [N. The market's statistics](business/flows/stats.md) - N1 to N7
 
 ## Planned, not built
@@ -107,8 +107,8 @@ Before any is sent, E05 requires a decision on imported addresses, which nobody 
 
 #### M5. The market's public page
 
-**Status:** Stubbed.
-`/<market-slug>` shows only the market's name; E05 makes it the market's real public page.
+**Status:** Works (T469, [ADR 0039](adr/0039-a-markets-address-is-its-public-page.md)).
+`/<market-slug>` is the market page, for anyone in every stage: the [public map](business/flows/the-markets-map.md#k8-a-visitor-finds-a-vendor) while it is open, the application call while the market takes applications ([H3a](business/flows/applying-online.md#h3a-a-new-vendor-applies)), and otherwise a notice of where it stands, each with a way to the vendor page, `/<market-slug>/vendor`.
 
 ## Not reachable yet
 
@@ -121,7 +121,6 @@ No bug blocks a flow any more: the fourteen rows that once stood here for bugs w
 | [B6](business/flows/organizations.md#b6-transfer-ownership) Transfer an organization | No screen | API only              | A screen                                 |
 | [F6](business/flows/form-tab.md#f6-table-type-preference) Table type preference      | Stubbed   | One table type in MVP | Assignment that uses several table types |
 | M1 to M4 Offers and outcome mail                                                     | Planned   | E05                   | The epic                                 |
-| M5 Public market page                                                                | Stubbed   | E05                   | The epic                                 |
 
 ## Bugs found while exploring
 
