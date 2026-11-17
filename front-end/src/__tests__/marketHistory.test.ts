@@ -968,6 +968,97 @@ describe('a verdict on an application dealt to a reviewer (E38/F07/S02)', () => 
   });
 });
 
+/** A verdict set on a selection, in one of its vendors' own history: their line alone. */
+describe('a selection’s verdict in a vendor’s own history', () => {
+  const SAM = 'sam@example.com';
+  const CAL = 'cal@ember.test';
+  const selection = (action: string, kind: string, before: string, after: string) =>
+    entry({
+      action,
+      kind,
+      vendors: ['ana@ember.test', 'ben@ember.test', CAL],
+      subject: { application_ids: ['a1', 'a2', 'a3'] },
+      detail: {
+        before: { a1: { status: before }, a2: { status: before }, a3: { status: before } },
+        after: { a1: { status: after }, a2: { status: after }, a3: { status: after } },
+        dealt_to: { a1: SAM, a2: 'dana@ember.test' },
+      },
+    });
+  const given = selection('give-verdicts', 'verdicts', 'open', 'reviewer_approved');
+  const changed = selection(
+    'change-verdicts',
+    'verdicts',
+    'reviewer_rejected',
+    'reviewer_approved',
+  );
+  const undone = selection('give-verdicts', 'verdicts_undone', 'reviewer_approved', 'open');
+  const own = (email: string) => ({ names: NAMES, path: IntakeMode.Csv, own: email });
+
+  it('words a selection given or changed as the vendor’s application and how many others', () => {
+    for (const each of [given, changed]) {
+      expect(said(entryParts(each, own('ben@ember.test')))).toBe(
+        'dana@ember.test set the application and 2 others to Approved',
+      );
+      expect(said(entryParts(each, own('ANA@ember.test')))).toBe(
+        `dana@ember.test set the application and 2 others to Approved, dealt to ${SAM}`,
+      );
+    }
+  });
+
+  it('words an undone selection as the vendor’s application and how many others', () => {
+    expect(said(entryParts(undone, own('ben@ember.test')))).toBe(
+      'dana@ember.test undid their verdicts on the application and 2 others: Approved back to Open',
+    );
+  });
+
+  it('words a selection of one as the application alone', () => {
+    const one = entry({
+      action: 'give-verdicts',
+      kind: 'verdicts',
+      vendors: ['ana@ember.test'],
+      subject: { application_ids: ['a1'] },
+      detail: {
+        before: { a1: { status: 'open' } },
+        after: { a1: { status: 'reviewer_rejected' } },
+      },
+    });
+    expect(said(entryParts(one, own('ana@ember.test')))).toBe(
+      'dana@ember.test set the application to Rejected',
+    );
+  });
+
+  it('opens to the vendor’s own verdict, before and after, and whose share it was', () => {
+    expect(entryChanges(given, own('ana@ember.test'))).toEqual({
+      changed: [{ field: 'Status', before: 'Open', after: 'Approved' }],
+      recorded: [{ field: 'Dealt to', value: SAM }],
+    });
+    expect(entryChanges(undone, own(CAL))).toEqual({
+      changed: [{ field: 'Status', before: 'Approved', after: 'Open' }],
+      recorded: [],
+    });
+  });
+
+  it('names no other vendor of the selection, nor their application', () => {
+    for (const each of [given, changed, undone]) {
+      const read = JSON.stringify([
+        entryParts(each, own('ben@ember.test')),
+        entryChanges(each, own('ben@ember.test')),
+      ]);
+      // Whole words, since the actor's own address, dana@, ends in ana@'s.
+      for (const other of ['ana@ember.test', 'Ana Rivera', CAL, SAM, 'a1', 'A1', 'a3', 'A3']) {
+        expect(read).not.toMatch(new RegExp(`(?<![\\w.@-])${other.replace(/\./g, '\\.')}`));
+      }
+    }
+  });
+
+  it('keeps the whole selection in the market’s history', () => {
+    expect(said(entryParts(given, { names: NAMES }))).toBe(
+      `dana@ember.test set 3 applications to Approved: [Ana Rivera] (dealt to ${SAM}), [Ben Okafor], [${CAL}]`,
+    );
+    expect(entryChanges(given).changed).toHaveLength(3);
+  });
+});
+
 /** A placement, read from the stored detail; a vendor in it is named by name and email. */
 describe('a placement', () => {
   const ON_THE_DAY = ' on Nov 19, 2026';
