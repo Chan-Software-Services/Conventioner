@@ -280,7 +280,7 @@ describe('a request answering after the vendor signed out', () => {
     await anaSignsOut(store);
     applicantApi.verifyLoginCode.mockResolvedValue({ ...BEN, token: 'ben-token' });
     await store.verifyCode('spring-market', BEN.applicantEmail, '123456', true);
-    // Ben's device is remembered now: a renewal would sign Ben in and send Ana's answers as his.
+    // The device remembers Ben now; Ana's ended save is not renewed at all.
     applicantApi.resumeSignIn.mockResolvedValue({ ...BEN, token: 'ben-renewed' });
     anasSave.refuse(unauthorized());
 
@@ -315,8 +315,8 @@ describe('a sign-in renewed from a remembered device', () => {
     );
   });
 
-  // The device's remembered sign-in is the market's, not this tab's: another tab that signed Ben in
-  // with "Remember me" made it his, so Ana's ended sign-in would come back as Ben's.
+  // The device's remembered sign-in is the market's, not this tab's, and another tab signed Ben in
+  // with "Remember me": a renewal of Ana's that brings back Ben is refused.
   it("never sends a save again with another vendor's remembered sign-in", async () => {
     const store = anaSignedIn();
     applicantApi.saveApplicantApplication.mockImplementation((_slug: string, token: string) =>
@@ -347,7 +347,7 @@ describe('a sign-in renewed from a remembered device', () => {
 
   it("never shows another vendor's application on a read renewed into their sign-in", async () => {
     const store = anaSignedIn();
-    // Ben's application, were the read sent again with his sign-in.
+    // The server answers Ben's application to Ben's sign-in alone.
     applicantApi.fetchApplicantApplication.mockImplementation((_slug: string, token: string) =>
       token === 'ben-remembered'
         ? Promise.resolve(application(BEN.applicantEmail))

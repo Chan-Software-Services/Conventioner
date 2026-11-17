@@ -361,9 +361,8 @@ export const useApplicationStore = defineStore('application', () => {
    * nothing: the page simply asks for a code, as it would have.
    *
    * A renewal names the vendor it renews (`renewing`), and a remembered sign-in of anyone else is
-   * false and held nowhere: the device remembers one vendor per market, not per tab, so another
-   * tab signing Ben in with "Remember me" makes it his, and renewing Ana's sign-in into it would
-   * send her answers as his.
+   * refused, false and held nowhere: the device remembers one vendor per market, not per tab, so a
+   * renewal is only ever the same vendor signed in again.
    */
   async function resume(slug: string, renewing: string | null = null): Promise<boolean> {
     try {
