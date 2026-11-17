@@ -865,6 +865,55 @@ describe("the card's place", () => {
   });
 });
 
+// ── The phone's card (T465 ticket 08, Daniel's Q1, option (c)) ──
+
+describe("the card at the vendor panel's top, in a narrower window", () => {
+  const live = () => side().get('.public-map__live');
+  const scroller = () => side().find('[data-testid="public-map-card-scroller"]');
+  const rows = () => side().findAll('[data-testid="public-map-vendor"]');
+
+  it('stands first in the panel, in a scroller of its own, over the list, which stays whole', async () => {
+    narrowWindow();
+    const page = await open();
+    const all = rows().length;
+    expect(all).toBeGreaterThan(0);
+    expect(scroller().exists()).toBe(false);
+
+    await routing.replace({ query: { date: TODAY, location: 'loc-upper', table: 'g1' } });
+    await flushPromises();
+    expect(scroller().exists()).toBe(true);
+    expect(scroller().find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(page.findAll('[data-testid="public-map-card"]')).toHaveLength(1);
+    // The live region holds it, ahead of the list, and the list keeps every row under it.
+    expect(live().attributes('aria-live')).toBe('polite');
+    expect(live().element.contains(scroller().element)).toBe(true);
+    expect(side().element.firstElementChild).toBe(live().element);
+    expect(rows()).toHaveLength(all);
+    // No tail: the card is no bubble here.
+    expect(page.find('[data-testid="public-map-bubble"]').exists()).toBe(false);
+  });
+
+  it('closes with its Close, the list whole again, the live region kept and the focus on the table', async () => {
+    narrowWindow();
+    const page = await open(found(), { table: 'g1' });
+    const region = live().element;
+    const all = rows().length;
+    expect(scroller().exists()).toBe(true);
+    const close = page.get<HTMLButtonElement>('[data-testid="public-map-card-close"]');
+    close.element.focus();
+    await close.trigger('click');
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper' },
+    });
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(scroller().exists()).toBe(false);
+    expect(live().element).toBe(region);
+    expect(rows()).toHaveLength(all);
+    expect(document.activeElement).toBe(page.get('[data-table-id="g1"]').element);
+  });
+});
+
 describe('closing the card', () => {
   it('Close drops the table from the address, and gives the focus back to the table', async () => {
     const page = await open(found(), { table: 'g1' });

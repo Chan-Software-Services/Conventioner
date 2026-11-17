@@ -357,6 +357,14 @@ html.fills-the-window {
   scrollbar-gutter: auto;
 }
 
+/* On a phone's browser `100vh` is the window with its bars hidden, taller than the one shown while
+   they are, so a page and a shell at least that tall scroll by the bars' height: while the page
+   fills the window they take the window shown, `100dvh`, and every other page keeps `100vh`. */
+html.fills-the-window body,
+html.fills-the-window .app-container {
+  min-height: 100dvh;
+}
+
 /*
  * No in-app scroller draws a bar (T217): on a browser with classic bars one squared a dialog's
  * corners and lay over its list, and each screen drew its own. A box that scrolls is a `ScrollBox`,

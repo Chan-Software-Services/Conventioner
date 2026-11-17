@@ -193,7 +193,7 @@ for (const size of PHONE_AND_DESK) {
         seeded.south.name,
       ]);
       await expect(map.page.getByTestId('day-map-locations')).toHaveCount(0);
-      await expect(map.dayButtons).toHaveCount(0);
+      await expect(map.page.getByTestId('public-map-days')).toHaveCount(0);
       await expect(map.table('Aisle A 1')).toHaveAccessibleName(/Ember Ceramics$/);
 
       await map.daySelect.selectOption(seeded.tomorrow);

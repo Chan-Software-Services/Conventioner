@@ -477,9 +477,9 @@ A free table's dashed edge is the grey of a table in no section, 4.03 on the flo
 
 - a table shared by two vendors is two halves split across its longer side, each its own shape with its outer corners round and the split square, so the two edges meet as the line between them; left is the half on the reader's left as the number reads, a table turned a quarter having its left half at the top; each half is labelled with the number and "L" or "R" ("12L") at the size a number takes for the half's box, left out where it does not fit, and drawn in its own tone, a half with nobody at it free;
 - a seat or table marked, as a search marks it or a press picks it, takes the selection's outline: round the table, or round the half its seat holds;
-- the legend under the map is one line of swatches, each 24 by 14px drawn in its tone in the open location's first section's colours, with the page's word for it at `--text-sm` ("Here", "Expected", "No vendor"; "Taken", "Free");
-- the zoom stands on the map's bottom-right corner, as the editor's does: Zoom out, Zoom in and Fit as compact secondary buttons on a white card with the card's shadow; each press zooms by half again or a third less about the map's middle, Ctrl and the wheel zoom about the pointer at a desk, a mouse drag pans once zoomed, a plain wheel scrolls the page, and a phone pinches and drags; in a box narrower than 30rem the zoom stands under the map at the legend's end instead, with no card, so it covers none of a phone's small map, and the phone keeps the buttons as the one-finger way to zoom a pinch needs beside it (WCAG 2.5.1);
-- two locations or more are switched by a row of filter toggles above the map, the open one pressed.
+- the legend under the map is one line of swatches, each 24 by 14px drawn in its tone in the open location's first section's colours, with the page's word for it at `--text-sm` ("Here", "Expected", "No vendor"); a day map that fills its box draws none, and its caller's legend stands in its slot: the public map's is a pill naming each section of the open hall in its colours and "Free table" on a day the hall has one, each with a 14px swatch at `--text-xs` (T465);
+- the zoom stands on the map's bottom-right corner, as the editor's does: Zoom out, Zoom in and Fit as compact secondary buttons on a white card with the card's shadow; each press zooms by half again or a third less about the map's middle, Ctrl and the wheel zoom about the pointer at a desk, a mouse drag pans once zoomed, a plain wheel scrolls the page, and a phone pinches and drags; in a box narrower than 30rem the zoom stands under the map at the legend's end instead, with no card, so it covers none of a phone's small map, and the phone keeps the buttons as the one-finger way to zoom a pinch needs beside it (WCAG 2.5.1); a day map that fills its box, the public map's (T465), draws the zoom as a floating white pill with `--shadow-float` and borderless buttons over the map's bottom-right corner, its caller's legend pill over the bottom-left, and in a box narrower than 30rem both pills in one row under the map;
+- two locations or more are switched by a row of filter toggles above the map, the open one pressed, unless the map fills its box, whose caller draws the choice: the public map's hall select.
 
 ### The brand green is `--mm-green` (`#36826f`)
 
@@ -854,7 +854,7 @@ The list holds these states, one a line, each beside the state it is most like, 
 - a location's layout with a no-table zone drawn and turned, waiting for Enter (T422)
 - a location's layout drawn as its map, with 20 tables
 - the signed-out pages
-- the public map signed out, before a pick and with a shared table picked, at a desk and on a phone (T422)
+- the public map signed out, before a pick, with a shared table picked and with one half of it picked, at a desk and on a phone (T422, T465)
 
 They are walked over a stress seed ([`e2e/helpers/seedTheScreens.ts`](../front-end/e2e/helpers/seedTheScreens.ts)) of long names, 40 applications in every review state, a review divided between two reviewers and 36 vendors over four dates and three sections, since a layout that holds on three short names breaks on a real market.
 Contrast and axe measure each state at its first size, focus at its first size and a phone's width, and the layout sweep at every size.

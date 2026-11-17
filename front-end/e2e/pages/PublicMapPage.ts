@@ -1,14 +1,12 @@
 import type { Locator, Page } from '@playwright/test';
 
 /**
- * A market's public map, `/<slug>/map` (T422): the market's name, the day buttons, the day map
- * (its location switch, the drawing, the zoom and the legend), the card of the table picked, and
- * the find field over the day's vendors. Its tables and halves are found by their accessible
- * names, as a layout's are ("Aisle A 3, Standard 6 ft, left half, Loom House"), since what the
- * spec proves is what a screen reader hears.
- *
- * T465 redesigns the page: it holds a locator for every test id its spec names, those kept, those
- * to come (read by nothing until their ticket lands) and those to go (dropped in its ticket 08).
+ * A market's public map, `/<slug>/map` (T422, T465): one sheet filling the window, its map side
+ * (the market's name, the day and hall selects, the hall the day map fills, the legend and the
+ * zoom), the card of the table picked (a speech bubble at a desk, the vendor panel's top on a
+ * phone), and the vendor panel (the "Find a vendor" search over every vendor of the day). Its
+ * tables and halves are found by their accessible names, as a layout's are ("Aisle A 3, Standard
+ * 6 ft, left half, Loom House"), since what the spec proves is what a screen reader hears.
  */
 export class PublicMapPage {
   readonly page: Page;
@@ -68,21 +66,6 @@ export class PublicMapPage {
     return this.page.getByTestId('public-map-not-found');
   }
 
-  /** The row of day buttons; goes with them (T465 ticket 03). */
-  get dayButtons(): Locator {
-    return this.page.getByTestId('public-map-days');
-  }
-
-  /** Every day button; goes for the day select (T465 ticket 03). */
-  get days(): Locator {
-    return this.page.getByTestId('public-map-day');
-  }
-
-  /** The day button of a market date, `YYYY-MM-DD`; goes for the day select (T465 ticket 03). */
-  day(date: string): Locator {
-    return this.page.locator(`[data-testid="public-map-day"][data-date="${date}"]`);
-  }
-
   /** The day select, a pill at the map side's top right (T465 ticket 03). */
   get daySelect(): Locator {
     return this.page.getByTestId('public-map-day-select');
@@ -126,12 +109,7 @@ export class PublicMapPage {
     return this.page.getByTestId('layout-map-image');
   }
 
-  /** The location switch's button of a location, by its name. */
-  location(name: string): Locator {
-    return this.page.getByTestId('day-map-locations').getByRole('button', { name, exact: true });
-  }
-
-  /** The day map's own legend items, "Taken" and "Free". */
+  /** The day map's own legend items, which the page never draws: its legend is `sectionLegend`. */
   get legend(): Locator {
     return this.page.getByTestId('day-map-legend-item');
   }
@@ -160,6 +138,11 @@ export class PublicMapPage {
   /** The card of the table picked. */
   get card(): Locator {
     return this.page.getByTestId('public-map-card');
+  }
+
+  /** The box the card scrolls in at the vendor panel's top, under 1000px (T465 ticket 08). */
+  get cardScroller(): Locator {
+    return this.page.getByTestId('public-map-card-scroller');
   }
 
   /** The table's code in its section's pill, on the card (T465 ticket 05). */
@@ -195,16 +178,6 @@ export class PublicMapPage {
   /** Each vendor's Instagram link on the card. */
   get cardInstagrams(): Locator {
     return this.card.getByTestId('public-map-card-instagram');
-  }
-
-  /** The vendor list's find field, which narrows it; goes for the search (T465 ticket 06). */
-  get find(): Locator {
-    return this.page.getByTestId('public-map-vendors-find');
-  }
-
-  /** The vendor list's count line; goes with it (T465 ticket 06). */
-  get vendorsCount(): Locator {
-    return this.page.getByTestId('public-map-vendors-count');
   }
 
   /** "Find a vendor", the panel's `SearchPicker` (T465 ticket 06). */

@@ -178,7 +178,8 @@ const HALF_NAMES = { left: 'Left half', right: 'Right half' } as const;
   flex: none;
   align-items: center;
   justify-content: center;
-  width: var(--control-height-compact);
+  /* A tap target's least width, not a width for words: 44px on a phone round a 16px cross. */
+  min-width: var(--control-height-compact);
   height: var(--control-height-compact);
   margin-inline-start: auto;
   padding: 0;

@@ -34,6 +34,7 @@ import DayMap from '@/components/daymap/DayMap.vue';
 import IconSparkle from '@/components/icons/IconSparkle.vue';
 import PageNotFound from '@/components/PageNotFound.vue';
 import ReadFailed from '@/components/ReadFailed.vue';
+import ScrollBox from '@/components/ScrollBox.vue';
 import PublicMapBackdrop from '@/components/publicmap/PublicMapBackdrop.vue';
 import PublicMapBubble from '@/components/publicmap/PublicMapBubble.vue';
 import PublicMapLegend from '@/components/publicmap/PublicMapLegend.vue';
@@ -407,18 +408,21 @@ async function openVendor(vendor: ListedVendor) {
         </div>
 
         <div class="public-map__side">
-          <!-- The live region stays while the card comes and goes, so a pick is announced. -->
+          <!-- The live region stays while the card comes and goes, so a pick is announced. It
+               lies over the panel's top, the list unmoved under it, and scrolls the card in its
+               own box when the card is taller than the panel. -->
           <div v-if="!wide" class="public-map__live" aria-live="polite">
-            <PublicMapTableCard
-              v-if="card"
-              ref="cardPart"
-              class="public-map__card"
-              :card="card"
-              :day="day"
-              :hallName="hallName"
-              :paint="cardPaint"
-              @close="closeCard"
-            />
+            <ScrollBox v-if="card" class="public-map__card-box" testid="public-map-card-scroller">
+              <PublicMapTableCard
+                ref="cardPart"
+                class="public-map__card"
+                :card="card"
+                :day="day"
+                :hallName="hallName"
+                :paint="cardPaint"
+                @close="closeCard"
+              />
+            </ScrollBox>
           </div>
 
           <PublicMapVendors
@@ -577,10 +581,11 @@ async function openVendor(vendor: ListedVendor) {
   min-height: 0;
 }
 
-/* The vendor panel: the card of the table picked at its top, the day's vendors taking the rest.
-   The panel itself never scrolls: the vendors' part scrolls its own list in the box it is given,
-   and keeps the panel's inset inside its scroller. */
+/* The vendor panel: the day's vendors take it whole, and the card of the table picked lies over
+   its top on anything narrower than a desk. The panel itself never scrolls: the vendors' part
+   scrolls its own list in the box it is given, and keeps the panel's inset inside its scroller. */
 .public-map__side {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -589,20 +594,26 @@ async function openVendor(vendor: ListedVendor) {
   border-block-start: 1px solid var(--mm-border-soft);
 }
 
+/* The card's place under 1000px (Daniel's Q1, option (c)): over the panel's top, its full width,
+   no taller than the panel, so the hall above is never covered and the list shows below it; above
+   the search field and its list, which stand at `z-index: 2` inside the vendors' part. */
 .public-map__live {
-  flex: none;
-  padding: var(--space-4) var(--space-4) 0;
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
 }
 
-.public-map__live:empty {
-  display: none;
+.public-map__card-box {
+  flex: 0 1 auto;
+  border-block-end: 1px solid var(--mm-border-soft);
+  background: white;
 }
 
 .public-map__card {
   padding: var(--space-4);
-  border: 1px solid var(--mm-border-soft);
-  border-radius: var(--radius-card);
-  background: white;
 }
 
 .public-map__vendors {
