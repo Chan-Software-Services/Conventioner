@@ -41,6 +41,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { api, getApiErrorMessage } from '@/utils/api';
 import { MarketPhase } from '@/assets/types/datatypes';
 import { getShortDate, getTimestampTime } from '@/utils/utils';
+import { updatedAgo } from '@/utils/updatedAgo';
 import { tableInWords } from '@/utils/placementChange';
 import { vendorMatches, type VendorNames } from '@/utils/vendorIdentity';
 import MarketFrame from '@/components/MarketFrame.vue';
@@ -125,6 +126,18 @@ const dates = computed(() => rosterRead.data.value?.dates ?? []);
 const roster = computed(() => rosterRead.data.value?.roster ?? []);
 /** When the roster was last read from the server, in milliseconds, or null before the first. */
 const readAt = rosterRead.readAt;
+
+/* Prototype (release walk F5): the read time stands on its own line, above the map's top right
+   corner, ageing as ListFreshness's does; the toolbar keeps Refresh alone. */
+const freshNow = ref(Date.now());
+let freshAgeing: ReturnType<typeof setInterval> | null = null;
+onMounted(() => (freshAgeing = setInterval(() => (freshNow.value = Date.now()), 10_000)));
+onUnmounted(() => {
+  if (freshAgeing) clearInterval(freshAgeing);
+});
+const updatedWords = computed(() =>
+  readAt.value === null ? '' : updatedAgo(readAt.value, Math.max(freshNow.value, readAt.value)),
+);
 const wasRead = computed(() => rosterRead.data.value !== null);
 /** The open market's failed first read, kept through the clock's quiet re-reads until one lands. */
 const firstFailure = ref<{ key: string; sentence: string } | null>(null);
@@ -640,6 +653,10 @@ const drawer = useVendorDrawer();
           />
         </div>
 
+        <p v-if="updatedWords" class="door-updated" data-testid="attendance-updated-line">
+          {{ updatedWords }}
+        </p>
+
         <AttendanceMap
           v-if="view === 'map'"
           :market="market"
@@ -821,6 +838,18 @@ const drawer = useVendorDrawer();
   /* Figures in a column need fixed-width digits (E15/F01/S03). The button's own ink, not muted:
      muted grey is 4.26 on the chosen date's green ground, below AA. */
   font-variant-numeric: tabular-nums;
+}
+
+/* Prototype (release walk F5): the read time above the map's top right corner, not in the toolbar. */
+.door .door-tools :deep(.freshness-time) {
+  display: none;
+}
+
+.door-updated {
+  margin: 0 0 calc(-1 * var(--space-2));
+  text-align: end;
+  font-size: var(--text-xs);
+  color: var(--mm-text-muted);
 }
 
 /* Prototype (release walk F5): the date and the location are selects at the toolbar's start, and
