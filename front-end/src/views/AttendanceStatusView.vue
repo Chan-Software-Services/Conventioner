@@ -888,8 +888,11 @@ const drawer = useVendorDrawer();
   /* Across the whole area, edge to edge as the phase header's rule above, the controls as far
      above it as the area's own padding puts them under that rule. */
   margin-inline: calc(-1 * var(--space-6));
+  /* Prototype (release walk F5): the smaller padding, 12px over and under the controls; the
+     area's own 24px top is taken back by 12px. */
+  margin-block-start: calc(var(--space-3) - var(--space-6));
   padding-inline: var(--space-6);
-  padding-block-end: var(--space-6);
+  padding-block-end: var(--space-3);
   border-block-end: 1px solid var(--mm-border);
 }
 
