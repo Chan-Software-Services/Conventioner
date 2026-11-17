@@ -19,6 +19,18 @@ const markedBy = new Map<HTMLElement, number>();
  */
 const suppressedBy = new Map<HTMLElement, number>();
 
+/**
+ * How many live modals hold the page's scroll.
+ *
+ * `inert` takes no scroll: with a dialog open, a wheel or a thumb's drag over its scrim, a fixed box
+ * with nothing of its own to scroll, moved the page behind it (T473). While any modal is open
+ * `<html>` carries this class, and `base.css` hides the page's overflow, which keeps its position and,
+ * with the gutter it always keeps, its width. A count, as the marks are, so a dialog opened from a
+ * dialog closing first leaves the page held for the one beneath.
+ */
+const HOLDS_STILL = 'holds-still';
+let scrollHolders = 0;
+
 /** Nothing here can hold focus or take a click, so marking it would only puzzle a reader. */
 const NOT_RENDERED = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'TEMPLATE', 'NOSCRIPT']);
 
@@ -38,6 +50,9 @@ const NOT_RENDERED = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'TEMPLATE', 'NO
  *
  * `inert` and not `aria-hidden`: `aria-hidden` hides a control from a screen reader while leaving it
  * clickable and focusable, which is the same lie in a different accent.
+ *
+ * It holds the page's scroll as well, since `inert` takes none (`HOLDS_STILL` above): a modal open
+ * with a part on the page keeps `<html>` in `holds-still` until it closes or unmounts.
  *
  * Known limit: the page is marked when the modal opens, so an element appended to the document
  * afterwards (a teleported dialog or toast) is not marked. Nothing in this product does that behind
@@ -62,6 +77,28 @@ export function useInertBehind(
    * releases correctly when it closes; only the attribute comes off, and goes back on release.
    */
   let suppressed: HTMLElement[] = [];
+  /** Whether this modal is one of `scrollHolders`: a walk again holds nothing twice. */
+  let holdsScroll = false;
+
+  function holdTheScroll() {
+    if (holdsScroll) return;
+    holdsScroll = true;
+    scrollHolders += 1;
+    document.documentElement.classList.add(HOLDS_STILL);
+  }
+
+  function giveTheScrollBack() {
+    if (!holdsScroll) return;
+    holdsScroll = false;
+    scrollHolders = Math.max(0, scrollHolders - 1);
+    if (scrollHolders === 0) document.documentElement.classList.remove(HOLDS_STILL);
+  }
+
+  /** Closed or gone: the marks and the scroll both go back. */
+  function letGo() {
+    release();
+    giveTheScrollBack();
+  }
 
   function release() {
     for (const el of suppressed) {
@@ -101,6 +138,7 @@ export function useInertBehind(
     // the real panel became a sibling of it, so the modal would mark ITSELF out of play.
     const parts = partsOf().filter((el): el is HTMLElement => el instanceof HTMLElement);
     if (parts.length === 0) return;
+    holdTheScroll();
 
     // Every ancestor of every part, so the walk below can tell the modal's own branch apart.
     const spine = new Set<Element>();
@@ -140,11 +178,11 @@ export function useInertBehind(
     // and `apply` releases before it marks, so a re-run never counts an element twice, and leaves a
     // dialog opened on top live (`suppressedBy`).
     () => [openNow(), ...partsOf()] as const,
-    ([open]) => (open ? apply() : release()),
+    ([open]) => (open ? apply() : letGo()),
     // `immediate` and `post` together: a modal whose parts already exist when it opens is marked
     // at once, and every later walk runs after the render that bound its parts.
     { immediate: true, flush: 'post' },
   );
 
-  onUnmounted(release);
+  onUnmounted(letGo);
 }

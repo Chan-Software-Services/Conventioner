@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { defineComponent, h, ref, nextTick, type Ref } from 'vue';
-import { mount } from '@vue/test-utils';
+import { enableAutoUnmount, mount } from '@vue/test-utils';
 
 import { useInertBehind } from '@/utils/useInertBehind';
 import { useModalRoot } from '@/utils/useModalRoot';
@@ -47,6 +47,13 @@ function mountWith(isOpen: Ref<boolean>, parts: () => (HTMLElement | null)[]) {
     }),
   );
 }
+
+// Every modal a test leaves open is closed after it, so the page's scroll hold, counted across the
+// module, starts each test from none.
+enableAutoUnmount(afterEach);
+
+/** Whether the page's own scroll is held: a wheel or a drag over a scrim moves nothing behind it. */
+const holdsStill = () => document.documentElement.classList.contains('holds-still');
 
 describe('useInertBehind', () => {
   beforeEach(() => {
@@ -278,6 +285,95 @@ describe('useInertBehind', () => {
     await nextTick();
     expect(onTop.hasAttribute('inert')).toBe(false);
     expect(content.hasAttribute('inert')).toBe(false);
+  });
+
+  /**
+   * `inert` takes no scroll: a wheel or a thumb's drag over the scrim moved the page behind it. While
+   * any modal is open, `<html>` carries `holds-still`, and `base.css` holds the page's scroll.
+   */
+  describe("the page's scroll", () => {
+    it('is held while the modal is open and given back when it closes', async () => {
+      const page = buildPage();
+      const open = ref(false);
+      mountWith(open, () => [page.scrim, page.panel]);
+      await nextTick();
+      expect(holdsStill()).toBe(false);
+
+      open.value = true;
+      await nextTick();
+      expect(holdsStill()).toBe(true);
+
+      open.value = false;
+      await nextTick();
+      expect(holdsStill()).toBe(false);
+    });
+
+    it('is given back when the view unmounts while the modal is still open', async () => {
+      const page = buildPage();
+      const wrapper = mountWith(ref(true), () => [page.scrim, page.panel]);
+      await nextTick();
+      expect(holdsStill()).toBe(true);
+
+      wrapper.unmount();
+      expect(holdsStill()).toBe(false);
+    });
+
+    it('is held once however often the modal walks again, so one close gives it back', async () => {
+      const page = buildPage();
+      const open = ref(true);
+      const part = ref<HTMLElement>(page.panel);
+      mountWith(open, () => [page.scrim, part.value]);
+      await nextTick();
+
+      part.value = document.querySelector('#close') as HTMLElement;
+      await nextTick();
+      part.value = page.panel;
+      await nextTick();
+      expect(holdsStill()).toBe(true);
+
+      open.value = false;
+      await nextTick();
+      expect(holdsStill()).toBe(false);
+    });
+
+    it('stays held until the last of two modals open at once has closed, in either order', async () => {
+      for (const firstToClose of ['beneath', 'onTop'] as const) {
+        const page = buildPage();
+        const beneath = ref(true);
+        const onTop = ref(true);
+        mountWith(beneath, () => [page.scrim, page.panel]);
+        mountWith(onTop, () => [page.panel]);
+        await nextTick();
+        expect(holdsStill()).toBe(true);
+
+        (firstToClose === 'beneath' ? beneath : onTop).value = false;
+        await nextTick();
+        expect(holdsStill(), `with ${firstToClose} closed first`).toBe(true);
+
+        (firstToClose === 'beneath' ? onTop : beneath).value = false;
+        await nextTick();
+        expect(holdsStill(), `with both closed, ${firstToClose} first`).toBe(false);
+      }
+    });
+
+    it('is not held by a modal open with nothing on the page to be', async () => {
+      mountWith(ref(true), () => [null]);
+      await nextTick();
+      expect(holdsStill()).toBe(false);
+    });
+
+    it('leaves a class something else put on the page as it found it', async () => {
+      const page = buildPage();
+      document.documentElement.classList.add('fills-the-window');
+      const open = ref(true);
+      mountWith(open, () => [page.scrim, page.panel]);
+      await nextTick();
+      open.value = false;
+      await nextTick();
+
+      expect(document.documentElement.classList.contains('fills-the-window')).toBe(true);
+      document.documentElement.classList.remove('fills-the-window');
+    });
   });
 
   /**

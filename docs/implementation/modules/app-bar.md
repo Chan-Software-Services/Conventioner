@@ -100,7 +100,7 @@ A long address wraps whole, since a `title` is no use to a thumb, and the row gr
 Taller than the window, the sheet scrolls within itself, in a [`ScrollBox`](../../design-system.md#the-primitive-layer) that shades the edge with more beyond it.
 
 **It behaves as a modal, without being a dialog.**
-It is a list of places and not a form in a window, so it is not an `AppDialog`, but it keeps a modal's contract ([dialogs](../conventions/dialogs.md)): `useInertBehind` holds the page out, the logo with it, with the sheet, the scrim and the menu button as its parts, since the button is how it closes; focus moves to its first row on opening; Escape, a press on the scrim and the button close it and return focus to the button (`useEscapeToClose`, `useFocusGoesBack`).
+It is a list of places and not a form in a window, so it is not an `AppDialog`, but it keeps a modal's contract ([dialogs](../conventions/dialogs.md)): `useInertBehind` holds the page out, the logo with it, with the sheet, the scrim and the menu button as its parts, since the button is how it closes, and holds the page's scroll while the sheet is open; focus moves to its first row on opening; Escape, a press on the scrim and the button close it and return focus to the button (`useEscapeToClose`, `useFocusGoesBack`).
 Choosing a row closes it, as does any route change, and a window that widens past the break, since the button is gone there and nothing would be left to close it with.
 [`modalsHoldThePageInert.test.ts`](../../../front-end/src/__tests__/modalsHoldThePageInert.test.ts) reads a full-window cover by its CSS and this scrim starts under the bar, so [`modal-inert.spec.ts`](../../../front-end/e2e/modal-inert.spec.ts) holds its wiring.
 

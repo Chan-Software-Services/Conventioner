@@ -314,6 +314,7 @@ A frame screen never scrolls inside its card: a sticky element inside an `overfl
 The page gutter, the card's width and corners, and what is shown until the market arrives belong to `MarketFrame`, never to the screen inside it.
 Each screen used to pad itself, so one market's frame sat at x 0, 16 or 32 depending on the page, and the page behind it was white on some and beige on others; it is white.
 The root keeps the scrollbar's room (`scrollbar-gutter: stable`), so a page taller than the window is not 15px narrower than one that is not.
+It keeps it while a modal holds the page's scroll (`html.holds-still`, [dialogs](implementation/conventions/dialogs.md)), so the page behind a dialog does not move sideways as it opens or closes.
 **Inside the card, every page insets its content `--space-6`**, the rail's own inset, so the rail, the frame's read-only note and the page's first card start on one line.
 Market Setup's four tabs each padded themselves 40px, so there the frame's note sat 16px left of the cards it explained (T15).
 
