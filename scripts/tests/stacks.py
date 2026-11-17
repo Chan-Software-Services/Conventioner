@@ -46,8 +46,8 @@ exit 0
 """
 
 
-def run_seed(checkout, tmp_path, *args, **env):
-    """Run a copy of `seed_fixture.sh` in `checkout` with stub `docker`, `curl`, `sleep` and `th-compose.sh`.
+def run_seed(checkout, tmp_path, *args, script=SEED, **env):
+    """Run a copy of `script` (`seed_fixture.sh` unless told) in `checkout` with stub `docker`, `curl`, `sleep` and `th-compose.sh`.
 
     Returns the finished process and every call the stubs logged, each as "<program> <arguments>".
     """
@@ -58,13 +58,15 @@ def run_seed(checkout, tmp_path, *args, **env):
         (bin_dir / name).chmod(0o755)
     scripts = checkout / "scripts"
     scripts.mkdir(parents=True, exist_ok=True)
-    shutil.copy(SEED, scripts)
+    shutil.copy(script, scripts)
+    # The stack rule every seed sources.
+    shutil.copytree(REPO / "scripts" / "lib", scripts / "lib", dirs_exist_ok=True)
     (scripts / "th-compose.sh").write_text(SEED_STUB)
     (scripts / "th-compose.sh").chmod(0o755)
     log = tmp_path / "calls.log"
     log.write_text("")
     result = subprocess.run(
-        [str(scripts / "seed_fixture.sh"), *args],
+        [str(scripts / script.name), *args],
         env=clean_env(PATH=f"{bin_dir}:{os.environ['PATH']}", CALL_LOG=str(log), **env),
         capture_output=True,
         text=True,

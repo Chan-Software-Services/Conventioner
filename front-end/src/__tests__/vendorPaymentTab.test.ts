@@ -4,6 +4,10 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
+import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
+import postcss from 'postcss';
+import { parse as parseSfc } from 'vue/compiler-sfc';
 import ChangeOwedDialog from '@/components/ChangeOwedDialog.vue';
 import VendorPaymentTab from '@/components/VendorPaymentTab.vue';
 import type { VendorAccount } from '@/utils/payments';
@@ -457,6 +461,112 @@ describe('the Payment tab', () => {
     expect(wrapper.get('[data-testid="payment-owed"]').text()).toBe('$35.00');
     expect(document.querySelector('[data-testid="change-owed-window"]')).not.toBeNull();
     expect(wrapper.emitted('changed')).toHaveLength(1);
+    wrapper.unmount();
+  });
+});
+
+/**
+ * Each part of the tab set apart (Daniel's release walk of 2026-11-17): the totals, "Table-days" and
+ * "Payments" each a card, and inside them each table-day and each payment a box of its own, even
+ * when it is the only one, so its "..." menu sits with it.
+ *
+ * The look is read from the component's own styles, as `aRefusalReadsRed.test.ts` reads its: happy-dom
+ * applies none, so a mounted tab measures nothing; `the-payment-tab.spec.ts` measures it laid out.
+ */
+describe('the Payment tab’s cards and boxes', () => {
+  const rules = (() => {
+    const { descriptor } = parseSfc(
+      readFileSync(resolvePath(process.cwd(), 'src/components/VendorPaymentTab.vue'), 'utf8'),
+    );
+    const found: { selectors: string[]; decls: Record<string, string> }[] = [];
+    for (const style of descriptor.styles) {
+      postcss.parse(style.content).walkRules((rule) => {
+        if (rule.parent?.type !== 'root') return;
+        const decls: Record<string, string> = {};
+        rule.walkDecls((decl) => {
+          decls[decl.prop] = decl.value;
+        });
+        found.push({ selectors: rule.selectors, decls });
+      });
+    }
+    return found;
+  })();
+
+  /** What the styles give `selector`, by every rule that names it alone, the last one winning. */
+  function styleOf(selector: string): Record<string, string> {
+    return Object.assign(
+      {},
+      ...rules.filter((rule) => rule.selectors.includes(selector)).map((rule) => rule.decls),
+    );
+  }
+
+  const CARD = {
+    padding: 'var(--space-4)',
+    border: '1px solid var(--mm-border)',
+    'border-radius': 'var(--radius-card)',
+  };
+  const BOX = {
+    padding: 'var(--space-2) var(--space-3)',
+    border: '1px solid var(--mm-border)',
+    'border-radius': 'var(--radius-control)',
+  };
+
+  it('sets the totals and each group apart as cards, a card’s gap apart', () => {
+    expect(styleOf('.payment-tab')).toMatchObject({ gap: 'var(--space-4)' });
+    expect(styleOf('.payment-totals')).toMatchObject(CARD);
+    expect(styleOf('.payment-group')).toMatchObject(CARD);
+  });
+
+  it('boxes each table-day and each payment, a box’s gap apart', () => {
+    expect(styleOf('.payment-list')).toMatchObject({ gap: 'var(--space-2)' });
+    expect(styleOf('.payment-line')).toMatchObject(BOX);
+    expect(styleOf('.payment-entry')).toMatchObject(BOX);
+  });
+
+  it('takes no edge or inset from a box by where it stands in its list, so one alone is boxed too', () => {
+    const byPlace = rules.filter((rule) =>
+      rule.selectors.some((selector) =>
+        /\.payment-(line|entry)\S*:(first|last|only|nth)/.test(selector),
+      ),
+    );
+    expect(byPlace.map((rule) => rule.selectors.join(', '))).toEqual([]);
+  });
+
+  it('draws a lone table-day and a lone payment each in its box, its menu inside it', async () => {
+    const wrapper = await tab(
+      true,
+      { ...ACCOUNT, lines: [ACCOUNT.lines[0]] },
+      {
+        canChangeOwed: true,
+        canAdjustPaid: true,
+      },
+    );
+
+    for (const [card, item, menu] of [
+      ['payment-days', 'payment-line', 'payment-line-menu-button'],
+      ['payment-payments', 'payment-entry', 'payment-entry-menu-button'],
+    ]) {
+      const boxes = wrapper.get(`[data-testid="${card}"]`).findAll(`[data-testid="${item}"]`);
+      expect(boxes).toHaveLength(1);
+      expect(boxes[0].classes()).toContain(item);
+      expect(boxes[0].find(`[data-testid="${menu}"]`).exists()).toBe(true);
+    }
+    wrapper.unmount();
+  });
+
+  it('moves a date whole, else breaks it only after its weekday, never parting a month from its day', async () => {
+    const wrapper = await tab(true);
+    const line = wrapper.findAll('[data-testid="payment-line"]')[0];
+    const entry = wrapper.findAll('[data-testid="payment-entry"]')[0];
+
+    // A table-day's date, and a payment's paid day after what it was.
+    expect(line.get('.payment-line-date').text()).toBe('Thursday, May 7, 2099');
+    expect(line.get('[data-testid="payment-line-day"]').text()).toBe('May 7, 2099');
+    expect(entry.get('.payment-entry-what').text()).toBe('Cash, paid Wednesday, April 1, 2099');
+    expect(entry.get('[data-testid="payment-entry-day"]').text()).toBe('April 1, 2099');
+    expect(entry.get('[data-testid="payment-entry-date"]').text()).toBe('Wednesday, April 1, 2099');
+    expect(styleOf('.payment-date')).toMatchObject({ display: 'inline-block' });
+    expect(styleOf('.payment-day')).toMatchObject({ 'white-space': 'nowrap' });
     wrapper.unmount();
   });
 });

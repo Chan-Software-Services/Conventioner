@@ -11,12 +11,8 @@ NO_ORG_EMAIL="${NO_ORG_EMAIL:-e2e-noorg@example.com}"
 NO_ORG_PASSWORD="${NO_ORG_PASSWORD:-e2enoorg123}"
 
 # ── Which stack: told, never guessed ──
-# This resets the stack's database before it seeds it, so it seeds only a stack it was told:
-#   1) COMPOSE_PROJECT_NAME and the three TH_*_PORT variables, as `th-compose.sh ports` exports them
-#   2) the treehouse slot this script's checkout sits in
-#   3) --primary, the default stack: the primary checkout's, or CI's one stack, never from a slot
-# and otherwise refuses. It used to fall back to the primary stack's defaults, so a run outside a
-# slot that had not exported its own stack yet wiped the primary checkout's local database.
+# This resets the stack's database before it seeds it, so it seeds only a stack it was told, by the
+# rule scripts/lib/stack-identity.sh holds, which says the order it reads and when it refuses.
 refuse() {
   echo "seed_fixture: $1 - refusing to guess, since this resets the stack's database." >&2
   echo "  For a stack th-compose.sh started: eval \"\$(scripts/th-compose.sh ports)\" first, which exports" >&2
@@ -38,43 +34,9 @@ for arg in "$@"; do
   esac
 done
 
-STACK_VARS=(COMPOSE_PROJECT_NAME TH_MONGO_PORT TH_BACKEND_PORT TH_FRONTEND_PORT)
-SET_VARS=()
-for var in "${STACK_VARS[@]}"; do
-  if [ -n "${!var:-}" ]; then SET_VARS+=("$var"); fi
-done
-SLOT="$(printf '%s' "$PROJECT_DIR" | sed -nE 's#.*/\.treehouse/[^/]+/([0-9]+)/.*#\1#p')"
-
-if [ "$PRIMARY" = true ]; then
-  if [ "${#SET_VARS[@]}" -gt 0 ]; then
-    refuse "--primary, but ${SET_VARS[*]} names another stack"
-  fi
-  # In a slot, plain `docker compose` names the project after the directory, the primary's.
-  if [[ "$SLOT" =~ ^[0-9]+$ ]]; then
-    refuse "--primary, but $PROJECT_DIR is in treehouse slot $SLOT, which names another stack"
-  fi
-  DOCKER_CMD=(docker compose)
-  SHOWN_CMD="docker compose"
-  BACKEND_PORT=5001
-  FRONTEND_PORT=5173
-  echo "Default stack, as --primary asks (ports: backend=$BACKEND_PORT, frontend=$FRONTEND_PORT)"
-elif [ "${#SET_VARS[@]}" -eq "${#STACK_VARS[@]}" ]; then
-  DOCKER_CMD=("$PROJECT_DIR/scripts/th-compose.sh")
-  SHOWN_CMD="scripts/th-compose.sh"
-  BACKEND_PORT="$TH_BACKEND_PORT"
-  FRONTEND_PORT="$TH_FRONTEND_PORT"
-  echo "Explicit stack identity: project=$COMPOSE_PROJECT_NAME (ports: backend=$BACKEND_PORT, frontend=$FRONTEND_PORT)"
-elif [ "${#SET_VARS[@]}" -gt 0 ]; then
-  refuse "the environment names only part of a stack (${SET_VARS[*]} set, not all of ${STACK_VARS[*]})"
-elif [[ "$SLOT" =~ ^[0-9]+$ ]] && [ -x "$PROJECT_DIR/scripts/th-compose.sh" ]; then
-  DOCKER_CMD=("$PROJECT_DIR/scripts/th-compose.sh")
-  SHOWN_CMD="scripts/th-compose.sh"
-  BACKEND_PORT=$((5001 + SLOT * 10))
-  FRONTEND_PORT=$((5173 + SLOT * 10))
-  echo "Worktree slot: $SLOT (ports: backend=$BACKEND_PORT, frontend=$FRONTEND_PORT)"
-else
-  refuse "no stack given: no stack variables are set and $PROJECT_DIR is not in a treehouse slot"
-fi
+# shellcheck source-path=SCRIPTDIR source=lib/stack-identity.sh
+source "$SCRIPT_DIR/lib/stack-identity.sh"
+stack_identity "$PROJECT_DIR" "$PRIMARY"
 
 BACKEND_URL="https://127.0.0.1:${BACKEND_PORT}"
 FRONTEND_URL="http://127.0.0.1:${FRONTEND_PORT}"
