@@ -127,8 +127,8 @@ const roster = computed(() => rosterRead.data.value?.roster ?? []);
 /** When the roster was last read from the server, in milliseconds, or null before the first. */
 const readAt = rosterRead.readAt;
 
-/* Prototype (release walk F5): the read time stands on its own line, above the map's top right
-   corner, ageing as ListFreshness's does; the toolbar keeps Refresh alone. */
+/* Prototype (release walk F5): the read time, out of the toolbar, under the map's bottom right
+   (or above the list), ageing as ListFreshness's does. */
 const freshNow = ref(Date.now());
 let freshAgeing: ReturnType<typeof setInterval> | null = null;
 onMounted(() => (freshAgeing = setInterval(() => (freshNow.value = Date.now()), 10_000)));
@@ -845,20 +845,22 @@ const drawer = useVendorDrawer();
   font-variant-numeric: tabular-nums;
 }
 
-/* Prototype (release walk F5): the read time above the map's top right corner, not in the toolbar. */
-.door .door-tools :deep(.freshness-time) {
-  display: none;
+/* Prototype (release walk F5): Attendance's toolbar.
+   One row, set off by a rule running edge to edge across the area, 12px over and under its
+   controls. At its start the date and, on the map, the location, each a select (the map's own
+   location switch is not drawn here). At its end List and Map as one segmented control, then Print
+   roster and Door code, then Refresh at the very end, a rule between each group. The read time is
+   not in the toolbar: on the map it stands under the map's bottom right (DayMap's `note`), on the
+   list above the list's right edge. */
+.door .door-top {
+  align-items: center;
+  margin-inline: calc(-1 * var(--space-6));
+  margin-block-start: calc(var(--space-3) - var(--space-6));
+  padding-inline: var(--space-6);
+  padding-block-end: var(--space-3);
+  border-block-end: 1px solid var(--mm-border);
 }
 
-.door-updated {
-  margin: 0 0 calc(-1 * var(--space-2));
-  text-align: end;
-  font-size: var(--text-xs);
-  color: var(--mm-text-muted);
-}
-
-/* Prototype (release walk F5): the date and the location are selects at the toolbar's start, and
-   the map's own location switch is not drawn, the toolbar's select standing for it. */
 .door-pickers {
   display: flex;
   flex-wrap: wrap;
@@ -876,64 +878,47 @@ const drawer = useVendorDrawer();
   display: none;
 }
 
-/* Prototype (release walk F5): the top row is one toolbar, its controls in groups.
-   The dates and List/Map are each one segmented control; the read time with Refresh, and Print
-   roster with Door code, are groups set apart by a rule. */
-.door .door-top {
-  align-items: center;
+.door .door-tools {
+  gap: var(--space-3);
 }
 
-/* Prototype (release walk F5): the toolbar set off by a rule under it, not a card round it. */
-.door .door-top {
-  /* Across the whole area, edge to edge as the phase header's rule above, the controls as far
-     above it as the area's own padding puts them under that rule. */
-  margin-inline: calc(-1 * var(--space-6));
-  /* Prototype (release walk F5): the smaller padding, 12px over and under the controls; the
-     area's own 24px top is taken back by 12px. */
-  margin-block-start: calc(var(--space-3) - var(--space-6));
-  padding-inline: var(--space-6);
-  padding-block-end: var(--space-3);
-  border-block-end: 1px solid var(--mm-border);
+.door .door-tools :deep(.freshness-time) {
+  display: none;
 }
 
-.door .door-dates,
+/* List and Map, one segmented control. */
+.door .door-view {
+  order: -2;
+  gap: 0;
+  margin-inline-end: 0;
+  padding-inline-end: var(--space-3);
+  border-inline-end: 1px solid var(--mm-border);
+}
+
 .door .door-view :deep(.filter-toggles) {
   gap: 0;
 }
 
-.door .door-view {
-  gap: 0;
-  margin-inline-end: 0;
-}
-
-.door .door-dates > .btn,
 .door .door-view :deep(.filter-toggles__toggle) {
   border-radius: 0;
 }
 
-.door .door-dates > .btn + .btn,
 .door .door-view :deep(.filter-toggles__toggle + .filter-toggles__toggle) {
   margin-inline-start: -1px;
 }
 
-.door .door-dates > .btn:first-child,
 .door .door-view :deep(.filter-toggles__toggle:first-child) {
   border-start-start-radius: var(--radius-control);
   border-end-start-radius: var(--radius-control);
 }
 
-.door .door-dates > .btn:last-child,
 .door .door-view :deep(.filter-toggles__toggle:last-child) {
   border-start-end-radius: var(--radius-control);
   border-end-end-radius: var(--radius-control);
 }
 
-.door .door-tools {
-  gap: var(--space-3);
-}
-
-/* Prototype (release walk F5): Refresh at the toolbar's very end, after Print roster and Door
-   code; the freshness group is `display: contents`, so its button is the bar's own item. */
+/* Print roster and Door code before Refresh; the freshness group is `display: contents`, so its
+   Refresh is the toolbar's own last item. */
 .door .door-papers {
   order: -1;
   margin-inline-start: 0;
@@ -941,13 +926,12 @@ const drawer = useVendorDrawer();
   border-inline-end: 1px solid var(--mm-border);
 }
 
-.door .door-view {
-  order: -2;
-}
-
-.door .door-view {
-  padding-inline-end: var(--space-3);
-  border-inline-end: 1px solid var(--mm-border);
+/* On the list, the read time above the list's right edge. */
+.door-updated {
+  margin: 0 0 calc(-1 * var(--space-2));
+  text-align: end;
+  font-size: var(--text-xs);
+  color: var(--mm-text-muted);
 }
 
 .door-bar {
