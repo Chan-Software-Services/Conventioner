@@ -12,17 +12,18 @@
 # Every write goes through the back end's own API, signed in as the fixture organizer
 # (e2e@example.com), as the organizer's screens would make it:
 #   - "Fernwick Winter Makers Market", a Google Form market of three days: today, tomorrow and the
-#     day after, each where this machine is;
+#     day after, each where this machine is, or from SEED_TODAY (YYYY-MM-DD) and the two days after
+#     it when that is set, so a walk can be seeded for a day that is not this one;
 #   - two halls laid out, each on a floorplan drawn here: Main Hall (Gold, sections A of 16 tables
 #     and B of 15) and Lower Hall (Silver, sections C and D of 14 each), with their zones;
 #   - 184 made-up vendors read in through the real import from a made-up form export, 150 approved
 #     and 34 rejected;
 #   - the real solver's run over the two halls, results published, the market in its market days,
-#     some of today's vendors checked in, and the public map on, showing each vendor's business
+#     some of its first day's vendors checked in, and the public map on, showing each vendor's business
 #     name, website and Instagram handle.
 # Every name, address and answer is made up here; none comes from production or a real export.
 #
-# Usage: scripts/seed_walk_market.sh [--primary]
+# Usage: [SEED_TODAY=YYYY-MM-DD] scripts/seed_walk_market.sh [--primary]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -399,9 +400,11 @@ def make_vendors():
         roll = rng.random()
         website = (f"https://{slug}.example.com" if roll < 0.55
                    else f"{slug}.example.com/shop" if roll < 0.7 else "")
+        # A handle begins with "example", as every fixture's does (test data): the public map links
+        # each to Instagram, where a bare word may be a real maker's account.
         handle_roll = rng.random()
-        instagram = (f"@{slug}.{category.split()[0].lower()}" if handle_roll < 0.6
-                     else f"{slug}_studio" if handle_roll < 0.8 else "")
+        instagram = (f"@example{slug}" if handle_roll < 0.6
+                     else f"example{slug}_studio" if handle_roll < 0.8 else "")
         days = sorted(rng.sample(DATES, rng.choice([1, 2, 2, 3, 3, 3])))
         tiers = rng.choices([["Gold"], ["Silver"], ["Gold", "Silver"]], weights=[40, 20, 40])[0]
         choice = rng.choices(["A whole table to myself", "Half a table, shared", "Either is fine"],
