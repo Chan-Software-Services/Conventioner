@@ -746,6 +746,15 @@ function rowPointAt(event: RowPointer, angled = false): PointMm {
  *  let go reads it again with no move, so the line shown takes or leaves its step (D11). */
 let rowPointer: RowPointer | null = null;
 
+/** A pointer event's place and keys as plain fields: an event's own are getters of its prototype,
+ *  which a spread of it does not copy. */
+const pointerOf = (event: RowPointer): RowPointer => ({
+  clientX: event.clientX,
+  clientY: event.clientY,
+  altKey: event.altKey,
+  shiftKey: event.shiftKey,
+});
+
 /** Shift pressed or let go: the row's next point, under the pointer that has not moved, is read
  *  again with Shift as it now is. */
 function reHoverRow(shiftKey: boolean) {
@@ -761,7 +770,7 @@ function reHoverRow(shiftKey: boolean) {
  *  it would be placed where it rests on the last point, which a click there places, and closed
  *  where it rests on the first, which a click there closes. A closed shape is its points alone. */
 function hoverRow(event: RowPointer) {
-  rowPointer = event;
+  rowPointer = pointerOf(event);
   // While the keys have the path it is the points laid, wherever the pointer passes.
   if (keysOnMap.value) return;
   const points = row.points.value;
@@ -1121,7 +1130,7 @@ function onPointerMove(event: PointerEvent) {
       row.movePoint(gesture.point, rowPointAt(event));
     } else if (gesture.stroke) drawStroke(event);
     else {
-      rowPointer = event;
+      rowPointer = pointerOf(event);
       row.hoverAt(rowPointAt(event, true));
     }
   } else if (gesture.kind === 'fill') {

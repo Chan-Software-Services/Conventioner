@@ -62,6 +62,9 @@ export class LayoutPage {
   readonly addType: Locator;
   readonly rowGap: Locator;
   readonly rowStand: Locator;
+  /** The row card's "Centred on the line", the default, and "Beside the line" radios. */
+  readonly rowCentred: Locator;
+  readonly rowBeside: Locator;
   readonly rowFlip: Locator;
   readonly rowRows: Locator;
   readonly rowAisle: Locator;
@@ -72,8 +75,16 @@ export class LayoutPage {
   readonly rowCount: Locator;
   readonly rowPoints: Locator;
   readonly rowTables: Locator;
+  /** What a point at the pointer would add past the row's last point: never placed. */
+  readonly rowGhosts: Locator;
   readonly rowLines: Locator;
   readonly rowCrosshair: Locator;
+  /** "Group tables" on Row of tables' and Fill an area's cards, its two fields and their lines. */
+  readonly group: Locator;
+  readonly groupSize: Locator;
+  readonly groupGap: Locator;
+  readonly groupSizeError: Locator;
+  readonly groupGapError: Locator;
   readonly toolFill: Locator;
   /** "Fill what is in view", on Fill an area's card. */
   readonly fillView: Locator;
@@ -250,6 +261,8 @@ export class LayoutPage {
     this.addType = page.getByTestId('layout-add-type');
     this.rowGap = page.getByTestId('layout-row-gap');
     this.rowStand = page.getByTestId('layout-row-stand');
+    this.rowCentred = this.rowStand.getByRole('radio', { name: 'Centred on the line' });
+    this.rowBeside = this.rowStand.getByRole('radio', { name: 'Beside the line' });
     this.rowFlip = page.getByTestId('layout-row-flip');
     this.rowRows = page.getByTestId('layout-row-rows');
     this.rowAisle = page.getByTestId('layout-row-aisle');
@@ -259,8 +272,14 @@ export class LayoutPage {
     this.rowCount = this.map.getByTestId('layout-row-count');
     this.rowPoints = this.map.getByTestId('layout-row-point');
     this.rowTables = this.map.getByTestId('layout-row-table');
+    this.rowGhosts = this.map.getByTestId('layout-row-ghost');
     this.rowLines = this.map.getByTestId('layout-row-line');
     this.rowCrosshair = this.map.getByTestId('layout-row-crosshair');
+    this.group = page.getByTestId('layout-group');
+    this.groupSize = page.getByTestId('layout-group-size');
+    this.groupGap = page.getByTestId('layout-group-gap');
+    this.groupSizeError = page.getByTestId('layout-group-size-error');
+    this.groupGapError = page.getByTestId('layout-group-gap-error');
     this.toolFill = this.toolbar.getByRole('button', { name: 'Fill an area', exact: true });
     this.fillView = page.getByTestId('layout-fill-view');
     this.fillPreview = this.map.getByTestId('layout-fill-preview');
@@ -602,6 +621,12 @@ export class LayoutPage {
   async clickAt(mm: [number, number]): Promise<void> {
     const at = await this.onScreen(mm);
     await this.page.mouse.click(at.x, at.y);
+  }
+
+  /** Right-click the map at a point of the hall, in millimetres, as a person asks for a menu. */
+  async rightClickAt(mm: [number, number]): Promise<void> {
+    const at = await this.onScreen(mm);
+    await this.page.mouse.click(at.x, at.y, { button: 'right' });
   }
 
   /**

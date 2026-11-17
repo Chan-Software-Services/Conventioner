@@ -7,9 +7,10 @@
  * what the tool does with them.
  *
  * Section and Table type stand once at its head and carry from one adding tool to the next. Row of
- * tables adds where its tables stand on the line, centred first and at first (item 17), the gap, the rows, the aisle between rows of
- * more than one, and Spread evenly to the ends; their values are the app's while it is open
- * (`rowChoices`). Fill an area adds "Fill what is in view". Both take Group tables, so many to a
+ * tables adds where its tables stand on the line, Centred on the line first and at first (item
+ * 17), the gap, the rows, the aisle between rows of more than one, and Spread evenly to the ends;
+ * their values are the app's while it is open (`rowChoices`). Fill an area adds "Fill what is in
+ * view". Both take Group tables, so many to a
  * group with a spacer between groups, one choice for the two (`groupChoices`, item 15); a group
  * field that holds no usable number says so under them (D9). Its last line says a right-click on
  * the map or Escape goes back to Select.
