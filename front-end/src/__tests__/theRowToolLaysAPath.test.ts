@@ -106,14 +106,39 @@ describe('a path being drawn', () => {
     expect(row.countAt.value).toEqual(p(22_000, 3000));
   });
 
-  it('follows the pointer past the last point, and the points alone once it has left', () => {
-    const { row } = aTool();
+  it('places along its points alone, the stretch to the pointer shown as ghosts', () => {
+    const { row, tables } = aTool();
     row.addPoint(p(2000, 3000));
     row.hoverAt(p(7600, 3000));
-    expect(row.poses.value).toHaveLength(3);
-    expect(row.countAt.value).toEqual(p(7600, 3000));
-    row.hoverAt(null);
+    // One point holds no row: what a point at the pointer would add is ghosts, and Enter waits.
     expect(row.poses.value).toEqual([]);
+    expect(row.ghosts.value).toHaveLength(3);
+    expect(row.countAt.value).toEqual(p(7600, 3000));
+    expect(row.place()).toEqual([]);
+    expect(row.points.value).toEqual([p(2000, 3000)]);
+    expect(tables()).toEqual([]);
+
+    row.addPoint(p(7600, 3000));
+    row.hoverAt(p(15_000, 3000));
+    expect(row.poses.value).toHaveLength(3);
+    expect(row.ghosts.value).toHaveLength(4);
+    const lastOfTheRow = Math.max(...row.poses.value.map((pose) => pose.xMm));
+    for (const ghost of row.ghosts.value) expect(ghost.xMm).toBeGreaterThan(lastOfTheRow);
+
+    const added = row.place();
+    expect(added).toHaveLength(3);
+    expect(Math.max(...added.map((one) => one.xMm + 915))).toBeLessThanOrEqual(7600 + 0.01);
+  });
+
+  it('shows no ghost once the pointer has left, or rests on the last point', () => {
+    const { row } = aTool();
+    row.addPoint(p(2000, 3000));
+    row.addPoint(p(7600, 3000));
+    row.hoverAt(p(15_000, 3000));
+    expect(row.ghosts.value).not.toEqual([]);
+    row.hoverAt(null);
+    expect(row.ghosts.value).toEqual([]);
+    expect(row.poses.value).toHaveLength(3);
   });
 
   it('shows a straight stroke from its press to where it is', () => {
@@ -175,16 +200,18 @@ describe('a path being drawn', () => {
     expect(row.poses.value).toEqual([]);
   });
 
-  it('stands its tables on the right of the line drawn, the left once flipped, or on it', () => {
+  it('stands its tables on the line at first, beside it on the right where asked, the left once flipped', () => {
     const { row } = aTool();
     row.strokeTo([p(2000, 3000), p(22_000, 3000)], STROKE);
+    expect(ROW_CHOICES_AT_FIRST.centred).toBe(true);
+    expect(row.side.value).toBe('centre');
+    expect(row.poses.value[0].yMm).toBeCloseTo(3000, 6);
+    rowChoices.centred = false;
+    expect(row.side.value).toBe('right');
     expect(row.poses.value[0].yMm).toBeCloseTo(3380, 6);
     row.flip();
     expect(row.side.value).toBe('left');
     expect(row.poses.value[0].yMm).toBeCloseTo(2620, 6);
-    rowChoices.centred = true;
-    expect(row.side.value).toBe('centre');
-    expect(row.poses.value[0].yMm).toBeCloseTo(3000, 6);
   });
 
   it('takes the size of the type chosen', () => {

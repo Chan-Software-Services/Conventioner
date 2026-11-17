@@ -87,6 +87,11 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
+/** The tables beside the line, on `side`, where Centred on the line is the default (item 17). */
+function standBeside(side: 'left' | 'right') {
+  Object.assign(rowChoices, { centred: false, side });
+}
+
 describe("a stroke's numbers", () => {
   it('are screen pixels, turned into millimetres by the view', () => {
     expect(STROKE_PX).toEqual({
@@ -189,6 +194,7 @@ describe('a stroke in hand', () => {
 
   it('is shown closed, its press ringed, once it has come back to where it began', () => {
     const { row } = aTool();
+    standBeside('right');
     row.strokeTo(RING.slice(0, 100), STROKE);
     expect(row.closeAt.value).toBeNull();
     row.strokeTo(RING, STROKE);
@@ -239,18 +245,27 @@ describe('a stroke in hand', () => {
 });
 
 describe('a straight stroke let go', () => {
-  it("ends 'straight', its two ends the path, and places what the straight drag placed", () => {
+  it("ends 'straight', its two ends a drawn path that waits, placed as it was shown", () => {
     const { row, editor, tables } = aTool();
     row.strokeTo(at(hand(SHAPES.line, 25, 2), 2000, 3000), STROKE);
     expect(row.endStroke()).toBe('straight');
     expect(row.stroking.value).toBe(false);
-    expect(row.drawn.value).toBe(false);
+    // It waits, as a curve does, for Enter: nothing is added on letting go (item 17's revision).
+    expect(row.pending.value).toBe(true);
+    expect(row.drawn.value).toBe(true);
+    expect(tables()).toEqual([]);
     expect(row.points.value).toEqual([p(2000, 3000), p(22_000, 3000)]);
+    expect(row.poses.value).toHaveLength(10);
+    // No pointer carries it on, and no ghost shows past its end.
+    row.hoverAt(p(28_000, 3000));
+    expect(row.poses.value).toHaveLength(10);
+    expect(row.ghosts.value).toEqual([]);
     const added = row.place();
     expect(added.map((table) => table.number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    // Centred on the line, the default.
     added.forEach((table, i) => {
       expect(table.xMm).toBeCloseTo(2915 + i * 1830, 2);
-      expect(table.yMm).toBeCloseTo(3380, 2);
+      expect(table.yMm).toBeCloseTo(3000, 2);
       expect(table.rotation).toBe(0);
     });
     expect(editor.selection.value).toEqual(added.map((table) => table.id));
@@ -258,6 +273,18 @@ describe('a straight stroke let go', () => {
     // One step of undo.
     editor.undo();
     expect(tables()).toEqual([]);
+  });
+
+  it('waits with its two ends to drag, re-laid as an end moves, beside the line where asked', () => {
+    const { row } = aTool();
+    standBeside('right');
+    row.strokeTo([p(2000, 3000), p(22_000, 3000)], STROKE);
+    row.endStroke();
+    expect(row.poses.value[0].yMm).toBeCloseTo(3380, 2);
+    row.movePoint(1, p(12_000, 3000));
+    expect(row.points.value).toEqual([p(2000, 3000), p(12_000, 3000)]);
+    expect(row.poses.value).toHaveLength(5);
+    expect(row.drawn.value).toBe(true);
   });
 
   it("ends 'straight' for a curve drawn with Shift held, from its press to its release", () => {
@@ -288,6 +315,7 @@ describe('a curved stroke let go', () => {
 
   it('closes into a loop of 8 points where it came back to its start', () => {
     const { row } = aTool();
+    standBeside('right');
     row.strokeTo(RING, STROKE);
     expect(row.endStroke()).toBe('curve');
     expect(row.drawn.value).toBe(true);
@@ -310,6 +338,7 @@ describe('a curved stroke let go', () => {
   });
 
   it('is re-laid by a point moved, the side flipped and the gap typed', () => {
+    standBeside('right');
     const { row } = withTheSDrawn();
     const before = row.poses.value;
     const second = row.points.value[1];
@@ -346,9 +375,11 @@ describe('a curved stroke let go', () => {
     expect(row.takePoint()).toBe(true);
     expect(row.points.value).toEqual([S[0]]);
     expect(row.drawn.value).toBe(false);
-    // The next click lays a second point, and the pointer has the path again.
+    // The pointer has the path again: what a point there would add shows as ghosts, and the
+    // next click lays a second point.
     row.hoverAt(p(20_000, 3000));
-    expect(row.poses.value.length).toBeGreaterThan(0);
+    expect(row.poses.value).toEqual([]);
+    expect(row.ghosts.value.length).toBeGreaterThan(0);
     row.addPoint(p(20_000, 3000));
     expect(row.points.value).toEqual([S[0], p(20_000, 3000)]);
   });
@@ -433,6 +464,11 @@ describe('a small loop let go on the very place it was pressed', () => {
 });
 
 describe('what is said of a line drawn by hand', () => {
+  it('says a straight line as a line, with its tables and how to place it', () => {
+    expect(saidCurveDrawn(2, 10, false)).toBe('Line drawn. 10 tables. Enter places it.');
+    expect(saidCurveDrawn(2, 1, false)).toBe('Line drawn. 1 table. Enter places it.');
+  });
+
   it('says the points, the tables and how to place it', () => {
     expect(saidCurveDrawn(6, 10, false)).toBe(
       'Curve drawn through 6 points. 10 tables. Enter places it.',
@@ -447,6 +483,7 @@ describe('what is said of a line drawn by hand', () => {
 
   it('says a quarter of a 5 m circle as three points and three tables', () => {
     const { row } = aTool();
+    standBeside('right');
     row.strokeTo(QUARTER, strokeOptions(0.02, false));
     expect(row.endStroke()).toBe('curve');
     expect(saidCurveDrawn(row.points.value.length, row.poses.value.length, row.closed.value)).toBe(

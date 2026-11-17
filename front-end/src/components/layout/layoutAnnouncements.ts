@@ -202,12 +202,16 @@ export function saidOpened(count: RowHolds): string {
   return `Opened again. ${held(count)}`;
 }
 
-/** A curved stroke let go, smoothed into a path that waits: "Curve drawn through 6 points. 10
- *  tables. Enter places it."; one that came back to its start, "Loop drawn through 8 points. 14
- *  tables. Enter places it."; while a field refuses, its sentence, and no Enter, which would
- *  place nothing. */
+/** A stroke let go, a path that waits for Enter: a straight one, its two ends, "Line drawn. 10
+ *  tables. Enter places it."; a curved one, smoothed, "Curve drawn through 6 points. 10 tables.
+ *  Enter places it."; one that came back to its start, "Loop drawn through 8 points. 14 tables.
+ *  Enter places it."; while a field refuses, its sentence, and no Enter, which would place
+ *  nothing. */
 export function saidCurveDrawn(points: number, tables: RowHolds, closed: boolean): string {
-  const drawn = `${closed ? 'Loop' : 'Curve'} drawn through ${points} points. ${held(tables)}`;
+  const drawn =
+    !closed && points === 2
+      ? `Line drawn. ${held(tables)}`
+      : `${closed ? 'Loop' : 'Curve'} drawn through ${points} points. ${held(tables)}`;
   return typeof tables === 'string' ? drawn : `${drawn} Enter places it.`;
 }
 

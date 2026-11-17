@@ -148,6 +148,7 @@ import {
   type FillRequest,
 } from './layoutFill';
 import {
+  heldToTheSteps,
   keepSample,
   rowChoices,
   strokeFrom,
@@ -333,6 +334,34 @@ const pointTool = computed(() =>
   tool.value === 'row' ? row : tool.value === 'fill' ? fillTool : null,
 );
 
+/**
+ * A right-click on the map, in place of the browser's menu, which holds nothing for a drawing
+ * (the QC walk of 2026-11-16, items 6 and 19): it drops what is in hand and keeps the tool, a drag
+ * under way, a row's path or an area's corners; with nothing in hand it puts Select back on, the
+ * tool most work comes back to. A no-table zone's draft is ticket 13's.
+ */
+function onContextMenu() {
+  if (gesture && gesture.kind !== 'pinch') {
+    // A drag under way is put back, as Escape puts it back. A press that has not moved is no
+    // drag (a Control and click on a Mac presses before it asks for the menu): it is dropped,
+    // and the right-click goes on to what else is in hand.
+    const begun = 'begun' in gesture && gesture.begun;
+    abandon();
+    if (begun) return;
+  }
+  if (tool.value === 'row' && row.pending.value) {
+    row.drop();
+    say(ROW_DROPPED);
+    return;
+  }
+  if (tool.value === 'fill' && fillTool.pending.value) {
+    fillTool.drop();
+    tell(AREA_DROPPED);
+    return;
+  }
+  tool.value = 'select';
+}
+
 // A path or an area belongs to the tool that drew it: another tool drops it, with whatever a
 // pointer still down was doing, so a line being drawn cannot come back under the next tool.
 watch(tool, () => {
@@ -394,15 +423,15 @@ const hint = computed(() => {
     }
     if (row.drawn.value) {
       return (
-        'Drag a point to adjust the curve. Enter places the row, Escape drops it, and ' +
-        'Backspace takes its last point back.'
+        'Drag a point to adjust the line. Enter places the row; Escape or a right-click drops ' +
+        'it, and Backspace takes its last point back.'
       );
     }
     return row.pending.value
-      ? 'Click along a wall. A sharp turn makes a corner. Double-click or press Enter to place ' +
-          'the row, or click the first point to close a shape.'
-      : "Click along a wall. A sharp turn makes a corner. Or drag to draw the row's line: a " +
-          'straight drag places a straight row, and a curve is smoothed for you to adjust.';
+      ? 'Click along a wall: each line holds to 15° steps, any angle with Shift. Double-click ' +
+          'or press Enter to place the row, or click the first point to close a shape.'
+      : "Click along a wall. A sharp turn makes a corner. Or drag to draw the row's line, " +
+          'straight or curved, to adjust; Enter places it.';
   }
   if (tool.value === 'fill') {
     return (
@@ -689,17 +718,50 @@ function select(id: string, toggle: boolean) {
   props.editor.select(now.includes(id) ? now.filter((one) => one !== id) : [...now, id]);
 }
 
-/** Where a point of a row's path goes for a pointer: snapped to the tables near it, freely with
- *  Alt. */
-function rowPointAt(event: PointerEvent): PointMm {
+/** The pointer's place and the keys held, as a point of a row's path reads them. */
+interface RowPointer {
+  clientX: number;
+  clientY: number;
+  altKey: boolean;
+  shiftKey: boolean;
+}
+
+/**
+ * Where a point of a row's path goes for a pointer: snapped to the tables near it, freely with
+ * Alt. A point laid after another by a click (`angled`) holds its line from the last point to 15°
+ * steps, a table's snap kept only on such a line; with Shift it takes any angle and every table's
+ * snap (the QC walk of 2026-11-16, item 16). A drag's line, a closed shape and a path drawn by
+ * hand are left as they are.
+ */
+function rowPointAt(event: RowPointer, angled = false): PointMm {
   const at = toMm(event);
-  return event.altKey ? at : row.snapped(at, SNAP_PX / camera.value!.pxPerMm, SNAP_REACH_MM);
+  if (event.altKey) return at;
+  const snapped = row.snapped(at, SNAP_PX / camera.value!.pxPerMm, SNAP_REACH_MM);
+  const last = row.points.value.at(-1);
+  if (!angled || event.shiftKey || !last || row.closed.value || row.drawn.value) return snapped;
+  return heldToTheSteps(last, at, snapped);
+}
+
+/** The pointer's last place over the map with Row of tables on, as it was read: Shift pressed or
+ *  let go reads it again with no move, so the line shown takes or leaves its step (D11). */
+let rowPointer: RowPointer | null = null;
+
+/** Shift pressed or let go: the row's next point, under the pointer that has not moved, is read
+ *  again with Shift as it now is. */
+function reHoverRow(shiftKey: boolean) {
+  if (tool.value !== 'row' || !rowPointer) return;
+  const again = { ...rowPointer, shiftKey };
+  if (!gesture) hoverRow(again);
+  else if (gesture.kind === 'row' && !gesture.stroke && gesture.point === null) {
+    row.hoverAt(rowPointAt(again, true));
+  }
 }
 
 /** The pointer over the map with Row of tables on: the path is shown through where it is, as
  *  it would be placed where it rests on the last point, which a click there places, and closed
  *  where it rests on the first, which a click there closes. A closed shape is its points alone. */
-function hoverRow(event: PointerEvent) {
+function hoverRow(event: RowPointer) {
+  rowPointer = event;
   // While the keys have the path it is the points laid, wherever the pointer passes.
   if (keysOnMap.value) return;
   const points = row.points.value;
@@ -709,7 +771,7 @@ function hoverRow(event: PointerEvent) {
     row.hoverClose(!row.closed.value);
     return;
   }
-  row.hoverAt(points.length > 1 && on === points.length - 1 ? null : rowPointAt(event));
+  row.hoverAt(points.length > 1 && on === points.length - 1 ? null : rowPointAt(event, true));
 }
 
 /** Hand the line a drag is drawing to the row, as it stands: the places kept and the pointer's
@@ -744,7 +806,8 @@ function closeRow() {
 /** Place the pending row, and say what was added. Placed by keys, the focus goes to its first
  *  table and the view shows the row: a map that had no table loses its own stop once it has one. */
 function placeRow() {
-  if (!row.pending.value) return;
+  // One point laid is no row yet: Enter waits for the next (item 17).
+  if (!row.pending.value || !row.placeable.value) return;
   // A gap or an aisle that is no length places nothing, the path kept for the field mended.
   if (row.refusal.value) {
     say(row.refusal.value);
@@ -925,7 +988,7 @@ function onPointerDown(event: PointerEvent) {
     gesture = {
       kind: 'row',
       from,
-      fromMm: rowPointAt(event),
+      fromMm: rowPointAt(event, true),
       point: row.pointNear(toMm(event), ROW_POINT_PX / cam.pxPerMm),
       begun: false,
       stroke: null,
@@ -1057,7 +1120,10 @@ function onPointerMove(event: PointerEvent) {
       row.hoverClose(false);
       row.movePoint(gesture.point, rowPointAt(event));
     } else if (gesture.stroke) drawStroke(event);
-    else row.hoverAt(rowPointAt(event));
+    else {
+      rowPointer = event;
+      row.hoverAt(rowPointAt(event, true));
+    }
   } else if (gesture.kind === 'fill') {
     if (!gesture.begun && Math.hypot(dx, dy) < DRAG_PX) return;
     gesture.begun = true;
@@ -1177,16 +1243,15 @@ function endGesture(event: PointerEvent, cancelled: boolean) {
       return;
     }
     if (done.stroke) {
-      // The line as it is let go: a straight one is placed at once, as a row; a curve waits,
-      // smoothed, for a look and an adjustment.
+      // The line as it is let go waits, straight or smoothed, for a look and an adjustment:
+      // Enter places it, Escape or a right-click drops it (the QC walk of 2026-11-16, item 17).
       done.stroke.pointer = rowPointAt(event);
       row.strokeTo(
         [...done.stroke.kept, done.stroke.pointer],
         strokeOptions(camera.value!.pxPerMm, event.shiftKey),
       );
       const ended = row.endStroke();
-      if (ended === 'straight') placeRow();
-      else if (ended === 'curve') {
+      if (ended === 'straight' || ended === 'curve') {
         say(saidCurveDrawn(row.points.value.length, rowHolds(), row.closed.value));
       }
       return;
@@ -1210,7 +1275,8 @@ function endGesture(event: PointerEvent, cancelled: boolean) {
     } else if (row.closed.value || row.drawn.value) {
       // A press on the floor adds nothing to a closed shape, nor to a path drawn by hand.
     } else {
-      row.addPoint(done.begun ? rowPointAt(event) : done.fromMm);
+      // A point carried by a drag is laid where it was shown, held to the steps as a click's is.
+      row.addPoint(done.begun ? rowPointAt(event, true) : done.fromMm);
     }
     return;
   }
@@ -1387,6 +1453,7 @@ function onWindowKeydown(event: KeyboardEvent) {
   if (event.key === 'Shift') {
     showStroke(true);
     reTurn(true);
+    reHoverRow(true);
   }
   if (event.defaultPrevented || inAField(event)) return;
   // A dialog over the page has the keys; a closed side panel, whose window stays in the page
@@ -1683,12 +1750,14 @@ function onWindowKeyup(event: KeyboardEvent) {
   if (event.key === 'Shift') {
     showStroke(false);
     reTurn(false);
+    reHoverRow(false);
   }
 }
 
 /** The pointer left the map: a pending row or area is shown through its points alone. */
 function onPointerLeave() {
   hovering.value = false;
+  rowPointer = null;
   row.hoverAt(null);
   fillTool.hoverAt(null);
 }
@@ -2275,6 +2344,7 @@ defineExpose({
         :style="{ aspectRatio: `${layout.imageWidth ?? 4} / ${layout.imageHeight ?? 3}` }"
         data-testid="layout-stage"
         @pointerdown="onPointerDown"
+        @contextmenu.prevent="onContextMenu"
         @pointermove="onPointerMove"
         @pointerup="endGesture($event, false)"
         @pointercancel="endGesture($event, true)"
@@ -2338,6 +2408,7 @@ defineExpose({
               v-if="tool === 'row' && (row.pending.value || crosshair)"
               :runs="row.runs.value"
               :poses="row.poses.value"
+              :ghosts="row.ghosts.value"
               :size="row.size.value"
               :points="row.points.value"
               :countAt="

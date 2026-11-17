@@ -7,7 +7,7 @@
  * what the tool does with them.
  *
  * Section and Table type stand once at its head and carry from one adding tool to the next. Row of
- * tables adds where its tables stand on the line, the gap, the rows, the aisle between rows of
+ * tables adds where its tables stand on the line, centred first and at first (item 17), the gap, the rows, the aisle between rows of
  * more than one, and Spread evenly to the ends; their values are the app's while it is open
  * (`rowChoices`). Fill an area adds "Fill what is in view". Both take Group tables, so many to a
  * group with a spacer between groups, one choice for the two (`groupChoices`, item 15); a group
@@ -89,6 +89,10 @@ const aisleError = computed(() => (rowsOf(rowChoices.rows) > 1 ? rowErrors.value
           data-testid="layout-row-stand"
         >
           <label class="layout-tool-card__choice">
+            <input v-model="rowChoices.centred" type="radio" :value="true" />
+            Centred on the line
+          </label>
+          <label class="layout-tool-card__choice">
             <input v-model="rowChoices.centred" type="radio" :value="false" />
             Beside the line
           </label>
@@ -101,10 +105,6 @@ const aisleError = computed(() => (rowsOf(rowChoices.rows) > 1 ? rowErrors.value
           >
             Flip side
           </button>
-          <label class="layout-tool-card__choice">
-            <input v-model="rowChoices.centred" type="radio" :value="true" />
-            Centred on the line
-          </label>
         </div>
         <label class="layout-tool-card__name" :for="`${toolCardTitleId}-gap`">Gap</label>
         <span class="layout-tool-card__unit">
@@ -242,7 +242,7 @@ const aisleError = computed(() => (rowsOf(rowChoices.rows) > 1 ? rowErrors.value
     >
       Fill what is in view
     </button>
-    <p class="layout-tool-card__back">Press Escape for Select.</p>
+    <p class="layout-tool-card__back">Right-click the map or press Escape for Select.</p>
   </section>
 </template>
 
