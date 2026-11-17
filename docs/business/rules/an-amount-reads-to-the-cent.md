@@ -12,7 +12,7 @@ describes:
   - back-end/pricing.py#money_text
   - back-end/api/vendor_export.py#money_cell
   - back-end/tests/fixtures/money_texts.json
-verified: 2026-11-17
+verified: 2026-11-03
 sources:
   - T191
   - T203
