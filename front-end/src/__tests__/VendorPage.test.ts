@@ -1787,12 +1787,12 @@ describe('the door code scanned at the entrance', () => {
     expect(has(wrapper, 'vendor-check-in-done')).toBe(true);
   });
 
-  it('waits through a sign-in that ran out, and is kept for the next one', async () => {
+  it('waits through a sign-in that ran out, and checks that vendor in after their next', async () => {
     signIn();
     routing.at.query = { door: DOOR_CODE };
     fetchVendorPage.mockResolvedValue(onItsDays());
     fetchApplicantApplication.mockResolvedValue(seated(seat(TODAY)));
-    checkInWithDoorCode.mockRejectedValue(unauthorized());
+    checkInWithDoorCode.mockRejectedValueOnce(unauthorized());
     const wrapper = await mountPage();
 
     expect(has(wrapper, 'vendor-sign-in-email-input')).toBe(true);
@@ -1800,9 +1800,102 @@ describe('the door code scanned at the entrance', () => {
     expect(JSON.parse(sessionStorage.getItem(DOOR_KEY) ?? 'null')).toEqual({
       marketSlug: 'spring-market',
       code: DOOR_CODE,
+      applicantEmail: 'vendor@example.com',
     });
+
+    signsInAs();
+    checkInWithDoorCode.mockResolvedValue({ checkedInAt: `${TODAY}T09:41:00+00:00` });
+    await signInWithACode(wrapper, 'vendor@example.com');
+
+    expect(checkInWithDoorCode).toHaveBeenCalledTimes(2);
+    expect(checkInWithDoorCode).toHaveBeenLastCalledWith(
+      'spring-market',
+      'a-token',
+      TODAY,
+      DOOR_CODE,
+    );
+    expect(has(wrapper, 'vendor-check-in-done')).toBe(true);
+    expect(sessionStorage.getItem(DOOR_KEY)).toBeNull();
+  });
+
+  // On a device at the door that vendors share, the code waited for whoever signed in next.
+  it('held through a sign-in that ran out, checks in no other vendor who signs in', async () => {
+    signIn();
+    routing.at.query = { door: DOOR_CODE };
+    fetchVendorPage.mockResolvedValue(onItsDays());
+    fetchApplicantApplication.mockResolvedValue(seated(seat(TODAY)));
+    checkInWithDoorCode.mockRejectedValueOnce(unauthorized());
+    const wrapper = await mountPage();
+    expect(checkInWithDoorCode).toHaveBeenCalledTimes(1);
+
+    signsInAs();
+    await signInWithACode(wrapper, 'next@example.com');
+
+    expect(wrapper.get('[data-testid="vendor-page-signed-in-as"]').text()).toContain(
+      'next@example.com',
+    );
+    expect(has(wrapper, 'vendor-check-in-code-input')).toBe(true);
+    expect(checkInWithDoorCode).toHaveBeenCalledTimes(1);
+    // Dropped, not kept for later: the vendor it was for has left the device.
+    expect(sessionStorage.getItem(DOOR_KEY)).toBeNull();
+  });
+
+  it('is for the first address the sign-in sends a code to, and checks in no other', async () => {
+    routing.at.query = { door: DOOR_CODE };
+    fetchVendorPage.mockResolvedValue(onItsDays());
+    requestLoginCode.mockResolvedValue({ message: "We've sent a code to this address." });
+    signsInAs();
+    fetchApplicantApplication.mockResolvedValue(seated(seat(TODAY)));
+    const wrapper = await mountPage();
+
+    await wrapper.get('[data-testid="vendor-sign-in-email-input"]').setValue('vendor@example.com');
+    await wrapper.get('[data-testid="vendor-sign-in-email-step"]').trigger('submit');
+    await flushPromises();
+    await wrapper.get('[data-testid="vendor-sign-in-back-btn"]').trigger('click');
+    await flushPromises();
+    // Said as before: the page cannot tell who stands at it.
+    expect(has(wrapper, 'vendor-page-door-held')).toBe(true);
+    await signInWithACode(wrapper, 'next@example.com');
+
+    expect(has(wrapper, 'vendor-check-in-code-input')).toBe(true);
+    expect(checkInWithDoorCode).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(DOOR_KEY)).toBeNull();
+  });
+
+  it('is kept for a code that could not be sent, and checks in the address that signs in', async () => {
+    routing.at.query = { door: DOOR_CODE };
+    fetchVendorPage.mockResolvedValue(onItsDays());
+    requestLoginCode
+      .mockRejectedValueOnce(new AxiosError('Network Error', 'ERR_NETWORK'))
+      .mockResolvedValue({ message: "We've sent a code to this address." });
+    signsInAs();
+    fetchApplicantApplication.mockResolvedValue(seated(seat(TODAY)));
+    checkInWithDoorCode.mockResolvedValue({ checkedInAt: `${TODAY}T09:41:00+00:00` });
+    const wrapper = await mountPage();
+
+    await wrapper
+      .get('[data-testid="vendor-sign-in-email-input"]')
+      .setValue('mistyped@example.com');
+    await wrapper.get('[data-testid="vendor-sign-in-email-step"]').trigger('submit');
+    await flushPromises();
+    await signInWithACode(wrapper, 'vendor@example.com');
+
+    expect(checkInWithDoorCode).toHaveBeenCalledWith('spring-market', 'a-token', TODAY, DOOR_CODE);
+    expect(has(wrapper, 'vendor-check-in-done')).toBe(true);
   });
 });
+
+/** Each right code signs in the address it was asked for. */
+function signsInAs() {
+  verifyLoginCode.mockImplementation((_slug: string, email: string) =>
+    Promise.resolve({
+      success: true,
+      marketId: 'market-1',
+      applicantEmail: email,
+      token: 'a-token',
+    }),
+  );
+}
 
 describe('the record, once the market has ended', () => {
   beforeEach(signIn);

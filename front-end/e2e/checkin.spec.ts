@@ -1,4 +1,4 @@
-import type { Browser } from '@playwright/test';
+import type { Browser, Page } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL, VendorPage } from './fixtures';
 import { seedPublishedMarketWithAssignments } from './helpers/seeds';
 import {
@@ -54,6 +54,30 @@ async function makeDoorCode(
   const { code, url } = (await made.json()) as { code: string; url: string };
   const at = new URL(url);
   return { code, path: `${at.pathname}${at.search}` };
+}
+
+/** When the server holds `vendor` checked in today, from the organizer's roster, or null. */
+async function checkedInAt(
+  request: Parameters<typeof seedPublishedMarketWithAssignments>[0],
+  marketId: string,
+  vendor: string,
+): Promise<string | null | undefined> {
+  const roster = await request.get(`${BACKEND_URL}/markets/${marketId}/attendance`);
+  const { roster: rows } = (await roster.json()) as {
+    roster: { vendorEmail: string; checkedInAt: string | null }[];
+  };
+  return rows.find((row) => row.vendorEmail === vendor)?.checkedInAt;
+}
+
+/** How many check-ins `page` has sent so far, counted from now. */
+function checkInsSentBy(page: Page): () => number {
+  let sent = 0;
+  page.on('request', (asked) => {
+    if (asked.method() === 'POST' && new URL(asked.url()).pathname.endsWith('/vendor/check-in')) {
+      sent += 1;
+    }
+  });
+  return () => sent;
 }
 
 /** A vendor's phone: a browser of its own, signed in as nobody. */
@@ -164,6 +188,75 @@ test('a scan on a day the vendor has no table says so, and checks nothing in', a
   await expect(phone.vendorPage.todayCard).toHaveCount(0);
   await expect(phone.vendorPage.otherDays).toContainText('2099');
   await phone.context.close();
+});
+
+// On a device at the door that vendors share, a scanned code waited in the tab for whoever signed
+// in next, so a vendor who scanned and walked away had the next vendor checked in by a scan they
+// never made. A held code is for the vendor who scanned it: the first address the sign-in sends a
+// code to, or the vendor whose sign-in ran out as it checked them in.
+
+test('a code scanned before one vendor asked to sign in checks in no other vendor', async ({
+  browser,
+  request,
+}) => {
+  const [scanner, next] = vendorsOf('asked');
+  const seed = await aMarketOnItsDay(request, [scanner, next]);
+  const { path } = await makeDoorCode(request, seed.marketId);
+
+  const phone = await aPhone(browser);
+  const checkIns = checkInsSentBy(phone.page);
+  await phone.page.goto(path);
+  await expect(phone.vendorPage.doorCodeHeld).toBeVisible();
+  // The vendor who scanned asks for a code, and walks away; the next one uses their own address.
+  await phone.vendorPage.requestCode(scanner);
+  await phone.vendorPage.differentEmailButton.click();
+  await signInOnThePage(phone.vendorPage, seed.marketId, next);
+
+  await expect(phone.vendorPage.todayCard).toBeVisible();
+  await expect(phone.vendorPage.doorCodeInput).toBeVisible();
+  await expect(phone.vendorPage.checkedIn).toHaveCount(0);
+  // Signed out, the page holds the code for nobody, and none was ever sent.
+  await phone.vendorPage.signOutButton.click();
+  await expect(phone.vendorPage.emailInput).toBeVisible();
+  await expect(phone.vendorPage.doorCodeHeld).toHaveCount(0);
+  expect(checkIns()).toBe(0);
+  await phone.context.close();
+  expect(await checkedInAt(request, seed.marketId, next)).toBeNull();
+});
+
+test('a code held through a sign-in that ran out checks in no other vendor', async ({
+  browser,
+  request,
+}) => {
+  const [scanner, next] = vendorsOf('ranout');
+  const seed = await aMarketOnItsDay(request, [scanner, next]);
+  const { path } = await makeDoorCode(request, seed.marketId);
+
+  const phone = await aPhone(browser);
+  const checkIns = checkInsSentBy(phone.page);
+  await phone.vendorPage.goto(seed.marketSlug);
+  await signInOnThePage(phone.vendorPage, seed.marketId, scanner);
+  // The sign-in lasts 30 minutes: the scan's check-in finds it ended, as after a long queue.
+  await phone.page.route(
+    '**/vendor/check-in',
+    (route) => route.fulfill({ status: 401, json: { error: 'Authentication required' } }),
+    { times: 1 },
+  );
+  await phone.page.goto(path);
+  await expect(phone.vendorPage.doorCodeHeld).toBeVisible();
+  expect(checkIns()).toBe(1);
+
+  // The vendor who scanned walks away, and the next one signs in.
+  await signInOnThePage(phone.vendorPage, seed.marketId, next);
+  await expect(phone.vendorPage.todayCard).toBeVisible();
+  await expect(phone.vendorPage.doorCodeInput).toBeVisible();
+  await expect(phone.vendorPage.checkedIn).toHaveCount(0);
+  await phone.vendorPage.signOutButton.click();
+  await expect(phone.vendorPage.emailInput).toBeVisible();
+  await expect(phone.vendorPage.doorCodeHeld).toHaveCount(0);
+  expect(checkIns()).toBe(1);
+  await phone.context.close();
+  expect(await checkedInAt(request, seed.marketId, next)).toBeNull();
 });
 
 test('a vendor is shown the seat stored for them, after a swap', async ({ browser, request }) => {

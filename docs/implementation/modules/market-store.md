@@ -213,6 +213,7 @@ The vendor page's store ([`stores/application.ts`](../../../front-end/src/stores
 Each signed-in request notes the epoch as it starts; one answering after it moved writes nothing (no application, no error, no draft kept, no questions, no second sign-out) and answers with nothing to show or say, so on a shared door device the next person sees nothing of the last vendor's, and a 401 after the sign-out never renews into the next vendor's sign-in.
 A renewal through `resume` signs the same vendor in again and leaves the epoch, so the request it renews still lands.
 The device remembers one vendor per market, not per tab, so another tab signing Ben in with "Remember me" makes the remembered sign-in his: a renewal that brings back an address other than the one it renews is refused and held nowhere, and the request ends as any sign-in that could not be renewed does, Ana's answers kept for her next sign-in (`aVendorsSessionEndsWhole.test.ts`).
+A door code it holds through a sign-in is the scanner's alone, kept with the address it is for, and a sign-in of any other address drops it unused, so the next vendor at a shared door device is never checked in by it ([attendance and the door](attendance-and-door.md#sharp-edges)).
 
 ## Sharp edges
 

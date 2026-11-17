@@ -92,19 +92,28 @@ function keepSession(session: StoredSession | null): void {
 /**
  * A door code scanned at the entrance (ADR 0022), kept in this tab from the moment the page opens
  * on `?door=<code>` until it is used once, so it survives the sign-in it may take first.
+ *
+ * It is for the vendor who scanned it, and checks in no one else: on a device at the door that
+ * vendors share, the next vendor to sign in was once checked in by a scan they never made.
+ * `applicantEmail` is that vendor's address: the first one the sign-in sends a code to, or the
+ * vendor whose sign-in ran out as it checked them in; null until then, when the first sign-in here
+ * is the scanner's own.
  */
 const DOOR_CODE_KEY = 'conventioner.doorCode';
 
 interface HeldDoorCode {
   marketSlug: string;
   code: string;
+  applicantEmail: string | null;
 }
 
 function storedDoorCode(): HeldDoorCode | null {
   try {
     const parsed = JSON.parse(sessionStorage.getItem(DOOR_CODE_KEY) ?? 'null') as unknown;
     const held = parsed as Partial<HeldDoorCode> | null;
-    return held?.marketSlug && held.code ? (held as HeldDoorCode) : null;
+    if (!held?.marketSlug || !held.code) return null;
+    const applicantEmail = typeof held.applicantEmail === 'string' ? held.applicantEmail : null;
+    return { marketSlug: held.marketSlug, code: held.code, applicantEmail };
   } catch {
     return null;
   }
@@ -299,6 +308,11 @@ export const useApplicationStore = defineStore('application', () => {
   async function requestCode(slug: string, email: string): Promise<CodeAnswer> {
     try {
       await requestLoginCode(slug, email);
+      // The first address sent a code after a scan is the scanner's: the code is theirs alone.
+      const held = heldDoorCode.value;
+      if (held && held.marketSlug === slug && held.applicantEmail === null) {
+        holdDoorCode(slug, held.code, email);
+      }
       return { ok: true };
     } catch (err: unknown) {
       return { ok: false, sentence: requestErrorFrom(err), codeState: null };
@@ -311,6 +325,11 @@ export const useApplicationStore = defineStore('application', () => {
     const held = draft.value;
     if (held && held.marketSlug === slug && held.applicantEmail !== result.applicantEmail) {
       dropDraft();
+    }
+    // Nor checks another vendor in with the door code held for the one who scanned it.
+    const door = heldDoorCode.value;
+    if (door && door.marketSlug === slug && !doorCodeIsFor(door, result.applicantEmail)) {
+      dropDoorCode();
     }
     // Another vendor, or another market's page, in place of one still signed in: nothing asked for
     // the one replaced lands on the next one's page.
@@ -477,18 +496,31 @@ export const useApplicationStore = defineStore('application', () => {
     }
   }
 
-  /** Keep a door code scanned at this market's entrance until the page uses it. */
-  function holdDoorCode(slug: string, code: string): void {
-    heldDoorCode.value = { marketSlug: slug, code };
+  /**
+   * Keep a door code scanned at this market's entrance until the page uses it, for `email`, or,
+   * scanned with nobody signed in, for the first address the sign-in sends a code to.
+   */
+  function holdDoorCode(slug: string, code: string, email: string | null = null): void {
+    heldDoorCode.value = { marketSlug: slug, code, applicantEmail: email };
     keepDoorCode(heldDoorCode.value);
   }
 
-  /** The door code held for this market, taken: it is used once. */
-  function takeDoorCode(slug: string): string | null {
-    const held = heldDoorCode.value;
-    if (!held || held.marketSlug !== slug) return null;
+  function dropDoorCode(): void {
     heldDoorCode.value = null;
     keepDoorCode(null);
+  }
+
+  function doorCodeIsFor(held: HeldDoorCode, email: string | null): boolean {
+    return held.applicantEmail === null || held.applicantEmail === email;
+  }
+
+  /** The door code held for this market and the vendor signed in, taken: it is used once. */
+  function takeDoorCode(slug: string): string | null {
+    const held = heldDoorCode.value;
+    if (!held || held.marketSlug !== slug || !doorCodeIsFor(held, applicantEmail.value)) {
+      return null;
+    }
+    dropDoorCode();
     return held.code;
   }
 
@@ -513,8 +545,8 @@ export const useApplicationStore = defineStore('application', () => {
 
   /**
    * What a check-in or an undo answering after the vendor signed out comes to: nothing marked and
-   * nothing said. Not `signedOut`, which has the section keep a scanned code for the next sign-in:
-   * on a shared door device, the next vendor's.
+   * nothing said. Not `signedOut`, which has the section keep a scanned code for the next sign-in
+   * of the vendor who asked: they signed out, and asked for nothing more.
    */
   const LEFT: CheckInResult = { ok: false, message: '', signedOut: false };
 

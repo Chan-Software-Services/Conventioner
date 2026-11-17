@@ -75,6 +75,7 @@ Covered by:
 A vendor signed in already is checked in at once.
 With no seat today the page says "You have no table today, so you are not checked in."; before the market's days "Check-in opens when the market's days begin."; once it has ended "This market has ended, so check-in is closed."; none checks anything in.
 A scanned code is used once: the page reloaded checks nobody in again.
+On a device vendors share at the door, a scanned code checks in only the vendor who scanned it: the first address sent a sign-in code, or the vendor whose sign-in ran out as it checked them in; anyone else who signs in next is not checked in, and types the code or scans it again.
 The seats shown are the stored assignment, so a vendor placed, swapped or freed by hand is sent where they were put (bug 1).
 It works alike on a Google Form market, whose vendor page opens once its results are published ([the Google Form path](the-google-form-path.md)).
 Covered by:
