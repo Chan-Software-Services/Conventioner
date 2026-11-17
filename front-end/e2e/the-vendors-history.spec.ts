@@ -17,11 +17,15 @@ import { putVerdict } from './helpers/putVerdict';
  * It was the placement trail alone; it is now everything the market's history holds about that
  * vendor, newest first, in the words of Manage market's History section. Two vendors are given a
  * verdict, a note and a table each through the API the screens call, on a fixture market, and each
- * drawer reads its own vendor's entries and never the other's. Raised above a Viewer, the history's
- * row takes the tab from their drawer and the changes from their Permissions dialog.
+ * drawer reads its own vendor's entries and never the other's. A verdict given to a selection of
+ * three reads in one vendor's drawer as their own line, naming none of the other two, and whole in
+ * Manage market's History, which opens to each vendor's verdict by their address. Raised above a
+ * Viewer, the history's row takes the tab from their drawer and the changes from their Permissions
+ * dialog.
  */
 const VENDOR = { email: 'e2e-drawer-history-vera@example.com', name: 'Vera Vendor' };
 const OTHER = { email: 'e2e-drawer-history-otto@example.com', name: 'Otto Other' };
+const THIRD = { email: 'e2e-drawer-history-tess@example.com', name: 'Tess Third' };
 const PAGE = 25;
 const VIEWER = { email: 'e2e-drawer-history-viewer@example.com', password: 'e2epassword123' };
 
@@ -112,6 +116,76 @@ test("a vendor's History tab reads their verdict, note and tables, newest first,
     `${me} set ${otto} to Approved`,
   ]);
   await expect(vendors.detailPanel).not.toContainText(VENDOR.email);
+});
+
+test("a verdict on a selection reads in a vendor's History tab as their own line, naming nobody else", async ({
+  authenticatedPage: page,
+  request,
+}) => {
+  const seed = await seedPhaseMarket(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
+  const plan = completePlan();
+  await savePlan(request, BACKEND_URL, TEST_USER.email, seed.marketId, plan);
+  const vendors = [VENDOR, OTHER, THIRD];
+  const applications = vendors.map((vendor) => ({
+    ...approvedVendorApplication(seed.marketId, vendor.email, {
+      dates: [plan.marketDates[0].date],
+      tiers: ['Gold'],
+      fullName: vendor.name,
+    }),
+    status: 'open',
+  }));
+  insertApplications(applications);
+  await transitionMarket(request, BACKEND_URL, TEST_USER.email, seed.marketId, 'applications');
+  // Approved all at once, as ticking the three and Approve does.
+  await ok(
+    await request.post(`${BACKEND_URL}/markets/${seed.marketId}/applications/verdicts`, {
+      data: {
+        status: 'reviewer_approved',
+        applications: applications.map((application) => ({
+          id: application.id,
+          seen: { status: 'open', verdictAt: null, updatedAt: application.updated_at },
+        })),
+      },
+    }),
+  );
+  const me = TEST_USER.email;
+
+  const drawer = new VendorsPage(page);
+  await page.goto(drawerPath(seed.marketId, VENDOR.email));
+  await expect(drawer.detailHistorySentences).toHaveText([
+    `${me} set the application and 2 others to Approved`,
+  ]);
+  const entry = page.getByTestId('vendor-drawer-panel-history').getByTestId('market-history-entry');
+  await entry.getByTestId('market-history-toggle').click();
+  // Before and after is their own verdict alone, as a verdict on their one application opens to.
+  await expect(entry.getByTestId('market-history-changes')).toContainText(
+    /Status\s*Open\s*Approved/,
+  );
+  const history = page.getByTestId('vendor-drawer-panel-history');
+  for (const other of [OTHER, THIRD]) {
+    await expect(history).not.toContainText(other.name);
+    await expect(history).not.toContainText(other.email);
+  }
+  for (const application of applications.slice(1)) {
+    await expect(history).not.toContainText(application.id);
+  }
+
+  // The market's own History still names the whole selection.
+  await page.goto(`/markets?q=${encodeURIComponent(seed.marketName)}`);
+  await page.getByTestId('market-card-manage-button').click();
+  const manage = new ManageMarketPage(page);
+  await manage.waitForOverlay();
+  await manage.openHistory();
+  await expect(manage.historySentences.first()).toHaveText(
+    `${me} set 3 applications to Approved: ${vendors.map((vendor) => `${vendor.name} ${vendor.email}`).join(', ')}`,
+  );
+  // It opens to each vendor's verdict by their address, never an application's id.
+  const changes = await manage.openHistoryEntry(0);
+  const rows = changes.locator('tbody tr');
+  await expect(rows).toHaveCount(vendors.length);
+  for (const [index, vendor] of vendors.entries()) {
+    await expect(rows.nth(index).locator('th, td')).toHaveText([vendor.email, 'Open', 'Approved']);
+  }
 });
 
 test("a vendor's long History scrolls with the drawer's body and fetches at its end, with no box of its own", async ({
