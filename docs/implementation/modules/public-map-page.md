@@ -24,7 +24,7 @@ describes:
   - front-end/e2e/the-public-map-phone-card.spec.ts
   - front-end/e2e/the-public-map-vendors.spec.ts
   - front-end/e2e/pages/PublicMapPage.ts
-verified: 2026-11-17
+verified: 2026-11-18
 sources:
   - T422
   - T465
