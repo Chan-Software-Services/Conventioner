@@ -9,6 +9,7 @@ import { CsvImportPage } from './pages/CsvImportPage';
 import { seedDraftMarket } from './helpers/seedDraftMarket';
 import { decideReviewSetup } from './helpers/decideReviewSetup';
 import { marketSetupPath } from './helpers/marketScreens';
+import { PHONE } from './helpers/screens';
 
 /**
  * Starting a draft from its Google Form's responses (E24/F03/S01): upload one of the five
@@ -523,13 +524,16 @@ test.describe('An answer that names someone', () => {
   const QUESTION = 'Where can we see your work?';
   const LINK = 'Online at https://example.com/prints';
 
-  /** A synthetic export, fixture values only: 24 and 12 plain answers, the link 3 times, a one-off. */
-  function writeExport(testInfo: TestInfo): string {
+  /**
+   * A synthetic export, fixture values only: 24 and 12 plain answers, the link 3 times, and a
+   * one-off unless `oneOff` is false, which leaves the link the only answer unticked by default.
+   */
+  function writeExport(testInfo: TestInfo, oneOff = true): string {
     const answers = [
       ...Array<string>(24).fill('In person'),
       ...Array<string>(12).fill('Instagram'),
       ...Array<string>(3).fill(LINK),
-      'Etsy',
+      ...(oneOff ? ['Etsy'] : []),
     ];
     const rows = answers.map(
       (answer, i) =>
@@ -540,12 +544,15 @@ test.describe('An answer that names someone', () => {
     return path;
   }
 
-  /** Start a draft from the export, the link ticked or not, and read the question it published. */
+  /**
+   * Start a draft from the export, the link left unticked, ticked or kept by "Keep all" on an export
+   * where it is the only answer unticked, and read the question it published.
+   */
   async function startFrom(
     page: Page,
     request: APIRequestContext,
     testInfo: TestInfo,
-    keepTheLink: boolean,
+    theLink: 'left' | 'ticked' | 'keep-all',
   ): Promise<string[]> {
     const { marketId } = await seedDraftMarket(
       request,
@@ -555,7 +562,7 @@ test.describe('An answer that names someone', () => {
     );
     const flow = new StartFromCsvPage(page);
     await flow.open(marketId);
-    await flow.chooseFile(writeExport(testInfo));
+    await flow.chooseFile(writeExport(testInfo, theLink !== 'keep-all'));
     await expect(flow.ledger).toBeVisible();
 
     const row = flow.row(QUESTION);
@@ -566,9 +573,26 @@ test.describe('An answer that names someone', () => {
     await expect(
       row.getByTestId('proposal-check').filter({ hasText: 'Has an option that names someone' }),
     ).toHaveCount(1);
-    if (keepTheLink) {
+    if (theLink === 'ticked') {
       await link.locator('input').check();
       await expect(link.locator('input')).toBeChecked();
+    }
+    if (theLink === 'keep-all') {
+      // The one press that keeps it says so before it is pressed.
+      const { keepAll } = flow.answers(row);
+      await expect(keepAll).toHaveText('Keep all 3, 1 names someone');
+      // Whole and on one line, at a desk and on the phone's 390, where the page keeps its floor.
+      await keepAll.scrollIntoViewIfNeeded();
+      await expect(keepAll).toBeInViewport({ ratio: 1 });
+      const lines = await keepAll.evaluate((button) => {
+        const words = document.createRange();
+        words.selectNodeContents(button);
+        return new Set([...words.getClientRects()].map((rect) => Math.round(rect.top))).size;
+      });
+      expect(lines, 'the label wraps').toBe(1);
+      await keepAll.click();
+      await expect(link.locator('input')).toBeChecked();
+      await expect(keepAll).toHaveCount(0);
     }
 
     await flow.confirm.click();
@@ -584,17 +608,31 @@ test.describe('An answer that names someone', () => {
     authenticatedPage: page,
     request,
   }, testInfo) => {
-    expect(await startFrom(page, request, testInfo, false)).toEqual(['In person', 'Instagram']);
+    expect(await startFrom(page, request, testInfo, 'left')).toEqual(['In person', 'Instagram']);
   });
 
   test('ticked, it is published as the organizer chose', async ({
     authenticatedPage: page,
     request,
   }, testInfo) => {
-    expect(await startFrom(page, request, testInfo, true)).toEqual([
+    expect(await startFrom(page, request, testInfo, 'ticked')).toEqual([
       'In person',
       'Instagram',
       LINK,
     ]);
   });
+
+  for (const size of [{ width: 1280, height: 800 }, PHONE]) {
+    test(`at ${size.width}, "Keep all" says it names someone, and keeps it as the organizer chose`, async ({
+      authenticatedPage: page,
+      request,
+    }, testInfo) => {
+      await page.setViewportSize(size);
+      expect(await startFrom(page, request, testInfo, 'keep-all')).toEqual([
+        'In person',
+        'Instagram',
+        LINK,
+      ]);
+    });
+  }
 });
