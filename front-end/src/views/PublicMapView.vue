@@ -124,6 +124,12 @@ function chooseLocation(locationId: string) {
   goTo({ ...place.value, locationId, tableId: keeps ? place.value.tableId : null });
 }
 
+/** Prototype (release walk F6): the title's look to compare, `?look=1` to `?look=6`. */
+const look = computed(() => {
+  const asked = Number(route.query.look);
+  return Number.isInteger(asked) && asked >= 1 && asked <= 6 ? asked : 1;
+});
+
 /** Prototype (release walk F6): a market day as the dropdown says it, "Nov 19". */
 const MONTH_NAMES = [
   'Jan',
@@ -383,9 +389,11 @@ function openVendor(vendor: ListedVendor) {
     </template>
 
     <template v-else-if="map">
-      <header class="public-map__head">
+      <header class="public-map__head" :class="`public-map__head--look-${look}`">
         <div class="public-map__words">
+          <p class="public-map__eyebrow" aria-hidden="true">✦ Vendor map</p>
           <h1 class="public-map__title" data-testid="public-map-heading">{{ map.marketName }}</h1>
+          <span class="public-map__sparkles" aria-hidden="true">✦ ✧</span>
           <svg
             class="public-map__squiggle"
             viewBox="0 0 120 10"
@@ -1302,6 +1310,164 @@ function openVendor(vendor: ListedVendor) {
   .public-map {
     padding-inline: var(--space-3);
     padding-block-start: var(--space-3);
+  }
+}
+
+/* ── Prototype (release walk F6): six looks for the title and subtitle, `?look=1` to `?look=6` ── */
+.public-map__eyebrow,
+.public-map__sparkles {
+  display: none;
+}
+
+/* 2. A mint pill above the name; no squiggle, no line under. */
+.public-map__head--look-2 .public-map__eyebrow {
+  display: inline-flex;
+  align-self: flex-start;
+  margin: 0 0 var(--space-1);
+  padding: 2px var(--space-3);
+  border: 1px solid var(--layout-section-4-edge);
+  border-radius: var(--radius-pill);
+  background: var(--layout-section-4-fill);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.public-map__head--look-2 .public-map__squiggle,
+.public-map__head--look-2 .public-map__subtitle {
+  display: none;
+}
+
+/* 3. Light and airy: the name in light Outfit, the subtitle led by a fine mustard rule. */
+.public-map__head--look-3 .public-map__title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.875rem;
+  font-weight: 300;
+  letter-spacing: 0.01em;
+}
+
+.public-map__head--look-3 .public-map__squiggle {
+  display: none;
+}
+
+.public-map__head--look-3 .public-map__subtitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.public-map__head--look-3 .public-map__subtitle::before {
+  content: '';
+  width: 2rem;
+  height: 1.5px;
+  background: var(--mm-yellow);
+}
+
+/* 4. One line: the name, a fine rule, "Vendor map", two sparkles. */
+.public-map__head--look-4 .public-map__words {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}
+
+.public-map__head--look-4 .public-map__squiggle {
+  display: none;
+}
+
+.public-map__head--look-4 .public-map__subtitle {
+  order: 2;
+  padding-inline-start: var(--space-3);
+  border-inline-start: 1px solid var(--pm-line);
+  font-size: var(--text-sm);
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.public-map__head--look-4 .public-map__subtitle::before {
+  content: none;
+}
+
+.public-map__head--look-4 .public-map__sparkles {
+  display: inline;
+  order: 3;
+  color: var(--mm-yellow);
+  font-size: var(--text-sm);
+  letter-spacing: 0.2em;
+}
+
+/* 5. A ticket: the name in a white card with a dashed edge, "VENDOR MAP" above it, sparkles at its
+   corner. */
+.public-map__head--look-5 .public-map__words {
+  position: relative;
+  padding: var(--space-3) var(--space-6) var(--space-3) var(--space-4);
+  border: 1.5px dashed var(--pm-line);
+  border-radius: 16px;
+  background: white;
+}
+
+.public-map__head--look-5 .public-map__eyebrow {
+  display: block;
+  order: -1;
+  margin: 0;
+  font-size: var(--text-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mm-text-muted);
+}
+
+.public-map__head--look-5 .public-map__eyebrow::first-letter {
+  color: var(--mm-yellow);
+}
+
+.public-map__head--look-5 .public-map__squiggle,
+.public-map__head--look-5 .public-map__subtitle {
+  display: none;
+}
+
+.public-map__head--look-5 .public-map__sparkles {
+  display: block;
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-3);
+  color: var(--layout-section-4-edge);
+  font-size: var(--text-xs);
+}
+
+/* 6. A highlighter: the name in bold Outfit over a honey stroke, "vendor map" in Merge One. */
+.public-map__head--look-6 .public-map__title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  /* The honey stroke as a thick underline behind the letters, so it follows each line's words. */
+  text-decoration: underline;
+  text-decoration-color: var(--layout-section-1-fill);
+  text-decoration-thickness: 0.4em;
+  text-underline-offset: -0.22em;
+  text-decoration-skip-ink: none;
+}
+
+.public-map__head--look-6 .public-map__squiggle {
+  display: none;
+}
+
+.public-map__head--look-6 .public-map__subtitle {
+  font-family: 'Merge One', sans-serif;
+  font-size: var(--text-md);
+  letter-spacing: 0.01em;
+  text-transform: lowercase;
+}
+
+.public-map__head--look-6 .public-map__subtitle::before {
+  content: '✧ ';
+  color: var(--layout-section-4-edge);
+}
+
+@media (width <= 640px) {
+  .public-map__head--look-4 .public-map__subtitle {
+    padding-inline-start: 0;
+    border-inline-start: none;
   }
 }
 </style>
