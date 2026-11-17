@@ -6,6 +6,7 @@ structured detail. Assignment history reads the same store narrowed to the ``ass
 """
 import pytest
 
+from conftest import assigning, let_in
 import api.market_actions as Actions
 import history as History
 from test_reading_the_history import PagedHistory, _matches
@@ -37,8 +38,11 @@ def placement_history(monkeypatch):
 
 
 class TestAnEntry:
+    """The history's one writer, private to it (``_record``): what an entry it writes holds, by
+    whichever door, the asking's or the unasked one."""
+
     def test_it_names_the_market_who_when_the_action_and_what_it_was_about(self, history):
-        History.record(
+        History._record(
             "m1", "dana@example.com", Actions.GIVE_VERDICTS, kind="verdict",
             vendors=["Ana@Example.com"], subject={"application_id": "app-1"},
             detail={"before": {"status": "pending"}, "after": {"status": "approved"}},
@@ -58,7 +62,7 @@ class TestAnEntry:
         }
 
     def test_an_action_with_one_change_needs_no_finer_kind(self, history):
-        History.record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail={})
+        History._record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail={})
 
         [entry] = history.docs
         assert entry["action"] == "change-setup"
@@ -70,7 +74,7 @@ class TestAnEntry:
     def test_it_is_at_the_time_it_is_recorded(self, history, monkeypatch):
         monkeypatch.setattr(History, "_now", lambda: "2099-04-02T10:00:00+00:00")
 
-        History.record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail={})
+        History._record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail={})
 
         [entry] = history.docs
         assert entry["at"] == "2099-04-02T10:00:00+00:00"
@@ -80,8 +84,8 @@ class TestAnEntry:
         amount was set, so it reads before the drop's entry."""
         monkeypatch.setattr(History, "_now", lambda: "2099-04-02T10:00:00+00:00")
 
-        History.record("m1", "dana@example.com", Actions.CHANGE_OWED, detail={},
-                       at="2099-04-02T09:59:59+00:00")
+        History._record("m1", "dana@example.com", Actions.CHANGE_OWED, detail={},
+                        at="2099-04-02T09:59:59+00:00")
 
         [entry] = history.docs
         assert entry["at"] == "2099-04-02T09:59:59+00:00"
@@ -94,22 +98,85 @@ class TestAnEntry:
 
         monkeypatch.setattr(History, "history_collection", Broken())
 
-        History.record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail={})
+        History._record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail={})
 
     def test_a_detail_that_cannot_be_built_is_swallowed(self, history):
         """Built inside the guard: a builder that raises loses the entry, never the change."""
         def broken():
             raise RuntimeError("the stored plan no longer parses")
 
-        History.record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail=broken)
+        History._record("m1", "dana@example.com", Actions.CHANGE_SETUP, detail=broken)
 
         assert history.docs == []
 
     def test_a_write_that_changed_nothing_records_nothing(self, history):
-        History.record("m1", "dana@example.com", Actions.CHANGE_SETUP,
-                       detail=lambda: History.changes({"name": "A"}, {"name": "A"}))
+        History._record("m1", "dana@example.com", Actions.CHANGE_SETUP,
+                        detail=lambda: History.changes({"name": "A"}, {"name": "A"}))
 
         assert history.docs == []
+
+
+class TestWhereItWrites:
+    def test_it_writes_into_the_database_holding_its_collection_and_no_other(self, history):
+        assert History.records_in({History.HISTORY_COLLECTION: history})
+        assert not History.records_in({History.HISTORY_COLLECTION: object()})
+
+
+class TestARecordNoRequestAsked:
+    """The one door for an entry under a row no request asked (T105-9): it writes as ``_record``
+    does, and says why nothing asked it."""
+
+    @pytest.fixture
+    def unasked(self):
+        return History.unasked("m1", None, Actions.CHECK_IN,
+                               because="a vendor's sign-in and the door code are the check")
+
+    def test_it_holds_its_market_actor_row_and_reason(self, unasked):
+        assert unasked.market_id == "m1"
+        assert unasked.actor is None
+        assert unasked.row is Actions.CHECK_IN
+        assert unasked.because == "a vendor's sign-in and the door code are the check"
+
+    def test_it_writes_the_entry_as_record_does(self, history, unasked):
+        unasked.record(kind=History.CHECKED_IN, vendors=["Ana@Example.com"],
+                       subject=lambda: {"date": "2026-11-18"}, detail={"at": "door"})
+
+        [entry] = history.docs
+        assert entry["market_id"] == "m1"
+        assert entry["actor"] is None
+        assert entry["action"] == "check-in"
+        assert entry["kind"] == "checked_in"
+        assert entry["vendors"] == ["ana@example.com"]
+        assert entry["subject"] == {"date": "2026-11-18"}
+        assert entry["detail"] == {"at": "door"}
+
+    def test_an_entry_given_when_its_change_landed_is_at_that_time(
+            self, history, unasked, monkeypatch):
+        monkeypatch.setattr(History, "_now", lambda: "2099-04-02T10:00:00+00:00")
+
+        unasked.record(detail={}, at="2099-04-02T09:59:59+00:00")
+        unasked.record(detail={})
+
+        assert [entry["at"] for entry in history.docs] == [
+            "2099-04-02T09:59:59+00:00", "2099-04-02T10:00:00+00:00"]
+
+    def test_a_write_that_changed_nothing_records_nothing(self, history, unasked):
+        unasked.record(detail=lambda: None)
+
+        assert history.docs == []
+
+    def test_a_write_that_cannot_be_saved_is_swallowed(self, monkeypatch, unasked):
+        class Broken:
+            def insert_one(self, _doc):
+                raise RuntimeError("mongo is having a day")
+
+        monkeypatch.setattr(History, "history_collection", Broken())
+
+        unasked.record(detail={})
+
+    def test_its_reason_is_given_by_name(self):
+        with pytest.raises(TypeError):
+            History.unasked("m1", None, Actions.CHECK_IN, "a reason")  # type: ignore[misc]
 
 
 class TestAnEntryWrittenOnceUnderItsId:
@@ -135,7 +202,8 @@ class TestAnEntryWrittenOnceUnderItsId:
 
 class TestAPlacementEntry:
     def test_it_is_an_assign_action_about_its_table_day(self, history):
-        History.record_freed("m1", "dana@example.com", "ana@example.com", "2026-08-01", "A 1")
+        History.record_freed(
+            assigning("m1", "dana@example.com"), "ana@example.com", "2026-08-01", "A 1")
 
         [entry] = history.docs
         assert entry["action"] == Actions.ASSIGN.id
@@ -149,13 +217,14 @@ class TestAPlacementEntry:
                 self.email, self.table_code = email, table_code
 
         History.record_swapped(
-            "m1", "dana@example.com", "2026-08-01", Seat("a@x.test", "A 1"), Seat("b@x.test", "A 2"),
+            assigning("m1", "dana@example.com"), "2026-08-01", Seat("a@x.test", "A 1"),
+            Seat("b@x.test", "A 2"),
         )
 
         assert history.docs[0]["subject"] == {"date": "2026-08-01", "table_codes": ["A 1", "A 2"]}
 
     def test_a_run_is_about_the_whole_market(self, history):
-        History.record_assignment_run("m1", "dana@example.com", 3, 1)
+        History.record_assignment_run(assigning("m1", "dana@example.com"), 3, 1)
 
         [entry] = history.docs
         assert entry["kind"] == History.ASSIGNED
@@ -173,14 +242,14 @@ class TestReadingTheAssignmentAction:
     """Assignment history is this store narrowed to the ``assign`` action, whatever its kind."""
 
     def test_it_holds_only_that_actions_entries(self, history):
-        History.record_freed("m1", "a@x.test", "v@x.test", "2026-08-01", "A 1")
-        History.record("m1", "a@x.test", Actions.CHECK_IN, vendors=["v@x.test"], detail={})
-        History.record("m1", "a@x.test", Actions.ASSIGN, kind=History.RULES, detail={})
+        History.record_freed(assigning("m1", "a@x.test"), "v@x.test", "2026-08-01", "A 1")
+        let_in(Actions.CHECK_IN, "m1", "a@x.test").record(vendors=["v@x.test"], detail={})
+        assigning("m1", "a@x.test").record(kind=History.RULES, detail={})
 
         assert sorted(e["kind"] for e in assignments("m1")) == [History.FREED, History.RULES]
 
     def test_an_entry_carries_all_it_holds_but_its_storage_keys(self, history):
-        History.record_freed("m1", "a@x.test", "v@x.test", "2026-08-01", "A 1")
+        History.record_freed(assigning("m1", "a@x.test"), "v@x.test", "2026-08-01", "A 1")
 
         [entry] = assignments("m1")
         assert set(entry) == {
@@ -203,7 +272,7 @@ class TestReadingItBeforeTheMigration:
         placement_history.insert_one(self.old_entry("m1", "2026-01-01T00:00:00+00:00", "Old 1"))
         placement_history.insert_one(self.old_entry("m1", "2026-03-01T00:00:00+00:00", "Old 2"))
         placement_history.insert_one(self.old_entry("m2", "2026-02-01T00:00:00+00:00", "Other"))
-        History.record_freed("m1", "a@x.test", "v@x.test", "2026-08-01", "New 1")
+        History.record_freed(assigning("m1", "a@x.test"), "v@x.test", "2026-08-01", "New 1")
         history.docs[0]["at"] = "2026-02-01T00:00:00+00:00"
 
         entries = assignments("m1")
@@ -225,16 +294,16 @@ class TestReadingItBeforeTheMigration:
     def test_deleting_a_market_takes_its_unmoved_entries_too(self, history, placement_history):
         placement_history.insert_one(self.old_entry("m1", "2026-01-01T00:00:00+00:00", "A 1"))
         placement_history.insert_one(self.old_entry("m2", "2026-01-01T00:00:00+00:00", "A 2"))
-        History.record_freed("m1", "a@x.test", "v@x.test", "2026-08-01", "A 3")
+        History.record_freed(assigning("m1", "a@x.test"), "v@x.test", "2026-08-01", "A 3")
 
         assert History.delete_for_market("m1") == 2
         assert [e["market_id"] for e in placement_history.docs] == ["m2"]
 
 
 def test_deleting_a_market_takes_every_entry_of_its_history(history):
-    History.record("m1", "a@x.test", Actions.CHANGE_SETUP, detail={})
-    History.record_freed("m1", "a@x.test", "v@x.test", "2026-08-01", "A 1")
-    History.record("m2", "a@x.test", Actions.CHANGE_SETUP, detail={})
+    let_in(Actions.CHANGE_SETUP, "m1", "a@x.test").record(detail={})
+    History.record_freed(assigning("m1", "a@x.test"), "v@x.test", "2026-08-01", "A 1")
+    let_in(Actions.CHANGE_SETUP, "m2", "a@x.test").record(detail={})
 
     assert History.delete_for_market("m1") == 2
     assert History.delete_for_market("m2") == 1

@@ -20,6 +20,12 @@ and a structured detail. The wording belongs to whichever surface shows it
 (``front-end/src/utils/marketHistory.ts`` and its ``historyReaders/``, for every list of it) and must be changeable without a migration - the same rule
 ``placement_reasons`` follows.
 
+**A change records under the row it asked** (T105-9, ADR 0038): a market's entry is written
+through the asking its write's check returned (``Actions.Asked.record``), or, for the few records
+no request asks, through ``unasked``, each caller with its reason. ``_record`` is private, so no
+entry can name a row passed by hand beside a check made elsewhere; an applicant's own change, which
+no row asks, is ``record_applicant``'s.
+
 **A run is one entry**, not none and not one per placement. Omitting runs would leave the history
 lying by omission, because a placement that changed between two hand edits would have no
 explanation. One entry per placement would drown the hand edits under machine rows, and the hand
@@ -36,10 +42,11 @@ A market's history is deleted with the market, and an organization's with the or
 """
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
-from api.market_actions import ASSIGN, CHANGE_THE_TABLE, Action
+from api.market_actions import ASSIGN, CHANGE_THE_TABLE, Action, Asked
 from db_config import get_database
 from utils.email_address import normalized_email
 
@@ -164,16 +171,20 @@ def _now() -> str:
 
 
 #: Part of an entry, given as it is or as a builder: a callable with no arguments, run inside
-#: ``record``'s guard.
+#: ``_record``'s guard.
 Part = Union[Dict[str, Any], None, Callable[[], Optional[Dict[str, Any]]]]
 
 
-def record(
+def _record(
     market_id: str, actor: Optional[str], action: Union[Action, str], *,
     kind: Optional[str] = None, vendors: Iterable[str] = (), subject: Part = None, detail: Part,
     at: Optional[str] = None,
 ) -> None:
     """Write one entry. Never raises: a history that can break a change is worse than no history.
+
+    Private (T105-9, ADR 0038): a change records through the asking its check returned
+    (``Actions.Asked.record``) or through ``unasked``, never by naming a row here, and
+    ``tests/test_only_an_asking_writes_a_markets_history.py`` fails any other module that calls it.
 
     The entry is at ``at``, the time the change landed, or now when it is not given. Only an
     Admin's amount owed recorded after a write that dropped it gives one (T335): the amount was
@@ -193,6 +204,49 @@ def record(
     """
     _write({MARKET_ID_FIELD: market_id}, actor, action if isinstance(action, str) else action.id,
            kind, vendors, subject, detail, at=at)
+
+
+@dataclass(frozen=True)
+class UnaskedRecorder:
+    """A recorder for a change no request asked its row of (``unasked``): it writes as ``_record``
+    does, under ``row`` as ``actor``, and keeps why nothing asked it."""
+
+    market_id: str
+    actor: Optional[str]
+    row: Union[Action, str]
+    because: str
+
+    def record(
+        self, *, kind: Optional[str] = None, vendors: Iterable[str] = (), subject: Part = None,
+        detail: Part, at: Optional[str] = None,
+    ) -> None:
+        _record(self.market_id, self.actor, self.row, kind=kind, vendors=vendors, subject=subject,
+                detail=detail, at=at)
+
+
+def unasked(
+    market_id: str, actor: Optional[str], row: Union[Action, str], *, because: str,
+) -> UnaskedRecorder:
+    """The one door for a change on a market recorded under a row no request asked (T105-9): a
+    record its request's asking cannot write (``Actions.Asked.record``), such as a vendor's own
+    check-in, under the door's row with no actor. ``row`` is a row of the table, or as ``_record``
+    takes it, a row's id or ``APPLY``: the deal of an arriving application is recorded under what
+    the write it arrived by stored. ``because`` says why nothing asked it, a constant beside its
+    caller. Only the functions ``tests/test_only_an_asking_writes_a_markets_history.py`` lists
+    (``DOORS``) call it, each with its constant, and the records they make are listed with their
+    reasons in ``tests/test_every_write_records.py`` (``UNASKED``)."""
+    return UnaskedRecorder(market_id, actor, row, because)
+
+
+#: What a helper that records for its caller's check takes (T105-9): the caller's asking, or the
+#: unasked door's recorder. Both record under their row as their actor, and hold the two.
+Recorder = Union[Asked, UnaskedRecorder]
+
+
+def records_in(database: Any) -> bool:
+    """Whether the history writes its entries into ``database``: for a script handed a database,
+    which records through the history, to refuse one the history does not write."""
+    return database[HISTORY_COLLECTION] == history_collection
 
 
 def record_applicant(
@@ -313,11 +367,13 @@ def placement_subject(kind: str, detail: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _record_placement(
-    market_id: str, actor: str, kind: str, vendors: List[str], detail: Dict[str, Any]
+    recorder: Recorder, kind: str, vendors: List[str], detail: Dict[str, Any]
 ) -> None:
-    record(
-        market_id, actor, ASSIGN, kind=kind, vendors=vendors,
-        subject=lambda: placement_subject(kind, detail), detail=detail,
+    """A seat change, through the asking of the Assignment row its write was let through on
+    (``Actions.ASSIGN``): every writer of the assignment asks it, so the entry names no row of its
+    own."""
+    recorder.record(
+        kind=kind, vendors=vendors, subject=lambda: placement_subject(kind, detail), detail=detail,
     )
 
 
@@ -336,12 +392,12 @@ def _while_here(detail: Dict[str, Any], while_here: bool) -> Dict[str, Any]:
 
 
 def record_placed(
-    market_id: str, actor: str, placement, left=None, *, after_results: bool = False,
+    recorder: Recorder, placement, left=None, *, after_results: bool = False,
     while_here: bool = False,
 ) -> None:
     """One vendor put in one seat by hand, and the seat they ``left`` on that date: ``before``,
     null when they had none. Entries older than ``before`` carry no such key."""
-    _record_placement(market_id, actor, PLACED, [placement.email], _while_here(_after_results({
+    _record_placement(recorder, PLACED, [placement.email], _while_here(_after_results({
         "date": placement.date,
         "table_code": placement.table_code,
         "table_choice": placement.table_choice,
@@ -351,21 +407,21 @@ def record_placed(
 
 
 def record_freed(
-    market_id: str, actor: str, email: str, date: str, table_code: str, *,
+    recorder: Recorder, email: str, date: str, table_code: str, *,
     after_results: bool = False, while_here: bool = False,
 ) -> None:
     """One seat emptied. Recorded even though nobody was placed: it is what a vendor dropping out
     looks like, and the question "where did they go" is asked about exactly this."""
-    _record_placement(market_id, actor, FREED, [email], _while_here(_after_results(
+    _record_placement(recorder, FREED, [email], _while_here(_after_results(
         {"date": date, "table_code": table_code}, after_results), while_here))
 
 
 def record_swapped(
-    market_id: str, actor: str, date: str, first, second, *, after_results: bool = False,
+    recorder: Recorder, date: str, first, second, *, after_results: bool = False,
     while_here: bool = False,
 ) -> None:
     """Two vendors traded seats - ONE entry, because it was one action."""
-    _record_placement(market_id, actor, SWAPPED, [first.email, second.email], _while_here(
+    _record_placement(recorder, SWAPPED, [first.email, second.email], _while_here(
         _after_results({
         "date": date,
         "seats": [
@@ -376,10 +432,10 @@ def record_swapped(
 
 
 def record_assignment_run(
-    market_id: str, actor: str, placements_written: int, pins_preserved: int
+    recorder: Recorder, placements_written: int, pins_preserved: int
 ) -> None:
     """One entry for the whole run, naming who pressed it and what it touched."""
-    _record_placement(market_id, actor, ASSIGNED, [], {
+    _record_placement(recorder, ASSIGNED, [], {
         "placements_written": placements_written,
         "pins_preserved": pins_preserved,
     })
@@ -579,7 +635,7 @@ def record_for_organization(
     organization_id: str, actor: Optional[str], action_id: str, *, kind: Optional[str] = None,
     subject: Part = None, detail: Part, entry_id: Optional[str] = None,
 ) -> None:
-    """Write one entry of an organization's own history. Never raises, as ``record`` never does:
+    """Write one entry of an organization's own history. Never raises, as ``_record`` never does:
     the change it records has already landed. ``entry_id`` writes it once however often it is
     recorded: a market's deletion records under its trail id, so a retry adds no second entry."""
     _write({ORGANIZATION_ID_FIELD: organization_id}, actor, action_id, kind, (), subject, detail,

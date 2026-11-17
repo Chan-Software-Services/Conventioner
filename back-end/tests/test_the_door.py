@@ -7,7 +7,9 @@ who was expected where.
 """
 import pytest
 
-from conftest import FakeApplicationsCollection, FakeMarketsCollection, stored_market
+from conftest import (
+    FakeApplicationsCollection, FakeMarketsCollection, at_the_door, stored_market,
+)
 
 import api.applications as ApplicationsApi
 import api.attendance as AttendanceApi
@@ -96,7 +98,7 @@ class TestTheRoster:
         assert all(r["checkedInAt"] is None for r in roster["roster"])
 
     def test_says_who_they_are_where_they_sit_and_when_they_came(self, door):
-        AttendanceApi.record_attendance("market-123", "ana@example.com", D1)
+        AttendanceApi.record_attendance(at_the_door("market-123"), "ana@example.com", D1)
 
         row = next(
             r for r in AttendanceApi.attendance_roster(door["markets"].doc)["roster"]
@@ -130,7 +132,7 @@ class TestAnOrganizerChecksAVendorIn:
 
     def test_a_vendor_checking_in_again_clears_the_organizer_s_name(self, door):
         DoorApi.check_in("market-123", "ben@example.com", D1, "door@example.com")
-        AttendanceApi.record_attendance("market-123", "ben@example.com", D1)
+        AttendanceApi.record_attendance(at_the_door("market-123"), "ben@example.com", D1)
 
         assert door["attendance"].documents[0]["checked_in_by"] is None
 

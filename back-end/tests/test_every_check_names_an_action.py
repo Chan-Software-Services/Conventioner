@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from conftest import COMPLETE_PLAN, FakeMarketsCollection, client_market, stored_market
+from conftest import COMPLETE_PLAN, FakeMarketsCollection, a_change_of, client_market, stored_market
 import api.added_vendors as AddedVendorsApi
 import api.discord_connection as DiscordConnectionApi
 import api.door as DoorApi
@@ -263,8 +263,8 @@ class TestThePlanWrite:
     def asked(self, monkeypatch):
         rows = []
         stored = stored_market(MarketPhase.DRAFT, setupObject=COMPLETE_PLAN)
-        monkeypatch.setattr(MarketsApi, "_load_market_and_organization_to_change", lambda *_a: (
-            MarketsApi.LoadedMarket(MarketsApi.market_from_document(stored), None)))
+        monkeypatch.setattr(MarketsApi, "_market_change",
+                            a_change_of(MarketsApi.market_from_document(stored)))
         # No markets collection here, so the write itself is stubbed: what is asked is the test.
         monkeypatch.setattr(MarketsApi, "write_market",
                             lambda *_a, **_k: MarketWrite.Written({"planRevision": 1}))

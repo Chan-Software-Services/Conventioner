@@ -9,11 +9,11 @@ describes:
   - back-end/app.py#preview_application_import
   - back-end/app.py#import_applications
   - front-end/src/utils/csvFile.ts
+  - front-end/src/utils/importWizard.ts
   - front-end/src/components/ValueFixes.vue
   - front-end/src/components/csvImport/ImportRefusedRows.vue
   - front-end/src/views/CsvImportView.vue#mapsTo
   - front-end/src/views/CsvImportView.vue#holdsAMapping
-  - front-end/src/utils/importWizard.ts
 verified: 2026-11-17
 sources:
   - wayfinding/readable-journey/05
@@ -84,10 +84,10 @@ In a draft it also refuses with every one of `first_import_blockers`, the move i
 The page's refusal heading (`refusalHeading` in `CsvImportView.vue`) checks the phase before the role: an archived market is headed "An archived market takes no imports" whoever reads it, since the served `actionRefusals` put the archived sentence before each changing row's own, so it reaches the page as the role refusal, the Owner's included; the body is that refusal as served (T315).
 The page's `h1` (`heading`) reads "Redo import" in Review alone, where the rail offers it, and on the done step of a redo; on a market past review, from Assignment to archived, it is "Import responses", as on a draft's refused first import, never "Redo import", which such a market does not offer.
 
-**The first import takes the market into Review** once its rows are written: `enter_review` moves it through `take_move` under the importer, and the result says the phase it is in (`phase`).
+**The first import takes the market into Review** once its rows are written: `enter_review` moves it through `take_move` under the importer, recorded under Move the phase through the unasked door, since the request asked the import's row (`FIRST_IMPORT_MOVES_UNASKED`), and the result says the phase it is in (`phase`).
 A first import that wrote nothing, or a move refused by a setup changed under it, leaves the market a draft.
 `_import_context` asks it on every endpoint, so a hidden button is never the rule; `_importing_market_document` asks the row Import applications, and start a market from a CSV ([the market's actions](market-actions.md)) then refuses an archived market whoever may.
-It returns the stored document beside the organization that check read (`ImportingMarket`), so the start from a CSV asks the Assign row of the same organization when its plan changes the assignment rules ([the CSV proposal and start](csv-proposal-and-start.md#sharp-edges)).
+It returns the stored document beside the organization that check read and the row's asking (`ImportingMarket`), so the start from a CSV asks the Assign row of the same organization when its plan changes the assignment rules ([the CSV proposal and start](csv-proposal-and-start.md#sharp-edges)), and the import's entry and the start's are recorded through the asking that let them in.
 The three endpoints catch nothing: their refusals are the literal answers above, the import's 404 "Market not found" when the market began its deletion under it, which takes back what it wrote ([the tombstone](market-deletion.md#the-tombstone)), and anything else is the generic 500 ([an exception never reaches a client](../conventions/an-exception-never-reaches-a-client.md)).
 
 **Every row goes through `record_application_answers(imported=True)`**, the applicant's own write ([`back-end/application_write.py`](../../../back-end/application_write.py)), so an imported application and a submitted one are the same kind of thing by construction; `imported=True` is the import's only difference ([what an import may leave unasked](../../business/rules/what-an-import-may-leave-unasked.md)).

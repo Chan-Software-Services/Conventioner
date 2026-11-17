@@ -109,7 +109,7 @@ An update that counts one of those keys itself is refused with `RuntimeError`.
   Its body is `{"error": MARKET_CHANGED, "code": "market_changed"}`, status 409 ([an exception never reaches a client](../conventions/an-exception-never-reaches-a-client.md#the-types)).
 - `MARKET_CHANGED` is the one sentence: "This market changed while you were working on it, so your change was not saved. Reload to see the latest, then make your change again."
 
-A refused write stores nothing and records no history entry, since each writer calls `History.record` after `write_market` returns ([the market's history](../data/history.md)).
+A refused write stores nothing and records no history entry, since each writer records its entry, through its asking of its row (`Asked.record`) or, for a record no request asked, the unasked recorder (`History.unasked`), after `write_market` returns ([the market's history](../data/history.md)).
 
 ## The market as read
 

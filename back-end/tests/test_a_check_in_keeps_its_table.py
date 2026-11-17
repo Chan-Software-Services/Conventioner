@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from conftest import skip_without_real_dependencies
+from conftest import at_the_door, skip_without_real_dependencies
 
 skip_without_real_dependencies()
 
@@ -252,7 +252,7 @@ class TestTheDoorHoldsThePhase:
         on_its_days(world, VENDOR)
         world.markets.doc["phase"] = MarketPhase.ASSIGNMENT.value
 
-        result, status = AttendanceApi.record_attendance(MARKET, VENDOR, DATE)
+        result, status = AttendanceApi.record_attendance(at_the_door(MARKET), VENDOR, DATE)
 
         assert status == 409
         assert result["error"] == "Vendors are checked in once the market is published."
@@ -263,7 +263,7 @@ class TestTheDoorHoldsThePhase:
         check_in(client)
         world.markets.doc["phase"] = MarketPhase.ARCHIVED.value
 
-        result, status = AttendanceApi.undo_attendance(MARKET, VENDOR, DATE)
+        result, status = AttendanceApi.undo_attendance(at_the_door(MARKET), VENDOR, DATE)
 
         assert status == 409
         assert result["error"] == ARCHIVED

@@ -7,7 +7,8 @@ assignment closes the form whether or not it was stopped.
 """
 import pytest
 
-from conftest import FakeSlugMarketsCollection
+import api.market_actions as Actions
+from conftest import FakeSlugMarketsCollection, let_in
 
 import api.applicants as ApplicantsApi
 import db_config as test_db_config
@@ -114,7 +115,9 @@ class TestTheAction:
     def test_stopping_writes_the_fact_conditional_on_where_the_market_stands(self, monkeypatch):
         markets = _install(monkeypatch, _doc())
 
-        body, status = ApplicantsApi.set_applications_stopped("market-123", True, "owner@example.com")
+        body, status = ApplicantsApi.set_applications_stopped(
+            "market-123", True,
+            let_in(Actions.STOP_APPLICATIONS, "market-123", "owner@example.com"))
 
         assert (body, status) == ({"applications_stopped": True}, 200)
         assert markets.last_update == {"$set": {"applicationsStopped": True}}
@@ -122,7 +125,9 @@ class TestTheAction:
     def test_a_google_form_market_is_refused_and_nothing_is_written(self, monkeypatch):
         markets = _install(monkeypatch, _doc(intakeMode="csv"))
 
-        _body, status = ApplicantsApi.set_applications_stopped("market-123", True, "owner@example.com")
+        _body, status = ApplicantsApi.set_applications_stopped(
+            "market-123", True,
+            let_in(Actions.STOP_APPLICATIONS, "market-123", "owner@example.com"))
 
         assert status == 409
         assert markets.last_update is None

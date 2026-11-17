@@ -7,7 +7,7 @@ describes:
   - front-end/src/utils/reviewHighlights.ts
   - front-end/src/utils/reviewQueue.ts#reviewAnswers
   - front-end/src/components/application/ReviewHighlights.vue
-verified: 2026-11-11
+verified: 2026-11-16
 sources:
   - wayfinding/the-order-of-the-work/05
   - E19/F03/S01

@@ -18,7 +18,9 @@ import application_status as ReviewState  # noqa: E402
 import market_write as MarketWrite  # noqa: E402
 import rejection_rules as Rules  # noqa: E402
 from conftest import (  # noqa: E402
-    FakeApplicationsCollection, client_market, complete_setup, seen_as_read)
+    FakeApplicationsCollection, a_change_of, client_market, complete_setup, reviewing,
+    seen_as_read,
+)
 from datatypes import (  # noqa: E402
     Application, ApplicationForm, ApplicationStatus, MarketPhase, RejectionRule, VerdictGiver)
 
@@ -152,7 +154,7 @@ class TestWhatJudgingNeverDoes:
             docs = [dict(doc) for doc in read(market_id, application_id)]
             ApplicantsApi.review_application(
                 "market-123", "a", ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
-                seen=seen_as_read("a"))
+                reviewing=reviewing("market-123", ALEX.email), seen=seen_as_read("a"))
             return docs
 
         monkeypatch.setattr(ApplicationsApi, "judgeable_applications", read_then_a_person_decides)
@@ -185,7 +187,8 @@ class TestWhoSeesTheReason:
         Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123", arrival=BY)
 
         ApplicantsApi.review_application(
-            "market-123", "a", ApplicationStatus.REVIEWER_APPROVED, by=ALEX, seen=seen_as_read("a"))
+            "market-123", "a", ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
+            reviewing=reviewing("market-123", ALEX.email), seen=seen_as_read("a"))
 
         assert stored[0]["verdict_by"]["kind"] == "person"
         assert "verdict_reason" not in stored[0]
@@ -199,7 +202,7 @@ class TestTheyApplyWhen:
         import api.markets as MarketsApi
 
         stored.append(_app("a", affiliation=OUTSIDER))
-        monkeypatch.setattr(MarketsApi, "_load_market_to_change", lambda *_a: _market())
+        monkeypatch.setattr(MarketsApi, "_market_change", a_change_of(_market))
         monkeypatch.setattr(MarketsApi, "write_market", lambda *_a, **_k: None)
 
         MarketsApi.save_rejection_rules(
@@ -253,7 +256,7 @@ class TestTheyApplyWhen:
         Rules.judge(Rules.Rulebook(_market(NO_SHOW_RULE)), "market-123", arrival=BY)
         without_it = _market(NO_SHOW_RULE).model_copy(update={"application_form": ApplicationForm(
             fields=[f for f in FIELDS if f["key"] != "no_shows"])})
-        monkeypatch.setattr(MarketsApi, "_load_market_to_change", lambda *_a: without_it)
+        monkeypatch.setattr(MarketsApi, "_market_change", a_change_of(without_it))
         monkeypatch.setattr(MarketsApi, "prepared_application_form", lambda *_a: EMPTY_FORM)
         monkeypatch.setattr(MarketsApi, "write_market", _form_written)
         monkeypatch.setattr(MarketsApi, "load_market_context",

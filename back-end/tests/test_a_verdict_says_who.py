@@ -20,7 +20,8 @@ import api.markets as MarketsApi  # noqa: E402
 import api.users as UsersApi  # noqa: E402
 import application_status as ReviewState
 from conftest import (  # noqa: E402
-    FakeApplicationsCollection, seen_as_read, sessions_load_through_get_user)
+    FakeApplicationsCollection, reviewing, seen_as_read, sessions_load_through_get_user,
+)
 from datatypes import ApplicationStatus, MarketPhase, VerdictGiver  # noqa: E402
 
 #: Why the review is closed, as the spec words each case (T207).
@@ -66,7 +67,7 @@ class TestTheGiverIsStored:
     def test_a_verdict_stores_its_giver_and_time_and_serves_them(self, stored):
         result, status = ApplicantsApi.review_application(
             "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
-            seen=seen_as_read("app-1"))
+            reviewing=reviewing("market-1", ALEX.email), seen=seen_as_read("app-1"))
 
         assert status == 200
         assert stored[0]["verdict_by"] == {
@@ -79,7 +80,7 @@ class TestTheGiverIsStored:
     def test_a_status_that_is_no_verdict_clears_the_giver(self, stored):
         ApplicantsApi.review_application(
             "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
-            seen=seen_as_read("app-1"))
+            reviewing=reviewing("market-1", ALEX.email), seen=seen_as_read("app-1"))
 
         # Answers that changed send an approval back to review (the import, E32/F02/S02).
         assert ReviewState.answers_changed(
@@ -165,6 +166,12 @@ class TestAnEditorGivesVerdicts:
         assert response.status_code == 403
 
 
+def _verdict_refusal(market):
+    """Why a reviewer is refused a verdict on ``market``, asked as the review routes ask it."""
+    return MarketsApi.verdict_refusal(
+        Actions.ask(Actions.GIVE_VERDICTS, "e@x.test", market, None), market)
+
+
 class TestWhenAVerdictMayChange:
     """While Assignment still lies ahead of the market (E36/F01/S01, T207): in Assignment and on, a
     verdict is the review's record, and a mistake is fixed with Back to review until results are
@@ -183,7 +190,7 @@ class TestWhenAVerdictMayChange:
         monkeypatch.setattr(Actions, "refusal", lambda *_a: None)
         from conftest import client_market
 
-        assert MarketsApi.verdict_refusal("e@x.test", client_market(phase=phase), None) is None
+        assert _verdict_refusal(client_market(phase=phase)) is None
 
     @pytest.mark.parametrize("phase, published, words", [
         (MarketPhase.ASSIGNMENT, False, ALLOCATING),
@@ -207,7 +214,7 @@ class TestWhenAVerdictMayChange:
         market = client_market(phase=phase, results_published=published)
 
         assert MarketsApi.review_closed_reason(market) == words
-        assert MarketsApi.verdict_refusal("e@x.test", market, None) == words
+        assert _verdict_refusal(market) == words
 
     @pytest.mark.parametrize("phase", OPEN)
     def test_an_open_review_names_no_reason(self, phase):
@@ -245,7 +252,7 @@ class TestWhenAVerdictMayChange:
         from conftest import client_market
 
         market = client_market(phase=phase, results_published=published)
-        verdicts_open = MarketsApi.verdict_refusal("e@x.test", market, None) is None
+        verdicts_open = _verdict_refusal(market) is None
         rules_open = MarketsApi.rejection_rules_lock_reason(market) is None
         assert verdicts_open == rules_open == (phase in self.OPEN)
 
@@ -253,5 +260,4 @@ class TestWhenAVerdictMayChange:
         monkeypatch.setattr(Actions, "refusal", lambda *_a: "Viewers read.")
         from conftest import client_market
 
-        assert MarketsApi.verdict_refusal(
-            "e@x.test", client_market(phase=MarketPhase.MARKET_DAYS), None) == "Viewers read."
+        assert _verdict_refusal(client_market(phase=MarketPhase.MARKET_DAYS)) == "Viewers read."

@@ -15,11 +15,12 @@ The rules of a market's life are not rows: an archived market refuses every chan
 settle on entering assignment, a vendor is added from Assignment on. Each is asked where it
 always was, and refuses whoever may.
 
-A story that gates a new action adds its row here with ``action(...)`` and asks it with
-``refusal`` or ``may``; it never compares a role itself.
+A story that gates a new action adds its row here with ``action(...)`` and asks it: a write with
+``ask``, whose ``Asked`` records the change under the row it asked (T105-9), a read or a screen
+with ``refusal`` or ``may``. It never compares a role itself.
 """
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 import api.permissions as PermissionsApi
 from assignment.made_from import assignment_rules
@@ -334,6 +335,48 @@ def refusal(
     return refusal_sentence(row, required)
 
 
+class RecordedARefusal(AssertionError):
+    """A write recorded a change under a row its person was refused: a programming error, since a
+    refused asking raises before anything is written, never something to answer a client with."""
+
+
+@dataclass(frozen=True)
+class Asked:
+    """A row asked of one person on one market (T105-9): ``refused`` is what ``refusal`` answered,
+    None when they may, and while they may, ``record`` is how the change is recorded, under this row
+    and as this person, so an entry can name only a row its request was let through on."""
+
+    row: Action
+    market_id: str
+    actor: str
+    refused: Optional[str]
+
+    def record(
+        self, *, kind: Optional[str] = None, vendors: Iterable[str] = (),
+        subject: Any = None, detail: Any, at: Optional[str] = None,
+    ) -> None:
+        """Write the change's entry under the row asked, through the history's private writer
+        (``History._record``): never raises for the entry, with the subject and the detail built
+        under its guard, and at ``at`` as ``_record`` takes it."""
+        if self.refused is not None:
+            raise RecordedARefusal(
+                f"A change on market {self.market_id} was recorded under {self.row.id!r}, which "
+                "its person was refused.")
+        # Here, not at the top: the history imports this module for its rows.
+        import history as History
+        History._record(self.market_id, self.actor, self.row, kind=kind, vendors=vendors,
+                        subject=subject, detail=detail, at=at)
+
+
+def ask(
+    row: Action, user_email: str, market: Market, organization: Optional[Organization],
+) -> Asked:
+    """Ask this person this row on this market: the answer ``refusal`` gives, as an ``Asked`` that
+    records the change under the row when they may. A write asks here, a read or a screen that only
+    asks reads ``refusal``; this asks through it, so the two never disagree."""
+    return Asked(row, market.id, user_email, refusal(row, user_email, market, organization))
+
+
 def role_refusal(
     row: Action, role: Optional[MarketRole], rows: Mapping[str, Any], chosen: bool = False,
 ) -> Optional[str]:
@@ -387,8 +430,9 @@ def may(
 
 def ask_assign_if_the_rules_change(
     market: Market, plan: SetupObject, user_email: str, organization: Optional[Organization],
-) -> None:
-    """Raise ``ASSIGN``'s refusal when ``plan`` changes ``market``'s assignment rules.
+) -> Optional[Asked]:
+    """The ``ASSIGN`` asking when ``plan`` changes ``market``'s assignment rules, raising its
+    refusal; None when it changes none, so the rules' entry is recorded only when it was asked.
 
     The rules ride in the plan and are the Assign row's, so every write of a plan asks it of a
     change: the plan write (``api.markets.save_plan``) and the start from a CSV
@@ -397,10 +441,11 @@ def ask_assign_if_the_rules_change(
     (``made_from.assignment_rules``).
     """
     if assignment_rules(plan) == assignment_rules(market.setup_object):
-        return
-    refused = refusal(ASSIGN, user_email, market, organization)
-    if refused:
-        raise ForbiddenError(refused)
+        return None
+    asked = ask(ASSIGN, user_email, market, organization)
+    if asked.refused:
+        raise ForbiddenError(asked.refused)
+    return asked
 
 
 def roles_row(role: MarketRole) -> Action:

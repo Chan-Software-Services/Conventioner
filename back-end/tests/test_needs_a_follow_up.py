@@ -14,7 +14,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import api.applicants as ApplicantsApi  # noqa: E402
 import api.applications as ApplicationsApi  # noqa: E402
-from conftest import FakeApplicationsCollection, client_market, seen_as_read  # noqa: E402
+import api.market_actions as Actions  # noqa: E402
+from conftest import (  # noqa: E402
+    FakeApplicationsCollection, client_market, let_in, reviewing, seen_as_read,
+)
 from client_errors import BadRequestError  # noqa: E402
 from datatypes import (  # noqa: E402
     Application, ApplicationStatus, MarketPerson, MarketPhase, VerdictGiver)
@@ -44,7 +47,7 @@ class TestMarkingOne:
     def test_stores_the_status_who_marked_it_and_its_owner_the_marker(self, stored):
         result, status = ApplicantsApi.review_application(
             "market-1", "app-1", ApplicationStatus.NEEDS_FOLLOW_UP, by=ALEX,
-            seen=seen_as_read("app-1"))
+            reviewing=reviewing("market-1", ALEX.email), seen=seen_as_read("app-1"))
 
         assert status == 200
         assert stored[0]["status"] == "needs_follow_up"
@@ -55,18 +58,18 @@ class TestMarkingOne:
     def test_another_owner_may_be_named_at_once(self, stored):
         ApplicantsApi.review_application(
             "market-1", "app-1", ApplicationStatus.NEEDS_FOLLOW_UP, by=ALEX, owner=SAM,
-            seen=seen_as_read("app-1"))
+            reviewing=reviewing("market-1", ALEX.email), seen=seen_as_read("app-1"))
 
         assert stored[0]["follow_up_owner"]["email"] == "sam@market.test"
 
     def test_a_verdict_after_it_clears_the_owner(self, stored):
         ApplicantsApi.review_application(
             "market-1", "app-1", ApplicationStatus.NEEDS_FOLLOW_UP, by=ALEX,
-            seen=seen_as_read("app-1"))
+            reviewing=reviewing("market-1", ALEX.email), seen=seen_as_read("app-1"))
 
         ApplicantsApi.review_application(
             "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
-            seen=seen_as_read("app-1"))
+            reviewing=reviewing("market-1", ALEX.email), seen=seen_as_read("app-1"))
 
         assert "follow_up_owner" not in stored[0]
 
@@ -75,16 +78,18 @@ class TestReassigningIt:
     def test_the_owner_changes(self, stored):
         ApplicantsApi.review_application(
             "market-1", "app-1", ApplicationStatus.NEEDS_FOLLOW_UP, by=ALEX,
-            seen=seen_as_read("app-1"))
+            reviewing=reviewing("market-1", ALEX.email), seen=seen_as_read("app-1"))
 
-        result, status = ApplicantsApi.reassign_follow_up(MARKET, None, "app-1", SAM, ALEX.email)
+        result, status = ApplicantsApi.reassign_follow_up(
+            MARKET, None, "app-1", SAM, let_in(Actions.GIVE_VERDICTS, "market-1", ALEX.email))
 
         assert status == 200
         assert stored[0]["follow_up_owner"]["email"] == "sam@market.test"
         assert stored[0]["status"] == "needs_follow_up"
 
     def test_only_a_follow_up_has_an_owner(self, stored):
-        _, status = ApplicantsApi.reassign_follow_up(MARKET, None, "app-1", SAM, ALEX.email)
+        _, status = ApplicantsApi.reassign_follow_up(
+            MARKET, None, "app-1", SAM, let_in(Actions.GIVE_VERDICTS, "market-1", ALEX.email))
 
         assert status == 409
 

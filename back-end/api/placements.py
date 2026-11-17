@@ -300,7 +300,8 @@ def run_assignment(market_id: str, requesting_user: str) -> Tuple[Dict[str, Any]
     handed; with ``assignment_object`` server-owned that round-trip no longer stores anything,
     and it should never have been the client's job to decide what the solver said.
     """
-    market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.ASSIGN)
+    change = MarketsApi._market_change(market_id, requesting_user, Actions.ASSIGN)
+    market = change.market
 
     refusal = assign_refusal(market)
     if refusal is not None:
@@ -334,8 +335,7 @@ def run_assignment(market_id: str, requesting_user: str) -> Tuple[Dict[str, Any]
         made_from=MadeFrom.fingerprint(market.setup_object, vendors, market.phase_history),
     )
     History.record_assignment_run(
-        market_id,
-        requesting_user,
+        change.asked,
         placements_written=len(assignment.vendor_assignments),
         pins_preserved=sum(1 for row in assignment.vendor_assignments if row.hand_placed),
     )
@@ -345,10 +345,9 @@ def run_assignment(market_id: str, requesting_user: str) -> Tuple[Dict[str, Any]
     seated_after = {(normalized_email(row.email), row.date)
                     for row in assignment.vendor_assignments}
     PaymentsApi.assignment_written(
-        market_id, seated=assignment.vendor_assignments, held_before=held_before,
+        change.asked, seated=assignment.vendor_assignments, held_before=held_before,
         dropped=[row for row in held_before
-                 if (normalized_email(row.email), row.date) not in seated_after],
-        by=requesting_user)
+                 if (normalized_email(row.email), row.date) not in seated_after])
 
     # The same shape ``GET /markets/<id>/assignment`` returns, so a caller swapping to this one
     # reads the result the same way - the organization's display name included, because the
@@ -396,7 +395,8 @@ def write_placement(
     operation of its own (E11/F03/S01), because a write that quietly displaces an occupant is
     how a vendor is silently unassigned on market day.
     """
-    market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.ASSIGN)
+    change = MarketsApi._market_change(market_id, requesting_user, Actions.ASSIGN)
+    market = change.market
 
     placement = _placement_for(
         market,
@@ -432,12 +432,11 @@ def write_placement(
 
     Lifecycle.store(market, Lifecycle.Event.PLACE, kept,
                     assignment_date=market.assignment_object.assignment_date)
-    History.record_placed(market_id, requesting_user, placement, left,
+    History.record_placed(change.asked, placement, left,
                           after_results=Lifecycle.results_published(market),
                           while_here=while_here)
-    PaymentsApi.assignment_written(market_id, seated=[placement],
-                                   held_before=[left] if left else [], dropped=[],
-                                   by=requesting_user)
+    PaymentsApi.assignment_written(change.asked, seated=[placement],
+                                   held_before=[left] if left else [], dropped=[])
 
     return {"placement": convert_keys_to_camel_case(placement.model_dump())}, 200
 
@@ -458,18 +457,19 @@ def remove_placement(
 
     ``deduct_owed`` is the free's question answered yes, "Also remove its $15.00 from what
     they owe?" (E44/F01/S02): the seat's line then owes $0 in the same change. It asks the row
-    ``Actions.CHANGE_OWED`` too, before anything is freed.
+    ``Actions.CHANGE_OWED`` too, before anything is freed, and the $0 is recorded through that
+    asking, the seat through the Assignment row's.
 
     Freeing a vendor who has checked in that day asks first (``VendorIsHere``) unless
     ``while_here`` is true, before the line is kept or the seat freed, so the question writes
     nothing; the deduction asked rides on the request asked again.
     """
-    market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.ASSIGN)
-    if deduct_owed:
-        refused = Actions.refusal(Actions.CHANGE_OWED, requesting_user, market,
-                                  MarketsApi._load_organization(market.organization_id))
-        if refused:
-            raise ForbiddenError(refused)
+    change = MarketsApi._market_change(market_id, requesting_user, Actions.ASSIGN)
+    market = change.market
+    owed = (Actions.ask(Actions.CHANGE_OWED, requesting_user, market, change.organization)
+            if deduct_owed else None)
+    if owed is not None and owed.refused:
+        raise ForbiddenError(owed.refused)
 
     email = (email or "").strip()
     date = (date or "").strip()
@@ -493,7 +493,7 @@ def remove_placement(
         # in the same write, so no stop after the seat leaves it free and its full amount owed.
         # Kept first, so a seat whose line could not be kept is not freed.
         kept_line = PaymentsApi.keep_freed_line(market, email, date, requesting_user,
-                                                deduct=deduct_owed)
+                                                deduct=owed)
         try:
             Lifecycle.store(market, Lifecycle.Event.FREE, kept,
                             assignment_date=market.assignment_object.assignment_date)
@@ -515,14 +515,14 @@ def remove_placement(
             raise
         for placement in freed:
             History.record_freed(
-                market_id, requesting_user, email, date, placement.table_code,
+                change.asked, email, date, placement.table_code,
                 after_results=Lifecycle.results_published(market), while_here=here,
             )
         kept_line.record_deduction()
-    elif deduct_owed:
+    elif owed is not None:
         # Nothing to free: a free from before T270 that stopped after its seat left the day owing
         # its full amount, and pressing Free again is the retry that finishes the deduction.
-        PaymentsApi.deduct_freed_day(market, email, date, requesting_user)
+        PaymentsApi.deduct_freed_day(market, email, date, owed)
 
     return {"removed": len(freed)}, 200
 
@@ -556,7 +556,8 @@ def swap_placements(
     A swap of a vendor who has checked in that day, either of the two, asks first (``VendorIsHere``,
     naming both when both are here) unless ``while_here`` is true.
     """
-    market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.ASSIGN)
+    change = MarketsApi._market_change(market_id, requesting_user, Actions.ASSIGN)
+    market = change.market
 
     date = (date or "").strip()
     first_email = (first_email or "").strip()
@@ -594,8 +595,7 @@ def swap_placements(
     # One entry, because it was one action: a trade recorded as two placements reads as two
     # unrelated decisions a week later.
     History.record_swapped(
-        market_id,
-        requesting_user,
+        change.asked,
         date,
         placements[held[first_email]],
         placements[held[second_email]],
@@ -605,8 +605,8 @@ def swap_placements(
 
     # Both days were held, so a freed record on either is one a stopped free left, and goes.
     PaymentsApi.assignment_written(
-        market_id, seated=[placements[held[first_email]], placements[held[second_email]]],
-        held_before=[first, second], dropped=[], by=requesting_user)
+        change.asked, seated=[placements[held[first_email]], placements[held[second_email]]],
+        held_before=[first, second], dropped=[])
 
     return {
         "placements": [
