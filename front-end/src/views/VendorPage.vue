@@ -170,7 +170,7 @@ onMounted(() => {
         <RouterLink
           v-if="store.page?.mapOpen"
           :to="marketPage"
-          class="vendor-page-map-link"
+          class="link-alone"
           data-testid="vendor-page-map-link"
         >
           See the market map
@@ -253,17 +253,6 @@ onMounted(() => {
   list-style: none;
   font-size: var(--text-sm);
   color: var(--mm-black);
-}
-
-/* A thumb's target on a phone, though its words are a line of text. Underlined, since colour alone
-   does not mark a link (WCAG 1.4.1). */
-.vendor-page-map-link {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--target-min);
-  color: var(--mm-text-link);
-  font-size: var(--text-sm);
-  text-decoration: underline;
 }
 
 .vendor-page-who {
