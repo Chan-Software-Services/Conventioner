@@ -42,6 +42,8 @@ const props = defineProps<{
   notHere: string;
   /** How many are here on `date` with no table that day. */
   hereWithoutSeat: number;
+  /** Prototype (release walk F5): the read time, under the map's bottom right. */
+  updated?: string;
 }>();
 
 const emit = defineEmits<{
@@ -190,6 +192,7 @@ const mayChangeSetup = computed(() => mayTake(props.market, MarketAction.ChangeS
         :picked="picked"
         :marked="marked"
         :legend="legend"
+        :note="updated"
         @update:locationId="chooseLocation"
         @pick="pick"
       />

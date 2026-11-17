@@ -38,6 +38,8 @@ const props = withDefaults(
     /** More seats or tables outlined, as a search marks the vendors it finds. */
     marked?: readonly string[];
     legend: readonly DayMapLegendItem[];
+    /** Prototype (release walk F5): a short line at the legend row's end, under the map's right. */
+    note?: string;
   }>(),
   { marked: () => [] },
 );
@@ -172,6 +174,7 @@ const swatches = computed(() => {
           <span>{{ item.label }}</span>
         </li>
       </ul>
+      <p v-if="note" class="day-map__note" data-testid="day-map-note">{{ note }}</p>
     </div>
   </div>
 </template>
@@ -192,8 +195,18 @@ const swatches = computed(() => {
   grid-template-areas:
     'switch switch'
     'map map'
-    'legend legend';
+    'legend note';
   gap: var(--space-3);
+}
+
+/* Prototype (release walk F5): the note at the legend row's end, under the map's right edge. */
+.day-map__note {
+  grid-area: note;
+  align-self: start;
+  margin: calc(-1 * var(--space-2)) 0 0;
+  text-align: end;
+  font-size: var(--text-xs);
+  color: var(--mm-text-muted);
 }
 
 .day-map__locations {
@@ -264,7 +277,8 @@ const swatches = computed(() => {
     grid-template-areas:
       'switch switch'
       'map map'
-      'legend zoom';
+      'legend zoom'
+      'note note';
   }
 
   .day-map__zoom {

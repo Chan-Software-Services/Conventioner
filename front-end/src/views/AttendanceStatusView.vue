@@ -653,7 +653,11 @@ const drawer = useVendorDrawer();
           />
         </div>
 
-        <p v-if="updatedWords" class="door-updated" data-testid="attendance-updated-line">
+        <p
+          v-if="updatedWords && view !== 'map'"
+          class="door-updated"
+          data-testid="attendance-updated-line"
+        >
           {{ updatedWords }}
         </p>
 
@@ -666,6 +670,7 @@ const drawer = useVendorDrawer();
           :openVendor="drawer.email.value"
           :notHere="notHere"
           :hereWithoutSeat="withoutSeatToday"
+          :updated="updatedWords"
           @open="drawer.open($event)"
           @showList="showListFromMap"
         />
@@ -918,10 +923,17 @@ const drawer = useVendorDrawer();
   gap: var(--space-3);
 }
 
+/* Prototype (release walk F5): Refresh at the toolbar's very end, after Print roster and Door
+   code; the freshness group is `display: contents`, so its button is the bar's own item. */
 .door .door-papers {
+  order: -1;
   margin-inline-start: 0;
-  padding-inline-start: var(--space-3);
-  border-inline-start: 1px solid var(--mm-border);
+  padding-inline-end: var(--space-3);
+  border-inline-end: 1px solid var(--mm-border);
+}
+
+.door .door-view {
+  order: -2;
 }
 
 .door .door-view {
