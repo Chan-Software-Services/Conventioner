@@ -647,6 +647,17 @@ describe('a half in the address (T465)', () => {
     });
   });
 
+  it('rings no vendor in the list for a half with nobody at it, though the other half is seated', async () => {
+    const rightFree = {
+      ...ANSWER,
+      seats: ANSWER.seats.filter((s) => !(s.tableId === 'g2' && s.half === 'right')),
+    };
+    const page = await open(found(rightFree), { table: 'g2', half: 'right' });
+    const rows = page.findAll('[data-testid="public-map-vendor"]');
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.filter((row) => row.attributes('aria-current') === 'true')).toHaveLength(0);
+  });
+
   it('keeps the half on a change of day', async () => {
     await open(found(), { location: 'loc-upper', table: 'g2', half: 'right' });
     await daySelect().setValue(TOMORROW);

@@ -108,7 +108,7 @@ Escape is heard on `window`, and does nothing when it was already handled, or wh
 **A press on a seated half of a shared table picks that half alone**: the address gains `half=left` or `half=right`, the map outlines that half (`publicSeatKey`), the card shows that part alone, and the list rings that vendor's row alone.
 A press on a whole table, or on a half with nobody at it, which the drawing gives no seat key, writes no half, so a free half opens the whole table, both parts.
 A vendor opened from the list or the search writes their seat's half, none for a whole seat.
-A half named in the address with nobody at it shows that half alone, "This half is free on <day>.", and the map outlines the whole table.
+A half named in the address with nobody at it shows that half alone, "This half is free on <day>.", the map outlines the whole table, and the list rings no row.
 This supersedes D35's "A half table's card lists both vendors, left then right" (T465): both are listed only when the whole table is picked.
 
 ## The vendor panel and its search

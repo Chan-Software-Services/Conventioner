@@ -232,8 +232,8 @@ const shownHalf = computed<PickedHalf | null>(() => {
   const side = parts.length === 1 ? parts[0]!.side : 'whole';
   return side === 'whole' ? null : side;
 });
-/** The key of the seat at the half shown alone, or none: a half with nobody at it, as a whole
- *  table, is outlined and ringed by its table. */
+/** The key of the seat at the half shown alone, or none: a half with nobody at it is outlined
+ *  by its whole table, and rings nothing in the list. */
 const pickedSeatKey = computed(() =>
   place.value.tableId && shownHalf.value && card.value?.halves[0]?.seat
     ? publicSeatKey({ tableId: place.value.tableId, half: shownHalf.value })
@@ -584,7 +584,7 @@ async function openVendor(vendor: ListedVendor) {
             class="public-map__vendors"
             :map="map"
             :date="place.date"
-            :pickedTableId="place.tableId"
+            :pickedTableId="shownHalf && !pickedSeatKey ? null : place.tableId"
             :pickedSeatKey="pickedSeatKey"
             :paints="paints"
             @open="openVendor"
