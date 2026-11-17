@@ -74,9 +74,9 @@ function parts(page: Page) {
       return box ? Math.round(box[side]) || 0 : null;
     };
     return {
-      frame: edge('market-frame', 'bottom'),
-      tools: edge('applications-tools', 'top'),
-      toolsEnd: edge('applications-tools', 'bottom'),
+      frame: edge('market-frame', 'bottom')!,
+      tools: edge('applications-tools', 'top')!,
+      toolsEnd: edge('applications-tools', 'bottom')!,
       filters: edge('applications-all-list-tools', 'top'),
       scrolled: Math.round(window.scrollY),
     };
@@ -157,7 +157,7 @@ test("All: the filters stay flush under a toolbar a failed refresh's line has gr
   await expect(page.getByTestId('applications-all-row').first()).toBeVisible({ timeout: 15000 });
   await expect(page.getByTestId('applications-publish-hint')).toBeVisible();
   const height = () =>
-    page.getByTestId('applications-tools').evaluate((block) => block.offsetHeight);
+    page.getByTestId('applications-tools').evaluate((block) => (block as HTMLElement).offsetHeight);
   const oneLine = await height();
 
   await page.route(THE_LIST, (route) =>
