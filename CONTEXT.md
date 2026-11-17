@@ -125,7 +125,7 @@ One day the market runs. A **calendar day**, never an instant: a stored `YYYY-MM
 
 **Section**:
 A named block of tables within the venue, carrying a tier, a location, and a count. Tables are generated from sections. A vendor ranks sections as a preference, and may be assigned outside their top choice.
-Where its location has a **layout**, its count is the number of the layout's tables in it, never typed.
+Where its location has a **layout** started in Draft, its count is the number of the layout's tables in it, never typed; a **layout that follows the plan** leaves the typed count as it is.
 _Avoid_: Area, zone, block
 
 **Tier**:
@@ -137,8 +137,13 @@ Where a section sits in the venue. Descriptive; the solver does not filter on it
 
 **Layout**:
 A location's floorplan, its scale, and the tables placed over it, each a real table of the plan: of a section, of a table type, with its number in its section. One per location; the code and the routes call it a floorplan.
+A layout started in Draft decides its sections' counts; one started after Draft follows the plan.
 _Avoid_: Floorplan (in anything an organizer reads), map (the drawing of a layout, not the layout)
 See [Layout](docs/business/concepts/layout.md).
+
+**Layout that follows the plan**:
+A layout started after Draft: it draws the seats the plan already settled, each section holding at most its count of tables numbered 1 to that count, and never counts them.
+_Avoid_: Settled layout (a layout started in Draft is settled too, once the market leaves Draft)
 
 **Table**:
 One physical table on one market date. Holds either one full-table vendor or two half-table vendors.
@@ -244,6 +249,16 @@ _Avoid_: Guest list, attendance list (that was only who came)
 Where one vendor stands at the door on one date: **expected** (a seat and no check-in), **here** (a check-in made at the seat they hold), **here at another table** (a check-in made at a table they no longer hold, after a move or a swap), or **here with no table** (a check-in and no seat that day, after a free).
 "Did not come" is how the page words expected once the day is over on the viewer's calendar, or the market is archived.
 _Avoid_: "Checked in" alone for here at another table, which hides where they went
+
+**Day map**:
+The drawing of a location's **layout** on one **market date**, each table drawn by who holds it that day.
+_Avoid_: Floorplan, seating chart
+
+**Public map**:
+The **day map** anyone may open at the market's address, with no sign-in, showing only the answers the organizer chose to publish: a public name, a website and an Instagram handle.
+Off until an Admin turns it on, and open only once results are out and until the market is archived.
+_Avoid_: Vendor map, directory
+See [The public map](docs/implementation/modules/public-map.md).
 
 ### Accounts
 

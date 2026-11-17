@@ -31,6 +31,8 @@ describes:
   - back-end/datatypes.py#SetupObject
   - back-end/datatypes.py#FloorplanObject
   - back-end/datatypes.py#TableTypeObject
+  - back-end/datatypes.py#FloorplanZone
+  - back-end/datatypes.py#PublicMapSettings
 verified: 2026-11-13
 sources:
   - E02
@@ -59,6 +61,7 @@ sources:
   - T277
   - T316
   - T315
+  - T422
 ---
 
 # The market document
@@ -106,6 +109,7 @@ The other collections differ: applications and the placement trail are stored sn
 | `nothingLeadsTheCard`, `noAutomaticRejections` | whether the organizer chose that nothing leads the card, and that no answer rejects (T206), each beside its list because an absent and an empty list both mean nothing is marked and neither says anyone chose it; true only while its list is empty, written only by its list's own write ([review highlights](../../business/rules/review-highlights.md#where-it-is-kept), [automatic rejections](../../business/rules/automatic-rejections.md#where-it-is-kept)), false at creation and never set by a create body; absent is false, so no migration, and the read serves both                                                                                                                                                                                                 |
 | `resultsPublished`                             | whether vendors may read their outcome, on either path ([Publish results waits for the allocation](../../business/rules/publish-results-waits-for-the-allocation.md)); on a `csv` market it also opens the vendor page (`vendor_page_market_by_slug`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `discord`                                      | the Discord server the market is connected to; see [the Discord connection is `discord`](#the-discord-connection-is-discord)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `publicMap`                                    | the public map's settings; see [the public map's settings are `publicMap`](#the-public-maps-settings-are-publicmap)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `applicationsStopped`                          | whether the organizer has stopped taking applications inside the stage (E38/F04/S02), a fact about the form; absent is false; written by `set_applications_stopped`, and by the phase move into the stage (`taking_applications_update`), which clears it on entering draft or the stage from draft, and sets it on a form market back from Assignment                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `reviewTeam`                                   | the reviewers chosen for the review, `{reviewers: [{userId, email}], turn}`, in the order they are dealt to (by address), and how many applications were dealt since they last changed, and while a deal runs `dealing` (`{by, until}`), the lease by which every deal holds the market, so the turn has one writer at a time ([ADR 0020](../../adr/0020-an-application-is-dealt-to-one-reviewer.md)); absent is none chosen, so no migration; written only by [`back-end/review_team.py`](../../../back-end/review_team.py), null at creation, and never by a market update body ([the review is dealt among chosen reviewers](../../business/rules/the-review-is-dealt-among-chosen-reviewers.md)); the read serves every reader `{reviewers: [{email, able}]}`, never the turn |
 | `doorCode`                                     | the market's live [door code](../modules/attendance-and-door.md#sharp-edges), `{code, madeAt, madeBy}`; absent before the first; written only by `api/door.py`, and never served by a market read (`leave_out_what_no_read_serves`, which takes `NEVER_SERVED_FIELDS` off the read and every Markets list entry)                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -127,10 +131,11 @@ Lengths are millimetres, angles degrees clockwise, positions from the floorplan 
   - a section's copy of its location carries that location's id: its own, when it names one of the plan's locations by id, else the id of the location of its name, set on every parse
   - a plan write sending a row with no id, as a page of the bundle before ids does, is refused (409, `PAGE_FROM_BEFORE_IDS` in `api/markets.py`) on a market with a layout when that row would read with an id the market does not hold, since the layout's location or a table's section would be written away
 - a floorplan (`FloorplanObject`): its `id`, `locationId`, `revision`, the image (`imageGridfsId`, `imageWidth`, `imageHeight`, `pdfPage`), the scale (`scalePxPerUnit`, image pixels per millimetre, and the reference line it was drawn from), and:
-  - `tables`, each `{id, sectionId, number, tableTypeId, xMm, yMm, rotation}`, `xMm` and `yMm` its centre, `sectionId` and `number` null on a table in no section; numbers run 1 to N in each section, so `table_code_for(section.name, number)` names the same table everywhere
-  - `zones`, the no-table zones, each `{id, label, xMm, yMm, widthMm, depthMm}` from its top-left corner
+  - `tables`, each `{id, sectionId, number, tableTypeId, xMm, yMm, rotation}`, `xMm` and `yMm` its centre, `sectionId` and `number` null on a table in no section; numbers run 1 to N in each section, or, on a layout that follows the plan, once each from 1 to the section's count with gaps allowed, so `table_code_for(section.name, number)` names the same table everywhere
+  - `zones`, the no-table zones, each `{id, label, xMm, yMm, widthMm, depthMm, rotation}` from its top-left corner, `rotation` its turn about its centre, stored 0 to 360 (a finite turn is read into that range as it parses, one that is not finite refused by the floorplan's bounds), 0 when absent
   - `sectionStyles`, each `{sectionId, color, labelAt}`, `color` an index 1 to 8 of the section palette and `labelAt` null where the drawing places the label
   - `startingCounts`, each `{sectionId, count}`, what Section Setup had when the layout began
+  - `followsPlan`, whether the layout was started after Draft and so draws the seats the plan settled rather than deciding them ([ADR 0034](../../adr/0034-a-layout-started-after-draft-follows-the-plan.md), [the public map](../modules/public-map.md)); server-owned, true on a layout started past Draft and false on one started in Draft, kept on every later save whatever the body sends, and false when absent; its location's sections keep their typed `count`, never derived from its tables
 - `setupObject.tableTypes`: the market's table types, each `{id, name, widthMm, depthMm}`, with no colour, since the section colours a table; the form and the solver do not read them yet ([essential fields](../modules/essential-fields.md))
 
 The model reads leniently, as stored models do: every new field has a default, and the floorplan beta's fields (`walls`, `obstacles`, `placedTables`, `sections`, a floorplan's own `tableTypes`, `scaleUnit`) are dropped as a stored one parses, so a floorplan the beta saved reads as one of no location (`locationId` null), shown nowhere and counted by no section.
@@ -186,6 +191,18 @@ Choosing another username question forgets:
 - its run
 
 The `discordGuildId` and `discordWebhookUrl` some old documents carry are E18/F05's removed fields, read by nothing.
+
+<a id="the-public-maps-settings-are-publicmap"></a>
+**The public map's settings are `publicMap`**; absent or null is off with nothing chosen, so no migration.
+Each list here is in the order `PublicMapSettings` (`datatypes.py`) declares its subfields ([two features never share a line](../conventions/two-features-never-share-a-line.md)):
+
+- whether the map is open, `enabled`
+- the short text questions whose answers it shows, each a question's key or null:
+  - `nameQuestion`
+  - `websiteQuestion`
+  - `instagramQuestion`
+
+It is server-owned: written only by [the Public map card's write](../modules/public-map.md#the-settings), null at creation and never set by a create body, and the read serves it as stored.
 
 **The application form is stored as one validator returns it.**
 Every writer of `applicationForm` passes it through `_normalized_application_form` (`api/markets.py`), so a stored form never differs from the form that was checked; the writes on an existing market go through `prepared_application_form`, which asks [the form lock](../../business/rules/the-form-locks-at-the-first-application.md) first:

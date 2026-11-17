@@ -1,8 +1,8 @@
 /**
- * The layout page's "Table types" card (T257 ticket 10): the market's types with their sizes and
- * how many tables are of each; adding, editing and removing one, a type tables use refused with
- * their count; and saving the types under a name and using a saved set, by name, in another
- * market.
+ * Layout settings' "Table types" section (T257 ticket 10, moved there by T422): the market's types
+ * with their sizes and how many tables are of each; adding, editing and removing one, a type tables
+ * use refused with their count; and saving the types under a name and using a saved set, by name,
+ * in another market.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';

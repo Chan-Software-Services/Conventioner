@@ -97,3 +97,18 @@ describe("Section Setup's count of a laid-out location", () => {
     expect(find(wrapper, 'setup-section-count-input-3').exists()).toBe(false);
   });
 });
+
+describe('Section Setup beside a layout that follows the plan (T422)', () => {
+  it('keeps the typed count, as a field, whatever tables the layout holds', () => {
+    const setupObject = plan();
+    setupObject.floorplans![0].followsPlan = true;
+    const wrapper = mount(ElementSectionSetup, { props: { setupObject } });
+
+    expect((find(wrapper, 'setup-section-count-input-0').element as HTMLInputElement).value).toBe(
+      '13',
+    );
+    expect(find(wrapper, 'setup-section-count-0').exists()).toBe(false);
+    expect(find(wrapper, 'setup-section-count-source-0').exists()).toBe(false);
+    expect(find(wrapper, 'setup-section-total').text()).toBe('Total tables: 25');
+  });
+});

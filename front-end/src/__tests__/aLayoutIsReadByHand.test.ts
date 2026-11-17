@@ -1,7 +1,8 @@
 /**
  * Reading a layout by hand (T257 ticket 12): the arithmetic of a read map's view, which a phone
  * pinches and drags, kept to the hall; how near a tap may fall to a table and still read it; and
- * the read map itself, pinched, dragged and tapped.
+ * the read map itself, pinched, dragged and tapped; and (T422) at a desk, zoomed by Ctrl and the
+ * wheel or by a caller's buttons, and dragged by the mouse once zoomed.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
@@ -14,6 +15,7 @@ import {
   pannedView,
   pinchedView,
   seenView,
+  zoomedView,
 } from '@/components/layout/layoutGeometry';
 
 const HALL = { xMm: 0, yMm: 0, widthMm: 30_000, heightMm: 22_500 };
@@ -95,6 +97,17 @@ describe('pinchedView', () => {
   it('keeps the view when the fingers start on one point', () => {
     const same = { x: 100, y: 100 };
     expect(pinchedView(HALL, [same, same], [same, { x: 200, y: 100 }], 400)).toEqual(HALL);
+  });
+});
+
+describe('zoomedView', () => {
+  it('zooms by a factor about a point of the box, the hall there staying under it', () => {
+    // 400 px across 30 m: the point 100 px in is 7.5 m in.
+    const zoomed = zoomedView(HALL, 2, { x: 100, y: 75 }, 400);
+    expect(zoomed.widthMm).toBeCloseTo(15_000);
+    expect(zoomed.heightMm).toBeCloseTo(11_250);
+    expect(zoomed.xMm + (100 / 400) * zoomed.widthMm).toBeCloseTo(7500);
+    expect(zoomed.yMm + (75 / 300) * zoomed.heightMm).toBeCloseTo(5625);
   });
 });
 
@@ -362,5 +375,118 @@ describe('a read map, by hand', () => {
     await pinchOut(map);
     expect(viewBox(map)).toEqual([0, 0, 30_000, 22_500]);
     expect((map.element as SVGElement).style.touchAction).toBe('');
+  });
+});
+
+/** A wheel turned over the map at a point of its box, Ctrl held or not; whether it was taken. */
+async function wheel(map: VueWrapper, deltaY: number, x: number, y: number, ctrlKey = false) {
+  const event = new WheelEvent('wheel', {
+    deltaY,
+    clientX: x,
+    clientY: y,
+    ctrlKey,
+    bubbles: true,
+    cancelable: true,
+  });
+  // happy-dom's WheelEvent keeps neither the modifier keys nor the pointer's place from its init.
+  for (const [key, value] of Object.entries({ ctrlKey, clientX: x, clientY: y, deltaY })) {
+    Object.defineProperty(event, key, { value });
+  }
+  map.element.dispatchEvent(event);
+  await nextTick();
+  return event.defaultPrevented;
+}
+
+async function mouse(
+  map: VueWrapper,
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  x: number,
+  y: number,
+  on: Element = map.element,
+) {
+  on.dispatchEvent(
+    new PointerEvent(type, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: x,
+      clientY: y,
+      bubbles: true,
+    }),
+  );
+  await nextTick();
+}
+
+interface Zooms {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  fit: () => void;
+}
+
+describe('a read map, at a desk', () => {
+  it('zooms in by Ctrl and the wheel about the pointer, and takes the wheel from the page', async () => {
+    const map = readMap();
+    expect(await wheel(map, -100, 100, 75, true)).toBe(true);
+    const [x, y, width] = viewBox(map);
+    expect(width).toBeLessThan(30_000);
+    // The hall's point under the pointer, 7.5 m by 5.625 m in, is under it still.
+    expect(x + (100 / 400) * width).toBeCloseTo(7500);
+    expect(y + (75 / 300) * viewBox(map)[3]).toBeCloseTo(5625);
+  });
+
+  it('leaves a plain wheel to the page, which scrolls', async () => {
+    const map = readMap();
+    expect(await wheel(map, 100, 100, 75)).toBe(false);
+    expectWhole(map);
+  });
+
+  it('zooms out by Ctrl and the wheel no further than the whole hall', async () => {
+    const map = readMap();
+    await wheel(map, -100, 200, 150, true);
+    for (let i = 0; i < 40; i++) await wheel(map, 100, 200, 150, true);
+    expectWhole(map);
+  });
+
+  it('is dragged by the mouse once zoomed, and the drag reads nothing', async () => {
+    const map = readMap();
+    (map.vm as unknown as Zooms).zoomIn();
+    await nextTick();
+    const [before] = viewBox(map);
+    const mmPerPx = viewBox(map)[2] / 400;
+    const table = map.get('[data-table-id="g1"]').element;
+    await mouse(map, 'pointerdown', 200, 150, table);
+    await mouse(map, 'pointermove', 170, 150, table);
+    await mouse(map, 'pointerup', 170, 150, table);
+    table.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 170, clientY: 150 }));
+    await nextTick();
+    expect(viewBox(map)[0]).toBeCloseTo(before + 30 * mmPerPx);
+    expect(map.emitted('activate')).toBeUndefined();
+  });
+
+  it('gives a caller zoom in, zoom out and fit, about its middle', async () => {
+    const map = readMap();
+    const zooms = map.vm as unknown as Zooms;
+    zooms.zoomIn();
+    await nextTick();
+    const [x, y, width, height] = viewBox(map);
+    expect(width).toBeCloseTo(20_000);
+    expect(x + width / 2).toBeCloseTo(15_000);
+    expect(y + height / 2).toBeCloseTo(11_250);
+    expect(map.attributes('data-zoomed')).toBe('');
+    zooms.zoomIn();
+    zooms.zoomOut();
+    await nextTick();
+    expect(viewBox(map)[2]).toBeCloseTo(20_000);
+    zooms.fit();
+    await nextTick();
+    expectWhole(map);
+    expect(map.attributes('data-zoomed')).toBeUndefined();
+  });
+
+  it('is not zoomed by the wheel when its view is given', async () => {
+    const view = { xMm: 0, yMm: 0, widthMm: 30_000, heightMm: 22_500 };
+    const map = readMap({ view });
+    expect(await wheel(map, -100, 100, 75, true)).toBe(false);
+    expect(viewBox(map)).toEqual([0, 0, 30_000, 22_500]);
   });
 });

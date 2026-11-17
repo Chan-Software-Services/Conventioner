@@ -19,9 +19,13 @@
  * table last tapped, pressed or focused (`LayoutPanelTable.vue`) heading the panel. A phone, 640px
  * and below, only reads: no upload, no scale, no edit, the map pinched and dragged by hand, the
  * Floorplan card left out and a hint saying how to read it, under the sections. Past Draft the
- * editor stays under the setup-settled sentence, its seats settled: tables still move and turn,
- * and the zones, the image, the scale and the colours still change, while what would add, remove,
- * renumber, re-section or re-type a table is disabled, and a location with no layout starts none.
+ * editor of a layout started in Draft stays under the setup-settled sentence, its seats settled:
+ * tables still move and turn, and the zones, the image, the scale and the colours still change,
+ * while what would add, remove, renumber, re-section or re-type a table is disabled. A location
+ * with no layout past Draft offers the upload all the same, and its layout follows the plan (T422,
+ * ADR 0034): under the follows-the-plan sentence its tables are added, removed, numbered and put
+ * in another section, up to each section's count, which the Sections card counts against, and the
+ * selection's card numbers one table by hand; only the table types stay settled.
  * It is drawn over the floor alone while the image is on its way or could not be had, and the
  * panel lists the location's sections in the colours the map draws them in. The page holds the
  * layout's working copy (`useLayoutEditor.ts`): each save names the revision it read, a save over
@@ -43,6 +47,7 @@ import type {
   TableTypeObject,
 } from '@/assets/types/datatypes';
 import MarketFrame from '@/components/MarketFrame.vue';
+import AppDialog from '@/components/AppDialog.vue';
 import { api } from '@/utils/api';
 import { useOpenMarket } from '@/utils/openMarket';
 import { useUnsavedWork } from '@/utils/useUnsavedWork';
@@ -54,12 +59,14 @@ import LayoutCalibration from './LayoutCalibration.vue';
 import LayoutEditor from './LayoutEditor.vue';
 import LayoutExportDialog from './LayoutExportDialog.vue';
 import LayoutMap from './LayoutMap.vue';
-import LayoutPanelKeyboard from './LayoutPanelKeyboard.vue';
 import LayoutPanelSections from './LayoutPanelSections.vue';
 import LayoutPanelSelection, { type Arrangement } from './LayoutPanelSelection.vue';
 import LayoutPanelTable from './LayoutPanelTable.vue';
 import LayoutPanelTypes from './LayoutPanelTypes.vue';
 import LayoutPanelZones from './LayoutPanelZones.vue';
+import LayoutToolCard from './LayoutToolCard.vue';
+import { isAdding, type Tool } from './layoutTools';
+import { rememberedChoice } from './layoutViewChoices';
 import { metresAcross, pxPerMm, type Point } from './calibration';
 import {
   NO_TABLE_FITS,
@@ -94,7 +101,7 @@ import {
   saveTypes,
   tablesOfEachType,
 } from './layoutTypes';
-import { useLayoutEditor } from './useLayoutEditor';
+import { heldBackSaid, useLayoutEditor } from './useLayoutEditor';
 import { useFloorplanImage } from './useFloorplanImage';
 
 const route = useRoute();
@@ -102,6 +109,20 @@ const router = useRouter();
 const marketId = computed(() => String(route.params.marketId ?? ''));
 const locationId = computed(() => String(route.params.locationId ?? ''));
 const { market, refresh } = useOpenMarket(marketId);
+/** The editor's tool on: any but Select shows its card in place of the selection's. */
+const editorTool = ref<Tool>('select');
+/** The section and the type the adding tools give a new table, shared by the three, chosen on the
+ *  tool's card; the editor starts them at the first of each. */
+const toolSectionId = ref<string | null>(null);
+const toolTypeId = ref('');
+const editorView = ref<InstanceType<typeof LayoutEditor> | null>(null);
+
+/** "Select them" on the Sections card: the tables in no section are selected and the map takes the
+ *  focus, so the arrow keys move them at once (D13). */
+function selectUnsectioned() {
+  editor.select(unsectioned.value.map((table) => table.id));
+  void editorView.value?.focusSelection();
+}
 
 /** The locations a layout can be opened for: named, and with the id a layout names. */
 const locations = computed<(LocationObject & { id: string })[]>(() =>
@@ -127,10 +148,25 @@ watch(
 /** Whether this person may change the layout here: the Market Setup row's answer, which refuses
  * everyone on an archived market. */
 const editable = computed(() => mayTake(market.value, MarketAction.ChangeSetup));
-/** Whether the market has left Draft, so the layout's seats are settled: where a table stands
- * still changes, but no table is added, removed, renumbered or given another section or type, and
- * no layout starts (`the-setup-settles-on-leaving-draft.md`). */
+/** Whether the market has left Draft, so a layout started in Draft has its seats settled: where a
+ * table stands still changes, but no table is added, removed, renumbered or given another section
+ * or type (`the-setup-settles-on-leaving-draft.md`); a layout started then follows the plan. */
 const settled = computed(() => Boolean(market.value?.setupLockReason));
+/** Whether the layout follows the plan: started after Draft, it draws the seats the plan settled
+ * and numbers them up to each section's count, in any phase (T422, D21). */
+const followsPlan = computed(() => Boolean(floorplan.value?.followsPlan));
+/** Whether the layout's seats are settled: past Draft, on a layout started in Draft. */
+const seatsSettled = computed(() => settled.value && !followsPlan.value);
+/** Whether the page says the layout follows the plan: one that does, past Draft, and a location
+ * with no layout yet past Draft for someone who may start it here, since the layout they start
+ * will; a reader is told the setup is settled. */
+const saysFollowsPlan = computed(
+  () => followsPlan.value || (settled.value && !floorplan.value && editsHere.value),
+);
+/** What the page says under its head past Draft, of a layout that follows the plan. */
+const FOLLOWS_THE_PLAN =
+  "This layout follows the plan: place each section's tables, up to its count. The seats " +
+  'themselves are settled.';
 /** Whether the market is archived, which its rail says, so the page does not say it is settled. */
 const archived = computed(() => market.value?.phase === MarketPhase.Archived);
 
@@ -142,6 +178,12 @@ const stored = computed<FloorplanObject | null>(
 );
 
 // ── The working copy and its saves ───────────────────────────────────────────
+
+/** The plan's sections of this location, with the id a table names its section by. */
+const ownSections = () =>
+  (market.value?.setupObject?.sections ?? []).filter(
+    (section) => section.id && section.location?.id === locationId.value,
+  );
 
 /** The layout as the page shows and changes it: the server's, and what is not saved yet. A change
  * to the layout's own fields (its start, its image, its scale) is written at once; a change to
@@ -155,10 +197,9 @@ const editor = useLayoutEditor({
   may: () => editable.value,
   tableTypes: () => market.value?.setupObject?.tableTypes ?? [],
   // The location's sections, by which a table whose section is gone is put in no section.
-  sectionIds: () =>
-    (market.value?.setupObject?.sections ?? [])
-      .filter((section) => section.id && section.location?.id === locationId.value)
-      .map((section) => section.id as string),
+  sectionIds: () => ownSections().map((section) => section.id as string),
+  // Their counts in the plan, which a layout that follows it numbers its tables up to.
+  counts: () => new Map(ownSections().map((section) => [section.id as string, section.count])),
 });
 const floorplan = editor.layout;
 const saveState = editor.saveState;
@@ -211,7 +252,16 @@ const calibrated = computed(() => Boolean(floorplan.value?.scalePxPerUnit));
 const recalibrating = ref(false);
 
 /** Whether the venue's floorplan is drawn under the tables; unticked, the hall is its floor. */
-const showImage = ref(true);
+const showImage = rememberedChoice('showImage', true);
+/** Whether it is drawn in greyscale, as it is by default, so the sections' colours are the only
+ *  colours; unticked, in its own. A choice of the person viewing, as `showImage` is, kept in their
+ *  browser. */
+const imageInGrey = rememberedChoice('imageInGrey', true);
+/** Whether it is drawn at half strength, as it is by default, so the tables stand out over a busy
+ *  plan; unticked, at full strength. A choice of the person viewing, kept in their browser. */
+const imageFaded = rememberedChoice('imageFaded', true);
+/** Whether the Layout settings dialog is open. */
+const settingsOpen = ref(false);
 
 // ── Replacing the image ──────────────────────────────────────────────────────
 
@@ -301,6 +351,8 @@ async function onReplacementCalibrated(line: { start: Point; end: Point; lengthM
 const sections = computed(() =>
   floorplan.value ? layoutSections(floorplan.value, market.value?.setupObject?.sections ?? []) : [],
 );
+/** Those sections themselves, which the adding tools put a new table in. */
+const ownLaidOutSections = computed(() => sections.value.map(({ section }) => section));
 
 /** The layout's tables in no section: of none, or of one that is gone or another location's. */
 const unsectioned = computed(() => {
@@ -338,11 +390,21 @@ function tablesOf(ids: readonly string[]) {
 function duplicateSelection() {
   const copies = editor.duplicate(editor.selection.value);
   if (!copies.length) {
-    if (editor.selection.value.length) say(LAYOUT_IS_FULL);
+    if (editor.selection.value.length && !tellHeldBack()) say(LAYOUT_IS_FULL);
     return;
   }
   editor.select(copies);
-  say(saidAdded(tablesOf(copies), sections.value));
+  if (!tellHeldBack()) say(saidAdded(tablesOf(copies), sections.value));
+}
+
+/** On a layout that follows the plan, what the last add or change of section held back, on the
+ *  status line and in the live region; null when nothing was. */
+function tellHeldBack(): string | null {
+  const held = heldBackSaid(editor, ownSections());
+  if (!held) return null;
+  showStatus(held);
+  say(held);
+  return held;
 }
 
 /**
@@ -377,7 +439,8 @@ function rowOnFromTheSelection(count: number) {
       rotation: pose.rotation,
     })),
   );
-  say(ids.length ? saidRowAdded(tablesOf(ids), sections.value) : NO_TABLE_FITS);
+  if (!tellHeldBack())
+    say(ids.length ? saidRowAdded(tablesOf(ids), sections.value) : NO_TABLE_FITS);
 }
 
 function turnTheSelection() {
@@ -395,7 +458,15 @@ function sectionSelection(sectionId: string | null) {
   const before = tablesOf(editor.selection.value);
   editor.setSection(editor.selection.value, sectionId);
   const section = market.value?.setupObject?.sections.find((one) => one.id === sectionId);
-  say(saidSectioned(before, section?.name ?? null, sections.value));
+  if (!tellHeldBack()) say(saidSectioned(before, section?.name ?? null, sections.value));
+}
+
+/** The Number field: the one selected table's number, swapped with the table that held it. */
+function numberSelection(number: number) {
+  const [table] = tablesOf(editor.selection.value);
+  if (!table || !editor.setNumber(table.id, number)) return;
+  const section = ownSections().find((one) => one.id === table.sectionId);
+  say(`Numbered ${section?.name ?? 'the table'} ${number}`);
 }
 
 function typeSelection(tableTypeId: string) {
@@ -704,6 +775,15 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
           >
             Export PNG
           </button>
+          <button
+            v-if="editing"
+            type="button"
+            class="btn btn--secondary"
+            data-testid="layout-settings-open"
+            @click="settingsOpen = true"
+          >
+            Layout settings
+          </button>
           <RouterLink
             :to="marketPath(market.id, 'setup')"
             class="btn btn--secondary"
@@ -714,7 +794,14 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
         </div>
       </header>
 
-      <p v-if="settled && !archived" class="note" data-testid="layout-setup-settled">
+      <p
+        v-if="settled && !archived && saysFollowsPlan"
+        class="note"
+        data-testid="layout-follows-plan"
+      >
+        {{ FOLLOWS_THE_PLAN }}
+      </p>
+      <p v-else-if="settled && !archived" class="note" data-testid="layout-setup-settled">
         {{ market.setupLockReason }}
       </p>
 
@@ -729,7 +816,7 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
         <section class="layout-map-column" :aria-label="`${location.name}'s floorplan`">
           <template v-if="!floorplan?.imageGridfsId">
             <FloorplanUploader
-              v-if="editsHere && !settled"
+              v-if="editsHere"
               :marketId="market.id"
               :busy="saveState === 'saving'"
               @uploaded="onUploaded"
@@ -812,12 +899,18 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
               :sections="market.setupObject?.sections ?? []"
               :tableTypes="tableTypes"
               :imageUrl="imageUrl"
-              :showImage="showImage"
-              :settled="settled"
+              v-model:showImage="showImage"
+              v-model:imageInGrey="imageInGrey"
+              v-model:imageFaded="imageFaded"
+              :settled="seatsSettled"
               :fill="(request) => placeTables(marketId, request)"
               @announce="say"
               @status="showStatus"
               @zoneAdded="zonesCard?.focusZone($event)"
+              @tool="editorTool = $event"
+              ref="editorView"
+              v-model:sectionId="toolSectionId"
+              v-model:typeId="toolTypeId"
             />
             <div
               v-else
@@ -833,6 +926,8 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
                 :tableTypes="tableTypes"
                 :imageUrl="imageUrl"
                 :showImage="showImage"
+                :imageInGrey="imageInGrey"
+                :imageFaded="imageFaded"
                 mode="read"
                 :selection="readTable ? [readTable.id] : []"
                 @activate="readId = $event"
@@ -874,7 +969,7 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
         <aside class="layout-panel" aria-label="Layout details">
           <section v-if="!floorplan?.imageGridfsId" class="layout-card">
             <p class="layout-card-text" data-testid="layout-panel-start">
-              <template v-if="editsHere && !settled">
+              <template v-if="editsHere">
                 Upload the venue's floorplan for {{ location.name }} to start.
               </template>
               <template v-else>{{ location.name }} has no layout yet.</template>
@@ -888,13 +983,8 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
             </p>
           </section>
           <template v-else-if="calibrated">
-            <p
-              v-if="editing && status"
-              class="layout-card layout-fill-status"
-              data-testid="layout-status"
-            >
-              {{ status }}
-            </p>
+            <!-- A reader's card of the table read heads the panel, where a phone shows it first under
+                 the map. -->
             <LayoutPanelTable
               v-if="reading"
               class="layout-card"
@@ -903,13 +993,61 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
               :tableTypes="tableTypes"
               :phone="!atADesk"
             />
+            <!-- What stands: the location's sections, informational, at the head of an editor's
+                 panel; what is worked with (the status, the tool's or the selection's card) under
+                 it. -->
+            <LayoutPanelSections
+              class="layout-card layout-card--info"
+              :locationName="location.name"
+              :sections="sections"
+              :unsectioned="unsectioned.length"
+              :startingCounts="floorplan?.startingCounts ?? []"
+              :editable="editing"
+              :settled="seatsSettled"
+              :followsPlan="followsPlan"
+              @color="(sectionId, color) => editor.setSectionStyle(sectionId, { color })"
+              @renumber="editor.renumber($event)"
+              @selectUnsectioned="selectUnsectioned"
+            />
+            <p
+              v-if="editing && status"
+              class="layout-card layout-fill-status"
+              data-testid="layout-status"
+            >
+              {{ status }}
+            </p>
+            <!-- The card of the tool on, while it is one that adds tables, in place of the
+                 selection's: its options, never over the map. -->
+            <LayoutToolCard
+              v-if="editing && isAdding(editorTool)"
+              v-model:sectionId="toolSectionId"
+              v-model:typeId="toolTypeId"
+              :tool="editorTool"
+              :sections="ownLaidOutSections"
+              :tableTypes="tableTypes"
+              :rowClosed="editorView?.rowClosed ?? false"
+              @flip="editorView?.flipRow()"
+              @fillInView="editorView?.fillInView()"
+            />
+            <!-- The no-table zones are the No-table zone tool's card: a zone is named as it is
+                 drawn. -->
+            <LayoutPanelZones
+              v-if="editing && editorTool === 'zone'"
+              ref="zonesCard"
+              class="layout-card"
+              :zones="floorplan?.zones ?? []"
+              @label="editor.setZoneLabel"
+              @remove="removeZone"
+            />
             <LayoutPanelSelection
-              v-if="editing"
+              v-if="editing && editorTool === 'select'"
               class="layout-card"
               :tables="selectedTables"
               :sections="sections"
               :tableTypes="tableTypes"
-              :settled="settled"
+              :settled="seatsSettled"
+              :typesSettled="settled"
+              :followsPlan="followsPlan"
               @turn="turnTheSelection"
               @remove="removeSelection"
               @duplicate="duplicateSelection"
@@ -917,64 +1055,38 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
               @section="sectionSelection"
               @type="typeSelection"
               @row="rowOnFromTheSelection"
+              @number="numberSelection"
             />
-            <LayoutPanelSections
+            <section
+              v-if="atADesk && !editing"
               class="layout-card"
-              :locationName="location.name"
-              :sections="sections"
-              :unsectioned="unsectioned.length"
-              :startingCounts="floorplan?.startingCounts ?? []"
-              :editable="editing"
-              :settled="settled"
-              @color="(sectionId, color) => editor.setSectionStyle(sectionId, { color })"
-              @renumber="editor.renumber($event)"
-              @selectUnsectioned="editor.select(unsectioned.map((table) => table.id))"
-            />
-            <LayoutPanelTypes
-              v-if="editing"
-              class="layout-card"
-              :tableTypes="tableTypes"
-              :counts="typeCounts"
-              :settled="settled"
-              :save="writeTableTypes"
-              :listSaved="listSaved"
-              :saveAs="saveTheseTypes"
-            />
-            <LayoutPanelZones
-              v-if="editing"
-              ref="zonesCard"
-              class="layout-card"
-              :zones="floorplan?.zones ?? []"
-              @label="editor.setZoneLabel"
-              @remove="removeZone"
-            />
-            <section v-if="atADesk" class="layout-card" data-testid="layout-panel-floorplan">
+              data-testid="layout-panel-floorplan"
+            >
               <h2 class="layout-card-title">Floorplan</h2>
               <p class="layout-card-text">{{ location.name }}'s floorplan reads {{ scaleText }}.</p>
               <label class="layout-tick">
                 <input v-model="showImage" type="checkbox" data-testid="layout-show-image" />
                 <span>Show the floorplan</span>
               </label>
-              <div v-if="editsHere && !recalibrating && !replacing" class="layout-card-actions">
-                <button
-                  type="button"
-                  class="btn btn--secondary"
-                  data-testid="layout-replace-image"
-                  @click="startReplacing"
-                >
-                  Replace the image
-                </button>
-                <button
-                  type="button"
-                  class="btn btn--secondary"
-                  data-testid="layout-recalibrate"
-                  @click="recalibrating = true"
-                >
-                  Recalibrate
-                </button>
-              </div>
+              <label class="layout-tick">
+                <input
+                  v-model="imageInGrey"
+                  type="checkbox"
+                  :disabled="!showImage"
+                  data-testid="layout-image-grey"
+                />
+                <span>Greyscale</span>
+              </label>
+              <label class="layout-tick">
+                <input
+                  v-model="imageFaded"
+                  type="checkbox"
+                  :disabled="!showImage"
+                  data-testid="layout-image-faded"
+                />
+                <span>Faded</span>
+              </label>
             </section>
-            <LayoutPanelKeyboard v-if="editing" class="layout-card" :settled="settled" />
             <p v-if="reading && !atADesk" class="layout-phone-hint" data-testid="layout-phone-hint">
               Pinch to zoom, drag to look around, tap a table to read it. The layout is edited at a
               desk.
@@ -982,6 +1094,63 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
           </template>
         </aside>
       </div>
+      <!-- What is set up once or seldom, out of the panel: the table types, and the floorplan's
+           image and scale (the QC walk of 2026-11-16). -->
+      <AppDialog
+        v-if="editing && location"
+        :open="settingsOpen"
+        title="Layout settings"
+        testid="layout-settings"
+        size="wide"
+        scroll="body"
+        @close="settingsOpen = false"
+      >
+        <div class="layout-settings">
+          <div class="layout-settings__column">
+            <LayoutPanelTypes
+              class="layout-settings__section"
+              :tableTypes="tableTypes"
+              :counts="typeCounts"
+              :settled="settled"
+              :save="writeTableTypes"
+              :listSaved="listSaved"
+              :saveAs="saveTheseTypes"
+            />
+            <section
+              class="layout-settings__section"
+              aria-labelledby="layout-settings-floorplan"
+              data-testid="layout-panel-floorplan"
+            >
+              <h2 id="layout-settings-floorplan" class="layout-card-title">Floorplan image</h2>
+              <p class="layout-card-text">{{ location.name }}'s floorplan reads {{ scaleText }}.</p>
+              <div v-if="!recalibrating && !replacing" class="layout-card-actions">
+                <button
+                  type="button"
+                  class="btn btn--secondary"
+                  data-testid="layout-replace-image"
+                  @click="
+                    settingsOpen = false;
+                    startReplacing();
+                  "
+                >
+                  Replace the image
+                </button>
+                <button
+                  type="button"
+                  class="btn btn--secondary"
+                  data-testid="layout-recalibrate"
+                  @click="
+                    settingsOpen = false;
+                    recalibrating = true;
+                  "
+                >
+                  Recalibrate
+                </button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </AppDialog>
       <LayoutExportDialog
         v-if="location"
         :open="exportOpen"
@@ -1017,11 +1186,18 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
   min-width: 0;
 }
 
+/* The page's head is a bar across the whole page, ruled off from the work under it: where it is and
+   how it stands (the title, the locations, the save state, the scale) and the page's own actions
+   above; the tools, the map and the panel below (the QC walk of 2026-11-16). */
 .layout-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3) var(--space-4);
+  /* Out to the page's edges, through its inset, which it keeps inside. */
+  margin: calc(-1 * var(--space-6)) calc(-1 * var(--space-6)) 0;
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--mm-border);
 }
 
 .layout-title {
@@ -1155,6 +1331,40 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
   box-shadow: var(--shadow-card);
 }
 
+/* Layout settings: what is set up once, each part set off by a rule rather than drawn as a card
+   inside the dialog's own card. */
+.layout-settings {
+  display: flex;
+  flex-direction: column;
+}
+
+.layout-settings__column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.layout-settings__section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.layout-settings__section + .layout-settings__section {
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--mm-border);
+}
+
+/* A card that informs rather than one worked in: flat on the page's ground, edged and unlifted,
+   so the card of the tool or the selection under it reads as the one in hand. */
+.layout-card--info {
+  background: var(--mm-beige);
+  box-shadow: none;
+  border: 1px solid var(--mm-border);
+}
+
 .layout-card-title {
   margin: 0;
   font-size: var(--text-md);
@@ -1198,6 +1408,11 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
 /* A phone's 16px gutter, as on every page that fits one. */
 @media (width <= 640px) {
   .layout-page {
+    padding: var(--space-4);
+  }
+
+  .layout-head {
+    margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;
     padding: var(--space-4);
   }
 }

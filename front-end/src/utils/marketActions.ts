@@ -35,6 +35,7 @@ export const MarketAction = {
   AdjustPaid: 'adjust-paid',
   CheckIn: 'check-in',
   ConnectDiscord: 'connect-discord',
+  PublishMap: 'publish-map',
   ManageEditorsAndViewers: 'manage-editors-and-viewers',
   ManageAdmins: 'manage-admins',
   HandOnMarket: 'hand-on-market',

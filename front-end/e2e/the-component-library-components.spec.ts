@@ -115,6 +115,29 @@ eachWindow('the existing components entry', (size) => {
     await expect(
       page.getByRole('region', { name: 'Chosen', exact: true }).getByTestId('read-out'),
     ).toHaveText('Chose: sign-out');
+
+    // Choices that stay chosen (T422): ticks the menu keeps open over, the list above its button.
+    const view = page.getByTestId('library-view-menu-button');
+    await press(view);
+    const list = page.getByTestId('library-view-menu');
+    await expect(list).toBeVisible();
+    expect((await list.boundingBox())!.y).toBeLessThan((await view.boundingBox())!.y);
+    const shown = list.getByRole('menuitemcheckbox', { name: 'Show the floorplan' });
+    const grey = list.getByRole('menuitemcheckbox', { name: 'Greyscale' });
+    await expect(shown).toHaveAttribute('aria-checked', 'true');
+    await press(shown);
+    await expect(list).toBeVisible();
+    await expect(shown).toHaveAttribute('aria-checked', 'false');
+    await expect(grey).toHaveAttribute('aria-disabled', 'true');
+    // Disabled, a press does nothing (sent as it lands: Playwright waits on an aria-disabled item).
+    await grey.dispatchEvent('click');
+    await expect(grey).toHaveAttribute('aria-checked', 'true');
+    await expect(
+      page.getByRole('region', { name: 'Chosen', exact: true }).getByTestId('read-out'),
+    ).toHaveText('Chose: shown: not ticked');
+    await page.keyboard.press('Escape');
+    await expect(list).toBeHidden();
+    await expect(view).toBeFocused();
   });
 
   test('ListFreshness says how old a list is, in each state, and asks for a read', async ({

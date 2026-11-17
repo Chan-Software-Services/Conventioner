@@ -23,7 +23,7 @@ describes:
   - back-end/app.py#verify_payment_indexes
   - back-end/migrations/migrate_owed_day_state.py
   - back-end/tests/fixtures/balance_states.json
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - T92
   - E44/F01/S01
@@ -36,6 +36,7 @@ sources:
   - T315
   - T335
   - T318
+  - T422
   - T411
 ---
 
