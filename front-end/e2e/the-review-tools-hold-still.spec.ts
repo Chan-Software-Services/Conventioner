@@ -14,8 +14,11 @@ import { APPLICATION_FIELDS, seedApplicantMarket } from './helpers/seedApplicant
  * the page, as the frame's rail does.
  */
 
-/** Questions enough that one application's card is taller than two windows. */
-const QUESTIONS = Array.from({ length: 36 }, (_, at) => ({
+/**
+ * Questions enough that one application's card is well over two windows tall: 36 left One by one's
+ * page at 1990x900 a pixel short of scrolling 900px.
+ */
+const QUESTIONS = Array.from({ length: 60 }, (_, at) => ({
   key: `question_${at + 1}`,
   label: `Question ${at + 1}`,
   type: 'text',
