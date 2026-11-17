@@ -51,8 +51,10 @@ One JSON file, `test-map.json`:
 Each push to `dev` records three things and builds the map from them, the last two steps by [`scripts/test_map.py`](../../../scripts/test_map.py):
 
 1. **The shards record each test.**
-   On a push to `dev`, each `e2e-shard` job sets `TEST_MAP_OUT`, and [`front-end/e2e/helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts), which `fixtures.ts` wraps Playwright's `test` in, appends one JSON line per test to it: its spec file, its start and end on the wall clock, every request its browser contexts made under `/src/` and `/api/`, and the V8 block coverage of its pages' modules (`page.coverage`, Chromium) as the stretches of each module that ran.
+   On a push to `dev`, each `e2e-shard` job sets `TEST_MAP_OUT`, and [`front-end/e2e/helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts), which `fixtures.ts` wraps Playwright's `test` in, appends one JSON line per test to it: its spec file, its start and end on the wall clock, every request its browser contexts made under `/src/` and `/api/`, and the V8 block coverage of its pages' modules (a DevTools session of each page's own, Chromium) as the stretches of each module that ran.
    A retry is a line of its own; a context a `beforeAll` opens records nothing, since no test is running then.
+   The recording makes each test slower, and only a push to `dev` records, so a test near its timeout can pass on every pull request and fail only on that push.
+   It takes no script's source: Playwright's `page.coverage` fetched the source of every module Vite serves, and a run recorded through it took some 40% longer in CI than one that recorded nothing.
    The build reads the requests and the window; the stretches are in the shard's records for a reader who wants more than the map holds, as T349's pruning did.
 2. **The shards keep the back end's log.**
    Each shard saves `docker compose logs --timestamps --no-log-prefix backend` beside its records and uploads both as `test-map-shard-<n>` (kept 90 days), so the calls Node's seed helpers make count as well as the pages' own.

@@ -221,20 +221,25 @@ test.describe('The frame stays put', () => {
    * see, under the 24px allowance the check above keeps for Tables, Attendance and Vendors. A box
    * whose content is taller than it, with any overflow but `visible`, is either a nested scroller
    * or a clip - and on a frame screen both are wrong, because the page is the scroller.
+   *
+   * One test a window size: each opens all ten screens, and both sizes in one test took two thirds
+   * of its 30 seconds, which the test map's recording on a push to `dev` took it past.
    */
-  test('no box inside any market screen scrolls or clips its content', async ({
-    authenticatedPage: page,
-  }) => {
-    const screens = [
-      ...['setup', 'form', 'applications', 'settings'].map((tab) => marketSetupPath(marketId, tab)),
-      ...(['assignments', 'attendance', 'vendors', 'payments', 'tools', 'stats'] as const).map(
-        (s) => marketScreenPath(marketId, s),
-      ),
-    ];
-    for (const size of [
-      { width: 1920, height: 1080 },
-      { width: 1280, height: 800 },
-    ]) {
+  for (const size of [
+    { width: 1920, height: 1080 },
+    { width: 1280, height: 800 },
+  ]) {
+    test(`no box inside any market screen scrolls or clips its content, at ${size.width}px`, async ({
+      authenticatedPage: page,
+    }) => {
+      const screens = [
+        ...['setup', 'form', 'applications', 'settings'].map((tab) =>
+          marketSetupPath(marketId, tab),
+        ),
+        ...(['assignments', 'attendance', 'vendors', 'payments', 'tools', 'stats'] as const).map(
+          (s) => marketScreenPath(marketId, s),
+        ),
+      ];
       await page.setViewportSize(size);
       for (const path of screens) {
         await page.goto(path);
@@ -258,8 +263,8 @@ test.describe('The frame stays put', () => {
         );
         expect(clipped, `${path} at ${size.width}px`).toEqual([]);
       }
-    }
-  });
+    });
+  }
 
   /**
    * Every market screen is one width (E22/F04/S01). Tables, Vendors and Attendance were
