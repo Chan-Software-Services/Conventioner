@@ -3,7 +3,7 @@ import { defineConfig } from 'vitest/config';
 import vue from '@vitejs/plugin-vue';
 import vueJsx from '@vitejs/plugin-vue-jsx';
 
-import { VUEDRAGGABLE_SOURCE } from './vite.config';
+import { VUEDRAGGABLE_SOURCE } from './vite.config.ts';
 
 export default defineConfig({
   plugins: [vue(), vueJsx()],
