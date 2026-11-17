@@ -148,7 +148,6 @@ The rename field takes a read's name only when it differs from the last one read
 The organization line says "Belongs to <organization>. Its admins run it; its members can view it."
 Covered by:
 
-- `*-sweep.spec.ts`, the sweeps' states "the manage-market dialog, an organization's people", "the manage-market dialog, removing a market role" and "the manage-market dialog, changing a market role"
 - `access-control.spec.ts`
 - [`an-address-breaks-only-before-its-at.spec.ts`](../../../front-end/e2e/an-address-breaks-only-before-its-at.spec.ts) (its rows)
 - [`changing-a-role-asks-first.spec.ts`](../../../front-end/e2e/changing-a-role-asks-first.spec.ts) (the confirmation's words, its closes, one write on confirm and where focus goes, a table whose owner moved a row, a refusal, one after someone else moved or removed them first, the arrow keys, and Viewer to Admin in sight at 1280 and 390)
@@ -158,6 +157,7 @@ Covered by:
 - `manageMarketReadsTheMarketItOpened.test.ts` (opened on another market while the last one's read is out, Loading and its name, a failed read of the last market said nowhere, a failed first read said over the opener's copy, a table change taken into it and it kept drawn through a write's re-read, a name being typed kept over a re-read that brings the same name, and an older re-read never undoing a rename or a table change)
 - [`people-at-scale-market.spec.ts`](../../../front-end/e2e/people-at-scale-market.spec.ts) (the list at 154 people: a page at a time, finding one person, the place kept, someone just added; on a phone at 390 and 320)
 - [`removing-someone-asks-first.spec.ts`](../../../front-end/e2e/removing-someone-asks-first.spec.ts) (the confirmation's words, Cancel, Escape, confirming and where focus goes, someone removed in another window included, at 1440 and 390; at 390 the address in Remove's and a role change's title broken only before its "@" or a dot)
+- `screen-sweeps-*.spec.ts`, the sweeps' states "the manage-market dialog, an organization's people", "the manage-market dialog, removing a market role" and "the manage-market dialog, changing a market role"
 - `the-manage-market-dialog-holds-together.spec.ts`
 - `tier2.spec.ts` ("add user, change role, and remove user from market")
 
@@ -189,12 +189,12 @@ A change reaches every screen at its next read of the market: the dialog and the
 The section and its dialog are [`MarketPermissions.vue`](../../../front-end/src/components/MarketPermissions.vue), its rows and its changes the shared [`PermissionRows.vue`](../../../front-end/src/components/PermissionRows.vue) and [`PermissionChanges.vue`](../../../front-end/src/components/PermissionChanges.vue) that Manage organization's default permissions show too, the dialog and its three confirmations teleported beside Manage market as a dialog opened from a dialog is ([dialogs](../../implementation/conventions/dialogs.md)); the words are [`front-end/src/utils/permissionTable.ts`](../../../front-end/src/utils/permissionTable.ts)'s, and the server keeps the table and its changes structured.
 Covered by:
 
-- `*-sweep.spec.ts`, which walk the dialog open
 - `every-control-is-named.spec.ts`, which walks the dialog open
 - `manageIsOfferedToWhoeverReads.test.ts`
 - `manageMarketMeetsAChangedMarket.test.ts` (a row's change, Reset and Copy refused over a changed market)
 - `marketPermissions.test.ts`
 - `permissionTable.test.ts`
+- `screen-sweeps-*.spec.ts`, which walk the dialog open
 - `the-markets-history.spec.ts` for a long record of its changes, in their box
 - `the-organizations-default.spec.ts` for the copy again
 - [`the-permissions-section.spec.ts`](../../../front-end/e2e/the-permissions-section.spec.ts) (a group's title nearer its rows than the group above, at 1280 and 390; the dialog's height, its confirmations, focus and Manage market's scroll on closing, and a reader's keys)

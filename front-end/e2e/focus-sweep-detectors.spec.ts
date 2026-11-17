@@ -6,7 +6,6 @@ import {
   walkTheMenus,
   type SweepInPage,
 } from './helpers/focusSweep';
-import { SCREENS, walkTheScreens, type SweepTest } from './helpers/screens';
 import type { Page } from '@playwright/test';
 
 /**
@@ -401,18 +400,5 @@ test.describe('The focus sweep', () => {
   test('a menu whose arrows walk its items passes', async ({ page }) => {
     await show(page, menu(true));
     expect(await walkTheMenus(page, 'the fixture')).toEqual([]);
-  });
-
-  test('a phone added to a sweep leaves the sizes every other sweep walks', async () => {
-    // `walkTheScreens` registers a test a screen; a stand-in for Playwright's `test` keeps the
-    // registrations, so only the sizes it reads are under test here.
-    const before = SCREENS.map((s) => s.sizes.map((size) => size.width));
-    const registered: string[] = [];
-    const stand = Object.assign((name: string) => void registered.push(name), {
-      beforeAll: () => {},
-    }) as unknown as SweepTest;
-    walkTheScreens(stand, { everySize: true, alsoAt: { width: 800, height: 600 } });
-    expect(registered).toHaveLength(SCREENS.length);
-    expect(SCREENS.map((s) => s.sizes.map((size) => size.width))).toEqual(before);
   });
 });

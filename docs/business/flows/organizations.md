@@ -42,8 +42,8 @@ Its owner and admins run every market it holds as the market's Admin does, and a
 The list and its dialogs (New organization, Manage organization and Delete organization) fit a phone, as the Markets list beside it does: nothing scrolls sideways or zooms out, and on Manage organization each person's address takes a line of its own ([the design language](../../design-system.md#layout)).
 Covered by:
 
-- [`*-sweep.spec.ts`](../../design-system.md#what-keeps-this-true), the sweeps, at 390px
 - `organizations-fit-a-phone.spec.ts`
+- [`screen-sweeps-*.spec.ts`](../../design-system.md#what-keeps-this-true), the sweeps, at 390px
 
 ## B1. Create an organization
 
@@ -115,10 +115,10 @@ While the removal and the re-read after it are out nothing closes the confirmati
 Each row's Remove is the destructive intent at secondary weight, red ink on white, not a filled red button on every row ([the design language](../../design-system.md#the-primitive-layer)).
 Covered by:
 
-- `*-sweep.spec.ts`, the sweeps' state "the manage-organization dialog, removing a member"
 - `access-control.spec.ts` ("org membership changes")
 - [`removing-someone-asks-first.spec.ts`](../../../front-end/e2e/removing-someone-asks-first.spec.ts) at 1440 and 390, someone removed in another window included, and at 390 the address in the confirmation's title broken only before its "@" or a dot
 - `removingSomeoneAsksFirst.test.ts` (held while it removes, one removal for two presses, and a refusal not in the next Remove)
+- `screen-sweeps-*.spec.ts`, the sweeps' state "the manage-organization dialog, removing a member"
 
 ## B3a. Make an admin a member, or a member an admin
 

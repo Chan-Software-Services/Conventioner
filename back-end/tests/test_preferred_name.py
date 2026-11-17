@@ -14,16 +14,13 @@ EMPTY = EssentialFormOptions(dates=[], sections=[], table_types=[], tiers=[])
 
 class TestWhereItSitsInTheContract:
     def test_it_is_essential(self):
+        # Every other essential question is gated on the plan offering something. Identity is not.
         assert EssentialFields.PREFERRED_NAME_KEY in EssentialFields.asked_essential_keys(EMPTY)
 
     def test_but_not_required(self):
         # Essential means the product owns the question and every form asks it. Required means an
         # applicant cannot submit without it. The table-share partner already has this shape.
         assert EssentialFields.PREFERRED_NAME_KEY not in EssentialFields.REQUIRED_ESSENTIAL_KEYS
-
-    def test_it_is_asked_unconditionally_like_the_legal_name(self):
-        # Every other essential question is gated on the plan offering something. Identity is not.
-        assert EssentialFields.PREFERRED_NAME_KEY in EssentialFields.asked_essential_keys(EMPTY)
 
     def test_the_plan_does_not_gate_it_and_it_does_not_gate_the_plan(self):
         # `plan_derived_asked_keys` is what `FormHasFieldsGuard` counts. A name asked
