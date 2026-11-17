@@ -25,6 +25,7 @@ import ListFrame from '@/components/ListFrame.vue';
 import PageNotFound from '@/components/PageNotFound.vue';
 import ReadFailed from '@/components/ReadFailed.vue';
 import ScrollBox from '@/components/ScrollBox.vue';
+import { layoutSections, paintValue } from '@/components/layout/layoutDrawing';
 import {
   publicDayLocations,
   publicSeats,
@@ -123,7 +124,11 @@ function chooseLocation(locationId: string) {
   goTo({ ...place.value, locationId, tableId: keeps ? place.value.tableId : null });
 }
 
-function pick(tableId: string) {
+/** Prototype (release walk F6): the seat pressed, so a half table's half is picked alone. */
+const pickedSeat = ref<string | null>(null);
+
+function pick(tableId: string, seatKey: string | null = null) {
+  pickedSeat.value = seatKey;
   goTo({ ...place.value, tableId });
 }
 
@@ -196,8 +201,148 @@ const finds = (vendor: ListedVendor, words: string) =>
 
 const mapBox = ref<HTMLElement>();
 
+// ── Prototype (release walk F6): the picked table's speech bubble, the section key ──
+
+/** Each laid-out table's section paint, by table id, for the code pills and the key. */
+const tablePaint = computed(() => {
+  const out = new Map<string, { fill: string; edge: string }>();
+  for (const location of locations.value) {
+    for (const { paint, tables } of layoutSections(location.layout, location.sections)) {
+      for (const table of tables)
+        out.set(table.id, { fill: paintValue(paint.fill), edge: paintValue(paint.edge) });
+    }
+  }
+  return out;
+});
+
+function codeStyle(tableId: string | null) {
+  const paint = tableId ? tablePaint.value.get(tableId) : undefined;
+  return paint ? { background: paint.fill, borderColor: paint.edge } : undefined;
+}
+
+const openLocation = computed(
+  () => locations.value.find((l) => l.id === place.value.locationId) ?? locations.value[0],
+);
+const hallName = computed(() => openLocation.value?.name ?? '');
+
+/** The open hall's sections, in its colours, as the map draws them. */
+const sectionKey = computed(() =>
+  openLocation.value
+    ? layoutSections(openLocation.value.layout, openLocation.value.sections)
+        .filter(({ tables }) => tables.length)
+        .map(({ section, paint }) => ({
+          name: section.name,
+          style: { background: paintValue(paint.fill), borderColor: paintValue(paint.edge) },
+        }))
+    : [],
+);
+
+/** Whether a table of the open hall has nobody at it on the day. */
+const hasFree = computed(() => {
+  const location = openLocation.value;
+  if (!location) return false;
+  const taken = new Set(seats.value.map((seat) => seat.tableId));
+  return layoutSections(location.layout, location.sections).some(({ tables }) =>
+    tables.some((table) => !taken.has(table.id)),
+  );
+});
+
+type Bubble = { left: number; top: number; tailX: number; vert: 'up' | 'down'; shown: boolean };
+const bubble = ref<Bubble | null>(null);
+const bubbleEl = ref<HTMLElement>();
+const GAP = 8;
+const TAIL = 12;
+let frame = 0;
+
+/** The picked seat when it is on the picked table, else none. */
+const seatHere = computed(() =>
+  seats.value.find((seat) => seat.key === pickedSeat.value && seat.tableId === place.value.tableId),
+);
+/** What the map outlines: the picked half, or the whole table. */
+const markedPick = computed(() => seatHere.value?.key ?? place.value.tableId);
+/** The card's parts: a picked half's alone, or the whole table's. */
+const shownParts = computed(() => {
+  const parts = card.value?.halves ?? [];
+  const half = seatHere.value?.half;
+  return half && half !== 'whole' ? parts.filter((part) => part.side === half) : parts;
+});
+
+const clamp = (value: number, low: number, high: number) =>
+  Math.min(Math.max(value, low), Math.max(low, high));
+
+/** Hold the bubble on its table (or half) as the map pans and zooms: above it and to its right by
+ *  default; to its left near the map's right edge; under it near the top; always inside the map,
+ *  the tail sliding along the bubble's edge to stay on the table. */
+function placeBubble() {
+  const box = mapBox.value;
+  const id = place.value.tableId;
+  const table = box && id ? box.querySelector(`[data-table-id="${CSS.escape(id)}"]`) : null;
+  if (!box || !table) {
+    bubble.value = null;
+    return;
+  }
+  const key = seatHere.value?.key;
+  const target = (key && table.querySelector(`[data-seat-key="${CSS.escape(key)}"]`)) || table;
+  const area = box.getBoundingClientRect();
+  const at = target.getBoundingClientRect();
+  const width = bubbleEl.value?.offsetWidth ?? 288;
+  const height = bubbleEl.value?.offsetHeight ?? 150;
+  const x = at.left + at.width / 2 - area.left;
+  const above = at.top - area.top;
+  const below = at.bottom - area.top;
+  const roomUp = above - GAP - TAIL;
+  const roomDown = area.height - below - GAP - TAIL;
+  const vert = roomUp >= height || roomUp >= roomDown ? 'up' : 'down';
+  const right = x - 28;
+  const left = right + width > area.width - GAP ? x - width + 28 : right;
+  const boxLeft = clamp(left, GAP, area.width - width - GAP);
+  const boxTop = clamp(
+    vert === 'up' ? above - TAIL - height : below + TAIL,
+    GAP,
+    area.height - height - GAP,
+  );
+  const shown =
+    at.right > area.left && at.left < area.right && at.bottom > area.top && at.top < area.bottom;
+  bubble.value = {
+    left: boxLeft,
+    top: boxTop,
+    tailX: clamp(x - boxLeft, 20, width - 20),
+    vert,
+    shown,
+  };
+}
+
+function follow() {
+  placeBubble();
+  frame = requestAnimationFrame(follow);
+}
+
+watch(
+  () => place.value.tableId,
+  (id) => {
+    cancelAnimationFrame(frame);
+    if (id) frame = requestAnimationFrame(follow);
+    else bubble.value = null;
+  },
+  { immediate: true },
+);
+
+function closeBubble() {
+  goTo({ ...place.value, tableId: null });
+}
+
+function onKey(event: KeyboardEvent) {
+  if (event.key === 'Escape' && place.value.tableId) closeBubble();
+}
+window.addEventListener('keydown', onKey);
+onUnmounted(() => {
+  cancelAnimationFrame(frame);
+  window.removeEventListener('keydown', onKey);
+});
+
 /** A vendor of the list: their location opened, their table picked, and the map in view. */
 function openVendor(vendor: ListedVendor) {
+  pickedSeat.value = vendor.key;
   goTo({ ...place.value, locationId: vendor.locationId, tableId: vendor.tableId });
   mapBox.value?.scrollIntoView({ block: 'nearest' });
 }
@@ -240,20 +385,36 @@ function openVendor(vendor: ListedVendor) {
           </p>
         </div>
 
-        <nav class="public-map__days" aria-label="Market day" data-testid="public-map-days">
-          <button
-            v-for="date in map.dates"
-            :key="date"
-            type="button"
-            class="public-map__day"
-            :aria-pressed="date === place.date"
-            :data-date="date"
-            data-testid="public-map-day"
-            @click="chooseDay(date)"
-          >
-            {{ dayInWords(date) }}
-          </button>
-        </nav>
+        <div class="public-map__pickers">
+          <label class="public-map__picker">
+            <span class="visually-hidden">Market day</span>
+            <select
+              class="field field--select public-map__select"
+              name="public-map-day"
+              :value="place.date"
+              data-testid="public-map-day-select"
+              @change="chooseDay(($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="date in map.dates" :key="date" :value="date">
+                {{ dayInWords(date) }}
+              </option>
+            </select>
+          </label>
+          <label v-if="locations.length > 1" class="public-map__picker">
+            <span class="visually-hidden">Location</span>
+            <select
+              class="field field--select public-map__select"
+              name="public-map-location"
+              :value="place.locationId"
+              data-testid="public-map-location-select"
+              @change="chooseLocation(($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="location in locations" :key="location.id" :value="location.id">
+                {{ location.name }}
+              </option>
+            </select>
+          </label>
+        </div>
       </header>
 
       <div class="public-map__body">
@@ -263,80 +424,122 @@ function openVendor(vendor: ListedVendor) {
             :tableTypes="map.tableTypes"
             :locationId="place.locationId"
             :seats="seats"
-            :picked="place.tableId"
+            :picked="markedPick"
             :legend="LEGEND"
             @update:locationId="chooseLocation"
             @pick="pick"
           />
+
+          <div
+            v-if="card && bubble"
+            ref="bubbleEl"
+            class="public-map__bubble"
+            :class="`public-map__bubble--${bubble.vert}`"
+            :style="{
+              left: `${bubble.left}px`,
+              top: `${bubble.top}px`,
+              '--tail-x': `${bubble.tailX}px`,
+              visibility: bubble.shown ? 'visible' : 'hidden',
+            }"
+            role="dialog"
+            :aria-label="`Table ${card.code}`"
+            aria-live="polite"
+            data-testid="public-map-card"
+            @pointerdown.stop
+            @wheel.stop
+          >
+            <button
+              type="button"
+              class="public-map__bubble-close"
+              aria-label="Close"
+              data-testid="public-map-card-close"
+              @click="closeBubble"
+            >
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <path
+                  d="M3 3 L13 13 M13 3 L3 13"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </button>
+            <p class="public-map__bubble-eyebrow">
+              <span class="public-map__code" :style="codeStyle(place.tableId)">{{
+                card.code
+              }}</span>
+              <span>{{ hallName }}</span>
+            </p>
+
+            <div
+              v-for="part in shownParts"
+              :key="part.side"
+              class="public-map__part"
+              :data-testid="
+                part.side === 'whole' ? 'public-map-card-whole' : 'public-map-card-half'
+              "
+            >
+              <h3 v-if="part.side !== 'whole'" class="public-map__half">
+                {{ HALF_NAMES[part.side] }}
+              </h3>
+              <p v-if="!part.seat" class="public-map__note">
+                {{ part.side === 'whole' ? freeTableOn(day) : freeHalfOn(day) }}
+              </p>
+              <p v-else-if="!part.seat.name" class="public-map__note">
+                {{ DETAILS_NOT_LISTED }}
+              </p>
+              <template v-else>
+                <p class="public-map__name" data-testid="public-map-card-name">
+                  {{ part.seat.name }}
+                </p>
+                <dl
+                  v-if="websiteLink(part.seat.website) || instagramLink(part.seat.instagram)"
+                  class="public-map__links"
+                >
+                  <template v-if="websiteLink(part.seat.website)">
+                    <dt>Website</dt>
+                    <dd>
+                      <a
+                        :href="websiteLink(part.seat.website)!.href"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="public-map__link"
+                        data-testid="public-map-card-website"
+                        >{{ websiteLink(part.seat.website)!.text }}</a
+                      >
+                    </dd>
+                  </template>
+                  <template v-if="instagramLink(part.seat.instagram)">
+                    <dt>Instagram</dt>
+                    <dd>
+                      <a
+                        :href="instagramLink(part.seat.instagram)!.href"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="public-map__link"
+                        data-testid="public-map-card-instagram"
+                        >{{ instagramLink(part.seat.instagram)!.text }}</a
+                      >
+                    </dd>
+                  </template>
+                </dl>
+              </template>
+            </div>
+          </div>
+
+          <ul class="public-map__legend" aria-label="Legend" data-testid="public-map-legend">
+            <li v-for="item in sectionKey" :key="item.name">
+              <span class="public-map__swatch" :style="item.style" aria-hidden="true"></span>
+              Section {{ item.name }}
+            </li>
+            <li v-if="hasFree">
+              <span class="public-map__swatch public-map__swatch--free" aria-hidden="true"></span>
+              Free table
+            </li>
+          </ul>
         </div>
 
         <aside class="public-map__side" aria-label="Vendors">
-          <section
-            class="public-map__card"
-            :class="{ 'public-map__card--picked': card }"
-            aria-live="polite"
-            data-testid="public-map-card"
-          >
-            <p v-if="!card" class="public-map__hint">{{ PICK_A_TABLE }}</p>
-            <template v-else>
-              <h2 class="public-map__card-title">Table {{ card.code }}</h2>
-              <div
-                v-for="part in card.halves"
-                :key="part.side"
-                class="public-map__part"
-                :data-testid="
-                  part.side === 'whole' ? 'public-map-card-whole' : 'public-map-card-half'
-                "
-              >
-                <h3 v-if="part.side !== 'whole'" class="public-map__half">
-                  {{ HALF_NAMES[part.side] }}
-                </h3>
-                <p v-if="!part.seat" class="public-map__note">
-                  {{ part.side === 'whole' ? freeTableOn(day) : freeHalfOn(day) }}
-                </p>
-                <p v-else-if="!part.seat.name" class="public-map__note">
-                  {{ DETAILS_NOT_LISTED }}
-                </p>
-                <template v-else>
-                  <p class="public-map__name" data-testid="public-map-card-name">
-                    {{ part.seat.name }}
-                  </p>
-                  <dl
-                    v-if="websiteLink(part.seat.website) || instagramLink(part.seat.instagram)"
-                    class="public-map__links"
-                  >
-                    <template v-if="websiteLink(part.seat.website)">
-                      <dt>Website</dt>
-                      <dd>
-                        <a
-                          :href="websiteLink(part.seat.website)!.href"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="public-map__link"
-                          data-testid="public-map-card-website"
-                          >{{ websiteLink(part.seat.website)!.text }}</a
-                        >
-                      </dd>
-                    </template>
-                    <template v-if="instagramLink(part.seat.instagram)">
-                      <dt>Instagram</dt>
-                      <dd>
-                        <a
-                          :href="instagramLink(part.seat.instagram)!.href"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="public-map__link"
-                          data-testid="public-map-card-instagram"
-                          >{{ instagramLink(part.seat.instagram)!.text }}</a
-                        >
-                      </dd>
-                    </template>
-                  </dl>
-                </template>
-              </div>
-            </template>
-          </section>
-
           <ScrollBox class="public-map__scroll" fieldsLeaveTheStop testid="public-map-scroll">
             <ListFrame
               :items="listed"
@@ -358,7 +561,12 @@ function openVendor(vendor: ListedVendor) {
                   data-testid="public-map-vendor"
                   @click="openVendor(item)"
                 >
-                  <span class="public-map__code" aria-hidden="true">{{ item.code }}</span>
+                  <span
+                    class="public-map__code"
+                    :style="codeStyle(item.tableId)"
+                    aria-hidden="true"
+                    >{{ item.code }}</span
+                  >
                   <span class="public-map__vendor-words">
                     <span class="public-map__vendor-name">{{ item.name }}</span>
                     <span class="public-map__vendor-seat"
@@ -586,8 +794,8 @@ function openVendor(vendor: ListedVendor) {
 }
 
 /* ── Prototype (release walk F6) ── */
-/* The look of a makers' market poster: paper, heavy black type, mustard and teal, flat outlined
-   shapes with a solid offset shadow rather than a soft one. */
+/* Cute and elegant: cream paper, Merge One's soft capitals for the name, fine charcoal lines, round
+   pastel pills, a mustard sparkle; a picked table speaks in a bubble from the map itself. */
 .public-map {
   /* The window's height under the app bar, not the shell's `flex: 1`, which grows with the list. */
   flex: none;
@@ -595,10 +803,11 @@ function openVendor(vendor: ListedVendor) {
   height: calc(100dvh - var(--banner-h));
   padding-block: var(--space-4) var(--space-6);
   overflow: hidden;
-  /* Paper to the window's edges, though the column keeps the workspace's width. */
-  background: var(--mm-beige);
-  box-shadow: 0 0 0 100vmax var(--mm-beige);
+  background: var(--layout-floor);
+  box-shadow: 0 0 0 100vmax var(--layout-floor);
   clip-path: inset(0 -100vmax);
+  --pm-line: rgba(39, 35, 35, 0.16);
+  --pm-soft-shadow: 0 1px 2px rgba(39, 35, 35, 0.06), 0 8px 24px rgba(39, 35, 35, 0.08);
 }
 
 .public-map__head {
@@ -610,6 +819,7 @@ function openVendor(vendor: ListedVendor) {
 }
 
 .public-map__words {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -617,89 +827,81 @@ function openVendor(vendor: ListedVendor) {
 }
 
 .public-map__head .public-map__title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 1.875rem;
-  font-weight: 850;
-  line-height: 1;
-  letter-spacing: -0.01em;
-  text-transform: uppercase;
+  font-family: 'Merge One', sans-serif;
+  font-size: var(--text-xl);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
 }
 
+/* The squiggle, thin and teal, under the name's start. */
 .public-map__squiggle {
-  width: 7.5rem;
-  height: 0.625rem;
-  color: var(--mm-yellow);
+  width: 4.5rem;
+  height: 0.5rem;
+  color: var(--layout-section-4-edge);
+}
+
+.public-map__squiggle path {
+  stroke-width: 1.75;
 }
 
 .public-map__head .public-map__subtitle {
   margin: 0;
   font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--mm-black);
+  color: var(--mm-text-muted-on-beige);
 }
 
-/* The days and the halls: outlined pills in bold capitals; the chosen day mustard, the chosen hall
-   teal. */
-.public-map__days,
-.public-map__map :deep(.filter-toggles) {
-  display: inline-flex;
-  flex-wrap: nowrap;
+.public-map__head .public-map__subtitle::before {
+  content: '✦ ';
+  color: var(--mm-yellow);
+}
+
+/* The day and the hall: two soft pill selects side by side at the header's end; the map's own
+   hall tabs give way to them. */
+.public-map__pickers {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
-.public-map__day,
-.public-map__map :deep(.filter-toggles__toggle) {
-  min-height: 34px;
-  height: 34px;
-  padding: 0 var(--space-4);
-  border: 2px solid var(--mm-black);
+.public-map__select {
+  width: auto;
+  min-width: 9rem;
+  height: 38px;
+  padding-inline-start: var(--space-4);
+  border: 1px solid var(--pm-line);
   border-radius: var(--radius-pill);
-  background: white;
-  color: var(--mm-black);
-  font: inherit;
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  cursor: pointer;
-  box-shadow: none;
+  background-color: white;
+  box-shadow: var(--pm-soft-shadow);
+  font-size: var(--text-sm);
 }
 
-.public-map__day:hover,
-.public-map__map :deep(.filter-toggles__toggle:hover) {
-  background: var(--mm-beige);
+.public-map__select:hover {
+  border-color: var(--layout-section-1-edge);
 }
 
-.public-map__day[aria-pressed='true'] {
-  background: var(--mm-yellow);
-  box-shadow: 2px 2px 0 var(--mm-black);
+.public-map__map :deep(.day-map__locations) {
+  display: none;
 }
 
-.public-map__map :deep(.filter-toggles__toggle[aria-pressed='true']) {
-  background: var(--mm-green);
-  color: white;
-  box-shadow: 2px 2px 0 var(--mm-black);
-}
-
-/* The viewer: one outlined sheet, map and panel, with a solid shadow. */
+/* The viewer: one soft white sheet, map and panel. */
 .public-map__body {
   flex: 1 1 auto;
   min-height: 0;
   gap: 0;
   align-items: stretch;
   overflow: hidden;
-  border: 2px solid var(--mm-black);
-  border-radius: 14px;
+  border: 1px solid var(--pm-line);
+  border-radius: 22px;
   background: white;
-  box-shadow: 5px 5px 0 var(--mm-black);
+  box-shadow: var(--pm-soft-shadow);
 }
 
 @media (width >= 1000px) {
   .public-map__body {
-    grid-template-columns: minmax(0, 1fr) 22rem;
+    grid-template-columns: minmax(0, 1fr) 21rem;
   }
 }
 
@@ -708,7 +910,7 @@ function openVendor(vendor: ListedVendor) {
   top: auto;
   height: 100%;
   min-height: 0;
-  background: var(--layout-floor);
+  background: #fbfaf7;
 }
 
 .public-map__map :deep(.day-map),
@@ -729,10 +931,9 @@ function openVendor(vendor: ListedVendor) {
   max-height: none;
   border: none;
   border-radius: 0;
+  background: transparent;
 }
 
-/* The hall tabs float on the map's top left, the legend on its bottom left, the zoom on its
-   bottom right, each outlined as the sheet is. */
 .public-map__map :deep(.day-map__locations) {
   grid-area: map;
   align-self: start;
@@ -741,23 +942,49 @@ function openVendor(vendor: ListedVendor) {
   top: var(--space-3);
   left: var(--space-3);
   z-index: 1;
+  box-shadow: var(--pm-soft-shadow);
 }
 
+/* The map's own legend gives way to the page's: the sections in their colours. */
 .public-map__map :deep(.day-map__legend) {
-  grid-area: map;
-  align-self: end;
-  justify-self: start;
-  flex-wrap: nowrap;
+  display: none;
+}
+
+.public-map__legend {
   position: absolute;
   bottom: var(--space-3);
   left: var(--space-3);
   z-index: 1;
-  padding: var(--space-1) var(--space-3);
-  border: 2px solid var(--mm-black);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  max-width: calc(100% - 10rem);
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--pm-line);
   border-radius: var(--radius-pill);
   background: white;
+  box-shadow: var(--pm-soft-shadow);
+  list-style: none;
   font-size: var(--text-xs);
-  font-weight: 600;
+}
+
+.public-map__legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.public-map__swatch {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid;
+  border-radius: 4px;
+}
+
+.public-map__swatch--free {
+  border: 1.5px dashed var(--layout-no-section-edge);
+  background: var(--layout-floor);
 }
 
 .public-map__map :deep(.day-map__zoom) {
@@ -766,50 +993,158 @@ function openVendor(vendor: ListedVendor) {
   right: var(--space-3);
   bottom: var(--space-3);
   z-index: 1;
-  padding: 0;
-  background: transparent;
-  box-shadow: none;
+  padding: 4px;
+  border: 1px solid var(--pm-line);
+  border-radius: var(--radius-pill);
+  background: white;
+  box-shadow: var(--pm-soft-shadow);
 }
 
 .public-map__map :deep(.day-map__zoom-button) {
-  border: 2px solid var(--mm-black);
+  border: none;
   border-radius: var(--radius-pill);
-  background: white;
-  font-weight: 700;
+  background: transparent;
 }
 
-/* The panel: the picked table over the vendors, which alone scroll. */
+.public-map__map :deep(.day-map__zoom-button:hover) {
+  background: var(--layout-floor);
+}
+
+/* The speech bubble: anchored on the picked table, up and right of it by default; the tail points
+   at the table, at the bubble's corner nearest it. */
+.public-map__bubble {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(18rem, calc(100% - 2 * var(--space-3)));
+  padding: var(--space-4);
+  border: 1px solid var(--pm-line);
+  border-radius: 18px;
+  background: white;
+  box-shadow: var(--pm-soft-shadow);
+  overflow-wrap: anywhere;
+  animation: public-map-pop 160ms ease-out;
+}
+
+.public-map__bubble::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--tail-x) - 7px);
+  width: 14px;
+  height: 14px;
+  background: white;
+  border: 1px solid var(--pm-line);
+  border-top-color: transparent;
+  border-left-color: transparent;
+}
+
+.public-map__bubble--up::after {
+  bottom: -8px;
+  transform: rotate(45deg);
+}
+
+.public-map__bubble--down::after {
+  top: -8px;
+  transform: rotate(-135deg);
+}
+
+@keyframes public-map-pop {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-map__bubble {
+    animation: none;
+  }
+}
+
+.public-map__bubble-close {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--mm-text-muted);
+  cursor: pointer;
+}
+
+.public-map__bubble-close:hover {
+  background: var(--layout-floor);
+  color: var(--mm-black);
+}
+
+.public-map__bubble-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding-inline-end: var(--space-6);
+  font-size: var(--text-xs);
+  color: var(--mm-text-muted);
+}
+
+.public-map__bubble .public-map__name {
+  font-family: 'Merge One', sans-serif;
+  font-size: var(--text-lg);
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.public-map__bubble .public-map__half {
+  margin-block-start: var(--space-1);
+}
+
+.public-map__bubble .public-map__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* The links as soft pills, their labels for a screen reader alone: the address and the handle
+   say which is which. */
+.public-map__bubble .public-map__links dt {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.public-map__bubble .public-map__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--pm-line);
+  border-radius: var(--radius-pill);
+  color: var(--mm-black);
+  font-size: var(--text-xs);
+  text-decoration: none;
+}
+
+.public-map__bubble .public-map__link:hover {
+  border-color: var(--layout-section-4-edge);
+  background: var(--layout-section-4-fill);
+}
+
+/* The panel: the vendors, which alone scroll. */
 .public-map__side {
   display: flex;
   flex-direction: column;
   gap: 0;
   min-height: 0;
-  border-inline-start: 2px solid var(--mm-black);
-}
-
-.public-map__card {
-  flex: none;
-  padding: var(--space-4);
-  border: none;
-  border-block-end: 2px solid var(--mm-black);
-  border-radius: 0;
-  background: white;
-}
-
-.public-map__card--picked {
-  background: var(--layout-section-1-fill);
-}
-
-.public-map__card-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: var(--text-lg);
-  font-weight: 850;
-  letter-spacing: 0.01em;
-  text-transform: uppercase;
-}
-
-.public-map__card--picked .public-map__links dt {
-  color: var(--mm-black);
+  border-inline-start: 1px solid var(--pm-line);
 }
 
 .public-map__scroll {
@@ -821,41 +1156,38 @@ function openVendor(vendor: ListedVendor) {
   padding: 0 var(--space-4) var(--space-4);
 }
 
-/* The find field stays at the panel's top while the vendors scroll under it. */
 .public-map__side :deep(.list-frame__tools) {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding-block: var(--space-3) var(--space-2);
+  padding-block: var(--space-4) var(--space-2);
   background: white;
 }
 
 .public-map__side :deep(.list-frame__tools .field-label) {
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: 'Merge One', sans-serif;
+  font-size: var(--text-md);
   color: var(--mm-black);
 }
 
 .public-map__side :deep(.list-frame__tools .field) {
-  border: 2px solid var(--mm-black);
+  border: 1px solid var(--pm-line);
   border-radius: var(--radius-pill);
+  background: var(--layout-floor);
   padding-inline: var(--space-4);
 }
 
 .public-map__side :deep(.list-frame__rows > li + li) {
-  border-block-start: 1px dashed var(--mm-border);
+  border-block-start: 1px solid var(--layout-floor);
 }
 
-/* A vendor: their table's code, then their name over their hall. */
 .public-map__vendor {
   flex-direction: row;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-1);
+  padding: var(--space-2) var(--space-2);
   border: none;
-  border-radius: 0;
+  border-radius: 12px;
 }
 
 .public-map__vendor:hover {
@@ -865,13 +1197,12 @@ function openVendor(vendor: ListedVendor) {
 .public-map__vendor:hover .public-map__vendor-name {
   text-decoration: underline;
   text-decoration-color: var(--mm-yellow);
-  text-decoration-thickness: 3px;
+  text-decoration-thickness: 2px;
   text-underline-offset: 3px;
 }
 
-.public-map__vendor[aria-current='true'] .public-map__code {
-  background: var(--mm-yellow);
-  box-shadow: 2px 2px 0 var(--mm-black);
+.public-map__vendor[aria-current='true'] {
+  box-shadow: inset 0 0 0 1.5px var(--mm-yellow);
 }
 
 .public-map__vendor-words {
@@ -881,55 +1212,39 @@ function openVendor(vendor: ListedVendor) {
   min-width: 0;
 }
 
+/* A table's code: a pill in its section's colours, as the map draws the table. */
 .public-map__code {
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 3rem;
-  height: 1.75rem;
+  min-width: 2.75rem;
+  height: 1.5rem;
   padding-inline: var(--space-2);
-  border: 2px solid var(--mm-black);
+  border: 1.5px solid var(--pm-line);
   border-radius: var(--radius-pill);
-  background: white;
+  background: var(--layout-floor);
   color: var(--mm-black);
   font-size: var(--text-xs);
-  font-weight: 800;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-/* A phone: the map over the panel, half the viewer each, within the window. */
+/* A phone: the map over the vendors, within the window; the map the larger part. */
 @media (width < 1000px) {
   .public-map__body {
-    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
   }
 
   .public-map__side {
     border-inline-start: none;
-    border-block-start: 2px solid var(--mm-black);
+    border-block-start: 1px solid var(--pm-line);
   }
 
-  .public-map__card {
-    gap: var(--space-1);
-    padding: var(--space-3) var(--space-4);
-  }
-
-  /* The links side by side on one line, their labels for a screen reader alone: the handle and the
-     address say which is which. */
-  .public-map__links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0 var(--space-4);
-  }
-
-  .public-map__links dt {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
+  .public-map__legend {
+    max-width: calc(100% - 9rem);
+    border-radius: 14px;
   }
 }
 
@@ -937,14 +1252,6 @@ function openVendor(vendor: ListedVendor) {
   .public-map {
     padding-inline: var(--space-3);
     padding-block-start: var(--space-3);
-  }
-
-  .public-map__head .public-map__title {
-    font-size: 1.375rem;
-  }
-
-  .public-map__day {
-    padding-inline: var(--space-3);
   }
 }
 </style>
