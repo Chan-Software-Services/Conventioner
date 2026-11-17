@@ -29,7 +29,9 @@ from api.applicants import (
     list_market_applications,
     review_application,
 )
-from conftest import FakeApplicationsCollection, FakeMarketsCollection, let_in, reviewing
+from conftest import (
+    FakeApplicationsCollection, FakeMarketsCollection, let_in, reviewing, seen_as_read,
+)
 
 import api.applications as ApplicationsApi
 import api.market_actions as Actions
@@ -256,7 +258,7 @@ def test_review_application_updates_status(monkeypatch):
 
     result, status = review_application(
         "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=REVIEWER,
-        reviewing=reviewing("market-1", REVIEWER.email),
+        reviewing=reviewing("market-1", REVIEWER.email), seen=seen_as_read("app-1"),
     )
 
     assert status == 200
@@ -281,7 +283,7 @@ def test_review_application_rejects_invalid_status(monkeypatch):
 
     result, status = review_application(
         "market-1", "app-1", ApplicationStatus.OPEN, by=REVIEWER,
-        reviewing=reviewing("market-1", REVIEWER.email),
+        reviewing=reviewing("market-1", REVIEWER.email), seen=seen_as_read("app-1"),
     )
     assert status == 400
     assert "invalid" in result["error"].lower()
@@ -293,7 +295,7 @@ def test_review_application_404_on_missing_app(monkeypatch):
 
     result, status = review_application(
         "market-1", "nonexistent", ApplicationStatus.REVIEWER_APPROVED, by=REVIEWER,
-        reviewing=reviewing("market-1", REVIEWER.email),
+        reviewing=reviewing("market-1", REVIEWER.email), seen=seen_as_read("nonexistent"),
     )
     assert status == 404
 
@@ -315,7 +317,7 @@ def test_review_application_rejects_app_from_different_market(monkeypatch):
 
     result, status = review_application(
         "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=REVIEWER,
-        reviewing=reviewing("market-1", REVIEWER.email),
+        reviewing=reviewing("market-1", REVIEWER.email), seen=seen_as_read("app-1"),
     )
     assert status == 404
 

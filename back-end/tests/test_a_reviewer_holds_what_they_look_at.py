@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import api.applicants as ApplicantsApi  # noqa: E402
 import api.applications as ApplicationsApi  # noqa: E402
-from conftest import FakeApplicationsCollection, reviewing  # noqa: E402
+from conftest import FakeApplicationsCollection, reviewing, seen_as_read  # noqa: E402
 from datatypes import Application, ApplicationStatus, MarketPerson, VerdictGiver  # noqa: E402
 
 ALEX = MarketPerson(user_id="user-alex", email="alex@market.test")
@@ -110,7 +110,7 @@ class TestAClaim:
         _, status = ApplicantsApi.review_application(
             "market-1", "first", ApplicationStatus.REVIEWER_REJECTED,
             by=VerdictGiver(kind="person", user_id="user-sam", email="sam@market.test"),
-            reviewing=reviewing("market-1", "sam@market.test"))
+            reviewing=reviewing("market-1", "sam@market.test"), seen=seen_as_read("first"))
 
         assert status == 200
         assert stored["first"].get("held_by") is None

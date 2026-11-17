@@ -8,6 +8,7 @@ import {
 import { transitionMarket } from './helpers/seedPhaseMarket';
 import { marketSetupPath } from './helpers/marketScreens';
 import { hideDevToolsPanel } from './helpers/hideDevToolsPanel';
+import { putVerdict } from './helpers/putVerdict';
 
 /**
  * A Google Form market's vendor page opens with its results (T202 ticket 05, ADR 0022).
@@ -74,10 +75,9 @@ async function allocated(request: APIRequestContext, vendor: string) {
 
   const listed = await request.get(`${BACKEND_URL}/markets/${market.marketId}/applications`);
   const [application] = (await listed.json()).applications as { id: string }[];
-  const approved = await request.put(
-    `${BACKEND_URL}/markets/${market.marketId}/applications/${application.id}/review`,
-    { data: { status: 'reviewer_approved' } },
-  );
+  const approved = await putVerdict(request, BACKEND_URL, market.marketId, application.id, {
+    status: 'reviewer_approved',
+  });
   expect(approved.ok(), await approved.text()).toBeTruthy();
   await transitionMarket(request, BACKEND_URL, TEST_USER.email, market.marketId, 'assignment');
   const ran = await request.post(`${BACKEND_URL}/markets/${market.marketId}/assignment`);

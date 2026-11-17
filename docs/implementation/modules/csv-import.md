@@ -9,12 +9,12 @@ describes:
   - back-end/app.py#preview_application_import
   - back-end/app.py#import_applications
   - front-end/src/utils/csvFile.ts
+  - front-end/src/utils/importWizard.ts
   - front-end/src/components/ValueFixes.vue
   - front-end/src/components/csvImport/ImportRefusedRows.vue
   - front-end/src/views/CsvImportView.vue#mapsTo
   - front-end/src/views/CsvImportView.vue#holdsAMapping
-  - front-end/src/utils/importWizard.ts
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - wayfinding/readable-journey/05
   - wayfinding/v0-1-0/map
@@ -101,13 +101,14 @@ Every refusal is decided before anything is written: creating first and validati
 
 **One row per applicant.**
 A Google Form keeps every submission, so a vendor who applied twice is two rows; they are one application, judged on the latest row and dated by the first (`_latest_rows`), and the earlier rows are reported as repeats (bug 34).
-A re-import updates each applicant's main application by the market and the address, keeps every organizer's [update of an answer](../../business/rules/an-update-is-kept-beside-the-vendors-answer.md), which it never writes over, writes nothing for an unchanged applicant, returns an approved one to review only when their answers, normalised, changed something the solver reads, and leaves an application absent from the file exactly as it is ([ADR 0011](../../adr/0011-re-import-upserts-on-market-and-email.md)).
+A re-import updates each applicant's main application by the market and the address, keeps every organizer's [update of an answer](../../business/rules/an-update-is-kept-beside-the-vendors-answer.md), which it never writes over, writes nothing for an unchanged applicant, compared after normalising both sides (`_unchanged`), and leaves an application absent from the file exactly as it is ([ADR 0011](../../adr/0011-re-import-upserts-on-market-and-email.md)).
+What a changed row does to its verdict is the review state's, not the import's: [the transition table](../data/application-document.md#the-transition-table)'s answers-changed column, the same for an applicant's own save (decision 9.1).
 
-**A row's answers and its "back to review" are one update, held to what the row's read found** (`_write_row`, T270).
-`record_application_answers` passes `held`, the application as read, and `back_to_review` to `update_application_form_data`, which writes only while the status and the verdict's time are still those, so a request cut short after the answers cannot leave a vendor approved on answers nobody saw, and importing the file again finds nothing left to repair.
-A held write that matches nothing answers `ANSWERS_MOVED`: a verdict was given between the read and the write, so the row is read and decided again on what is stored then, and an approval that landed first goes back to review.
+**A row's answers and what they do to its verdict are one update, held to what the row's read found** (`_write_row`, T270).
+`record_application_answers` writes them through the review state's `answers_changed` with source `import`, which writes only while the status and the verdict's time are still those the row read, so a request cut short after the answers cannot leave a vendor approved on answers nobody saw, and importing the file again finds nothing left to repair ([changed answers](../data/application-document.md#changed-answers)).
+A held write that matches nothing answers `ANSWERS_MOVED`: a verdict was given between the read and the write, so the row is read and decided again on what is stored then, and a person's verdict that landed first goes back to review.
 After `ROW_TRIES`, three tries in all, the row is a row failure: "This application changed while the file was imported, so its row was left out. Import the file again to bring it in."
-A new row's application is written held to the document `find_or_create_application` returned, and `returnedToReview` counts the rows written with `back_to_review`.
+A new row's application is created by `arrive`, origin `imported` and marked for the deal by the import, and written held to the document it returned; `returnedToReview` counts the rows whose write sent a verdict back to open (`Recorded.returned`).
 
 **`submitted_at` is the form's own timestamp**, an ordinary mapping target, optional, and auto-detected from Google Forms' "Timestamp" heading; it is normalised to ISO 8601 at the boundary (`normalized_submitted_at`, [the application document](../data/application-document.md#the-fields-that-matter)).
 A row without one gets the import's moment, so the screen warns when the market orders by arrival and nothing maps it (`orders_by_submitted_at`, [priority and tie-breaks](../../business/rules/priority-and-tie-breaks.md)); the warning, not a refusal, because a market with no rule on arrival does not need the column.
@@ -163,8 +164,9 @@ A saved target the form lacks is skipped, which is how the start's left-out colu
 The start from a CSV writes the same format, so the first import of a later export opens with every column restored and every value matched ([the CSV proposal and start](csv-proposal-and-start.md)); do not give anything a mapping shape of its own.
 
 **After the writes, the [automatic rejection](../../business/rules/automatic-rejections.md) rules judge** what the import wrote and anything else undecided, and the result counts how many they rejected (`rejectedByRules`) and returned to undecided (`returnedByRules`), returning one only when the importer may overturn an automatic rejection (`may_overturn`, E38/F06/S01).
-The preview judges the file first, writing nothing: one helper, `_as_the_import_leaves_them`, gives each written row's application as the import would leave it, judged only where a rule may judge it (`is_judgeable`), its answers as stored with an organizer's update read in place, and a rule's rejection no rule meets any longer returned to review as `judge` returns it, unless the results are published or the person previewing may not overturn one (`preview_values`' `by`, which the preview route passes as the signed-in address).
-`_rule_rejections` reads it for the rows the import's judging will newly reject (E38/F03/S02), and `_kept_verdicts` for how many written rows update an application already decided (`is_decided`) that the import leaves at that verdict (`keptVerdicts`): never an approval it sends back to review, a row listed as newly rejected, or a rule's rejection it returns to review (T116 rereview 10).
+The preview judges the file first, writing nothing: one helper, `_as_the_import_leaves_them`, gives each written row's application as the import would leave it, by the same `move` its write makes (`_row_move`), judged only where a rule may judge it (`is_judgeable`), its answers as stored with an organizer's update read in place, and a rule's rejection no rule meets any longer returned to review as `judge` returns it, unless the results are published or the person previewing may not overturn one (`preview_values`' `by`, which the preview route passes as the signed-in address).
+`_rule_rejections` reads it for the rows the import's judging will newly reject (E38/F03/S02), and `_kept_verdicts` for how many written rows update an application already decided (`is_decided`) that the import leaves at that verdict (`keptVerdicts`): an added vendor's approval, or a rule's rejection the rules still meet for the same reason; never a person's verdict it sends back to review, a row listed as newly rejected, or a rule's rejection it returns to review (T116 rereview 10).
+`returningToReview` counts, by the same move, the person's approvals and rejections whose rows changed (`_sends_back`), so both counts are what the import then does.
 The view words the line from that count, the new rows and the rejected ones in `previewMergeLine` ([`importPreview.ts`](../../../front-end/src/utils/importPreview.ts)), so it never says every row awaits review ([the import](../../business/flows/import.md)).
 An organizer's own column mapped to "From your sheet" replaces each imported vendor's sheet note ([vendor notes](vendor-notes.md)).
 

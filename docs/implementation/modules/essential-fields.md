@@ -10,7 +10,7 @@ describes:
   - back-end/guards.py#FormHasFieldsGuard
   - front-end/src/utils/applicationForm.ts#applicationFormError
   - front-end/src/utils/applicationForm.ts#applicationFormRefusal
-verified: 2026-11-13
+verified: 2026-11-17
 sources:
   - wayfinding/readable-journey/02
   - wayfinding/v0-1-0/map
@@ -51,7 +51,7 @@ The import lists its targets in that order and the CSV proposal its unanswered q
 - **Asked** is `asked_essential_keys(options)`, the one statement of which questions an offering asks: the name, preferred name and request always; the dates, the number wanted, the table choice and the partner when the plan has dates; the tiers when it has tiers; a ranking only over two or more options (`asks_ranking`), since a list of one has one order.
   The applicant validator, the solver's input translation ([the assignment solver](assignment-solver.md)), the import and the automatic rejections all read it, so the solver can never reject answers the form has just accepted.
 - **Required** is `REQUIRED_ESSENTIAL_KEYS`, every essential question but the preferred name, the partner and the request, and only when asked ([an incomplete application refuses the run](../../business/rules/an-incomplete-application-refuses-the-run.md)); an import may leave the number of dates unanswered ([what an import may leave unasked](../../business/rules/what-an-import-may-leave-unasked.md)).
-- **Solver-relevant** is `SOLVER_RELEVANT_KEYS`: a re-import that changes one of those answers sends an approved vendor back to review, because the approval was given on the old answer; correcting a name, or reformatting an answer, does not.
+- **Solver-relevant** is `SOLVER_RELEVANT_KEYS`, the answers the solver reads; what any changed answer does to a verdict is the review state's, whichever answer it is ([the transition table](../data/application-document.md#the-transition-table)), and a reformatted answer is no change.
 - **Updated by an organizer** ([an update of a vendor's answer](../../business/rules/an-update-is-kept-beside-the-vendors-answer.md)) through `validated_essential_update`, which runs the form's own steps over the update and the answers it leaves, judges only the steps the update touches, and returns the stored answers each updated question writes (`UPDATABLE_ESSENTIAL_QUESTIONS`: the table-share words write the addresses read out of them too).
   A question whose stored answers meet `SOLVER_RELEVANT_KEYS` also asks the row "Update info the assignment or price reads", an Admin's by default; the solver and the other readers read the update through `effective_answers`.
   The dialog asks them with the applicant's own component ([`EssentialApplicationFields.vue`](../../../front-end/src/components/application/EssentialApplicationFields.vue), its `locked` questions read-only and its `after` slot under each), on the offering `marketEssentialOptions` in `essentialFields.ts` mirrors from `effective_essential_options_for_market`.
@@ -72,7 +72,7 @@ The applicant form asks the two as one grid, a row per market date with its tier
 `VendorIdentity.vue` shows the name it is handed on every screen that names a vendor; the review card alone shows both, labelled, since deciding about a person is not scanning a list.
 `applicantName` in `essentialFields.ts` is the same rule read from an application's answers, for a screen that holds the answers rather than the served names: the All view's rows and the import preview's.
 The Vendors page and its drawer read it too, so a refused placement read still names every vendor, the served name winning where the server has one (T123).
-The preferred name is asked of everyone, after the full name, and is never required, never solver-relevant (correcting a spelling reopens no review) and never switched off.
+The preferred name is asked of everyone, after the full name, and is never required, never solver-relevant and never switched off.
 What every screen does with the name is [a vendor is called by their chosen name](../../business/rules/a-vendor-is-called-by-their-chosen-name.md).
 
 ## The offering, and the freeze

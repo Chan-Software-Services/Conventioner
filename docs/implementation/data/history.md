@@ -15,7 +15,7 @@ describes:
   - back-end/api/organizations.py#get_default_permission_history
   - back-end/tests/test_the_history.py
   - back-end/tests/test_only_an_asking_writes_a_markets_history.py
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - wayfinding/readable-journey/08
   - E40/F01/S01
@@ -48,8 +48,8 @@ sources:
   - T315
   - T335
   - T318
-  - T352
   - T422
+  - T352
 ---
 
 # The market's history
@@ -83,7 +83,7 @@ Stored snake_case with the market foreign key `market_id` (an organization's own
 | `detail`    | structured, per kind: the date, table code and table choice placed, and the seat left; the date and table freed; the date and both seats swapped; how many placements a run wrote and how many pins it kept                                                                                                                                                                                                                   |
 
 `_record(market_id, actor, action, kind=, vendors=, subject=, detail=)` writes one, and `record_applicant` writes an applicant's own; the placement writes call `record_placed`, `record_freed`, `record_swapped` and `record_assignment_run`, which build the detail and its subject (`placement_subject`) and record it through the recorder they are given, the Assign asking of the write that called them, so none names a row of its own.
-**A change records under the row it asked** ([ADR 0037](../../adr/0037-a-change-records-under-the-row-it-asked.md)): `_record` is private, and two recorders write through it and bind its market, actor and action, so a change can be recorded only under a row it is entitled to (T105-9): the `Asked` a write's asking of its row returns (`Asked.record`, [the market's actions](../modules/market-actions.md#the-interface)), and, for a record no request asked, `unasked(market_id, actor, row, because=)`, whose `UnaskedRecorder` keeps why nothing asked it; each takes `kind`, `vendors`, `subject`, `detail` and `at` as `_record` does.
+**A change records under the row it asked** ([ADR 0038](../../adr/0038-a-change-records-under-the-row-it-asked.md)): `_record` is private, and two recorders write through it and bind its market, actor and action, so a change can be recorded only under a row it is entitled to (T105-9): the `Asked` a write's asking of its row returns (`Asked.record`, [the market's actions](../modules/market-actions.md#the-interface)), and, for a record no request asked, `unasked(market_id, actor, row, because=)`, whose `UnaskedRecorder` keeps why nothing asked it; each takes `kind`, `vendors`, `subject`, `detail` and `at` as `_record` does.
 The markets module's writes record through them (T352): each through the `Asked` its own check returned, a move through the recorder its caller passes `take_move` (the transition endpoint's asking of Move a phase, or the unasked recorder the first import and the seeder open), and the layouts a plan drops through the one `release_removed_floorplans` is passed (the plan write's or the layout save's asking of Market Setup, or the start's unasked recorder).
 The placements, the payments, the door and attendance record through them too (T352): each write through the `Asked` its own check returned; payments' `assignment_written` through the Assign asking of the write of the assignment, and a free's deduction (`keep_freed_line`'s `deduct`, `deduct_freed_day`) through the free's own asking of Change the amount owed, so `remove_placement` records its two rows each through its own asking; `record_attendance` and `undo_attendance` through the door's asking of Check vendors in, or, for the vendor's own check-in and its undo, the unasked recorder `api/vendor_check_in.py` opens, with no actor.
 The verdicts, the import, the start and the review team record through them too (T352): a verdict or a selection's through the asking of the row it took, giving or changing (`_verdict_asking` in `api/applicants.py`, over the two askings `_reviewing` in `app.py` hands it: the giving one `_reviewer_on` made and the change row's it asks), an undo and a follow-up's owner through the giving row's asking `_reviewer_on` returned, publishing results and stopping applications through their routes' askings, the import's and the start's entries through the import row's asking `_importing_market_document` returned, and a change of reviewers and its deal through the Choose reviewers asking the markets module hands `review_team.choose`.
@@ -330,7 +330,7 @@ One block per action, in the order of [the actions table](../modules/market-acti
 - `submitted`, `edited`: an applicant's own application ([a vendor signs in before applying](../../business/rules/a-vendor-signs-in-before-applying.md))
   - Vendors: the applicant
   - Subject: `application_id`
-  - Detail: the answers that changed, with their values; `rejected_by_rules` and `returned_by_rules`: whether the rules rejected it, or returned it to undecided, as it landed
+  - Detail: the answers that changed, with their values; `rejected_by_rules` and `returned_by_rules`: whether the rules rejected it, or returned it to undecided, as it landed; `returned_to_review: true` on an edit whose changed answers sent a person's verdict back to open ([changed answers](application-document.md#changed-answers)), which the History reads as "<vendor> edited their application, which sent it back to Open" and leaves out of the entry's rows
 
 An undo reads "<actor> undid their verdict on <vendor>: Rejected back to Open", a selection's "undid their verdicts on N applications: …".
 A verdict on someone else's share reads "…, dealt to <address>", and nothing is added when its reviewer decided it or it was never dealt; an entry written before reviewers existed reads as it always did.

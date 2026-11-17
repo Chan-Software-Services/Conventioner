@@ -1322,10 +1322,11 @@ watch(marketId, () => {
         <h2 data-testid="import-preview-counts">{{ previewHeadline }}</h2>
         <p class="import-help" data-testid="import-preview-merge">{{ previewMergeLine }}</p>
 
-        <!-- An approval the import would invalidate. Said before it happens, because silently
-           un-approving someone the organizer already decided on is not acceptable either way. -->
+        <!-- A person's verdict the import would invalidate, an approval or a rejection (decision
+           9.1 of T277). Said before it happens, because silently undoing what the organizer
+           already decided is not acceptable either way. -->
         <p v-if="returningToReview" class="import-note warn" data-testid="import-returning-note">
-          {{ returningToReview }} approved application{{ returningToReview === 1 ? '' : 's' }} will
+          {{ returningToReview }} decided application{{ returningToReview === 1 ? '' : 's' }} will
           return to review because
           {{ returningToReview === 1 ? 'its answers have' : 'their answers have' }} changed<span
             v-if="returningEmails.length"

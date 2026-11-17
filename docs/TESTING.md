@@ -20,6 +20,7 @@ sources:
   - T317
   - T381
   - T375
+  - T349
 ---
 
 # Testing Conventioner
@@ -29,6 +30,19 @@ The testing nodes of the [knowledge graph](implementation/testing/README.md) hol
 The sharp edges are in the testing nodes: [E2E patterns](implementation/testing/e2e-patterns.md), [E2E seeds](implementation/testing/e2e-seeds.md), [the market journey spec](implementation/testing/the-market-journey-spec.md), [the layout's E2E](implementation/testing/floorplan-e2e.md), [CI and the gate](implementation/testing/ci-and-the-gate.md), [the assignment behaviour suite](implementation/testing/assignment-behaviour-suite.md) and [the real-MongoDB suite](implementation/testing/real-mongo-suite.md).
 The stack is seeded by [`scripts/seed_fixture.sh`](../scripts/seed_fixture.sh), Playwright is configured in [`front-end/playwright.config.ts`](../front-end/playwright.config.ts), and [`scripts/nm-test.sh`](../scripts/nm-test.sh) runs every suite on a stack of its own; the no-mistakes gate runs only its real-data checks (`--real-data-only`).
 Before a merge, the suites run only in CI's required jobs: Playwright on the laptop was most of every gate run and the heaviest load the machine saw, and CI ran every suite again anyway ([CI and the gate](implementation/testing/ci-and-the-gate.md#the-no-mistakes-gate)).
+
+## What a builder runs
+
+Before it delivers, a builder runs only the tests its change reaches:
+
+- **Back end**: each test file the change reaches (those you wrote or changed, and those of the modules you changed), alone, with `cd back-end && python -m pytest <files> -q`, and the real-MongoDB tests among them through `scripts/real-mongo-test.sh tests/real_mongo/<file> -q`, since a plain pytest run skips them.
+- **Front end**: each Vitest file the change reaches, alone, with `cd front-end && npm run test:unit -- <files>`, and `npm run type-check`.
+- **E2E**: on the worktree's stack (`scripts/th-compose.sh up -d` then `./scripts/seed_fixture.sh`, a team worker's with `team-stack up` then `team-stack seed`), `python3 scripts/affected-specs.py --run` from the worktree root.
+- **The knowledge graph**: `python3 scripts/knowledge_graph.py check` when you changed any Markdown.
+
+It never runs a whole suite, which CI runs on every pull request's head and every push to `dev` and `main` ([CI and the gate](implementation/testing/ci-and-the-gate.md)).
+That is Daniel's rule (2026-11-15): a whole suite run on the machine every worktree shares repeats what CI runs anyway, beside every other task's work.
+The E2E specs are chosen by `affected-specs.py`, since the whole suite takes about an hour and a half locally, while CI's [test map](implementation/testing/the-test-map.md#choosing-a-builders-specs) says which specs a change reaches, and the script runs them by score up to 30 of CI's minutes, a spec the change edits whatever the cap, and leaves the rest to CI's full run.
 
 ## Quick Start: Seed Fixture
 
@@ -72,7 +86,7 @@ pip install -r requirements.txt -r requirements-dev.txt
 python -m pytest tests/ -v
 ```
 
-Install **both** files. `requirements-dev.txt` is only `pytest`, uv (for the lock check) and what they need; it does not pull in the runtime
+Install **both** files. `requirements-dev.txt` is only `pytest`, coverage.py (for [the test map](implementation/testing/the-test-map.md)), uv (for the lock check) and what they need; it does not pull in the runtime
 dependencies, and the suite imports the application. `scripts/nm-test.sh` installs both, which is
 why it passes where a hand-run `pip install -r requirements-dev.txt` does not.
 The suite also uploads a real PDF floorplan, with an empty `PATH`, so it proves the Python requirements alone draw a PDF, as they must on production's Vercel function, which installs no system package.

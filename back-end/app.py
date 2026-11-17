@@ -1937,8 +1937,10 @@ def _named_status(name: Any) -> Optional[ApplicationStatus]:
 def review_application(market_id: str, application_id: str) -> Response:
     """Record a review verdict, or a follow-up, on an application, and its giver (E34/F01/S01).
 
-    Body: { "status": "reviewer_approved", "seen": { "status": "open", "verdictAt": null },
-            "ownerEmail": "..." }  - ``seen`` and ``ownerEmail`` optional.
+    Body: { "status": "reviewer_approved",
+            "seen": { "status": "open", "verdictAt": null, "updatedAt": "..." },
+            "ownerEmail": "..." }  - ``ownerEmail`` optional. ``seen`` is what the reviewer saw when
+    they opened it, which the verdict is held on: without it, 400 (``SEEN_REQUIRED``).
     """
     reviewer, refused = _reviewer_on(market_id)
     if refused:
@@ -1972,7 +1974,8 @@ def review_selection(market_id: str) -> Response:
 
     Body: { "status": "reviewer_approved",
             "applications": [{ "id": "...", "seen": { "status": "open", "verdictAt": null } }] }
-    Answers { "written": [ids], "skipped": [{ "id", "email", "reason" }] }.
+    Answers { "written": [ids], "skipped": [{ "id", "email", "reason" }] }; an entry naming no
+    ``seen`` is skipped with ``SEEN_REQUIRED``.
     """
     reviewer, refused = _reviewer_on(market_id)
     if refused:
@@ -2031,7 +2034,8 @@ def undo_review(market_id: str, application_id: str) -> Response:
         return refused
     asked = _undo_asked(application_id, json_object(required=True))
     result, status_code = ApplicantsApi.undo_verdict(
-        market_id, asked, by=reviewer.person.as_giver(),
+        reviewer.context.market, reviewer.context.organization, asked,
+        by=reviewer.person.as_giver(),
         owner_offered=_owner_offered(reviewer.context, reviewer.person), giving=reviewer.giving)
     return jsonify(result), status_code
 
@@ -2056,7 +2060,8 @@ def undo_selection(market_id: str) -> Response:
         item = item if isinstance(item, dict) else {}
         asked.append(_undo_asked(str(item.get('id') or ''), item))
     result, status_code = ApplicantsApi.undo_selection(
-        market_id, asked, by=reviewer.person.as_giver(),
+        reviewer.context.market, reviewer.context.organization, asked,
+        by=reviewer.person.as_giver(),
         owner_offered=_owner_offered(reviewer.context, reviewer.person), giving=reviewer.giving)
     return jsonify(result), status_code
 
@@ -2123,7 +2128,8 @@ def reassign_follow_up(market_id: str, application_id: str) -> Response:
         reviewer.context.market, reviewer.context.organization, reviewer.person,
         data.get('ownerEmail'))
     result, status_code = ApplicantsApi.reassign_follow_up(
-        market_id, application_id, owner, reviewer.giving)
+        reviewer.context.market, reviewer.context.organization, application_id, owner,
+        reviewer.giving)
     return jsonify(result), status_code
 
 
@@ -2322,11 +2328,11 @@ def import_applications(market_id: str) -> Response:
         # recorded through the asking that let it in.
         importing.asked.record(
             kind=History.IMPORTED, detail=lambda: CsvImport.import_counts(result))
-        # Then each row it left open is dealt to the next reviewer in turn (E38/F07/S03), after the
-        # import's rules have judged and a first import has taken the market into Review.
+        # Then each row it marked open is dealt to the next reviewer in turn (E38/F07/S03), after
+        # the import's rules have judged and a first import has taken the market into Review.
         context = MarketsApi.load_market_context(market_id)
         if context is not None and context.market is not None:
-            ReviewTeam.deal_arrivals(context.market, importing.asked)
+            ReviewTeam.deal_arrivals(context.market)
         # After the import's last write: a deletion that began after the import read the market
         # has swept, or will sweep, every row written, or this takes them back as a 404.
         MarketDeletion.kept_only_while_live(MarketsApi.markets_collection, market_id)

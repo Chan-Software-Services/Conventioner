@@ -306,7 +306,7 @@
 
 /* Each tone is an opaque ground - its tint already laid over white, so it reads the same on beige
    as on white - with its own ink. Each pair is asserted in `contrast.test.ts`, and the rendered
-   pairing is measured by `e2e/contrast-sweep.spec.ts`. */
+   pairing is measured by the screen sweeps' contrast check, `e2e/helpers/screenSweeps.ts`. */
 .chip--neutral {
   background: var(--mm-beige);
   color: var(--mm-black);

@@ -25,7 +25,7 @@ describes:
   - back-end/api/markets.py#_market_change
   - back-end/tests/test_a_change_records_under_the_row_it_asked.py
   - back-end/tests/test_only_an_asking_writes_a_markets_history.py
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - E39
   - E39/F01/S01
@@ -56,8 +56,8 @@ sources:
   - T274
   - T283
   - T315
-  - T352
   - T422
+  - T352
 ---
 
 # The market's actions
@@ -81,7 +81,7 @@ Both ask the read row the same way, through `read_refused` in [`back-end/api/mar
 
 **A write asks its row with `ask`, and records its change through the answer** (T105-9): `ask(row, user_email, market, organization)` is an `Asked` holding the row, the market's id, the person as the actor, and `refused`, which is what `refusal` answers, since `ask` asks through it.
 `Asked.record(*, kind=None, vendors=(), subject=None, detail)` writes the change's entry into [the market's history](../data/history.md) under that row and as that person, through the history's private writer `History._record`, so it never raises for the entry and builds the subject and the detail under its guard.
-**A change records under the row it asked** ([ADR 0037](../../adr/0037-a-change-records-under-the-row-it-asked.md)): `Asked.record`, and for the few records no request asks the history's `unasked` door, are the only ways a change a row asks is recorded on a market, beside an applicant's own `record_applicant`, so the history and the table cannot disagree on what a change was let through on.
+**A change records under the row it asked** ([ADR 0038](../../adr/0038-a-change-records-under-the-row-it-asked.md)): `Asked.record`, and for the few records no request asks the history's `unasked` door, are the only ways a change a row asks is recorded on a market, beside an applicant's own `record_applicant`, so the history and the table cannot disagree on what a change was let through on.
 Called on an `Asked` that was refused it raises `RecordedARefusal`, an `AssertionError`: a refused write raises before it writes anything, so a record of one is a programming error, answered to no client.
 `_market_change(market_id, user, row)` in [`back-end/api/markets.py`](../../../back-end/api/markets.py) loads a market for a write and asks its row, and returns a `MarketChange` of the market, the organization it read, and the `Asked`; it is not found, refused as an unreadable market, refused in the row's words, then refused as archived whoever may, in that order.
 Every write of the markets module loads through it and records through its `Asked`, but for the role writes and the transfer of ownership, which load the market themselves since an archived market still takes them, and ask their rows with `ask`; a move (`take_move`), which records through the recorder its caller passes; a market's deletion, which asks its row with `refusal` and records in the organization's history; and a market's creation, which records in the organization's history (T352).
@@ -116,7 +116,7 @@ Each check keeps the order it had, so every route answers each person as it did 
 
 ## Each route's row
 
-**A verdict on an application already approved or rejected asks two rows**: the giving row at `_reviewer_on`, and the change row of each application it writes (E38/F06/S01); the write itself carries `unless_decided`, so a verdict landing between the reviewer's look and the write is the 409 it always was ([what each role may do](../../business/rules/what-each-role-may-do.md#where-it-is-kept)).
+**A verdict on an application already approved or rejected asks two rows**: the giving row at `_reviewer_on`, and the change row of each application it writes (E38/F06/S01); what the reviewer saw (`seen`) says which: one they saw undecided gives, held on that status, so a verdict landing between their look and the write is the 409 it always was ([what each role may do](../../business/rules/what-each-role-may-do.md#where-it-is-kept)).
 
 **Taking a role asks both roles rows first**: `DELETE /markets/:id/roles/<user_id>` (`remove_market_role`) asks the Editor-and-Viewer row and the Admin row before it looks at the person, so someone both refuse reads the Editor-and-Viewer row's refusal whoever the person is; then it answers someone holding no role as gone, refuses taking the only owner, and asks the row of the role taken.
 Each role write records through the asking of the row that gives the role (`_record_role`), among the rows its check asked: the Admin row when an Admin or Owner role is either side of the change.

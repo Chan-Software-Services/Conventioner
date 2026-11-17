@@ -8,6 +8,7 @@ import { approvedVendorApplication, insertApplications } from './helpers/seedApp
 import { seedPhaseMarket, transitionMarket } from './helpers/seedPhaseMarket';
 import { uniqueMarketName } from './helpers/uniqueName';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { putVerdict } from './helpers/putVerdict';
 
 /**
  * Every change on a market, read in Manage market's History section (E40/F01/S03).
@@ -82,10 +83,9 @@ async function seedAHistory(request: APIRequestContext) {
   const applicationId = application.id;
   await transitionMarket(request, BACKEND_URL, TEST_USER.email, seed.marketId, 'applications');
   await ok(
-    await request.put(
-      `${BACKEND_URL}/markets/${seed.marketId}/applications/${applicationId}/review`,
-      { data: { status: 'reviewer_approved' } },
-    ),
+    await putVerdict(request, BACKEND_URL, seed.marketId, applicationId, {
+      status: 'reviewer_approved',
+    }),
   );
   await transitionMarket(request, BACKEND_URL, TEST_USER.email, seed.marketId, 'assignment');
   await ok(

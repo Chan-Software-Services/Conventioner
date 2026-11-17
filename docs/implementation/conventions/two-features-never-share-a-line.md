@@ -102,7 +102,7 @@ A new input to the words, something a reader needs from the screen besides the e
 ### A flow's "Covered by"
 
 [The flows](../../business/flows/README.md)' "Covered by": under each step, `Covered by:` ends its line and a list follows, after one blank line as Prettier writes it or none, one test a line, sorted by the test's file name as its code span writes it, ignoring case, a link whose text is a code span counting as one; each keeps its note after the name.
-A group of specs that walk one step together is one item named by their shared pattern, as the four sweeps are `*-sweep.spec.ts`, sorted by that text.
+A group of specs that walk one step together is one item named by their shared pattern, as the screen sweeps' groups are `screen-sweeps-*.spec.ts`, sorted by that text.
 A new spec is one line in its sorted place in the list of each step it walks, and nowhere else: the [coverage map](../testing/walking-the-flows.md#coverage-map) keeps only each flow's gaps.
 [`check_covered_by`](../../../scripts/knowledge_graph.py) in `knowledge_graph.py check` refuses, in a flow, a `Covered by:` with anything after its colon, more than one blank line before its list, an item that does not open with a file name, an item out of order, and a line run on to the last item, with "a Covered by is a list, one test a line, sorted by file name".
 
@@ -120,3 +120,8 @@ A new kind's example is one line in its block's place.
 
 [The design language](../../design-system.md#what-keeps-this-true), "What keeps this true": the states the sweeps walk are a list, one state a line, each beside the state it is most like, and the stress seed's description is a sentence after it.
 A new state is one line beside the state it is most like, not at the list's end, where every lane would add its own.
+
+### CI and the gate
+
+[CI and the gate](../testing/ci-and-the-gate.md#ci), the jobs of the Test workflow: one block per job, its id a bold lead line, then a list of what it runs, one step or fact a line.
+A new job is a new block beside the job it is most like; a new step of a job is one item beside the step it is most like.

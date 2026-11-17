@@ -1299,6 +1299,27 @@ class FakeApplicationsCollection:
         return self.count + len(self._matching(query))
 
 
+def seen_as_stored(app_id: str) -> dict:
+    """What a reviewer opening this application now saw, as a client sends it with a verdict
+    (``seen``, which a verdict is held on): its status, its verdict's time and its answers' time,
+    read from whichever applications collection the test bound. ``{}`` for one not stored, so a
+    verdict on it is refused for what it is, never for naming nothing it saw."""
+    import api.applications as ApplicationsApi
+
+    doc = ApplicationsApi.applications_collection.find_one({"id": app_id}) or {}
+    if not doc:
+        return {}
+    return {"status": doc.get("status"), "verdictAt": doc.get("verdict_at"),
+            "updatedAt": doc.get("updated_at")}
+
+
+def seen_as_read(app_id: str) -> dict:
+    """``seen_as_stored`` as ``ApplicantsApi.review_application`` takes it, read off the wire."""
+    import api.applicants as ApplicantsApi
+
+    return ApplicantsApi.seen_from(seen_as_stored(app_id))
+
+
 @pytest.fixture(autouse=True)
 def applications(monkeypatch):
     """The D9 lock counts applications; keep that off the real database everywhere."""

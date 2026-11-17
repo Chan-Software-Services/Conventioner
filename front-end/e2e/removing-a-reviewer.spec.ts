@@ -9,6 +9,7 @@ import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { ApplicationsAllPage } from './pages/ApplicationsAllPage';
 import { ReviewersPanel } from './pages/ReviewersPanel';
 import { VendorsPage } from './pages/VendorsPage';
+import { putVerdict } from './helpers/putVerdict';
 
 /**
  * Removing a reviewer deals their share and their follow-ups again (E38/F07/S02).
@@ -47,8 +48,9 @@ test('a removed reviewer’s follow-up is handed to the reviewer it is dealt to'
   const chosen = await request.put(`${api}/reviewers`, { data: { reviewers: [ANA, BEN, CAT] } });
   expect(chosen.ok(), await chosen.text()).toBeTruthy();
   // Dealt to Cat, the third in turn, and marked for a follow-up Ana owns.
-  const marked = await request.put(`${api}/applications/${followUp}/review`, {
-    data: { status: 'needs_follow_up', ownerEmail: ANA },
+  const marked = await putVerdict(request, BACKEND_URL, marketId, followUp, {
+    status: 'needs_follow_up',
+    ownerEmail: ANA,
   });
   expect(marked.ok(), await marked.text()).toBeTruthy();
 

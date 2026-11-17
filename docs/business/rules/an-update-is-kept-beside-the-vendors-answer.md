@@ -7,7 +7,7 @@ describes:
   - front-end/src/components/UpdateInfoTheirs.vue
   - front-end/src/components/AnswerUpdateNote.vue
   - front-end/src/utils/answerUpdates.ts
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - E41/F01/S01
   - E41/F01/S02
@@ -54,6 +54,7 @@ The names and the request are [essential questions](../concepts/essential-questi
   Only what the update touches is judged, so an answer the vendor gave that the form would now refuse never blocks an update of another; the full name and the preferred name are judged apart, so updating one never demands the other.
 - The [assignment solver](../../implementation/modules/assignment-solver.md) reads the answers as updated, so the next run places the vendor by them, and an assignment already made reads as [out of date](an-assignment-knows-when-it-is-out-of-date.md); the placement warnings, the empty-tier check, the [table-share notice](table-share-pairing.md) and the vendor's request beside the notes read them too.
 - The price groups read them as updated as well, so a vendor's price follows an update of the answers it is set by.
+- **An update keeps every verdict**, a person's, an added vendor's and a rule's, since the organizer made both: a vendor's own edit or a re-import that changes their answers sends a person's verdict back to review, an organizer's update never does (Daniel's decision 9.1 of T277; [the transition table](../../implementation/data/application-document.md#the-transition-table)'s answers-changed columns).
 - While the review is open, the [automatic rejections](automatic-rejections.md) judge the answers as updated, as they judge a vendor's own save: an update past a rule returns the application to undecided, but only for someone who may overturn an automatic rejection (an Admin or the owner by default, E38/F06/S01; for anyone else the rejection stands), and one that meets a rule rejects it.
   From assignment on, the rules have settled with the verdicts ([verdicts settle on entering assignment](verdicts-settle-on-entering-assignment.md)), so an update stands and the verdict stays.
 - The drawer and the review card say "Updated by <address>, <when>; they wrote <their answer>" under an updated answer ([`AnswerUpdateNote.vue`](../../../front-end/src/components/AnswerUpdateNote.vue)), and under it, once what they wrote changed since, "Their answer changed since your update.", or "Their answer now matches your update." where what they wrote now is the update itself, the first sentence of Update info's own line.

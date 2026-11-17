@@ -335,6 +335,40 @@ describe('a chosen reviewer', () => {
     expect(wrapper.find('[data-testid="app-monitor-card"]').exists()).toBe(false);
     expect(text(wrapper, 'app-monitor-share-done')).toContain('Your share is done.');
   });
+
+  it('moves on to the one left in their share from a card handed up outside it', async () => {
+    // As a verdict they undid comes back up, dealt to Sam since (T277 ticket 02).
+    stored = [application('amy', 1, ME), application('ben', 2, SAM)];
+    serve();
+    api.post.mockImplementationOnce(async () => ({
+      data: { application: { ...stored[1] } },
+    }));
+    const wrapper = mount(ApplicationMonitor, {
+      props: reactive({ market: market(), visible: true }),
+    });
+    await flushPromises();
+    expect(shown(wrapper)).toBe('ben@vendor.test');
+    expect(text(wrapper, 'app-monitor-progress')).toBe('1 of 1 open');
+
+    const next = wrapper.get('[data-testid="app-monitor-next-button"]');
+    expect(next.attributes('disabled')).toBeUndefined();
+    await next.trigger('click');
+    await flushPromises();
+
+    expect(lastAsk()).toMatchObject({ after: 'ben', mineOnly: true });
+    expect(shown(wrapper)).toBe('amy@vendor.test');
+    expect(text(wrapper, 'app-monitor-progress')).toBe('1 of 1 in your share');
+  });
+
+  it('has nothing to move on to with the one card of their share up', async () => {
+    stored = [application('amy', 1, ME), application('ben', 2, SAM)];
+    const wrapper = await monitor();
+
+    expect(shown(wrapper)).toBe('amy@vendor.test');
+    expect(
+      wrapper.get('[data-testid="app-monitor-next-button"]').attributes('disabled'),
+    ).toBeDefined();
+  });
 });
 
 describe('anyone else', () => {

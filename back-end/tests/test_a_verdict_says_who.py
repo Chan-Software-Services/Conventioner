@@ -18,8 +18,9 @@ import api.applications as ApplicationsApi  # noqa: E402
 import api.market_actions as Actions  # noqa: E402
 import api.markets as MarketsApi  # noqa: E402
 import api.users as UsersApi  # noqa: E402
+import application_status as ReviewState
 from conftest import (  # noqa: E402
-    FakeApplicationsCollection, reviewing, sessions_load_through_get_user,
+    FakeApplicationsCollection, reviewing, seen_as_read, sessions_load_through_get_user,
 )
 from datatypes import ApplicationStatus, MarketPhase, VerdictGiver  # noqa: E402
 
@@ -66,7 +67,7 @@ class TestTheGiverIsStored:
     def test_a_verdict_stores_its_giver_and_time_and_serves_them(self, stored):
         result, status = ApplicantsApi.review_application(
             "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
-            reviewing=reviewing("market-1", ALEX.email))
+            reviewing=reviewing("market-1", ALEX.email), seen=seen_as_read("app-1"))
 
         assert status == 200
         assert stored[0]["verdict_by"] == {
@@ -79,10 +80,13 @@ class TestTheGiverIsStored:
     def test_a_status_that_is_no_verdict_clears_the_giver(self, stored):
         ApplicantsApi.review_application(
             "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
-            reviewing=reviewing("market-1", ALEX.email))
+            reviewing=reviewing("market-1", ALEX.email), seen=seen_as_read("app-1"))
 
         # Answers that changed send an approval back to review (the import, E32/F02/S02).
-        ApplicationsApi.update_application_status("app-1", ApplicationStatus.OPEN)
+        assert ReviewState.answers_changed(
+            dict(stored[0]), ReviewState.Source.IMPORT,
+            {"form_data": {"changed": True}, "updated_at": "2026-10-02T00:00:00Z"},
+            ReviewState.Arrival("alex@market.test", "import-applications"))
 
         assert "verdict_by" not in stored[0] and "verdict_at" not in stored[0]
 

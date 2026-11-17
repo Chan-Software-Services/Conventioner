@@ -24,7 +24,9 @@ from datetime import datetime
 from typing import Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple
 
 from client_errors import parse_failure_detail
-from application_write import record_application_answers, validate_application_answers
+from application_write import (
+    ANSWER_TRIES, ANSWERS_MOVED, record_application_answers, validate_application_answers,
+)
 import table_share as TableShare
 from market_write import write_market
 from market_documents import (
@@ -39,10 +41,12 @@ from market_documents import (
 )
 from datatypes import (
     Application,
+    ApplicationOrigin,
     ApplicationStatus,
     IntakeMode,
     Market,
     MarketPerson,
+    Organization,
     VendorAssignmentResult,
     VerdictGiver,
     MarketPhase,
@@ -59,6 +63,7 @@ from utils.application_token import (
 import api.applications as ApplicationsApi
 import api.attendance as AttendanceApi
 import api.market_actions as Actions
+import application_status as ReviewState
 import history as History
 import market_deletion as MarketDeletion
 import review_team as ReviewTeam
@@ -168,6 +173,9 @@ def _application_response_organizer(
         # Who recorded a vendor who never applied, and when (E36/F03/S01).
         "addedBy": app.added_by.as_wire() if app.added_by else None,
         "addedAt": app.added_at,
+        # How it came to the market, apart from its verdict: whether they applied is read here,
+        # never off ``addedBy``, since an added vendor imported since is an applicant (T277 P7).
+        "origin": ReviewState.origin_of(app.model_dump()).value,
     }
 
 
@@ -424,6 +432,11 @@ def _gone_under_the_save(
     return None
 
 
+#: The applicant's save met their application moved under it ``ANSWER_TRIES`` times running: a
+#: verdict, most likely, which they never read of, so the sentence names none.
+CHANGED_WHILE_SAVED = "Your application changed while it was saved. Save again."
+
+
 def save_applicant_application(
     market_slug: str, token_payload: Dict[str, Any], form_data: Dict[str, Any],
 ) -> Tuple[Dict[str, Any], int]:
@@ -432,7 +445,10 @@ def save_applicant_application(
     Validates the form data against the market's application form fields, and the essential
     answers against what the essential questions offer (``essential_fields``). Refuses
     submission unless the market takes applications (``takes_applications``).
-    The applicant owns their answers but never ``status``.
+    The applicant owns their answers but never ``status``, though changing them sends a person's
+    approval or rejection back to open (decision 9.1). The save holds the application as it read
+    it, so it never lands under a verdict given since: it reads it again and saves on what is
+    stored then, ``ANSWER_TRIES`` times, then answers 409 ``CHANGED_WHILE_SAVED``.
 
     The first successful save freezes the essential offering onto the market's stored form
     (``freeze_and_effective_essential_options``), atomically and before the answers are
@@ -485,16 +501,27 @@ def save_applicant_application(
         refusal = validate_application_answers(market_doc, form_data)
         if refusal:
             return {"error": refusal}, 422
-    app_doc = existing or ApplicationsApi.find_or_create_application(Application(
-        market_id=market_id,
-        applicant_email=email,
-        form_data={},
-        status=ApplicationStatus.OPEN,
-    )).model_dump()
+    # The applicant's own save is its arrival, marked for the deal as it is created, and the write
+    # a verdict it sends back to open is dealt by.
+    arrival = ReviewState.Arrival(email, History.APPLY)
+    app_doc = existing or ReviewState.arrive(
+        market_id, email, ApplicationOrigin.APPLIED, None, arrival).model_dump()
 
     # Validation, the offering freeze, the write and the status all live in one place, so an
     # imported application and a form-submitted one cannot drift apart.
-    error, app = record_application_answers(db["markets"], market_doc, app_doc, form_data)
+    for _try in range(ANSWER_TRIES):
+        error, app, returned = record_application_answers(
+            db["markets"], market_doc, app_doc, form_data,
+            source=ReviewState.Source.APPLICANT, arrival=arrival)
+        if error != ANSWERS_MOVED:
+            break
+        # A verdict landed since the read: saved again on the application as it is now.
+        app_doc = ApplicationsApi.find_application_by_id(app_doc.get("id", ""))
+        if app_doc is None:
+            return _gone_under_the_save(db["markets"], market_id) or (
+                {"error": CHANGED_WHILE_SAVED}, 409)
+    else:
+        return {"error": CHANGED_WHILE_SAVED}, 409
     if error:
         # Only reachable for a new application if the offering froze differently between the
         # check and the write; the application made for these answers must not outlive them.
@@ -510,16 +537,18 @@ def save_applicant_application(
     if whole is None:
         return _gone_under_the_save(db["markets"], market_id) or ({"error": "Market not found."}, 404)
     market = market_from_document(whole)
-    verdicts = RejectionRules.judge(RejectionRules.Rulebook(market), market_id, app.id)
+    verdicts = RejectionRules.judge(RejectionRules.Rulebook(market), market_id, app.id,
+                                    arrival=arrival)
     # After the rules, so the entry says what they did to it: no rule records an entry of its own.
     saved = app
     History.record_applicant(
         market_id, email, History.EDITED if existing else History.SUBMITTED, app.id,
-        lambda: _with_rules(History.changes(answered, saved.form_data or {}), verdicts))
+        lambda: _with_rules(History.changes(answered, saved.form_data or {}), verdicts,
+                            returned))
     # Then dealt to the next reviewer in turn, if reviewers are chosen and it is still open
-    # (E38/F07/S03): the applicant's own save is its arrival, so it is recorded as theirs, and it
-    # deals theirs alone.
-    ReviewTeam.deal_an_applicants_own(market, email, app.id)
+    # (E38/F07/S03), recorded as the applicant's own arrival; anything else waiting is recorded
+    # under the write that marked it, never theirs.
+    ReviewTeam.deal_arrivals(market)
     # After the save's last write: a deletion that began after the market was read above has
     # swept, or will sweep, everything written here, or this takes it back (``market_deletion``).
     gone = _gone_under_the_save(db["markets"], market_id)
@@ -597,6 +626,11 @@ _STATUS_WORD = {
 }
 
 
+#: Why a verdict naming nothing it saw is refused: the verdict is held on what the reviewer saw, so
+#: without it nothing says it still is (E34/F03/S01).
+SEEN_REQUIRED = "Say what the application was when you opened it."
+
+
 def seen_from(raw: Any) -> Optional[Dict[str, Any]]:
     """What a reviewer saw of an application, from the wire's ``{status, verdictAt, updatedAt}``,
     or None when they sent nothing (E34/F03/S01)."""
@@ -640,30 +674,36 @@ def review_application(
 
     The verdict is written but NOT revealed to the applicant until results are published.
 
-    ``seen`` is the application as the reviewer saw it - its status and its verdict's time - and the
-    verdict is written only if it still is (E34/F03/S01). Two reviewers at once used to mean the last
-    verdict silently won; now the second is refused with a 409 naming who changed it and to what,
-    and the application as it stands, so they decide again on what is really there.
+    ``seen`` is the application as the reviewer saw it - its status, its verdict's time and its
+    answers' time - and the verdict is written only if it still is (E34/F03/S01); one naming none is
+    refused (``SEEN_REQUIRED``). Two reviewers at once used to mean the last verdict silently won;
+    now the second is refused with a 409 naming who changed it and to what, and the application as
+    it stands, so they decide again on what is really there.
 
-    A write on an application already approved or rejected changes a verdict, the table's change
-    row (E38/F06/S01): ``reviewing.changing`` is that row's asking of this reviewer. While it
-    refuses them, an application they saw decided is refused in its words, a 403; one decided since
-    they saw it is the 409 above, never written over.
+    What they saw says which event it is: a verdict on an application awaiting one gives it, and a
+    write on one already approved or rejected changes a verdict, the table's change row
+    (E38/F06/S01): ``reviewing.changing`` is that row's asking of this reviewer. While it refuses
+    them, an application they saw decided is refused in its words, a 403, and one decided since they
+    saw it is the 409 above, never written over. A change the table refuses (an added vendor's
+    approval to anything but a rejection) is a 400 in the table's words.
     """
     change_refused = reviewing.changing.refused
-    if new_status not in ApplicationsApi.MARKED_STATUSES:
+    if new_status not in ReviewState.MARKED_STATUSES:
         return {"error": f"Invalid review status: {new_status.value}"}, 400
+    if seen is None:
+        return {"error": SEEN_REQUIRED}, 400
 
     app_doc = ApplicationsApi.find_application_by_id(application_id)
     if not app_doc or app_doc.get("market_id") != market_id:
         return {"error": "Application not found for this market."}, 404
-    if change_refused and ApplicationsApi.is_decided(seen or app_doc):
+    giving = not ReviewState.saw_decided(seen)
+    if not giving and change_refused:
         return {"error": change_refused}, 403
 
-    kept = ApplicationsApi.undo_to_of(app_doc)
-    written = ApplicationsApi.update_application_status(
-        application_id, new_status, by=by, owner=owner, if_unchanged_since=seen,
-        unless_decided=bool(change_refused), kept_for_undo=kept)
+    event = ReviewState.give_verdict if giving else ReviewState.change_verdict
+    written = event(app_doc, seen, new_status, by, owner)
+    if isinstance(written, ReviewState.Refused) and written.reason:
+        return {"error": written.reason}, 400
     if not written:
         now = ApplicationsApi.find_application_by_id(application_id)
         if now is None:
@@ -682,7 +722,7 @@ def review_application(
     )
     app = Application(**stored)
     return {"application": _application_response_organizer(app),
-            **(undo_window() if kept is not None else {})}, 200
+            **(undo_window() if giving else {})}, 200
 
 
 def _verdict_asking(reviewing: Reviewing, before: List[Dict[str, Any]]) -> Actions.Asked:
@@ -693,20 +733,22 @@ def _verdict_asking(reviewing: Reviewing, before: List[Dict[str, Any]]) -> Actio
     returned to open."""
     if reviewing.changing.refused:
         return reviewing.giving
-    if any(ApplicationsApi.is_decided(doc) for doc in before):
+    if any(ReviewState.is_decided(doc) for doc in before):
         return reviewing.changing
     return reviewing.giving
 
 
 def _with_rules(
-    answers: Optional[Dict[str, Any]], verdicts: RejectionRules.Judged,
+    answers: Optional[Dict[str, Any]], verdicts: RejectionRules.Judged, returned: bool,
 ) -> Optional[Dict[str, Any]]:
-    """An applicant's changed answers, and whether the rules rejected or returned the application
-    as they landed; answers saved unchanged record nothing."""
+    """An applicant's changed answers, whether the rules rejected or returned the application as
+    they landed, and ``returned_to_review`` when the change sent a verdict back to open (decision
+    9.1); answers saved unchanged record nothing."""
     if not answers:
         return None
     return {**answers, "rejected_by_rules": bool(verdicts.rejected),
-            "returned_by_rules": bool(verdicts.returned)}
+            "returned_by_rules": bool(verdicts.returned),
+            **({"returned_to_review": True} if returned else {})}
 
 
 def _dealt_to(doc: Dict[str, Any]) -> Dict[str, Any]:
@@ -735,15 +777,17 @@ def review_selection(
 ) -> Tuple[Dict[str, Any], int]:
     """One verdict for a ticked selection (E34/F04/S02). Organizer only.
 
-    Each is written as a single verdict is, only on what the reviewer saw (``seen``, F03/S01); one
-    another reviewer holds open is not written at all, nor one of another market. The answer says
-    which were written and, for each skipped, why - never an action on "everything matching". One
-    already at the status asked for is skipped too: a follow-up marked again would quietly change
-    hands. One already approved or rejected is skipped in the words of ``reviewing.changing`` while
-    it refuses: this reviewer gives verdicts but may not change one (E38/F06/S01).
+    Each is written as a single verdict is, only on what the reviewer saw (``seen``, F03/S01), and
+    one naming nothing it saw is skipped with ``SEEN_REQUIRED``; one another reviewer holds open is
+    not written at all, nor one of another market. The answer says which were written and, for
+    each skipped, why - never an action on "everything matching". One already at the status asked
+    for is skipped too: a follow-up marked again would quietly change hands. One already approved
+    or rejected is skipped in the words of ``reviewing.changing`` while it refuses: this reviewer
+    gives verdicts but may not change one (E38/F06/S01). One the table refuses is skipped with its
+    words.
     """
     change_refused = reviewing.changing.refused
-    if new_status not in ApplicationsApi.MARKED_STATUSES:
+    if new_status not in ReviewState.MARKED_STATUSES:
         return {"error": f"Invalid review status: {new_status.value}"}, 400
     me = {"user_id": by.user_id, "email": by.email}
     written: List[str] = []
@@ -753,6 +797,10 @@ def review_selection(
         doc = ApplicationsApi.find_application_by_id(app_id)
         if doc is None or doc.get("market_id") != market_id:
             skipped.append({"id": app_id, "email": None, "reason": "Not an application here."})
+            continue
+        if seen is None:
+            skipped.append({"id": app_id, "email": doc.get("applicant_email"),
+                            "reason": SEEN_REQUIRED})
             continue
         holder = ApplicationsApi.holder_of(doc)
         if holder is not None and holder != me:
@@ -764,17 +812,19 @@ def review_selection(
                             "reason": f"Already {_STATUS_WORD[new_status.value]}."})
             continue
         # Decided as they saw it, or by now: either way not theirs to change, so the row says why.
-        if change_refused and (ApplicationsApi.is_decided(seen or doc)
-                               or ApplicationsApi.is_decided(doc)):
+        if change_refused and (ReviewState.saw_decided(seen) or ReviewState.is_decided(doc)):
             skipped.append({"id": app_id, "email": doc.get("applicant_email"),
                             "reason": change_refused})
             continue
-        if ApplicationsApi.update_application_status(
-                app_id, new_status, by=by, if_unchanged_since=seen,
-                unless_decided=bool(change_refused),
-                kept_for_undo=ApplicationsApi.undo_to_of(doc)):
+        event = (ReviewState.change_verdict if ReviewState.saw_decided(seen)
+                 else ReviewState.give_verdict)
+        done = event(doc, seen, new_status, by)
+        if done:
             written.append(app_id)
             was[app_id] = doc
+        elif isinstance(done, ReviewState.Refused) and done.reason:
+            skipped.append({"id": app_id, "email": doc.get("applicant_email"),
+                            "reason": done.reason})
         else:
             now = ApplicationsApi.find_application_by_id(app_id) or doc
             skipped.append({"id": app_id, "email": doc.get("applicant_email"),
@@ -795,7 +845,7 @@ def review_selection(
             },
         )
     # Undone only as a whole, so offered only when every one it wrote kept what it was.
-    undoable = written and all(ApplicationsApi.undo_to_of(was[app_id]) for app_id in written)
+    undoable = written and all(ReviewState.is_undecided(was[app_id]) for app_id in written)
     return {"written": written, "skipped": skipped, **(undo_window() if undoable else {})}, 200
 
 
@@ -816,7 +866,7 @@ def undo_window() -> Dict[str, int]:
     """How long a verdict just written may be undone by its giver, for its answer: the client times
     its Undo from this, so the window is kept in one place (E38/F10/S01). Answered only for a
     verdict that kept what the application was, so the client offers Undo only where it may."""
-    return {"undoSeconds": int(ApplicationsApi.UNDO_WINDOW.total_seconds())}
+    return {"undoSeconds": int(ReviewState.UNDO_WINDOW.total_seconds())}
 
 
 #: What a reviewer asks to undo: the application, and how they saw it once their verdict was written.
@@ -847,34 +897,38 @@ def _undo_one(
     if (pinned["status"] != doc.get("status")
             or (pinned["verdict_at"] or None) != (doc.get("verdict_at") or None)):
         return doc, None, (_changed_since_seen(doc, seen), 409)
-    if not ApplicationsApi.undoable_by(doc, by.user_id):
+    if not ReviewState.undoable_by(doc, by.user_id):
         return doc, None, (UNDO_REFUSED, 403)
-    undo_to = doc["undo_to"]
-    owner = (undo_to.get("follow_up_owner") or {}).get("email")
+    owner = (doc["undo_to"].get("follow_up_owner") or {}).get("email")
     if owner and not owner_offered(owner):
         return doc, None, (UNDO_OWNER_REFUSED, 400)
-    if not ApplicationsApi.restore_before_verdict(app_id, undo_to, pinned):
+    done = ReviewState.undo(doc, pinned, by,
+                            ReviewState.Arrival(by.email, Actions.GIVE_VERDICTS.id))
+    if isinstance(done, ReviewState.Refused):
+        return doc, None, (UNDO_REFUSED, 403)
+    if not done:
         now = ApplicationsApi.find_application_by_id(app_id) or doc
         return now, None, (_changed_since_seen(now, seen), 409)
     return doc, ApplicationsApi.find_application_by_id(app_id), None
 
 
 def undo_verdict(
-    market_id: str, asked: UndoAsked, by: VerdictGiver, owner_offered: OwnerOffered,
-    giving: Actions.Asked,
+    market: Market, organization: Optional[Organization], asked: UndoAsked, by: VerdictGiver,
+    owner_offered: OwnerOffered, giving: Actions.Asked,
 ) -> Tuple[Dict[str, Any], int]:
     """Undo the verdict, or the follow-up, this reviewer gave an application (E38/F10/S01).
 
     Theirs alone, within ``UNDO_WINDOW``, while they may still give verdicts (the caller asks
     ``verdict_refusal``) - giving, taken back, so never the change row: it is recorded through
-    ``giving``, that row's asking. It returns the application
-    to what the verdict found it as, open, or needs follow-up marked and owned as it was, and
-    leaves whom it was dealt to as it is. Refused with ``UNDO_REFUSED`` (403) once it is not theirs
+    ``giving``, that row's asking. It returns the application to what the verdict found it as,
+    open, or needs follow-up marked and owned as it was, and then deals it: still dealt to whom it
+    was while they may review, else to the next reviewer in turn (E38/F07/S03). Refused with
+    ``UNDO_REFUSED`` (403) once it is not theirs
     to undo, with ``UNDO_OWNER_REFUSED`` (400) for a follow-up whose owner it may no longer hand
     one to, and with the stale-verdict sentence and the application as it stands (409) when someone
     wrote over it since.
     """
-    was, now, refused = _undo_one(market_id, asked, by, owner_offered)
+    was, now, refused = _undo_one(market.id, asked, by, owner_offered)
     if refused:
         reason, status = refused
         if status == 409 and was is not None:
@@ -887,12 +941,15 @@ def undo_verdict(
         detail=lambda: {"before": _verdict_state(was), "after": _verdict_state(now),
                         **_dealt_to(was)},
     )
+    # After its entry, so the history reads the undo before the deal it waited for.
+    if ReviewTeam.deal_waiting(market, organization):
+        now = ApplicationsApi.find_application_by_id(asked[0]) or now
     return {"application": _application_response_organizer(Application(**now))}, 200
 
 
 def undo_selection(
-    market_id: str, selection: List[UndoAsked], by: VerdictGiver, owner_offered: OwnerOffered,
-    giving: Actions.Asked,
+    market: Market, organization: Optional[Organization], selection: List[UndoAsked],
+    by: VerdictGiver, owner_offered: OwnerOffered, giving: Actions.Asked,
 ) -> Tuple[Dict[str, Any], int]:
     """Undo what a selection's verdict wrote (E38/F10/S01), each as ``undo_verdict`` undoes one,
     answering which were written and, for each skipped, why - as ``review_selection`` answers."""
@@ -901,7 +958,7 @@ def undo_selection(
     now: Dict[str, Dict[str, Any]] = {}
     skipped: List[Dict[str, Any]] = []
     for asked in selection:
-        before, after, refused = _undo_one(market_id, asked, by, owner_offered)
+        before, after, refused = _undo_one(market.id, asked, by, owner_offered)
         if refused:
             skipped.append({"id": asked[0], "email": (before or {}).get("applicant_email"),
                             "reason": refused[0]})
@@ -919,18 +976,23 @@ def undo_selection(
                 **_each_dealt_to(was[app_id] for app_id in written),
             },
         )
+        ReviewTeam.deal_waiting(market, organization)
     return {"written": written, "skipped": skipped}, 200
 
 
 def reassign_follow_up(
-    market_id: str, application_id: str, owner: MarketPerson, giving: Actions.Asked,
+    market: Market, organization: Optional[Organization], application_id: str,
+    owner: MarketPerson, giving: Actions.Asked,
 ) -> Tuple[Dict[str, Any], int]:
     """Hand a follow-up to someone else with a role on the market (E34/F02/S01), recorded through
-    ``giving``, the signed-in reviewer's Give verdicts and follow-ups asking."""
+    ``giving``, the signed-in reviewer's Give verdicts and follow-ups asking; then the deal keeps it
+    with its new owner while they hold any role on the market, and hands it on to the next reviewer
+    in turn otherwise (E38/F07/S03)."""
     app_doc = ApplicationsApi.find_application_by_id(application_id)
-    if not app_doc or app_doc.get("market_id") != market_id:
+    if not app_doc or app_doc.get("market_id") != market.id:
         return {"error": "Application not found for this market."}, 404
-    if not ApplicationsApi.reassign_follow_up_owner(application_id, owner):
+    if not ReviewState.hand_on_follow_up(
+            app_doc, owner, ReviewState.Arrival(giving.actor, Actions.GIVE_VERDICTS.id)):
         return {"error": "Only an application that needs a follow-up has an owner."}, 409
     giving.record(
         kind=History.FOLLOW_UP_OWNER,
@@ -940,6 +1002,7 @@ def reassign_follow_up(
             {"follow_up_owner": owner.email},
         ),
     )
+    ReviewTeam.deal_waiting(market, organization)
     app = Application(**ApplicationsApi.find_application_by_id(application_id))
     return {"application": _application_response_organizer(app)}, 200
 

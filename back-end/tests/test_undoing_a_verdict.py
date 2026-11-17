@@ -5,8 +5,9 @@ mistake could not put it right, since changing a verdict is an Admin's (E38/F06/
 whatever their role - an Editor, a chosen Viewer - takes their own verdict back within
 ``UNDO_WINDOW``, while they may still give verdicts and the review is open. The undo is giving,
 taken back: it asks the giving row, never the change row. It returns the application to what it was
-before the verdict, open or needs follow-up with its owner, still dealt to whom it was dealt, and
-only while nobody has written over the verdict since. After the window, or for someone else's
+before the verdict, open or needs follow-up with its owner, still dealt to whom it was dealt while
+they may review (``test_every_return_to_open_waits_for_the_deal.py`` deals it otherwise), and only
+while nobody has written over the verdict since. After the window, or for someone else's
 verdict, it is refused, and changing the verdict stays an Admin's.
 """
 from datetime import datetime, timedelta, timezone
@@ -17,7 +18,9 @@ from test_choosing_reviewers_deals_the_open_applications import (  # noqa: F401 
     ADMIN, CAT, EDITOR, MARKET, OWNER, VIEWER, _choose, _client, world,
 )
 
+from conftest import seen_as_stored
 import api.applications as ApplicationsApi
+import application_status as ReviewState
 import history as History
 from datatypes import ApplicationStatus, MarketPhase, VerdictGiver
 
@@ -37,7 +40,8 @@ def _seen(doc):
 
 
 def _give(who, app_id, status, owner=None):
-    body = {"status": status, **({"ownerEmail": owner} if owner else {})}
+    body = {"status": status, "seen": seen_as_stored(app_id),
+            **({"ownerEmail": owner} if owner else {})}
     response = _client(who).put(f"/markets/{MARKET}/applications/{app_id}/review", json=body)
     assert response.status_code == 200, response.get_json()
     return response.get_json()["application"]
@@ -51,6 +55,12 @@ def _undo(who, app_id, seen):
 def _undo_selection(who, items):
     return _client(who).post(f"/markets/{MARKET}/applications/verdicts/undo",
                              json={"applications": items})
+
+
+def _seen_read(doc):
+    """``seen`` as the owner takes it, from an application as stored."""
+    return {"status": doc["status"], "verdict_at": doc.get("verdict_at"),
+            "updated_at": doc.get("updated_at")}
 
 
 def _seen_of(application):
@@ -68,17 +78,19 @@ def _entries(world, kind):
 
 class TestTheWindow:
     def test_is_two_minutes(self):
-        assert ApplicationsApi.UNDO_WINDOW == timedelta(minutes=2)
+        assert ReviewState.UNDO_WINDOW == timedelta(minutes=2)
 
     def test_a_verdicts_answer_says_how_long_it_may_be_undone(self, world):
         response = _client(EDITOR).put(f"/markets/{MARKET}/applications/app-v1/review",
-                                       json={"status": "reviewer_rejected"})
+                                       json={"status": "reviewer_rejected",
+                                             "seen": seen_as_stored("app-v1")})
 
         assert response.get_json()["undoSeconds"] == 120
 
     def test_a_selections_answer_says_it_too(self, world):
         response = _client(EDITOR).post(f"/markets/{MARKET}/applications/verdicts", json={
-            "status": "reviewer_rejected", "applications": [{"id": "app-v1"}]})
+            "status": "reviewer_rejected",
+            "applications": [{"id": "app-v1", "seen": seen_as_stored("app-v1")}]})
 
         assert response.get_json()["undoSeconds"] == 120
 
@@ -288,9 +300,8 @@ class TestWhatItComesBackTo:
                                                            "email": ADMIN}
         giver = VerdictGiver(kind="person", user_id="user-editor", email=EDITOR)
 
-        written = ApplicationsApi.update_application_status(
-            "app-follow-up", ApplicationStatus.REVIEWER_APPROVED, by=giver,
-            kept_for_undo=ApplicationsApi.undo_to_of(read))
+        written = ReviewState.give_verdict(
+            read, _seen_read(read), ApplicationStatus.REVIEWER_APPROVED, giver)
 
         assert written is False
         assert _doc(world, "app-follow-up")["status"] == "needs_follow_up"
@@ -299,9 +310,10 @@ class TestWhatItComesBackTo:
         _give(EDITOR, "app-v1", "reviewer_rejected")
         assert _doc(world, "app-v1")["undo_to"]["status"] == "open"
 
-        ApplicationsApi.update_application_status(
-            "app-v1", ApplicationStatus.REVIEWER_REJECTED,
-            by=VerdictGiver(kind="rule", rule="x"), reason="r")
+        read = dict(_doc(world, "app-v1"))
+        ReviewState.change_verdict(
+            read, _seen_read(read), ApplicationStatus.REVIEWER_APPROVED,
+            VerdictGiver(kind="person", user_id="user-admin", email=ADMIN))
 
         assert "undo_to" not in _doc(world, "app-v1")
 
@@ -327,14 +339,16 @@ class TestWhatItComesBackTo:
         _give(EDITOR, "app-v1", "reviewer_rejected")
 
         response = _client(ADMIN).put(f"/markets/{MARKET}/applications/app-v1/review",
-                                      json={"status": "reviewer_approved"})
+                                      json={"status": "reviewer_approved",
+                                            "seen": seen_as_stored("app-v1")})
 
         assert "undoSeconds" not in response.get_json()
 
     def test_a_selection_that_changed_one_offers_no_undo(self, world):
         response = _client(ADMIN).post(f"/markets/{MARKET}/applications/verdicts", json={
             "status": "reviewer_rejected",
-            "applications": [{"id": "app-v1"}, {"id": "app-decided"}]})
+            "applications": [{"id": "app-v1", "seen": seen_as_stored("app-v1")},
+                             {"id": "app-decided", "seen": seen_as_stored("app-decided")}]})
 
         assert response.get_json()["written"] == ["app-v1", "app-decided"]
         assert "undoSeconds" not in response.get_json()
@@ -381,7 +395,8 @@ class TestTheHistory:
 def _decide(world, who, ids, status="reviewer_approved"):
     """A selection's verdict, and what each application it wrote looks like now."""
     response = _client(who).post(f"/markets/{MARKET}/applications/verdicts", json={
-        "status": status, "applications": [{"id": app_id} for app_id in ids]})
+        "status": status,
+        "applications": [{"id": app_id, "seen": seen_as_stored(app_id)} for app_id in ids]})
     assert response.status_code == 200, response.get_json()
     return {app_id: _seen(_doc(world, app_id)) for app_id in ids}
 

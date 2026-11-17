@@ -384,26 +384,6 @@ def normalized_names(values: Any) -> List[str]:
     return _unique_names(values)
 
 
-def solver_relevant_change(before: Dict[str, Any], after: Dict[str, Any]) -> bool:
-    """Did an answer the solver reads actually change?
-
-    Both sides are compared AFTER normalisation, so a re-export that merely reformats a value -
-    reordering a multi-select, changing whitespace - is not a change. Treating it as one would
-    un-approve a market's worth of vendors for nothing.
-    """
-    for key in SOLVER_RELEVANT_KEYS:
-        if _compared(key, before) != _compared(key, after):
-            return True
-    return False
-
-
-def _compared(key: str, answers: Dict[str, Any]) -> Any:
-    # An application written before the further share addresses were kept holds none of them.
-    if key == TABLE_SHARE_ALSO_KEY:
-        return list(answers.get(key) or [])
-    return answers.get(key)
-
-
 def _unique_names(values: Any) -> List[str]:
     """Trimmed, non-blank, order-preserving unique strings."""
     seen: List[str] = []

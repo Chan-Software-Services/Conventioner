@@ -6,11 +6,11 @@ describes:
   - back-end/api/markets.py#rejection_rules_lock_reason
   - back-end/api/markets.py#save_rejection_rules
   - back-end/api/applications.py#judgeable_applications
-  - back-end/api/applications.py#is_judgeable
   - front-end/src/components/application/AutomaticRejections.vue
   - front-end/src/components/application/ChoiceConditions.vue
   - back-end/api/markets.py#may_overturn
-verified: 2026-11-16
+  - back-end/application_status.py#is_judgeable
+verified: 2026-11-17
 sources:
   - wayfinding/november-2026-dry-run/map
   - wayfinding/rejection-visibility/map
@@ -48,6 +48,7 @@ A question of 12 answers or fewer draws them as checkboxes; past 12 they are a f
 
 **A rule judges only what no person has decided**: the undecided applications, and those a rule rejected.
 A person's verdict, an overturned rejection included, is never read, and neither is a follow-up.
+An applicant's edit or a re-import that changes the answers under a person's verdict sends it back to undecided first, and the rules then judge it like any other; a rule's rejection stays one through changed answers, and the rules judge it again ([the transition table](../../implementation/data/application-document.md#the-transition-table)'s answers-changed columns, decision 9.1 of T277).
 An application a rule meets is stored rejected, with the rule as its giver and the answer as its reason ("Answered “Half a table, shared” to “Table choice”", "Did not tick “I understand that no-shows”").
 One a rule rejected that no rule meets any longer, because the rule or the answers changed, returns to undecided; once results are published it stands instead, since its applicant has read the outcome.
 **Returning it overturns the rejection, so a person's write returns it only when the change row is theirs** (`may_overturn`, E38/F06/S01): someone the change row refuses (an Editor, by default) who narrows or removes a rule, takes a question off the form, updates a vendor's answer or imports leaves what the rules already rejected standing, with its rule and reason, and an Admin or the owner can overturn each one in the review.
@@ -57,7 +58,7 @@ An organizer may [update a vendor's answer](an-update-is-kept-beside-the-vendors
 
 **A question the application holds no answer to meets no rule**: a checkbox added since it was written, or a column an import left out, is not an unticked box.
 
-**The rules judge when something they read changes**: when the list is saved (every judgeable application of the market), when an applicant saves online (that application), when an organizer updates a vendor's info while the review is open (that application), and at the end of an import (the market, after any approval the import sent back to review), whose result says how many the rules rejected.
+**The rules judge when something they read changes**: when the list is saved (every judgeable application of the market), when an applicant saves online (that application), when an organizer updates a vendor's info while the review is open (that application), and at the end of an import (the market, after any verdict the import sent back to review), whose result says how many the rules rejected.
 Before an import writes anything, its preview judges the file's rows the same way and lists every row they will newly reject, with its reason, so an organizer checks the rules before they reject anyone ([importing a Google Form's responses](../flows/import.md#h2a-first-import-everything-maps)).
 Every write is conditioned on the application being as it was read, so a reviewer's verdict that lands in between is never overwritten ([ADR 0014](../../adr/0014-reviewers-claim-and-a-verdict-is-a-conditional-write.md)).
 
@@ -80,7 +81,7 @@ The form tab's line and the import's done line name who may overturn from the ma
 ## Where it is kept
 
 - [`back-end/rejection_rules.py`](../../../back-end/rejection_rules.py) is the one statement of what a rule may say and how it judges: `Rulebook` builds the questions a rule may name and the rules as they stand, `prepared` refuses a write in the organizer's words (a 400 [client error](../../implementation/conventions/an-exception-never-reaches-a-client.md)), `rejecting` finds the first rule an application meets and words its reason, and `judge` applies them, returning a rule's rejection to undecided only when its caller says the writer may overturn one (`overturns`).
-- `is_judgeable` in [`back-end/api/applications.py`](../../../back-end/api/applications.py) is which applications a rule may judge, and `judgeable_applications` lists a market's; the giver (`{kind: rule, rule}`) and `verdict_reason` are stored on [the application document](../../implementation/data/application-document.md#statuses), and the reason is served to the organizer as `verdictReason` and never in an applicant's response.
+- `is_judgeable` in [`back-end/application_status.py`](../../../back-end/application_status.py) is which applications a rule may judge, and `judgeable_applications` in [`back-end/api/applications.py`](../../../back-end/api/applications.py) lists a market's; the giver (`{kind: rule, rule}`) and `verdict_reason` are stored on [the application document](../../implementation/data/application-document.md#the-review-state), and the reason is served to the organizer as `verdictReason` and never in an applicant's response.
 - `save_rejection_rules` and `rejection_rules_lock_reason` in [`back-end/api/markets.py`](../../../back-end/api/markets.py); the lock takes the market and asks why the review is closed (`_why_the_review_is_closed`), as the verdicts' `review_closed_reason` does, and the market read serves `rejectionQuestions`, `rejectionRules` and `rejectionRulesLockReason`, so the step offers exactly what the write takes.
 - The same write is the one writer of `noAutomaticRejections`: `{rules: [], noAutomaticRejections: true}` decides that none rejects, under the same lock; a flag that is not a JSON boolean is refused, and so is the flag beside a rule, in the organizer's words; it answers `{rejectionRules, noAutomaticRejections}` as stored, and the market read serves the flag, false when absent (`back-end/tests/test_the_review_setup_decisions.py`).
 - The import judges at its end, and its preview judges without writing ([the CSV import](../../implementation/modules/csv-import.md)).

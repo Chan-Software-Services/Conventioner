@@ -2,8 +2,10 @@
 (E38/F07, ADR 0020).
 
 ``test_every_order_of_a_deal.py`` lands the other deal before every step the first one takes, and
-checks after each that the shares are even, the turn is where the next arrival expects it, and
-nothing is left waiting or held. Its cases are imported here, not copied, and run over a world
+checks after each that the shares are even, the turn is where the next arrival expects it,
+nothing is left waiting or held, and no open application sits outside every share while an able
+reviewer exists; a return to open (an undo, a rule's return, a re-import) lands against a change
+the same way. Its cases are imported here, not copied, and run over a world
 whose markets, applications and history are the real collections: its ``Counted`` wrapper steps
 over the server's own calls, so every lease, mark and deal is matched by MongoDB, not a fake.
 """
@@ -16,7 +18,8 @@ from test_choosing_reviewers_deals_the_open_applications import (
     MARKET, the_market, the_people_sign_in,
 )
 from test_every_order_of_a_deal import (  # noqa: F401  (collected here, over this world)
-    TestAChangeAtEveryStepOfAnArrival, TestAnArrivalAtEveryStepOfAChange, TestEveryLetGoLooksAgain,
+    TestAChangeAtEveryStepOfAnArrival, TestAChangeAtEveryStepOfAReturn,
+    TestAnArrivalAtEveryStepOfAChange, TestAReturnAtEveryStepOfAChange, TestEveryLetGoLooksAgain,
     TestTheMarketsHold, TestTwoArrivalsAtOnce,
 )
 

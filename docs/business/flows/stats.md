@@ -14,7 +14,7 @@ describes:
   - front-end/src/utils/moneyCard.ts
   - front-end/src/utils/checkInRows.ts
   - front-end/src/components/charts/
-verified: 2026-11-12
+verified: 2026-11-17
 sources:
   - E45/F01/S01
   - E45/F01/S02

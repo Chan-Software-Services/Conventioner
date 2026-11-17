@@ -148,10 +148,6 @@ class TestAStoredApplicationWithNoNameStillAssigns:
         assert incomplete == [], [item.reasons for item in incomplete]
         assert [vendor.email for vendor in vendors] == ["vendor@example.com"]
 
-    def test_the_name_is_asked_of_that_very_market(self):
-        """So the test above is about the solver ignoring it, not about it not being asked."""
-        assert EF.FULL_NAME_KEY in EF.asked_essential_keys(A_FULL_PLAN)
-
 
 class TestTheGuardStillGuards:
     """A name asked unconditionally would have made ``FormHasFieldsGuard`` unable to fail.
