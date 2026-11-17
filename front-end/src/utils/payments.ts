@@ -9,7 +9,7 @@
 import type { InjectionKey } from 'vue';
 import { api, getApiErrorStatus } from '@/utils/api';
 import { formatPrice } from '@/utils/pricing';
-import { getFormattedDate, getTimestampDate } from '@/utils/utils';
+import { getTimestampDate } from '@/utils/utils';
 
 /**
  * What a page showing payments provides to hear of a payment written from the drawer whose answer
@@ -172,15 +172,14 @@ export function lineSource(line: PaymentLine): { text: string; freedOn: string |
 }
 
 /**
- * An entry as it reads, "Cash, paid" and "Friday, April 3, 2099", or "Refund by e-transfer, given"
- * and its day: the day apart, so the screen keeps it on one line.
+ * What an entry was, "Cash, paid" or "Refund by e-transfer, given": the Payment tab writes its day
+ * after it, in parts, so a narrow box breaks the day only after its weekday.
  */
-export function entryText(payment: Payment): { text: string; day: string } {
-  const day = getFormattedDate(payment.paidOn) ?? payment.paidOn;
+export function entryText(payment: Payment): string {
   if (payment.kind === 'refund') {
-    return { text: `Refund by ${methodLabel(payment.method).toLowerCase()}, given`, day };
+    return `Refund by ${methodLabel(payment.method).toLowerCase()}, given`;
   }
-  return { text: `${methodLabel(payment.method)}, paid`, day };
+  return `${methodLabel(payment.method)}, paid`;
 }
 
 /** The last change to an entry since it was recorded, "Edited by …" or "Removed by …", shown
