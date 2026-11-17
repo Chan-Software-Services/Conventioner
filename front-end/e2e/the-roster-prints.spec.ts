@@ -7,10 +7,10 @@ import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
 /**
  * The door's roster prints whole (T318).
  *
- * Paper is the door's only fallback when the venue's network or the back end fails, and nothing
- * prompted the organizer to keep one. Attendance now asks for it before each day still to be run,
- * and "Print roster" prints a sheet of every vendor of the chosen date by table, with a box to
- * tick, in place of the app and whatever the filter and the search on screen leave out.
+ * Paper is the door's only fallback when the venue's network or the back end fails. The phase
+ * guide asks for it in Market Days, and "Print roster" prints a sheet of every vendor of the chosen
+ * date by table, with a box to tick, in place of the app and whatever the filter and the search on
+ * screen leave out.
  */
 const TODAY = calendarToday();
 
@@ -40,9 +40,8 @@ test('the printed roster is every vendor of the day, alone on the paper and its 
   const door = new AttendanceStatusPage(page);
   await door.goto(seed.marketId);
   await expect(door.rows).toHaveCount(3);
-  await expect(door.printNote).toHaveText(
-    "If the venue's network fails, a printed roster still works. Print this day's roster before the doors open.",
-  );
+  // The page says only what it must: the phase guide asks for paper, no note of its own (T466).
+  await expect(page.getByTestId('attendance-print-note')).toHaveCount(0);
   await expect(door.print).toHaveText('Print roster');
   await expect(door.printSheet).toBeHidden();
 

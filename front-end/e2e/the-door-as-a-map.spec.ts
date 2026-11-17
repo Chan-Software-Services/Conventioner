@@ -77,6 +77,11 @@ for (const size of PHONE_AND_DESK) {
         expect(await page.evaluate(() => window.scrollY)).toBe(0);
         expect(await bottom(page.getByTestId('day-map-zoom'))).toBeLessThanOrEqual(height);
         expect(await bottom(door.legend.last())).toBeLessThanOrEqual(height);
+        // The map stands on the screen's 24px inset under the pinned tools, as the list's first
+        // line does: the day map keeps no empty row over it for the switch it does not draw (T466).
+        const toolsBottom = await bottom(door.tools);
+        const mapTop = (await door.dayMap.locator('.day-map__frame').boundingBox())!.y;
+        expect(Math.round(mapTop - toolsBottom)).toBe(24);
       }
 
       // North Wing, the first location, opens: Ember Ceramics here, Kiln & Co expected, the shared
@@ -136,9 +141,10 @@ for (const size of PHONE_AND_DESK) {
       // The map is kept across a reload, and across the other location.
       await page.reload();
       await expect(door.viewMap).toHaveAttribute('aria-pressed', 'true');
-      await press(
-        page.getByTestId('day-map-locations').getByRole('button', { name: 'South Wing' }),
-      );
+      // The location is the toolbar's select, beside the day (T466).
+      await expect(page.getByTestId('day-map-locations')).toHaveCount(0);
+      await door.locationSelect.selectOption({ label: 'South Wing' });
+      await expect(page).toHaveURL(/[?&]location=loc-south-wing(&|$)/);
       await expect(door.mapTable('Aisle B 1')).toBeVisible();
       // Every table of South Wing's Aisle B is held today: its legend names no free table.
       await expect(door.legend).toHaveText(['Here', 'Expected']);

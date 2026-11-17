@@ -34,7 +34,7 @@ test.describe('The door on market day', () => {
     const attendance = new AttendanceStatusPage(ownerPage);
     await attendance.goto(seed.marketId);
 
-    await expect(attendance.date(ON_THE_DAY)).toHaveAttribute('aria-pressed', 'true');
+    await expect(attendance.dateSelect).toHaveValue(ON_THE_DAY);
     await expect(attendance.summary).toHaveText('1 of 2 checked in');
     await expect(attendance.status('alice@example.com')).not.toHaveText('Not yet');
     await expect(attendance.status('bob@example.com')).toHaveText('Not yet');

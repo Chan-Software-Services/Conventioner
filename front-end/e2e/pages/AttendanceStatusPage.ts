@@ -10,6 +10,16 @@ export class AttendanceStatusPage {
   readonly summary: Locator;
   readonly rows: Locator;
   readonly search: Locator;
+  /**
+   * The tools pinned under the market's frame at a desk (T466): the toolbar, then the count row of
+   * the count, the list's Show buttons and the search.
+   */
+  readonly tools: Locator;
+  readonly toolbar: Locator;
+  readonly bar: Locator;
+  /** The toolbar's day, and on the map with two locations laid out or more, its location. */
+  readonly dateSelect: Locator;
+  readonly locationSelect: Locator;
   /** The frame's line saying why the person looking may change nothing, above the door (T15). */
   readonly readOnly: Locator;
   /** "Checked in, with no table on this date (n)", over the rows of vendors here with no seat (T318). */
@@ -17,13 +27,15 @@ export class AttendanceStatusPage {
   /** Every row's Check in and Undo, offered only to whoever may check vendors in. */
   readonly checkIns: Locator;
   readonly undos: Locator;
-  /** When the roster was last read, Refresh, and the line a failed re-read leaves (T318). */
+  /**
+   * When the roster was last read, over the list (on the map it is the day map's note), Refresh,
+   * and the line a failed re-read leaves under the toolbar's end (T318, T466).
+   */
   readonly updated: Locator;
   readonly refresh: Locator;
   readonly refreshError: Locator;
-  /** "Print roster", the note asking for it before a day, and the sheet it prints (T318). */
+  /** "Print roster" and the sheet it prints (T318). */
   readonly print: Locator;
-  readonly printNote: Locator;
   readonly printSheet: Locator;
   readonly printRows: Locator;
   /** "Door code", offered in Market Days to whoever may check vendors in (ADR 0022). */
@@ -45,7 +57,7 @@ export class AttendanceStatusPage {
   readonly newCodeConfirm: Locator;
   readonly newCodeConfirmButton: Locator;
   readonly newCodeCancel: Locator;
-  /** "List" and "Map" in the tools row (T422): the roster as its list, or as the open day's map. */
+  /** "List" and "Map" in the toolbar (T422): the roster as its list, or as the open day's map. */
   readonly viewList: Locator;
   readonly viewMap: Locator;
   /** The map of the open day, its drawing, its legend's lines and the line a free table leaves. */
@@ -71,6 +83,11 @@ export class AttendanceStatusPage {
     this.summary = page.getByTestId('attendance-summary');
     this.rows = page.getByTestId('attendance-row');
     this.search = page.getByTestId('attendance-search');
+    this.tools = page.getByTestId('attendance-tools');
+    this.toolbar = page.getByTestId('attendance-toolbar');
+    this.bar = page.getByTestId('attendance-bar');
+    this.dateSelect = page.getByTestId('attendance-date-select');
+    this.locationSelect = page.getByTestId('attendance-location-select');
     this.unseatedHeading = page.getByTestId('attendance-unseated-heading');
     this.readOnly = page.getByTestId('market-read-only');
     this.checkIns = page.getByTestId('attendance-check-in');
@@ -79,7 +96,6 @@ export class AttendanceStatusPage {
     this.refresh = page.getByTestId('attendance-refresh');
     this.refreshError = page.getByTestId('attendance-refresh-error');
     this.print = page.getByTestId('attendance-print');
-    this.printNote = page.getByTestId('attendance-print-note');
     this.printSheet = page.getByTestId('attendance-print-sheet');
     this.printRows = page.getByTestId('attendance-print-row');
     this.doorCodeButton = page.getByTestId('attendance-door-code');
@@ -141,11 +157,6 @@ export class AttendanceStatusPage {
 
   async goto(marketId: string): Promise<void> {
     await this.page.goto(marketScreenPath(marketId, 'attendance'));
-  }
-
-  /** The tab for one market date. */
-  date(date: string): Locator {
-    return this.page.getByTestId(`attendance-date-${date}`);
   }
 
   /** One vendor's row on the date shown. */

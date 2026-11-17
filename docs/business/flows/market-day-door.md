@@ -26,6 +26,7 @@ sources:
   - T316
   - T422
   - T421
+  - T466
 ---
 
 # Publishing, and the door on market day
@@ -111,8 +112,10 @@ Covered by:
 
 **Status:** Works (re-walked live on 2026-10-03; the door rebuilt since, read from the code as of E29 and E35/F01/S02: `the-door-on-market-day.spec.ts`, `the-door-keeps-its-own-day.spec.ts`).
 
-1. Attendance opens on today when it is a market date, else the next one, else the last; each date is a button with "checked in / expected".
-2. "N of M checked in", and "All M", "Not yet N" (or "Did not come N" once the day is over or the market archived) and "Checked in N" to show one or the other.
+1. Attendance opens on today when it is a market date, else the next one, else the last; the day is a select at the start of the toolbar, each option the day alone ("Nov 17, 2026"), and choosing one keeps the view.
+   The toolbar is one row: the day (and, on the map, the location) at its start, then at its end "List" and "Map" as one joined choice, "Print roster" and "Door code", and "Refresh" last, a rule between each group; the Tab key walks it in that order (T466).
+2. Under it, a second row holds "N of M checked in", and on the list "All M", "Not yet N" (or "Did not come N" once the day is over or the market archived) and "Checked in N" to show one or the other, and the search.
+   At a desk, 1,024px wide and more, the two rows are pinned under the market's frame from the start, so they never move while the list or the map scrolls under them; on a phone they scroll away with the page, each control a 44px target.
 3. "Find a vendor" ("Name, email or table") narrows the list.
 4. Each vendor placed that day, by table: their name, a link at rest (link ink, underlined, a 44px target on a phone), which opens the [vendor drawer](vendor-drawer.md) and never checks them in; how and when they checked in ("Scanned in at 9:41 AM" for their own, with the door code, "9:41 AM by you" or by the organizer's address), or "Not yet"; and their notes under the row when they have some.
    A vendor checked in and then moved or swapped reads where they checked in, "9:41 AM by you, at table North Wing 2", in an attention chip, so they are sent to their new table.
@@ -120,18 +123,21 @@ Covered by:
 5. While the market is in Market Days, "Check in" and "Undo" on each row check a vendor in at the door, for someone who may check vendors in.
    "Check in" is offered on today and past days, so a tap missed in the rush is put right after, and never on a day to come, which the server refuses too: "That day has not begun yet, so nobody can be checked in for it."
    A Viewer is offered neither: they read the frame's "You can view this market but not change it. …", the rail's "Follow who has checked in at the door.", and each row ending at its status (E38/F15/S04).
-6. In Market Days, someone who may check vendors in opens "Door code" at the end of the dates' row: the market's name, its QR code, the code as "K7M 4QP" and "Scan with your phone's camera to check in", full screen, for the tablet or laptop that stands at the entrance.
+6. In Market Days, someone who may check vendors in opens "Door code", beside "Print roster" in the toolbar: the market's name, its QR code, the code as "K7M 4QP" and "Scan with your phone's camera to check in", full screen, for the tablet or laptop that stands at the entrance.
    With no code yet it offers "Make a door code".
    "Print" prints the same poster on one page, and "New code" asks "Make a new door code? The current code and every printed poster of it stop working.", on Cancel, before it makes another; the code stays the same until then.
    A Viewer is offered no Door code, and the server refuses them the code.
 7. The roster reads itself again every 15 seconds while the page is in view, and at once when the tab comes back into view or the browser comes back online, so a vendor who scanned in, or another organizer's check-in, shows with no tap or reload.
-   "Updated just now" or "Updated N minutes ago" and "Refresh" stand before "Print roster" and "Door code", at the end of the dates' row; a read that fails keeps the rows and says "Could not update. The roster is as it was last read." under that row.
+   "Updated just now" or "Updated N minutes ago" stands over the list's right edge, or under the map's bottom right, and "Refresh" ends the toolbar; a read that fails keeps the rows and says "Could not update. The roster is as it was last read." in red under the toolbar's end.
    Taps on several rows' Check in go through at once, each row showing its check-in as soon as the server answers.
    Moved to another market, the page reads "Loading…" until that market's roster arrives, never the last market's, and a check-in tapped on the last market posts there and says nothing on this one, even when it was refused.
-8. "Print roster", in the dates' row for anyone who reads Attendance, prints the chosen date's roster on paper, the door's fallback when the venue's network or the app fails: the market's name, the date in words, "<N> vendors", "Printed <date> at <time>", then every vendor of the date by table, their name with their address under it, and when they came or an empty box to tick, whatever "Show" and "Find a vendor" leave on screen; vendors checked in with no table that day print under their own heading.
-   In Market Days, on today or a date to come, a note over the roster asks for it: "If the venue's network fails, a printed roster still works. Print this day's roster before the doors open."
-9. "List" and "Map", first of the tools after the dates in the dates' row, show the day as its rows or as a map of the venue's layouts (T422); the map is kept across a change of day and a reload.
-   Each table is drawn by its vendor: filled once they are here, outlined while they are expected, and a grey dashed outline with nobody at it, as its legend says ("Here", "Expected" or "Did not come", "No vendor"); a shared table is two halves, each its own vendor's.
+8. "Print roster", in the toolbar for anyone who reads Attendance, prints the chosen date's roster on paper, the door's fallback when the venue's network or the app fails: the market's name, the date in words, "<N> vendors", "Printed <date> at <time>", then every vendor of the date by table, their name with their address under it, and when they came or an empty box to tick, whatever "Show" and "Find a vendor" leave on screen; vendors checked in with no table that day print under their own heading.
+   The phase guide's "Print each day's roster, then check vendors in at the door." asks for it; the page has no note of its own (T466).
+9. "List" and "Map", first of the toolbar's end, show the day as its rows or as a map of the venue's layouts (T422); the map is kept across a change of day and a reload.
+   With two locations or more laid out, the map's location is a select beside the day, offering exactly the locations the map can draw, and kept in the address, so a reload or a shared link opens the same hall; with one, there is no select.
+   Each table is drawn by its vendor: filled once they are here, outlined while they are expected, and a grey dashed outline with nobody at it; the legend says "Here" and "Expected" (or "Did not come"), and "No vendor" only on a day the open location draws a table or half nobody sits at (T466).
+   The no-table zones, the stage or the entrance, stay drawn and named on the map, with no legend item.
+   A shared table is two halves, each its own vendor's.
    A press on a vendor's table opens their drawer, as their name on the list does, and Back closes it on the map; a press on a table with nobody says "Table Aisle A 4: no vendor on Nov 17, 2026." under the map.
    "Find a vendor" outlines the tables of the vendors it finds, and the map changes as the roster reads itself again.
    Under the map, "<n> here with no table" and "<n> vendors are at tables not on a layout." count the vendors it cannot draw, each with "Show in the list", which opens the list showing all; with no location laid out it says "No location has a layout yet." alone, with "Open the layout" for whoever may change the setup.
@@ -149,6 +155,7 @@ Covered by:
 - `the-door-keeps-its-own-day.spec.ts`
 - `the-door-on-market-day.spec.ts`
 - `the-door-stays-fresh.spec.ts`
+- `the-door-tools-hold-still.spec.ts`
 - `the-roster-prints.spec.ts`
 
 ## The rules it obeys
