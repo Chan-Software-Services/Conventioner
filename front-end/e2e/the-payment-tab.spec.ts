@@ -370,6 +370,15 @@ test.describe('the Payment tab', () => {
           ).toBeCloseTo(16, 1);
       }
 
+      // "Record refund" and "Record payment" keep one row inside their card, under the heading
+      // where the card is too narrow for all three.
+      const refund = (await drawn(tab.getByTestId('payment-refund'))).rect;
+      const record = (await drawn(tab.getByTestId('payment-record'))).rect;
+      expect(Math.abs(refund.top - record.top), `the buttons ${at}: one row`).toBeLessThan(1);
+      expect(record.right, `the buttons ${at}: inside their card`).toBeLessThanOrEqual(
+        cardsDrawn[2].rect.right - 17 + 0.5,
+      );
+
       const boxesDrawn = [];
       for (const { box, menu } of boxes) {
         const drawnBox = await drawn(box);

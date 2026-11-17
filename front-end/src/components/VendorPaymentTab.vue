@@ -545,9 +545,12 @@ function struckPrice(line: PaymentLine): boolean {
   gap: var(--space-2);
 }
 
-/* The heading, with "Record payment" at its end, as the Submission's carries "Update info". */
+/* The heading, with "Record payment" at its end, as the Submission's carries "Update info". Where
+   the card is too narrow for the heading and both buttons, the buttons go under the heading as one
+   row, still at the end, rather than stacking beside it. */
 .payment-group-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
@@ -617,6 +620,7 @@ function struckPrice(line: PaymentLine): boolean {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--space-2);
+  margin-left: auto;
 }
 
 /* A line's amount, and beside it the calculated price struck when someone set it by hand. */
