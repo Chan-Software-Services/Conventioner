@@ -1,12 +1,14 @@
 import type { Locator, Page } from '@playwright/test';
+import { marketPagePath } from '../helpers/marketScreens';
 
 /**
- * A market's public map, `/<slug>/map` (T422, T465): one sheet filling the window, its map side
- * (the market's name, the day and hall selects, the hall the day map fills, the legend and the
- * zoom), the card of the table picked (a speech bubble at a desk, the vendor panel's top on a
- * phone), and the vendor panel (the "Find a vendor" search over every named vendor of the day). Its
- * tables and halves are found by their accessible names, as a layout's are ("Aisle A 3, Standard
- * 6 ft, left half, Loom House"), since what the spec proves is what a screen reader hears.
+ * A market's public map, at the market's own address, `/<slug>`, which the market page shows while
+ * the map is open (T422, T465, ADR 0039): one sheet filling the window, its map side (the market's
+ * name, the day and hall selects, the hall the day map fills, the legend and the zoom), the card of
+ * the table picked (a speech bubble at a desk, the vendor panel's top on a phone), and the vendor
+ * panel (the "Find a vendor" search over every named vendor of the day). Its tables and halves are
+ * found by their accessible names, as a layout's are ("Aisle A 3, Standard 6 ft, left half, Loom
+ * House"), since what the spec proves is what a screen reader hears.
  */
 export class PublicMapPage {
   readonly page: Page;
@@ -15,27 +17,16 @@ export class PublicMapPage {
     this.page = page;
   }
 
-  /** Open the map, its query with it, and wait for the market to answer: its map, or not. */
+  /** Open the market page, its query with it, and wait for the market to answer: its map, or not. */
   async goto(slug: string, query: Record<string, string> = {}) {
     const search = new URLSearchParams(query).toString();
-    await this.page.goto(`/${slug}/map${search ? `?${search}` : ''}`);
+    await this.page.goto(`${marketPagePath(slug)}${search ? `?${search}` : ''}`);
     await this.heading
       .or(this.page.getByTestId('page-not-found'))
       .or(this.page.getByTestId('public-map-read-failed'))
       // A map that is not open is a notice on the market page (T469).
       .or(this.page.getByTestId('market-page-notice'))
       .waitFor();
-  }
-
-  /**
-   * Everything a visitor is shown at `/<slug>/map`, as text, with the slug masked out: a market
-   * whose map is not open must read exactly as a slug naming nothing.
-   */
-  async renderedText(slug: string): Promise<string> {
-    await this.page.goto(`/${slug}/map`);
-    await this.page.waitForLoadState('networkidle');
-    const text = (await this.page.locator('body').innerText()).trim();
-    return text.split(slug).join('<slug>');
   }
 
   /** The page's whole column, once the market answered with a map, or while it is read. */

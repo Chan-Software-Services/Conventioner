@@ -6,20 +6,20 @@ import { inTheWindow, PHONE_AND_DESK } from './helpers/phoneWindow';
 import { seedMarketDayMap, type SeededMarketDayMap } from './helpers/seedMarketDayMap';
 
 /**
- * A market's public map (T422 ticket 09), `/<slug>/map`, opened signed out on the seam's seeded
- * market: North Wing's Aisle A of four tables, Aisle A 3 shared by Loom House (left) and Paper Moth
- * Press (right), and South Wing's Aisle B of three, one vendor there with no public name and one
- * whose business name was an email address, withheld. Today seven vendors are seated, tomorrow
- * two.
+ * A market's public map (T422 ticket 09), at the market's own address, `/<slug>`, where the market
+ * page shows it (ADR 0039), opened signed out on the seam's seeded market: North Wing's Aisle A of
+ * four tables, Aisle A 3 shared by Loom House (left) and Paper Moth Press (right), and South Wing's
+ * Aisle B of three, one vendor there with no public name and one whose business name was an email
+ * address, withheld. Today seven vendors are seated, tomorrow two.
  *
  * The page is one sheet filling the window under the app bar (T465): it never scrolls, the day and
  * the hall are two selects at the map side's top right, and the legend names the open hall's
  * sections. The list of the day's vendors is proved in `the-public-map-vendors.spec.ts`.
  *
  * The allowlist on the page: whatever a visitor presses, the page's text and its links hold no
- * email address and none of the seeded personal markers, and every request goes to the map's two
- * public routes or the app's own files. A market whose map is off reads exactly as an address
- * naming nothing.
+ * email address and none of the seeded personal markers, and every request goes to the market
+ * page's read, the map's two public routes or the app's own files. A market whose map is off reads
+ * the market page's notice, and an address naming nothing reads "Page not found".
  */
 
 /** A market date as the day select offers it, "Nov 18", read in UTC as the page reads it. */

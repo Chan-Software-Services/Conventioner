@@ -490,14 +490,15 @@ function layoutAt(
 }
 
 /**
- * The day map market's public map (T422), its address carrying `query` (a table picked, a half of
- * it) when given, once its floorplan has drawn and `shows` is on screen: the hall, or a part of the
- * card, which shows only once a table is picked (T465).
+ * The day map market's public map (T422) at its market page, `/<slug>` (ADR 0039), its address
+ * carrying `query` (a table picked, a half of it) when given, once its floorplan has drawn and
+ * `shows` is on screen: the hall, or a part of the card, which shows only once a table is picked
+ * (T465).
  */
 function publicMapAt(query: Record<string, string> = {}, shows = 'public-map-hall') {
   return async (page: Page, seed: TheScreensSeed) => {
     const search = new URLSearchParams(query).toString();
-    await page.goto(`/${seed.dayMap.slug}/map${search ? `?${search}` : ''}`);
+    await page.goto(`${marketPage('dayMap')(seed)}${search ? `?${search}` : ''}`);
     await expect(page.getByTestId('layout-map-image')).toHaveAttribute('href', /^blob:/, {
       timeout: 15000,
     });
