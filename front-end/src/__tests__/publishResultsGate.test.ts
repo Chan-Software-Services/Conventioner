@@ -204,11 +204,35 @@ describe('before the assignment (E38/F05, Daniel on 2026-10-29)', () => {
     },
   );
 
-  it('offers it again from the assignment on, published or not', async () => {
-    const days = await mounted(
+  it('offers it again from the assignment on', async () => {
+    const days = await mounted(marketTaking(IntakeMode.Form, { phase: MarketPhase.MarketDays }));
+    expect(days.find(button).exists()).toBe(true);
+  });
+});
+
+describe('once published (T466, release walk F7)', () => {
+  it.each([MarketPhase.Assignment, MarketPhase.Offers])(
+    'says so quietly in %s, a dot and the words, with no button',
+    async (phase) => {
+      const wrapper = await mounted(
+        marketTaking(IntakeMode.Form, { phase, resultsPublished: true }),
+      );
+
+      const status = wrapper.get('[data-testid="applications-published-badge"]');
+      expect(status.text()).toBe('Results published · vendors can see them');
+      expect(status.classes()).not.toContain('chip');
+      expect(status.find('.publish-status-dot').attributes('aria-hidden')).toBe('true');
+      expect(wrapper.find(button).exists()).toBe(false);
+      expect(wrapper.find(hint).exists()).toBe(false);
+    },
+  );
+
+  it('says nothing in market days, where results are out by definition', async () => {
+    const wrapper = await mounted(
       marketTaking(IntakeMode.Form, { phase: MarketPhase.MarketDays, resultsPublished: true }),
     );
-    expect(days.find('[data-testid="applications-published-badge"]').exists()).toBe(true);
+
+    expect(wrapper.html()).toBe('<!--v-if-->');
   });
 });
 

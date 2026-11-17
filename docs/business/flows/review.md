@@ -4,6 +4,7 @@ kind: flow
 describes:
   - front-end/src/components/application/ApplicationMonitor.vue
   - front-end/src/components/application/ApplicationsAll.vue
+  - front-end/src/components/application/reviewViewTools.ts
   - front-end/src/components/market/MarketApplicationsTab.vue
   - front-end/src/components/ListFreshness.vue
   - front-end/src/components/market/ReviewersPanel.vue
@@ -61,6 +62,7 @@ sources:
   - T270
   - T411
   - T421
+  - T466
 ---
 
 # Reviewing applications
@@ -71,13 +73,19 @@ sources:
 
 Applications arrive and are reviewed in one phase, shown as Review on a Google Form market and Applications on one whose vendors apply on its page ([ADR 0016](../../adr/0016-one-stage-for-applications-and-review.md)).
 Verdicts are open from the first application until the market enters Assignment, and reopen when Back to review takes the market back to the review, until results are published, so reviewing starts as soon as applications arrive and must be finished before Begin assignment ([verdicts settle on entering assignment](../rules/verdicts-settle-on-entering-assignment.md)).
-A line above the review says where the market stands, in words: on a market's own form, what arrives ("This market is open for applications. New ones keep arriving here." or "This market is not taking applications. No new ones will arrive."), while on a Google Form market the rail's sentence just above says it ("Every imported response is here.") and the page adds no line of its own; from Assignment on, why the review is closed and what to do instead, in the server's words (`verdictsSettledReason`, the browser keeping no copy): in Assignment, "The review is closed while tables are allocated. To change a verdict, choose Back to review under More… on the phase rail; tables are then allocated again."; once results are published, "The review closed when results were published. To change who has a table, place or free a seat on Assignments."; on a Google Form market that went live, that the review closed when the market went live ([what a closed review says](../rules/verdicts-settle-on-entering-assignment.md#what-a-closed-review-says)).
+While applications are open, a line under the review's tools says where the market stands, in words: on a market's own form, what arrives ("This market is open for applications. New ones keep arriving here." or "This market is not taking applications. No new ones will arrive."), while on a Google Form market the rail's sentence just above says it ("Every imported response is here.") and the page adds no line of its own.
+From Assignment on the page says no such line (T466): the review's controls are gone, the rail says where the market stands, and a review write that still reaches the server is refused in the words of why the review closed ([what a closed review says](../rules/verdicts-settle-on-entering-assignment.md#what-a-closed-review-says)).
 How many are left to decide is the rail's to say, as the blocker on Begin assignment.
 The page offers no import on either path ([review needs an import](../rules/review-needs-an-import.md)).
-The page has two views ([`MarketApplicationsTab.vue`](../../../front-end/src/components/market/MarketApplicationsTab.vue)), chosen under "How do you want to review?" with a line on what each is: "All" ([`ApplicationsAll.vue`](../../../front-end/src/components/application/ApplicationsAll.vue)), first and the default, and "One by one" ([`ApplicationMonitor.vue`](../../../front-end/src/components/application/ApplicationMonitor.vue)).
+The page has two views ([`MarketApplicationsTab.vue`](../../../front-end/src/components/market/MarketApplicationsTab.vue)), chosen at the start of the page's toolbar as one joined control, named "How do you want to review?" and described, for a screen reader, by a hidden line on what each is: "All" ([`ApplicationsAll.vue`](../../../front-end/src/components/application/ApplicationsAll.vue)), first and the default, and "One by one" ([`ApplicationMonitor.vue`](../../../front-end/src/components/application/ApplicationMonitor.vue)).
+Publish results follows the views from the assignment on ([I7](assignment-and-result.md#i7-publish-results)), and the toolbar's end holds the open view's read time and Refresh, then, on All, Export, Refresh first in the order the Tab key meets them.
+From 1024px wide the toolbar is pinned under the market's frame from the start, so it never moves as the list scrolls, a failed refresh's line shown or not; on a narrower window it scrolls with the page (`the-review-tools-hold-still.spec.ts`, T466).
+While applications are open, the line on where the market stands and the reviewers line follow under the toolbar, first over the All view's rows and first in One by one, so the tools stand in the same place in every stage.
+Switching views keeps the focus on the switch, since the toolbar is the page's and stays where it is (`theReviewToolbar.test.ts`).
 The choice is kept in the address: no `view` is All, and a saved `?view=all` still opens it; One by one is `?view=one`, and so is a link to one application (`?application=<id>`, as the Assignment tab's refusal links to it), which opens on its card.
 Choosing All drops both `view` and `application`.
 Both views say when their list was last read from the server, "Updated just now" or "Updated N minutes ago", ageing on screen, with "Refresh" beside it to read it again at once ([`ListFreshness.vue`](../../../front-end/src/components/ListFreshness.vue)), which draws its time unless a screen that says it elsewhere gives `showTime` false (T466).
+The page draws them in its toolbar from the read state the open view exposes (`ReviewViewTools`, [`reviewViewTools.ts`](../../../front-end/src/components/application/reviewViewTools.ts)): each view keeps its own read, which every verdict holds, so the toolbar only shows it and asks for another, and Refresh waits while a verdict is being written or its own read is out; One by one's Refresh stands from the first read's landing on.
 A refresh is a re-read, not a reset: the All view keeps the ticks of rows still shown, One by one keeps the card up while it is still to decide and moves on from one decided elsewhere, and a refresh that fails says "Could not refresh. The list is as it was last read." and keeps the list.
 The page fits a phone, in every phase it is shown in, as the plan, the form and Settings do not ([the design language](../../design-system.md#layout), T180): on a phone the All view's row reads down, the name and address, the leading answers, then the status lines, each row's tick a 44px square, and the vendor drawer and Update info open inside the window; One by one's card is the window less its gutters, its verdict buttons wrapping inside it, "Include the N follow-ups", "Show N reviewed" and "Choose what leads the card" are 44px targets, and the reviewed applications, what leads the card, the follow-up, reviewers, Open applications and Publish results dialogs open inside the window (`the-market-on-a-phone.spec.ts`).
 A first read that fails says what went wrong (the connection, the server, or the server's own reason), with "Try again" to read it once more ([`ReadFailed.vue`](../../../front-end/src/components/ReadFailed.vue)).
@@ -215,7 +223,7 @@ Covered by:
    Nothing closes the confirmation while it decides, and a second press decides nothing more; a refusal is said in it and gone at the next opening, and another market's list closes it (T411).
    When any ticked row is an open application or a follow-up dealt to another reviewer and not in the reader's share ([a follow-up is in its owner's share too](../rules/the-review-is-dealt-among-chosen-reviewers.md#why)), the confirmation adds "K of them are dealt to other reviewers; their history will say you decided them." (or "1 of them is dealt to another reviewer; its history will say you decided it.").
 5. The answer: "N applications approved; K skipped:" and each skipped one with why ("<email> has it open.", "Already approved.", who changed it, or the change row's sentence for one already decided).
-6. "Export", at the filter row's end, opens the vendor export on the filter, Mine and the words, never on "Assigned to" ([J15](vendors.md#j15-export-the-vendors-to-a-csv)), in every phase the view shows: "Open" as Open, a verdict as its status, "Approved" with Added by hand too, since the All view lists a vendor added by hand as approved, and Mine as the follow-ups the one exporting owns.
+6. "Export", at the toolbar's end after Refresh, opens the vendor export on the filter, Mine and the words, never on "Assigned to" ([J15](vendors.md#j15-export-the-vendors-to-a-csv)), in every phase the view shows: "Open" as Open, a verdict as its status, "Approved" with Added by hand too, since the All view lists a vendor added by hand as approved, and Mine as the follow-ups the one exporting owns.
    So the review's lists (approved, rejected, needs follow-up) leave as a CSV before assignment as well as after.
 
 A selection is only ever the rows ticked, one by one or by Select all, which ticks the rows on screen: each is in front of the reviewer and counted in the confirmation, and nothing past them is decided.
@@ -230,7 +238,7 @@ Each verdict, follow-up, selection's verdict and undo holds the list while it is
 **Status:** Works (read from the code as of E38/F07/S04: `choosing-reviewers-deals-the-open-applications.spec.ts`, `removing-a-reviewer.spec.ts`, `each-arrival-is-dealt.spec.ts`, `a-chosen-reviewer-decides.spec.ts`, `rows-name-their-reviewer.spec.ts`, `the-all-view-opens-on-my-share.spec.ts`, `one-by-one-hands-out-my-share-first.spec.ts`).
 The rule is [the review is dealt among chosen reviewers](../rules/the-review-is-dealt-among-chosen-reviewers.md).
 
-1. A "Reviewers" panel sits between the line on where the market stands and Publish results while the review is open, and is gone from Assignment on ([`ReviewersPanel.vue`](../../../front-end/src/components/market/ReviewersPanel.vue)).
+1. A "Reviewers" panel sits under the line on where the market stands, under the review's tools, while the review is open, and is gone from Assignment on ([`ReviewersPanel.vue`](../../../front-end/src/components/market/ReviewersPanel.vue)).
    It says the chosen reviewers in one line, "12 reviewers: a, b, c and 9 more" ([`NameList.vue`](../../../front-end/src/components/NameList.vue)), "(you)" beside the reader's own address ([`ReviewerName.vue`](../../../front-end/src/components/market/ReviewerName.vue)); with three or fewer it names them all and has no button, and with none it says "No reviewers chosen. Everyone reviews first come, first served."
    A reviewer who no longer holds a role on the market, or whose role the market's table no longer lets be chosen, is never folded out of sight: such reviewers are named first, each marked "Can no longer review here", and when more of them are folded the line ends with how many ("2 more can no longer review here").
 2. Someone who may choose reviewers (an Admin or the owner, by default) is offered "Choose reviewers", or "Change reviewers" once some are chosen; anyone else reads the panel without it.

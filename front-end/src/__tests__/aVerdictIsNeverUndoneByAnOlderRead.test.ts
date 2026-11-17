@@ -17,6 +17,7 @@ import { ApplicationStatus, type Application, type Market } from '@/assets/types
 import { MarketAction } from '@/utils/marketActions';
 import { statusLabel } from '@/utils/verdicts';
 import { answersRefusing } from './support/servedAnswers';
+import { pressRefresh, toolsOf } from './support/reviewViewTools';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 const route = await vi.hoisted(async () => {
@@ -148,7 +149,7 @@ describe('a verdict', () => {
 
     // Refresh is out, served before the verdict: it holds jo as open.
     holding = true;
-    await wrapper.get('[data-testid="applications-refresh"]').trigger('click');
+    await pressRefresh(wrapper);
     expect(held).toHaveLength(1);
     holding = false;
 
@@ -259,8 +260,7 @@ describe('the half-minute re-read', () => {
     await flushPromises();
     expect(held).toHaveLength(1);
 
-    const refresh = wrapper.get('[data-testid="applications-refresh"]');
-    expect(refresh.attributes('disabled')).toBeUndefined();
+    expect(toolsOf(wrapper).freshness.refreshing).toBe(false);
   });
 });
 
@@ -274,20 +274,18 @@ describe('Refresh', () => {
     await flushPromises();
     expect(held.length).toBeGreaterThan(0);
 
-    const refresh = wrapper.get('[data-testid="applications-refresh"]');
-    expect(refresh.attributes('disabled')).toBeUndefined();
+    expect(toolsOf(wrapper).freshness.refreshing).toBe(false);
   });
 
   it('is disabled while its own read is out', async () => {
     const wrapper = await allView();
     holding = true;
 
-    await wrapper.get('[data-testid="applications-refresh"]').trigger('click');
+    await pressRefresh(wrapper);
     await flushPromises();
 
     expect(held).toHaveLength(1);
-    const refresh = wrapper.get('[data-testid="applications-refresh"]');
-    expect(refresh.attributes('disabled')).toBeDefined();
+    expect(toolsOf(wrapper).freshness.refreshing).toBe(true);
   });
 });
 

@@ -11,6 +11,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import ApplicationMonitor from '@/components/application/ApplicationMonitor.vue';
 import { ApplicationStatus, type Application, type Market } from '@/assets/types/datatypes';
+import { pressRefresh } from './support/reviewViewTools';
 
 const fetchMarketApplications = vi.fn();
 const api = vi.hoisted(() => ({
@@ -123,7 +124,7 @@ describe('two hand-outs in flight', () => {
     let reread: (apps: Application[]) => void = () => undefined;
     fetchMarketApplications.mockReturnValueOnce(new Promise((resolve) => (reread = resolve)));
     await wrapper.get('[data-testid="app-monitor-next-button"]').trigger('click');
-    await wrapper.get('[data-testid="applications-refresh"]').trigger('click');
+    await pressRefresh(wrapper);
 
     moved.answer(BEN);
     await flushPromises();

@@ -17,6 +17,10 @@
  * as `search`, 50 rows and "Show 50 more". A selection only ever holds rows on screen, so `drawn`
  * drives it: Select all, what it says it left out and the ticks all read what the frame drew. Export
  * opens on the words too.
+ *
+ * The tab's toolbar draws the list's read time, Refresh and Export from what this view exposes
+ * (`ReviewViewTools`, T466), and the tab's `lead` slot, its lines while applications are open, stands
+ * over the rows, under the filters.
  */
 import { MarketAction, actionRefusal, mayTake } from '@/utils/marketActions';
 import { whoMayTake } from '@/utils/permissionTable';
@@ -66,11 +70,11 @@ import AppDialog from '@/components/AppDialog.vue';
 import ExportVendorsDialog from '@/components/ExportVendorsDialog.vue';
 import VendorDrawer from '@/components/VendorDrawer.vue';
 import ListFrame from '@/components/ListFrame.vue';
-import ListFreshness from '@/components/ListFreshness.vue';
 import ReadFailed from '@/components/ReadFailed.vue';
 import EmailAddress from '@/components/EmailAddress.vue';
 import SearchPicker from '@/components/SearchPicker.vue';
 import type { AddressPart } from '@/utils/addressParts';
+import type { ReviewViewTools } from '@/components/application/reviewViewTools';
 
 const props = defineProps<{
   market: Market | null;
@@ -301,6 +305,18 @@ function openExport(): void {
   });
   exporting.value = true;
 }
+
+/**
+ * The tab's toolbar draws this view's read time, Refresh and Export (T466): the read stays here,
+ * held by every verdict, and the toolbar only shows it and asks.
+ */
+const freshness = computed<ReviewViewTools['freshness']>(() => ({
+  readAt: readAt.value,
+  refreshing: refreshing.value || saving.value,
+  failed: refreshError.value,
+  ready: true,
+}));
+defineExpose({ freshness, refresh, mayExport, openExport });
 
 // --- The drawer, and the verdicts it carries during review -----------------------------------
 
@@ -623,13 +639,6 @@ async function decideSelection() {
 
 <template>
   <div class="all-view" data-testid="applications-all">
-    <ListFreshness
-      testid="applications"
-      :readAt="readAt"
-      :refreshing="refreshing || saving"
-      :failed="refreshError"
-      @refresh="refresh"
-    />
     <ListFrame
       :items="shown"
       :wholeCount="applications.length"
@@ -692,15 +701,6 @@ async function decideSelection() {
               testid="applications-all-assigned-to"
               @update:model-value="assignTo($event as string)"
             />
-            <button
-              v-if="mayExport"
-              type="button"
-              class="btn btn--secondary btn--compact all-export"
-              data-testid="applications-all-export-button"
-              @click="openExport"
-            >
-              Export
-            </button>
           </div>
         </div>
       </template>
@@ -709,6 +709,9 @@ async function decideSelection() {
         <p id="applications-all-filter-hint" class="all-filter-hint">
           Open is not decided yet. Needs follow-up waits on someone reaching out to the applicant.
         </p>
+        <!-- What the tab says over the review while applications are open: under the tools and the
+             filters' own hint, over the rows, so the tools stand still in every stage (T466). -->
+        <slot name="lead" />
 
         <!-- The rows shown, ticked at once (E38/F05/S02); a reviewer's, as the ticks are. -->
         <div v-if="decides && onScreen.length" class="all-select-all">
@@ -1129,10 +1132,6 @@ async function decideSelection() {
   width: auto;
   min-width: 0;
   height: var(--control-height-compact);
-}
-
-.all-export {
-  margin-left: auto;
 }
 
 .all-selection {
