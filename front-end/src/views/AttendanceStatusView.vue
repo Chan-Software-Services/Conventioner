@@ -324,16 +324,6 @@ const printedUnseated = computed(() =>
   printedDay.value.filter((row) => !hasSeat(row)).map(printedRow),
 );
 
-/**
- * Asks for a printed roster in Market Days on each day still to be run: on a day that has passed,
- * or a market archived, paper is too late.
- */
-const asksForPaper = computed(
-  () =>
-    market.value?.phase === MarketPhase.MarketDays &&
-    !!selectedDate.value &&
-    selectedDate.value >= calendarToday(),
-);
 
 function printRoster(): void {
   window.print();
@@ -566,11 +556,6 @@ const drawer = useVendorDrawer();
             </span>
           </div>
         </div>
-
-        <p v-if="asksForPaper" class="note" data-testid="attendance-print-note">
-          If the venue's network fails, a printed roster still works. Print this day's roster before
-          the doors open.
-        </p>
 
         <div class="door-bar">
           <h2 class="door-summary" data-testid="attendance-summary">
