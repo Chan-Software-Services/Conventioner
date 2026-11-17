@@ -579,8 +579,8 @@ function struckPrice(line: PaymentLine): boolean {
 }
 
 /* The heading, with "Record payment" at its end, as the Submission's carries "Update info". Where
-   the card is too narrow for the heading and both buttons, the buttons go under the heading as one
-   row, still at the end, rather than stacking beside it. */
+   the card is too narrow for the heading and both buttons, the buttons go under the heading, still
+   at the end, as one row where the card has room for both, rather than stacking beside it. */
 .payment-group-head {
   display: flex;
   flex-wrap: wrap;
