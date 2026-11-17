@@ -284,7 +284,7 @@ function struckPrice(line: PaymentLine): boolean {
     <p v-else-if="phase === 'failed'" class="payment-note">{{ sentence }}</p>
 
     <template v-else-if="account">
-      <div class="payment-totals">
+      <div class="payment-totals" data-testid="payment-totals">
         <dl class="payment-figures">
           <div class="payment-figure">
             <dt>Owed</dt>
@@ -305,7 +305,7 @@ function struckPrice(line: PaymentLine): boolean {
         </span>
       </div>
 
-      <div class="payment-group">
+      <div class="payment-group" data-testid="payment-days">
         <h3 class="payment-heading">Table-days</h3>
         <p v-if="account.lines.length === 0" class="payment-note">
           No table yet, so nothing is owed.
@@ -360,7 +360,7 @@ function struckPrice(line: PaymentLine): boolean {
         </ul>
       </div>
 
-      <div class="payment-group">
+      <div class="payment-group" data-testid="payment-payments">
         <div class="payment-group-head">
           <h3 class="payment-heading">Payments</h3>
           <div class="payment-actions">
@@ -490,10 +490,13 @@ function struckPrice(line: PaymentLine): boolean {
 </template>
 
 <style scoped>
+/* Each part a card, and each table-day and payment inside one a box of its own, even alone, so a
+   lone line's "..." menu sits with it (Daniel's release walk of 2026-11-17). The cards inform, so
+   they are flat (the design language's elevation). */
 .payment-tab {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-4);
 }
 
 .payment-note {
@@ -509,6 +512,13 @@ function struckPrice(line: PaymentLine): boolean {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3) var(--space-4);
+}
+
+.payment-totals,
+.payment-group {
+  padding: var(--space-4);
+  border: 1px solid var(--mm-border);
+  border-radius: var(--radius-card);
 }
 
 .payment-figures {
@@ -556,6 +566,7 @@ function struckPrice(line: PaymentLine): boolean {
   padding: 0;
   display: flex;
   flex-direction: column;
+  gap: var(--space-2);
 }
 
 .payment-line,
@@ -564,13 +575,9 @@ function struckPrice(line: PaymentLine): boolean {
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--mm-border);
-}
-
-.payment-line:last-child,
-.payment-entry:last-child {
-  border-bottom: none;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--mm-border);
+  border-radius: var(--radius-control);
 }
 
 .payment-line-main {

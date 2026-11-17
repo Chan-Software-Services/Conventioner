@@ -303,6 +303,110 @@ test.describe('the Payment tab', () => {
     }
   });
 
+  test('sets its parts apart: each a card, each table-day and payment a box, even alone', async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    const marketId = await aliceOnTwoGoldDays(request);
+    const tab = await paymentTab(page, marketId);
+    // One payment, alone in its list, beside two table-days.
+    await recordPayment(page, '35', 'cash');
+    await expect(tab.getByTestId('payment-entry')).toHaveCount(1);
+
+    const cards = ['payment-totals', 'payment-days', 'payment-payments'].map((id) =>
+      tab.getByTestId(id),
+    );
+    const boxes = [
+      ...(await tab.getByTestId('payment-line').all()).map((box) => ({
+        box,
+        menu: box.getByTestId('payment-line-menu-button'),
+      })),
+      ...(await tab.getByTestId('payment-entry').all()).map((box) => ({
+        box,
+        menu: box.getByTestId('payment-entry-menu-button'),
+      })),
+    ];
+    expect(boxes).toHaveLength(3);
+
+    /** Its edge on all four sides, its corners, its inset, and where it stands on the page. */
+    const drawn = (target: typeof tab) =>
+      target.evaluate((el) => {
+        const style = getComputedStyle(el);
+        const sides = ['Top', 'Right', 'Bottom', 'Left'] as const;
+        const rect = el.getBoundingClientRect();
+        return {
+          edges: sides.map(
+            (side) =>
+              `${style.getPropertyValue(`border-${side.toLowerCase()}-width`)} ${style.getPropertyValue(`border-${side.toLowerCase()}-style`)}`,
+          ),
+          corners: style.borderRadius,
+          inset: style.padding,
+          rect: { top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left },
+        };
+      });
+    const EDGES = ['1px solid', '1px solid', '1px solid', '1px solid'];
+
+    for (const size of [
+      { width: 1440, height: 900 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(size);
+      const at = `at ${size.width}`;
+      const tabRect = (await drawn(tab)).rect;
+
+      const cardsDrawn = [];
+      for (const card of cards) cardsDrawn.push(await drawn(card));
+      for (const [i, card] of cardsDrawn.entries()) {
+        expect(card.edges, `card ${i} ${at}: its edge`).toEqual(EDGES);
+        expect(card.corners, `card ${i} ${at}: its corners`).toBe('10px');
+        expect(card.inset, `card ${i} ${at}: its inset`).toBe('16px');
+        // Nothing runs past the tab, the drawer's column, on a phone or at a desk.
+        expect(card.rect.left, `card ${i} ${at}: its left`).toBeGreaterThanOrEqual(tabRect.left);
+        expect(card.rect.right, `card ${i} ${at}: its right`).toBeLessThanOrEqual(tabRect.right);
+        if (i > 0)
+          expect(
+            card.rect.top - cardsDrawn[i - 1].rect.bottom,
+            `card ${i} ${at}: apart`,
+          ).toBeCloseTo(16, 1);
+      }
+
+      const boxesDrawn = [];
+      for (const { box, menu } of boxes) {
+        const drawnBox = await drawn(box);
+        const menuRect = (await drawn(menu)).rect;
+        boxesDrawn.push(drawnBox);
+        const i = boxesDrawn.length - 1;
+        expect(drawnBox.edges, `box ${i} ${at}: its edge`).toEqual(EDGES);
+        expect(drawnBox.corners, `box ${i} ${at}: its corners`).toBe('6px');
+        expect(drawnBox.inset, `box ${i} ${at}: its inset`).toBe('8px 12px');
+        // Its "..." sits inside it.
+        for (const side of ['top', 'left'] as const)
+          expect(menuRect[side], `box ${i} ${at}: its menu's ${side}`).toBeGreaterThan(
+            drawnBox.rect[side],
+          );
+        for (const side of ['bottom', 'right'] as const)
+          expect(menuRect[side], `box ${i} ${at}: its menu's ${side}`).toBeLessThan(
+            drawnBox.rect[side],
+          );
+      }
+      // The two table-days stand a box's gap apart, inside their card's inset.
+      expect(
+        boxesDrawn[1].rect.top - boxesDrawn[0].rect.bottom,
+        `the days ${at}: apart`,
+      ).toBeCloseTo(8, 1);
+      const days = cardsDrawn[1].rect;
+      const payments = cardsDrawn[2].rect;
+      for (const [i, box] of boxesDrawn.entries()) {
+        const card = i < 2 ? days : payments;
+        expect(box.rect.left - card.left, `box ${i} ${at}: inset from its card`).toBeCloseTo(17, 1);
+        expect(card.right - box.rect.right, `box ${i} ${at}: inset from its card`).toBeCloseTo(
+          17,
+          1,
+        );
+      }
+    }
+  });
+
   test('a Viewer reads the tab and is offered no Record payment', async ({ browser, request }) => {
     const marketId = await aliceOnTwoGoldDays(request);
 
