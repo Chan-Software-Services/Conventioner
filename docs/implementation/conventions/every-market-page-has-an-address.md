@@ -66,7 +66,7 @@ The routes are in [`front-end/src/router/index.ts`](../../../front-end/src/route
   Opening a market from the list, its "Previously opened" line or a new market all come through it ([`openMarket`](../../../front-end/src/utils/market.ts)), so none of them has to know which page a phase belongs to.
 
 **Every address is built with [`marketPath()`](../../../front-end/src/utils/market.ts)**, and the market page's and the vendor page's with `marketPagePath()` and `vendorPagePath()` beside it, each slug encoded; nothing spells a market path by hand.
-The E2E specs build the two public ones with the twins of the same name in `front-end/e2e/helpers/marketScreens.ts`.
+The E2E specs build the two public ones with the twins of the same name in `front-end/e2e/helpers/marketScreens.ts`, but for `intake-mode.spec.ts`, which walks every address under a slug, deeper ones that name no page among them, as the slug and a suffix.
 
 ## A page's own state is replaced, the drawer's opening is pushed
 

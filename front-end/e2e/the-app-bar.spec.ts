@@ -1169,13 +1169,18 @@ for (const size of SIZES) {
         }
       };
 
-      await visit(['/login', '/reset-password-request', `/${marketSlug}`, '/no/such/page']);
+      await visit([
+        '/login',
+        '/reset-password-request',
+        marketPagePath(marketSlug),
+        '/no/such/page',
+      ]);
 
       const login = new LoginPage(page);
       await login.login(TEST_USER.email, TEST_USER.password);
       await login.waitForMarkets();
       probes = 0;
-      await visit(['/reset-password-request', `/${marketSlug}`, '/no/such/page']);
+      await visit(['/reset-password-request', marketPagePath(marketSlug), '/no/such/page']);
 
       // That the count can move at all: an organizer's page does probe.
       await page.goto('/markets');

@@ -120,8 +120,8 @@ Covered by:
 ### H3e. A Google Form market's public pages
 
 **Status:** Works (walked live; the vendor page read from the code as of T202).
-Before its results are published, `/<slug>` and `/<slug>/vendor` of a market whose vendors apply on the organizer's own Google Form answer exactly as for a market that does not exist; both say the page does not exist, and the vendor page never takes an address ([a gated market answers as absent](../rules/a-gated-market-answers-as-absent.md)).
-From its results its vendors sign in at the vendor page ([the Google Form path](the-google-form-path.md)).
+Before its results are published or it reaches its market days, `/<slug>` and `/<slug>/vendor` of a market whose vendors apply on the organizer's own Google Form answer exactly as for a market that does not exist; both say the page does not exist, and the vendor page never takes an address ([a gated market answers as absent](../rules/a-gated-market-answers-as-absent.md)).
+From then its vendors sign in at the vendor page ([the Google Form path](the-google-form-path.md)).
 Covered by:
 
 - `intake-mode.spec.ts`
