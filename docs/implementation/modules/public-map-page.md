@@ -64,7 +64,7 @@ The sheet is a grid on a white ground with `--radius-sheet` corners and `--shado
 
 **The map side holds a title bar over the hall.**
 The bar is a grid, the market's name and "vendor map" in the start column and the selects in the end one, so a long name wraps short of them; at 640px and under the selects take a row over the title, which stays first in the markup so a screen reader meets the heading first.
-The name is an `h1` in Outfit at 600, `--text-2xl` (`--text-xl` at 640px and under), over a honey marker stroke drawn as a thick underline so it follows each line; "Vendor map" is in Merge One, lower case, led by the teal sparkle of [`IconSparkle.vue`](../../../front-end/src/components/icons/IconSparkle.vue).
+The name is an `h1` in Outfit at 600, `--text-2xl` (`--text-xl` at 640px and under), over a honey marker stroke drawn as a thick underline so it follows each line; "Vendor map" is in Merge One, lower case, led by the green sparkle of [`IconSparkle.vue`](../../../front-end/src/components/icons/IconSparkle.vue).
 The day is a native select named "Market day", each option `shortDay` ("Nov 18"), and the hall a select named "Location", drawn only for two locations or more; each is a white pill `--control-height` tall with `--shadow-float`, 12px from the side's top and end edges.
 The hall takes the rest: `DayMap` with `fills` ([the day map](floorplan-placement.md#the-day-map)), so it draws no switch and no legend of its own, its zoom a pill, and the page's legend in its `legend` slot.
 Its pick writes the table, and the half pressed when a seated half was ([below](#a-half-picked-alone)).

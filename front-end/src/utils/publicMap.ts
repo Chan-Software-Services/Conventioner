@@ -50,7 +50,8 @@ export async function fetchPublicMapImage(slug: string, locationId: string): Pro
   return data as Blob;
 }
 
-/** What the card says of a vendor with no public name (D27), and of a failed read. */
+/** What the page says of a vendor with no public name (D27), of a day with no vendor listed, and of
+ *  a failed read. */
 export const DETAILS_NOT_LISTED = 'A vendor is at this table. Their details are not listed.';
 export const NO_VENDORS_LISTED = 'No vendors are listed for this day yet.';
 export const MAP_COULD_NOT_LOAD = 'The map could not be loaded.';
