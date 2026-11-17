@@ -223,8 +223,8 @@ describe('a request answering after the vendor signed out', () => {
     await anaSignsOut(store);
     checking.settle({ checkedInAt: '2099-08-01T09:00:00Z' });
 
-    // Not "your sign-in ended": that answer has the section keep a scanned code for the next
-    // sign-in, which on a shared device is the next vendor's.
+    // Not "your sign-in ended": that answer has the section keep a scanned code for the vendor's
+    // next sign-in, and Ana signed out.
     expect(await checkIn).toEqual({ ok: false, message: '', signedOut: false });
     expectNobodySignedIn(store);
   });
