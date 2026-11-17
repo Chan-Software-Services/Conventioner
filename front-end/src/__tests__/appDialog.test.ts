@@ -927,9 +927,10 @@ describe("the close's place is the title's line, in tokens (T422)", () => {
   const SRC = resolvePath(process.cwd(), 'src');
   const read = (path: string) => readFileSync(join(SRC, path), 'utf8');
 
-  /** The declarations of the first rule whose selector is exactly `selector`. */
+  /** The declarations of the first rule whose selector is exactly `selector`, read as plain text. */
   function rule(css: string, selector: string): Record<string, string> {
-    const at = css.search(new RegExp(`(^|\\n)${selector.replace(/[.#]/g, '\\$&')} \\{`));
+    const literal = selector.replace(/[\\^$.*+?()[\]{}|#]/g, '\\$&');
+    const at = css.search(new RegExp(`(^|\\n)${literal} \\{`));
     expect(at, `${selector} has a rule`).toBeGreaterThanOrEqual(0);
     const body = css.slice(css.indexOf('{', at) + 1, css.indexOf('}', at));
     return Object.fromEntries(
