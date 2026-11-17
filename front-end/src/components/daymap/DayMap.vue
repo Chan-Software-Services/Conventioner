@@ -93,18 +93,17 @@ const swatches = computed(() => {
 
 <template>
   <div class="day-map" data-testid="day-map">
+    <FilterToggles
+      v-if="locationSwitch && locations.length > 1 && open"
+      class="day-map__locations"
+      :options="switches"
+      label="Location"
+      testid="day-map-locations"
+      :modelValue="open.id"
+      :rest="open.id"
+      @update:modelValue="locationId = $event as string"
+    />
     <div class="day-map__grid">
-      <FilterToggles
-        v-if="locationSwitch && locations.length > 1 && open"
-        class="day-map__locations"
-        :options="switches"
-        label="Location"
-        testid="day-map-locations"
-        :modelValue="open.id"
-        :rest="open.id"
-        @update:modelValue="locationId = $event as string"
-      />
-
       <div v-if="open" class="day-map__frame" :style="{ aspectRatio: shape }">
         <LayoutMap
           ref="map"
@@ -183,9 +182,9 @@ const swatches = computed(() => {
 </template>
 
 <style scoped>
-/* The switch, the map and the legend stack; the zoom stands over the map's bottom-right corner,
-   placed in the map's cell (an absolute grid item takes its area as its box), until the box is a
-   phone's width, where it moves under the map. */
+/* The switch over the grid, then the map and the legend stack; the zoom stands over the map's
+   bottom-right corner, placed in the map's cell (an absolute grid item takes its area as its box),
+   until the box is a phone's width, where it moves under the map. */
 .day-map {
   container-type: inline-size;
   min-width: 0;
@@ -196,7 +195,6 @@ const swatches = computed(() => {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
-    'switch switch'
     'map map'
     'legend legend';
   gap: var(--space-3);
@@ -205,13 +203,14 @@ const swatches = computed(() => {
 /* A note takes the legend row's end, so a map with none keeps the legend the whole width. */
 .day-map__grid:has(> .day-map__note) {
   grid-template-areas:
-    'switch switch'
     'map map'
     'legend note';
 }
 
+/* Over the grid rather than a row of it, so a map with no switch has no empty row and no gap over
+   it (T466): the grid's gap is the switch's own margin. */
 .day-map__locations {
-  grid-area: switch;
+  margin-block-end: var(--space-3);
 }
 
 /* The map's box: the hall's shape across the width it is given, no taller than most of the
@@ -286,14 +285,12 @@ const swatches = computed(() => {
 @container (width < 30rem) {
   .day-map__grid {
     grid-template-areas:
-      'switch switch'
       'map map'
       'legend zoom';
   }
 
   .day-map__grid:has(> .day-map__note) {
     grid-template-areas:
-      'switch switch'
       'map map'
       'legend zoom'
       'note note';

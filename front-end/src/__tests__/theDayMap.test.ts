@@ -397,6 +397,10 @@ describe('the day map', () => {
   it('draws no switch with locationSwitch off, for a page that draws its own', () => {
     const map = dayMap({ locationSwitch: false });
     expect(map.find('[data-testid="day-map-locations"]').exists()).toBe(false);
+    // The grid opens on the map: nothing over it, not even an empty row.
+    expect(map.get('.day-map__grid').element.firstElementChild?.classList).toContain(
+      'day-map__frame',
+    );
     expect(map.get('[data-testid="layout-map"]').attributes('aria-label')).toBe(
       'Upper Hall layout, 2 tables',
     );
@@ -414,19 +418,21 @@ describe('the day map', () => {
       return style.slice(at, style.indexOf('}', at)).replace(/\s+/g, ' ');
     };
     // With no note the legend keeps the whole row, and a phone's box adds no row for it.
-    expect(rule('.day-map__grid')).toContain(
-      "grid-template-areas: 'switch switch' 'map map' 'legend legend';",
-    );
+    expect(rule('.day-map__grid')).toContain("grid-template-areas: 'map map' 'legend legend';");
     expect(rule('.day-map__grid:has(> .day-map__note)')).toContain(
-      "grid-template-areas: 'switch switch' 'map map' 'legend note';",
+      "grid-template-areas: 'map map' 'legend note';",
     );
     const phone = style.indexOf('@container (width < 30rem)');
     expect(rule('.day-map__grid', phone)).toContain(
-      "grid-template-areas: 'switch switch' 'map map' 'legend zoom';",
+      "grid-template-areas: 'map map' 'legend zoom';",
     );
     expect(rule('.day-map__grid:has(> .day-map__note)', phone)).toContain(
-      "grid-template-areas: 'switch switch' 'map map' 'legend zoom' 'note note';",
+      "grid-template-areas: 'map map' 'legend zoom' 'note note';",
     );
+    // The switch stands over the grid, its gap's 12px its own, so a map with no switch keeps no
+    // empty row and no gap over the map (T466).
+    expect(style).not.toContain("'switch");
+    expect(rule('.day-map__locations')).toContain('margin-block-end: var(--space-3);');
     const note = rule('.day-map__note');
     for (const declaration of [
       'grid-area: note;',
