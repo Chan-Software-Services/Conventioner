@@ -1,9 +1,10 @@
-"""One vendor page per market, at its own address (T202, ADR 0022).
+"""One vendor page per market, at `/<slug>/vendor` (T202, ADR 0022, ADR 0039).
 
 `vendor_page_market_by_slug` decides whether a market has a vendor page, and every vendor read and
 sign-in goes through it. The page's own public read, `GET /public/markets/<slug>/vendor-page`, says
-what the page needs before anyone signs in, and answers a market the gate does not serve exactly as
-it answers a slug that names nothing, so a stranger learns nothing of a draft or a gated market.
+what the page needs before anyone signs in, which the market page at `/<slug>` reads too, and
+answers a market the gate does not serve exactly as it answers a slug that names nothing, so a
+stranger learns nothing of a draft or a gated market.
 """
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
