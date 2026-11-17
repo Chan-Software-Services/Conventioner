@@ -137,7 +137,7 @@ test.describe('The door on market day', () => {
     await expect(attendance.summary).toHaveText('0 of 2 checked in');
 
     // The rail's second address chip takes a row on a phone, so the second vendor sits below the
-    // first screen: the door works once a visitor scrolls to it.
+    // first screen: the door works once the organizer scrolls to it.
     const action = attendance.row('bob@example.com').getByRole('button', { name: /Check in/ });
     await action.scrollIntoViewIfNeeded();
     await expect(action).toBeInViewport();
