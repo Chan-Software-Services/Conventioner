@@ -4,8 +4,8 @@
  * Its own module, so the row's and the grouping's modules each read it without the other.
  */
 
-/** The widest gap, aisle or spacer a row or a fill takes, in centimetres: the placement's
- *  10,000 mm. */
+/** The widest gap, aisle or spacer a row or a fill takes, in centimetres: 10,000 mm, the
+ *  placement's aisle bound. */
 export const MAX_LENGTH_CM = 1000;
 
 /** A length typed, in millimetres: a number of centimetres from 0 to 1,000, a comma for the point
