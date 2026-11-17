@@ -329,4 +329,39 @@ test.describe(`the card ${DESK.name}`, () => {
     await expect(map.cardScroller).toHaveCount(0);
     await expect(map.vendorsPanel.getByTestId('public-map-card')).toHaveCount(0);
   });
+
+  test('a search pick, then the window narrowed past 1000px: the card at the panel top, the focus in sight', async ({
+    page,
+  }) => {
+    const map = new PublicMapPage(page);
+    await map.goto(seeded.slug);
+    await map.searchInput.fill('Ember');
+    await map.searchOptions.first().click();
+    await expect(map.bubble.getByTestId('public-map-card')).toHaveCount(1);
+    await expect(map.searchInput).toBeFocused();
+
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await expect(map.cardScroller.getByTestId('public-map-card')).toHaveCount(1);
+    await expect(map.bubble).toHaveCount(0);
+    await page.waitForTimeout(100);
+    await expectFocusInSight(page, 'the focus once the window narrowed');
+  });
+
+  test("the focus in the card follows it from the bubble to the panel's top and back", async ({
+    page,
+  }) => {
+    const map = new PublicMapPage(page);
+    await map.goto(seeded.slug);
+    await map.table('Aisle A 1').click();
+    await map.cardInstagrams.focus();
+
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await expect(map.cardScroller.getByTestId('public-map-card')).toHaveCount(1);
+    await expect(map.cardScroller.getByTestId('public-map-card-instagram')).toBeFocused();
+    await expectFocusInSight(page, 'the Instagram link at the panel top');
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(map.bubble.getByTestId('public-map-card')).toHaveCount(1);
+    await expect(map.bubble.getByTestId('public-map-card-instagram')).toBeFocused();
+  });
 });

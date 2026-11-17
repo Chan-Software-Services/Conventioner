@@ -82,6 +82,42 @@ async function drag(page: Page, map: PublicMapPage, dx: number, dy: number) {
   await page.mouse.up();
 }
 
+/** Whether two boxes overlap at all. */
+const overlap = (a: Box, b: Box) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+/**
+ * A second row in North Wing, 2 m under Aisle A, each table held today by a fixture vendor, so a
+ * bubble opening down from Aisle A covers a table that takes the focus: North Wing's answer as the
+ * server sent it, the seed unchanged for this one test.
+ */
+async function addARowUnderAisleA(page: Page): Promise<void> {
+  await page.route(
+    (url) => new URL(url.href).pathname.endsWith(`/public/markets/${seeded.slug}/map`),
+    async (route) => {
+      const response = await route.fetch();
+      const answer = await response.json();
+      const north = answer.locations.find(
+        (location: { id: string }) => location.id === seeded.north.id,
+      );
+      const aisle = north.layout.tables.slice(0, 4);
+      aisle.forEach((model: { xMm: number; yMm: number }, i: number) => {
+        const tableId = `second-row-table-${i + 1}`;
+        north.layout.tables.push({ ...model, id: tableId, number: 5 + i, yMm: model.yMm + 2000 });
+        answer.seats.push({
+          date: seeded.today,
+          tableId,
+          half: 'whole',
+          name: `Rowfixture Stall ${i + 1}`,
+          website: null,
+          instagram: null,
+        });
+      });
+      await route.fulfill({ response, json: answer });
+    },
+  );
+}
+
 test.describe('the bubble at a desk', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -161,6 +197,41 @@ test.describe('the bubble at a desk', () => {
 
     await page.getByTestId('day-map-fit').click();
     await expectSpeaksFor(map, free, 'up');
+  });
+
+  test('the focus reaching a table it covers closes it, the focus staying on that table', async ({
+    page,
+  }) => {
+    await addARowUnderAisleA(page);
+    const map = new PublicMapPage(page);
+    await map.goto(seeded.slug);
+    const ember = map.table('Aisle A 1');
+    await ember.click();
+    await expect(map.bubble).toHaveAttribute('data-vert', 'down');
+    const under = map.table('Aisle A 5');
+    expect(
+      overlap(await boxOf(map.bubble), await boxOf(under)),
+      'the precondition: Aisle A 5 lies under the bubble',
+    ).toBe(true);
+    const beside = map.table('Aisle A 2');
+    expect(
+      overlap(await boxOf(map.bubble), await boxOf(beside)),
+      'the precondition: Aisle A 2 is clear of the bubble',
+    ).toBe(false);
+
+    // A neighbour clear of it keeps it open; one under it closes it, and keeps the focus.
+    await ember.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(beside).toBeFocused();
+    await page.waitForTimeout(100);
+    await expect(map.bubble).toBeVisible();
+    await page.keyboard.press('ArrowLeft');
+    await expect(ember).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(under).toBeFocused();
+    await expect(map.card).toHaveCount(0);
+    await expect(page).not.toHaveURL(/table=/);
+    await expect(under).toBeFocused();
   });
 
   test('Close shuts it and gives the focus back to its table', async ({ page }) => {

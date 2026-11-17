@@ -445,3 +445,122 @@ for (const size of WINDOWS) {
     });
   });
 }
+
+/**
+ * North Wing's answer as the server sent it, its four tables dealt between sections of these
+ * names, two each, and its free table given a fixture vendor today, so the legend names the
+ * sections alone. The seed is not changed for a name's length alone.
+ */
+async function nameTheSections(page: Page, names: readonly string[]): Promise<void> {
+  await page.route(
+    (url) => new URL(url.href).pathname.endsWith(`/public/markets/${seeded.slug}/map`),
+    async (route) => {
+      const response = await route.fetch();
+      const answer = await response.json();
+      const north = answer.locations.find(
+        (location: { id: string }) => location.id === seeded.north.id,
+      );
+      north.sections = names.map((name, i) => ({ id: `legend-section-${i}`, name }));
+      north.layout.tables.forEach((table: { sectionId: string }, i: number) => {
+        table.sectionId = `legend-section-${Math.min(Math.floor(i / 2), names.length - 1)}`;
+      });
+      const seated = new Set(
+        answer.seats
+          .filter((seat: { date: string }) => seat.date === seeded.today)
+          .map((seat: { tableId: string }) => seat.tableId),
+      );
+      for (const table of north.layout.tables as { id: string }[])
+        if (!seated.has(table.id))
+          answer.seats.push({
+            date: seeded.today,
+            tableId: table.id,
+            half: 'whole',
+            name: 'Legendfixture Stall',
+            website: null,
+            instagram: null,
+          });
+      await route.fulfill({ response, json: answer });
+    },
+  );
+}
+
+// On a phone the legend shares a row with the zoom under the hall (T465): two short section names
+// keep one line, and a name long enough to wrap it grows the box upward, each swatch beside its
+// label's first line, the zoom where it was.
+test.describe("the phone's legend beside the zoom", () => {
+  test.use(PHONE_AND_DESK[0].use);
+
+  type Box = { x: number; y: number; width: number; height: number };
+  const box = async (locator: Locator): Promise<Box> => (await locator.boundingBox())!;
+  const bottomOf = (b: Box) => b.y + b.height;
+
+  /** The zoom stands 12px in from the hall's bottom and end, its foot on the legend's. */
+  async function expectTheZoomInPlace(map: PublicMapPage) {
+    const hall = await box(map.hall);
+    const zoom = await box(map.page.getByTestId('day-map-zoom'));
+    const legend = await box(map.sectionLegend);
+    expect(bottomOf(hall) - bottomOf(zoom), "the zoom 12px over the hall's foot").toBeCloseTo(
+      12,
+      0,
+    );
+    expect(
+      hall.x + hall.width - (zoom.x + zoom.width),
+      'the zoom 12px in from its end',
+    ).toBeCloseTo(12, 0);
+    expect(bottomOf(legend), "the legend's foot on the zoom's").toBeCloseTo(bottomOf(zoom), 0);
+    expect(legend.x + legend.width, 'the legend clear of the zoom').toBeLessThanOrEqual(zoom.x);
+    return zoom;
+  }
+
+  test('two short section names keep one line', async ({ page }) => {
+    await nameTheSections(page, ['A', 'B']);
+    const map = new PublicMapPage(page);
+    await map.goto(seeded.slug);
+    await expect(map.sectionLegendItems).toHaveText(['Section A', 'Section B']);
+    const [a, b] = [
+      await box(map.sectionLegendItems.nth(0)),
+      await box(map.sectionLegendItems.nth(1)),
+    ];
+    expect(b.y, 'both on one line').toBeCloseTo(a.y, 0);
+    expect(b.x).toBeGreaterThan(a.x + a.width);
+    await expectTheZoomInPlace(map);
+  });
+
+  test('a long section name wraps the legend whole, each swatch on its first line', async ({
+    page,
+  }) => {
+    await nameTheSections(page, ['A', 'The Long Gallery by the North Windows']);
+    const map = new PublicMapPage(page);
+    await map.goto(seeded.slug);
+    await expect(map.sectionLegendItems).toHaveText([
+      'Section A',
+      'The Long Gallery by the North Windows',
+    ]);
+    const legend = await box(map.sectionLegend);
+    const items = [
+      await box(map.sectionLegendItems.nth(0)),
+      await box(map.sectionLegendItems.nth(1)),
+    ];
+    const swatches = [
+      await box(map.sectionLegendItems.nth(0).locator('svg')),
+      await box(map.sectionLegendItems.nth(1).locator('svg')),
+    ];
+    // Each item a line of its own, the lines starting at one edge, the box round them evenly.
+    expect(items[1]!.y, 'the long name on a line of its own').toBeGreaterThan(bottomOf(items[0]!));
+    expect(items[1]!.x, 'the lines start together').toBeCloseTo(items[0]!.x, 0);
+    expect(items[1]!.height, 'the long name wraps').toBeGreaterThan(items[0]!.height * 1.5);
+    expect(items[0]!.y - legend.y, 'as much room over the first line').toBeCloseTo(
+      bottomOf(legend) - bottomOf(items[1]!),
+      0,
+    );
+    expect(legend.x + legend.width, 'the items inside the box').toBeGreaterThanOrEqual(
+      Math.max(...items.map((item) => item.x + item.width)),
+    );
+    // Each swatch where a one-line name has it: as far down its item as the first one's.
+    expect(swatches[1]!.y - items[1]!.y, "the swatch beside the label's first line").toBeCloseTo(
+      swatches[0]!.y - items[0]!.y,
+      0,
+    );
+    await expectTheZoomInPlace(map);
+  });
+});

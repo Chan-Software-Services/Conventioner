@@ -6,7 +6,7 @@
  * free on the day, or that a vendor sits there unnamed; and a close button, heard as `close`.
  *
  * It is a region named by its heading, "Table <code>" to a reader, the code alone shown. It is no
- * dialog: it takes no focus and holds nothing modal. The page stands it in the speech bubble at a
+ * dialog: it holds nothing modal and traps no focus. The page stands it in the speech bubble at a
  * desk and at the vendor panel's top on anything narrower, and keeps the live region round it.
  *
  * Nothing a vendor typed is rendered as markup: their three answers are text, and a link is built

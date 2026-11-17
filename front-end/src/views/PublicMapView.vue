@@ -300,12 +300,15 @@ const cardBoxEl = () => (cardBox.value?.$el as Element | undefined) ?? null;
 const vendorList = () =>
   side.value?.querySelector<HTMLElement>('[data-testid="public-map-vendors-list"]') ?? null;
 
+/** Whether two screen boxes overlap at all. */
+function overlap(box: DOMRect, at: DOMRect): boolean {
+  return at.top < box.bottom && at.bottom > box.top && at.left < box.right && at.right > box.left;
+}
+
 /** Whether the card at the panel's top lies over the element. */
 function underTheCard(el: Element): boolean {
   const box = cardBoxEl()?.getBoundingClientRect();
-  if (!box) return false;
-  const at = el.getBoundingClientRect();
-  return at.top < box.bottom && at.bottom > box.top && at.left < box.right && at.right > box.left;
+  return Boolean(box && overlap(box, el.getBoundingClientRect()));
 }
 
 /** How far the card reaches down over the list's scroller, given to the list as its scroll
@@ -373,6 +376,51 @@ watch(
   },
   { flush: 'post' },
 );
+
+/** What takes the focus in the card, in its order. */
+const cardControls = (el: Element | undefined) =>
+  el ? [...el.querySelectorAll<HTMLElement>('a[href], button')] : [];
+
+// The card moves between the bubble and the panel's top as the window crosses 1000px. The focus in
+// it goes to the same control of the card where it lands; at the panel's top, what holds the focus
+// outside it is kept in sight, as when a card opens there.
+watch(wide, async (nowWide) => {
+  if (!card.value) return;
+  const focused = document.activeElement;
+  const at = cardControls(cardPart.value?.$el as Element | undefined).findIndex(
+    (control) => control === focused,
+  );
+  await nextTick();
+  if (at >= 0) {
+    const controls = cardControls(cardPart.value?.$el as Element | undefined);
+    (controls[at] ?? controls[0])?.focus();
+  } else if (!nowWide) requestAnimationFrame(keepTheFocusInSight);
+});
+
+// ── Nothing holding the focus lies under the bubble at a desk (WCAG 2.4.11) ──
+
+/** The focus reaching something in the hall the shown bubble lies over (a neighbouring table, by
+ *  the arrow keys) closes the card, the focus staying where it went; judged a frame later, against
+ *  this card, so a table pressed, which opens its own, is left alone. */
+function onHallFocus(event: FocusEvent) {
+  const target = event.target as Element;
+  const bubble = () =>
+    hall.value?.querySelector<HTMLElement>(
+      '[data-testid="public-map-bubble"]:not(.public-map-bubble--hidden)',
+    ) ?? null;
+  if (!wide.value || !card.value || !bubble() || bubble()!.contains(target)) return;
+  const shown = card.value;
+  requestAnimationFrame(() => {
+    const over = bubble();
+    if (
+      card.value === shown &&
+      over &&
+      document.activeElement === target &&
+      overlap(over.getBoundingClientRect(), target.getBoundingClientRect())
+    )
+      void closeCard();
+  });
+}
 
 /** A vendor of the list: their location opened and their table picked, or their half of a shared
  *  one. The page never scrolls; a table zoomed out of view is brought back by showing the whole
@@ -458,7 +506,12 @@ async function openVendor(vendor: ListedVendor) {
             </div>
           </div>
 
-          <div ref="hall" class="public-map__hall" data-testid="public-map-hall">
+          <div
+            ref="hall"
+            class="public-map__hall"
+            data-testid="public-map-hall"
+            @focusin="onHallFocus"
+          >
             <DayMap
               ref="dayMap"
               fills

@@ -188,6 +188,10 @@ for (const size of PHONE_AND_DESK) {
       const box = (await first.boundingBox())!;
       const listBox = (await map.vendorsList.boundingBox())!;
       expect(box.y).toBeGreaterThanOrEqual(listBox.y);
+      // At rest the first row stands 12px into the list, 20px under the field, as the design has it.
+      expect(box.y - listBox.y, "the first row's room at the list's top").toBeCloseTo(12, 0);
+      const field = (await map.searchInput.boundingBox())!;
+      expect(box.y - (field.y + field.height), 'the first row under the field').toBeCloseTo(20, 0);
       const atTop = await page.evaluate(
         ({ x, y }) =>
           document.elementFromPoint(x, y)?.closest('[data-testid="public-map-vendor"]')

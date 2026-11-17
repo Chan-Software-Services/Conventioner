@@ -63,24 +63,33 @@ defineProps<{ items: readonly PublicMapLegendItem[] }>();
   color: var(--mm-black);
 }
 
+/* The swatch one line tall, its 14px square centred in it by the view box, beside the label's
+   first line, so a name long enough to wrap keeps its swatch where a one-line name has it. */
 .public-map-legend__item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-2);
 }
 
 .public-map-legend__swatch {
   flex: none;
   width: 14px;
-  height: 14px;
+  height: 1lh;
 }
 
-/* Under a hall a phone's width the legend shares a row with the zoom and may wrap: a pill's ends
-   would round a two-line legend into a capsule, so its corners are the bubble's, which still
-   round one line whole. */
+/* Under a hall a phone's width the legend shares a row with the zoom: its spacing is tighter, so
+   two short section names keep one line beside the zoom at 390px, and when longer or more names
+   wrap it, a pill's ends would round it into a capsule, so its corners are the bubble's, which
+   still round one line whole. */
 @container (width < 30rem) {
   .public-map-legend {
+    column-gap: var(--space-3);
+    padding-inline: var(--space-3);
     border-radius: var(--radius-bubble);
+  }
+
+  .public-map-legend__item {
+    gap: var(--space-1);
   }
 }
 </style>

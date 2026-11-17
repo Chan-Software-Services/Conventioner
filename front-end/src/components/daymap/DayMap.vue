@@ -314,10 +314,11 @@ const swatches = computed(() => {
     padding-bottom: var(--space-3);
   }
 
+  /* Their feet on one line, so a legend that wraps grows upward and the zoom never moves. */
   .day-map--fills .day-map__legend-slot,
   .day-map--fills .day-map__zoom {
     position: static;
-    align-self: center;
+    align-self: end;
     margin-top: var(--space-3);
   }
 

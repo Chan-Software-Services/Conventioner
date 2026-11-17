@@ -198,10 +198,11 @@ function onScroll(event: Event) {
   scroll-padding-top: var(--public-map-card-reach);
 }
 
-/* The panel's inset, inside the scroller, so a row's focus halo is never cut at its edge. */
+/* The panel's inset, inside the scroller, so a row's focus halo is never cut at its edge; the
+   first row stands --space-3 under the field at rest, the room scrolling away with the rows. */
 .public-map-vendors__rows {
   margin: 0;
-  padding: 0 var(--space-4) var(--space-4);
+  padding: var(--space-3) var(--space-4) var(--space-4);
   list-style: none;
 }
 

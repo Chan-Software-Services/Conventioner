@@ -786,25 +786,34 @@ describe("the list of the day's vendors", () => {
 
 // ── The card's place, closing it, and a vendor out of view (T465 ticket 05) ──
 
-/** A window narrower than the sheet's two columns, its `matchMedia` answering not wide until
- *  `widen` says the window grew. */
-function narrowWindow() {
+/** A window as wide as the sheet's two columns or narrower, its `matchMedia` answering so until
+ *  `widen` or `narrow` says the window crossed 1000px. */
+function windowAt(wide: boolean) {
   const heard: ((event: { matches: boolean }) => void)[] = [];
   vi.spyOn(window, 'matchMedia').mockImplementation(
     (query: string) =>
       ({
         media: query,
-        matches: false,
+        matches: wide,
         addEventListener: (_: string, listener: (event: { matches: boolean }) => void) =>
           heard.push(listener),
         removeEventListener: (_: string, listener: (event: { matches: boolean }) => void) =>
           heard.splice(heard.indexOf(listener), 1),
       }) as unknown as MediaQueryList,
   );
-  return {
-    heard,
-    widen: () => heard.forEach((listener) => listener({ matches: true })),
-  };
+  const tell = (matches: boolean) => heard.forEach((listener) => listener({ matches }));
+  return { heard, widen: () => tell(true), narrow: () => tell(false) };
+}
+const narrowWindow = () => windowAt(false);
+const frame = () => new Promise<void>((done) => requestAnimationFrame(() => done()));
+
+/** Each element matching a selector drawn at its box, the map's box 1,200 by 900 px, the rest at
+ *  none. */
+function drawnAt(boxes: [selector: string, box: DOMRect][]) {
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    if (this.getAttribute('data-testid') === 'layout-map') return new DOMRect(0, 0, 1200, 900);
+    return boxes.find(([selector]) => this.matches(selector))?.[1] ?? new DOMRect(0, 0, 0, 0);
+  });
 }
 
 const side = () => wrapper!.get('.public-map__side');
@@ -919,7 +928,6 @@ describe("the card at the vendor panel's top, in a narrower window", () => {
 // pick that opens it over the focus gives the focus to its Close.
 describe("the focus and the card at the vendor panel's top", () => {
   const field = () => wrapper!.get<HTMLInputElement>('[data-testid="public-map-find-input"]');
-  const frame = () => new Promise<void>((done) => requestAnimationFrame(() => done()));
 
   /** The card's box over the panel's top 200px, and each of `under` drawn at its own top. */
   function drawnUnderTheCard(under: Record<string, number>) {
@@ -988,6 +996,103 @@ describe("the focus and the card at the vendor panel's top", () => {
   it('leaves the bubble open at a desk when the focus enters the search field', async () => {
     const page = await open(found(), { table: 'g1' });
     field().element.focus();
+    await frame();
+    await flushPromises();
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
+    expect(routing.replace).not.toHaveBeenCalled();
+  });
+});
+
+// The card moves between the bubble and the panel's top as the window crosses 1000px (a tablet
+// turned, a window resized): the focus in it follows it, and the panel's rule holds where it lands.
+describe('the card moving as the window crosses 1000px', () => {
+  const field = () => wrapper!.get<HTMLInputElement>('[data-testid="public-map-find-input"]');
+  const control = (testid: string) => wrapper!.get<HTMLElement>(`[data-testid="${testid}"]`);
+  const inThePanel = () => side().find('[data-testid="public-map-card"]').exists();
+
+  it("gives the focus to the panel card's Close when it lands over the focused search field", async () => {
+    const window = windowAt(true);
+    drawnAt([
+      ['.public-map__card-box', new DOMRect(0, 0, 390, 200)],
+      ['[data-testid="public-map-find-input"]', new DOMRect(16, 40, 358, 44)],
+    ]);
+    const page = await open();
+    field().element.focus();
+    const kiln = mapListing(ANSWER, TODAY).find((vendor) => vendor.name === 'Kiln & Co')!;
+    page.getComponent(PublicMapVendors).vm.$emit('open', kiln);
+    await flushPromises();
+    await frame();
+    expect(document.activeElement).toBe(field().element);
+
+    window.narrow();
+    await flushPromises();
+    await frame();
+    await flushPromises();
+    expect(inThePanel()).toBe(true);
+    expect(document.activeElement).toBe(control('public-map-card-close').element);
+  });
+
+  it("keeps the focus on the same control of the card, from the bubble to the panel's top", async () => {
+    const window = windowAt(true);
+    const page = await open(found(), { table: 'g1' });
+    control('public-map-card-close').element.focus();
+    window.narrow();
+    await flushPromises();
+    await frame();
+    expect(inThePanel()).toBe(true);
+    expect(document.activeElement).toBe(control('public-map-card-close').element);
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
+  });
+
+  it("keeps the focus on the same link, from the panel's top to the bubble", async () => {
+    const window = windowAt(false);
+    await open(found(), { table: 'g1' });
+    control('public-map-card-instagram').element.focus();
+    window.widen();
+    await flushPromises();
+    await frame();
+    expect(inThePanel()).toBe(false);
+    expect(
+      wrapper!
+        .get('[data-testid="public-map-bubble"]')
+        .element.contains(control('public-map-card-instagram').element),
+    ).toBe(true);
+    expect(document.activeElement).toBe(control('public-map-card-instagram').element);
+  });
+});
+
+// At a desk, nothing holding the focus lies under the bubble either: the focus reaching a table
+// it covers (a neighbour, by the arrow keys) closes it, the focus staying on that table.
+describe('the focus and the bubble at a desk', () => {
+  const BUBBLE = new DOMRect(200, 200, 288, 200);
+  const drawn = (g4: DOMRect) =>
+    drawnAt([
+      ['[data-testid="public-map-bubble-layer"]', new DOMRect(0, 0, 1200, 900)],
+      ['[data-testid="public-map-bubble"]', BUBBLE],
+      ['[data-table-id="g1"]', new DOMRect(160, 420, 60, 30)],
+      ['[data-table-id="g4"]', g4],
+    ]);
+
+  it('closes when the focus reaches a table it covers, which keeps the focus', async () => {
+    drawn(new DOMRect(300, 300, 60, 30));
+    const page = await open(found(), { table: 'g1' });
+    await frame();
+    const g4 = page.get('[data-table-id="g4"]');
+    (g4.element as HTMLElement).focus();
+    await frame();
+    await flushPromises();
+    expect(routing.replace).toHaveBeenLastCalledWith({
+      query: { date: TODAY, location: 'loc-upper' },
+    });
+    expect(page.find('[data-testid="public-map-card"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(g4.element);
+  });
+
+  it('stays when the focus reaches a table clear of it', async () => {
+    drawn(new DOMRect(900, 700, 60, 30));
+    const page = await open(found(), { table: 'g1' });
+    await frame();
+    (page.get('[data-table-id="g4"]').element as HTMLElement).focus();
     await frame();
     await flushPromises();
     expect(page.find('[data-testid="public-map-card"]').exists()).toBe(true);
