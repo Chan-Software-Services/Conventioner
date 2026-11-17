@@ -32,6 +32,8 @@ describes:
   - front-end/e2e/helpers/seeds.ts#seedSettledLayout
   - front-end/e2e/helpers/seeds.ts#recordCheckIns
   - front-end/e2e/helpers/seeds.ts#allocateThenFreeEverySeat
+  - front-end/e2e/helpers/seedMarketDayMap.ts
+  - front-end/e2e/helpers/seedAPricedVendor.ts
 verified: 2026-11-12
 sources:
   - E02
@@ -61,6 +63,8 @@ sources:
   - T318
   - T277
   - T316
+  - T422
+  - T411
 ---
 
 # E2E seeds
@@ -178,6 +182,12 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
   - `intakeMode: 'form'` makes its vendors apply on its page, so it has results to publish
   - `laidOut` lays Main Hall out in Draft (`startLayout()`), Hall A's tables in a row across a hall 30 m wide, so the run places vendors at a layout's tables (T257)
 
+**`seedAPricedVendor()`** ([file](../../../front-end/e2e/helpers/seedAPricedVendor.ts))
+
+- Leaves: `seedMarketWithVendors()`'s market priced in CAD, walked to `assignment`, with alice (`PRICED_VENDOR`) on a Gold full table at $35 on its one date
+- Notes:
+  - her drawer's Payment tab owes $35 and records a payment, for a spec of Record payment's dialog
+
 **`seedPublishedMarketWithAssignments()`**
 
 - Leaves: the above, in `market_days`, with its slug
@@ -226,6 +236,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
   - settled rules, on a priced market, so Payments draws the market's money and its tables by tier and by date (T180)
   - a section of 24 tables on a market in Assignment, past the Assignments page's fold of 20, so a sweep walks a section unfolded (T223)
   - a market connected to Discord with a long last run written on it, in every group of the role report and naming a vendor no longer listed, of its own since a connection changes the Vendors page and the Tools tab the others are walked on (T217)
+  - a market on its days with both halls laid out and its public map on (`seedMarketDayMap()`), for the public map, Attendance's map and the Public map card turned on (T422)
   - an archive
   - the CSV markets the import screens serve: one taking applications, whose saved `importMapping` the `LATER_IMPORT` export reads, so Map columns opens with values waiting, a draft with no plan, and a draft with a plan and the Viewer on it, whose first import's preview offers the reviewers
   - an organization of the organizer's own:
@@ -255,7 +266,21 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
 
 **`startLayout()`** ([file](../../../front-end/e2e/helpers/seeds.ts))
 
-- Leaves: a location's layout started on a market in Draft as the page starts it, calibrated to `metresAcross` when given, with `tables` (each naming its section by id) and `zones` on it; `seedLayout()` and `seedAssignedMarket({ laidOut })` call it
+- Leaves: a location's layout started on a market in Draft as the page starts it, calibrated to `metresAcross` when given, with `tables` (each naming its section by id) and `zones` (each turned by its `rotation`, none unless given) on it; `seedLayout()` and `seedAssignedMarket({ laidOut })` call it
+- Notes: its tables' ids are `table-1` on, or `tablePrefix` and their place, which a market of two layouts sets for each, since a seat names its table by id alone
+
+**`seedMarketDayMap()`** ([file](../../../front-end/e2e/helpers/seedMarketDayMap.ts))
+
+- Leaves: a `form` market in `market_days`, today its first date and tomorrow its second, for every spec of the day map, the public map and Attendance's map (T422):
+  - North Wing laid out in Draft with Aisle A's four tables in a row and a stage turned 30 degrees, and South Wing with Aisle B's three, each layout's tables with ids of its own
+  - seven vendors seated by hand today on an allocation (`allocateThenFreeEverySeat()`), two of them sharing Aisle A 3 as its left and right halves, and two seated tomorrow
+  - the first vendor checked in today at the door, and an organizer's note on the second
+  - the form's three short text questions, a business name, a website and an Instagram handle, answered by most vendors in the shapes the map cleans, one answering none and one giving an email address as their business name
+- With `publicMap: true`, the map turned on through the Public map card's own write, its three questions chosen
+- With `inAssignment: true`, it stops in `assignment` once today's and tomorrow's seats are given: no location laid out, its sections' counts as Section Setup typed them, its results not out and nobody checked in, so a spec starts a layout past Draft and publishes itself (the phase's journey, `a-market-past-draft-gets-a-public-map.spec.ts`)
+- Notes:
+  - answers the vendors (`DAY_MAP_VENDORS`), their seats and answers, the halls and their ids, and `personalMarkers`, every name, address and note a public page must never show
+  - every value is a fixture value, none from a real floorplan or export
 
 **A vendor is seeded as an approved application**, which is what the solver reads ([ADR 0003](../../adr/0003-applications-are-the-solvers-only-input.md)).
 `seedApprovedVendor()` writes the essential answers in the shapes `essential_fields.py` validates into (dates and tiers as the plan's own names, the count an integer, the table choice lower-cased).

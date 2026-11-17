@@ -250,6 +250,9 @@ describe('confirming', () => {
   it('no close takes it during the write, and the move goes when the write lands', async () => {
     const wrapper = await pressOpen(draft());
     const answer = await writeHeld(wrapper);
+    // A second press, Enter on the form, sends nothing while the first is out.
+    await confirm(wrapper);
+    expect(api.put).toHaveBeenCalledTimes(1);
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await wrapper.get('[data-testid="open-applications-cancel-button"]').trigger('click');

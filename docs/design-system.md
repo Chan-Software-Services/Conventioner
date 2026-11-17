@@ -7,10 +7,6 @@ describes:
   - front-end/src/assets/main.css
   - front-end/stylelint.config.js
   - front-end/src/__tests__/spacingScale.test.ts
-  - front-end/e2e/screen-sweeps-markets-to-assignments.spec.ts
-  - front-end/e2e/screen-sweeps-vendors-to-signed-out.spec.ts
-  - front-end/e2e/screen-sweeps-plan.spec.ts
-  - front-end/e2e/helpers/screenSweeps.ts
   - front-end/e2e/layout-detectors.spec.ts
   - front-end/e2e/helpers/screens.ts
   - front-end/e2e/helpers/layoutDetectors.ts
@@ -46,6 +42,10 @@ describes:
   - front-end/src/utils/useGroupFolds.ts
   - front-end/src/components/AuthCard.vue
   - front-end/src/components/charts/
+  - front-end/e2e/screen-sweeps-markets-to-assignments.spec.ts
+  - front-end/e2e/screen-sweeps-vendors-to-signed-out.spec.ts
+  - front-end/e2e/screen-sweeps-plan.spec.ts
+  - front-end/e2e/helpers/screenSweeps.ts
 verified: 2026-11-13
 sources:
   - wayfinding/claims-and-room/map
@@ -106,6 +106,7 @@ sources:
   - T263
   - T201
   - T315
+  - T422
 ---
 
 # Conventioner's design language
@@ -167,6 +168,12 @@ Six steps. Adjacent 1px steps are not distinguishable, so they carry no meaning 
 
 Nothing below 12px, which is the readable minimum.
 No `font-size` in `front-end/src` is smaller.
+
+### Line height
+
+`--leading` is running text's line height, 1.6 times the size, which `body` sets and every line box inherits.
+A box placed on a line's middle is placed by it, never by a pixel written by hand: a dialog's close stands half of `--text-lg` times `--leading` below the title's top, on its first line ([dialogs](implementation/conventions/dialogs.md)), and the vendor drawer's close on its name's line the same way (T422).
+Such a line sets `line-height: var(--leading)` itself, so a parent's line height cannot move it from under the box.
 
 ### Weight
 
@@ -346,6 +353,8 @@ One elevation shadow, extracted from the newer screens, where it is already used
   0 0 0 1px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.07), 0 6px 14px rgba(0, 0, 0, 0.08);
 ```
 
+**A card that informs is flat**, where the cards worked in are lifted: on the [layout's page](implementation/modules/floorplan-placement.md#the-editor) the Sections card stands on `--mm-beige` with a 1px `--mm-border` edge and no shadow, so the white, lifted card of the selection or the tool under it reads as the one in hand (T422, the QC walk of 2026-11-16); its quiet lines take `--mm-text-muted-on-beige`, since `--mm-text-muted` is 4.23:1 there.
+
 **The legacy halo is retired**: `0 0 4px 5px rgba(0,0,0,.25)` and its inset twin. A shadow with no offset has no light source, and a spread larger than its blur is a ring, not a shadow - which is why the older cards read as outlined in grey fog. The inset variant is what makes the setup fields look pressed and skeuomorphic. That rule is elevation's; the focus halo below is a focus indicator, deliberately a flat ring that hugs the control.
 
 **A scroller's edge shade** is `--edge-shade` fading to nothing over `--edge-shade-depth` (12px, Daniel's choice), drawn by [`ScrollBox`](#the-primitive-layer) at each edge that has more beyond it, so a scroller with no bar still says it scrolls ([dialogs](implementation/conventions/dialogs.md)).
@@ -429,16 +438,34 @@ A table in no section is grey, `--layout-no-section-fill` and `-edge` (12.36:1, 
 
 **How a layout is drawn** ([`LayoutMap.vue`](../front-end/src/components/layout/LayoutMap.vue), [the drawing](implementation/modules/floorplan-placement.md#the-drawing)):
 
-- the floor is `--layout-floor`, and on a screen the venue's floorplan lies on it at half strength and in grey, so the sections' colours are the only colours;
+- the floor is `--layout-floor`, and on a screen the venue's floorplan lies on it at half strength and in grey, so the sections' colours are the only colours, unless the person viewing unticks Greyscale or Faded (`imageInGrey`, `imageFaded`), which draw it in its own colours or at full strength;
 - a table is a rectangle at its true size with a 40 mm corner, its edge 1.5px, its number in Outfit 600 at 14px (`--text-sm`) where the table has the room, smaller to fit, and left out below 6px; the number turns with the table and never reads upside down;
 - a section's name is `--text-xs` at 600 in a white pill 22px tall, edged 1.5px in the section's edge, 6px from its tables;
-- a no-table zone is hatched at 45°, 10px apart, inside a 1.5px dashed edge with a 4px corner, its label at 14px where it fits;
-- a selected table is outlined 2.5px in `--mm-black`, 3px outside its edge, and an alignment guide is 1px of `--mm-blue`, dashed;
+- a no-table zone is hatched at 45°, 10px apart, inside a 1.5px dashed edge with a 4px corner, its label at 14px where it fits; a turned zone is drawn turned about its centre, its label upright;
+- a selected table is outlined 1.5px in `--mm-black`, the outline's inner side on the outer side of the table's edge with no floor between them (T422), and an alignment guide is 1px of `--mm-blue`, dashed;
 - a table picked up by keyboard is drawn lifted: its outline dashed, 6px on and 4px off, and a shadow of `--mm-black` at 30%, 3px under it, straight down the screen however it is turned;
+- the selection stands in a frame, 1px of `--mm-black` 6px outside the tables' edges, clear of their outlines: one table's turned with it, several's square to the page; on each of its corners a turn knob, a 10px white circle edged 1.5px in `--mm-black`, with a 28px reach for a thumb and a turning arrow for its cursor, drawn as an inline image rather than an icon, since a cursor is no component (T422);
 - while the keys are on the editor's map, the stage round it wears the halo, and the focused table its own border;
 - a row being drawn is its path, 2px of `--mm-blue`, each point laid a 5px white dot edged 2px in it, the first ringed at 11px in 2px of it while a click on it would close the path, as the place a line drawn by hand began is while letting go there would close it, the tables it would place in their section's tint at 75% with a dashed edge, 5px on and 3px off, their count in white at 12px on a `--mm-black` chip 22px tall, 14px from the pointer, and the keys' crosshair two 24px arms of `--mm-black` over white;
 - an area being drawn for Fill an area is its outline, 2px of `--mm-blue`, each corner a 5px white dot edged 2px in it, the first ringed at 11px while a click on it would close the shape; a shape whose sides cross is drawn in `--mm-text-red-on-tint` instead, since it cannot be closed; a box in hand and an area closed are `--mm-blue` at 10% with a dashed edge of 1.5px, 5px on and 3px off;
 - every one of those pixel sizes holds at any zoom, and a table's millimetres are what zoom: 100% is 1px to 25 mm, at which a 6 ft table is 73 by 30px.
+
+**A day's map draws each table by who holds it** (T422, D40, D41; [`DayMap.vue`](../front-end/src/components/daymap/DayMap.vue)), never by colour alone:
+
+| Tone       | Means                                     | Fill               | Edge                                              | Number       |
+| ---------- | ----------------------------------------- | ------------------ | ------------------------------------------------- | ------------ |
+| `filled`   | here at the door; taken on the public map | the section's tint | the section's hue                                 | `--mm-black` |
+| `outlined` | expected (or did not come) at the door    | white              | the section's hue                                 | `--mm-black` |
+| free       | no vendor at it                           | `--layout-floor`   | `--layout-no-section-edge`, dashed 4px on 3px off | `--mm-black` |
+
+Every tone's number is `--mm-black`, held to the 7:1 a table's number is held to on each of the three fills (15.54 on white, 13.90 on the floor); a section's hue as the number on white would be as low as 3.83 (gold) and the muted ink on the floor 4.40, so neither is used.
+A free table's dashed edge is the grey of a table in no section, 4.03 on the floor, where `--mm-border` would be about 1.6; `contrast.test.ts` holds each tone for each of the eight colours.
+
+- a table shared by two vendors is two halves split across its longer side, each its own shape with its outer corners round and the split square, so the two edges meet as the line between them; left is the half on the reader's left as the number reads, a table turned a quarter having its left half at the top; each half is labelled with the number and "L" or "R" ("12L") at the size a number takes for the half's box, left out where it does not fit, and drawn in its own tone, a half with nobody at it free;
+- a seat or table marked, as a search marks it or a press picks it, takes the selection's outline: round the table, or round the half its seat holds;
+- the legend under the map is one line of swatches, each 24 by 14px drawn in its tone in the open location's first section's colours, with the page's word for it at `--text-sm` ("Here", "Expected", "No vendor"; "Taken", "Free");
+- the zoom stands on the map's bottom-right corner, as the editor's does: Zoom out, Zoom in and Fit as compact secondary buttons on a white card with the card's shadow; each press zooms by half again or a third less about the map's middle, Ctrl and the wheel zoom about the pointer at a desk, a mouse drag pans once zoomed, a plain wheel scrolls the page, and a phone pinches and drags; in a box narrower than 30rem the zoom stands under the map at the legend's end instead, with no card, so it covers none of a phone's small map, and the phone keeps the buttons as the one-finger way to zoom a pinch needs beside it (WCAG 2.5.1);
+- two locations or more are switched by a row of filter toggles above the map, the open one pressed.
 
 ### The brand green is `--mm-green` (`#36826f`)
 
@@ -693,6 +720,8 @@ Measured, the green glow is 1.58:1 against white and 1.50:1 against beige, below
 
 **A selected row is the on toggle's look**, so selection and focus never read alike (T123).
 A toggle that is on (`.btn[aria-pressed='true']` in `primitives.css`) is the one selected state the language had: a `--mm-chip-positive` ground inside a `--mm-green` border.
+**A tool that is on is filled instead** (T422, the QC walk of 2026-11-16): the layout editor's toolbar draws its tool on in `--mm-green` with white ink, its key white too, deepening to `--mm-green-hover` and `--mm-green-pressed` under the pointer and held down (white 4.59, 5.23 and 5.91:1), since the tool is a mode every press on the map obeys, where a filter's toggle only narrows a list; each tool's key stands after its name in `--text-xs` and `--mm-text-muted`, the disabled ink on a tool that cannot be used.
+A menu's choice that stays chosen ([`RowMenu.vue`](../front-end/src/components/RowMenu.vue)'s ticked items, the layout map's Floorplan menu) draws its tick as the app's checkbox is, a `--mm-green` square with a white check.
 **A tap shows on the control, never as the browser's box** (T142): `base.css` turns off the tap highlight, which flashed a square light-blue box over a tapped control whatever its shape, and a `.btn` shows its press itself, its pressed fill under `:active`, a step past its hover's ([a fill of its own](#the-contrast-contract)).
 The [Vendors page](business/flows/vendors.md)'s open vendor takes the same pair (`.vendor-row--open` in [`VendorsView.vue`](../front-end/src/views/VendorsView.vue)), where it drew a 2px black outline; its row keeps its own ink, and a focused row keeps its white ground and draws the green border.
 The tint is a chip's own ground, so inside a selected row a chip keeps its ink on white, and its muted lines, the address under a name and the date count, take `--mm-text-muted-on-beige`, since `--mm-text-muted` is 4.27:1 on the tint; `contrast.test.ts` holds the row's text, its muted lines and its 3.75:1 border to the tint.
@@ -768,11 +797,12 @@ A convention nothing enforces is how the product got here. Six checks, the first
    A button that is an SVG shape must instead show a shape of its own marked `data-focus-border`, its stroke 2px with `vector-effect: non-scaling-stroke` and in the deep green, at the size the button had at rest.
    Any other control must draw no outline and the halo for its ground: white at 35% where the first ancestor with a fill is dark, the green halo elsewhere.
    A file input is a control, not a field, since nothing is typed into it and the drop zone around it wears its halo.
+   It reads each button's size at rest two frames after it took the focus away, once the page has drawn what losing it did, since the layout editor puts down a table the keys picked up as the focus leaves the map and a size read at once was the lifted table's (T422).
    It moves the pointer to the window's corner before it reads how the fields look unfocused, since a focus that scrolls a dialog's body can bring the box around the focused field under a pointer left there, and that box's hover fill read as a look focus drew (T180).
    Both must have rounded corners, no box that clips what lies past its edge may cut either off, and a text control with no fill or border may be no more than 24px wider than its words and its padding, room for a disclosure's marker.
    A box clips only what is placed inside it, so the clip check climbs the chain of containing blocks: a positioned box holds what is placed absolutely, and a box with a `transform`, `translate`, `rotate`, `scale`, `perspective`, `filter` or `backdrop-filter`, a `will-change` naming one of them, a `contain` of `layout`, `paint`, `strict` or `content`, or a `container-type` of `size` or `inline-size` holds what is placed fixed or absolutely.
    A menu's items are no Tab stop, so in every state it opens each menu with Enter on its button (`aria-haspopup="menu"`) and judges each item it reaches with the arrow keys; Enter, and each arrow key that moves to the next item, must land focus on a `[role='menuitem']` of the menu it opened, or the sweep names the menu, its button and where focus is, so a menu that keeps focus on its button cannot pass.
-   [`e2e/focus-sweep-detectors.spec.ts`](../front-end/e2e/focus-sweep-detectors.spec.ts) proves them on fixtures: a halo at the edge of a box that holds it through each of `transform`, `filter`, `will-change: transform` and `contain: paint`, placed absolutely and fixed, is caught, as is one in a static box around a transformed box that holds it, and one in a static box is not; a menu whose arrows leave focus on its button is caught, and a working one passes; and a drop zone that shows no focus for its file input is caught, and one that wears the halo passes; and a button that wears the halo, draws its border outside its edge or over its words, draws the plain green on a green fill or its own green border, draws the deep green where the plain shows, or is resized by focus is caught, as is a text button whose border is cut off by a box or runs off the window, and a button, a text button clear of its words or a card around one drawing it rightly passes; and a drawn button, an SVG shape, with no border shape of its own, with one in the drawing's units or in the plain green, or with one reaching past its edge is caught, and one drawing the deep green over its edge passes.
+   [`e2e/focus-sweep-detectors.spec.ts`](../front-end/e2e/focus-sweep-detectors.spec.ts) proves them on fixtures: a halo at the edge of a box that holds it through each of `transform`, `filter`, `will-change: transform` and `contain: paint`, placed absolutely and fixed, is caught, as is one in a static box around a transformed box that holds it, and one in a static box is not; a menu whose arrows leave focus on its button is caught, and a working one passes; and a drop zone that shows no focus for its file input is caught, and one that wears the halo passes; and a button that wears the halo, draws its border outside its edge or over its words, draws the plain green on a green fill or its own green border, draws the deep green where the plain shows, or is resized by focus is caught, one the page redraws a microtask after the focus left it passing, as is a text button whose border is cut off by a box or runs off the window, and a button, a text button clear of its words or a card around one drawing it rightly passes; and a drawn button, an SVG shape, with no border shape of its own, with one in the drawing's units or in the plain green, or with one reaching past its edge is caught, and one drawing the deep green over its edge passes.
    [`e2e/a-focused-button-moves-nothing.spec.ts`](../front-end/e2e/a-focused-button-moves-nothing.spec.ts) reads each button and the boxes around it focused and at rest, on the library's primitives and on Markets, at a desk and on a phone.
    [`e2e/screen-sweeps-plan.spec.ts`](../front-end/e2e/screen-sweeps-plan.spec.ts) proves that the phone it adds goes on a copy of a screen's sizes, so it never reaches the sizes the other checks walk, which screens share.
    It walks each state at a phone's width too, as well as at its first size: an organizer's screens ship at a desk, but a desk zoomed to 400% is that narrow, and there a table too wide for its box scrolls and becomes a keyboard stop of its own; a state that cannot be walked that narrow is marked `deskOnly`.
@@ -799,12 +829,15 @@ The list holds these states, one a line, each beside the state it is most like, 
 - `/markets` and the Assignments page with their dialogs at 390
 - Vendors and Payments with their dialogs and drawers at 390, Payments priced and unpriced
 - the vendor drawer at the door on each of its tabs at 390
+- Attendance as a map, a shared table in halves, at the door's three sizes (T422)
 - an Editor's Update info with its essential questions locked
 - settled rules
+- the Public map card turned on, its address shown (T422)
 - a location's layout past draft, at its upload step and calibrating
 - a location's layout past Draft in its editor, a table selected, what would change a seat disabled
 - a location's layout drawn as its map, with 20 tables
 - the signed-out pages
+- the public map signed out, before a pick and with a shared table picked, at a desk and on a phone (T422)
 
 They are walked over a stress seed ([`e2e/helpers/seedTheScreens.ts`](../front-end/e2e/helpers/seedTheScreens.ts)) of long names, 40 applications in every review state, a review divided between two reviewers and 36 vendors over four dates and three sections, since a layout that holds on three short names breaks on a real market.
 Contrast and axe measure each state at its first size, focus at its first size and a phone's width, and the layout sweep at every size.

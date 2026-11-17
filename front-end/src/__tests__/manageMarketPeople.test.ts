@@ -11,6 +11,7 @@ import ManageMarketOverlay from '@/views/ManageMarketOverlay.vue';
 import { MarketPhase, MarketRole, type Market } from '@/assets/types/datatypes';
 import { MarketAction } from '@/utils/marketActions';
 import { answersRefusing } from './support/servedAnswers';
+import { tryEveryClose } from './support/dialogCloses';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 
@@ -440,5 +441,233 @@ describe('Users with access at 154 people', () => {
     await flushPromises();
 
     expect(count(wrapper)).toBe('Showing 50 of 154');
+  });
+});
+
+/**
+ * Manage market's own writes, Add user, Rename and Delete market, belong to the opening they were
+ * sent from (T411): a press while one is out sends nothing, nothing closes Manage market or the
+ * delete's confirmation while one is out, and an answer that lands after Manage market was opened
+ * on another market leaves that market's dialog alone.
+ */
+describe("Manage market's writes belong to their opening", () => {
+  function held<T = unknown>() {
+    let resolve!: (value: T) => void;
+    let reject!: (err: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  const OTHER = market({ id: 'market-2', name: 'Lakeside', phase: MarketPhase.Draft });
+  const byTestId = (id: string) =>
+    document.body.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+  const refused = (sentence: string) =>
+    Object.assign(new Error('refused'), {
+      isAxiosError: true,
+      response: { status: 400, data: { error: sentence } },
+    });
+
+  async function openOn(first: Market) {
+    api.get.mockImplementation(async (url: string) => {
+      if (url === '/markets/market-1') return { data: { market: first } };
+      if (url === '/markets/market-2') return { data: { market: OTHER } };
+      return { data: { entries: [], next: null, vendorNames: {}, actors: [], groups: [] } };
+    });
+    const wrapper = mount(ManageMarketOverlay, {
+      props: { manageOpen: true, market: first },
+      attachTo: document.body,
+      global: { stubs: { Teleport: true, RouterLink: RouterLinkStub } },
+    });
+    await flushPromises();
+    return wrapper;
+  }
+
+  /** Every way a person closes Manage market, which has no Cancel of its own. */
+  async function tryToCloseManageMarket() {
+    byTestId('manage-market-close-button')!.click();
+    byTestId('manage-market-background')!.click();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flushPromises();
+  }
+
+  async function typeAnAddress(wrapper: Awaited<ReturnType<typeof openOn>>, email: string) {
+    await wrapper.get('[data-testid="manage-market-add-user-button"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="manage-market-add-user-input"]').setValue(email);
+  }
+
+  async function reopenOnTheOther(wrapper: Awaited<ReturnType<typeof openOn>>) {
+    await wrapper.setProps({ market: OTHER });
+    await flushPromises();
+  }
+
+  it('Add user sends once for two presses and holds Manage market until it lands', async () => {
+    const wrapper = await openOn(market());
+    await typeAnAddress(wrapper, 'newcomer@example.com');
+    const answer = held();
+    api.post.mockReturnValue(answer.promise);
+
+    await wrapper.get('.add-user-form').trigger('submit');
+    await wrapper.get('.add-user-form').trigger('submit');
+    await flushPromises();
+    await tryToCloseManageMarket();
+
+    expect(api.post).toHaveBeenCalledTimes(1);
+    expect(wrapper.emitted('manageClose')).toBeUndefined();
+    expect(byTestId('manage-market-close-button')!.hasAttribute('disabled')).toBe(true);
+
+    answer.resolve({ data: {} });
+    await flushPromises();
+    await tryToCloseManageMarket();
+    expect(wrapper.emitted('manageClose')).not.toBeUndefined();
+  });
+
+  it("keeps an add's refusal out of Manage market opened on another market", async () => {
+    const wrapper = await openOn(market());
+    await typeAnAddress(wrapper, 'newcomer@example.com');
+    const answer = held();
+    api.post.mockReturnValue(answer.promise);
+    await wrapper.get('.add-user-form').trigger('submit');
+    await flushPromises();
+
+    await reopenOnTheOther(wrapper);
+    answer.reject(refused('User not found'));
+    await flushPromises();
+
+    expect(byTestId('manage-market-add-user-error')).toBeNull();
+    expect(wrapper.text()).not.toContain('User not found');
+    expect(wrapper.get('.market-name').text()).toBe('Lakeside');
+    expect(wrapper.text()).not.toContain('Riverside');
+  });
+
+  it("keeps an add's success out of Manage market opened on another market", async () => {
+    const wrapper = await openOn(market());
+    await typeAnAddress(wrapper, 'newcomer@example.com');
+    const answer = held();
+    api.post.mockReturnValue(answer.promise);
+    await wrapper.get('.add-user-form').trigger('submit');
+    await flushPromises();
+
+    await reopenOnTheOther(wrapper);
+    await typeAnAddress(wrapper, 'typed-here@example.com');
+    const reads = api.get.mock.calls.length;
+    answer.resolve({ data: {} });
+    await flushPromises();
+
+    expect(api.get.mock.calls.length).toBe(reads);
+    expect(
+      (wrapper.get('[data-testid="manage-market-add-user-input"]').element as HTMLInputElement)
+        .value,
+    ).toBe('typed-here@example.com');
+    expect(wrapper.get('.market-name').text()).toBe('Lakeside');
+  });
+
+  it('Rename sends once for two presses and holds Manage market until it lands', async () => {
+    const wrapper = await openOn(market({ phase: MarketPhase.Draft }));
+    await wrapper.get('[data-testid="manage-market-rename-input"]').setValue('Autumn Market');
+    const answer = held();
+    api.put.mockReturnValue(answer.promise);
+
+    await wrapper.get('.rename-row').trigger('submit');
+    await wrapper.get('.rename-row').trigger('submit');
+    await flushPromises();
+    await tryToCloseManageMarket();
+
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(wrapper.emitted('manageClose')).toBeUndefined();
+
+    answer.reject(refused('A market with this address already exists.'));
+    await flushPromises();
+    expect(wrapper.get('[data-testid="manage-market-rename-error"]').text()).toBe(
+      'A market with this address already exists.',
+    );
+    await tryToCloseManageMarket();
+    expect(wrapper.emitted('manageClose')).not.toBeUndefined();
+  });
+
+  it("keeps a rename's refusal and its re-read out of Manage market opened on another market", async () => {
+    const wrapper = await openOn(market({ phase: MarketPhase.Draft }));
+    await wrapper.get('[data-testid="manage-market-rename-input"]').setValue('Autumn Market');
+    const answer = held();
+    api.put.mockReturnValue(answer.promise);
+    await wrapper.get('.rename-row').trigger('submit');
+    await flushPromises();
+
+    await reopenOnTheOther(wrapper);
+    answer.reject(refused('A market with this address already exists.'));
+    await flushPromises();
+
+    expect(byTestId('manage-market-rename-error')).toBeNull();
+    expect(
+      (wrapper.get('[data-testid="manage-market-rename-input"]').element as HTMLInputElement).value,
+    ).toBe('Lakeside');
+  });
+
+  it('drops a re-read of the market it was open on once it is open on another', async () => {
+    const reread = held<{ data: { market: Market } }>();
+    const wrapper = await openOn(market());
+    api.get.mockImplementation(async (url: string) => {
+      if (url === '/markets/market-1') return reread.promise;
+      if (url === '/markets/market-2') return { data: { market: OTHER } };
+      return { data: { entries: [], next: null, vendorNames: {}, actors: [], groups: [] } };
+    });
+    await typeAnAddress(wrapper, 'newcomer@example.com');
+    api.post.mockResolvedValue({ data: {} });
+    await wrapper.get('.add-user-form').trigger('submit');
+    await flushPromises();
+
+    await reopenOnTheOther(wrapper);
+    reread.resolve({ data: { market: market() } });
+    await flushPromises();
+
+    expect(wrapper.get('.market-name').text()).toBe('Lakeside');
+  });
+
+  it('Delete market sends one delete for two presses and holds its confirmation until it lands', async () => {
+    const wrapper = await openOn(market());
+    await wrapper.get('[data-testid="manage-market-delete-button"]').trigger('click');
+    await flushPromises();
+    const answer = held();
+    api.delete.mockReturnValue(answer.promise);
+
+    const confirm = () =>
+      byTestId('manage-market-delete-window')!.querySelector('form')!.requestSubmit();
+    confirm();
+    confirm();
+    await flushPromises();
+
+    expect(api.delete).toHaveBeenCalledTimes(1);
+    expect(byTestId('manage-market-delete-submit-button')!.hasAttribute('disabled')).toBe(true);
+    await tryEveryClose('manage-market-delete');
+    expect(byTestId('manage-market-delete-window')).not.toBeNull();
+
+    answer.resolve({ data: {} });
+    await flushPromises();
+    expect(byTestId('manage-market-delete-window')).toBeNull();
+    expect(wrapper.emitted('manageClose')).toHaveLength(1);
+  });
+
+  it("keeps a delete's refusal out of its next opening", async () => {
+    const wrapper = await openOn(market());
+    await wrapper.get('[data-testid="manage-market-delete-button"]').trigger('click');
+    await flushPromises();
+    api.delete.mockRejectedValue(refused('Only the owner deletes a market.'));
+    byTestId('manage-market-delete-window')!.querySelector('form')!.requestSubmit();
+    await flushPromises();
+    expect(byTestId('manage-market-delete-window')!.textContent).toContain(
+      'Only the owner deletes a market.',
+    );
+
+    byTestId('manage-market-delete-cancel-button')!.click();
+    await flushPromises();
+    await wrapper.get('[data-testid="manage-market-delete-button"]').trigger('click');
+    await flushPromises();
+
+    expect(byTestId('manage-market-delete-window')!.textContent).not.toContain(
+      'Only the owner deletes a market.',
+    );
   });
 });

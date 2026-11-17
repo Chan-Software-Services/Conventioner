@@ -23,6 +23,7 @@ import {
   seedPublishedMarketWithAssignments,
   type SeededLayout,
 } from './seeds';
+import { seedMarketDayMap, type SeededMarketDayMap } from './seedMarketDayMap';
 import { uniqueMarketName } from './uniqueName';
 import { ensureVerifiedUser } from './verifiedUser';
 import { saveApplicationForm } from './saveApplicationForm';
@@ -94,6 +95,11 @@ export interface TheScreensSeed {
    * since a connection changes the Vendors page and the Tools tab the other markets are walked on.
    */
   roleReport: SeededMarket;
+  /**
+   * Market days today, both its locations laid out and its public map on (T422,
+   * `seedMarketDayMap`): the public map signed out, Attendance's map and the Public map card on.
+   */
+  dayMap: SeededMarket & SeededMarketDayMap;
   /** Archived, a CSV market. */
   archived: SeededMarket;
   /** A CSV market taking applications, which the import screen serves. */
@@ -776,6 +782,9 @@ export async function seedTheScreens(
   });
   recordRoleRun(roleReport.marketId, roleName, roleRunOf(reported.map(({ id }) => id)));
 
+  const mapped = await seedMarketDayMap(api, backend, email, password, { publicMap: true });
+  const dayMap = { ...mapped, marketSlug: mapped.slug };
+
   const archived = await seedPublishedMarketWithAssignments(api, backend, email, password);
   await transitionMarket(api, backend, email, archived.marketId, 'archived');
 
@@ -827,6 +836,7 @@ export async function seedTheScreens(
     rules,
     longSection,
     roleReport,
+    dayMap,
     archived,
     csv,
     csvDraft,

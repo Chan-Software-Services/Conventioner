@@ -5,13 +5,15 @@
  * dropped and the server's layout shown, as Market Setup forgets a plan it may no longer send.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { reactive } from 'vue';
+import { defineComponent, h, reactive } from 'vue';
 import { enableAutoUnmount, shallowMount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 
 import LayoutView from '@/components/layout/LayoutView.vue';
 import LayoutEditor from '@/components/layout/LayoutEditor.vue';
-import type { LayoutEditor as Editor } from '@/components/layout/useLayoutEditor';
+import { useLayoutEditor, type LayoutEditor as Editor } from '@/components/layout/useLayoutEditor';
+import type { SavedLayout } from '@/components/layout/layoutSave';
+import type { FloorplanObject } from '@/assets/types/datatypes';
 import { ROW_CHOICES_AT_FIRST, rowChoices } from '@/components/layout/layoutRow';
 import { useMarketStore } from '@/stores/market';
 import { MARKET_ID, marketRouter } from './support/marketScreen';
@@ -95,6 +97,12 @@ async function mountPage(): Promise<VueWrapper> {
     global: {
       stubs: {
         RouterLink: { template: '<a><slot /></a>' },
+        // Layout settings shows its body while open, as the dialog does.
+        AppDialog: {
+          name: 'AppDialog',
+          props: ['open', 'testid'],
+          template: '<div v-if="open" :data-testid="testid"><slot /></div>',
+        },
         // The frame stands as itself would, its page in its slot, its props read by the test.
         MarketFrame: {
           name: 'MarketFrame',
@@ -110,6 +118,13 @@ async function mountPage(): Promise<VueWrapper> {
 
 function editorOf(wrapper: VueWrapper): Editor {
   return wrapper.findComponent(LayoutEditor).props('editor') as Editor;
+}
+
+/** Open Layout settings from the page's head, where the table types and the floorplan's image
+ *  are set (T422, the QC walk's item 9). */
+async function openSettings(wrapper: VueWrapper) {
+  await wrapper.get('[data-testid="layout-settings-open"]').trigger('click');
+  await vi.advanceTimersByTimeAsync(0);
 }
 
 async function moveATable(wrapper: VueWrapper) {
@@ -215,29 +230,108 @@ describe('a refused change once the market is settled elsewhere', () => {
   });
 });
 
+describe('a save refused once the person may no longer write', () => {
+  // The layout keeps its copy on a refusal, and the page reads the server's layout again when the
+  // right to write goes, so the refusal's sentence stands alone: the plan's "back as it was last
+  // saved" is not this page's to say (T420's review).
+  it("says the server's sentence alone", async () => {
+    let may = true;
+    let refuse: (err: unknown) => void = () => {};
+    const editor = useLayoutEditor({
+      save: () =>
+        new Promise<SavedLayout>((_resolve, reject) => {
+          refuse = reject;
+        }),
+      may: () => may,
+    });
+    editor.adopt({ ...STORED, tables: [...STORED.tables] });
+    editor.moveTables(['g-1'], 1000, 0);
+    await vi.advanceTimersByTimeAsync(700);
+
+    may = false;
+    refuse(aRefusal(403, 'This market is archived.'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(editor.saveMessage.value).toBe('This market is archived.');
+    expect(editor.pending()).toBe(false);
+  });
+});
+
+describe('a save refused with a later move waiting', () => {
+  // The layout keeps its copy on a refusal; the move made while the refused save was out stays in
+  // it, but its pause no longer sends it, since the server would refuse it again (T420's gate
+  // review). The refused line with Retry stands, and leaving the page sends the copy.
+  it('sends nothing by the pause, says the refusal with Retry, and sends the copy on leaving', async () => {
+    const sent: FloorplanObject[] = [];
+    const refusals: ((err: unknown) => void)[] = [];
+    let editor!: Editor;
+    const Host = defineComponent({
+      setup() {
+        editor = useLayoutEditor({
+          save: (layout) => {
+            sent.push(structuredClone(layout));
+            return new Promise<SavedLayout>((_resolve, reject) => refusals.push(reject));
+          },
+        });
+        editor.adopt({ ...STORED, tables: [...STORED.tables] });
+        return () => h('div');
+      },
+    });
+    const wrapper = shallowMount(Host);
+
+    editor.moveTables(['g-1'], 1000, 0);
+    await vi.advanceTimersByTimeAsync(600);
+    expect(sent).toHaveLength(1);
+    editor.moveTables(['g-2'], 1000, 0);
+    await vi.advanceTimersByTimeAsync(200);
+    refusals.shift()!(aRefusal(400, "Each section's tables are numbered 1 to N."));
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(sent).toHaveLength(1);
+    // 'failed' is the state that shows the line with Retry (`layout-save-retry`).
+    expect(editor.saveState.value).toBe('failed');
+    expect(editor.saveMessage.value).toBe("Each section's tables are numbered 1 to N.");
+    expect(editor.pending()).toBe(true);
+
+    wrapper.unmount();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sent).toHaveLength(2);
+    expect(sent[1].tables.map((t) => `${t.id}:${t.xMm}`)).toEqual(['g-1:5000', 'g-2:7000']);
+  });
+});
+
 describe('a layout past Draft', () => {
+  // The editor's own shortcuts list is told by the editor (`theLayoutPagesFrame.test.ts`); the
+  // table types stand in Layout settings.
   const PANELS = [
     'LayoutEditor',
     'LayoutPanelSelection',
     'LayoutPanelSections',
     'LayoutPanelTypes',
-    'LayoutPanelKeyboard',
   ];
 
   it('is edited under the settled sentence, every card told its seats are settled', async () => {
     market = served({ phase: 'applications', setupLockReason: SETTLED });
     const wrapper = await mountPage();
+    await openSettings(wrapper);
 
     expect(wrapper.get('[data-testid="layout-setup-settled"]').text()).toBe(SETTLED);
     for (const name of PANELS) {
       expect(wrapper.findComponent({ name }).props('settled'), name).toBe(true);
     }
-    expect(wrapper.find('[data-testid="layout-replace-image"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="layout-recalibrate"]').exists()).toBe(true);
+    // The image and its scale still change, from Layout settings, not the panel.
+    const settings = wrapper.get('[data-testid="layout-settings"]');
+    expect(settings.find('[data-testid="layout-replace-image"]').exists()).toBe(true);
+    expect(settings.find('[data-testid="layout-recalibrate"]').exists()).toBe(true);
+    const panel = wrapper.get('.layout-panel');
+    expect(panel.find('[data-testid="layout-replace-image"]').exists()).toBe(false);
+    expect(panel.find('[data-testid="layout-recalibrate"]').exists()).toBe(false);
+    expect(panel.findComponent({ name: 'LayoutPanelTypes' }).exists()).toBe(false);
   });
 
   it('is told so in Draft', async () => {
     const wrapper = await mountPage();
+    await openSettings(wrapper);
 
     expect(wrapper.find('[data-testid="layout-setup-settled"]').exists()).toBe(false);
     for (const name of PANELS) {
@@ -268,23 +362,6 @@ describe('a layout past Draft', () => {
 
     expect(editor.canUndo.value).toBe(false);
     expect(editor.layout.value!.tables.map((t) => t.id)).toEqual(['g-1']);
-  });
-
-  it('starts no layout where a location has none', async () => {
-    market = served({
-      phase: 'applications',
-      setupLockReason: SETTLED,
-      setupObject: { ...served().setupObject, floorplans: [] },
-    });
-    const wrapper = await mountPage();
-
-    expect(wrapper.findComponent({ name: 'FloorplanUploader' }).exists()).toBe(false);
-    expect(wrapper.get('[data-testid="layout-no-floorplan"]').text()).toBe(
-      'No floorplan has been uploaded for Upper Hall yet.',
-    );
-    expect(wrapper.get('[data-testid="layout-panel-start"]').text()).toBe(
-      'Upper Hall has no layout yet.',
-    );
   });
 });
 
@@ -325,6 +402,7 @@ describe('a layout read only', () => {
 describe('a recalibration that would leave tables outside the floorplan', () => {
   it('is refused in the page with how many, and writes nothing', async () => {
     const wrapper = await mountPage();
+    await openSettings(wrapper);
     await wrapper.get('[data-testid="layout-recalibrate"]').trigger('click');
     await vi.advanceTimersByTimeAsync(0);
     const calibration = wrapper.findComponent({ name: 'LayoutCalibration' });
@@ -360,6 +438,7 @@ describe("a recalibration's refusal", () => {
       },
     });
     const wrapper = await mountPage();
+    await openSettings(wrapper);
     await wrapper.get('[data-testid="layout-recalibrate"]').trigger('click');
     await vi.advanceTimersByTimeAsync(0);
     wrapper

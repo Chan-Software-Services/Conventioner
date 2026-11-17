@@ -6,7 +6,8 @@ describes:
   - front-end/src/utils/openMarket.ts
   - front-end/src/utils/lastMarket.ts
   - front-end/src/utils/marketActions.ts
-verified: 2026-11-11
+  - front-end/src/utils/useServerRead.ts
+verified: 2026-11-17
 sources:
   - E38/F04/S02
   - wayfinding/the-market-frame/03
@@ -24,6 +25,8 @@ sources:
   - T217
   - T263
   - T274
+  - T422
+  - T421
 ---
 
 # The market store
@@ -40,7 +43,9 @@ The rules it keeps for all code are [one market, from the server](../conventions
   Every write that changes the market is followed by a call to it; it is also the retry after a failed arrival.
 - `clear()` forgets the market entirely; signing out calls it, so one account is never shown another's market.
 - `installMarketChanged()`, exported beside the store and installed once from `main.ts`, calls `refresh()` whenever a write answers that the market changed under it, so every screen follows the market as it now stands ([the market write](market-write.md#on-the-screen)).
-- `market` is the held market, and only while its id is the open id; `status` is `idle`, `loading`, `loaded`, `failed` or `missing`; `stale` is true when the last re-read failed in transit.
+- `market` is the held market, and only while its id is the open id; `status` is the keyed read's phase, one of `empty`, `loading`, `ready`, `refreshing`, `failed`, `refresh_failed` or `missing`, so the store can never read failed and old at once.
+- `rereadFailed` is true in `refresh_failed` and in the `refreshing` that follows it, until a re-read lands; the frame says it once for every market screen ([the market frame](market-frame.md#sharp-edges)).
+- `open(id)` resolves once the read it asked settles (`settled()`); `refresh()` is the read's `reread()`, and `clear()` empties the key, so an answer out when it is called lands nowhere.
 
 Screens do not call the store directly: [`useOpenMarket`](../../../front-end/src/utils/openMarket.ts) takes the route's market id, opens the market on arrival and whenever the id changes, re-reads it when the organizer comes back to the browser tab (`visibilitychange`), and returns `{ market, status, refresh }`.
 Every view routed by market id uses it, and hands the market to [the market frame](market-frame.md).
@@ -75,6 +80,10 @@ A new control is one line under its screen, and a new screen is a block beside t
 **Tools, the Discord card**
 
 - Connect, Disconnect, and each choice: Connect Discord and give roles
+
+**Tools, the Public map card**
+
+- turning the map on or off, and each question chosen: Publish the map
 
 **The form tab, and the review's highlights**
 
@@ -146,17 +155,61 @@ The frame alone says why a person may change nothing, from `readOnlyReason` ([th
 No screen reads the role-shaped reasons the screens read before: every screen that read one is listed above.
 The read serves none of them, nor the person's `user_role` ([the market's actions](market-actions.md#what-the-screens-read)), and the `Market` type names none of them, nor the role, so the type checker refuses a screen that reads one.
 
+## Reads keyed by market
+
+The roster at the door, the Vendors list, Payments, the vendor drawer's details, the vendor notes and Stats' figures each read the market open through one keyed read, [`useServerRead`](../../../front-end/src/utils/useServerRead.ts), so those screens never show one market's answer, or its refusal, under another market's name.
+On those screens it replaced each one's own data, loading flag and error, read on a watch of the market id and checked by hand.
+
+`useServerRead(key, fetcher, options)` takes a getter of the key (the market id, null with none), the read, and `{ failure, refreshFailure?, missing?, lazy?, landed?, gone? }`.
+It returns `key`, `phase`, `data`, `sentence` and `readAt`, all read-only, and four calls:
+
+- `reread()` asks again (Refresh, Try again, a clock), and resolves when that read lands, fails or is dropped.
+- `settled()` resolves when the newest read out settles, at once with none out.
+- `holdWhile(write)` makes a write on the key open, handing it the key; it answers `ok` with the write's answer or `failed` with its error, and `left` when the key moved before the write answered (or the component is gone), so a write on another market is never said, and it never throws.
+- `adopt(key, change)` takes a write's own answer into the data, for the key it was made on only.
+
+`phase` is one of `empty` (no key, or a lazy read not asked), `loading` (nothing held), `ready`, `refreshing` (a re-read out, the data held), `failed` (the first read failed), `refresh_failed` (a re-read failed; the data kept as last read) and `missing` (only with `options.missing`: gone, or not this person's).
+`sentence` is the failure said, `getApiErrorMessage(error, failure)`, or `refreshFailure` for a re-read when given; it stays while the next re-read from `refresh_failed` is out, so a line saying the data is old does not blink on every clock tick.
+
+The moves are one pure table, `readStep(state, event)`, beside the composable, one test per row in `aReadBelongsToItsKey.test.ts`:
+
+| From                        | Event                         | To                                                                                   |
+| --------------------------- | ----------------------------- | ------------------------------------------------------------------------------------ |
+| any                         | the same key                  | unchanged                                                                            |
+| any                         | another key, or none          | `loading`, or `empty` with none or when lazy; nothing held, every read out overtaken |
+| `empty` with a key, `ready` | ask                           | `loading`, `refreshing`                                                              |
+| `failed`, `missing`         | ask                           | `loading`                                                                            |
+| `refresh_failed`            | ask                           | `refreshing`, the sentence kept                                                      |
+| `loading`, `refreshing`     | ask                           | the same phase; the read out is overtaken                                            |
+| `loading`, `refreshing`     | the newest answer             | `ready`, with the data and its time                                                  |
+| `loading`, `refreshing`     | the newest failure            | `failed`, `refresh_failed` with the data kept, or `missing` with nothing held        |
+| any                         | an answer not the newest      | unchanged                                                                            |
+| a key held                  | a write held                  | while any write is held, no answer lands and no ask is sent; the last release asks   |
+| `ready`, `refresh_failed`   | an adopt of this key          | the data changed, its time kept                                                      |
+| `refreshing`                | an adopt of this key          | the data changed; with no write held, the read out is overtaken and asked again      |
+| any                         | a release or adopt of another | unchanged                                                                            |
+
+The key is watched synchronously, so the state moves in the same tick as the key: nothing reads the last market's data under the new one, not even for a frame.
+A read held while a write is out may have been served before the write, so it never lands; the write's release reads again.
+Adopt the write's answer inside the write, on the key it is handed: the key is still held there, so the read the release asks is the only one, where an adopt after the release overtakes that read and asks once more.
+Once the component is gone nothing out lands, and no `landed` or `gone` is called.
+It has no timer and no retry of its own: a read that needs a timeout gives one to axios, and a clock is the screen's.
+
+The market store itself is one (`landed` sets the pointer below, `gone` forgets it), and Attendance reads its roster through it ([attendance and the door](attendance-and-door.md#sharp-edges)).
+The vendors' read ([`vendorDetails.ts`](../../../front-end/src/utils/vendorDetails.ts)), which Vendors, Payments and the drawer share, says why its first read failed, or "The vendors could not be loaded." when the server gives no reason, only while nothing is held; a failed re-read keeps the vendors as last read and says "Could not update. The vendors are as they were last read.", as the roster does, on while the next re-read is out and gone once one lands (Vendors and the drawer show it only while no read is out, since they show "Loading vendors…" in place of the rows), as [the Vendors flow](../../business/flows/vendors.md) says (`vendorReadsBelongToTheirMarket.test.ts`).
+
 ## Sharp edges
 
 **Keyed by the route's id.**
-A market held for one id is never shown while another is open, not even for a frame, and an answer to a fetch that a later fetch has overtaken is dropped (a generation counter).
+The store is built on [the keyed read](#reads-keyed-by-market), its key the open id, so a market held for one id is never shown while another is open, not even for a frame, and an answer to a fetch that a later fetch has overtaken is dropped.
 
 **What it holds is shown while a re-read of the same market is in flight**, so returning to a screen or saving does not blank it.
 Only an arrival with nothing held shows `loading`.
 
 **A missing market and one the organizer cannot reach read identically.**
 A 404 and a 403 both drop what is held and set `missing`; telling them apart would confirm to anyone guessing ids that a market is real.
-Any other failure is `failed` when nothing is held, and a failed re-read keeps the held market and marks it `stale`, so a dropped connection never unmounts a screen's unsaved work.
+Any other failure is `failed` when nothing is held, and a failed re-read keeps the held market and reads `refresh_failed`, so a dropped connection never unmounts a screen's unsaved work.
+Moving to another market empties the read in one step: a failed re-read of one market, then another failing to arrive, reads `failed` alone, where a `stale` flag beside the status once read failed and old at once (T277 probe 15, in `marketStore.test.ts`).
 
 **The pointer to the market last opened is set here and nowhere else.**
 [`front-end/src/utils/lastMarket.ts`](../../../front-end/src/utils/lastMarket.ts) keeps `lastMarketId` in `localStorage`: a pointer for Markets' "Previously opened" line, never a copy.

@@ -103,6 +103,15 @@ function reachedMarketDays(market: MarketState): boolean {
 export function hasVendorPage(market: MarketState): boolean {
   if (!market.phase || market.phase === MarketPhase.Draft) return false;
   if (market.intakeMode === IntakeMode.Form) return true;
+  return vendorsWereTold(market);
+}
+
+/**
+ * Have this market's vendors been told whether they have a table? The server's `results_are_out`:
+ * its results are published, or it reached its market days, which covers a Google Form market that
+ * went live before it could publish them. The public map opens only after it (D30).
+ */
+export function vendorsWereTold(market: MarketState): boolean {
   return Boolean(market.resultsPublished) || reachedMarketDays(market);
 }
 

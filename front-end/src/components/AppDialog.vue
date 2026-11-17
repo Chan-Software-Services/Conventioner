@@ -32,6 +32,11 @@
  * one box over the title and the body. A long one asks for `scroll="body"` (T200): its title, close,
  * error and actions stay in view and only its body scrolls; a `tray` slot holds what the dialog has
  * gathered, pinned above the actions (`dialogs.md`).
+ *
+ * A dialog that writes hands its `submission` (`useDialogSubmit`, T411), and the hold is derived
+ * here, never asked for: while it sends nothing closes the dialog and its confirm is disabled, and a
+ * single form's one submission that `says: 'dialog'` has its refusal said in the error line until a
+ * field changes.
  */
 import { computed, nextTick, ref, watch, type FunctionalComponent } from 'vue';
 import EmailAddress from '@/components/EmailAddress.vue';
@@ -40,6 +45,7 @@ import { FOCUSABLE } from '@/utils/focusable';
 import { useEscapeToClose } from '@/utils/useEscapeToClose';
 import { useFocusGoesBack } from '@/utils/useFocusGoesBack';
 import { useModalRoot } from '@/utils/useModalRoot';
+import type { DialogSubmission } from '@/utils/useDialogSubmit';
 
 const props = withDefaults(
   defineProps<{
@@ -59,8 +65,9 @@ const props = withDefaults(
     confirmLabel?: string;
     confirmDisabled?: boolean;
     /**
-     * Nothing closes it while this holds: a save in flight, whose refusal a close would hide. Cancel
-     * and the close control are drawn disabled, and Escape and the scrim do nothing.
+     * Nothing closes it while this holds. Cancel and the close control are drawn disabled, and
+     * Escape and the scrim do nothing. A write holds by its `submission`; this is for a hold that is
+     * no write, a file being drawn or downloaded.
      */
     closeDisabled?: boolean;
     cancelLabel?: string;
@@ -79,12 +86,27 @@ const props = withDefaults(
      */
     scroll?: 'window' | 'body';
     /**
+     * With `scroll="body"`, at 640px wide or tall or less: as tall as its content needs, up to the
+     * window less the gutter, where every other such dialog is that tall whatever it holds
+     * (Daniel's choice 22). Its title and actions stay pinned and its body scrolls between them
+     * past the cap.
+     * For a long dialog whose list is usually short, as "Choose what leads the card" (T446).
+     */
+    fitsContentOnAPhone?: boolean;
+    /**
      * A dialog whose body grows as it is used (a field's error appearing as a key is typed) holds
      * its top where it opened, rather than its centre, so nothing under the pointer moves.
      */
     anchored?: boolean;
     /** An error about the submission as a whole. Field errors belong beneath their field. */
     error?: string;
+    /**
+     * The dialog's write, or each of its writes for a dialog of several actions. While any one
+     * sends, the dialog holds as under `closeDisabled` and its confirm is disabled; a single form's
+     * one submission that `says: 'dialog'` has its refusal said in the error line, under `error`,
+     * and a change to any field takes it back to editing.
+     */
+    submission?: DialogSubmission | readonly DialogSubmission[];
   }>(),
   { size: 'narrow', cancelLabel: 'Cancel', scroll: 'window' },
 );
@@ -98,6 +120,30 @@ const emit = defineEmits<{ close: []; submit: [] }>();
 function onSubmit(event: Event) {
   event.preventDefault();
   emit('submit');
+}
+
+const submissions = computed<readonly DialogSubmission[]>(() => {
+  const given = props.submission;
+  if (!given) return [];
+  return 'submit' in given ? [given] : given;
+});
+const sending = computed(() => submissions.value.some((submission) => submission.sending.value));
+
+/** Nothing closes it: a hold asked for, or a write out. */
+const held = computed(() => !!props.closeDisabled || sending.value);
+const confirmOff = computed(() => !!props.confirmDisabled || sending.value);
+
+/** The dialog's own error, else its one write's refusal when the shell is to say it. */
+const shownError = computed(() => {
+  if (props.error) return props.error;
+  const [only, ...others] = submissions.value;
+  if (!props.confirmLabel || !only || others.length || only.says !== 'dialog') return '';
+  return only.sentence.value;
+});
+
+/** A field changed: a refusal said goes, and a save that stays open is editing again. */
+function onInput() {
+  for (const submission of submissions.value) submission.edit();
 }
 
 const pinned = computed(() => props.scroll === 'body');
@@ -121,7 +167,7 @@ const whole = computed(() =>
 );
 
 function close() {
-  if (!props.closeDisabled) emit('close');
+  if (!held.value) emit('close');
 }
 
 useEscapeToClose(() => props.open, close);
@@ -217,9 +263,9 @@ watch(
  * another dialog, one opened over this.
  */
 watch(
-  () => [props.closeDisabled, props.confirmDisabled] as const,
-  async ([held, confirmOff], [wasHeld, confirmWasOff]) => {
-    const released = (wasHeld && !held) || (confirmWasOff && !confirmOff);
+  () => [held.value, confirmOff.value] as const,
+  async ([isHeld, isOff], [wasHeld, wasOff]) => {
+    const released = (wasHeld && !isHeld) || (wasOff && !isOff);
     if (!released || !props.open) return;
     await nextTick();
     if (!props.open) return;
@@ -255,6 +301,7 @@ watch(
         'dialog-window--wide': size === 'wide',
         'dialog-window--broad': size === 'broad',
         'dialog-window--body': pinned,
+        'dialog-window--fits': pinned && fitsContentOnAPhone,
       }"
       role="dialog"
       aria-modal="true"
@@ -268,7 +315,7 @@ watch(
         aria-label="Close"
         data-dialog-close
         :data-testid="`${testid}-close-button`"
-        :disabled="closeDisabled"
+        :disabled="held"
         @click="close"
       >
         &times;
@@ -287,7 +334,7 @@ watch(
             :is="confirmLabel ? 'form' : 'div'"
             class="dialog-body"
             :class="{ 'dialog-body--pinned': pinned }"
-            v-on="confirmLabel ? { submit: onSubmit } : {}"
+            v-on="confirmLabel ? { submit: onSubmit, input: onInput } : {}"
           >
             <!-- Only the body scrolls, in a box of its own between the pinned parts. -->
             <ScrollBox
@@ -314,8 +361,8 @@ watch(
               </div>
             </template>
 
-            <p v-if="error" class="dialog-error" role="alert" :data-testid="`${testid}-error`">
-              {{ error }}
+            <p v-if="shownError" class="dialog-error" role="alert" :data-testid="`${testid}-error`">
+              {{ shownError }}
             </p>
 
             <footer v-if="confirmLabel || $slots.actions" class="dialog-actions">
@@ -324,7 +371,7 @@ watch(
                   type="button"
                   class="btn btn--secondary"
                   :data-testid="`${testid}-cancel-button`"
-                  :disabled="closeDisabled"
+                  :disabled="held"
                   @click="close"
                 >
                   {{ cancelLabel }}
@@ -333,7 +380,7 @@ watch(
                   type="submit"
                   class="btn"
                   :class="destructive ? 'btn--destructive' : 'btn--primary'"
-                  :disabled="confirmDisabled"
+                  :disabled="confirmOff"
                   :data-testid="`${testid}-submit-button`"
                 >
                   {{ confirmLabel }}
@@ -420,9 +467,13 @@ watch(
 
 .dialog-title {
   margin: 0;
-  padding-right: var(--space-6);
+  /* A long title wraps short of the close, which spans 16px to about 54px from the window's right
+     edge at a desk: the title's lines end 64px in. */
+  padding-right: calc(var(--space-8) + var(--space-2));
   overflow-wrap: anywhere;
   font-size: var(--text-lg);
+  /* Its own, not what the dialog's parent sets: the close is placed by this line's height. */
+  line-height: var(--leading);
   color: var(--mm-black);
 }
 
@@ -471,7 +522,7 @@ watch(
 
 .dialog-window--body > .dialog-parts > .dialog-title {
   flex: none;
-  padding: var(--space-6) var(--space-12) var(--space-2) var(--space-6);
+  padding: var(--space-6) calc(var(--space-12) + var(--space-4)) var(--space-2) var(--space-6);
 }
 
 /* The parts between the title and the window's foot: 16px apart, as `.dialog-parts`' gap sets them
@@ -537,14 +588,15 @@ watch(
   padding: var(--space-2) var(--space-6);
 }
 
-/* Where `--target-min` makes the close 44px wide, a long title wraps 8px short of it. */
+/* Where `--target-min` makes the close 44px wide, 16px to 60px from the right edge, a long title
+   wraps 8px short of it, 68px in. */
 @media (width <= 640px) {
   .dialog-title {
-    padding-right: calc(var(--space-8) + var(--space-2));
+    padding-right: calc(var(--space-8) + var(--space-3));
   }
 
   .dialog-window--body > .dialog-parts > .dialog-title {
-    padding-right: calc(var(--space-12) + var(--space-4));
+    padding-right: calc(var(--space-12) + var(--space-4) + var(--space-1));
   }
 }
 
@@ -560,6 +612,12 @@ watch(
     height: calc(100dvh - var(--space-12) - var(--space-6));
     max-height: calc(100dvh - var(--space-12) - var(--space-6));
   }
+
+  /* `fitsContentOnAPhone`: as tall as its content needs, up to the same cap, the body giving way
+     past it, so a short list leaves no band of white above the actions. */
+  .dialog-window--body.dialog-window--fits {
+    height: auto;
+  }
 }
 
 /* Over what scrolls beneath it when the window scrolls whole, its own ground keeping a row's words
@@ -569,8 +627,15 @@ watch(
   min-height: var(--target-min);
   position: absolute;
   z-index: 1;
-  top: var(--space-2);
-  right: var(--space-3);
+  /* Its middle on the middle of the title's first line, which starts at the window's 24px inset in
+     either scroll, and its glyph as far in from the right as the title is from the left: the
+     button is 8px wider than its glyph on each side (its padding and border), so 16px from the
+     edge puts the glyph at 24px. The QC walk of 2026-11-16 found it 16.5px above the line and its
+     glyph 20px in (T422). Where `--target-min` is 44px the glyph stands centred in it, a few px
+     further in. */
+  top: calc(var(--space-6) + var(--text-lg) * var(--leading) / 2);
+  right: var(--space-4);
+  transform: translateY(-50%);
   background: white;
   border: 1px solid transparent;
   font-size: var(--text-xl);

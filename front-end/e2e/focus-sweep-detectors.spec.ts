@@ -189,6 +189,27 @@ test.describe('The focus sweep', () => {
     expect(await problemsOfTheFirstStop(page)).toEqual(['focus resized a button: 37x15 -> 45x23']);
   });
 
+  test('a button the page redraws once the focus has left it is measured as redrawn, at rest', async ({
+    page,
+  }) => {
+    // As the layout editor's table picked up by keyboard: drawn lifted while it has the focus and
+    // put down as the focus leaves, the page redrawing it a microtask later, as Vue does.
+    await show(page, '<p>Before</p><button style="height: 40px">Lifted</button>');
+    await page.evaluate(() => {
+      const lifted = document.querySelector('button')!;
+      lifted.addEventListener(
+        'focusout',
+        () => queueMicrotask(() => (lifted.style.height = '36px')),
+        { once: true },
+      );
+      lifted.focus();
+    });
+    await rememberFieldsAtRest(page);
+    // Tab from the page's top, as a walk that comes round to the button again does.
+    await page.mouse.click(5, 5);
+    expect(await problemsOfTheFirstStop(page)).toEqual([]);
+  });
+
   test('a button that wears the halo rather than the border is caught', async ({ page }) => {
     await show(page, button('', `outline: none; box-shadow: 0 0 0 3px ${LOOKS.halo};`));
     expect(await problemsOfTheFirstStop(page)).toEqual([

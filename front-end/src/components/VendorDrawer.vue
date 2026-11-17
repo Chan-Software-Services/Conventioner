@@ -134,6 +134,15 @@ watch(
 
 async function infoSaved(saved: Application): Promise<void> {
   updating.value = false;
+  await infoRefreshed(saved);
+}
+
+/**
+ * An update saved after the dialog it was sent from was closed (the drawer moved to another vendor
+ * meanwhile, T411): the screen is told and the answers read again, as on a save, but what is open
+ * now stays open.
+ */
+async function infoRefreshed(saved: Application): Promise<void> {
   emit('infoUpdated', saved);
   // The market read says what the last Discord check now shows of this vendor ("Check again" once
   // their username changed), so it is read again too where a check has run (E46/F01/S05).
@@ -351,6 +360,7 @@ watch(
                 :vendor="discordVendor"
                 :canAnswer="answersDiscord"
                 @confirmed="infoSaved"
+                @refreshed="infoRefreshed"
               />
             </div>
             <div class="detail-section">
@@ -446,6 +456,7 @@ watch(
     :priceReads="market?.priceReads ?? []"
     @close="updating = false"
     @saved="infoSaved"
+    @refreshed="infoRefreshed"
   />
 </template>
 
@@ -513,6 +524,7 @@ watch(
 
 .detail-eyebrow {
   font-size: var(--text-xs);
+  line-height: var(--leading);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   opacity: 0.7;
@@ -522,6 +534,7 @@ watch(
   margin: 0;
   font-family: 'Merge One', sans-serif;
   font-size: var(--text-lg);
+  line-height: var(--leading);
   color: white;
   overflow-wrap: anywhere;
 }
@@ -534,8 +547,19 @@ watch(
   overflow-wrap: anywhere;
 }
 
+/*
+ * On the name's first line, as a dialog's close is on its title's (T422): the eyebrow's line and
+ * the gap above the name, and half the name's line, from the head's top, with its middle there; a
+ * relative offset, so the head is as tall as before. Its glyph as far in from the right as the name
+ * is from the left, the button's 4px padding taken back into the head's 24px. Where `--target-min`
+ * is 44px the glyph stands centred in it, a few px further in.
+ */
 .detail-close {
   flex-shrink: 0;
+  position: relative;
+  top: calc(var(--text-xs) * var(--leading) + var(--space-1) + var(--text-lg) * var(--leading) / 2);
+  transform: translateY(-50%);
+  margin-right: calc(-1 * var(--space-1));
   min-width: var(--target-min);
   min-height: var(--target-min);
   background: transparent;

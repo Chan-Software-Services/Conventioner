@@ -535,9 +535,10 @@ def setup_part(plan: Optional[SetupObject]) -> Dict[str, Any]:
     """The part of a plan that is the setup, in one comparable shape (E31/F01/S02).
 
     Everything on Market Setup: the dates, tiers, locations, sections and their tables, the
-    prices (E43/F01/S01), and of the layouts what settles: each floorplan's seats and the
-    market's table types (``layout.settled_part``), never where a table stands, which a layout's
-    save still changes past draft (``layout.settled_layout_refusal``). Not the assignment rules
+    prices (E43/F01/S01), and of the layouts what settles: the seats of each floorplan started in
+    Draft and the market's table types (``layout.settled_part``), never where a table stands, nor
+    the tables of a layout that follows the plan, which a layout's save still changes past draft
+    (``layout.settled_layout_refusal``). Not the assignment rules
     (``made_from.assignment_rules``), which ride in the same object and keep a lock of their own.
     """
     if plan is None:
@@ -3012,6 +3013,21 @@ def release_removed_floorplans(
         )
 
 
+def _setup_as_held(
+    stored: Optional[SetupObject], plan: SetupObject,
+    floorplans: Optional[List[FloorplanObject]],
+) -> Dict[str, Any]:
+    """The stored plan's setup, as a write past draft is compared with it: on a layout's own save
+    (``floorplans`` passed) to a market with no table type, the types the save gives it count as
+    held, since a layout started past draft gives such a market "Standard 6 ft" (T422, D23). Only
+    a layout's start passes types to a market with none past draft: the types write is refused
+    before it reaches here (``layouts.save_table_types``)."""
+    held = setup_part(stored)
+    if floorplans is not None and stored is not None and not stored.table_types:
+        held["table_types"] = Layout.settled_part(plan)["table_types"]
+    return held
+
+
 def prepared_plan(
     market: Market, body: Dict[str, Any], *,
     floorplans: Optional[List[FloorplanObject]] = None,
@@ -3061,8 +3077,14 @@ def prepared_plan(
 
     # And the setup the same way, from leaving draft on (E31/F01/S02): restating it is not a change.
     setup_settled = setup_lock_reason(market)
-    if setup_settled and setup_part(plan) != setup_part(market.setup_object):
+    if setup_settled and setup_part(plan) != _setup_as_held(market.setup_object, plan, floorplans):
         raise BadRequestError(setup_settled)
+    # A layout that follows the plan draws the seats it numbers; its own save judges its numbers
+    # (``layout.layout_refusal``), every other write of the plan the counts under them (T422).
+    if floorplans is None:
+        held_number = Layout.count_refusal(plan)
+        if held_number:
+            raise BadRequestError(held_number)
 
     # The plan saves as the organizer types, in every phase, and always carries the rules it holds;
     # restating the stored rules is not a change, and anything else is refused once they are

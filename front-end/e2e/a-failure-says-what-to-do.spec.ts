@@ -289,24 +289,30 @@ test.describe('a failed write', () => {
 });
 
 test.describe('signing in keeps the place', () => {
-  test('a session that ends mid-review signs in again and returns to the same address', async ({
-    authenticatedPage: page,
-    request,
-  }) => {
-    const { marketId } = await reviewingMarket(request);
-    const all = new ApplicationsAllPage(page);
-    await page.goto(openApplications(marketId));
-    await expect(all.rows).toHaveCount(3);
-    await all.open('nadia@ember.test');
-    // The address as it stands, the open drawer included.
-    const opened = new URL(page.url());
-    const place = opened.pathname + opened.search;
-
-    // The session ends under the organizer: the server no longer knows the login its cookie names,
-    // as after a password reset. The next sign-in gives the account a new one.
+  /**
+   * The session ends under the organizer: the server no longer knows the login its cookie names, as
+   * after a password reset. The next sign-in gives the account a new one, so the tests after this
+   * one, each signing in afresh, start signed in.
+   */
+  const endTheSession = () =>
     mongoEval(`db.users.updateOne({ email: '${TEST_USER.email}' }, { $unset: { login_id: '' } })`);
-    await all.drawerButton('approve').click();
 
+  /** The review's All view of a market of its own, its three rows shown. */
+  async function onTheReview(page: Page, request: APIRequestContext): Promise<void> {
+    const { marketId } = await reviewingMarket(request);
+    await page.goto(openApplications(marketId));
+    await expect(new ApplicationsAllPage(page).rows).toHaveCount(3);
+  }
+
+  /** Opens a vendor's drawer: answers the address as it stands, the open drawer included. */
+  async function openADrawer(page: Page): Promise<string> {
+    await new ApplicationsAllPage(page).open('nadia@ember.test');
+    const opened = new URL(page.url());
+    return opened.pathname + opened.search;
+  }
+
+  /** Sign-in says the session ended, keeps `place`, and signing in returns there. */
+  async function signsInAgainTo(page: Page, place: string): Promise<void> {
     await page.waitForURL(/\/login\?/);
     const url = new URL(page.url());
     expect(url.searchParams.get('next')).toBe(place);
@@ -315,7 +321,53 @@ test.describe('signing in keeps the place', () => {
 
     await new LoginPage(page).signIn(TEST_USER.email, TEST_USER.password);
     await page.waitForURL((at) => at.pathname + at.search === place);
-    await expect(all.rows).toHaveCount(3);
+    await expect(new ApplicationsAllPage(page).rows).toHaveCount(3);
+  }
+
+  test('a session that ends mid-review signs in again and returns to the same address', async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    await onTheReview(page, request);
+    const place = await openADrawer(page);
+
+    // The session ends as Approve's verdict is sent, so the press has landed whichever request
+    // finds it ended first. Ended before the press, a read the drawer sent on opening could find it
+    // first and take the page to sign in under the press (the next test).
+    const verdict = /\/markets\/[^/]+\/applications\/[^/]+\/review$/;
+    await page.route(verdict, async (route) => {
+      if (isApiCall(route.request(), 'PUT')) endTheSession();
+      return route.continue();
+    });
+    await new ApplicationsAllPage(page).drawerButton('approve').click();
+
+    await signsInAgainTo(page, place);
+  });
+
+  test("a session that ends under a read of the page's own signs in again and returns to the same address", async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    await onTheReview(page, request);
+    // The drawer reads the market's vendor notes on opening: held until the session has ended, the
+    // read is the request that finds it ended, with nothing pressed.
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let reached!: () => void;
+    const sent = new Promise<void>((resolve) => (reached = resolve));
+    await page.route(/\/markets\/[^/]+\/vendor-notes$/, async (route) => {
+      if (!isApiCall(route.request(), 'GET')) return route.continue();
+      reached();
+      await held;
+      return route.continue();
+    });
+    const place = await openADrawer(page);
+    await sent;
+
+    endTheSession();
+    release();
+
+    await signsInAgainTo(page, place);
   });
 
   test('a link opened signed out lands where it pointed, signed in by password', async ({

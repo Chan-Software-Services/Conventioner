@@ -4,11 +4,13 @@
  * one to choose; "Use these types" adds each of its types the market has none of by that name.
  * It lists them itself when it opens (`list`), and says so while they are on their way, when there
  * are none, and when they could not be had. The list grows with every set saved, so only its body
- * scrolls, the title and the actions pinned.
+ * scrolls, the title and the actions pinned. The card adds the chosen set's types through the
+ * `submission` it hands here (T411), which holds the dialog while it sends and says its refusal.
  */
 import { computed, ref, watch } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
 import { getApiErrorMessage } from '@/utils/api';
+import type { DialogSubmission } from '@/utils/useDialogSubmit';
 import { plural } from '@/utils/utils';
 import { sizeInWords, type SavedTypes } from './layoutTypes';
 
@@ -16,13 +18,15 @@ const props = defineProps<{
   open: boolean;
   /** The saved sets of types this person may use. */
   list: () => Promise<SavedTypes[]>;
-  busy?: boolean;
-  error?: string;
+  /** The card's write of the chosen set's types, which holds the dialog while it sends. */
+  submission: DialogSubmission;
 }>();
 
 const emit = defineEmits<{ close: []; use: [saved: SavedTypes] }>();
 
 const NOT_LISTED = 'The saved types could not be listed. Try again in a moment.';
+
+const sending = computed(() => props.submission.sending.value);
 
 const saved = ref<SavedTypes[] | null>(null);
 const listError = ref('');
@@ -54,7 +58,7 @@ const typesOf = (one: SavedTypes) =>
   one.tableTypes.map((type) => `${type.name} (${sizeInWords(type)})`).join(', ') || 'No types';
 
 function use() {
-  if (props.busy || !choice.value) return;
+  if (sending.value || !choice.value) return;
   emit('use', choice.value);
 }
 </script>
@@ -66,10 +70,10 @@ function use() {
     testid="layout-saved-types"
     size="wide"
     scroll="body"
-    :confirm-label="busy ? 'Adding…' : 'Use these types'"
-    :confirm-disabled="busy || !choice"
-    :close-disabled="busy"
-    :error="error || listError"
+    :confirm-label="sending ? 'Adding…' : 'Use these types'"
+    :confirm-disabled="!choice"
+    :error="listError"
+    :submission="submission"
     @close="emit('close')"
     @submit="use"
   >
@@ -80,7 +84,7 @@ function use() {
       No table types are saved yet. Save this market's with "Save these types" to use them in
       another.
     </p>
-    <fieldset v-else-if="saved" class="saved-list" :disabled="busy">
+    <fieldset v-else-if="saved" class="saved-list" :disabled="sending">
       <legend class="field-label">Saved types</legend>
       <p class="saved-note">The types this market has none of by name are added.</p>
       <label

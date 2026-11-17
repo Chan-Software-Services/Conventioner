@@ -11,6 +11,10 @@
  * Each control is offered on the table's row for it (E44/F01/S02): "Record payment" an Editor's;
  * a line's "..." menu (change the amount owed, or use the calculated price again), "Record refund"
  * and an entry's "..." menu (edit or remove it) an Admin's. Each confirms in a dialog first.
+ *
+ * Each dialog's write belongs to its opening (T411): held while it writes, and an answer that lands
+ * after its opening has gone is shown in the account behind the dialog (`refreshed`), never by
+ * closing what is open now.
  */
 import { computed, ref, watch } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
@@ -18,6 +22,7 @@ import ChangeOwedDialog from '@/components/ChangeOwedDialog.vue';
 import RecordPaymentDialog from '@/components/RecordPaymentDialog.vue';
 import RowMenu from '@/components/RowMenu.vue';
 import { getApiErrorMessage } from '@/utils/api';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import { getFormattedTimestamp } from '@/utils/utils';
 import { dateLabel } from '@/utils/vendorDetails';
 import {
@@ -81,14 +86,11 @@ type Open =
   | { kind: 'calculated'; line: PaymentLine }
   | { kind: 'remove'; entry: Payment };
 const open = ref<Open | null>(null);
-const confirmBusy = ref(false);
-const confirmError = ref('');
 /** A confirmation refused with the account as it stands behind it: what it asks no longer reads
  * as stored, so it confirms nothing more until it is opened again, as its refusal says. */
 const confirmSpent = ref(false);
 
 function show(dialog: Open): void {
-  confirmError.value = '';
   confirmSpent.value = false;
   open.value = dialog;
 }
@@ -118,6 +120,12 @@ const owedLine = computed(() => (open.value?.kind === 'owed' ? open.value.line :
 const confirming = computed(() =>
   open.value?.kind === 'calculated' || open.value?.kind === 'remove' ? open.value : null,
 );
+/** The confirmation's write, keyed to the confirmation it was opened as. */
+const confirmSubmission = useDialogSubmit({
+  opening: () => confirming.value,
+  failure: 'That change could not be saved.',
+});
+const { sending: confirmSending } = confirmSubmission;
 
 /** The confirmation of the two changes that ask nothing but yes. */
 const confirmText = computed(() => {
@@ -143,25 +151,28 @@ const confirmText = computed(() => {
 
 async function confirm(): Promise<void> {
   const dialog = confirming.value;
-  if (!dialog || confirmBusy.value || confirmSpent.value) return;
-  confirmBusy.value = true;
-  confirmError.value = '';
-  try {
-    saved(
+  if (!dialog || confirmSpent.value) return;
+  await confirmSubmission.submit(
+    () =>
       dialog.kind === 'calculated'
-        ? await useCalculatedPrice(props.marketId, props.email, dialog.line.date)
-        : await removePayment(props.marketId, dialog.entry.id),
-    );
-  } catch (err: unknown) {
-    const standing = accountAsItStands(err);
-    if (standing) {
-      refreshed(standing);
-      confirmSpent.value = true;
-    }
-    confirmError.value = getApiErrorMessage(err, 'That change could not be saved.');
-  } finally {
-    confirmBusy.value = false;
-  }
+        ? useCalculatedPrice(props.marketId, props.email, dialog.line.date)
+        : removePayment(props.marketId, dialog.entry.id),
+    {
+      done: saved,
+      refused: (err) => {
+        const standing = accountAsItStands(err);
+        if (standing) {
+          refreshed(standing);
+          confirmSpent.value = true;
+        }
+      },
+      // An earlier confirmation's answer: the account takes it, and what is open now stays.
+      late: (answer) => {
+        const standing = answer.ok ? answer.answer : accountAsItStands(answer.error);
+        if (standing) refreshed(standing);
+      },
+    },
+  );
 }
 
 function lineItems(line: PaymentLine) {
@@ -384,15 +395,16 @@ defineExpose({ reload: load });
         :currency="account?.currency ?? null"
         @close="open = null"
         @saved="saved"
+        @refreshed="refreshed"
       />
       <AppDialog
         :open="!!confirmText"
         :title="confirmText?.title ?? ''"
         testid="payment-confirm"
-        :confirm-label="confirmBusy ? 'Saving…' : confirmText?.confirm"
-        :confirm-disabled="confirmBusy || confirmSpent"
+        :confirm-label="confirmSending ? 'Saving…' : confirmText?.confirm"
+        :confirm-disabled="confirmSpent"
         :destructive="confirming?.kind === 'remove'"
-        :error="confirmError"
+        :submission="confirmSubmission"
         @close="open = null"
         @submit="confirm"
       >

@@ -3,12 +3,14 @@
  * "Give roles" confirmed (E46/F01/S04): the market's role, by its name, to the vendors holding a
  * seat, which the server gives to each one it finds in the connected server. A run only gives, so
  * the confirmation says so: nobody loses a role by it.
+ *
+ * Its write belongs to its opening (T411): the shell holds it while the run asks Discord.
  */
-import { computed, ref, watch } from 'vue';
+import { computed } from 'vue';
 
 import AppDialog from '@/components/AppDialog.vue';
-import { getApiErrorMessage } from '@/utils/api';
 import { giveRoles, giveRolesQuestion } from '@/utils/discordRoles';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 
 const props = defineProps<{
   open: boolean;
@@ -22,31 +24,23 @@ const props = defineProps<{
 /** `giving` as the run starts, so the page offers no check meanwhile; then `given` or `refused`. */
 const emit = defineEmits<{ close: []; giving: []; given: []; refused: [] }>();
 
-const busy = ref(false);
-const error = ref('');
-watch(
-  () => props.open,
-  (open) => {
-    if (open) error.value = '';
-  },
-);
+const submission = useDialogSubmit({
+  opening: () => props.open,
+  failure: 'The roles could not be given. Try again.',
+});
+const { sending } = submission;
 
 const question = computed(() => giveRolesQuestion(props.roleName, props.assigned));
 
 async function give(): Promise<void> {
-  if (busy.value) return;
-  busy.value = true;
-  error.value = '';
+  if (sending.value) return;
   emit('giving');
-  try {
-    await giveRoles(props.marketId);
-    emit('given');
-  } catch (err) {
-    error.value = getApiErrorMessage(err, 'The roles could not be given. Try again.');
-    emit('refused');
-  } finally {
-    busy.value = false;
-  }
+  await submission.submit(() => giveRoles(props.marketId), {
+    done: () => emit('given'),
+    refused: () => {
+      emit('refused');
+    },
+  });
 }
 </script>
 
@@ -55,10 +49,8 @@ async function give(): Promise<void> {
     :open="open"
     title="Give roles"
     testid="give-roles"
-    :confirm-label="busy ? 'Giving roles…' : 'Give roles'"
-    :confirm-disabled="busy"
-    :close-disabled="busy"
-    :error="error"
+    :confirm-label="sending ? 'Giving roles…' : 'Give roles'"
+    :submission="submission"
     @close="emit('close')"
     @submit="give"
   >

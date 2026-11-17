@@ -272,6 +272,25 @@ describe('the roster reads itself again', () => {
     expect(rosterReads()).toBe(3);
   });
 
+  it('keeps the page that could not be read while the clock reads again', async () => {
+    const slow = held<unknown>();
+    serveRoster(offline, () => slow.promise);
+    const wrapper = await open();
+    const failed = () => wrapper.find('[data-testid="attendance-read-failed"]');
+    const said = failed().text();
+    expect(said).toContain('offline');
+
+    await vi.advanceTimersByTimeAsync(REREAD_MS);
+    expect(rosterReads()).toBe(2);
+    expect(failed().text()).toBe(said);
+    expect(wrapper.text()).not.toContain('Loading…');
+
+    slow.settle(roster());
+    await flushPromises();
+    expect(failed().exists()).toBe(false);
+    expect(status(wrapper, ANA)).toBe('Not yet');
+  });
+
   it('stops when the page is left', async () => {
     const wrapper = await open();
     wrapper.unmount();

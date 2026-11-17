@@ -18,8 +18,9 @@
  */
 import { MarketAction, actionRefusal, mayTake } from '@/utils/marketActions';
 import { whoMayTake } from '@/utils/permissionTable';
-import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useUnsavedWork } from '@/utils/useUnsavedWork';
+import { useAutosave } from '@/utils/useAutosave';
 import { useRoute, useRouter } from 'vue-router';
 import { useMarketStore } from '@/stores/market';
 import ElementSettingContainer from '@/components/elements/ElementSettingContainer.vue';
@@ -83,7 +84,6 @@ const keyTouched = ref<boolean[]>([]);
  * rather than replacing the questions someone else saved. Null until the form is read.
  */
 const formRevision = ref<number | null>(null);
-const formSaveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle');
 const formErrorMessage = ref<string | null>(null);
 const formLoadStatus = ref<'loading' | 'loaded' | 'error'>('loading');
 const formLoadError = ref<string | null>(null);
@@ -213,6 +213,36 @@ const formIncompleteHint = computed(() => applicationFormHint(applicationForm.va
 
 const formValidationError = computed(() => applicationFormError(applicationForm.value));
 
+/**
+ * Every write of the form, the essentials' "Ask this" and Save Form alike, goes through one autosave
+ * with no pause (T420): one whole-form `PUT` out at a time, each carrying the revision the last one
+ * answered. They used to be two writes of their own, and only Save Form was refused while a save was
+ * out, so two quick ticks, or a tick while Save Form was out, put two `PUT`s out at the same
+ * revision; the server refused the second as "the market changed", and the tab read the form again
+ * over the questions not yet saved. A tick made while a save is out shows at once and is sent when
+ * that save answers. The tab has no Retry, so a save that does not land, refused or failed on the
+ * way, takes the stored "Ask this" choices back and says why, as a refusal does.
+ */
+const formAutosave = useAutosave({
+  send: sendForm,
+  sendOnUnload: () => false,
+  afterSave: () => {
+    // One re-read once the last save of a run of ticks lands.
+    if (!formAutosave.unsaved.value) void marketStore.refresh();
+  },
+  afterRefusal: takeBackAfterARefusal,
+  may: () => formEditable.value,
+  failure: 'The form was not saved.',
+  delay: 0,
+  takesBackOnFailure: true,
+});
+
+/** The save row's state: a save that did not land, refused or failed, is its error. */
+const formSaveStatus = computed<'idle' | 'saving' | 'saved' | 'error'>(() => {
+  const status = formAutosave.status.value;
+  return status === 'failed' || status === 'refused' ? 'error' : status;
+});
+
 const canSaveForm = computed(
   () =>
     formEditable.value &&
@@ -221,20 +251,75 @@ const canSaveForm = computed(
     formSaveStatus.value !== 'saving',
 );
 
-const savedStatusTimer = ref<ReturnType<typeof setTimeout> | null>(null);
-
-function clearSavedStatusTimer() {
-  if (savedStatusTimer.value !== null) {
-    clearTimeout(savedStatusTimer.value);
-    savedStatusTimer.value = null;
-  }
-}
-
-onUnmounted(clearSavedStatusTimer);
+/** Save Form was pressed since the last save went, so the next one carries the questions. */
+let questionsWanted = false;
+/** Every tick of "Ask this", so an answer knows whether one came after its save went. */
+let ticks = 0;
+/** What the last save that did not land was rejected with, for the re-read after it. */
+let lastRejection: unknown = null;
 
 /** A form save's body: the form, and the revision this tab's copy of it came from. */
 function savedForm(form: ApplicationForm) {
   return { ...form, formRevision: formRevision.value };
+}
+
+/**
+ * Send the form as it stands: the working copy when Save Form was pressed since the last save
+ * went, else the form as stored with the working copy's "Ask this" choices, so a question still
+ * being written never rides along on a tick, past Save Form's checks (T271). Its answer becomes the
+ * stored form, and its revision the next save's, before the next save goes.
+ */
+async function sendForm() {
+  if (!market.value?.id) throw new Error('No market is loaded.');
+  const working = applicationForm.value;
+  const unaskedEssentials = working?.unaskedEssentials ?? storedForm.value?.unaskedEssentials ?? [];
+  const carriesQuestions = questionsWanted && working !== null;
+  questionsWanted = false;
+  const body: ApplicationForm = carriesQuestions
+    ? working
+    : { ...(storedForm.value ?? { fields: [] }), unaskedEssentials };
+  const ticksAtSend = ticks;
+  formErrorMessage.value = null;
+  let response;
+  try {
+    response = await api.put(`/markets/${market.value.id}/application-form`, savedForm(body));
+  } catch (err: unknown) {
+    lastRejection = err;
+    throw err;
+  }
+  // What was sent is what is stored, when the answer does not say otherwise.
+  const stored: ApplicationForm = response.data?.application_form ?? body;
+  formRevision.value = response.data?.formRevision ?? formRevision.value;
+  const now = applicationForm.value;
+  adoptApplicationForm(stored);
+  // Save Form's answer is the working copy whole; a tick's is only its choices, so unsaved
+  // questions stay unsaved and unsent. A tick made after this save went keeps its own choice,
+  // while the form may still change, for the save behind it.
+  const kept = ticks !== ticksAtSend && formEditable.value ? now?.unaskedEssentials : undefined;
+  if (carriesQuestions) {
+    if (kept) applicationForm.value = { ...stored, unaskedEssentials: kept };
+  } else if (now) {
+    applicationForm.value = { ...now, unaskedEssentials: kept ?? stored.unaskedEssentials ?? [] };
+  }
+}
+
+/**
+ * A save that did not land: the sentence shows where a save's error shows, the "Ask this" choices
+ * go back to the stored form's, and the questions stay in the working copy, unless a 409 reads the
+ * form again.
+ */
+async function takeBackAfterARefusal(sentence: string) {
+  formErrorMessage.value = sentence;
+  const working = applicationForm.value;
+  if (working) {
+    applicationForm.value = {
+      ...working,
+      unaskedEssentials: storedForm.value?.unaskedEssentials ?? [],
+    };
+  }
+  const err = lastRejection;
+  lastRejection = null;
+  await rereadAfterARefusal(err);
 }
 
 /**
@@ -254,79 +339,32 @@ async function rereadAfterARefusal(err: unknown) {
 /**
  * Switch a preference ordering on or off for this market (E01/F06).
  *
- * Saved immediately rather than on the form's Save button: it is a property of what the market
+ * Saved as it is ticked rather than on the form's Save button: it is a property of what the market
  * asks, not of the custom fields being edited, and Save is disabled until a custom field exists.
  * The back end refuses anything but a ranking, so this cannot turn off a constraint.
  *
- * It sends the form as stored with the new choice, never the working copy: it used to send every
- * question in hand, saving one still being written without Save Form's checks (T271). Only the
- * choice comes back into the working copy, so unsaved questions stay unsaved and unsent.
+ * The choice is the working copy's at once, so the box shows it while it saves and a second tick
+ * builds on the first; the save itself goes through the form's one autosave.
  */
-async function handleToggleUnasked(key: string, unasked: boolean) {
+function handleToggleUnasked(key: string, unasked: boolean) {
   if (!market.value?.id || !formEditable.value) return;
-  const current = storedForm.value ?? { fields: [] };
-  const next = new Set(applicationForm.value?.unaskedEssentials ?? current.unaskedEssentials ?? []);
+  const working = applicationForm.value ?? storedForm.value ?? { fields: [] };
+  const next = new Set(working.unaskedEssentials ?? []);
   if (unasked) {
     next.add(key);
   } else {
     next.delete(key);
   }
-  const updated = { ...current, unaskedEssentials: [...next] };
-  formErrorMessage.value = null;
-  // This writes immediately through its own endpoint, unlike the custom fields beside it which
-  // wait for Save Form. Reporting through the same status is what tells the organizer which of
-  // their changes are already persisted; it used to save in complete silence.
-  clearSavedStatusTimer();
-  formSaveStatus.value = 'saving';
-  try {
-    const response = await api.put(
-      `/markets/${market.value.id}/application-form`,
-      savedForm(updated),
-    );
-    const stored: ApplicationForm = response.data?.application_form ?? updated;
-    formRevision.value = response.data?.formRevision ?? formRevision.value;
-    const working = applicationForm.value;
-    adoptApplicationForm(stored);
-    if (working) {
-      applicationForm.value = { ...working, unaskedEssentials: stored.unaskedEssentials ?? [] };
-    }
-    void marketStore.refresh();
-    formSaveStatus.value = 'saved';
-    savedStatusTimer.value = setTimeout(() => {
-      savedStatusTimer.value = null;
-      if (formSaveStatus.value === 'saved') formSaveStatus.value = 'idle';
-    }, 2000);
-  } catch (err: unknown) {
-    formSaveStatus.value = 'error';
-    formErrorMessage.value = getApiErrorMessage(err, 'Could not update the form.');
-    await rereadAfterARefusal(err);
-  }
+  applicationForm.value = { ...working, unaskedEssentials: [...next] };
+  ticks += 1;
+  formAutosave.edited();
 }
 
 async function saveApplicationForm() {
   if (!market.value?.id || !canSaveForm.value || !applicationForm.value) return;
-  clearSavedStatusTimer();
-  formSaveStatus.value = 'saving';
-  formErrorMessage.value = null;
-  try {
-    const response = await api.put(
-      `/markets/${market.value.id}/application-form`,
-      savedForm(applicationForm.value),
-    );
-    formSaveStatus.value = 'saved';
-    // What was sent is what is stored, when the answer does not say otherwise.
-    adoptApplicationForm(response.data?.application_form ?? applicationForm.value);
-    formRevision.value = response.data?.formRevision ?? formRevision.value;
-    void marketStore.refresh();
-    savedStatusTimer.value = setTimeout(() => {
-      savedStatusTimer.value = null;
-      if (formSaveStatus.value === 'saved') formSaveStatus.value = 'idle';
-    }, 2000);
-  } catch (err: unknown) {
-    formSaveStatus.value = 'error';
-    formErrorMessage.value = getApiErrorMessage(err, 'The form was not saved.');
-    await rereadAfterARefusal(err);
-  }
+  questionsWanted = true;
+  formAutosave.edited();
+  await formAutosave.flush();
 }
 
 /**
@@ -662,6 +700,15 @@ watch(formLocked, (locked, wasLocked) => {
               data-testid="form-builder-save-error"
             >
               {{ formErrorMessage }}
+            </span>
+            <!-- Save Form says it on its own steps; a tick's save out says it here, or the row
+                 stood empty under its rule. -->
+            <span
+              v-else-if="formSaveStatus === 'saving' && !savesHere"
+              class="save-status hint"
+              data-testid="form-builder-saving"
+            >
+              Saving...
             </span>
             <span
               v-else-if="savesHere && formValidationError"

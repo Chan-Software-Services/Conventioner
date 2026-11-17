@@ -12,10 +12,15 @@
  * refused with the account as it stands, which the dialog hands on (`refreshed`) and keeps its
  * error shown, so the entry appears behind it. An edit of an entry that changed or was removed
  * before it was saved is refused the same way, so the entry shows as it now reads (T335).
+ *
+ * Its write belongs to its opening (T411): nothing closes it while it records, and an answer that
+ * lands after it was closed and opened again leaves the new opening alone, handing on the account it
+ * carries (`refreshed`) so the account behind the dialog is true.
  */
 import { computed, ref, watch } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
 import { getApiErrorMessage } from '@/utils/api';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import {
   PAYMENT_METHODS,
   accountAsItStands,
@@ -55,8 +60,11 @@ const amount = ref('');
 const method = ref<PaymentMethod>('e-transfer');
 const paidOn = ref(today());
 const note = ref('');
-const error = ref('');
-const busy = ref(false);
+const submission = useDialogSubmit({
+  opening: () => props.open,
+  failure: 'It could not be recorded.',
+});
+const { sending } = submission;
 /** This opening's one press of Record, made as it opens; an edit sends none. */
 let requestKey = '';
 
@@ -73,7 +81,7 @@ const title = computed(() => {
   return isRefund.value ? 'Record refund' : 'Record payment';
 });
 const confirmLabel = computed(() => {
-  if (busy.value) return props.mode === 'edit' ? 'Saving…' : 'Recording…';
+  if (sending.value) return props.mode === 'edit' ? 'Saving…' : 'Recording…';
   return props.mode === 'edit' ? 'Save' : title.value;
 });
 
@@ -86,7 +94,6 @@ watch(
     method.value = entry?.method ?? 'e-transfer';
     paidOn.value = entry?.paidOn ?? today();
     note.value = entry?.note ?? '';
-    error.value = '';
     requestKey = props.mode === 'edit' ? '' : crypto.randomUUID();
   },
   { immediate: true },
@@ -100,7 +107,7 @@ const cents = computed(() => {
 const amountError = computed(() =>
   amount.value.trim() && cents.value === null ? 'Type an amount, such as 35 or 35.50.' : '',
 );
-const ready = computed(() => cents.value !== null && !!paidOn.value && !busy.value);
+const ready = computed(() => cents.value !== null && !!paidOn.value);
 
 function send(fields: NewPayment): Promise<VendorAccount> {
   if (props.mode === 'edit' && props.entry) {
@@ -113,28 +120,27 @@ function send(fields: NewPayment): Promise<VendorAccount> {
 
 async function save(): Promise<void> {
   if (!ready.value || cents.value === null) return;
-  busy.value = true;
-  error.value = '';
-  try {
-    emit(
-      'saved',
-      await send({
-        cents: cents.value,
-        method: method.value,
-        paidOn: paidOn.value,
-        note: note.value.trim(),
-      }),
-    );
-  } catch (err: unknown) {
-    const standing = accountAsItStands(err);
-    if (standing) emit('refreshed', standing);
-    error.value = getApiErrorMessage(
-      err,
-      props.mode === 'edit' ? 'The change could not be saved.' : 'It could not be recorded.',
-    );
-  } finally {
-    busy.value = false;
-  }
+  const fields: NewPayment = {
+    cents: cents.value,
+    method: method.value,
+    paidOn: paidOn.value,
+    note: note.value.trim(),
+  };
+  const failure =
+    props.mode === 'edit' ? 'The change could not be saved.' : 'It could not be recorded.';
+  await submission.submit(() => send(fields), {
+    done: (account) => emit('saved', account),
+    refused: (err) => {
+      const standing = accountAsItStands(err);
+      if (standing) emit('refreshed', standing);
+      return getApiErrorMessage(err, failure);
+    },
+    // An earlier opening's answer: the account behind the dialog takes it, and this opening stays.
+    late: (answer) => {
+      const standing = answer.ok ? answer.answer : accountAsItStands(answer.error);
+      if (standing) emit('refreshed', standing);
+    },
+  });
 }
 </script>
 
@@ -146,7 +152,7 @@ async function save(): Promise<void> {
     anchored
     :confirm-label="confirmLabel"
     :confirm-disabled="!ready"
-    :error="error"
+    :submission="submission"
     @close="emit('close')"
     @submit="save"
   >

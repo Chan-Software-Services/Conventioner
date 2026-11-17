@@ -1,13 +1,15 @@
 <script setup lang="ts">
 /**
  * A table type, added or edited (T257): its name, its width and its depth, typed in centimetres
- * unless another unit is chosen. Each field says beneath it what it is refused for, and a refusal
- * of the write as a whole (`error`) stands over the actions; the dialog holds still while the
- * write is out (`busy`).
+ * unless another unit is chosen. Each field says beneath it what it is refused for. The card
+ * writes the type through the `submission` it hands here (T411), so the shell holds the dialog
+ * while the write and its re-read are out and says a refusal of the write as a whole over the
+ * actions.
  */
 import { computed, ref, watch } from 'vue';
 import type { TableTypeObject } from '@/assets/types/datatypes';
 import AppDialog from '@/components/AppDialog.vue';
+import type { DialogSubmission } from '@/utils/useDialogSubmit';
 import { lengthMm, type LengthUnit } from './calibration';
 import { SIDE_UNITS, sideIn, typeOf, typedTypeErrors, type TypedType } from './layoutTypes';
 
@@ -17,11 +19,13 @@ const props = defineProps<{
   type: TableTypeObject | null;
   /** The market's other types, whose names a type may not share. */
   others: readonly TableTypeObject[];
-  busy?: boolean;
-  error?: string;
+  /** The card's write of the type, which holds the dialog while it sends. */
+  submission: DialogSubmission;
 }>();
 
 const emit = defineEmits<{ close: []; submit: [type: TableTypeObject] }>();
+
+const sending = computed(() => props.submission.sending.value);
 
 const typed = ref<TypedType>({ name: '', width: '', depth: '', unit: 'cm' });
 /** Whether a submit was tried, after which each field says what it lacks. */
@@ -60,7 +64,7 @@ const shown = computed(() => (tried.value ? errors.value : {}));
 
 function submit() {
   tried.value = true;
-  if (props.busy || Object.keys(errors.value).length) return;
+  if (sending.value || Object.keys(errors.value).length) return;
   emit('submit', typeOf(typed.value, props.type?.id ?? crypto.randomUUID()));
 }
 </script>
@@ -70,10 +74,8 @@ function submit() {
     :open="open"
     :title="type ? `Edit ${type.name}` : 'Add a table type'"
     testid="layout-type"
-    :confirm-label="busy ? 'Saving…' : type ? 'Save type' : 'Add type'"
-    :confirm-disabled="busy"
-    :close-disabled="busy"
-    :error="error"
+    :confirm-label="sending ? 'Saving…' : type ? 'Save type' : 'Add type'"
+    :submission="submission"
     anchored
     @close="emit('close')"
     @submit="submit"
@@ -87,7 +89,7 @@ function submit() {
           type="text"
           autocomplete="off"
           maxlength="100"
-          :disabled="busy"
+          :disabled="sending"
           :aria-invalid="!!shown.name"
           :aria-describedby="shown.name ? 'layout-type-name-error' : undefined"
           data-testid="layout-type-name"
@@ -109,7 +111,7 @@ function submit() {
             type="text"
             inputmode="decimal"
             autocomplete="off"
-            :disabled="busy"
+            :disabled="sending"
             :aria-invalid="!!shown.width"
             :aria-describedby="shown.width ? 'layout-type-width-error' : undefined"
             data-testid="layout-type-width"
@@ -123,7 +125,7 @@ function submit() {
             type="text"
             inputmode="decimal"
             autocomplete="off"
-            :disabled="busy"
+            :disabled="sending"
             :aria-invalid="!!shown.depth"
             :aria-describedby="shown.depth ? 'layout-type-depth-error' : undefined"
             data-testid="layout-type-depth"
@@ -134,7 +136,7 @@ function submit() {
           <select
             :value="typed.unit"
             class="field field--select"
-            :disabled="busy"
+            :disabled="sending"
             data-testid="layout-type-unit"
             @change="changeUnit(($event.target as HTMLSelectElement).value as LengthUnit)"
           >

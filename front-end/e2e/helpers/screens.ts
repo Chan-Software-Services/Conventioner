@@ -243,11 +243,13 @@ const FORM_STEPS = ['essentials', 'questions', 'preview', 'review'] as const;
  * over the faded floorplan with the panel's list of sections: the editor at a desk and the map read
  * on a phone, and on a phone with Silver aisle 1 tapped and read under the map; then, at a desk,
  * with a table selected, with every table selected, with a section's
- * colours open, with Add table's options open, with a table picked up by keyboard, with the
- * panel's list of keys open, with a row being drawn by the crosshair, with a curve drawn by hand
+ * colours open, with Add table's card, with a table picked up by keyboard, with the
+ * keyboard shortcuts shown, with a row being drawn by the crosshair, with a curve drawn by hand
  * waiting with its points, with an L-shaped area's
  * corners clicked for Fill an area, with that area closed and its dialog open, with a table type's
- * dialog open, and with the image being replaced; with Export PNG's dialog open, at a desk and
+ * dialog open over Layout settings, with Layout settings open, with the map's Floorplan menu open,
+ * with the No-table zone tool's card of zones, and with the image being replaced; with Export
+ * PNG's dialog open, at a desk and
  * on a phone; and the settled seed's Upper Hall past Draft,
  * a table selected under the setup-settled sentence, with what would change a seat disabled.
  * Nothing is saved, so each walk finds them as seeded.
@@ -271,10 +273,23 @@ function layoutAt(
     | 'typeDialog'
     | 'exportDialog'
     | 'replacing'
+    | 'settings'
+    | 'viewMenu'
+    | 'zones'
     | 'settled',
 ) {
   return async (page: Page, seed: TheScreensSeed) => {
     const layout = new LayoutPage(page);
+    // Each stage starts from the editor's own choices: a page that walks several (the layout
+    // sweep's `measureTheRest`) would otherwise keep the shortcuts a stage before showed, over the
+    // table the next one clicks (`layoutViewChoices.ts`).
+    if (page.url().startsWith('http')) {
+      await page.evaluate(() => {
+        for (const key of Object.keys(localStorage)) {
+          if (key.startsWith('conventioner.layout.')) localStorage.removeItem(key);
+        }
+      });
+    }
     if (stage === 'upload') {
       await layout.goto(seed.draft.marketId);
       await expect(layout.uploadDropzone).toBeVisible();
@@ -302,14 +317,15 @@ function layoutAt(
         await expect(layout.tableReadTitle).toHaveText('Silver aisle 1');
       }
       if (stage === 'selected') {
-        // Silver aisle's first table, pressed: outlined, the turn handle over it, its card filled.
+        // Silver aisle's first table, pressed: outlined, its frame round it with a turn knob on
+        // each corner, its card filled.
         await layout.clickAt([10_000, 11_000]);
         await expect(layout.selectionTitle).toHaveText('Silver aisle 1');
         await expect(layout.turnKnob).toBeVisible();
       }
       if (stage === 'several') {
-        // Every table selected: the card's count, its first ten codes, its fields reading
-        // "Mixed", and the Align menu beside its buttons.
+        // Every table selected: the card's count, how many in each section, its fields reading
+        // "Mixed", the Align menu beside its buttons, and the frame round them all.
         await layout.clickAt([10_000, 11_000]);
         await page.keyboard.press('Control+a');
         await expect(layout.selectionTitle).toHaveText(
@@ -382,7 +398,9 @@ function layoutAt(
         }
       }
       if (stage === 'typeDialog') {
-        // Standard 6 ft's dialog, opened from its row's menu of the Table types card.
+        // Standard 6 ft's dialog, opened from its row's menu of Layout settings' Table types, over
+        // the settings.
+        await layout.openSettings();
         await layout.chooseForType('Standard 6 ft', 'Edit');
         await expect(layout.typeDialog).toBeVisible();
         await expect(layout.typeName).toBeFocused();
@@ -394,19 +412,53 @@ function layoutAt(
         await expect(layout.exportNumbers).toBeChecked();
       }
       if (stage === 'replacing') {
-        // "Replace the image": the upload's drop zone in the map's place, and the way back.
+        // "Replace the image", from Layout settings: the upload's drop zone in the map's place,
+        // and the way back.
+        await layout.openSettings();
         await layout.replaceImage.click();
         await expect(layout.uploadDropzone).toBeVisible();
         await expect(layout.replaceCancel).toBeVisible();
       }
       if (stage === 'keys') {
-        await layout.keyboardSummary.click();
-        await expect(layout.keyboard.getByText('Put them back')).toBeVisible();
+        // The keyboard shortcuts, shown by the toolbar's button: beside the page where the window
+        // has room, else over the map's corner.
+        await layout.showShortcuts();
+        await expect(layout.keyboard.getByText('Show or hide these shortcuts')).toBeVisible();
+      }
+      if (stage === 'settings') {
+        // Layout settings: the table types and the floorplan's image.
+        await layout.openSettings();
+        await expect(layout.typesCard).toBeVisible();
+      }
+      if (stage === 'viewMenu') {
+        // The map's Floorplan menu, open over the map above its zoom bar.
+        await layout.openViewMenu();
+        await expect(layout.viewShowImage).toBeFocused();
+      }
+      if (stage === 'zones') {
+        // The No-table zone tool on, its card the list of the layout's zones.
+        await layout.toolZone.click();
+        await expect(layout.zonesCard).toBeVisible();
       }
       return;
     }
     await layout.goto(seed.layout.marketId, seed.layout.upper.id);
     await expect(layout.calibrationMap.locator('image')).toHaveAttribute('href', /^blob:/);
+  };
+}
+
+/**
+ * The day map market's public map (T422), with the table `table` picked from the address when
+ * given, once its floorplan has drawn and `shows` is on the card.
+ */
+function publicMapAt(table?: string, shows = 'public-map-card') {
+  return async (page: Page, seed: TheScreensSeed) => {
+    await page.goto(`/${seed.dayMap.slug}/map${table ? `?table=${table}` : ''}`);
+    await expect(page.getByTestId('layout-map-image')).toHaveAttribute('href', /^blob:/, {
+      timeout: 15000,
+    });
+    await visible(page, shows);
+    await visible(page, 'public-map-vendor');
   };
 }
 
@@ -1249,6 +1301,20 @@ export const SCREEN_GROUPS = {
       open: at(screen('big', 'attendance'), 'attendance-row'),
     },
     {
+      // Attendance as a map (T422): today's North Wing drawn by who is here and who is expected, a
+      // shared table in halves, the legend under it, at the door on a phone as at a desk.
+      name: "the attendance's map",
+      who: 'organizer',
+      sizes: FITS_A_PHONE,
+      open: async (page, seed) => {
+        await page.goto(`${screen('dayMap', 'attendance')(seed)}?view=map`);
+        await expect(
+          page.getByTestId('attendance-map').getByTestId('layout-map-image'),
+        ).toHaveAttribute('href', /^blob:/, { timeout: 15000 });
+        await visible(page, 'day-map-legend-item');
+      },
+    },
+    {
       // The strip, who applied - a column a day over the 19 days its applications span, and
       // the review's split bar (T201) - the room, how full each section is each day (T201), and a
       // chart per choice question, as ledgers of bars (E45/F01/S01 to S03); it fits a phone (T180).
@@ -1286,6 +1352,14 @@ export const SCREEN_GROUPS = {
       who: 'organizer',
       sizes: FITS_A_PHONE,
       open: at(screen('big', 'tools'), 'plan-card-discord'),
+    },
+    {
+      // The Public map card turned on (T422): its three questions chosen, the switch on, and the
+      // map's address with Copy link and Open the map.
+      name: 'the tools, the public map on',
+      who: 'organizer',
+      sizes: FITS_A_PHONE,
+      open: at(screen('dayMap', 'tools'), 'public-map-address'),
     },
     // The door code over the attendance (ADR 0022), on the tablet or laptop at the entrance or the
     // phone in the organizer's hand: before one is made, full screen, and New code's confirmation.
@@ -1400,12 +1474,13 @@ export const SCREEN_GROUPS = {
       // Before publishing the door is a note, so the rail is what the state waits on.
       open: at(screen(market, 'attendance'), 'phase-rail-current'),
     })),
-    // A layout past draft, with no floorplan: read, with nothing to upload.
+    // A layout past draft, with no floorplan: its upload at a desk, since a layout started past
+    // draft follows the plan (T422), and read on a phone, which starts no layout.
     {
       name: 'the layout, past draft',
       who: 'organizer',
       sizes: FITS_A_PHONE,
-      open: at(screen('big', 'layout'), 'layout-no-floorplan'),
+      open: at(screen('big', 'layout'), 'layout-panel-start'),
     },
     // Its upload step is the app's one drop zone (T205). The page fits a phone (T257), where it only
     // reads: a layout is started and its scale set at a desk.
@@ -1477,7 +1552,7 @@ export const SCREEN_GROUPS = {
       open: layoutAt('pickedUp'),
     },
     {
-      name: 'the layout, its keys listed',
+      name: 'the layout, its keyboard shortcuts shown',
       who: 'organizer',
       sizes: ORGANIZER,
       deskOnly: true,
@@ -1527,6 +1602,28 @@ export const SCREEN_GROUPS = {
       who: 'organizer',
       sizes: FITS_A_PHONE,
       open: layoutAt('exportDialog'),
+    },
+    // The layout's frame (T422): Layout settings, the Floorplan menu and the zones' card.
+    {
+      name: 'the layout, Layout settings',
+      who: 'organizer',
+      sizes: ORGANIZER,
+      deskOnly: true,
+      open: layoutAt('settings'),
+    },
+    {
+      name: "the layout, the map's Floorplan menu",
+      who: 'organizer',
+      sizes: ORGANIZER,
+      deskOnly: true,
+      open: layoutAt('viewMenu'),
+    },
+    {
+      name: 'the layout, the No-table zone tool',
+      who: 'organizer',
+      sizes: ORGANIZER,
+      deskOnly: true,
+      open: layoutAt('zones'),
     },
     {
       name: 'the layout, its image being replaced',
@@ -1718,6 +1815,23 @@ export const SCREEN_GROUPS = {
       open: at(fixed('/no/such/page'), 'page-not-found'),
     },
     {
+      // A market's public map, signed out (T422): the day buttons, North Wing's map with its location
+      // switch, zoom and legend, the card waiting for a press, and the day's vendors under "Find a
+      // vendor"; at a desk in two columns, on a phone one.
+      name: 'the public map',
+      who: 'nobody',
+      sizes: PUBLIC,
+      open: publicMapAt(),
+    },
+    {
+      // The public map with a shared table picked from the address, as a shared link opens it: the
+      // card lists both halves, and the list edges the two vendors at it.
+      name: 'the public map, a shared table picked',
+      who: 'nobody',
+      sizes: PUBLIC,
+      open: publicMapAt('north-table-3', 'public-map-card-half'),
+    },
+    {
       // A market's vendor page, signed out (ADR 0022): its name and the email step.
       name: 'the vendor page, signed out',
       who: 'nobody',
@@ -1848,7 +1962,7 @@ export const SCREEN_GROUPS = {
   ],
 } satisfies Record<string, Screen[]>;
 
-/** Every screen and state the sweeps walk, each in one of `SCREEN_GROUPS`. */
+/** Every screen and deliberate state the sweeps walk, each in one of `SCREEN_GROUPS`. */
 export const SCREENS: Screen[] = Object.values(SCREEN_GROUPS).flat();
 
 /** One seat, as the vendor's own read lists it. */

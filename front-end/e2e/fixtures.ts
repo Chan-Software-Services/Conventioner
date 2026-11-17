@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { LoginPage } from './pages/LoginPage';
 import { settle } from './helpers/settle';
 import { stack } from './helpers/stack';
+import { startMongoSession } from './helpers/mongo';
 import { hideDevToolsPanel } from './helpers/hideDevToolsPanel';
 import { withTheTestMap } from './helpers/testMap';
 import {
@@ -83,10 +84,24 @@ async function expectAccessible(page: Page, state: string, { soft = false } = {}
   ).toEqual([]);
 }
 
-export const test = base.extend<{
-  authenticatedPage: Page;
-  expectAccessible: (state: string, options?: { soft?: boolean }) => Promise<void>;
-}>({
+export const test = base.extend<
+  {
+    authenticatedPage: Page;
+    expectAccessible: (state: string, options?: { soft?: boolean }) => Promise<void>;
+  },
+  { mongoSession: void }
+>({
+  /**
+   * Each worker process starts its Mongo session (`helpers/mongo.ts`) before its first test, so
+   * that first start, slow on a loaded CI runner, is not counted against a test that seeds.
+   */
+  mongoSession: [
+    async ({}, use) => {
+      await startMongoSession();
+      await use();
+    },
+    { scope: 'worker', auto: true, timeout: 90_000 },
+  ],
   page: async ({ page }, use, testInfo) => {
     await hideDevToolsPanel(page.context());
     const said = watchTheBrowser(page);

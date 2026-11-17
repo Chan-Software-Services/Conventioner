@@ -2,8 +2,9 @@
 /**
  * The dialog (T200, T217): `AppDialog` in its three widths, the whole-window scroll beside the body
  * scroll on the same 150-person list, the body scroll with a tray, the footer without a form, a
- * read-only list the keys scroll, and the dialogs that prove every behaviour is kept, each on the
- * fixture's people and applicants. Daniel's choices on it are made, so it asks none.
+ * read-only list the keys scroll, a short list that fits its content on a phone (T446), and the
+ * dialogs that prove every behaviour is kept, each on the fixture's people, applicants and columns.
+ * Daniel's choices on it are made, so it asks none.
  *
  * Every dialog here is the real `AppDialog`, opened from a button the way a screen opens one; the
  * line under each button reads out how it last closed, so a save is seen to land and a close is
@@ -14,6 +15,7 @@ import { MarketRole } from '@/assets/types/datatypes';
 import AppDialog from '@/components/AppDialog.vue';
 import { OFFLINE_MESSAGE } from '@/utils/api';
 import { getRoleDisplayName } from '@/utils/permissions';
+import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import LibrarySection from '../parts/LibrarySection.vue';
 import LibraryPanel from '../parts/LibraryPanel.vue';
 import TodayAndProposed from '../parts/TodayAndProposed.vue';
@@ -32,6 +34,7 @@ type DialogId =
   | 'tray'
   | 'actions'
   | 'read'
+  | 'fits'
   | 'destructive'
   | 'error'
   | 'anchored'
@@ -88,6 +91,10 @@ function act(what: string) {
   outcome.actions = what;
 }
 
+// A long dialog whose list is usually short: on a phone it is as tall as these few ticks.
+const fewColumns = offered.columns.slice(0, 6);
+const chosenFew = ref<string[]>(fewColumns.slice(0, 2).map((column) => column.id));
+
 // Every behaviour kept, in either scroll.
 const SCROLLS = [
   { id: 'window', label: 'The window scrolls' },
@@ -97,11 +104,22 @@ const keptScroll = ref<'window' | 'body'>('body');
 
 const removing = people[5]!;
 
-// A save in flight, which lands only when asked, so the hold can be looked at for as long as it takes.
-const inFlight = ref(false);
+// A save in flight, which lands only when asked, so the hold can be looked at for as long as it
+// takes. It writes as a dialog does, through `useDialogSubmit`, and the shell holds it.
+const inFlight = useDialogSubmit({
+  opening: () => opened.value === 'inFlight',
+  failure: 'The template could not be saved.',
+});
+const { sending: savingInFlight } = inFlight;
+let land: (() => void) | null = null;
+function saveInFlight() {
+  void inFlight.submit(() => new Promise<void>((resolve) => (land = resolve)), {
+    done: () => saved('inFlight', 'Saved'),
+  });
+}
 function letTheSaveLand() {
-  inFlight.value = false;
-  saved('inFlight', 'Saved');
+  land?.();
+  land = null;
 }
 
 const owed = ref('120');
@@ -225,6 +243,18 @@ function addUser() {
   </LibrarySection>
 
   <LibrarySection
+    title="The body scrolls, as tall as a short list on a phone"
+    about="Serves: Choose what leads the card, whose list is usually short; every other long dialog fills a phone's window (Daniel's choice 22)"
+  >
+    <LibraryPanel label="As tall as its list on a phone, up to the window">
+      <button type="button" class="btn btn--secondary" @click="open('fits')">
+        Choose what leads
+      </button>
+      <ReadOut label="Last" :value="outcome.fits ?? null" />
+    </LibraryPanel>
+  </LibrarySection>
+
+  <LibrarySection
     title="Every behaviour kept"
     about="Serves: the 9 destructive confirmations, the 6 anchored dialogs, the 7 of several actions, and every form's error"
   >
@@ -321,6 +351,33 @@ function addUser() {
     @close="closed('read')"
   >
     <p v-for="person in people" :key="person.id" class="library-text">{{ person.name }}</p>
+  </AppDialog>
+
+  <!-- A short list, its window as tall as the list on a phone, Done pinned beneath it. -->
+  <AppDialog
+    :open="opened === 'fits'"
+    title="Choose what leads the card"
+    testid="library-fits"
+    size="wide"
+    scroll="body"
+    fits-content-on-a-phone
+    @close="closed('fits')"
+  >
+    <p class="library-text">A reviewer reads these first.</p>
+    <label v-for="column in fewColumns" :key="column.id" class="library-check">
+      <input v-model="chosenFew" type="checkbox" :value="column.id" />
+      <span>{{ column.label }}</span>
+    </label>
+    <template #actions>
+      <button
+        type="button"
+        class="btn btn--primary"
+        data-testid="library-fits-done"
+        @click="saved('fits', `Chose ${chosenFew.length} of ${fewColumns.length}`)"
+      >
+        Done
+      </button>
+    </template>
   </AppDialog>
 
   <!-- The sizes. -->
@@ -496,17 +553,16 @@ function addUser() {
     title="Name the template"
     testid="library-in-flight"
     :scroll="keptScroll"
-    :confirm-label="inFlight ? 'Saving…' : 'Save'"
-    :confirm-disabled="inFlight"
-    :close-disabled="inFlight"
+    :confirm-label="savingInFlight ? 'Saving…' : 'Save'"
+    :submission="inFlight"
     @close="closed('inFlight')"
-    @submit="inFlight = true"
+    @submit="saveInFlight"
   >
     <p class="library-text">Save, then let it land when you have looked at the hold.</p>
     <button
       type="button"
       class="btn btn--secondary"
-      :disabled="!inFlight"
+      :disabled="!savingInFlight"
       data-testid="library-in-flight-land"
       @click="letTheSaveLand"
     >

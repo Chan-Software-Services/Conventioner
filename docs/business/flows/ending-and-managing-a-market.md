@@ -48,6 +48,7 @@ sources:
   - T273
   - T283
   - T315
+  - T411
 ---
 
 # Ending and managing a market
@@ -137,6 +138,9 @@ Covered by:
    When that moved the row past those shown, the find field takes their address, so the refusal is still read.
    When someone else removed them first, the row is gone and the words stand at the foot of the list, after their address; adding them back brings the row back without the words.
 
+Each of these writes belongs to the dialog it was sent from (T411): while "Add" and the list's re-read are out nothing closes Manage market, and while a removal or a role change and its re-read are out nothing closes its confirmation, Cancel and the close drawn disabled; a second press sends nothing.
+An answer that lands after Manage market was closed, or opened on another market, writes nothing into the one open, its re-read of the market included.
+
 The organization line says "Belongs to <organization>. Its admins run it; its members can view it."
 Covered by:
 
@@ -145,6 +149,7 @@ Covered by:
 - [`changing-a-role-asks-first.spec.ts`](../../../front-end/e2e/changing-a-role-asks-first.spec.ts) (the confirmation's words, its closes, one write on confirm and where focus goes, a table whose owner moved a row, a refusal, one after someone else moved or removed them first, the arrow keys, and Viewer to Admin in sight at 1280 and 390)
 - [`everyone-with-access.spec.ts`](../../../front-end/e2e/everyone-with-access.spec.ts) (the walk's case, and at 390 nothing overflowing and each Remove a 44px target, on one edge)
 - `manageMarketMeetsAChangedMarket.test.ts` (a role's add, change and take refused over a changed market)
+- `manageMarketPeople.test.ts` (an add held, sent once, and its answer kept out of Manage market opened on another market)
 - [`people-at-scale-market.spec.ts`](../../../front-end/e2e/people-at-scale-market.spec.ts) (the list at 154 people: a page at a time, finding one person, the place kept, someone just added; on a phone at 390 and 320)
 - [`removing-someone-asks-first.spec.ts`](../../../front-end/e2e/removing-someone-asks-first.spec.ts) (the confirmation's words, Cancel, Escape, confirming and where focus goes, someone removed in another window included, at 1440 and 390; at 390 the address in Remove's and a role change's title broken only before its "@" or a dot)
 - `screen-sweeps-*.spec.ts`, the sweeps' states "the manage-market dialog, an organization's people", "the manage-market dialog, removing a market role" and "the manage-market dialog, changing a market role"
@@ -170,6 +175,7 @@ Covered by:
 8. For anyone but the owner the dialog is read-only and says "Only the market's owner changes these."; on an archived market, the owner included, it says the archived words instead.
    A reader gets no foot, and with no control in the dialog focus lands on its body at each opening, so the arrow keys scroll the rows; the changes are read afresh each time, so their box comes after focus has landed.
 9. Reset and Copy are pinned at the dialog's foot for the owner, in reach from any row, and a change, a reset or a copy asks first over the dialog: Cancel, Escape and the backdrop close only the confirmation, and a confirm writes once and leaves the dialog open with the table and the changes read again.
+   Nothing closes a confirmation while its write is out, and a second press sends nothing (T411).
    Closing the dialog, whichever way, gives focus back to "Show", with Manage market as it was.
 
 Beneath Permissions, "History", closed until opened, lists every change on the market, newest first, for whoever may read the market's history: [L6](reading-the-markets-history.md#l6-read-the-markets-history).
@@ -194,10 +200,12 @@ Covered by:
 "Rename market", with the name and "Save", in Draft only; afterwards "This market's public web address comes from its name, and it has already been shared, so its name can no longer change.", and an archived market says it is archived.
 The new name is stored without the spaces at its ends, and holds the rule a new market's does ([D6](creating-a-market.md#d6-a-name-of-at-most-100-characters-on-one-line)): the field takes at most 100 characters, and the server's refusal ("A market's name can be at most 100 characters.", "A market's name must be on one line.", "A market needs a name.") shows under it.
 A rename that lands after the market left draft is refused with [the market write's one sentence](../../implementation/modules/market-write.md#what-it-answers) under the name, and the market is read again, so the field gives way to why the name can no longer change (T274).
+While the rename and the re-read after it are out nothing closes Manage market and a second "Save" sends nothing; an answer that lands after Manage market was opened on another market leaves it alone, and the market open in the store is still read again when it is the one renamed (T411).
 Covered by:
 
 - `a-market-name-fits-one-line.spec.ts`
 - `manageMarketMeetsAChangedMarket.test.ts` (a rename refused over a market that left draft)
+- `manageMarketPeople.test.ts` (a rename held, sent once, and its refusal kept out of Manage market opened on another market)
 - `public-address.spec.ts`
 
 ## L4a. Transfer ownership
@@ -208,7 +216,7 @@ Covered by:
    It says "Make someone with access its Owner. You stay on it as an Admin." and offers "Transfer ownership"; with nobody but the owner under "Users with access" it says "Nobody else has access to this market yet. Add someone under Users with access first." and offers nothing.
 2. Its button opens "Transfer ownership of <market>", a destructive dialog that opens on Cancel, since the owner cannot take it back themselves ([`HandOnMarketDialog.vue`](../../../front-end/src/components/HandOnMarketDialog.vue)).
    Its picker, "New owner", offers everyone under "Users with access" but the owner, each address with the role that counts beside it ("Admin", "Viewer, through <organization>"), found by any part of the address, at most 50 drawn at a time.
-3. Once someone is chosen it says "<address> becomes its Owner: only they can delete it, give and take Admin roles and change who may do what. You stay on it as an Admin, and cannot take it back yourself."; its "Transfer ownership" waits for a choice, and nothing closes the dialog while the request is in flight.
+3. Once someone is chosen it says "<address> becomes its Owner: only they can delete it, give and take Admin roles and change who may do what. You stay on it as an Admin, and cannot take it back yourself."; its "Transfer ownership" waits for a choice, and nothing closes the dialog while the request and the re-read after it are in flight, the picker disabled with them; a second press sends nothing (T411).
 4. "Transfer ownership" makes that person the Owner and the owner an Admin in one write (`POST /markets/:id/hand-on`), and [the market's history](../../implementation/data/history.md) records it: "<owner> transferred ownership of the market to <address>, and stays on it as an Admin", entries recorded before T315 included.
    The dialog closes, the market is re-read, so the section and "Delete market" go and "Users with access" shows both new roles, the market open in the store is re-read when it is this one, and focus goes to "Users with access".
 5. A refusal stays in the dialog with the choice, and choosing someone else lets it go.
@@ -227,8 +235,10 @@ Covered by:
 **Status:** Works (walked live; what it names read from the code as of bug 43's fix and E30/F01/S03).
 Owner only, in any phase: "Delete market" opens "Delete <market>?", which names what goes ("This deletes the market with its applications, its assignments, its check-in records and the record of who changed what. It cannot be undone."), adds "Its vendor page will stop working for anyone who has the link." while its vendor page answers (a form market after draft, a Google Form market once its results are published or it reached its market days), and opens on Cancel (bug 43).
 Everything the market kept beside itself is deleted with it (bug 47).
+"Delete market" sends one delete however often it is pressed, and nothing closes the confirmation until it answers; a refusal is said in it, and the next opening starts without it (T411).
 Covered by:
 
+- `manageMarketPeople.test.ts` (one delete for two presses, held until it answers)
 - `market-records-go-with-it.spec.ts`
 - `the-manage-market-dialog-holds-together.spec.ts`
 - `tier2.spec.ts`

@@ -181,4 +181,24 @@ describe('adding a vendor, while the write is out', () => {
     expect(wrapper.emitted('close')).toHaveLength(4);
     wrapper.unmount();
   });
+
+  it('adds one vendor for two presses of Add vendor', async () => {
+    let answer!: (value: unknown) => void;
+    held = new Promise((resolve) => (answer = resolve));
+    const wrapper = dialog([]);
+    await nameAndAddress(wrapper);
+
+    await wrapper.get('form').trigger('submit');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+
+    expect(sent).toHaveLength(1);
+    expect(wrapper.get(testid('add-vendor-submit-button')).text()).toBe('Adding…');
+    expect(wrapper.get(testid('add-vendor-submit-button')).attributes('disabled')).toBeDefined();
+
+    answer({ data: { application: { applicantEmail: 'walk.in@example.com' } } });
+    await flushPromises();
+    expect(wrapper.emitted('added')).toEqual([['walk.in@example.com']]);
+    wrapper.unmount();
+  });
 });

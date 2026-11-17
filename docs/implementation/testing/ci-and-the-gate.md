@@ -19,7 +19,7 @@ describes:
   - .github/actions/e2e-stack/action.yml
   - .github/actions/front-end-deps/action.yml
   - front-end/scripts/e2e-repeat.ts
-verified: 2026-11-16
+verified: 2026-11-17
 sources:
   - T47
   - T53
@@ -36,20 +36,21 @@ sources:
   - T294
   - T317
   - T375
+  - T424
 ---
 
 # CI and the gate
 
-GitHub Actions runs the suites before code reaches `dev`, on every push and pull request; the no-mistakes gate, on a branch pushed through it, checks it for real data before it pushes and [leaves the suites to CI](#the-no-mistakes-gate).
+GitHub Actions runs the suites before code reaches `dev`, on every push, pull request and merge queue trial commit; the no-mistakes gate, on a branch pushed through it, checks it for real data before it pushes and [leaves the suites to CI](#the-no-mistakes-gate).
 [Dependabot's pull requests](#dependabot) meet only the first.
 What each suite covers is [TESTING.md](../../TESTING.md); how a commit reaches production is [RELEASING.md](../../RELEASING.md).
 
 ## CI
 
-[`.github/workflows/test.yml`](../../../.github/workflows/test.yml) runs on pushes and pull requests to `dev` and `main`.
+[`.github/workflows/test.yml`](../../../.github/workflows/test.yml) runs on pushes and pull requests to `dev` and `main`, and on [a merge queue's trial commit](#a-merge-queues-trial-commit) for `dev`.
 Its token is read-only (`permissions: contents: read`, and on the `e2e` job `actions: read` too, for the newest `test-map` artifact, another run's), every action is pinned by its full commit SHA with the version in a comment beside it, which [Dependabot](#dependabot) bumps together, and no checkout keeps its git credentials (`persist-credentials: false`), since no job pushes.
 No `${{ }}` expression is written inside a `run:` script: a value reaches the shell through the step's `env:` and is read as a variable.
-A push to a pull request's branch cancels the run of its earlier head (`concurrency`); a push to `dev` or `main` never cancels one, since each commit there keeps the checks a promotion reads.
+A push to a pull request's branch cancels the run of its earlier head (`concurrency`); a push to `dev` or `main` never cancels one, since each commit there keeps the checks a promotion reads, and neither does a trial commit, whose group is its own queue branch and commit.
 Every job but `e2e-shard` (whose checks are `e2e shard <n>/10`) sets `name:` to its id, the name branch protection requires its check by, so renaming a job drops a required check.
 
 Each job is one block, what it runs one item a line ([two features never share a line](../conventions/two-features-never-share-a-line.md)); a new job is a block beside the job it is most like, and a new step of a job is one item beside the step it is most like.
@@ -74,7 +75,7 @@ Each job is one block, what it runs one item a line ([two features never share a
 **`real-data-and-workflows`**
 
 - four short checks in one job, so [one run fits the account's 20 jobs](#the-e2e-shards): on a pull request only, [`real_data_check.py`](../../../scripts/real_data_check.py) on the PR's commits since the base branch ("No real data in the PR's commits") and then on every file of the merge it checks out ("No real data anywhere in the tree"), then gitleaks 8.28.0 (checksum-verified, fully redacted) on the same commits, which lets by only the fingerprints in the root `.gitleaksignore` (a fixture value gitleaks takes for a key, in a commit already pushed, which only a force-push could take out of the range), the backstop to the git hooks and the gate, which run the checker before anything is pushed ([real data never leaves the PC](../conventions/security-invariants.md#real-data-never-leaves-the-pc))
-- on every push and pull request, [zizmor](https://docs.zizmor.sh/) 1.31.1 (checksum-verified) with `--offline` over the repository, which audits the four workflows (Test, Deploy, Release Please and Promote), the [shared e2e actions](#the-e2e-stack-and-its-caches) and `dependabot.yml` without a token, where any finding fails the job and its log names the audit, file and line, an accepted finding is ignored on the line zizmor reports, with its audit and the reason after it (`# zizmor: ignore[<audit>] <reason>`), and there is no zizmor config file, so nothing is ignored wholesale
+- on every run, [zizmor](https://docs.zizmor.sh/) 1.31.1 (checksum-verified) with `--offline` over the repository, which audits the four workflows (Test, Deploy, Release Please and Promote), the [shared e2e actions](#the-e2e-stack-and-its-caches) and `dependabot.yml` without a token, where any finding fails the job and its log names the audit, file and line, an accepted finding is ignored on the line zizmor reports, with its audit and the reason after it (`# zizmor: ignore[<audit>] <reason>`), and there is no zizmor config file, so nothing is ignored wholesale
 - then [actionlint](https://github.com/rhysd/actionlint) 1.7.12 (checksum-verified) over the four workflows: their syntax, expressions, job references and action inputs (a local action's against its `action.yml`), and each `run:` script through the runner's shellcheck, which zizmor's security audits do not read, but not a composite action's own scripts, where any finding fails the job and its log names the file, line and rule
 - last, on a pull request only, zizmor without `--offline`, given the run's read-only token, for the audits that look actions up on GitHub (an impostor commit, a known-vulnerable action or a confused ref behind a pin), with `--format github`, so each finding is an annotation on the pull request, and `continue-on-error`, so a finding or an outage of GitHub's API never fails the job
 
@@ -123,6 +124,25 @@ Under `CI`, Playwright retries twice and sets `failOnFlakyTests` ([`front-end/pl
 Every failed attempt and every retry keeps its trace, so the shard's `playwright-artifacts-shard-<n>` artifact, uploaded on that failure, holds every failed attempt's trace beside its passing retry's ([when a test fails](../../TESTING.md#when-a-test-fails)).
 Within a shard the tests share one database (`workers: 1`); never across shards.
 
+## A merge queue's trial commit
+
+**Every required check the Test workflow makes runs on the commit a merge queue builds for `dev`.**
+The `merge_group` trigger (`checks_requested`, for `dev` alone, since `main` moves only through Promote) runs the workflow on the trial commit GitHub builds for a queued pull request on its own `gh-readonly-queue/dev/...` branch, a run separate from the pull request's and the push's, so the queue gets every required check the Test workflow makes on the commit it would merge.
+`dev`'s two other required checks, `CodeQL` and `agent-review`, come from outside this workflow, and nothing in this repository makes either on a trial commit.
+On it `github.base_ref` and `github.event.pull_request` are empty, since they belong to a pull request's event, and each job reads its event as follows:
+
+| Job                                                                   | On a trial commit                                                                                                                                                                                                  |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-build` | every step, as on a push: none has an `if:`                                                                                                                                                                        |
+| `knowledge-graph`                                                     | the scripts' tests and `knowledge_graph.py check`; the drift step, which reads `github.base_ref`, is skipped, as on a push, since it judges a pull request against its base, which the pull request's own run does |
+| `real-data-and-workflows`                                             | zizmor offline and actionlint; the real-data scans, gitleaks and zizmor online, each `if: github.event_name == 'pull_request'`, are skipped, as on a push                                                          |
+| `e2e-shard`                                                           | every step, as on a push, but shard 1 saves no cache ([why](#the-e2e-stack-and-its-caches))                                                                                                                        |
+| `e2e`                                                                 | its `if: ${{ !cancelled() }}`, which reads no event                                                                                                                                                                |
+| `e2e-repeat`                                                          | skipped (`if: github.event_name == 'pull_request'`), as on a push; not a required check                                                                                                                            |
+
+Its concurrency group is `Test-<its queue branch's ref>-<its sha>`, so no other run shares it and none is cancelled.
+Promotion never reads it: [`promote_check.py`](../../../scripts/promote_check.py) reads only a run on a push to `dev`, which the queue's merge starts on the same commit.
+
 ## The e2e shards
 
 Each `e2e-shard` job runs [`front-end/scripts/e2e-shards.ts`](../../../front-end/scripts/e2e-shards.ts) `--shard=<n>/10`, not Playwright's `--shard`.
@@ -135,7 +155,7 @@ The timings are the summed duration of every attempt of every test in a file, fr
 Refresh them when a shard runs well over the others, or after a large spec file lands:
 
 ```sh
-gh run download <run id> -R chanjdaniel/Conventioner -p 'e2e-results-shard-*' -D <an empty dir>
+gh run download <run id> -R Chan-Software-Services/Conventioner -p 'e2e-results-shard-*' -D <an empty dir>
 cd front-end && node scripts/e2e-shards.ts refresh <that dir>
 ```
 
@@ -146,7 +166,7 @@ The first timings came from run 42493172818's list-reporter times, before the re
 **Ten shards, since the suite is the run's critical path.**
 With six, the slowest shard ended a median 21.5 minutes into a run, while every other job was done by 2.7; a shard is about 3 minutes of setup and its share of the suite, so ten bring a shard to about 12 minutes at about 13 more runner-minutes of setup a run.
 That holds while runners are free: the account is on GitHub Free, which runs 20 jobs at once across the repository.
-One pull request's run asks for 20, so it fits alone: 17 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, the ten shards and `e2e-repeat`), `e2e` only once the shards are done, and CodeQL's three; a push to `dev` or `main` starts 16 Test jobs, with no `e2e-repeat`, and on `dev` `test-map` starts once the shards are done, beside `e2e`.
+One pull request's run asks for 20, so it fits alone: 17 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, the ten shards and `e2e-repeat`), `e2e` only once the shards are done, and CodeQL's three; a push to `dev` or `main`, or a trial commit, starts 16 Test jobs, with no `e2e-repeat`, and on `dev` `test-map` starts once the shards are done, beside `e2e`.
 That is why the five short checks (drift, the real-data scan with gitleaks, zizmor offline, zizmor online and actionlint) are steps of `knowledge-graph` and `real-data-and-workflows`: as five jobs of their own they made one run ask for 24, more than the account runs at once.
 With another run going, shards still wait: on one such run four shards queued 9 to 12 minutes, and the run ended at 23 minutes while each shard's own time was 10.5 to 12.5.
 The matrix lists the shards and their `total`, which move together.
@@ -171,6 +191,7 @@ That is the rule by which every worktree and `nm-test.sh` stack shares its image
 Only shard 1 saves (`save-cache` and `save-caches`), and only what it did not restore, so ten shards never race to write one key; the first run of a new key installs and builds on every shard, as before.
 `docker-build` never uses the cache: it builds both images from nothing on every run, so a base image or a dependency that no longer builds still fails it.
 A cache written on `dev` is read by every pull request; one written on a pull request's run only by that pull request's later runs.
+A trial commit's shards read `dev`'s, the default branch's, and save none: a cache written on its queue branch would be read by no other run.
 The three caches are about 660 MB together (the images' archive about 340, the browsers about 280, `node_modules` about 40), saved once by each pull request that changes a key's files, against the repository's 10 GB of Actions cache, which GitHub evicts least recently used first and after 7 days unread.
 
 ## The e2e repeat

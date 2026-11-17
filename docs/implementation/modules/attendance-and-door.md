@@ -24,6 +24,7 @@ describes:
   - front-end/e2e/one-record-for-a-vendors-day.spec.ts
   - front-end/src/components/ListFreshness.vue
   - front-end/src/components/DoorRosterPrint.vue
+  - front-end/src/components/attendance/AttendanceMap.vue
 verified: 2026-11-16
 sources:
   - wayfinding/real-market-readiness/map
@@ -48,6 +49,9 @@ sources:
   - T201
   - T274
   - T318
+  - T421
+  - T422
+  - T411
 ---
 
 # Attendance and the door
@@ -96,6 +100,18 @@ The roster, the vendor's own read and the check-in all read the same stored rows
 A row's status says who checked the vendor in: "Scanned in at 9:41 AM" for the vendor's own (`checkedInVia: door_code`), "9:41 AM by you" or "by <organizer>" for an organizer's, and the time alone for one made on the old public page.
 A vendor's own check-in times are `check_ins_of`, which the vendor page's own read uses, so each seat a vendor reads carries when they checked in to it ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)); whether a market ran is `market_ran`.
 The Stats tab's Check-in is `check_in_counts`, beside the roster: the same stored rows and attendance records, counted per date as the door's "18/24" counts them and with `came`, the vendors in on any date, but reading no names and sending no row ([who has come](../../business/flows/stats.md#n6-see-who-has-come)).
+
+**Attendance is a list or a map of the open day** (T422, D38 to D41): "List" and "Map" stand first in the tools row, the open one pressed, and Map is `view=map` in the address, written with `router.replace` beside `date`, so a change of day and a reload keep it; List is the page as it was.
+On Map, [`AttendanceMap.vue`](../../../front-end/src/components/attendance/AttendanceMap.vue) stands in place of the Show toggles and the rows, and draws the [day map](../../../front-end/src/components/daymap/DayMap.vue) of the chosen date from the roster the page already reads and re-reads, so it is as fresh as the list, with no read of its own but the open location's floorplan image, read with the session as the layout page reads it (`useFloorplanImage`).
+Its locations are those laid out as the public map's server chooses them (`mapped_locations`): a layout with a scale and a table numbered in one of the location's own sections; the open one is `location` in the address, else the first.
+A roster row is matched to a table by its code, its section's name and its number (`rosterSeats` in [`dayMap.ts`](../../../front-end/src/components/daymap/dayMap.ts)): `here` and `here_elsewhere` are filled, `expected` outlined, and a table with nobody free; the legend reads "Here", "Expected" (or "Did not come", as the list words it once the day is over) and "No vendor".
+A seat is named as the list names its vendor, their name or else their address, and keyed by their address, so a press on it opens the vendor drawer through the page's own `useVendorDrawer`, on its Application tab, keeping `view` and `date`; the open vendor's seat is the one picked, and each half of a shared table is its own seat.
+A press on a table with nobody says "Table <code>: no vendor on <date>." under the map, the date spelled as the date buttons spell it, and opens nothing; a free half of a shared table is no button.
+"Find a vendor" marks the seats of the vendors it finds, by name, address or table, and the note of a free table gives way to it.
+At a desk the map is no taller than the window leaves under the door's head (its own rule caps the day map's frame at the window less 30rem, at least 20rem), so the whole map, its zoom and its legend stand in view as the page opens; a phone keeps the day map's own height.
+Under the map, "<n> here with no table" and "<n> vendors are at tables not on a layout." each show only when they apply, with "Show in the list", which goes back to List with Show set to All, since the toggle is hidden on Map and would hide some of them; with no location laid out the map says "No location has a layout yet." in place of the second count, with "Open the layout" for whoever may change the setup.
+Nothing on the map writes: Check in, Undo and notes stay on the list (D39), and the drawer has no check-in.
+[`theDoorAsAMap.test.ts`](../../../front-end/src/__tests__/theDoorAsAMap.test.ts) holds the switch, the tones, the re-read, the presses and the counts; [`the-door-as-a-map.spec.ts`](../../../front-end/e2e/the-door-as-a-map.spec.ts) walks it on a phone and at a desk, where the zoom and the legend stand in the window, with a check-in on the list and one elsewhere that the re-read brings, and a Viewer who reads it and writes nothing.
 
 **A check-in needs a stored placement for that vendor on that date** (`seat_on`, the stored row or None; `seated_on` asks whether there is one), or it is a 404.
 A placement is dated by the market date itself, so no reader maps anything back to a date.
@@ -148,12 +164,15 @@ An organizer checking a vendor in on a past market date is not refused, and on o
 It was read on load and after the organizer's own tap, so a vendor who scanned themselves in, or another organizer's check-in, showed only after this organizer's next tap or a reload, and "who is missing" was stale at exactly the moment it was asked.
 Attendance reads its roster again every 15 seconds while the page is in view (`REREAD_MS`), and at once when the tab comes back into view or the browser comes back online; hidden, it reads nothing, and the clock never asks for a read while one is out.
 A read that has not answered in `REREAD_MS` is given up (its own axios `timeout`, not the shared instance's) and fails as any read does, so a stalled request on the venue's wifi never stops the clock or holds Refresh disabled.
-Every read takes a number from one counter as it is asked, and its answer lands only if nothing newer was asked or landed since, so two reads answering out of order never show a vendor just checked in as not here; a dropped answer changes nothing on screen, its error included.
-A check-in or its undo shows on its row from the server's answer at once (`checkedInAt` from the answer, `checkedInBy` the signed-in address and `state` `here` at the row's own table, or all three cleared and `state` `expected`; an undone row with no seat goes), counts as newer than every read in flight, and a re-read follows; each row is held busy only while its own write is out, so taps on several rows all go through.
+The roster is one keyed read, by the market open ([reads keyed by market](market-store.md#reads-keyed-by-market)): only the newest read's answer lands, so two reads answering out of order never show a vendor just checked in as not here, and a dropped answer changes nothing on screen, its error included.
+Moved to another market, the page says "Loading…" at once, never the last market's roster, and nothing the last market's reads or writes answer lands on it.
+A check-in or its undo is held on the market whose roster the row came from, and posts there only: no read asked before it lands, so none undoes it, and it shows on its row from the server's answer at once (`checkedInAt` from the answer, `checkedInBy` the signed-in address and `state` `here` at the row's own table, or all three cleared and `state` `expected`; an undone row with no seat goes), and a re-read follows.
+Its refusal is said only on the market it was made on, so a refusal landing after the organizer moved says nothing on the market they moved to, and it is forgotten on moving, so coming back to that market never says it again; each row is held busy only while its own write is out, by its market, date and vendor, so taps on several rows all go through and a write still out on the last market holds no row of this one.
 The top row ends with [`ListFreshness`](../../../front-end/src/components/ListFreshness.vue) (`attendance-updated`, `attendance-refresh`) before Print roster and Door code: when the roster was last read, ageing on screen, and Refresh.
 A re-read or a Refresh that fails keeps the rows and says "Could not update. The roster is as it was last read." on a line under the top row, until a read lands: between Refresh and Door code it pushed Door code onto a line of its own on a phone; a first read that fails is still the page that could not be read, with Try again.
+The clock, a tab coming back and the browser coming back online read it again quietly, so that page stays, with its sentence, while their read is out; only Try again says "Loading…".
 There is no offline copy and no queue of taps.
-`AttendanceStatusView.test.ts` holds each of these, and [`the-door-stays-fresh.spec.ts`](../../../front-end/e2e/the-door-stays-fresh.spec.ts) a vendor's own check-in showing on the open roster once `page.clock` runs 15 seconds, and a re-read that fails.
+`AttendanceStatusView.test.ts` holds each of these, `theDoorReadsItsOwnMarket.test.ts` the move to another market while a read or a check-in is out, and [`the-door-stays-fresh.spec.ts`](../../../front-end/e2e/the-door-stays-fresh.spec.ts) a vendor's own check-in showing on the open roster once `page.clock` runs 15 seconds, and a re-read that fails.
 
 **The roster prints whole, and the door is asked to print it** (T318).
 Paper is the door's only fallback when the venue's network or the back end fails, and nothing prompted the organizer to keep one.
@@ -206,6 +225,7 @@ Its `url`, the address the QR code opens, is the vendor page with the code, `<FR
 
 **Attendance offers "Door code" in Market Days to whoever may check vendors in** (`offersDoorCode` in [`doorCode.ts`](../../../front-end/src/utils/doorCode.ts)), and it opens [`DoorCodeScreen.vue`](../../../front-end/src/components/DoorCodeScreen.vue) over the whole window: the market's name, the QR code, the code in two groups of three ("K7M 4QP"), "Scan with your phone's camera to check in", and who made it and when.
 It is a modal, not an `AppDialog`, which is a small window: it holds the page behind inert, takes Escape while on top and gives focus back to "Door code", as [every modal](../conventions/dialogs.md) does, and its one confirmation, "Make a new door code?", is an `AppDialog` teleported beside it that opens on Cancel.
+Nothing closes the confirmation while the new code is being made, and a second press makes none; each opening starts with no refusal said (T411).
 The QR code is encoded by the `qrcode` package and drawn by the app as one SVG path (`qrDrawing` in [`qrDrawing.ts`](../../../front-end/src/utils/qrDrawing.ts), with the standard's four-module quiet zone, kept out of `doorCode.ts` so the vendor page, which reads and types the code with `normalizedDoorCode` and `DOOR_CODE_LENGTH` there, never loads the encoder), so no markup from the package reaches the page; `theDoorCode.test.ts` decodes the drawn path with `jsqr` back to the `url`.
 The package loads only with Attendance's chunk, never the entry's ([the bundle budget](../testing/ci-and-the-gate.md#the-bundle-budget)).
 The QR code's box is a square the window's width that gives up height where the rest needs it, and the typed code is the scale's display figure, `--text-2xl`.

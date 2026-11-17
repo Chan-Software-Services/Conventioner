@@ -50,6 +50,7 @@ STRANGER = "stranger@example.com"
 ACCOUNTS = {OWNER: "user-owner", STRANGER: "user-stranger"}
 
 APPLICANT_SURFACE = "the applicant's own surface, whose tests hold its token checks"
+PUBLIC_MAP = "the public map"
 
 PUBLIC = {
     ("GET", "/healthz"): "the deployment's health check",
@@ -71,6 +72,8 @@ PUBLIC = {
     ("PUT", "/public/markets/<market_slug>/applicant/application"): APPLICANT_SURFACE,
     ("POST", "/public/markets/<market_slug>/vendor/check-in"): APPLICANT_SURFACE,
     ("DELETE", "/public/markets/<market_slug>/vendor/check-in"): APPLICANT_SURFACE,
+    ("GET", "/public/markets/<market_slug>/map"): PUBLIC_MAP,
+    ("GET", "/public/markets/<market_slug>/map/image/<location_id>"): PUBLIC_MAP,
 }
 
 CALLERS_OWN = {
@@ -117,6 +120,7 @@ PATH_VALUES = {
     # A viewer, so the role routes walk the caller's role check: the owner's role never changes.
     "user_id": "user-viewer",
     "date": "2026-11-01",
+    "location_id": "loc-main-hall",
 }
 
 # What every request but a GET sends, unless ``BODIES`` gives the route-method its own: one value

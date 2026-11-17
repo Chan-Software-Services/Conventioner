@@ -26,6 +26,8 @@ sources:
   - T260
   - T263
   - T311
+  - T422
+  - T411
 ---
 
 # The app bar
@@ -62,9 +64,10 @@ It holds Change password, Sign out and [Sign out everywhere](#sign-out-everywher
 There is no list by role, since a role belongs to a market or an organization and not to the account.
 So a Viewer's bar is an Owner's, an organizer with no organization has Organizations to make one in, sign-in shows a vendor the logo alone, and an organizer who opens "Page not found" keeps the full bar, with no place marked current.
 
-**A market's vendor page stands apart from the organizer app, and shows the logo alone, with no link, to everyone** (T260).
+**A market's vendor page stands apart from the organizer app, and shows the logo alone, with no link, to everyone** (T260), and so does its [public map](public-map-page.md) (T422).
 It is the vendors' page, so an organizer who opens their own market's page reads it as a vendor would, with neither the places nor the account menu.
-The route says so with `meta.vendorFacing`, which [`isVendorFacing`](../../../front-end/src/utils/currentPlace.ts) reads, and [`theBarsCurrentPlace.test.ts`](../../../front-end/src/__tests__/theBarsCurrentPlace.test.ts) holds that the vendor page is the only route that sets it.
+The route says so with `meta.vendorFacing`, which [`isVendorFacing`](../../../front-end/src/utils/currentPlace.ts) reads, and [`theBarsCurrentPlace.test.ts`](../../../front-end/src/__tests__/theBarsCurrentPlace.test.ts) holds that the vendor page and the public map are the only routes that set it.
+The public map tells the bar its slug answered absent as the vendor page does, below.
 That route also answers "Page not found" itself, for a one-segment address naming no market and for a gated market's page, a draft's even to its own organizer ([a gated market answers as absent](../../business/rules/a-gated-market-answers-as-absent.md)).
 That is no vendor's page, so [`VendorPage`](../../../front-end/src/views/VendorPage.vue) tells the bar its slug answered absent (`vendorPageAnswered`) and, when the page goes, takes that back for the slug it answered for, since by then the route is already the next page's; and [`standsApart`](../../../front-end/src/utils/currentPlace.ts), which the bar reads, then gives the organizer the full bar there as at any deeper unknown address.
 While the page is still reading its market, and when the read failed, the bar stands apart.
@@ -134,7 +137,7 @@ From the sheet, focus goes to the menu button before the sheet closes, so the di
 **[`signOutEverywhere`](../../../front-end/src/utils/sessionEnded.ts) posts `/logout-everywhere` through the app's `api`**, which replaces the account's login id, ends every record of its sign-ins and signs this browser out ([what ends a sign-in](../data/users-and-email.md#a-sign-in-is-kept-on-the-server)).
 Done, it forgets the session (`forgetTheSession`) and goes to `/login?everywhere=1`, where sign-in says "You are signed out on every device." in the place of "Your session has ended" (`loginAddress`'s `everywhere`).
 Unlike `signOut` it goes through `api`, so a 401 is a session already over, which ends as any organizer request's 401 does, saying it ended.
-Any other failure forgets nothing, since every other browser is still signed in: the dialog holds through the request (`closeDisabled`, its confirm reading "Signing out…") and stays open saying "Could not sign out everywhere. Try again.".
+Any other failure forgets nothing, since every other browser is still signed in: the dialog holds through the request (by its submission, T411, its confirm reading "Signing out…") and stays open saying "Could not sign out everywhere. Try again.".
 The dialog closes too when the stored user changes under it, as the sheet does.
 
 ## Sharp edges

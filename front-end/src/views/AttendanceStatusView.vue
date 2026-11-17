@@ -45,6 +45,8 @@ import { tableInWords } from '@/utils/placementChange';
 import { vendorMatches, type VendorNames } from '@/utils/vendorIdentity';
 import MarketFrame from '@/components/MarketFrame.vue';
 import VendorDrawer from '@/components/VendorDrawer.vue';
+import FilterToggles from '@/components/FilterToggles.vue';
+import AttendanceMap from '@/components/attendance/AttendanceMap.vue';
 import VendorNameButton from '@/components/VendorNameButton.vue';
 import VendorNotes from '@/components/VendorNotes.vue';
 import ListFreshness from '@/components/ListFreshness.vue';
@@ -58,6 +60,8 @@ import { useVendorNotes } from '@/utils/vendorNotes';
 import { calendarToday } from '@/utils/marketGuide';
 import { useOpenMarket } from '@/utils/openMarket';
 import { signedInEmail } from '@/utils/signedIn';
+import { withoutQueryKey } from '@/utils/routeQuery';
+import { useServerRead } from '@/utils/useServerRead';
 
 /**
  * Where a vendor stands at the door on a date: a seat and no check-in (`expected`), a check-in made
@@ -86,29 +90,92 @@ interface RosterRow {
 
 type Show = 'all' | 'not-yet' | 'here';
 
+interface Roster {
+  dates: string[];
+  roster: RosterRow[];
+}
+
 const route = useRoute();
 const router = useRouter();
 
 const marketId = computed(() => String(route.params.marketId ?? ''));
 const { market } = useOpenMarket(marketId);
 
-const dates = ref<string[]>([]);
-const roster = ref<RosterRow[]>([]);
-const errorMessage = ref('');
-/** The roster's first read that failed, which Try again reads once more (E38/F11/S01). */
-const readError = ref('');
-const isLoading = ref(false);
+/**
+ * The roster of the market open, read through one keyed read (T277 ticket 11): moved to another
+ * market, the page says it is loading at once, never the last market's rows, and nothing the last
+ * market's reads or writes answer lands. Before the first read lands, a failure is the page that
+ * could not be read, with Try again (E38/F11/S01); after it, a failure keeps the rows and says they
+ * are old, and goes on saying so while the next re-read is out.
+ */
+const rosterRead = useServerRead<string, Roster>(
+  () => marketId.value || null,
+  (id) =>
+    api
+      .get<Partial<Roster>>(`/markets/${encodeURIComponent(id)}/attendance`, {
+        timeout: REREAD_MS,
+      })
+      .then(({ data }) => ({ dates: data.dates ?? [], roster: data.roster ?? [] })),
+  {
+    failure: 'Attendance could not be loaded.',
+    refreshFailure: 'Could not update. The roster is as it was last read.',
+  },
+);
+const dates = computed(() => rosterRead.data.value?.dates ?? []);
+const roster = computed(() => rosterRead.data.value?.roster ?? []);
 /** When the roster was last read from the server, in milliseconds, or null before the first. */
-const readAt = ref<number | null>(null);
-/** A Refresh in flight, so its button cannot be pressed twice. */
-const refreshing = ref(false);
-/** A read after the first that failed: the rows stay, and this says they are old. */
-const refreshError = ref('');
+const readAt = rosterRead.readAt;
+const wasRead = computed(() => rosterRead.data.value !== null);
+/** The open market's failed first read, kept through the clock's quiet re-reads until one lands. */
+const firstFailure = ref<{ key: string; sentence: string } | null>(null);
+watch(
+  [rosterRead.phase, rosterRead.sentence],
+  ([phase, sentence]) => {
+    if (phase === 'failed' && rosterRead.key.value)
+      firstFailure.value = { key: rosterRead.key.value, sentence };
+    else if (phase !== 'loading') firstFailure.value = null;
+  },
+  { flush: 'sync' },
+);
+/** The first read failed: the page that could not be read, with Try again. */
+const readError = computed(() => {
+  if (rosterRead.phase.value === 'failed') return rosterRead.sentence.value;
+  const kept = firstFailure.value;
+  return rosterRead.phase.value === 'loading' && kept?.key === rosterRead.key.value
+    ? kept.sentence
+    : '';
+});
+const isLoading = computed(() => rosterRead.phase.value === 'loading' && !readError.value);
+/** A Refresh, or the clock's re-read, in flight, so Refresh cannot be pressed twice. */
+const refreshing = computed(() => rosterRead.phase.value === 'refreshing');
+/** A re-read that failed: the rows stay, and this says they are old. */
+const refreshError = computed(() =>
+  rosterRead.phase.value === 'refresh_failed' || rosterRead.phase.value === 'refreshing'
+    ? rosterRead.sentence.value
+    : '',
+);
+/** The last write's refusal, with the market it was made on: said only while that market is open. */
+const refusal = ref<{ key: string; sentence: string } | null>(null);
+const errorMessage = computed(() =>
+  refusal.value && refusal.value.key === rosterRead.key.value ? refusal.value.sentence : '',
+);
+// Moved to another market, the refusal is forgotten, so coming back to the market it was made on
+// never says it again. A reset of what the page shows, never a read: the roster's read is keyed.
+watch(
+  rosterRead.key,
+  () => {
+    refusal.value = null;
+    firstFailure.value = null;
+  },
+  { flush: 'sync' },
+);
 const show = ref<Show>('all');
 const search = ref('');
 /**
  * The rows whose write is in flight, each held busy on its own, so a queue at the door moves: taps
- * on several rows all go through. Replaced on each change, so Vue sees it.
+ * on several rows all go through. Each is held by the market it was made on as well as its date
+ * and vendor, so a write still out on the last market holds no row of this one. Replaced on each
+ * change, so Vue sees it.
  */
 const busyRows = ref<ReadonlySet<string>>(new Set());
 
@@ -125,6 +192,29 @@ const selectedDate = computed(() => {
 
 function chooseDate(date: string) {
   void router.replace({ query: { ...route.query, date } });
+}
+
+/**
+ * The roster as a list, today's page, or as a map of the open day (T422, D38): the page's own
+ * state, in the address as `view=map`, replaced, so a change of day and a reload keep it.
+ */
+type View = 'list' | 'map';
+const VIEWS = [
+  { id: 'list', label: 'List' },
+  { id: 'map', label: 'Map' },
+];
+const view = computed<View>(() => (route.query.view === 'map' ? 'map' : 'list'));
+
+function chooseView(next: View) {
+  const query = withoutQueryKey(route.query, 'view');
+  void router.replace({ query: next === 'map' ? { ...query, view: 'map' } : query });
+}
+
+/** The map's "Show in the list": the list with every vendor the map counted under it shown, so
+ *  the Show toggle, hidden on Map, hides none of them. */
+function showListFromMap() {
+  show.value = 'all';
+  chooseView('list');
 }
 
 const signedInAs = computed(() => (signedInEmail() ?? '').toLowerCase());
@@ -184,6 +274,20 @@ const shownToday = computed(() => {
   });
 });
 const shown = computed(() => shownToday.value.filter(hasSeat));
+/** The seated vendors the search finds on the chosen date, which the map marks; the Show toggles
+ *  are the list's alone. */
+const foundOnMap = computed(() => {
+  const term = search.value.trim().toLowerCase();
+  if (!term) return [];
+  return roster.value
+    .filter((row) => row.date === selectedDate.value && hasSeat(row))
+    .filter(
+      (row) =>
+        (row.tableCode ?? '').toLowerCase().includes(term) ||
+        vendorMatches(term, row.vendorEmail, names.value),
+    )
+    .map((row) => row.vendorEmail);
+});
 /** Checked in on the chosen date with no table that day, under the seats, by the same filters. */
 const shownWithoutSeat = computed(() => shownToday.value.filter((row) => !hasSeat(row)));
 const withoutSeatToday = computed(
@@ -272,80 +376,11 @@ function whoFor(row: RosterRow): string {
   return row.vendorName || row.vendorEmail;
 }
 
-/**
- * One counter orders every read and write's answer. A read takes a number as it is asked, and its
- * answer lands only if nothing newer was asked or landed since: two reads in flight can answer in
- * either order, and the older landing last showed a vendor just checked in as not here.
- */
-let asked = 0;
-/** Reads in flight, so the clock never asks for a second while one is out. */
-let reading = 0;
-/** The page was left: nothing reads again, and nothing in flight lands. */
-let left = false;
-const COULD_NOT_UPDATE = 'Could not update. The roster is as it was last read.';
-
-/**
- * Read the roster. Before the first read lands, a failure is the page that could not be read, with
- * Try again; after it, a failure keeps the rows and says they are old. A dropped answer changes
- * nothing on screen, its error included.
- */
-async function read(): Promise<void> {
-  if (!marketId.value || left) return;
-  const mine = ++asked;
-  const forMarket = marketId.value;
-  reading += 1;
-  isLoading.value = readAt.value === null && !readError.value;
-  try {
-    const { data } = await api.get<{ dates: string[]; roster: RosterRow[] }>(
-      `/markets/${encodeURIComponent(forMarket)}/attendance`,
-      { timeout: REREAD_MS },
-    );
-    if (mine !== asked) return;
-    dates.value = data.dates ?? [];
-    roster.value = data.roster ?? [];
-    readAt.value = Date.now();
-    readError.value = '';
-    refreshError.value = '';
-  } catch (err: unknown) {
-    if (mine !== asked) return;
-    if (readAt.value === null) {
-      readError.value = getApiErrorMessage(err, 'Attendance could not be loaded.');
-    } else {
-      refreshError.value = COULD_NOT_UPDATE;
-    }
-  } finally {
-    reading -= 1;
-    if (mine === asked) isLoading.value = false;
-  }
-}
-
-/** Try again, after the first read failed: the page says it is loading again. */
+/** Try again after the first read failed, and Refresh: a read at once, which keeps the rows if it
+ *  fails once they were read. */
 function retry(): void {
-  readError.value = '';
-  void read();
-}
-
-/** Refresh, at once: a re-read, which keeps the rows if it fails. */
-async function refresh(): Promise<void> {
-  if (refreshing.value) return;
-  refreshing.value = true;
-  try {
-    await read();
-  } finally {
-    refreshing.value = false;
-  }
-}
-
-/** Another market's roster is never shown under this one's, nor its time or its failure. */
-function openMarket(): void {
-  dates.value = [];
-  roster.value = [];
-  readAt.value = null;
-  readError.value = '';
-  refreshError.value = '';
-  errorMessage.value = '';
-  busyRows.value = new Set();
-  void read();
+  firstFailure.value = null;
+  void rosterRead.reread();
 }
 
 /**
@@ -355,10 +390,12 @@ function openMarket(): void {
  */
 let rereading: ReturnType<typeof setInterval> | null = null;
 function tick(): void {
-  if (document.visibilityState === 'visible' && reading === 0) void read();
+  if (document.visibilityState !== 'visible') return;
+  if (rosterRead.phase.value === 'loading' || refreshing.value) return;
+  void rosterRead.reread();
 }
 function backInView(): void {
-  if (document.visibilityState === 'visible') void read();
+  if (document.visibilityState === 'visible') void rosterRead.reread();
 }
 onMounted(() => {
   rereading = setInterval(tick, REREAD_MS);
@@ -369,9 +406,15 @@ onUnmounted(() => {
   if (rereading) clearInterval(rereading);
   document.removeEventListener('visibilitychange', backInView);
   window.removeEventListener('online', backInView);
-  left = true;
-  asked += 1;
 });
+
+function busyKey(forMarket: string, row: RosterRow): string {
+  return `${forMarket}|${rowKey(row)}`;
+}
+
+function isBusy(row: RosterRow): boolean {
+  return busyRows.value.has(busyKey(marketId.value, row));
+}
 
 function holdBusy(key: string, busy: boolean): void {
   const rows = new Set(busyRows.value);
@@ -382,18 +425,21 @@ function holdBusy(key: string, busy: boolean): void {
 
 /**
  * The row shows the server's answer at once, and a re-read follows: a slow re-read never leaves
- * the organizer wondering whether it worked. The answer counts as newer than every read in flight,
- * so none of them, asked before it, undoes it. A check-in is here at the seat the row holds; an
- * undo leaves a seat expected, and a row with no seat has nothing left to show.
+ * the organizer wondering whether it worked. The write is held on the market whose roster the row
+ * came from, and posts there only: no read asked before it lands, so none undoes it, and an answer
+ * after the organizer moved to another market says nothing there. A check-in is here at the seat
+ * the row holds; an undo leaves a seat expected, and a row with no seat has nothing left to show.
  */
 async function write(row: RosterRow, method: 'post' | 'delete') {
+  const forMarket = rosterRead.key.value;
+  if (!forMarket) return;
+  const busy = busyKey(forMarket, row);
+  holdBusy(busy, true);
+  refusal.value = null;
   const key = rowKey(row);
-  holdBusy(key, true);
-  errorMessage.value = '';
-  const forMarket = marketId.value;
-  const url = `/markets/${encodeURIComponent(forMarket)}/attendance`;
   const body = { vendorEmail: row.vendorEmail, date: row.date };
-  try {
+  const outcome = await rosterRead.holdWhile(async (id) => {
+    const url = `/markets/${encodeURIComponent(id)}/attendance`;
     let arrived: Pick<
       RosterRow,
       'state' | 'checkedInTableCode' | 'checkedInAt' | 'checkedInBy' | 'checkedInVia'
@@ -417,21 +463,25 @@ async function write(row: RosterRow, method: 'post' | 'delete') {
         checkedInVia: null,
       };
     }
-    if (forMarket !== marketId.value) return;
-    asked += 1;
-    roster.value = roster.value.flatMap((one) => {
-      if (rowKey(one) !== key) return [one];
-      if (!hasSeat(one) && method === 'delete') return [];
-      return [{ ...one, ...arrived }];
-    });
-    void read();
-  } catch (err: unknown) {
-    errorMessage.value = getApiErrorMessage(
-      err,
-      method === 'post' ? 'That check-in was not recorded.' : 'That check-in was not undone.',
-    );
-  } finally {
-    holdBusy(key, false);
+    // Taken while the write still holds the market, so the re-read its end asks is the only one.
+    rosterRead.adopt(id, (held) => ({
+      ...held,
+      roster: held.roster.flatMap((one) => {
+        if (rowKey(one) !== key) return [one];
+        if (!hasSeat(one) && method === 'delete') return [];
+        return [{ ...one, ...arrived }];
+      }),
+    }));
+  });
+  holdBusy(busy, false);
+  if (outcome.kind === 'failed') {
+    refusal.value = {
+      key: forMarket,
+      sentence: getApiErrorMessage(
+        outcome.error,
+        method === 'post' ? 'That check-in was not recorded.' : 'That check-in was not undone.',
+      ),
+    };
   }
 }
 
@@ -447,8 +497,6 @@ const canWriteNotes = computed(() => mayTake(market.value, MarketAction.WriteVen
  */
 const details = useVendorDetails(marketId, market);
 const drawer = useVendorDrawer();
-
-watch(marketId, openMarket, { immediate: true });
 </script>
 
 <template>
@@ -458,7 +506,7 @@ watch(marketId, openMarket, { immediate: true });
       <p v-if="errorMessage" class="door-error" role="alert">{{ errorMessage }}</p>
       <p v-if="isLoading" class="door-note">Loading…</p>
       <!-- Said of a roster that was read: under a failed read there is nothing to say it of. -->
-      <p v-else-if="dates.length === 0 && !readError" class="door-note">
+      <p v-else-if="wasRead && dates.length === 0" class="door-note">
         This market has no dates yet.
       </p>
       <template v-else-if="dates.length">
@@ -480,13 +528,22 @@ watch(marketId, openMarket, { immediate: true });
           <!-- When the roster was read, then Print roster and the door code: together at the row's
                end, or the end of a line of their own when the dates fill theirs. -->
           <div class="door-tools">
+            <FilterToggles
+              class="door-view"
+              :options="VIEWS"
+              label="Show as"
+              testid="attendance-view"
+              :modelValue="view"
+              :rest="view"
+              @update:modelValue="chooseView($event as View)"
+            />
             <ListFreshness
               class="door-freshness"
               testid="attendance"
               :readAt="readAt"
               :refreshing="refreshing"
               :failed="refreshError"
-              @refresh="refresh"
+              @refresh="retry"
             />
             <span class="door-papers">
               <button
@@ -519,7 +576,7 @@ watch(marketId, openMarket, { immediate: true });
           <h2 class="door-summary" data-testid="attendance-summary">
             {{ today.here }} of {{ today.expected }} checked in
           </h2>
-          <div class="door-show" role="group" aria-label="Show">
+          <div v-if="view === 'list'" class="door-show" role="group" aria-label="Show">
             <button
               type="button"
               class="btn btn--secondary btn--compact"
@@ -559,79 +616,93 @@ watch(marketId, openMarket, { immediate: true });
           />
         </div>
 
-        <p v-if="today.expected === 0 && withoutSeatToday === 0" class="door-note">
-          Nobody is assigned on this date.
-        </p>
-        <p v-else-if="lists.length === 0" class="door-note">Nobody here matches.</p>
-        <template v-for="list in lists" :key="list.key">
-          <h3 v-if="list.heading" class="door-heading" data-testid="attendance-unseated-heading">
-            {{ list.heading }}
-          </h3>
-          <ul class="door-list" :data-testid="`attendance-list-${list.key}`">
-            <li
-              v-for="row in list.rows"
-              :key="rowKey(row)"
-              class="door-row"
-              :class="{ 'door-row--read': !canCheckIn }"
-              data-testid="attendance-row"
-              :data-vendor="row.vendorEmail"
-            >
-              <VendorNameButton
-                class="door-who"
-                :email="row.vendorEmail"
-                :names="names"
-                testid="attendance-vendor"
-                @open="drawer.open(row.vendorEmail)"
-              />
-              <!-- Where they sit and whether they came, one line under the vendor's on a phone, so
+        <AttendanceMap
+          v-if="view === 'map'"
+          :market="market"
+          :rows="roster"
+          :date="selectedDate"
+          :found="foundOnMap"
+          :openVendor="drawer.email.value"
+          :notHere="notHere"
+          :hereWithoutSeat="withoutSeatToday"
+          @open="drawer.open($event)"
+          @showList="showListFromMap"
+        />
+        <template v-else>
+          <p v-if="today.expected === 0 && withoutSeatToday === 0" class="door-note">
+            Nobody is assigned on this date.
+          </p>
+          <p v-else-if="lists.length === 0" class="door-note">Nobody here matches.</p>
+          <template v-for="list in lists" :key="list.key">
+            <h3 v-if="list.heading" class="door-heading" data-testid="attendance-unseated-heading">
+              {{ list.heading }}
+            </h3>
+            <ul class="door-list" :data-testid="`attendance-list-${list.key}`">
+              <li
+                v-for="row in list.rows"
+                :key="rowKey(row)"
+                class="door-row"
+                :class="{ 'door-row--read': !canCheckIn }"
+                data-testid="attendance-row"
+                :data-vendor="row.vendorEmail"
+              >
+                <VendorNameButton
+                  class="door-who"
+                  :email="row.vendorEmail"
+                  :names="names"
+                  testid="attendance-vendor"
+                  @open="drawer.open(row.vendorEmail)"
+                />
+                <!-- Where they sit and whether they came, one line under the vendor's on a phone, so
                    neither widens the column the action stands in (E38/F15/S04). -->
-              <span class="door-place">
-                <span class="door-table" data-testid="attendance-row-table">{{
-                  whereTheySit(row)
-                }}</span>
-                <span
-                  class="chip door-status"
-                  :class="statusTone(row)"
-                  data-testid="attendance-row-status"
-                  >{{ status(row) }}</span
-                >
-              </span>
-              <span v-if="canCheckIn" class="door-action">
-                <button
-                  v-if="!row.checkedInAt && checkInOpen"
-                  type="button"
-                  class="btn btn--primary btn--compact"
-                  :disabled="busyRows.has(rowKey(row))"
-                  :aria-label="`Check in ${whoFor(row)}`"
-                  data-testid="attendance-check-in"
-                  @click="write(row, 'post')"
-                >
-                  Check in
-                </button>
-                <button
-                  v-else-if="row.checkedInAt"
-                  type="button"
-                  class="btn btn--secondary btn--compact"
-                  :disabled="busyRows.has(rowKey(row))"
-                  :aria-label="`Undo ${whoFor(row)}'s check-in`"
-                  data-testid="attendance-undo"
-                  @click="write(row, 'delete')"
-                >
-                  Undo
-                </button>
-              </span>
-              <VendorNotes
-                class="door-notes"
-                :marketId="marketId"
-                :email="row.vendorEmail"
-                :entry="entryFor(row.vendorEmail)"
-                :canWrite="canWriteNotes"
-                onlyWhenNoted
-                :testid="`attendance-notes-${row.vendorEmail}`"
-                @changed="loadNotes"
-              />
-            </li>
-          </ul>
+                <span class="door-place">
+                  <span class="door-table" data-testid="attendance-row-table">{{
+                    whereTheySit(row)
+                  }}</span>
+                  <span
+                    class="chip door-status"
+                    :class="statusTone(row)"
+                    data-testid="attendance-row-status"
+                    >{{ status(row) }}</span
+                  >
+                </span>
+                <span v-if="canCheckIn" class="door-action">
+                  <button
+                    v-if="!row.checkedInAt && checkInOpen"
+                    type="button"
+                    class="btn btn--primary btn--compact"
+                    :disabled="isBusy(row)"
+                    :aria-label="`Check in ${whoFor(row)}`"
+                    data-testid="attendance-check-in"
+                    @click="write(row, 'post')"
+                  >
+                    Check in
+                  </button>
+                  <button
+                    v-else-if="row.checkedInAt"
+                    type="button"
+                    class="btn btn--secondary btn--compact"
+                    :disabled="isBusy(row)"
+                    :aria-label="`Undo ${whoFor(row)}'s check-in`"
+                    data-testid="attendance-undo"
+                    @click="write(row, 'delete')"
+                  >
+                    Undo
+                  </button>
+                </span>
+                <VendorNotes
+                  class="door-notes"
+                  :marketId="marketId"
+                  :email="row.vendorEmail"
+                  :entry="entryFor(row.vendorEmail)"
+                  :canWrite="canWriteNotes"
+                  onlyWhenNoted
+                  :testid="`attendance-notes-${row.vendorEmail}`"
+                  @changed="loadNotes"
+                />
+              </li>
+            </ul>
+          </template>
         </template>
       </template>
     </div>
@@ -687,6 +758,11 @@ watch(marketId, openMarket, { immediate: true });
   justify-content: flex-end;
   gap: var(--space-2);
   margin-inline-start: auto;
+}
+
+/* List and Map, a step apart from the time and Refresh after them, as Print roster is. */
+.door-view {
+  margin-inline-end: var(--space-2);
 }
 
 /* The time, Refresh and a failed read's line are the group's own items, so that line goes under
@@ -830,6 +906,21 @@ watch(marketId, openMarket, { immediate: true });
 @media (width <= 640px) {
   .door {
     padding: var(--space-4);
+  }
+
+  /* On a phone the tools never share the dates' line: they start their own lines at the left, as
+     the dates do, List and Map first, rather than at the right with a gap before them. */
+  .door-tools {
+    justify-content: flex-start;
+    margin-inline-start: 0;
+  }
+
+  .door-papers {
+    margin-inline-start: 0;
+  }
+
+  .door-freshness :deep(.freshness-error) {
+    text-align: start;
   }
 }
 
