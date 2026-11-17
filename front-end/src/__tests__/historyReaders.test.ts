@@ -138,7 +138,7 @@ const SENTENCES = [
 ];
 
 /** The keys before-and-after rows are given for, sorted, as `entryChanges`' `if` chain gave them
- * before the split, an action's every kind keyed `action/*`. */
+ * before the split, an action's every kind keyed `action/*`, and a selection's verdicts since. */
 const ROWS = [
   '*/dealt',
   'add-vendor/*',
@@ -155,10 +155,13 @@ const ROWS = [
   'change-the-default/permission_table_reset',
   'change-the-table/permission_table_copied',
   'change-the-table/permission_table_reset',
+  'change-verdicts/verdicts',
   'choose-reviewers/reviewers',
   'connect-discord/*',
   'connect-discord/discord_checked',
   'connect-discord/discord_roles_given',
+  'give-verdicts/verdicts',
+  'give-verdicts/verdicts_undone',
   'publish-map/public_map',
   'record-payment/*',
   'update-vendor-info/*',
