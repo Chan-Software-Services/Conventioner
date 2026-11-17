@@ -34,7 +34,7 @@ How it is built is [the public map](../../implementation/modules/public-map.md),
 3. Turn on "Show the public map".
    Expect the address, the market page's `/<market-slug>` under the app's origin, with "Copy link" and "Open the map", which opens it in a new tab.
 4. Until the map can open, the card says the first thing it still lacks: "Lay out a location first: the map draws the market's layouts." with "Open the layout", then "The map opens once results are published."; on an archived market "An archived market's map is closed.".
-   Meanwhile the market page shows its notice, "Applications are closed." or "The map isn't published yet.", and the map's own read answers as an address that names no market, so seats are never public before vendors are told them.
+   Meanwhile the market page shows what it shows with no map (the application call while the market takes applications, else a notice such as "Applications are closed." or "The map isn't published yet."), and the map's own read answers as an address that names no market, so seats are never public before vendors are told them.
 
 The switch and the three questions are the "Publish the map" row's, an Admin's by default ([what each role may do](../rules/what-each-role-may-do.md)); an Editor or a Viewer reads the card with its controls disabled and the row's sentence.
 The market's history reads each change in words, "turned the public map on" or "set the public map's name to “Business name”" ([L6](reading-the-markets-history.md)).
