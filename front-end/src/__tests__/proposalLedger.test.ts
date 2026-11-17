@@ -8,6 +8,7 @@ import {
   draftFrom,
   toggleOption,
   type Proposal,
+  type ProposalDraft,
   type ProposedColumn,
   type ProposedOption,
 } from '@/utils/csvProposal';
@@ -334,10 +335,12 @@ describe('the proposal ledger', () => {
       it('still counts an answer that names someone once it is ticked, since it keeps it too', async () => {
         const wrapper = ledger(proposalOf([...OPTIONS, named('Online at example.org/shop')]));
         await optionsOf(rowAt(wrapper))[2].find('input').setValue(true);
-        expect(
-          optionsOf(rowAt(wrapper))[2].find<HTMLInputElement>('input').element.checked,
-          'the tick reached the working copy',
-        ).toBe(true);
+        // Read on the working copy the box writes to: the box's own `checked` is the one the tick
+        // set, and stays true whether or not the toggle landed.
+        const draft = wrapper.props('draft') as ProposalDraft;
+        expect(draft.rows[0].kept.select, 'the tick reached the working copy').toContain(
+          'Online at example.org/shop',
+        );
         expect(keepAllIn(rowAt(wrapper)).text()).toBe('Keep all 3, 1 names someone');
       });
 
