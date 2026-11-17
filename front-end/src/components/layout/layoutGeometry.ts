@@ -2969,6 +2969,37 @@ export function offZones(
   return still;
 }
 
+/**
+ * Whether any of the tables (`shapes`, their corners as they stand turned) stands on a no-table
+ * zone as the zone itself stands turned, touching it being clear of it, as the push reads it. A
+ * table in the corner of the box round a turned zone, clear of the zone, stands on none, so a
+ * table a row, a fill or Add table laid clear of a turned zone is never pushed, while one put down
+ * on the zone is pushed off the box round it (`offZones`, D15).
+ */
+export function standsOnAZone(
+  shapes: readonly (readonly PointMm[])[],
+  zones: readonly Pick<FloorplanZone, 'xMm' | 'yMm' | 'widthMm' | 'depthMm' | 'rotation'>[],
+): boolean {
+  if (!shapes.length || !zones.length) return false;
+  const boxes = shapes.map(boxOfPoints);
+  return zones.some((zone) => {
+    const round = zoneBounds(zone);
+    let corners: PointMm[] | null = null;
+    return boxes.some((box, i) => {
+      if (
+        box.right <= round.left ||
+        box.left >= round.right ||
+        box.bottom <= round.top ||
+        box.top >= round.bottom
+      ) {
+        return false;
+      }
+      corners ??= zoneCorners(zone);
+      return shapesOverlap(shapes[i], corners, TOUCHING_A_ZONE_MM);
+    });
+  });
+}
+
 function boxOfPoints(points: readonly PointMm[]): Bounds {
   const xs = points.map((point) => point.xMm);
   const ys = points.map((point) => point.yMm);

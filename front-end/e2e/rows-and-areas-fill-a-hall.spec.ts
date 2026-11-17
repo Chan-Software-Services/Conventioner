@@ -1852,7 +1852,14 @@ async function storedPlan(request: APIRequestContext, marketId: string) {
           imageGridfsId: string;
           imageWidth: number;
           scalePxPerUnit: number;
-          zones: { label: string; xMm: number; yMm: number; widthMm: number; depthMm: number }[];
+          zones: {
+            label: string;
+            xMm: number;
+            yMm: number;
+            widthMm: number;
+            depthMm: number;
+            rotation?: number;
+          }[];
           tables: StoredLayoutTable[];
         }[];
       };
@@ -2167,7 +2174,7 @@ test.describe('Types and zones shape a hall', () => {
     ]);
   });
 
-  test('a no-table zone dragged and named "Stage" is drawn hatched with its name, stays after a reload, and a table dropped on it is pushed off it', async ({
+  test('a no-table zone dragged, added by Enter and named "Stage" is drawn hatched with its name, stays after a reload, and a table dropped on it is pushed off it', async ({
     authenticatedPage: page,
     request,
   }) => {
@@ -2184,12 +2191,15 @@ test.describe('Types and zones shape a hall', () => {
     await layout.toolZone.click();
     await expect(layout.toolZone).toHaveAttribute('aria-pressed', 'true');
     await expect(layout.noZones).toBeVisible();
-    await layout.saved(() =>
-      layout.drag([10_000, 8000], [16_000, 12_000], {
-        hold: async () => expect(layout.zoneBox).toBeVisible(),
-      }),
-    );
-    // The zone just drawn is named where it is listed.
+    await layout.drag([10_000, 8000], [16_000, 12_000], {
+      hold: async () => expect(layout.zoneBox).toBeVisible(),
+    });
+    // Drawn, it is a draft until Enter adds it.
+    await expect(layout.zoneDraft).toBeVisible();
+    await expect(layout.zones).toHaveCount(0);
+    await layout.saved(() => page.keyboard.press('Enter'));
+    await expect(layout.zoneDraft).toHaveCount(0);
+    // The zone just added is named where it is listed.
     await expect(layout.zoneLabels.first()).toBeFocused();
     await expect(layout.announcement).toHaveText(/^Added a no-table zone 6\.\d m by 4\.\d m\./);
     await layout.saved(async () => {
@@ -2236,6 +2246,111 @@ test.describe('Types and zones shape a hall', () => {
     );
     await expect(layout.zones).toHaveCount(0);
     await expect(layout.announcement).toHaveText('Removed the no-table zone Stage');
+  });
+
+  test('a no-table zone is a draft first: drawn, moved, sized by a corner and an edge, turned by its knob, added by Enter, and found turned after a reload', async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    const seeded = await seedLayout(request, BACKEND_URL, TEST_USER.email, TEST_USER.password, {
+      metresAcross: 30,
+      tables: [{ section: 'sec-gold', at: [3000, 3000] }],
+    });
+    const layout = new LayoutPage(page);
+    await layout.goto(seeded.marketId, seeded.upper.id);
+    await expect(layout.tables).toHaveCount(1);
+    let saves = 0;
+    page.on('request', (sent) => {
+      if (sent.url().includes('/floorplans/save-to-market')) saves += 1;
+    });
+    const near = (value: number, to: number, within = 2 * A_PIXEL_MM) =>
+      expect(Math.abs(value - to)).toBeLessThan(within);
+
+    await layout.toolZone.click();
+    await expect(layout.noZones).toContainText('Drag a box on the map');
+    await expect(layout.zonesHint).toHaveText(
+      'A box drawn is a draft to move, size and turn. Enter adds it; Escape or a right-click ' +
+        'drops it.',
+    );
+    await layout.drag([6000, 6000], [12_000, 10_000]);
+    await expect(layout.zoneDraft).toBeVisible();
+    await expect(layout.zoneDraft.getByTestId('layout-zone-corner')).toHaveCount(4);
+    await expect(layout.zoneDraft.getByTestId('layout-zone-edge-handle')).toHaveCount(4);
+    await expect(layout.zoneTurn).toBeVisible();
+    await expect(layout.hint).toContainText('Enter adds it; Escape or a right-click drops it.');
+    let draft = (await layout.zoneDraftNow())!;
+    near(draft.widthMm, 6000);
+    near(draft.depthMm, 4000);
+
+    // Moved by its middle: 4 m right and 2 m down.
+    await layout.dragFrom(layout.zoneDraftBody, [13_000, 10_000]);
+    draft = (await layout.zoneDraftNow())!;
+    near(draft.cxMm, 13_000);
+    near(draft.cyMm, 10_000);
+    near(draft.widthMm, 6000);
+
+    // Sized by its bottom-right corner: its top-left stays at (10 m, 8 m).
+    await layout.dragFrom(layout.zoneCorner('1,1'), [17_000, 13_000]);
+    draft = (await layout.zoneDraftNow())!;
+    near(draft.widthMm, 7000);
+    near(draft.depthMm, 5000);
+    near(draft.cxMm - draft.widthMm / 2, 10_000);
+    near(draft.cyMm - draft.depthMm / 2, 8000);
+
+    // Its right edge sizes its width alone.
+    await layout.dragFrom(layout.zoneEdgeHandle('1,0'), [19_000, 10_500]);
+    draft = (await layout.zoneDraftNow())!;
+    near(draft.widthMm, 9000);
+    near(draft.depthMm, 5000);
+    near(draft.cxMm - draft.widthMm / 2, 10_000);
+
+    // Its knob turned a third of the way to the right: 30°, in its steps.
+    const centre = { x: draft.cxMm, y: draft.cyMm };
+    const toward = (degrees: number): [number, number] => {
+      const turn = ((degrees - 90) * Math.PI) / 180;
+      return [centre.x + 5000 * Math.cos(turn), centre.y + 5000 * Math.sin(turn)];
+    };
+    await layout.dragFrom(layout.zoneTurn, toward(32));
+    draft = (await layout.zoneDraftNow())!;
+    expect(draft.rotation).toBe(30);
+    near(draft.cxMm, centre.x, 1);
+    // By the degree with Shift.
+    await layout.dragFrom(layout.zoneTurn, toward(37), true);
+    expect((await layout.zoneDraftNow())!.rotation).toBeCloseTo(37, 0);
+    await layout.dragFrom(layout.zoneTurn, toward(30));
+    expect((await layout.zoneDraftNow())!.rotation).toBe(30);
+    // Its edge, turned with it, sizes along its own side.
+    await expect(layout.zoneEdge('1,0')).toHaveCSS('cursor', 'nwse-resize');
+    await expect(layout.zones).toHaveCount(0);
+    expect(saves).toBe(0);
+
+    await layout.saved(() => page.keyboard.press('Enter'));
+    await expect(layout.zoneDraft).toHaveCount(0);
+    await expect(layout.zones).toHaveCount(1);
+    await expect(layout.announcement).toHaveText(
+      /^Added a no-table zone 9\.\d m by 5\.\d m, turned 30°\. Name it in the panel\.$/,
+    );
+    await expect(layout.zoneLabels.first()).toBeFocused();
+    await expect(layout.zones.first()).toHaveAttribute('transform', /^rotate\(30 /);
+
+    await page.reload();
+    await expect(layout.zones).toHaveCount(1);
+    await expect(layout.zones.first()).toHaveAttribute('transform', /^rotate\(30 /);
+    const [stored] = (await storedPlan(request, seeded.marketId)).floorplans[0].zones;
+    expect(stored.rotation).toBe(30);
+    near(stored.widthMm, 9000);
+    near(stored.depthMm, 5000);
+
+    // Another drawn is dropped by a right-click, the tool kept; a second goes to Select.
+    await page.keyboard.press('z');
+    await layout.drag([22_000, 15_000], [26_000, 18_000]);
+    await expect(layout.zoneDraft).toBeVisible();
+    await layout.rightClickAt([24_000, 16_500]);
+    await expect(layout.zoneDraft).toHaveCount(0);
+    await expect(layout.toolZone).toHaveAttribute('aria-pressed', 'true');
+    await expect(layout.zones).toHaveCount(1);
+    await layout.rightClickAt([24_000, 16_500]);
+    await expect(layout.toolSelect).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('the Floorplan menu hides and shows the image; a replaced image keeps every table where it was in metres and its old file is deleted', async ({

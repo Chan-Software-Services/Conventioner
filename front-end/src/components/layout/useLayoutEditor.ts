@@ -51,7 +51,6 @@ import {
   clampMove,
   clampToHall,
   closeGaps,
-  cornersOf,
   duplicateOffset,
   hallOf,
   inNoSection,
@@ -66,7 +65,9 @@ import {
   tableCorners,
   turnedAbout,
   offZones,
+  standsOnAZone,
   zoneBounds,
+  zoneCorners,
   type Alignment,
   type Bounds,
   type MoveMm,
@@ -74,13 +75,12 @@ import {
 } from './layoutGeometry';
 import { SAVE_FAILED, STALE_LAYOUT, type SavedLayout } from './layoutSave';
 import { MAX_LAYOUT_TABLES } from './layoutRow';
+import { MIN_ZONE_SIDE_MM, heldInHall } from './layoutZoneDraft';
 
 /** How many steps undo holds. */
 const UNDO_STEPS = 200;
 /** How many no-table zones a layout holds, as the server bounds them. */
 export const MAX_ZONES = 100;
-/** The smallest side a no-table zone is drawn with: smaller is a slip of the pointer. */
-const MIN_ZONE_SIDE_MM = 100;
 /**
  * How the layout's saves stand: `idle` with nothing to say, `saving` while a change waits or a
  * write is out, `saved` just after one landed, `failed` when one did not (Retry), `stale` when the
@@ -248,9 +248,10 @@ export interface LayoutEditor {
   /** Choose a section's colour of the palette, or where its name stands (null: beside its tables,
    *  where the drawing puts it). */
   setSectionStyle(sectionId: string, style: { color?: number; labelAt?: PointMm | null }): void;
-  /** Mark a no-table zone over a box of the hall, held inside it; its id, or null for a box too
-   *  small to hold a table's corner, or a layout that holds as many zones as it may. */
-  addZone(box: Bounds, label?: string): string | null;
+  /** Mark a no-table zone over a box of the hall, turned `rotation` degrees about its centre and
+   *  held inside the hall as it stands turned (`heldInHall`); its id, or null for a box too small
+   *  to hold a table's corner, or a layout that holds as many zones as it may. */
+  addZone(box: Bounds, label?: string, rotation?: number): string | null;
   /** Name a no-table zone: "Stage", "Pillar". */
   setZoneLabel(id: string, label: string): void;
   removeZone(id: string): void;
@@ -625,7 +626,8 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
   /**
    * The tables with those named pushed off the no-table zones they stand on, together, to the
    * nearest clear place inside the hall, as a snap would take them (`offZones`); the same array
-   * when they stand clear. What is picked up by keyboard is pushed only as it is dropped, so the
+   * when they stand clear. A turned zone is stood on only where its turned shape is, and pushed
+   * off by the box round it (D15). What is picked up by keyboard is pushed only as it is dropped, so the
    * keys can carry it across a zone.
    */
   function pushedOff(
@@ -634,12 +636,11 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
     whole: FloorplanObject,
   ): FloorplanTable[] {
     if (!whole.zones.length) return tables;
-    const own = tables.filter((table) => ids.has(table.id));
-    const by = offZones(
-      own.map((table) => tableCorners(table, sizeOf(table))),
-      whole.zones.map(zoneBounds),
-      hallOf(whole),
-    );
+    const own = tables
+      .filter((table) => ids.has(table.id))
+      .map((table) => tableCorners(table, sizeOf(table)));
+    if (!standsOnAZone(own, whole.zones)) return tables;
+    const by = offZones(own, whole.zones.map(zoneBounds), hallOf(whole));
     if (by.dxMm === 0 && by.dyMm === 0) return tables;
     return tables.map((table) =>
       ids.has(table.id)
@@ -756,14 +757,7 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
         originals.map((table) => tableCorners(table, sizeOf(table))),
         [
           ...tables.map((table) => tableCorners(table, sizeOf(table))),
-          ...whole.zones.map((zone) =>
-            cornersOf({
-              left: zone.xMm,
-              top: zone.yMm,
-              right: zone.xMm + zone.widthMm,
-              bottom: zone.yMm + zone.depthMm,
-            }),
-          ),
+          ...whole.zones.map(zoneCorners),
         ],
         Math.min(...originals.map((table) => sizeOf(table).depthMm)),
         hall,
@@ -891,19 +885,25 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
 
   // ── No-table zones ─────────────────────────────────────────────────────────
 
-  function addZone(box: Bounds, label = ''): string | null {
+  function addZone(box: Bounds, label = '', rotation = 0): string | null {
     const id = newId();
+    const turn = roundTurn(rotation);
     let added = false;
     alter((from, whole) => {
-      const hall = hallOf(whole);
-      const left = Math.max(box.left, 0);
-      const top = Math.max(box.top, 0);
-      const right = hall ? Math.min(box.right, hall.widthMm) : box.right;
-      const bottom = hall ? Math.min(box.bottom, hall.heightMm) : box.bottom;
+      const held = heldInHall(
+        {
+          xMm: box.left,
+          yMm: box.top,
+          widthMm: box.right - box.left,
+          depthMm: box.bottom - box.top,
+          rotation: turn,
+        },
+        hallOf(whole),
+      );
       if (
         from.zones.length >= MAX_ZONES ||
-        right - left < MIN_ZONE_SIDE_MM ||
-        bottom - top < MIN_ZONE_SIDE_MM
+        held.widthMm < MIN_ZONE_SIDE_MM ||
+        held.depthMm < MIN_ZONE_SIDE_MM
       ) {
         return {};
       }
@@ -914,10 +914,11 @@ export function useLayoutEditor(options: LayoutEditorOptions): LayoutEditor {
           {
             id,
             label: label.trim(),
-            xMm: roundMm(left),
-            yMm: roundMm(top),
-            widthMm: roundMm(right - left),
-            depthMm: roundMm(bottom - top),
+            xMm: roundMm(held.xMm),
+            yMm: roundMm(held.yMm),
+            widthMm: roundMm(held.widthMm),
+            depthMm: roundMm(held.depthMm),
+            ...(turn ? { rotation: turn } : {}),
           },
         ],
       };

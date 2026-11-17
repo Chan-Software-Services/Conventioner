@@ -13,6 +13,7 @@ import { ROW_DROPPED } from '@/components/layout/layoutAnnouncements';
 import { AREA_DROPPED } from '@/components/layout/layoutFill';
 import { ROW_CHOICES_AT_FIRST, rowChoices } from '@/components/layout/layoutRow';
 import type { SavedLayout } from '@/components/layout/layoutSave';
+import { ZONE_DROPPED } from '@/components/layout/layoutZoneDraft';
 import { useLayoutEditor } from '@/components/layout/useLayoutEditor';
 
 const SIX_FOOT = { id: 'six-foot', name: 'Standard 6 ft', widthMm: 1830, depthMm: 760 };
@@ -235,6 +236,62 @@ describe('with an area in hand', () => {
     await pointer('pointerup', p(9000, 9000), stage);
     expect(w.find('[data-testid="layout-fill-window"]').exists()).toBe(false);
     expect(w.find('[data-testid="layout-fill-preview"]').exists()).toBe(false);
+  });
+});
+
+describe('with a no-table zone drawn and not added', () => {
+  async function drawn() {
+    const made = await anEditor('zone');
+    await pointer('pointerdown', p(8000, 7000), made.stage);
+    await pointer('pointermove', p(10_000, 8000), made.stage);
+    await pointer('pointermove', p(12_000, 9000), made.stage);
+    await pointer('pointerup', p(12_000, 9000), made.stage);
+    const draft = () => made.w.find('[data-testid="layout-zone-draft"]');
+    expect(draft().exists()).toBe(true);
+    return { ...made, draft };
+  }
+
+  it('drops the draft and keeps No-table zone on, then a second goes to Select', async () => {
+    const { w, stage, toolOn, draft, editor } = await drawn();
+
+    await rightClick(stage);
+    expect(toolOn()).toBe('layout-tool-zone');
+    expect(draft().exists()).toBe(false);
+    expect(w.emitted('status')!.at(-1)).toEqual([ZONE_DROPPED]);
+    expect(editor.layout.value!.zones).toEqual([]);
+
+    await rightClick(stage);
+    expect(toolOn()).toBe('layout-tool-select');
+  });
+
+  it('puts back a draft being moved, the draft and the tool kept', async () => {
+    const { w, stage, toolOn, draft } = await drawn();
+    const before = draft().attributes('transform');
+    const body = w.get('[data-testid="layout-zone-draft-body"]').element;
+    await pointer('pointerdown', p(10_000, 8000), body);
+    await pointer('pointermove', p(12_000, 8000), stage);
+    await pointer('pointermove', p(14_000, 8000), stage);
+    expect(draft().attributes('transform')).not.toBe(before);
+
+    await rightClick(stage, p(14_000, 8000));
+    expect(toolOn()).toBe('layout-tool-zone');
+    expect(draft().attributes('transform')).toBe(before);
+    await pointer('pointerup', p(16_000, 8000), stage);
+    expect(draft().attributes('transform')).toBe(before);
+  });
+
+  it('drops a box being dragged, and keeps No-table zone on with no draft', async () => {
+    const { stage, toolOn, w } = await anEditor('zone');
+    await pointer('pointerdown', p(8000, 7000), stage);
+    await pointer('pointermove', p(10_000, 8000), stage);
+    await pointer('pointermove', p(12_000, 9000), stage);
+    expect(w.find('[data-testid="layout-zone-box"]').exists()).toBe(true);
+
+    await rightClick(stage, p(12_000, 9000));
+    expect(toolOn()).toBe('layout-tool-zone');
+    await pointer('pointerup', p(12_000, 9000), stage);
+    expect(w.find('[data-testid="layout-zone-box"]').exists()).toBe(false);
+    expect(w.find('[data-testid="layout-zone-draft"]').exists()).toBe(false);
   });
 });
 

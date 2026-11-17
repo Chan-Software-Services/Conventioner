@@ -95,6 +95,14 @@ const GROUPS: readonly {
     ],
   },
   {
+    title: 'With a no-table zone drawn',
+    keys: [
+      [['Enter'], 'Add the zone drawn'],
+      [['Escape', 'Right-click'], 'Drop it, and No-table zone stays on'],
+      [['Shift'], 'While turning it by its knob: by the degree'],
+    ],
+  },
+  {
     title: 'Adding, undo and the view',
     settledTitle: 'Undo and the view',
     keys: [

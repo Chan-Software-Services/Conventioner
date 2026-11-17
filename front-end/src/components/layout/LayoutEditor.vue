@@ -116,7 +116,6 @@ import {
   clampMove,
   clampToHall,
   clearPlace,
-  cornersOf,
   fitCamera,
   hallOf,
   nearestTo,
@@ -127,6 +126,7 @@ import {
   tableCorners,
   tablesInBox,
   unionOf,
+  zoneCorners,
   zoomPercent,
   zoomedAbout,
   type Bounds,
@@ -161,6 +161,21 @@ import { centreOf, selectionBounds, turnSelection } from './layoutSelection';
 import { ADDING_TOOLS, TOOL_KEYS, type Tool } from './layoutTools';
 import { SHORTCUTS_WIDTH, rememberedChoice, useRoomBesideTheFrame } from './layoutViewChoices';
 import { MAX_ZONES, heldBackSaid, type LayoutEditor } from './useLayoutEditor';
+import {
+  MIN_ZONE_SIDE_MM,
+  ZONE_CORNERS,
+  ZONE_DRAFT_DRAWN,
+  ZONE_DROPPED,
+  ZONE_EDGES,
+  boxOfDraft,
+  draftOfBox,
+  handleCursor,
+  movedDraft,
+  sizedDraft,
+  turnedDraft,
+  type ZoneDraft,
+  type ZoneHandle,
+} from './layoutZoneDraft';
 
 const props = withDefaults(
   defineProps<{
@@ -338,7 +353,7 @@ const pointTool = computed(() =>
  * A right-click on the map, in place of the browser's menu, which holds nothing for a drawing
  * (the QC walk of 2026-11-16, items 6 and 19): it drops what is in hand and keeps the tool, a drag
  * under way, a row's path or an area's corners; with nothing in hand it puts Select back on, the
- * tool most work comes back to. A no-table zone's draft is ticket 13's.
+ * tool most work comes back to. A no-table zone drawn and not added is dropped as a row's path is.
  */
 function onContextMenu() {
   if (gesture && gesture.kind !== 'pinch') {
@@ -359,6 +374,10 @@ function onContextMenu() {
     tell(AREA_DROPPED);
     return;
   }
+  if (tool.value === 'zone' && zoneDraft.value) {
+    dropZoneDraft();
+    return;
+  }
   tool.value = 'select';
 }
 
@@ -368,6 +387,7 @@ watch(tool, () => {
   abandon();
   row.drop();
   fillTool.drop();
+  zoneDraft.value = null;
 });
 // A corner laid, moved or taken back answers what was said of the shape before it.
 watch(fillTool.points, (points) => {
@@ -398,7 +418,9 @@ const hint = computed(() => {
       );
     }
     if (tool.value === 'zone') {
-      return 'A no-table zone is drawn with the pointer. The arrow keys move between tables.';
+      return zoneDraft.value
+        ? 'A no-table zone is drawn with the pointer. Enter adds the zone drawn; Escape drops it.'
+        : 'A no-table zone is drawn with the pointer. The arrow keys move between tables.';
     }
     return tool.value === 'add'
       ? 'Enter places a table at the middle of the view. The arrow keys move between tables.'
@@ -440,10 +462,10 @@ const hint = computed(() => {
     );
   }
   if (tool.value === 'zone') {
-    return (
-      'Drag a box over a stage, a pillar or an exit to keep tables off it, then name it in ' +
-      'the panel.'
-    );
+    return zoneDraft.value
+      ? 'Drag the zone to move it, an edge or a corner to size it, or its knob to turn it ' +
+          '(Shift: by the degree). Enter adds it; Escape or a right-click drops it.'
+      : 'Drag a box over a stage, a pillar or an exit to keep tables off it.';
   }
   return tool.value === 'add'
     ? 'Click the floor to place a table. Ctrl and the wheel zoom, and Space and a drag move the view.'
@@ -474,6 +496,8 @@ const mapKeys = computed(() =>
 // ── The stage and its camera ─────────────────────────────────────────────────
 
 const stage = ref<HTMLElement | null>(null);
+/** The editor's whole box: its toolbar, its map and what stands over the map. */
+const editorRoot = ref<HTMLElement | null>(null);
 const size = ref<{ width: number; height: number } | null>(null);
 const camera = shallowRef<Camera | null>(null);
 let resize: ResizeObserver | null = null;
@@ -606,6 +630,9 @@ const SNAP_PX = 8;
 /** How far along the line they would share a still table may stand and still be snapped to. */
 const SNAP_REACH_MM = 5000;
 const TURN_STEP = 15;
+/** How far above a zone drawn its knob's stem reaches, and its knob's middle stands, in pixels. */
+const ZONE_STEM_PX = 17;
+const ZONE_KNOB_PX = 24;
 /** How near a point of a pending path a press is a press on it, in screen pixels. */
 const ROW_POINT_PX = 12;
 
@@ -635,6 +662,18 @@ type Gesture =
       begun: boolean;
     }
   | { kind: 'zone'; from: { x: number; y: number }; fromMm: PointMm; begun: boolean }
+  | {
+      kind: 'zoneEdit';
+      /** Moved by its middle, sized by a corner or an edge (`handle`), or turned by its knob. */
+      mode: 'move' | 'size' | 'turn';
+      handle: ZoneHandle;
+      /** The draft as the press found it, which every frame reckons from. */
+      start: ZoneDraft;
+      fromMm: PointMm;
+      begun: boolean;
+      /** Where the pointer last was, so Shift pressed or let go turns again with no move. */
+      atMm: PointMm | null;
+    }
   | {
       kind: 'floor';
       from: { x: number; y: number };
@@ -684,6 +723,49 @@ const guides = shallowRef<Guide[]>([]);
 const selectBox = shallowRef<Bounds | null>(null);
 /** The no-table zone a drag with No-table zone on is drawing. */
 const zoneBox = shallowRef<Bounds | null>(null);
+/**
+ * The no-table zone drawn and not added yet (the QC walk of 2026-11-16, item 19): moved by a drag
+ * inside it, sized by a corner or an edge, turned by its knob, added by Enter and dropped by
+ * Escape, a right-click or another tool. It is nothing of the layout's, its saves' or its undo's
+ * until Enter adds it.
+ */
+const zoneDraft = shallowRef<ZoneDraft | null>(null);
+
+/** Add the zone drawn, turned as it stands, as one step of undo. */
+function addZoneDraft() {
+  const draft = zoneDraft.value;
+  if (!draft) return;
+  zoneDraft.value = null;
+  addZone(boxOfDraft(draft), draft.rotation);
+}
+
+function dropZoneDraft() {
+  zoneDraft.value = null;
+  tell(ZONE_DROPPED);
+}
+
+/**
+ * Enter or Escape with a zone drawn and not added: true when it was one of them. Enter is the
+ * draft's only while the focus is in the editor (its toolbar, where the tool was chosen, or its
+ * map) or on nothing: on another of the page's controls it is that control's own press.
+ */
+function zoneDraftKey(event: KeyboardEvent): boolean {
+  if (tool.value !== 'zone' || !zoneDraft.value || gesture) return false;
+  if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false;
+  if (event.key === 'Enter') {
+    const focused = document.activeElement;
+    if (focused && focused !== document.body && !editorRoot.value?.contains(focused)) {
+      return false;
+    }
+    if (!event.repeat) addZoneDraft();
+    return true;
+  }
+  if (event.key === 'Escape') {
+    dropZoneDraft();
+    return true;
+  }
+  return false;
+}
 const dragging = ref(false);
 const spaceHeld = ref(false);
 const hovering = ref(false);
@@ -956,6 +1038,7 @@ function onPointerDown(event: PointerEvent) {
         fillTool.dragTo(null);
         fillTool.hoverAt(null);
       }
+      if (gesture?.kind === 'zoneEdit') zoneDraft.value = gesture.start;
       guides.value = [];
       selectBox.value = null;
       zoneBox.value = null;
@@ -1009,6 +1092,19 @@ function onPointerDown(event: PointerEvent) {
       fromMm: fillPointAt(event),
       point: fillTool.pointNear(toMm(event), ROW_POINT_PX / cam.pxPerMm),
       begun: false,
+    };
+  } else if (tool.value === 'zone' && zoneDraft.value && zoneHandleAt(event)) {
+    const handle = zoneHandleAt(event)!;
+    // A handle is no stop of the keyboard's: the press leaves the focus where it was.
+    event.preventDefault();
+    gesture = {
+      kind: 'zoneEdit',
+      mode: handle.mode,
+      handle: handle.handle,
+      start: zoneDraft.value,
+      fromMm: toMm(event),
+      begun: false,
+      atMm: null,
     };
   } else if (tool.value === 'zone') {
     gesture = { kind: 'zone', from, fromMm: clampToHall(toMm(event), hall.value), begun: false };
@@ -1146,6 +1242,8 @@ function onPointerMove(event: PointerEvent) {
     if (!gesture.begun && Math.hypot(dx, dy) < DRAG_PX) return;
     gesture.begun = true;
     zoneBox.value = boxBetween(gesture.fromMm, clampToHall(toMm(event), hall.value));
+  } else if (gesture.kind === 'zoneEdit') {
+    editZoneDraft(gesture, toMm(event), event.shiftKey);
   } else if (gesture.kind === 'floor') {
     if (!gesture.begun && Math.hypot(dx, dy) < DRAG_PX) return;
     gesture.begun = true;
@@ -1191,10 +1289,37 @@ function turnTo(turn: Extract<Gesture, { kind: 'turn' }>, atMm: PointMm, fine: b
   props.editor.turnTables(turn.ids, by, turn.centre);
 }
 
-/** Shift pressed or let go under a knob's drag turns the selection again, by the degree or back
- *  to the step, with no move of the pointer (D11). */
+/** Shift pressed or let go under a knob's drag turns the selection, or the zone drawn, again, by
+ *  the degree or back to the step, with no move of the pointer (D11). */
 function reTurn(fine: boolean) {
   if (gesture?.kind === 'turn' && gesture.atMm) turnTo(gesture, gesture.atMm, fine);
+  if (gesture?.kind === 'zoneEdit' && gesture.mode === 'turn' && gesture.atMm) {
+    editZoneDraft(gesture, gesture.atMm, fine);
+  }
+}
+
+/** The draft's handle a press is on: its body moves it, a corner or an edge sizes it, the knob
+ *  turns it. */
+function zoneHandleAt(event: Event): { mode: 'move' | 'size' | 'turn'; handle: ZoneHandle } | null {
+  const target = event.target instanceof Element ? event.target : null;
+  const handle = target?.closest('[data-zone-handle]');
+  if (!handle) return null;
+  const mode = handle.getAttribute('data-zone-handle') as 'move' | 'size' | 'turn';
+  const [sx, sy] = (handle.getAttribute('data-handle') ?? '0,0').split(',').map(Number);
+  return { mode, handle: [sx, sy] as unknown as ZoneHandle };
+}
+
+/** A frame of a drag on the zone drawn, reckoned from the draft as the press found it. */
+function editZoneDraft(edit: Extract<Gesture, { kind: 'zoneEdit' }>, atMm: PointMm, fine: boolean) {
+  edit.atMm = atMm;
+  edit.begun = true;
+  const { start, fromMm } = edit;
+  zoneDraft.value =
+    edit.mode === 'move'
+      ? movedDraft(start, { dxMm: atMm.xMm - fromMm.xMm, dyMm: atMm.yMm - fromMm.yMm })
+      : edit.mode === 'turn'
+        ? turnedDraft(start, fromMm, atMm, fine)
+        : sizedDraft(start, edit.handle, atMm);
 }
 
 function endGesture(event: PointerEvent, cancelled: boolean) {
@@ -1234,9 +1359,20 @@ function endGesture(event: PointerEvent, cancelled: boolean) {
     }
     return;
   }
+  if (done.kind === 'zoneEdit') {
+    if (cancelled) zoneDraft.value = done.start;
+    return;
+  }
   if (done.kind === 'zone') {
     if (!done.begun || cancelled) return;
-    addZone(boxBetween(done.fromMm, clampToHall(toMm(event), hall.value)));
+    // Drawn, the box is a draft to move, size and turn; Enter adds it.
+    const box = boxBetween(done.fromMm, clampToHall(toMm(event), hall.value));
+    if (box.right - box.left < MIN_ZONE_SIDE_MM || box.bottom - box.top < MIN_ZONE_SIDE_MM) {
+      tell('Drag a larger box to mark a no-table zone.');
+      return;
+    }
+    zoneDraft.value = draftOfBox(box);
+    say(ZONE_DRAFT_DRAWN);
     return;
   }
   if (done.kind === 'floor') {
@@ -1343,10 +1479,10 @@ function place(at: PointMm): string | null {
   return ids[0];
 }
 
-/** Mark a no-table zone over a box drawn, and say so; the page then asks for its name. A box too
- *  small, or a layout holding as many zones as it may, marks none and says why. */
-function addZone(box: Bounds) {
-  const id = props.editor.addZone(box);
+/** Mark a no-table zone over a box drawn, turned, and say so; the page then asks for its name. A
+ *  box too small, or a layout holding as many zones as it may, marks none and says why. */
+function addZone(box: Bounds, rotation: number) {
+  const id = props.editor.addZone(box, '', rotation);
   if (!id) {
     tell(
       layout.value.zones.length >= MAX_ZONES
@@ -1355,7 +1491,8 @@ function addZone(box: Bounds) {
     );
     return;
   }
-  say(saidZoneAdded(box));
+  const added = layout.value.zones.find((zone) => zone.id === id);
+  if (added) say(saidZoneAdded(added));
   emit('zoneAdded', id);
 }
 
@@ -1363,6 +1500,8 @@ function addZone(box: Bounds) {
 function abandon() {
   const done = gesture;
   gesture = null;
+  // The zone drawn goes back to where the drag found it.
+  if (done?.kind === 'zoneEdit') zoneDraft.value = done.start;
   turning.value = null;
   guides.value = [];
   selectBox.value = null;
@@ -1483,6 +1622,10 @@ function onWindowKeydown(event: KeyboardEvent) {
     return;
   }
   if (tool.value === 'fill' && fillKey(event, false)) {
+    event.preventDefault();
+    return;
+  }
+  if (zoneDraftKey(event)) {
     event.preventDefault();
     return;
   }
@@ -1801,6 +1944,12 @@ function onStageKeydown(event: KeyboardEvent) {
     return;
   }
   if (nudgeKey(event)) return;
+  // The zone drawn has Enter and Escape over a table the focus is on.
+  if (zoneDraftKey(event)) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
   if (tool.value === 'row' || tool.value === 'fill') {
     // The tool's keys, before the map hears them; no table is picked up while it is on.
     if (tool.value === 'row' ? rowKey(event, true) : fillKey(event, true)) event.preventDefault();
@@ -1969,14 +2118,7 @@ function placeAtTheMiddle() {
   const size = typeById.value.get(addTypeId.value) ?? STANDARD_TABLE;
   const taken = [
     ...layout.value.tables.map((table) => tableCorners(table, sizeOf(table))),
-    ...layout.value.zones.map((zone) =>
-      cornersOf({
-        left: zone.xMm,
-        top: zone.yMm,
-        right: zone.xMm + zone.widthMm,
-        bottom: zone.yMm + zone.depthMm,
-      }),
-    ),
+    ...layout.value.zones.map(zoneCorners),
   ];
   const id = place(clearPlace({ xMm: cam.xMm, yMm: cam.yMm }, size, taken, hall.value));
   if (!id) return;
@@ -2222,7 +2364,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="layout-editor" data-testid="layout-editor">
+  <div ref="editorRoot" class="layout-editor" data-testid="layout-editor">
     <div
       ref="toolbar"
       class="layout-toolbar"
@@ -2413,6 +2555,108 @@ defineExpose({
               aria-hidden="true"
               data-testid="layout-zone-box"
             />
+            <!-- The zone drawn and not added: a body that moves it, a corner or an edge that sizes
+                 it (an edge is a target its whole length, a handle marks its middle), and a knob
+                 on a stem above its own top that turns it. Handles keep their size on screen. -->
+            <g
+              v-if="zoneDraft"
+              class="layout-zone-draft"
+              :transform="`translate(${zoneDraft.cxMm} ${zoneDraft.cyMm}) rotate(${zoneDraft.rotation})`"
+              aria-hidden="true"
+              data-testid="layout-zone-draft"
+            >
+              <rect
+                :x="-zoneDraft.widthMm / 2"
+                :y="-zoneDraft.depthMm / 2"
+                :width="zoneDraft.widthMm"
+                :height="zoneDraft.depthMm"
+                fill="var(--layout-zone-fill)"
+                fill-opacity="0.7"
+                stroke="var(--mm-blue)"
+                stroke-width="1.5"
+                vector-effect="non-scaling-stroke"
+                class="layout-zone-draft__body"
+                data-zone-handle="move"
+                data-testid="layout-zone-draft-body"
+              />
+              <line
+                x1="0"
+                :y1="-zoneDraft.depthMm / 2"
+                x2="0"
+                :y2="-zoneDraft.depthMm / 2 - ZONE_STEM_PX * mmPerPx"
+                stroke="var(--mm-blue)"
+                stroke-width="1.5"
+                vector-effect="non-scaling-stroke"
+                pointer-events="none"
+              />
+              <line
+                v-for="[sx, sy] in ZONE_EDGES"
+                :key="`edge ${sx} ${sy}`"
+                :x1="sx ? (sx * zoneDraft.widthMm) / 2 : -zoneDraft.widthMm / 2"
+                :y1="sy ? (sy * zoneDraft.depthMm) / 2 : -zoneDraft.depthMm / 2"
+                :x2="sx ? (sx * zoneDraft.widthMm) / 2 : zoneDraft.widthMm / 2"
+                :y2="sy ? (sy * zoneDraft.depthMm) / 2 : zoneDraft.depthMm / 2"
+                stroke="transparent"
+                stroke-width="12"
+                vector-effect="non-scaling-stroke"
+                pointer-events="stroke"
+                :style="{ cursor: handleCursor([sx, sy], zoneDraft.rotation) }"
+                data-zone-handle="size"
+                :data-handle="`${sx},${sy}`"
+                data-testid="layout-zone-edge"
+              />
+              <rect
+                v-for="[sx, sy] in ZONE_EDGES"
+                :key="`mid ${sx} ${sy}`"
+                :x="(sx * zoneDraft.widthMm) / 2 - (sx ? 4 : 8) * mmPerPx"
+                :y="(sy * zoneDraft.depthMm) / 2 - (sy ? 4 : 8) * mmPerPx"
+                :width="(sx ? 8 : 16) * mmPerPx"
+                :height="(sy ? 8 : 16) * mmPerPx"
+                :rx="2 * mmPerPx"
+                fill="white"
+                stroke="var(--mm-blue)"
+                stroke-width="1.5"
+                vector-effect="non-scaling-stroke"
+                :style="{ cursor: handleCursor([sx, sy], zoneDraft.rotation) }"
+                data-zone-handle="size"
+                :data-handle="`${sx},${sy}`"
+                data-testid="layout-zone-edge-handle"
+              />
+              <rect
+                v-for="[sx, sy] in ZONE_CORNERS"
+                :key="`corner ${sx} ${sy}`"
+                :x="(sx * zoneDraft.widthMm) / 2 - 5 * mmPerPx"
+                :y="(sy * zoneDraft.depthMm) / 2 - 5 * mmPerPx"
+                :width="10 * mmPerPx"
+                :height="10 * mmPerPx"
+                fill="white"
+                stroke="var(--mm-blue)"
+                stroke-width="1.5"
+                vector-effect="non-scaling-stroke"
+                :style="{ cursor: handleCursor([sx, sy], zoneDraft.rotation) }"
+                data-zone-handle="size"
+                :data-handle="`${sx},${sy}`"
+                data-testid="layout-zone-corner"
+              />
+              <g class="layout-turn-handle" data-zone-handle="turn" data-testid="layout-zone-turn">
+                <!-- A thumb's reach round the knob. -->
+                <circle
+                  cx="0"
+                  :cy="-zoneDraft.depthMm / 2 - ZONE_KNOB_PX * mmPerPx"
+                  :r="14 * mmPerPx"
+                  fill="transparent"
+                />
+                <circle
+                  cx="0"
+                  :cy="-zoneDraft.depthMm / 2 - ZONE_KNOB_PX * mmPerPx"
+                  :r="6 * mmPerPx"
+                  fill="white"
+                  stroke="var(--mm-blue)"
+                  stroke-width="1.5"
+                  vector-effect="non-scaling-stroke"
+                />
+              </g>
+            </g>
             <LayoutRowPreview
               v-if="tool === 'row' && (row.pending.value || crosshair)"
               :runs="row.runs.value"
@@ -2785,6 +3029,10 @@ defineExpose({
 .layout-select-box,
 .layout-zone-box {
   pointer-events: none;
+}
+
+.layout-zone-draft__body {
+  cursor: move;
 }
 
 .layout-stage--drawing,

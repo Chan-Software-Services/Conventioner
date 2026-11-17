@@ -23,7 +23,7 @@ import { metres } from './layoutDrawing';
 import {
   STANDARD_TABLE,
   boxBetween,
-  cornersOf,
+  zoneCorners,
   hallOf,
   polygonIsSimple,
   readingOrder,
@@ -145,12 +145,7 @@ export function fillRequest(
   return {
     walls: [],
     obstacles: layout.zones.map((zone) => ({
-      polygon: cornersOf({
-        left: zone.xMm,
-        top: zone.yMm,
-        right: zone.xMm + zone.widthMm,
-        bottom: zone.yMm + zone.depthMm,
-      }).map(pair),
+      polygon: zoneCorners(zone).map(pair),
       type: 'no_table_zone',
     })),
     table_types: [

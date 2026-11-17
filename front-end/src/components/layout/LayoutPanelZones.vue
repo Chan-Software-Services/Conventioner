@@ -2,8 +2,9 @@
 /**
  * The layout page's "No-table zones" card (T257): each zone the layout keeps tables off, a stage,
  * a pillar, an exit, with its size; its name in a field, saved as the field is left or Enter is
- * pressed, and Remove. A zone is drawn with the editor's No-table zone tool, and the page then
- * gives its field the focus (`focusZone`), so it is named where it is listed.
+ * pressed, and Remove. It is the No-table zone tool's card, shown while that tool is on: a box
+ * drawn on the map is a draft to move, size and turn, which Enter adds (T422), and the page then
+ * gives the new zone's field the focus (`focusZone`), so it is named where it is listed.
  */
 import { nextTick, ref, useId } from 'vue';
 import type { FloorplanZone } from '@/assets/types/datatypes';
@@ -55,8 +56,7 @@ defineExpose({ focusZone });
   >
     <h2 :id="titleId" class="zones-title">No-table zones</h2>
     <p v-if="!zones.length" class="zones-none" data-testid="layout-panel-no-zones">
-      None yet. Draw one with No-table zone over a stage, a pillar or an exit, and no table is put
-      there.
+      None yet. Drag a box on the map over a stage, a pillar or an exit, and no table is put there.
     </p>
     <ul v-else ref="list" class="zones-list">
       <li
@@ -97,6 +97,10 @@ defineExpose({ focusZone });
         </button>
       </li>
     </ul>
+    <p class="zones-hint" data-testid="layout-panel-zones-hint">
+      A box drawn is a draft to move, size and turn. Enter adds it; Escape or a right-click drops
+      it.
+    </p>
   </section>
 </template>
 
@@ -142,8 +146,13 @@ defineExpose({ focusZone });
   min-width: 0;
 }
 
-.zones-size {
+.zones-size,
+.zones-hint {
   font-size: var(--text-xs);
   color: var(--mm-text-muted);
+}
+
+.zones-hint {
+  margin: 0;
 }
 </style>

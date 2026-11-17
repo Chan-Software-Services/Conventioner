@@ -32,7 +32,7 @@ import {
   STANDARD_TABLE,
   angleFrom,
   snapAngle,
-  cornersOf,
+  zoneCorners,
   hallOf,
   fitStroke,
   placeAlongRuns,
@@ -193,14 +193,7 @@ export function standingShapes(
 ): PointMm[][] {
   return [
     ...layout.tables.map((table) => tableCorners(table, sizeOf(table))),
-    ...layout.zones.map((zone) =>
-      cornersOf({
-        left: zone.xMm,
-        top: zone.yMm,
-        right: zone.xMm + zone.widthMm,
-        bottom: zone.yMm + zone.depthMm,
-      }),
-    ),
+    ...layout.zones.map(zoneCorners),
   ];
 }
 

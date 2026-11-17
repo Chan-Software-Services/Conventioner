@@ -292,6 +292,7 @@ function layoutAt(
     | 'settings'
     | 'viewMenu'
     | 'zones'
+    | 'zoneDraft'
     | 'settled',
 ) {
   return async (page: Page, seed: TheScreensSeed) => {
@@ -477,6 +478,15 @@ function layoutAt(
         // The No-table zone tool on, its card the list of the layout's zones.
         await layout.toolZone.click();
         await expect(layout.zonesCard).toBeVisible();
+      }
+      if (stage === 'zoneDraft') {
+        // The No-table zone tool on, a box dragged over the clear floor south of the tables and
+        // turned 30° by its knob: a draft with its handles, not added (T422, item 19).
+        await layout.toolZone.click();
+        await layout.drag([12_000, 13_000], [17_000, 16_000]);
+        await layout.dragFrom(layout.zoneTurn, [14_500 + 2500, 14_500 - 4330]);
+        await expect(layout.zoneDraft).toHaveAttribute('transform', /rotate\(30\)$/);
+        await expect(layout.hint).toContainText('Enter adds it');
       }
       return;
     }
@@ -1664,6 +1674,14 @@ export const SCREENS: Screen[] = [
     sizes: ORGANIZER,
     deskOnly: true,
     open: layoutAt('zones'),
+  },
+  // A no-table zone drawn and turned, waiting for Enter (T422, item 19).
+  {
+    name: 'the layout, a no-table zone drawn and turned',
+    who: 'organizer',
+    sizes: ORGANIZER,
+    deskOnly: true,
+    open: layoutAt('zoneDraft'),
   },
   {
     name: 'the layout, its image being replaced',
