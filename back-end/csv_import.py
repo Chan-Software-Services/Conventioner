@@ -102,17 +102,30 @@ def first_import_blockers(market_doc: Dict[str, Any]) -> List[Any]:
     )
 
 
+#: Why a first import's move into Review is recorded with no request asking the Move a phase row.
+FIRST_IMPORT_MOVES_UNASKED = (
+    "a Google Form market's first import is its way into Review: the import's row let the request "
+    "in, and the move is judged as every move is")
+
+
 def enter_review(market_id: str, by: Optional[str]) -> str:
     """Take a draft that now holds imported responses into Review, through the one judged move, and
     return the phase it is in. A market already past draft, or one the move refuses (no row was
-    written, or its setup changed under the import), is left where it stands."""
+    written, or its setup changed under the import), is left where it stands.
+
+    The move is recorded under the Move a phase row, as ``by``, through the unasked door: the
+    request asked the import's row, not that one (``FIRST_IMPORT_MOVES_UNASKED``)."""
+    import api.market_actions as Actions
     import api.markets as MarketsApi
+    import history as History
 
     context = MarketsApi.load_market_context(market_id)
     if context is None or context.market is None:
         return MarketPhase.DRAFT.value
     if context.market.phase is MarketPhase.DRAFT:
-        blockers = MarketsApi.take_move(context, MarketPhase.APPLICATIONS.value, by=by)
+        blockers = MarketsApi.take_move(
+            context, MarketPhase.APPLICATIONS.value,
+            History.unasked(market_id, by, Actions.MOVE_PHASE, because=FIRST_IMPORT_MOVES_UNASKED))
         if not blockers:
             return MarketPhase.APPLICATIONS.value
     return context.market.phase.value

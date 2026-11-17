@@ -8,7 +8,7 @@ history.
 """
 import api.applicants as ApplicantsApi
 import api.market_actions as Actions
-from conftest import a_solver_vendor
+from conftest import a_solver_vendor, let_in
 from datatypes import Application, ApplicationStatus, MarketPhase
 from market_write import MARKET_CHANGED
 from real_mongo.test_a_judged_write_lands_only_on_the_market_it_judged import (
@@ -58,7 +58,8 @@ class TestAllocateTables:
             accepted_tiers_by_date={DATE: frozenset({"Gold"})})])
         published = []
         interleave("api.placements.assign_market", lambda: published.append(
-            ApplicantsApi.publish_results(market["id"], ORGANIZER)))
+            ApplicantsApi.publish_results(
+                market["id"], let_in(Actions.PUBLISH_RESULTS, market["id"], ORGANIZER))))
 
         response = client.post(f"/markets/{market['id']}/assignment")
 

@@ -860,16 +860,16 @@ class TestCheckingWhoIsInTheServer:
         """The card's write must forget the check's fields whatever the connection it read held."""
         world.market(discord=CONNECTED, **WITH_THE_FORM)
         maple = world.applicant("maple@example.com", "maple")
-        load = MarketsApi._load_market_to_change
+        load = MarketsApi._market_change
 
         def loaded_then_checked(*args, **kwargs):
-            market = load(*args, **kwargs)
+            change = load(*args, **kwargs)
             world.markets.doc["discord"] = {
                 **CONNECTED, "checkedAt": "2026-10-31T12:00:00+00:00",
                 "vendorStates": [{"applicationId": maple, "state": "not_found"}]}
-            return market
+            return change
 
-        world.patch.setattr(MarketsApi, "_load_market_to_change", loaded_then_checked)
+        world.patch.setattr(MarketsApi, "_market_change", loaded_then_checked)
 
         client.put(f"/markets/{MARKET}/discord", json={"usernameQuestion": "shop"})
 
@@ -924,16 +924,16 @@ class TestCheckingWhoIsInTheServer:
     def test_a_first_check_finishing_while_disconnecting_is_forgotten(self, client, world):
         world.market(discord=CONNECTED, **WITH_THE_FORM)
         maple = world.applicant("maple@example.com", "maple")
-        load = MarketsApi._load_market_to_change
+        load = MarketsApi._market_change
 
         def loaded_then_checked(*args, **kwargs):
-            market = load(*args, **kwargs)
+            change = load(*args, **kwargs)
             world.markets.doc["discord"] = {
                 **CONNECTED, "checkedAt": "2026-10-31T12:00:00+00:00",
                 "vendorStates": [{"applicationId": maple, "state": "not_found"}]}
-            return market
+            return change
 
-        world.patch.setattr(MarketsApi, "_load_market_to_change", loaded_then_checked)
+        world.patch.setattr(MarketsApi, "_market_change", loaded_then_checked)
 
         client.delete(f"/markets/{MARKET}/discord/connection")
 
@@ -1472,17 +1472,17 @@ class TestGivingTheRole:
         """The card's write must forget the run's report whatever the connection it read held."""
         world.market(discord=WITH_THE_ROLE, **WITH_THE_FORM, **_seats("ana@example.com"))
         ana = world.applicant("ana@example.com", "ana")
-        load = MarketsApi._load_market_to_change
+        load = MarketsApi._market_change
 
         def loaded_then_run(*args, **kwargs):
-            market = load(*args, **kwargs)
+            change = load(*args, **kwargs)
             world.markets.doc["discord"] = {
                 **WITH_THE_ROLE, "roleRun": {
                     "ranAt": "2026-10-31T12:00:00+00:00", "roleName": "Vendor Nov 2026",
                     "outcomes": [{"applicationId": ana, "outcome": "not_found"}]}}
-            return market
+            return change
 
-        world.patch.setattr(MarketsApi, "_load_market_to_change", loaded_then_run)
+        world.patch.setattr(MarketsApi, "_market_change", loaded_then_run)
 
         client.put(f"/markets/{MARKET}/discord", json={"usernameQuestion": "shop"})
 

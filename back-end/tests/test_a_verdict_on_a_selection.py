@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import api.applicants as ApplicantsApi  # noqa: E402
 import api.applications as ApplicationsApi  # noqa: E402
-from conftest import FakeApplicationsCollection  # noqa: E402
+from conftest import FakeApplicationsCollection, reviewing  # noqa: E402
 from datatypes import ApplicationStatus, MarketPerson, VerdictGiver  # noqa: E402
 
 ALEX = VerdictGiver(kind="person", user_id="user-alex", email="alex@market.test")
@@ -48,7 +48,8 @@ def test_each_is_written_as_one_verdict_and_the_rest_skipped_saying_why(stored):
     body, status = ApplicantsApi.review_selection(
         "market-1",
         [(i, ApplicantsApi.seen_from(SEEN_OPEN)) for i in ("a", "b", "held", "changed")],
-        ApplicationStatus.REVIEWER_APPROVED, by=ALEX)
+        ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
+        reviewing=reviewing("market-1", ALEX.email))
 
     assert status == 200
     assert body["written"] == ["a", "b"]
@@ -67,7 +68,8 @@ def test_one_the_reviewer_holds_themselves_is_written(stored):
 
     body, _ = ApplicantsApi.review_selection(
         "market-1", [("held", ApplicantsApi.seen_from(SEEN_OPEN))], ApplicationStatus.REVIEWER_REJECTED,
-        by=ALEX)
+        by=ALEX,
+        reviewing=reviewing("market-1", ALEX.email))
 
     assert body["written"] == ["held"]
 
@@ -76,7 +78,8 @@ def test_an_application_of_another_market_is_skipped(stored):
     stored["a"]["market_id"] = "market-2"
 
     body, _ = ApplicantsApi.review_selection(
-        "market-1", [("a", ApplicantsApi.seen_from(SEEN_OPEN))], ApplicationStatus.REVIEWER_APPROVED, by=ALEX)
+        "market-1", [("a", ApplicantsApi.seen_from(SEEN_OPEN))],
+        ApplicationStatus.REVIEWER_APPROVED, by=ALEX, reviewing=reviewing("market-1", ALEX.email))
 
     assert body["written"] == [] and body["skipped"][0]["reason"] == "Not an application here."
 
@@ -87,7 +90,8 @@ def test_one_already_at_the_status_is_skipped_rather_than_changing_hands(stored)
 
     body, _ = ApplicantsApi.review_selection(
         "market-1", [("a", ApplicantsApi.seen_from({"status": "needs_follow_up"}))],
-        ApplicationStatus.NEEDS_FOLLOW_UP, by=ALEX)
+        ApplicationStatus.NEEDS_FOLLOW_UP, by=ALEX,
+        reviewing=reviewing("market-1", ALEX.email))
 
     assert body["skipped"][0]["reason"] == "Already needing a follow-up."
     assert stored["a"]["follow_up_owner"]["email"] == "sam@market.test"

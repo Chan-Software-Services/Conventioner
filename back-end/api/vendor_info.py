@@ -27,7 +27,7 @@ import rejection_rules as RejectionRules
 import review_team as ReviewTeam
 from application_write import validated_answer
 from client_errors import BadRequestError, ForbiddenError, NotFoundError
-from datatypes import AnswerUpdate, Market, MarketPerson
+from datatypes import AnswerUpdate, MarketPerson
 
 NOTHING_TO_UPDATE = "Change an answer to update it."
 
@@ -43,7 +43,8 @@ def update_vendor_info(
     Asks ``Actions.UPDATE_VENDOR_INFO`` in any phase, and an answer the assignment or a price group
     reads asks ``Actions.UPDATE_ASSIGNMENT_OR_PRICE_INFO`` too; an archived market refuses it.
     """
-    market = MarketsApi._load_market_to_change(market_id, updater.email, Actions.UPDATE_VENDOR_INFO)
+    change = MarketsApi._market_change(market_id, updater.email, Actions.UPDATE_VENDOR_INFO)
+    market = change.market
     if not isinstance(answers, dict) or not answers:
         raise BadRequestError(NOTHING_TO_UPDATE)
     doc = ApplicationsApi.find_application_by_id(application_id)
@@ -54,8 +55,7 @@ def update_vendor_info(
                                              if market.application_form else [])}
     theirs = doc.get("form_data") or {}
     before = ApplicationsApi.effective_answers(doc)
-    assert_may_update_what_the_assignment_or_prices_read(
-        market, [str(key) for key in answers], updater.email)
+    assert_may_update_what_the_assignment_or_prices_read(change, [str(key) for key in answers])
     essential: Dict[str, Any] = {}
     values: Dict[str, Any] = {}
     for key, raw in answers.items():
@@ -121,11 +121,12 @@ def update_vendor_info(
     verdicts = (RejectionRules.judge(
         RejectionRules.Rulebook(market), market_id, application_id,
         overturns=MarketsApi.may_overturn(updater.email, market),
-        arrival=ReviewState.Arrival(updater.email, Actions.UPDATE_VENDOR_INFO.id))
+        arrival=ReviewState.Arrival.of(change.asked))
         if judging else RejectionRules.Judged())
     moved = [key for key in values if key not in kept and key not in matched]
-    History.record(
-        market_id, updater.email, Actions.UPDATE_VENDOR_INFO,
+    # The one entry is the vendor info row's: the second row an answer the assignment or a price
+    # reads asks is a check alone, and records nothing of its own.
+    change.asked.record(
         kind=(History.KEPT if kept and not (updates.keys() - kept.keys() or cleared) else None),
         vendors=[doc.get("applicant_email")], subject={"application_id": application_id},
         detail=lambda: _with_rules(
@@ -161,20 +162,23 @@ def _write_updates(
 
 
 def assert_may_update_what_the_assignment_or_prices_read(
-    market: Market, asked: List[str], email: str,
+    change: MarketsApi.MarketChange, asked: List[str],
 ) -> None:
     """An answer the assignment or a price group reads asks its own row as well, decided from the
     questions asked before any answer is judged: whoever may not update it is told so rather than
     what is wrong with the answer. Declining a possible Discord match asks it too, of the username
-    question, as confirming one does (``api.discord_connection.decline_match``)."""
+    question, as confirming one does (``api.discord_connection.decline_match``).
+
+    Asked of the person and the organization ``change`` let in on "Update a vendor's info", whose
+    asking records the write's entry: this row only checks."""
+    market = change.market
     written = {key for question in asked
                for key in EssentialFields.UPDATABLE_ESSENTIAL_QUESTIONS.get(question, ())}
     if not (written & set(EssentialFields.SOLVER_RELEVANT_KEYS)
             or set(asked) & set(Pricing.Groups(market).keys())):
         return
     refused = Actions.refusal(
-        Actions.UPDATE_ASSIGNMENT_OR_PRICE_INFO, email, market,
-        MarketsApi._load_organization(market.organization_id))
+        Actions.UPDATE_ASSIGNMENT_OR_PRICE_INFO, change.asked.actor, market, change.organization)
     if refused:
         raise ForbiddenError(refused)
 

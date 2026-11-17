@@ -103,7 +103,7 @@ class TestAPlanSaveCrossingOpenApplications:
         market opened, would move a day applicants were already choosing."""
         client = signed_in(ORGANIZER)
         market = market_in(MarketPhase.DRAFT, **OPENABLE)
-        interleave("api.markets._load_market_and_organization_to_change",
+        interleave("api.markets._market_change",
                    _move(market, MarketPhase.APPLICATIONS))
 
         response = _save(client, market, _with_another_day(), planRevision=0)
@@ -123,7 +123,7 @@ class TestAPlanSaveCrossingPublishResults:
         held tells the save it crossed it."""
         client = signed_in(ORGANIZER)
         market = market_in(MarketPhase.ASSIGNMENT)
-        interleave("api.markets._load_market_and_organization_to_change",
+        interleave("api.markets._market_change",
                    lambda: real_db["markets"].update_one(
                        {"id": market["id"]}, {"$set": {"resultsPublished": True}}))
 

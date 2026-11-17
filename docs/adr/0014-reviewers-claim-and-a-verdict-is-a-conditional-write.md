@@ -2,12 +2,12 @@
 layer: implementation
 kind: adr
 describes:
-  - back-end/application_status.py#give_verdict
-  - back-end/application_status.py#change_verdict
   - back-end/api/applications.py#claim_next_for_review
   - back-end/api/applications.py#CLAIM_LEASE
   - back-end/api/applicants.py#review_selection
   - front-end/src/utils/reviewClaims.ts
+  - back-end/application_status.py#give_verdict
+  - back-end/application_status.py#change_verdict
 verified: 2026-11-17
 sources:
   - brain-dump/2026-10-19#11

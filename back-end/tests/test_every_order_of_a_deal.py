@@ -24,10 +24,12 @@ from test_choosing_reviewers_deals_the_open_applications import (  # noqa: F401 
 )
 
 import api.applications as ApplicationsApi
+import api.market_actions as Actions
 import api.markets as MarketsApi
 import application_status as ReviewState
 import history as History
 import review_team as ReviewTeam
+from conftest import let_in
 from datatypes import VerdictGiver
 
 
@@ -329,7 +331,8 @@ class TestEveryLetGoLooksAgain:
             ReviewTeam.choose(MarketsApi.market_from_document(_market(world)), None,
                               [person for person in ReviewTeam.team_of(
                                   MarketsApi.market_from_document(_market(world))).reviewers
-                               if person.email != ANA], ANA)
+                               if person.email != ANA],
+                              let_in(Actions.CHOOSE_REVIEWERS, _market(world)["id"], ANA))
         monkeypatch.setattr(ReviewState, "deal", real)
 
         # The change stays unfinished, its pool still Ana's, until the same choice again finishes

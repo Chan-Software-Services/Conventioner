@@ -16,6 +16,7 @@ import pytest
 from pymongo.errors import AutoReconnect, DuplicateKeyError
 
 import api.payments as PaymentsApi
+from conftest import assigning
 from client_errors import ConflictError
 import api.placements as PlacementsApi
 import assignment.lifecycle as Lifecycle
@@ -513,8 +514,8 @@ class TestEveryWriteForgetsTheStaleFreedRecordsOfItsDays:
         [sunday] = [row for row in PlacementsApi.MarketsApi.market_from_document(
             market.doc).assignment_object.vendor_assignments if row.date == SUN]
 
-        PaymentsApi.assignment_written(MARKET, seated=[], held_before=[sunday], dropped=[sunday],
-                                       by=ADMIN)
+        PaymentsApi.assignment_written(assigning(MARKET, ADMIN), seated=[], held_before=[sunday],
+                                       dropped=[sunday])
 
         assert stores.owed.documents == []
 

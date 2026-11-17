@@ -34,6 +34,7 @@ import api.market_actions as Actions
 import api.markets as MarketsApi
 import api.organizations as OrgsApi
 import api.users as UsersApi
+import history as History
 from client_errors import ClientError
 from datatypes import IntakeMode, MarketPhase, User, market_name_slug
 from db_config import require_named_database
@@ -46,6 +47,11 @@ class TestMarket(NamedTuple):
     name: str
     intake_mode: IntakeMode
 
+
+#: Why the seeder's phase moves are recorded with no request asking the Move a phase row.
+SEEDER_MOVES_UNASKED = (
+    "the operator's seeder runs on the machine, not on a request: it checks the owner may move the "
+    "market before it seeds it, and moves it as that owner once its plan and questions are written")
 
 TEST_MARKETS = (
     TestMarket("Conventioner Test - Online Applications", IntakeMode.FORM),
@@ -166,7 +172,7 @@ def seed_test_market(test_market: TestMarket, organization_id: str, owner: User,
         return MarketPhase.DRAFT.value
     blockers = MarketsApi.take_move(
         MarketsApi.load_market_context(market_id), MarketPhase.APPLICATIONS.value,
-        by=owner.email,
+        History.unasked(market_id, owner.email, Actions.MOVE_PHASE, because=SEEDER_MOVES_UNASKED),
     )
     if blockers:
         raise SeedError(

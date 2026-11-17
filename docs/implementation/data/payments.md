@@ -36,9 +36,9 @@ sources:
   - T315
   - T335
   - T318
+  - T422
   - T411
   - T421
-  - T422
 ---
 
 # Payments, and what a vendor owes
@@ -135,7 +135,7 @@ Its callers are in [`back-end/api/payments.py`](../../../back-end/api/payments.p
   When nothing was put back, the run's own tidy of the day landed after the owner's write, dropped the amount and recorded `owed_dropped`: the amount was set, so the request answers the account as the market now stands, with no line that day, and records `owed_set` at the time the owner wrote the amount (`HandAmount.at`), so the history reads the set before the drop.
   A day that kept changing answers 409, "What this vendor owes for that day kept changing as it was saved, so nothing was changed. Try again." (`OWED_KEPT_CHANGING`); a change that left the day reading as it did answers the account with no history entry.
 - `keep_freed_line` sends `freed` or `freed_with_deduction` with the seat held, for a free ([below](#freeing-a-table-never-changes-either-amount-by-itself)), and `deduct_freed_day` sends `freed_with_deduction` with nothing held, for Free pressed again.
-- `assignment_written(market_id, *, seated, held_before, dropped, by)` runs after every write of the assignment ([placements](../modules/placements.md) says which days each write hands it): each seated day takes `seated` and each dropped day `dropped_by_run`, recording `owed_taken_back` and `owed_dropped` as the table says.
+- `assignment_written(asked, *, seated, held_before, dropped)` runs after every write of the assignment ([placements](../modules/placements.md) says which days each write hands it): each seated day takes `seated` and each dropped day `dropped_by_run`, recording `owed_taken_back` and `owed_dropped` as the table says, through `asked`, the write's Assign asking.
   It reads only the market's records that may move, in one read (`records_that_may_move`: every record holding a freed line, and any on a date seated afresh or dropped), so a run never reads the market's records one by one.
   An `OwedDayChanged` or a refused cell there never fails the assignment's write, which has landed: it is logged as a failure a route goes on past is ([an exception never reaches a client](../conventions/an-exception-never-reaches-a-client.md)), an error naming the market id and the date with its frames, and the day reads through `on_day` until its next write.
 
@@ -167,7 +167,7 @@ Anyone else frees the seat with no such question, and the line stays owed for an
 [`back-end/migrations/migrate_owed_day_state.py`](../../../back-end/migrations/migrate_owed_day_state.py), `[--dry-run]`, gives every record of every live market (`tombstone.live`) the state the read gives it, judged by the same rule (`read_record`), against the days the market's stored assignment holds:
 
 - a record whose `state` is absent or disagrees with its legacy fields is stored as `on_day` of `derive_from_legacy`, and one that follows the seat is deleted;
-- an Admin's amount on a day not held, its state stored or not, is deleted with an `owed_dropped` entry recorded with no actor and `by_migration` in its subject ("Alice Example held no table on May 8, 2099, so the $0.00 admin@example.com set for that day was dropped");
+- an Admin's amount on a day not held, its state stored or not, is deleted with an `owed_dropped` entry recorded with no actor, through the history's unasked door (`MIGRATION_DROPS_UNASKED`, [the market's history](history.md)), and `by_migration` in its subject ("Alice Example held no table on May 8, 2099, so the $0.00 admin@example.com set for that day was dropped");
 - a trusted state is otherwise left, a freed one on a held day included, since a free writes its record before its seat goes and may be in flight.
 
 Each write holds the record as read (its `_id` and the fields its owner writes, `OWNED_FIELDS`: `state`, the legacy fields and `revision`) and counts `revision` up from the one read; a record that changed meanwhile is read again with the assignment, up to three tries, then listed as skipped, and a record that cannot be read is left and listed.
@@ -287,7 +287,7 @@ Every route is in [`back-end/app.py`](../../../back-end/app.py) (`get_vendor_acc
   It asks the row "Record a payment", an Editor's by default (Q15: "editors can"; [what each role may do](../../business/rules/what-each-role-may-do.md)), refuses an archived market, and a vendor the market has no application from, 404, as a seat is.
 - `PUT /markets/:id/payments/:email/owed/:date`, body `{cents}` from 0 to $100,000, sets a table-day's amount owed, and `DELETE` on the same path uses the calculated price again; both ask the row "Change the amount owed", an Admin's by default (Q26: "this number can be changed by the admin"), refuse a day with no line, 404, and a day that kept changing as it was saved, 409 ([the one writer](#the-one-writer)).
 - `POST /markets/:id/payments/:email/refunds` records a refund, `PUT /markets/:id/payment-entries/:payment_id` edits an entry and `DELETE` on it removes it; all three ask the row "Adjust the amount paid", an Admin's by default, and an entry of another market, or one removed, is not found, 404; an edit or a removal that meets another change of the entry is refused, 409 ([above](#the-amount-paid)).
-- Each write is recorded in [the market's history](history.md): a payment under `record-payment`; an amount owed set, a free's deduction included, or set back to the calculated price under `change-owed`, subject `{date, currency}`, the line's `owed_cents` before and after; an amount dropped with a day or a free's $0 taken back under `assign` ([the owed day's state](#the-owed-days-state)); a refund, an edit or a removal under `adjust-paid`, subject `{payment_id, payment_kind, currency}`, the entry's fields before and after; `payment_kind` (`payment` or `refund`, on `record-payment` too) words an edit that changed no amount.
+- Each write is recorded in [the market's history](history.md), through the asking of its row its load returned ([the market's actions](../modules/market-actions.md)): a payment under `record-payment`; an amount owed set, a free's deduction included, or set back to the calculated price under `change-owed`, subject `{date, currency}`, the line's `owed_cents` before and after; an amount dropped with a day or a free's $0 taken back under `assign` ([the owed day's state](#the-owed-days-state)); a refund, an edit or a removal under `adjust-paid`, subject `{payment_id, payment_kind, currency}`, the entry's fields before and after; `payment_kind` (`payment` or `refund`, on `record-payment` too) words an edit that changed no amount.
   Each names the vendor, so it reads in their drawer's History tab as in Manage market's ([reading the market's history](../../business/flows/reading-the-markets-history.md)), worded by [`historyReaders/payments.ts`](../../../front-end/src/utils/historyReaders/payments.ts) ("… recorded a payment of $50.00 from Alice Example", "… set what Alice Example owes on May 8, 2099 to $0.00", "… recorded a refund of $15.00 to Alice Example"), opening to its fields in the Payment tab's words and money.
 
 `accounts` in `back-end/api/payments.py` answers every vendor's account on the market at once, by address, each as `vendor_account` answers it, for every vendor with a seat, a kept line or an entry, from one read of each collection (`amounts_owed_by_vendor`, `payments_by_vendor`), a record with no address being nobody's; its caller has asked the table already.

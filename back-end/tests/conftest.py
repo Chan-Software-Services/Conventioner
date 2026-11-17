@@ -1096,6 +1096,55 @@ def client_market(**overrides) -> Market:
     return Market(**kwargs)
 
 
+def a_change_of(market, organization=None):
+    """A stand-in for ``MarketsApi._market_change`` that loads ``market`` (or what calling it
+    returns, a fresh copy each load) and lets the asker in on the row the write asks, for a test of
+    what a write does once it is let in: its entry is recorded under that row, as the real load's."""
+    import api.market_actions as Actions
+    import api.markets as MarketsApi
+
+    def change(_market_id, user, row):
+        loaded = market() if callable(market) else market
+        return MarketsApi.MarketChange(loaded, organization, Actions.Asked(row, loaded.id, user, None))
+    return change
+
+
+def assigning(market_id, actor):
+    """The Assignment row's asking, let in, for a test that writes a placement entry the way a
+    write of the assignment does: through what its check returned (``Actions.ASSIGN``)."""
+    import api.market_actions as Actions
+    return Actions.Asked(Actions.ASSIGN, market_id, actor, None)
+
+
+def let_in(row, market_id, actor):
+    """``row``'s asking of ``actor``, let in, for a test of a write past its route's check: its
+    entry is recorded under that row, as the asking the route returned records it."""
+    import api.market_actions as Actions
+    return Actions.Asked(row, market_id, actor, None)
+
+
+def reviewing(market_id, actor, change_refused=None):
+    """The two rows a verdict asks of ``actor`` (``ApplicantsApi.Reviewing``): giving, let in, as
+    the review routes' gate lets them in, and changing, refused with ``change_refused`` when set."""
+    import api.applicants as ApplicantsApi
+    import api.market_actions as Actions
+    return ApplicantsApi.Reviewing(
+        giving=Actions.Asked(Actions.GIVE_VERDICTS, market_id, actor, None),
+        changing=Actions.Asked(Actions.CHANGE_VERDICTS, market_id, actor, change_refused))
+
+
+def at_the_door(market_id, actor=None):
+    """The recorder a check-in or its undo records through: the organizer ``actor``'s "Check
+    vendors in" asking, let in, as the door's; or with no actor, the vendor's own, through the
+    unasked door as their vendor page's."""
+    import api.market_actions as Actions
+    import history as History
+    if actor is None:
+        return History.unasked(market_id, None, Actions.CHECK_IN,
+                               because="a test's check-in of the vendor's own")
+    return Actions.Asked(Actions.CHECK_IN, market_id, actor, None)
+
+
 class _SortableCursor:
     """A fake ``find``'s cursor: it sorts, limits and projects when it is read, as the driver's
     does, whatever order ``sort`` and ``limit`` were called in, and hands back copies."""

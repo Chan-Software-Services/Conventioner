@@ -3,10 +3,10 @@
 **The settings are the Public map card's** (``PUT /markets/<id>/public-map``): whether the map is on,
 and which of the market's own short text questions hold each vendor's public name, website and
 Instagram handle. Their write asks the table's "Publish the map" row (an Admin's by default, D25),
-loads through ``_load_market_to_change`` so an archived market refuses it, writes through the
-market write holding the settings as read, and records what changed in the market's history, each
-question by its key and its label, as Discord's question is. A write that changes nothing writes
-and records nothing.
+loads through ``_market_change`` so an archived market refuses it, writes through the market write
+holding the settings as read, and records what changed in the market's history through the asking
+that let it through, each question by its key and its label, as Discord's question is. A write
+that changes nothing writes and records nothing.
 
 **The read is public** (``GET /public/markets/<slug>/map``), behind one gate
 (``market_documents.public_map_market_by_slug``, D30): found by its slug as the vendor page finds
@@ -104,7 +104,8 @@ def save_settings(market_id: str, body: Dict[str, Any], requesting_user: str) ->
             no short text question of the form, or a map on with no name question.
         MarketChanged: the market moved, or its settings changed, since they were read.
     """
-    market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.PUBLISH_MAP)
+    change = MarketsApi._market_change(market_id, requesting_user, Actions.PUBLISH_MAP)
+    market = change.market
     before = settings_of(market)
     after = before.model_copy(update=_settings_update(market, body))
     if after.enabled and chosen_question(market, after.name_question) is None:
@@ -115,9 +116,9 @@ def save_settings(market_id: str, body: Dict[str, Any], requesting_user: str) ->
     # no field can be created, and two tabs changing the settings at once never merge their halves.
     write_market(market, {"$set": {market_doc_key("public_map"): served(after)}},
                  holds=(market_doc_key("public_map"),))
-    History.record(market.id, requesting_user, Actions.PUBLISH_MAP, kind=History.PUBLIC_MAP,
-                   detail=lambda: History.changes(_recorded(market, before),
-                                                  _recorded(market, after)))
+    change.asked.record(kind=History.PUBLIC_MAP,
+                        detail=lambda: History.changes(_recorded(market, before),
+                                                       _recorded(market, after)))
     return {"publicMap": served(after)}
 
 

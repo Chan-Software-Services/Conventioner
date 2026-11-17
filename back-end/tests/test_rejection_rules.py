@@ -18,7 +18,7 @@ import api.markets as MarketsApi  # noqa: E402
 import market_write as MarketWrite  # noqa: E402
 import rejection_rules as Rules  # noqa: E402
 from conftest import (  # noqa: E402
-    FakeMarketsCollection, client_market, complete_setup, stored_market)
+    FakeMarketsCollection, a_change_of, client_market, complete_setup, stored_market)
 from client_errors import BadRequestError  # noqa: E402
 from datatypes import ApplicationForm, MarketPhase  # noqa: E402
 
@@ -119,9 +119,8 @@ class TestTheWrite:
         write writes to and each load reads a copy of, as the server hands one."""
         markets = FakeMarketsCollection(stored_market(phase, applicationForm={"fields": FIELDS}))
         monkeypatch.setattr(MarketWrite, "markets_collection", markets)
-        monkeypatch.setattr(MarketsApi, "_load_market_to_change",
-                            lambda market_id, user, action:
-                            MarketsApi.market_from_document(copy.deepcopy(markets.doc)))
+        monkeypatch.setattr(MarketsApi, "_market_change", a_change_of(
+            lambda: MarketsApi.market_from_document(copy.deepcopy(markets.doc))))
         return markets
 
     def test_it_writes_the_rules_on_a_locked_form(self, monkeypatch):

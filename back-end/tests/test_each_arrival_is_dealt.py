@@ -10,7 +10,7 @@ once take different turns.
 
 import pytest
 
-from conftest import sessions_load_through_get_user, stored_market
+from conftest import let_in, sessions_load_through_get_user, stored_market
 from test_choosing_reviewers_deals_the_open_applications import (
     ADMIN, ANA, BEN, CAT, EMAILS, MARKET, PEOPLE, ROLES, Markets, _account, _application, _choose,
     _client, _reviewers,
@@ -21,6 +21,7 @@ from test_essential_fields import VALID_ANSWERS, _applicant_market_doc
 
 import app as app_module
 import api.applicants as ApplicantsApi
+import api.market_actions as Actions
 import api.markets as MarketsApi
 import market_write as MarketWrite
 import api.users as UsersApi

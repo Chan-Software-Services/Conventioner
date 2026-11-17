@@ -11,12 +11,11 @@ from flask import Blueprint, request, jsonify, send_file
 from flask_login import login_required
 from PIL import Image as PILImage
 
-from api.floorplans_access import image_refusal, market_refusal
+from api.floorplans_access import image_asking, image_refusal, market_refusal
 import api.market_actions as Actions
 import floorplan_limits as Limits
 import history as History
-from services.gridfs_service import delete_image, get_image, get_image_market_id, upload_image
-from utils.identity import authenticated_email
+from services.gridfs_service import delete_image, get_image, upload_image
 from utils.pdf_converter import TooManyPages, UnreadablePdf, pdf_to_images, is_pdf
 
 logger = logging.getLogger(__name__)
@@ -172,16 +171,14 @@ def delete_floorplan(gridfs_id: str):
     The caller must be an editor of the image's market, on a market that is not archived.
     """
     try:
-        refusal = image_refusal(gridfs_id, Actions.CHANGE_SETUP, edits=True)
+        asked, refusal = image_asking(gridfs_id, Actions.CHANGE_SETUP, edits=True)
         if refusal:
             return refusal
 
-        market_id = get_image_market_id(gridfs_id)
         success = delete_image(gridfs_id)
         if not success:
             return jsonify({"error": "Image not found"}), 404
-        History.record(
-            market_id, authenticated_email(), Actions.CHANGE_SETUP,
+        asked.record(
             kind=History.FLOORPLAN_IMAGE_DELETED, subject={"image_id": gridfs_id},
             detail=lambda: History.changes({"image_id": gridfs_id}, {"image_id": None}),
         )

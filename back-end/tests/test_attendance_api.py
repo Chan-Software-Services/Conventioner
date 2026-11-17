@@ -1,7 +1,7 @@
 import pytest
 
 import api.attendance as AttendanceApi
-from conftest import FakeApplicationsCollection
+from conftest import FakeApplicationsCollection, at_the_door
 from datatypes import MarketPhase
 from market_documents import market_by_slug, market_name_slug
 
@@ -39,24 +39,26 @@ def _market_with_assignment():
 
 
 def test_record_attendance_validates_input(monkeypatch):
-    result, status = AttendanceApi.record_attendance("", "v@example.com", "2026-05-01")
+    result, status = AttendanceApi.record_attendance(at_the_door(""), "v@example.com", "2026-05-01")
     assert status == 400
-    result, status = AttendanceApi.record_attendance("m", "", "2026-05-01")
+    result, status = AttendanceApi.record_attendance(at_the_door("m"), "", "2026-05-01")
     assert status == 400
-    result, status = AttendanceApi.record_attendance("m", "v@example.com", "")
+    result, status = AttendanceApi.record_attendance(at_the_door("m"), "v@example.com", "")
     assert status == 400
 
 
 def test_record_attendance_404_when_market_missing(monkeypatch):
     monkeypatch.setattr(AttendanceApi.markets_collection, "find_one", lambda *_a: None)
-    result, status = AttendanceApi.record_attendance("missing", "v@example.com", "2026-05-01")
+    result, status = AttendanceApi.record_attendance(
+        at_the_door("missing"), "v@example.com", "2026-05-01")
     assert status == 404
     assert result["error"] == "Market not found"
 
 
 def test_record_attendance_404_when_no_assignment_for_vendor_on_date(monkeypatch):
     monkeypatch.setattr(AttendanceApi.markets_collection, "find_one", lambda *_a: _market_with_assignment())
-    result, status = AttendanceApi.record_attendance("market-123", "other@example.com", "2026-05-01")
+    result, status = AttendanceApi.record_attendance(
+        at_the_door("market-123"), "other@example.com", "2026-05-01")
     assert status == 404
     assert "No assignment" in result["error"]
 
@@ -66,7 +68,8 @@ def test_record_attendance_upserts_with_timestamp(monkeypatch):
     monkeypatch.setattr(AttendanceApi.markets_collection, "find_one", lambda *_a: _market_with_assignment())
     monkeypatch.setattr(AttendanceApi, "attendance_collection", fake_coll)
 
-    result, status = AttendanceApi.record_attendance("market-123", "Vendor@Example.com", "2026-05-01")
+    result, status = AttendanceApi.record_attendance(
+        at_the_door("market-123"), "Vendor@Example.com", "2026-05-01")
     assert status == 200
     assert result["message"] == "Checked in"
     assert "checkedInAt" in result and result["checkedInAt"]
@@ -79,7 +82,8 @@ def test_record_attendance_upserts_with_timestamp(monkeypatch):
     assert stored["checked_in_at"] == result["checkedInAt"]
     assert stored["table_code"] == "A1"
 
-    result2, status2 = AttendanceApi.record_attendance("market-123", "vendor@example.com", "2026-05-01")
+    result2, status2 = AttendanceApi.record_attendance(
+        at_the_door("market-123"), "vendor@example.com", "2026-05-01")
     assert status2 == 200
     assert len(fake_coll.documents) == 1
     assert fake_coll.documents[0]["checked_in_at"] == result2["checkedInAt"]
@@ -381,7 +385,8 @@ class TestUndoingACheckInOnTheWrongDay:
              "checked_in_at": "2026-05-02T10:00:00Z"},
         ])
 
-        result, status = AttendanceApi.undo_attendance("m", "V@Example.com", "2026-05-01")
+        result, status = AttendanceApi.undo_attendance(
+            at_the_door("m"), "V@Example.com", "2026-05-01")
 
         assert status == 200
         assert result["message"] == "Check-in undone"
@@ -390,7 +395,8 @@ class TestUndoingACheckInOnTheWrongDay:
     def test_says_so_when_there_was_no_check_in_to_undo(self, monkeypatch):
         self._collection(monkeypatch, [])
 
-        result, status = AttendanceApi.undo_attendance("m", "v@example.com", "2026-05-01")
+        result, status = AttendanceApi.undo_attendance(
+            at_the_door("m"), "v@example.com", "2026-05-01")
 
         assert status == 404
         assert "No check-in found" in result["error"]
@@ -403,6 +409,6 @@ class TestUndoingACheckInOnTheWrongDay:
     def test_refuses_an_incomplete_request(self, monkeypatch, market_id, email, date):
         self._collection(monkeypatch, [])
 
-        _result, status = AttendanceApi.undo_attendance(market_id, email, date)
+        _result, status = AttendanceApi.undo_attendance(at_the_door(market_id), email, date)
 
         assert status == 400

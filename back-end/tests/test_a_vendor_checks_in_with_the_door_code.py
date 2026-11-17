@@ -23,7 +23,7 @@ import app as app_module
 import db_config
 import history as History
 import sign_in_limits
-from conftest import stored_market
+from conftest import at_the_door, stored_market
 from datatypes import MarketPhase
 from test_every_write_records import Attendance, LiveMarkets
 from utils.application_token import generate_application_token
@@ -156,7 +156,8 @@ class TestACheckInRacingAnother:
         def an_organizer_taps_first(*_args, **_kwargs):
             # The organizer's tap inserts between this check-in's read and its insert.
             monkeypatch.setattr(world.attendance, "find_one_and_update", the_upsert)
-            AttendanceApi.record_attendance(MARKET, VENDOR, TODAY, "door@example.com")
+            AttendanceApi.record_attendance(
+                at_the_door(MARKET, "door@example.com"), VENDOR, TODAY)
             raise DuplicateKeyError("E11000 duplicate key error")
 
         monkeypatch.setattr(world.attendance, "find_one_and_update", an_organizer_taps_first)
@@ -177,7 +178,7 @@ class TestACheckInRacingAnother:
         monkeypatch.setattr(world.attendance, "find_one_and_update", refused)
 
         with pytest.raises(DuplicateKeyError):
-            AttendanceApi.record_attendance(MARKET, VENDOR, TODAY)
+            AttendanceApi.record_attendance(at_the_door(MARKET), VENDOR, TODAY)
         assert world.history.documents == []
 
 

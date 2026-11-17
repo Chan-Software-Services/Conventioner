@@ -12,12 +12,14 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 import api.discord_connection as DiscordConnection
+import api.market_actions as Actions
 import api.markets as MarketsApi
 import api.organizations as OrgsApi
 import assignment.lifecycle as Lifecycle
 import csv_import as CsvImport
 import csv_start as CsvStart
 import discord_client as Discord
+from conftest import let_in
 import history as History
 import public_map as PublicMap
 from datatypes import MarketPhase, VendorAssignmentResult
@@ -204,7 +206,7 @@ class TestDecliningAPossibleMatch:
         offered = {"applicationId": "app-1", "state": "not_found", "answer": "wren",
                    "possibleMatches": [{"username": "wren.okafor"}]}
         market = _connected_market(market_in, vendorStates=[offered])
-        interleave("api.markets._load_market_to_change", _move(market, MarketPhase.ARCHIVED))
+        interleave("api.markets._market_change", _move(market, MarketPhase.ARCHIVED))
 
         response = client.post(
             f"/markets/{market['id']}/discord/possible-matches/app-1/declined",
@@ -224,7 +226,7 @@ class TestTheDiscordCard:
         client = signed_in(ORGANIZER)
         market = _connected_market(market_in)
         theirs = "https://discord.gg/theirs"
-        interleave("api.markets._load_market_to_change", lambda: DiscordConnection.save(
+        interleave("api.markets._market_change", lambda: DiscordConnection.save(
             market["id"], {"inviteLink": theirs}, ORGANIZER))
 
         response = client.put(f"/markets/{market['id']}/discord",
@@ -239,7 +241,7 @@ class TestTheDiscordCard:
             self, discord, signed_in, market_in, interleave, real_db, market_records):
         client = signed_in(ORGANIZER)
         market = _connected_market(market_in)
-        interleave("api.markets._load_market_to_change", lambda: DiscordConnection.save(
+        interleave("api.markets._market_change", lambda: DiscordConnection.save(
             market["id"], {"roleId": OTHER_ROLE.id}, ORGANIZER))
 
         response = client.put(f"/markets/{market['id']}/discord",
@@ -259,7 +261,7 @@ class TestTheDiscordCard:
         market = market_in(MarketPhase.APPLICATIONS, intakeMode="form", applicationForm={
             "fields": [DISCORD_QUESTION], "essentialOptions": None}, discord=None)
         state = _started(client, market)
-        interleave("api.markets._load_market_to_change", lambda: _connect(
+        interleave("api.markets._market_change", lambda: _connect(
             other_tab, market, _started(other_tab, market), guild=OTHER_GUILD))
 
         response = _connect(client, market, state)
@@ -288,7 +290,7 @@ class TestThePublicMapCard:
         another setting even, is never written over by one made from the copy before it."""
         client = signed_in(ORGANIZER)
         market = _mapped_market(market_in)
-        interleave("api.markets._load_market_to_change", lambda: PublicMap.save_settings(
+        interleave("api.markets._market_change", lambda: PublicMap.save_settings(
             market["id"], {"websiteQuestion": "website"}, ORGANIZER))
 
         response = client.put(f"/markets/{market['id']}/public-map", json={"enabled": True})
@@ -306,7 +308,7 @@ class TestThePublicMapCard:
         client = signed_in(ORGANIZER)
         market = market_in(MarketPhase.MARKET_DAYS, intakeMode="form", applicationForm={
             "fields": MAP_QUESTIONS, "essentialOptions": None}, publicMap=None)
-        interleave("api.markets._load_market_to_change", lambda: PublicMap.save_settings(
+        interleave("api.markets._market_change", lambda: PublicMap.save_settings(
             market["id"], {"nameQuestion": "website"}, ORGANIZER))
 
         response = client.put(f"/markets/{market['id']}/public-map",
@@ -320,7 +322,7 @@ class TestThePublicMapCard:
             self, signed_in, market_in, interleave, real_db, market_records):
         client = signed_in(ORGANIZER)
         market = _mapped_market(market_in)
-        interleave("api.markets._load_market_to_change", _move(market, MarketPhase.ARCHIVED))
+        interleave("api.markets._market_change", _move(market, MarketPhase.ARCHIVED))
 
         response = client.put(f"/markets/{market['id']}/public-map", json={"enabled": True})
 
@@ -401,7 +403,8 @@ class TestTheCsvStart:
 
         def another_start():
             landed.append(CsvStart.confirm(
-                _stored(real_db, market), {**body, "csvContent": other}, ORGANIZER, None))
+                _stored(real_db, market), {**body, "csvContent": other},
+                let_in(Actions.IMPORT_APPLICATIONS, market["id"], ORGANIZER), None))
 
         interleave("app._importing_market_document", another_start)
 
@@ -485,7 +488,7 @@ class TestAPermissionRow:
             self, signed_in, market_in, interleave, real_db, market_records):
         client = signed_in(ORGANIZER)
         market = market_in(MarketPhase.APPLICATIONS, permissions={ROW: _owners_row("owner")})
-        interleave("api.markets._load_market_to_change", lambda: MarketsApi.set_permission(
+        interleave("api.markets._market_change", lambda: MarketsApi.set_permission(
             market["id"], ROW, "editor", ORGANIZER))
 
         response = client.delete(f"/markets/{market['id']}/permissions")
@@ -501,7 +504,7 @@ class TestAPermissionRow:
         org_id = OrgsApi.create_organization(ORGANIZER, "Fixture Organization")
         OrgsApi.set_default_permission(org_id, ROW, "editor", ORGANIZER)
         market = market_in(MarketPhase.APPLICATIONS, organizationId=org_id)
-        interleave("api.markets._load_market_to_change", lambda: MarketsApi.set_permission(
+        interleave("api.markets._market_change", lambda: MarketsApi.set_permission(
             market["id"], ROW, "owner", ORGANIZER))
 
         response = client.post(f"/markets/{market['id']}/permissions/organization-default")
