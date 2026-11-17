@@ -15,8 +15,8 @@ long is refused, so nobody can connect a market by sending someone a link.
 **The card is a manual tool, not part of the plan** (Daniel, Q10, Q19): no phase gates it, and it
 stays editable in every phase until the market is archived, unlike Market Setup's plan. Every
 write asks the table's "Connect Discord and give roles" row (Admin by default, Q19: "admins only"),
-loads through ``_load_market_to_change`` so an archived market refuses it, and records its change
-in the market's history, the fields before and after.
+loads through ``_market_change`` so an archived market refuses it, and records its change in the
+market's history through the asking that let it in, the fields before and after.
 
 **"Check Discord" reads who is in the server** (E46/F01/S03), from the Vendors page, under the same
 row: it lists the server's members and matches each vendor's username, as the organizer reads it,
@@ -213,7 +213,7 @@ def start(market_id: str, requesting_user: str) -> Dict[str, str]:
     The state leads with the market's id, so the page Discord sends the person back to knows which
     market to post to and to return to; the random part is what is checked.
     """
-    MarketsApi._load_market_to_change(market_id, requesting_user, Actions.CONNECT_DISCORD)
+    MarketsApi._market_change(market_id, requesting_user, Actions.CONNECT_DISCORD)
     values = Discord.required_credentials()
     state = f"{market_id}.{secrets.token_urlsafe(24)}"
     session[SESSION_KEY] = {
@@ -229,7 +229,8 @@ def connect(market_id: str, code: Optional[str], state: Optional[str], requestin
     first text question whose label names Discord, as a market started from a Google Form with a
     "Discord Username" question has (Q12).
     """
-    market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.CONNECT_DISCORD)
+    change = MarketsApi._market_change(market_id, requesting_user, Actions.CONNECT_DISCORD)
+    market = change.market
     values = Discord.required_credentials()
     started = session.pop(SESSION_KEY, None)
     if not _state_is_this_sessions(started, market_id, requesting_user, state) or not code:
@@ -245,7 +246,7 @@ def connect(market_id: str, code: Optional[str], state: Optional[str], requestin
             else _discord_question(market)
         ),
     })
-    _write(market, before, after, History.DISCORD_CONNECTED, requesting_user)
+    _write(market, before, after, History.DISCORD_CONNECTED, change.asked)
 
 
 def roles(market_id: str, requesting_user: str) -> List[Dict[str, Any]]:
@@ -264,7 +265,8 @@ def save(market_id: str, body: Dict[str, Any], requesting_user: str) -> None:
     A refusal is logged in its own words, which our code wrote with nothing sent in them, so the log
     says which one it was and never holds what the organizer typed.
     """
-    market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.CONNECT_DISCORD)
+    change = MarketsApi._market_change(market_id, requesting_user, Actions.CONNECT_DISCORD)
+    market = change.market
     try:
         before = _connection(market)
         update = _card_update(market, before, body)
@@ -272,7 +274,7 @@ def save(market_id: str, body: Dict[str, Any], requesting_user: str) -> None:
         logger.warning("Discord card save refused for market %s: %s", market.id, refusal.message)
         raise
     _write(market, before, before.model_copy(update=update), History.DISCORD_SETTINGS,
-           requesting_user)
+           change.asked)
 
 
 def _card_update(
@@ -323,7 +325,8 @@ def check(market_id: str, requesting_user: str) -> Dict[str, Any]:
     records nothing, and answers ``CHECK_TOO_SLOW``.
     """
     deadline = Discord.clock() + MEMBERS_READ_SECONDS
-    market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.CONNECT_DISCORD)
+    change = MarketsApi._market_change(market_id, requesting_user, Actions.CONNECT_DISCORD)
+    market = change.market
     before = _connection(market)
     question = _username_question(market, before)
 
@@ -342,8 +345,8 @@ def check(market_id: str, requesting_user: str) -> Dict[str, Any]:
 
     counts = _counts(STATES, (vendor.state for vendor in states))
     changed = _changed_states(before, states, vendors)
-    History.record(
-        market.id, requesting_user, Actions.CONNECT_DISCORD, kind=History.DISCORD_CHECKED,
+    change.asked.record(
+        kind=History.DISCORD_CHECKED,
         vendors=[email for _, email in changed],
         subject={"application_ids": [app_id for app_id, _ in changed]},
         # Each vendor's address beside their state, by application id: ``vendors`` leaves out an
@@ -371,7 +374,8 @@ def give_roles(market_id: str, requesting_user: str) -> Dict[str, Any]:
     """
     started = Discord.clock()
     deadline = started + ROLE_RUN_SECONDS
-    market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.CONNECT_DISCORD)
+    change = MarketsApi._market_change(market_id, requesting_user, Actions.CONNECT_DISCORD)
+    market = change.market
     before = _connection(market)
     if not before.role_id:
         raise BadRequestError(NO_ROLE)
@@ -441,8 +445,8 @@ def give_roles(market_id: str, requesting_user: str) -> Dict[str, Any]:
     changed = _changed_states(before, found, vendors) if written else []
     named = {app_id for app_id, _ in changed} | set(given)
     named_vendors = [(app_id, email) for app_id, email, *_ in vendors if app_id in named]
-    History.record(
-        market.id, requesting_user, Actions.CONNECT_DISCORD, kind=History.DISCORD_ROLES_GIVEN,
+    change.asked.record(
+        kind=History.DISCORD_ROLES_GIVEN,
         vendors=[email for _, email in named_vendors],
         subject={"application_ids": [app_id for app_id, _ in named_vendors]},
         detail={"role_name": role_name, "given": given,
@@ -689,12 +693,12 @@ def decline_match(
     the vendor's info, not the check. Only a member the last check offered to this vendor may be
     declined.
     """
-    market = MarketsApi._load_market_to_change(
-        market_id, requesting_user, Actions.UPDATE_VENDOR_INFO)
+    change = MarketsApi._market_change(market_id, requesting_user, Actions.UPDATE_VENDOR_INFO)
+    market = change.market
     connection = _connection(market)
     if connection.username_question:
         VendorInfo.assert_may_update_what_the_assignment_or_prices_read(
-            market, [connection.username_question], requesting_user)
+            change, [connection.username_question])
     username = _string(body, "username")
     vendor = next((state for state in connection.vendor_states or []
                    if state.application_id == application_id), None)
@@ -709,8 +713,9 @@ def decline_match(
 
     application = ApplicationsApi.find_application_by_id(vendor.application_id) or {}
     email = str(application.get(ApplicationsApi.APPLICANT_EMAIL_FIELD) or "").strip().lower()
-    History.record(
-        market.id, requesting_user, Actions.UPDATE_VENDOR_INFO,
+    # Under "Update a vendor's info" alone, as confirming records: the row a price group's
+    # question asks is a check.
+    change.asked.record(
         kind=History.DISCORD_MATCH_DECLINED, vendors=[email] if email else [],
         subject={"application_id": vendor.application_id},
         detail={"username": offered.username, "display_name": offered.display_name,
@@ -750,12 +755,13 @@ def disconnect(market_id: str, requesting_user: str) -> None:
     """Forget the server, its role and its invite link; keep the username question, which is about
     the market's form. The bot stays in the server until someone removes it there: another market
     may still use it."""
-    market = MarketsApi._load_market_to_change(market_id, requesting_user, Actions.CONNECT_DISCORD)
+    change = MarketsApi._market_change(market_id, requesting_user, Actions.CONNECT_DISCORD)
+    market = change.market
     before = market.discord
     if before is None or not before.guild_id:
         return
     after = DiscordConnection(username_question=before.username_question)
-    _write(market, before, after, History.DISCORD_DISCONNECTED, requesting_user)
+    _write(market, before, after, History.DISCORD_DISCONNECTED, change.asked)
 
 
 def _state_is_this_sessions(
@@ -818,11 +824,11 @@ def _is_invite_link(link: str) -> bool:
 
 def _write(
     market: Market, before: DiscordConnection, after: DiscordConnection, kind: str,
-    requesting_user: str,
+    asked: Actions.Asked,
 ) -> None:
-    """Write the card's change, holding each field it changes as the market was loaded with it, so
-    a change another tab saved to the same field meanwhile is not undone; a field it does not
-    change, saved meanwhile, stands beside it.
+    """Write the card's change, recorded through the asking that let it in, holding each field it
+    changes as the market was loaded with it, so a change another tab saved to the same field
+    meanwhile is not undone; a field it does not change, saved meanwhile, stands beside it.
 
     Raises:
         MarketChanged: the market moved, or a field this changes was changed, since it was
@@ -861,9 +867,8 @@ def _write(
                     convert_keys_to_camel_case(value))
         if update:
             write_market(market, update, holds=tuple(_discord_key(field) for field in changed))
-    History.record(market.id, requesting_user, Actions.CONNECT_DISCORD, kind=kind,
-                   detail=lambda: History.changes(_recorded(market, before),
-                                                  _recorded(market, after)))
+    asked.record(kind=kind, detail=lambda: History.changes(_recorded(market, before),
+                                                           _recorded(market, after)))
 
 
 def _recorded(market: Market, connection: DiscordConnection) -> Dict[str, Any]:

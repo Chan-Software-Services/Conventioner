@@ -245,10 +245,9 @@ def save_floorplan_to_market() -> Tuple[Any, int]:
     market = context.market
 
     # ── 2. Permission check ────────────────────────────────────────────
-    user_email = authenticated_email()
-    refused = Actions.refusal(Actions.CHANGE_SETUP, user_email, market, context.organization)
-    if refused:
-        return jsonify({"error": refused}), 403
+    asked = Actions.ask(Actions.CHANGE_SETUP, authenticated_email(), market, context.organization)
+    if asked.refused:
+        return jsonify({"error": asked.refused}), 403
     # It writes the plan, and an archived market's plan is part of its record (bug 30).
     refusal = MarketsApi.archived_refusal(market)
     if refusal:
@@ -307,14 +306,14 @@ def save_floorplan_to_market() -> Tuple[Any, int]:
                      revisions={MarketsApi.PLAN_REVISION_KEY: market.plan_revision})
     except MarketChanged:
         return jsonify({"error": STALE_LAYOUT}), 409
-    MarketsApi.release_removed_floorplans(market, prepared.removed_floorplans, user_email)
+    MarketsApi.release_removed_floorplans(market, prepared.removed_floorplans, asked)
     if held is not None and held.image_gridfs_id \
             and held.image_gridfs_id != floorplan.image_gridfs_id:
         delete_image(held.image_gridfs_id)
     location = next(
         (place.name for place in plan.locations if place.id == floorplan.location_id), None)
-    History.record(
-        market_id, user_email, Actions.CHANGE_SETUP, kind=History.FLOORPLAN,
+    asked.record(
+        kind=History.FLOORPLAN,
         subject={"floorplan_id": floorplan.id, "location": location},
         detail=lambda: Layout.describe_change(held, floorplan, plan) or None,
     )

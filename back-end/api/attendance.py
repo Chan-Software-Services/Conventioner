@@ -17,7 +17,6 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 import api.applications as ApplicationsApi
-import api.market_actions as Actions
 import history as History
 import phase_record as PhaseRecord
 from assignment.utils import convert_keys_to_camel_case, convert_keys_to_snake_case
@@ -195,10 +194,11 @@ def check_ins_of(market_id: str, vendor_email: str) -> Dict[str, Optional[str]]:
 
 
 def undo_attendance(
-    market_id: str, vendor_email: str, date: str, undone_by: Optional[str] = None,
-    via: Optional[str] = None,
+    recorder: History.Recorder, vendor_email: str, date: str, via: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], int]:
-    """Remove a check-in a vendor made on the wrong day.
+    """Remove a check-in a vendor made on the wrong day, on ``recorder``'s market, recorded
+    through it as its actor: the organizer's "Check vendors in" asking, or the vendor's own undo's
+    unasked recorder, with no actor (``_record_door``).
 
     A two-day market offered an identical button per date and no undo, so one mis-tap recorded a
     vendor as present on a day they were not. Deleting the record is the whole operation: a
@@ -209,6 +209,7 @@ def undo_attendance(
     read and the delete gets the record back (``_closed_since``): the archived record of who came
     stays whole.
     """
+    market_id = recorder.market_id
     if not isinstance(market_id, str) or not market_id.strip():
         return {"error": "market_id is required"}, 400
     if not isinstance(vendor_email, str) or not vendor_email.strip():
@@ -231,19 +232,19 @@ def undo_attendance(
     if closed:
         _take_back_a_delete(removed)
         return closed
-    _record_door(market_id, vendor_email, date, undone_by, via, History.CHECK_IN_UNDONE, False)
+    _record_door(recorder, vendor_email, date, via, History.CHECK_IN_UNDONE, False)
     return {"message": "Check-in undone"}, 200
 
 
 def record_attendance(
-    market_id: str, vendor_email: str, date: str, checked_in_by: Optional[str] = None,
-    via: Optional[str] = None,
+    recorder: History.Recorder, vendor_email: str, date: str, via: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], int]:
-    """Upsert an attendance record for (market_id, vendor_email, date), at the table the vendor
-    holds that day.
+    """Upsert an attendance record for (``recorder``'s market, vendor_email, date), at the table
+    the vendor holds that day, recorded through ``recorder`` (``_record_door``).
 
-    ``checked_in_by`` is the organizer who checked the vendor in at the door (E29/F01/S02), and
-    None when the vendor did it themselves, when ``via`` says how (``VIA_DOOR_CODE``). Both are
+    ``checked_in_by`` is ``recorder``'s actor: the organizer who checked the vendor in at the door
+    (E29/F01/S02), through their "Check vendors in" asking, and None when the vendor did it
+    themselves, through the unasked door, when ``via`` says how (``VIA_DOOR_CODE``). Both are
     written either way, so a vendor checking in again after an organizer did is not still credited
     to the organizer, nor an organizer's check-in after a scan to the door code. ``table_code`` is
     the seat's at the moment of the check-in (T318), so a vendor moved or freed after reads as here
@@ -257,6 +258,7 @@ def record_attendance(
     (``day_has_begun``); and a market archived between that read and the write gets the write taken
     back, with no entry (``_closed_since``).
     """
+    market_id, checked_in_by = recorder.market_id, recorder.actor
     if not isinstance(market_id, str) or not market_id.strip():
         return {"error": "market_id is required"}, 400
     if not isinstance(vendor_email, str) or not vendor_email.strip():
@@ -300,8 +302,7 @@ def record_attendance(
         return closed
     # Only a vendor not yet here is a change: checking in again is a new time, not a new arrival.
     if replaced is None:
-        _record_door(
-            market_id, vendor_email, target_date, checked_in_by, via, History.CHECKED_IN, True)
+        _record_door(recorder, vendor_email, target_date, via, History.CHECKED_IN, True)
     return {"message": "Checked in", "checkedInAt": checked_in_at}, 200
 
 
@@ -338,11 +339,12 @@ def _take_back_a_delete(removed: Dict[str, Any]) -> None:
 
 
 def _record_door(
-    market_id: str, vendor_email: str, date: str, by: Optional[str], via: Optional[str],
-    kind: str, here: bool,
+    recorder: History.Recorder, vendor_email: str, date: str, via: Optional[str], kind: str,
+    here: bool,
 ) -> None:
-    """A check-in or its undo, by the organizer who made it; or the vendor's own, on their vendor
-    page, with no actor beside the vendor it names and ``via`` saying how (``VIA_DOOR_CODE``,
+    """A check-in or its undo, by the organizer who made it, through the "Check vendors in" row
+    their request asked; or the vendor's own, on their vendor page, through the unasked door with
+    no actor beside the vendor it names and ``via`` saying how (``VIA_DOOR_CODE``,
     ``VIA_VENDOR_PAGE``).
 
     An entry written before the vendor page carries ``via: "check_in_page"``: the public check-in
@@ -350,9 +352,8 @@ def _record_door(
     word it.
     """
     vendor = normalized_email(vendor_email)
-    History.record(
-        market_id, by, Actions.CHECK_IN, kind=kind, vendors=[vendor],
-        subject={"date": date.strip()},
+    recorder.record(
+        kind=kind, vendors=[vendor], subject={"date": date.strip()},
         detail=lambda: {**History.changes({"checked_in": not here}, {"checked_in": here}),
                         **({"via": via} if via else {})},
     )

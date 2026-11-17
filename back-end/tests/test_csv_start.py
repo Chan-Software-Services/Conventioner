@@ -12,10 +12,12 @@ import re
 
 import pytest
 
+import api.market_actions as Actions
 import csv_import as CsvImport
 import csv_proposal as CsvProposal
 import csv_start as CsvStart
 import essential_fields as EssentialFields
+from conftest import let_in
 
 CORPUS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_data", "google_forms")
 YEARS = {"days-as-one-question": 2023, "four-day-grid": 2024, "no-timestamp": 2025,
@@ -251,7 +253,8 @@ def test_a_legacy_draft_with_no_phase_is_written_under_its_own_shape(monkeypatch
     csv_text = _csv("five-day-grid")
 
     body, status = CsvStart.confirm(
-        doc, {"csvContent": csv_text, "year": YEARS["five-day-grid"]}, "owner@example.com", None)
+        doc, {"csvContent": csv_text, "year": YEARS["five-day-grid"]},
+        let_in(Actions.IMPORT_APPLICATIONS, doc["id"], "owner@example.com"), None)
 
     assert (body, status) == ({"written": True}, 200)
     assert "phase" not in markets.doc

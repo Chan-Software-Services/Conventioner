@@ -56,7 +56,7 @@ class TestAFormSaveCrossingOpenApplications:
             self, signed_in, market_in, interleave, real_db, market_records):
         client = signed_in(ORGANIZER)
         market = _a_form_market(market_in)
-        interleave("api.markets._load_market_to_change", _move(market, MarketPhase.APPLICATIONS))
+        interleave("api.markets._market_change", _move(market, MarketPhase.APPLICATIONS))
 
         response = client.put(f"/markets/{market['id']}/application-form",
                               json={"fields": [SHOP, WEBSITE], "formRevision": 0})
@@ -77,7 +77,7 @@ class TestAFormSaveCrossingTheFirstApplication:
         market = _a_form_market(market_in)
         opened = _move(market, MarketPhase.APPLICATIONS)
         freeze = _first_application_freezes(real_db, market)
-        interleave("api.markets._load_market_to_change", lambda: (opened(), freeze()))
+        interleave("api.markets._market_change", lambda: (opened(), freeze()))
 
         response = client.put(f"/markets/{market['id']}/application-form",
                               json={"fields": [SHOP, WEBSITE], "formRevision": 0})
@@ -97,7 +97,7 @@ class TestAFormSaveCrossingTheFirstApplication:
         frozen offering tells the save it crossed it: the phase never moved."""
         client = signed_in(ORGANIZER)
         market = _a_form_market(market_in, intakeMode="csv")
-        interleave("api.markets._load_market_to_change", _first_application_freezes(real_db, market))
+        interleave("api.markets._market_change", _first_application_freezes(real_db, market))
 
         response = client.put(f"/markets/{market['id']}/application-form",
                               json={"fields": [SHOP, WEBSITE], "formRevision": 0})

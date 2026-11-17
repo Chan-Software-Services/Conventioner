@@ -128,9 +128,11 @@ def served(
 
 
 def choose(
-    market: Market, organization: Optional[Organization], reviewers: List[MarketPerson], by: str,
+    market: Market, organization: Optional[Organization], reviewers: List[MarketPerson],
+    asked: Actions.Asked,
 ) -> Chosen:
-    """Make ``reviewers`` the market's review team and deal every open application among them.
+    """Make ``reviewers`` the market's review team and deal every open application among them,
+    recording both through ``asked``, the Choose reviewers asking its caller was let in on.
 
     Holding the market, the team is written with its turn reset, then the pool is read and dealt
     round robin from the first able reviewer (``eligible``) in arrival order, and the turn is
@@ -167,7 +169,7 @@ def choose(
     if not _hold(market.id, deal, waits=CHOICE_WAITS):
         raise ConflictError(DEALING_BUSY)
     try:
-        return _choose_holding(market, organization, reviewers, by, deal)
+        return _choose_holding(market, organization, reviewers, asked, deal)
     finally:
         # Every let-go looks again, a failed change's too: an arrival that found the market held
         # left its application to whoever held it.
@@ -176,8 +178,8 @@ def choose(
 
 
 def _choose_holding(
-    market: Market, organization: Optional[Organization], reviewers: List[MarketPerson], by: str,
-    deal: str,
+    market: Market, organization: Optional[Organization], reviewers: List[MarketPerson],
+    asked: Actions.Asked, deal: str,
 ) -> Chosen:
     """``choose``'s writes, made while it holds the market: the team as it stands now is read
     again, since another choice may have landed between the request's read and the hold.
@@ -203,8 +205,8 @@ def _choose_holding(
             _TURN: 0,
             _UNFINISHED: {"removed": sorted(removed)},
         }})
-        History.record(
-            market.id, by, Actions.CHOOSE_REVIEWERS, kind=History.REVIEWERS,
+        asked.record(
+            kind=History.REVIEWERS,
             detail=lambda: History.changes(
                 {"reviewers": _addresses(before.reviewers)}, {"reviewers": _addresses(chosen)}))
 
@@ -233,8 +235,8 @@ def _choose_holding(
     turn = len(pool) if able else 0
 
     if moved:
-        History.record(
-            market.id, by, Actions.CHOOSE_REVIEWERS, kind=History.DEALT,
+        asked.record(
+            kind=History.DEALT,
             vendors=[doc.get("applicant_email") for doc, *_rest in moved],
             subject={"application_ids": [doc["id"] for doc, *_rest in moved]},
             detail=lambda: {
@@ -336,6 +338,14 @@ def _settle(market: Market, organization: Optional[Organization], again: bool = 
     return dealt
 
 
+#: Why the deal of a waiting application is recorded with no request asking its row: the write
+#: that marked it asked its own (an applicant's save asks none), and stored it and its person beside
+#: the application, so whichever deal next holds the market records it under them, never its own.
+ARRIVALS_DEAL_UNASKED = (
+    "an arriving application is dealt by whichever deal next holds the market, under the row and "
+    "the person the write it arrived by stored")
+
+
 class _Dealt(NamedTuple):
     """One waiting application a deal dealt: as it read it, whom it was dealt to before, as stored,
     and whom to now; a follow-up's owner before too, as the owner and the reviewer both become
@@ -377,7 +387,8 @@ def _deal_arriving(market: Market, organization: Optional[Organization], deal: s
     - with nobody able, an undecided one is left waiting, never let go (T277 P5).
 
     The turn is written once at the end. Records one entry per write they were marked by, under its
-    action and actor, each application's reviewer and a follow-up's owner before as stored."""
+    action and actor, through the unasked door (``ARRIVALS_DEAL_UNASKED``), each application's
+    reviewer and a follow-up's owner before as stored."""
     stored = markets_collection.find_one(live({"id": market.id})) or {}
     team = _team_of_document(stored)
     if not team.reviewers:
@@ -427,8 +438,10 @@ def _deal_arriving(market: Market, organization: Optional[Organization], deal: s
         marked = one.doc.get(ApplicationsApi.ARRIVING_FIELD) or {}
         by_write.setdefault((marked.get("actor"), marked.get("action")), []).append(one)
     for (actor, action), deals in by_write.items():
-        History.record(
-            market.id, actor, action or History.APPLY, kind=History.DEALT,
+        History.unasked(
+            market.id, actor, action or History.APPLY, because=ARRIVALS_DEAL_UNASKED,
+        ).record(
+            kind=History.DEALT,
             vendors=[one.doc.get("applicant_email") for one in deals],
             subject={"application_ids": [one.doc["id"] for one in deals]},
             detail=lambda deals=deals: {

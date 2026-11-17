@@ -6,10 +6,10 @@ describes:
   - back-end/api/markets.py#rejection_rules_lock_reason
   - back-end/api/markets.py#save_rejection_rules
   - back-end/api/applications.py#judgeable_applications
-  - back-end/application_status.py#is_judgeable
   - front-end/src/components/application/AutomaticRejections.vue
   - front-end/src/components/application/ChoiceConditions.vue
   - back-end/api/markets.py#may_overturn
+  - back-end/application_status.py#is_judgeable
 verified: 2026-11-17
 sources:
   - wayfinding/november-2026-dry-run/map

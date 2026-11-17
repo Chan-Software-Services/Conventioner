@@ -52,16 +52,16 @@ describes:
   - front-end/src/components/layout/LayoutSavedTypesDialog.vue
   - front-end/src/components/layout/LayoutSaveTypesDialog.vue
   - front-end/src/components/layout/LayoutPanelZones.vue
-  - front-end/src/components/layout/layoutZoneDraft.ts
   - front-end/src/components/layout/exportLayoutPng.ts
   - front-end/src/components/layout/LayoutExportDialog.vue
   - front-end/src/components/layout/LayoutToolCard.vue
   - front-end/src/components/layout/layoutTools.ts
-  - front-end/src/components/layout/layoutGroups.ts
-  - front-end/src/components/layout/layoutLength.ts
   - front-end/src/components/layout/layoutViewChoices.ts
   - front-end/src/components/daymap/DayMap.vue
   - front-end/src/components/daymap/dayMap.ts
+  - front-end/src/components/layout/layoutZoneDraft.ts
+  - front-end/src/components/layout/layoutGroups.ts
+  - front-end/src/components/layout/layoutLength.ts
 verified: 2026-11-17
 sources:
   - bug/38
@@ -388,7 +388,9 @@ The service is handed the parsed models' snake-cased dumps, so the aisle values 
 
 Every floorplan action asks its row of the table ([the market's actions](market-actions.md)) on the floorplan's market, the way saving a floorplan to a market always did.
 The roles are [what each role may do](../../business/rules/what-each-role-may-do.md) says, and a route that changes the floorplan keeps [an archived market is read-only](../../business/rules/an-archived-market-is-read-only.md).
-[`back-end/api/floorplans_access.py`](../../../back-end/api/floorplans_access.py) is the one place a floorplan route decides it: `market_refusal(market_id, action, edits=...)` asks on a market the request names, `image_refusal(gridfs_id, action, edits=...)` asks on the market an image was uploaded for, and each answers None or the refusal the route returns.
+[`back-end/api/floorplans_access.py`](../../../back-end/api/floorplans_access.py) is the one place a floorplan route decides it: `market_asking(market_id, action, edits=...)` asks on a market the request names, `image_asking(gridfs_id, action, edits=...)` asks on the market an image was uploaded for, and each answers the asking of its row (`Asked`) and no refusal when the caller may go on, else no asking and the refusal the route returns.
+A route that records its change records through that asking, as the image's delete does, so its entry is under the row its check let it through on ([the market's actions](market-actions.md#the-interface)); a route that records nothing asks with `market_refusal` or `image_refusal`, which answer the refusal alone.
+Saving a floorplan to a market asks Market Setup with `ask` itself, and records the layout's entry and hands the floorplans the plan releases through that asking.
 They answer in save's order: no market named 400, unknown market 404, unreadable market data 400, a person the row refuses 403 with its sentence, and, for a route that changes the floorplan (`edits`), an archived market 403.
 A route checks access right after it has read the id it is checked by, before the rest of its body or its image read.
 
@@ -494,7 +496,7 @@ The answer is `{floorplan, sections}`, the layout and the plan's sections as sto
 It holds the plan's revision its page read, which a layout's save counts, so Market Setup's autosave, which carries the whole working copy it read, is refused rather than putting back a layout saved since that page read the plan ([the plan's revision](market-write.md#the-plans-revision)).
 Every write of the plan runs `layout.derive_counts`, so a section of a location laid out in Draft stores the number of its layout's tables whatever count was sent, and a section of a location with no layout, or whose layout follows the plan, keeps its typed count.
 A plan write, or the CSV start, that would leave a section's count below a number its location's layout that follows the plan holds is refused 400 "<Section>'s layout holds table <n>. Remove it from the layout first." (`layout.count_refusal`), after the setup-settled sentence.
-A floorplan whose location is no longer one of the plan's goes with it: the write drops it, and `release_removed_floorplans` deletes its image by id once the write has landed and records `floorplan_removed`; the CSV start does the same after its write.
+A floorplan whose location is no longer one of the plan's goes with it: the write drops it, and `release_removed_floorplans` deletes its image by id once the write has landed and records `floorplan_removed` through the recorder it is passed, the plan write's or the layout save's asking of Market Setup; the CSV start does the same after its write, through the unasked door.
 A floorplan of no location, which only the beta saved, is kept and ignored by every reader until [`migrations/migrate_layouts.py`](../../../back-end/migrations/migrate_layouts.py) removes it.
 What of a layout settles on leaving draft is the seats of a layout started in Draft and the market's table types (`layout.settled_part`), never where a table stands: past draft the plan write refuses a change to them 400 through `setup_part`, and a layout's save 409 through `layout.settled_layout_refusal`, as above.
 Every writer of the plan, the plan write, a layout's save, the table types write and the CSV start, holds the plan's revision as read and counts it ([the plan's revision](market-write.md#the-plans-revision)), so none puts back what another wrote between its read and its write: a layout's save then answers 409 `STALE_LAYOUT`, and the others the one 409 "market changed".

@@ -24,7 +24,9 @@ import api.permissions as PermissionsApi  # noqa: E402
 import api.users as UsersApi  # noqa: E402
 import application_status as ReviewState  # noqa: E402
 import rejection_rules as Rules  # noqa: E402
-from conftest import client_market, complete_setup, sessions_load_through_get_user, stored_market  # noqa: E402
+from conftest import (  # noqa: E402
+    a_change_of, client_market, complete_setup, reviewing, sessions_load_through_get_user,
+    stored_market)
 from datatypes import (  # noqa: E402
     ApplicationForm, ApplicationStatus, MarketPhase, MarketRole, RejectionRule, VerdictGiver)
 
@@ -337,6 +339,29 @@ class TestTheHistory:
         actions = [entry["action"] for entry in market_records.history.documents]
         assert actions == ["give-verdicts", "change-verdicts"]
 
+    def test_a_verdict_read_decided_after_it_was_seen_open_is_refused_and_records_nothing(
+        self, client, market_records, monkeypatch,
+    ):
+        """An editor saw it open; another reviewer's verdict was read as it reached their request,
+        then undone before their write. The write is held to the application as read, which is not
+        what they saw, so it is refused and records nothing: never an entry under the change row
+        they may not take (review of T352's phase 2, finding 1)."""
+        _as(client, "editor@market.test")
+        seen = _seen(client.stored["open"])
+        read_decided = {**client.stored["open"], "status": APPROVED.value, "verdict_by": KAI,
+                        "verdict_at": "2026-10-03T00:00:00+00:00"}
+        find = ApplicantsApi.ApplicationsApi.find_application_by_id
+        reads = iter([read_decided])
+        monkeypatch.setattr(ApplicantsApi.ApplicationsApi, "find_application_by_id",
+                            lambda app_id: next(reads, None) or find(app_id))
+
+        response = client.put("/markets/market-1/applications/open/review",
+                              json={"status": REJECTED.value, "seen": seen})
+
+        assert response.status_code == 409, response.get_json()
+        assert client.stored["open"]["status"] == seen["status"]
+        assert market_records.history.documents == []
+
     def test_records_a_selection_that_changed_any_verdict_under_the_change_row(
         self, client, market_records,
     ):
@@ -405,8 +430,8 @@ class TestAWriteThatJudgesAgain:
 
     @pytest.fixture(autouse=True)
     def market(self, monkeypatch):
-        monkeypatch.setattr(MarketsApi, "_load_market_to_change",
-                            lambda *_a: _rules_market(NO_SHOW_RULE))
+        monkeypatch.setattr(MarketsApi, "_market_change",
+                            a_change_of(lambda: _rules_market(NO_SHOW_RULE)))
         # The rules' own write: a market built here has no stored document to hold.
         monkeypatch.setattr(MarketsApi, "write_market", lambda *_a, **_k: None)
 
@@ -423,7 +448,7 @@ class TestAWriteThatJudgesAgain:
     def test_the_form_save(self, ruled_out, holding, monkeypatch, role, status):
         without_it = _rules_market(NO_SHOW_RULE).model_copy(
             update={"application_form": ApplicationForm(fields=[])})
-        monkeypatch.setattr(MarketsApi, "_load_market_to_change", lambda *_a: without_it)
+        monkeypatch.setattr(MarketsApi, "_market_change", a_change_of(without_it))
         monkeypatch.setattr(MarketsApi, "prepared_application_form", lambda *_a: EMPTY_FORM)
         monkeypatch.setattr(MarketsApi, "write_market", _form_written)
         monkeypatch.setattr(MarketsApi, "load_market_context",
@@ -461,11 +486,11 @@ class TestAWriteThatJudgesAgain:
 
         assert MarketsApi.may_overturn("someone@market.test", market) is False
         if write == "rules":
-            monkeypatch.setattr(MarketsApi, "_load_market_to_change", lambda *_a: market)
+            monkeypatch.setattr(MarketsApi, "_market_change", a_change_of(market))
             MarketsApi.save_rejection_rules("market-1", [], "someone@market.test")
         elif write == "form":
             without_it = market.model_copy(update={"application_form": ApplicationForm(fields=[])})
-            monkeypatch.setattr(MarketsApi, "_load_market_to_change", lambda *_a: without_it)
+            monkeypatch.setattr(MarketsApi, "_market_change", a_change_of(without_it))
             monkeypatch.setattr(MarketsApi, "prepared_application_form", lambda *_a: EMPTY_FORM)
             monkeypatch.setattr(MarketsApi, "write_market", _form_written)
             monkeypatch.setattr(MarketsApi, "load_market_context",
@@ -476,7 +501,7 @@ class TestAWriteThatJudgesAgain:
             import api.vendor_info as VendorInfoApi
             from datatypes import MarketPerson
 
-            monkeypatch.setattr(MarketsApi, "_load_market_to_change", lambda *_a: market)
+            monkeypatch.setattr(MarketsApi, "_market_change", a_change_of(market))
             VendorInfoApi.update_vendor_info(
                 "market-1", "ruled-out", {"no_shows": True},
                 MarketPerson(user_id="user-someone", email="someone@market.test"))
@@ -506,7 +531,7 @@ def test_a_selection_skips_one_decided_since_it_was_seen_with_the_change_rows_se
     body, _ = ApplicantsApi.review_selection(
         "market-1", [("approved", ApplicantsApi.seen_from({"status": "open", "verdictAt": None}))],
         REJECTED, by=VerdictGiver(kind="person", user_id="u", email="e@market.test"),
-        change_refused=CHANGE_REFUSED)
+        reviewing=reviewing("market-1", "e@market.test", CHANGE_REFUSED))
 
     assert body == {"written": [], "skipped": [
         {"id": "approved", "email": "approved@example.com", "reason": CHANGE_REFUSED}]}
@@ -519,7 +544,7 @@ def test_the_selection_function_skips_decided_ones_with_the_reason_given(applica
     body, _ = ApplicantsApi.review_selection(
         "market-1", [("approved", ApplicantsApi.seen_from(_seen(applications.documents[0])))],
         REJECTED, by=VerdictGiver(kind="person", user_id="u", email="e@market.test"),
-        change_refused=CHANGE_REFUSED)
+        reviewing=reviewing("market-1", "e@market.test", CHANGE_REFUSED))
 
     assert body == {"written": [], "skipped": [
         {"id": "approved", "email": "approved@example.com", "reason": CHANGE_REFUSED}]}

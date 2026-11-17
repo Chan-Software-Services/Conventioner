@@ -42,7 +42,8 @@ def add_vendor(
 ) -> Tuple[Dict[str, Any], int]:
     """Record a vendor who never applied: their name, their address, their answers to the questions
     the price groups read (``answers``, ``{question key: answer}``), and who added them."""
-    market = MarketsApi._load_market_to_change(market_id, adder.email, Actions.ADD_VENDOR)
+    change = MarketsApi._market_change(market_id, adder.email, Actions.ADD_VENDOR)
+    market = change.market
     refused = MarketsApi.adding_refusal(market.phase)
     if refused:
         raise AddVendorRefused(refused)
@@ -61,8 +62,8 @@ def add_vendor(
         raise AddVendorRefused(
             f"{address} already has an application in this market. Assign them on the Assignments page."
         )
-    History.record(
-        market_id, adder.email, Actions.ADD_VENDOR, vendors=[address],
+    change.asked.record(
+        vendors=[address],
         subject={"application_id": application.id},
         detail=lambda: History.changes(
             {}, {"name": name, "status": application.status.value, "answers": answers}),

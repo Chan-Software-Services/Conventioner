@@ -22,6 +22,9 @@ describes:
   - back-end/api/markets.py#hand_on_market
   - back-end/tests/test_handing_a_market_on.py
   - back-end/tests/real_mongo/test_handing_a_market_on_on_the_server.py
+  - back-end/api/markets.py#_market_change
+  - back-end/tests/test_a_change_records_under_the_row_it_asked.py
+  - back-end/tests/test_only_an_asking_writes_a_markets_history.py
 verified: 2026-11-17
 sources:
   - E39
@@ -54,6 +57,7 @@ sources:
   - T283
   - T315
   - T422
+  - T352
 ---
 
 # The market's actions
@@ -75,6 +79,20 @@ The person's role is the one `get_user_market_role` resolves (the market's own a
 `role_refusal(row, role, rows, chosen)` asks a row of a role already resolved, on a market holding `rows`, for the market read, which resolves the person's role once, and the markets list, which resolves each entry's role from the market and the organization its memo holds (`_summary_role`) and passes the rows of the market as the read parses it; both rank through `role_reaches`, the one ranking.
 Both ask the read row the same way, through `read_refused` in [`back-end/api/markets.py`](../../../back-end/api/markets.py), so the list leaves out every market the read answers as absent ([the organization document](../data/organization-document.md#what-a-person-may-do-on-a-market)).
 
+**A write asks its row with `ask`, and records its change through the answer** (T105-9): `ask(row, user_email, market, organization)` is an `Asked` holding the row, the market's id, the person as the actor, and `refused`, which is what `refusal` answers, since `ask` asks through it.
+`Asked.record(*, kind=None, vendors=(), subject=None, detail)` writes the change's entry into [the market's history](../data/history.md) under that row and as that person, through the history's private writer `History._record`, so it never raises for the entry and builds the subject and the detail under its guard.
+**A change records under the row it asked** ([ADR 0038](../../adr/0038-a-change-records-under-the-row-it-asked.md)): `Asked.record`, and for the few records no request asks the history's `unasked` door, are the only ways a change a row asks is recorded on a market, beside an applicant's own `record_applicant`, so the history and the table cannot disagree on what a change was let through on.
+Called on an `Asked` that was refused it raises `RecordedARefusal`, an `AssertionError`: a refused write raises before it writes anything, so a record of one is a programming error, answered to no client.
+`_market_change(market_id, user, row)` in [`back-end/api/markets.py`](../../../back-end/api/markets.py) loads a market for a write and asks its row, and returns a `MarketChange` of the market, the organization it read, and the `Asked`; it is not found, refused as an unreadable market, refused in the row's words, then refused as archived whoever may, in that order.
+Every write of the markets module loads through it and records through its `Asked`, but for the role writes and the transfer of ownership, which load the market themselves since an archived market still takes them, and ask their rows with `ask`; a move (`take_move`), which records through the recorder its caller passes; a market's deletion, which asks its row with `refusal` and records in the organization's history; and a market's creation, which records in the organization's history (T352).
+So does every write of the placements, the payments and the organizer's door, each handing its `Asked` to the helpers that record for it: the history's placement writers, payments' `assignment_written`, `keep_freed_line` and `deduct_freed_day`, and attendance's `record_attendance` and `undo_attendance`; a free asked to deduct asks "Change the amount owed" with `ask` too, and records the deduction through that asking.
+The routes of `app.py` that check a row and leave the write to another module ask it with `ask` and hand that module the `Asked`: every review write the giving row's (`_reviewer_on`, held in its `Reviewer`), a verdict and a selection's the change row's too (`_reviewing`, the applicants module's `Reviewing`, whose entry goes through the one the write took), the import and the start the import row's (`_importing_market_document`, held in its `ImportingMarket`), and publishing results and stopping applications their own; the markets module hands the Choose reviewers asking to `review_team.choose`.
+So does every write of the Discord connection, vendor info, added vendors and the table types; the floorplan routes ask with the floorplans access module's `market_asking` or `image_asking`, which answer the `Asked` their delete records through, and saving a floorplan to a market asks with `ask`.
+A write that asks a second row only to check it, as vendor info and the Discord match's decline ask "Update info the assignment or price reads" of an answer the assignment or a price reads, asks it with `refusal` of the person and organization its change let in, and records its one entry through the first row's asking.
+`_market_change` is the one loader for a change; the two it replaced, which returned the market without the asking, are gone (T352).
+[`back-end/tests/test_a_change_records_under_the_row_it_asked.py`](../../../back-end/tests/test_a_change_records_under_the_row_it_asked.py) pins `ask` against `refusal` for every row and role, the entry `Asked.record` writes, the refused record's error, `_market_change`'s refusals and their order, the rules' asking below, that a move is recorded through the recorder its caller passes `take_move`, that a verdict records through the changing row's asking exactly when it wrote a decided application, that a change of reviewers records under the asking it is given and nothing for a refused one, and that each placement writer records under the row of the asking it is given, and nothing for a refused one.
+[`back-end/tests/test_only_an_asking_writes_a_markets_history.py`](../../../back-end/tests/test_only_an_asking_writes_a_markets_history.py) reads every server module and fails one but the history and this module that uses the history's private writers or its collection, opens the unasked door outside the functions it lists, or builds a recorder by hand, each with its reason ([the market's history](../data/history.md)).
+
 **Being chosen as a reviewer passes the giving row** (E38/F07/S03, [ADR 0020](../../adr/0020-an-application-is-dealt-to-one-reviewer.md)): `refusal` and `role_refusal` answer None for `give-verdicts` to someone its role refuses when they are a chosen reviewer and their role reaches `review-when-chosen`.
 `refusal` reads it off the market's team by address (`is_chosen`); `role_refusal` takes it as `chosen`, which the market read passes once and the markets list once for each entry (`_listed`), both from the reader's address, so a card answers the giving row as the market's page does.
 A row on top of the giving row asks it with the same `chosen`, so a chosen Viewer is refused a change of verdict in the change row's own words.
@@ -93,20 +111,21 @@ A switch row (on or off rather than a role) arrives with the first story that ne
 ## The rules of a market's life keep their place
 
 The table says only who may.
-The rules of a market's life stay where they were and refuse whoever may: an archived market refuses every change (`archived_refusal`, and `_load_market_to_change` for every write that loads through it), verdicts settle on entering assignment (`verdict_refusal`), a vendor is added from Assignment on (`adding_refusal`), tables are allocated only in Assignment (`assign_refusal`), and applications are stopped and taken again only on a market whose vendors apply on its page, in Applications (`applications_stop_refusal`, served as `applicationsStopReason`).
-Each check keeps the order it had, so every route answers each person as it did before the table: a write that loads through `_load_market_to_change`, `market_refusal`, `_importing_market_document`, `save_floorplan_to_market`, publish-results and the applications stop ask the row first and the archived rule after it; `verdict_refusal` asks the archived rule first.
+The rules of a market's life stay where they were and refuse whoever may: an archived market refuses every change (`archived_refusal`, and `_market_change` for every write that loads through it), verdicts settle on entering assignment (`verdict_refusal`), a vendor is added from Assignment on (`adding_refusal`), tables are allocated only in Assignment (`assign_refusal`), and applications are stopped and taken again only on a market whose vendors apply on its page, in Applications (`applications_stop_refusal`, served as `applicationsStopReason`).
+Each check keeps the order it had, so every route answers each person as it did before the table: a write that loads through `_market_change`, `market_refusal`, `_importing_market_document`, `save_floorplan_to_market`, publish-results and the applications stop ask the row first and the archived rule after it; `verdict_refusal`, given the giving row's asking, answers the archived rule first.
 
 ## Each route's row
 
 **A verdict on an application already approved or rejected asks two rows**: the giving row at `_reviewer_on`, and the change row of each application it writes (E38/F06/S01); what the reviewer saw (`seen`) says which: one they saw undecided gives, held on that status, so a verdict landing between their look and the write is the 409 it always was ([what each role may do](../../business/rules/what-each-role-may-do.md#where-it-is-kept)).
 
 **Taking a role asks both roles rows first**: `DELETE /markets/:id/roles/<user_id>` (`remove_market_role`) asks the Editor-and-Viewer row and the Admin row before it looks at the person, so someone both refuse reads the Editor-and-Viewer row's refusal whoever the person is; then it answers someone holding no role as gone, refuses taking the only owner, and asks the row of the role taken.
+Each role write records through the asking of the row that gives the role (`_record_role`), among the rows its check asked: the Admin row when an Admin or Owner role is either side of the change.
 
 **A write of the plan asks two rows**: its own row always, and the Assignment row too when the plan changes the assignment rules, which ride in it; restating them asks only its own row.
 The plan write's own row is Market Setup, and the start from a CSV's is the import's.
 A market with no setup yet holds the rules a new plan starts with (`assignment_rules` in [what an assignment was made from](made-from.md)), so a first plan that keeps them asks only the write's own row.
-Both ask the Assignment row through one function, `ask_assign_if_the_rules_change`, which takes the market, the plan `prepared_plan` parsed, the requester and the organization, and raises the row's refusal as a 403.
-`save_plan` passes the organization its load read to ask Market Setup (`_load_market_and_organization_to_change`), and the start's confirm the one `_importing_market_document` read to ask the import's row ([the CSV proposal and start](csv-proposal-and-start.md#sharp-edges)).
+Both ask the Assignment row through one function, `ask_assign_if_the_rules_change`, which takes the market, the plan `prepared_plan` parsed, the requester and the organization, raises the row's refusal as a 403, and returns the Assignment row's `Asked` when the plan changes the rules, None when it changes none, so the rules' entry can be recorded only through the asking that let it in.
+`save_plan` passes the organization its load read to ask Market Setup (`_market_change`), and records the rules' entry through the Assignment row's `Asked` it returned, so a restated plan asks and records only Market Setup's; the start's confirm passes the one `_importing_market_document` read to ask the import's row ([the CSV proposal and start](csv-proposal-and-start.md#sharp-edges)).
 
 One block per row, in the `ACTIONS` order: a new action is a block in its place in that order, and a new route or caller one line in its action's "Asked by" list ([two features never share a line](../conventions/two-features-never-share-a-line.md#the-markets-actions)).
 
@@ -202,7 +221,7 @@ Default: Admin.
 
 Asked by:
 
-- on top of the row above, `PUT .../review` and `POST .../verdicts` of each application already approved or rejected (`_change_refused`, then `review_application` and `review_selection`)
+- on top of the row above, `PUT .../review` and `POST .../verdicts` of each application already approved or rejected (`_reviewing`, then `review_application` and `review_selection`)
 - whether a write that judges the automatic rejections again returns a rule's rejection to open (`may_overturn`: the rules save, the form save, updating a vendor's info, an import)
 - on screen, One by one's "Approve instead" and "Reject instead" and a decided card's verdicts, and the All view's tick, Select all and drawer verdicts on a decided row, show by its answer
 - the form tab's and the import's lines name who may by the row's role (`whoMayTake`)
@@ -419,7 +438,7 @@ Only the owner's write stores a row, so neither happens unless a document was ch
 Manage market's Permissions dialog shows it ([setting who may do what](../../business/flows/ending-and-managing-a-market.md#l3a-set-who-may-do-what)); a control asks `actionRefusals`, never this.
 
 **The owner's writes alone**: `PUT /markets/:id/permissions/<action>` with `{"role": "admin"}` sets the row (`set_permission`), `DELETE` on the same path returns it to its built-in default (`reset_permission`), `DELETE /markets/:id/permissions` returns every row the market holds to its default in one write (`reset_permissions`, E39/F01/S04), and `POST /markets/:id/permissions/organization-default` copies the organization's default again (`copy_organization_default`, [below](#the-organizations-default)); each answers the market's table.
-All four load through `_load_market_to_change` with the fixed row `change-the-table`, so anyone but the market's one owner is refused with "Only the market's owner may change who may do what on this market." (an organization's owner and admins hold Admin, never Owner), and so is an archived market, in the archived rule's words.
+All four load through `_market_change` with the fixed row `change-the-table`, and record through its asking, so anyone but the market's one owner is refused with "Only the market's owner may change who may do what on this market." (an organization's owner and admins hold Admin, never Owner), and so is an archived market, in the archived rule's words.
 Then the row: one the table does not have is "This market's table has no such row.", a fixed one "Who may take the row "<label>" is fixed, so it cannot be changed.", and a role other than the four stored values is "A row's role is one of viewer, editor, admin or owner."; every refusal is a 400 or 403 with its sentence, and stores and records nothing.
 Setting the role a row already asks, resetting a row the market does not hold, or resetting a market that holds no row it can read, stores and records nothing.
 Setting writes `permissions.<action>` to `{role, source: market}`, and resetting unsets it, whether it was changed here or copied from the organization; resetting every row unsets exactly the rows it returns, in one write, so a stored row this build cannot read stays as the per-row reset leaves it, and is not in the entry.
@@ -471,6 +490,7 @@ The search cannot see a raw read of `market.roles` or `organization.admins`: com
 The same file pins every row's default, label, group and fixed flag against the epic's table, and for each row that its default role may, that every role above may, and that the role below is refused with its sentence; and which row each loader-backed write and read asks.
 
 **A test that fakes who may patches `user_has_permission` or `Actions.refusal`**: the first still sees the role the row asks on the market (its default unless the market holds the row), so a fake that answers by role keeps working.
+`ask` asks through `Actions.refusal` as the module holds it, so a patch of `refusal` answers `ask` and `_market_change` too, and `test_every_write_records.py`'s spy on it sees a write that asks through `ask`.
 
 ## Why
 

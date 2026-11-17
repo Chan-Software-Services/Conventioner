@@ -50,7 +50,7 @@ def markets(client, organization, monkeypatch):  # noqa: F811
         update_one=lambda *_args, **_kwargs: None)})
     monkeypatch.setattr(MarketsApi, "_organization_default_rows", lambda _org: {})
     monkeypatch.setattr(History, "record_for_organization", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(History, "record", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(History, "_record", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(PermissionsApi, "user_has_permission", lambda *_args, **_kwargs: True)
     return collection
 

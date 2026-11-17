@@ -7,7 +7,7 @@ told when what they wrote has changed since.
 """
 import pytest
 
-from conftest import FakeMarketsCollection, stored_market
+from conftest import FakeMarketsCollection, reviewing, stored_market
 
 import api.applicants as ApplicantsApi
 import api.applications as ApplicationsApi
@@ -122,7 +122,8 @@ class TestAnUpdateMovesTheAnswersVersion:
 
     def _approve(self, seen):
         return ApplicantsApi.review_application(
-            MARKET, "app-1", ApplicationStatus.REVIEWER_APPROVED, by=REVIEWER, seen=seen)
+            MARKET, "app-1", ApplicationStatus.REVIEWER_APPROVED, by=REVIEWER,
+            reviewing=reviewing(MARKET, REVIEWER.email), seen=seen)
 
     def test_a_verdict_on_a_card_opened_before_an_update_is_refused(self, market):
         applications = market()

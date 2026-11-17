@@ -33,7 +33,7 @@ class TestARenameJudgedOnADraft:
             self, signed_in, market_in, interleave, real_db, market_records):
         client = signed_in(ORGANIZER)
         market = market_in(MarketPhase.DRAFT)
-        interleave("api.markets._load_market_to_change", _move(market, MarketPhase.APPLICATIONS))
+        interleave("api.markets._market_change", _move(market, MarketPhase.APPLICATIONS))
 
         response = client.put(f"/markets/{market['id']}/name", json={"name": "Fixture New Name"})
 
@@ -53,7 +53,7 @@ class TestARejectionRulesSaveJudgedOnAnOpenReview:
 
         client = signed_in(ORGANIZER)
         market = market_in(MarketPhase.APPLICATIONS)
-        interleave("api.markets._load_market_to_change", _move(market, MarketPhase.ASSIGNMENT))
+        interleave("api.markets._market_change", _move(market, MarketPhase.ASSIGNMENT))
 
         response = client.put(f"/markets/{market['id']}/rejection-rules", json={
             "rules": [{"key": EssentialFields.TABLE_CHOICE_KEY, "answers": ["half"]}]})
@@ -72,7 +72,7 @@ class TestAHighlightsSaveJudgedOnALiveMarket:
             self, phase, signed_in, market_in, interleave, real_db, market_records):
         client = signed_in(ORGANIZER)
         market = market_in(phase)
-        interleave("api.markets._load_market_to_change", _move(market, MarketPhase.ARCHIVED))
+        interleave("api.markets._market_change", _move(market, MarketPhase.ARCHIVED))
 
         response = client.put(f"/markets/{market['id']}/review-highlights",
                               json={"keys": ["business_name"]})

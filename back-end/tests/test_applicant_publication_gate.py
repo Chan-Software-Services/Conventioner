@@ -29,9 +29,12 @@ from api.applicants import (
     list_market_applications,
     review_application,
 )
-from conftest import FakeApplicationsCollection, FakeMarketsCollection, seen_as_read
+from conftest import (
+    FakeApplicationsCollection, FakeMarketsCollection, let_in, reviewing, seen_as_read,
+)
 
 import api.applications as ApplicationsApi
+import api.market_actions as Actions
 import market_write as MarketWrite
 
 
@@ -140,7 +143,8 @@ def _markets(monkeypatch, doc):
 
 def test_publish_results_flips_the_flag(monkeypatch):
     fake = _markets(monkeypatch, publishable())
-    result, status = publish_results("market-1", "owner@example.com")
+    result, status = publish_results(
+        "market-1", let_in(Actions.PUBLISH_RESULTS, "market-1", "owner@example.com"))
 
     assert status == 200
     assert result["results_published"] is True
@@ -152,7 +156,8 @@ def test_publish_results_flips_the_flag(monkeypatch):
 def test_a_google_form_market_publishes_its_results(monkeypatch):
     """Its vendors read them on its vendor page (ADR 0022), which opens with them."""
     fake = _markets(monkeypatch, publishable(intakeMode="csv"))
-    result, status = publish_results("market-1", "owner@example.com")
+    result, status = publish_results(
+        "market-1", let_in(Actions.PUBLISH_RESULTS, "market-1", "owner@example.com"))
 
     assert status == 200
     assert result["results_published"] is True
@@ -171,7 +176,8 @@ def test_publishing_results_sends_no_email(monkeypatch, intake_mode):
     monkeypatch.setattr(resend.Emails, "send", lambda *a, **k: sent.append((a, k)))
     fake = _markets(monkeypatch, publishable(intakeMode=intake_mode))
 
-    _, status = publish_results("market-1", "owner@example.com")
+    _, status = publish_results(
+        "market-1", let_in(Actions.PUBLISH_RESULTS, "market-1", "owner@example.com"))
 
     assert status == 200
     assert sent == []
@@ -179,7 +185,8 @@ def test_publishing_results_sends_no_email(monkeypatch, intake_mode):
 
 def test_publish_results_refuses_when_already_published(monkeypatch):
     fake = _markets(monkeypatch, publishable(resultsPublished=True))
-    result, status = publish_results("market-1", "owner@example.com")
+    result, status = publish_results(
+        "market-1", let_in(Actions.PUBLISH_RESULTS, "market-1", "owner@example.com"))
 
     assert status == 409
     assert "already published" in result.get("error", "").lower()
@@ -187,14 +194,16 @@ def test_publish_results_refuses_when_already_published(monkeypatch):
 
 def test_publish_results_404_on_missing_market(monkeypatch):
     fake = _markets(monkeypatch, None)
-    result, status = publish_results("nonexistent", "owner@example.com")
+    result, status = publish_results(
+        "nonexistent", let_in(Actions.PUBLISH_RESULTS, "nonexistent", "owner@example.com"))
 
     assert status == 404
 
 
 def test_publish_results_refuses_on_draft_market(monkeypatch):
     fake = _markets(monkeypatch, publishable(MarketPhase.DRAFT))
-    result, status = publish_results("market-1", "owner@example.com")
+    result, status = publish_results(
+        "market-1", let_in(Actions.PUBLISH_RESULTS, "market-1", "owner@example.com"))
 
     assert status == 409
     assert "once tables have been allocated" in result.get("error", "")
@@ -249,7 +258,7 @@ def test_review_application_updates_status(monkeypatch):
 
     result, status = review_application(
         "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=REVIEWER,
-        seen=seen_as_read("app-1"),
+        reviewing=reviewing("market-1", REVIEWER.email), seen=seen_as_read("app-1"),
     )
 
     assert status == 200
@@ -273,7 +282,8 @@ def test_review_application_rejects_invalid_status(monkeypatch):
     monkeypatch.setattr(ApplicationsApi, "applications_collection", fake)
 
     result, status = review_application(
-        "market-1", "app-1", ApplicationStatus.OPEN, by=REVIEWER, seen=seen_as_read("app-1"),
+        "market-1", "app-1", ApplicationStatus.OPEN, by=REVIEWER,
+        reviewing=reviewing("market-1", REVIEWER.email), seen=seen_as_read("app-1"),
     )
     assert status == 400
     assert "invalid" in result["error"].lower()
@@ -285,7 +295,7 @@ def test_review_application_404_on_missing_app(monkeypatch):
 
     result, status = review_application(
         "market-1", "nonexistent", ApplicationStatus.REVIEWER_APPROVED, by=REVIEWER,
-        seen=seen_as_read("nonexistent"),
+        reviewing=reviewing("market-1", REVIEWER.email), seen=seen_as_read("nonexistent"),
     )
     assert status == 404
 
@@ -307,7 +317,7 @@ def test_review_application_rejects_app_from_different_market(monkeypatch):
 
     result, status = review_application(
         "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=REVIEWER,
-        seen=seen_as_read("app-1"),
+        reviewing=reviewing("market-1", REVIEWER.email), seen=seen_as_read("app-1"),
     )
     assert status == 404
 
