@@ -101,7 +101,6 @@ eachWindow('the toolbars entry', (size) => {
     page,
   }) => {
     const { press } = inTheWindow(size);
-    const view = page.getByTestId('library-toolbar-view');
     const readOuts = readOutOf(page, 'toolbar');
 
     await page.getByTestId('library-toolbar-date').selectOption({ index: 1 });
