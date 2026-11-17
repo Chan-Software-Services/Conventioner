@@ -5,6 +5,7 @@ describes:
   - front-end/playwright.config.ts
   - scripts/seed_fixture.sh
   - scripts/nm-test.sh
+  - scripts/lib/stack-identity.sh
 verified: 2026-11-14
 sources:
   - E34/F03/S02
@@ -54,8 +55,7 @@ The fastest way to get a working test environment:
 ```
 
 The script empties the stack's database first (`back-end/reset_database.py`), so it seeds only a stack it is told, and otherwise refuses before it touches anything.
-It takes, in order, `COMPOSE_PROJECT_NAME` with `TH_MONGO_PORT`, `TH_BACKEND_PORT` and `TH_FRONTEND_PORT` (as `eval "$(scripts/th-compose.sh ports)"` exports them), then the treehouse slot its checkout sits in, and the default stack (the primary checkout's, or CI's one stack) only with `--primary`.
-It refuses when only some of those variables are set, and `--primary` with any of them set or from a treehouse slot, where plain `docker compose` names the project after the directory, the primary checkout's.
+The order it takes its stack in, and when it refuses, is the one rule in [`scripts/lib/stack-identity.sh`](../scripts/lib/stack-identity.sh), which `scripts/seed_walk_market.sh` ([walking the flows](implementation/testing/walking-the-flows.md#local-stack)) sources too, so a fix to it reaches both.
 It used to fall back to the primary stack's defaults, so a run outside a slot that had not yet exported its own stack wiped the primary checkout's local database.
 
 It seeds a stack that already runs and never starts one: start the stack first, as the [E2E section](#end-to-end-e2e-tests) shows.
