@@ -15,7 +15,8 @@ import { LoginPage } from './pages/LoginPage';
  * The map shows each table by whether its vendor is here, a press on a vendor's table opens their
  * drawer as their row does, each half of the shared table its own, and the map follows a check-in
  * made on the list, and one made elsewhere, which the roster's re-read brings with no reload. The
- * drawer holds no check-in (D39): a check-in is the list's.
+ * legend names "No vendor" on North Wing, where Aisle A 4 is free, and not on South Wing, whose
+ * tables are all held. The drawer holds no check-in (D39): a check-in is the list's.
  */
 
 const VIEWER = { email: 'e2e-door-map-viewer@example.com', password: 'e2epassword123' };
@@ -139,6 +140,8 @@ for (const size of PHONE_AND_DESK) {
         page.getByTestId('day-map-locations').getByRole('button', { name: 'South Wing' }),
       );
       await expect(door.mapTable('Aisle B 1')).toBeVisible();
+      // Every table of South Wing's Aisle B is held today: its legend names no free table.
+      await expect(door.legend).toHaveText(['Here', 'Expected']);
       await expectFits(page, 'The door as a map, South Wing');
     });
 

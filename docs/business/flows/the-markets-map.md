@@ -8,6 +8,7 @@ describes:
 verified: 2026-11-17
 sources:
   - T422
+  - T466
 ---
 
 # The market's map: published, found and directed by
@@ -73,6 +74,7 @@ Covered by:
 4. Check them in on "List" or have them scan the door code ([K2](market-day-door.md#k2-a-vendor-scans-the-door-code-and-is-checked-in)): the map checks nobody in, and their table is drawn filled on the roster's next read.
 
 A press on a table with nobody says "Table <code>: no vendor on <date>." under the map; vendors here with no table, and those at tables on no layout, are counted under it with "Show in the list".
+The legend under the map reads "Here" and "Expected" ("Did not come" once the day is over), and "No vendor" only on a day the open location's map draws a table, or a half of a shared one, nobody sits at; the no-table zones, the stage or the entrance, are still drawn and named on the map, with no legend item (T466).
 Covered by:
 
 - `a-market-past-draft-gets-a-public-map.spec.ts`
