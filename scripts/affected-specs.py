@@ -71,7 +71,7 @@ RUN_EVERY_SPEC = re.compile(
     r"^(?:front-end/(?:e2e/fixtures\.ts|e2e/global-setup\.ts|playwright\.config\.ts"
     r"|package-lock\.json|vite\.config\.ts|index\.html)"
     r"|docker-compose[^/]*\.ya?ml|(?:.*/)?Dockerfile[^/]*|back-end/requirements[^/]*\.txt"
-    r"|scripts/seed_fixture\.sh)$"
+    r"|scripts/seed_fixture\.sh|scripts/lib/stack-identity\.sh)$"
 )
 
 # The changed files that drive no spec, wherever the map places them: the docs, Markdown, the
