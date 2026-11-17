@@ -6,7 +6,7 @@ describes:
   - front-end/src/components/AssignmentHistoryDialog.vue
   - front-end/src/utils/personChoice.ts
   - front-end/src/components/SearchPicker.vue
-verified: 2026-11-14
+verified: 2026-11-18
 sources:
   - brain-dump/2026-10-19#30
   - wayfinding/claims-and-room/05
