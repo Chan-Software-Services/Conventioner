@@ -7,7 +7,7 @@ describes:
   - front-end/src/components/csvProposal/ProposalLedger.vue
   - front-end/src/components/market/DraftedFrom.vue
   - front-end/src/utils/draftedFrom.ts
-verified: 2026-11-16
+verified: 2026-11-18
 sources:
   - wayfinding/the-form-started-from-a-csv/05
   - wayfinding/the-form-started-from-a-csv/map
