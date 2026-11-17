@@ -83,7 +83,7 @@ It reads the image by the layout it found, never by an id the request names.
 
 ## What a layout stores for it
 
-A no-table zone stores its turn, `rotation`, degrees clockwise about its centre, read into 0 to 360 as it parses; a turn that is not a finite number is refused by the floorplan's bounds.
+A no-table zone stores its turn, `rotation`, as [the market document](../data/market-document.md) sets out the zone's shape.
 A layout stores `followsPlan`, whether it was started after Draft: true on one started past Draft ([ADR 0034](../../adr/0034-a-layout-started-after-draft-follows-the-plan.md)), false on one started in Draft, and kept on every later save whatever the body sends ([`back-end/api/floorplans_save.py`](../../../back-end/api/floorplans_save.py)).
 [`back-end/tests/test_a_layouts_stored_shapes.py`](../../../back-end/tests/test_a_layouts_stored_shapes.py) saves both through the layout's own route.
 
