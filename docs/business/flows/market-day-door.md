@@ -113,7 +113,7 @@ Covered by:
 **Status:** Works (re-walked live on 2026-10-03; the door rebuilt since, read from the code as of E29 and E35/F01/S02: `the-door-on-market-day.spec.ts`, `the-door-keeps-its-own-day.spec.ts`).
 
 1. Attendance opens on today when it is a market date, else the next one, else the last; the day is a select at the start of the toolbar, each option the day alone ("Nov 17, 2026"), and choosing one keeps the view.
-   The toolbar is one row: the day (and, on the map, the location) at its start, then at its end "List" and "Map" as one joined choice, "Print roster" and "Door code", and "Refresh" last, a rule between each group; the Tab key walks it in that order (T466).
+   The toolbar is one row: the day (and, on the map with two locations or more laid out, the location) at its start, then at its end "List" and "Map" as one joined choice, "Print roster" and "Door code", and "Refresh" last, a rule between each group; the Tab key walks it in that order (T466).
 2. Under it, a second row holds "N of M checked in", and on the list "All M", "Not yet N" (or "Did not come N" once the day is over or the market archived) and "Checked in N" to show one or the other, and the search.
    At a desk, 1,024px wide and more, the two rows are pinned under the market's frame from the start, so they never move while the list or the map scrolls under them; on a phone they scroll away with the page, each control a 44px target.
 3. "Find a vendor" ("Name, email or table") narrows the list.
