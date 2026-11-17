@@ -19,9 +19,9 @@ import { ToolsPage } from './pages/ToolsPage';
  * The organizer starts North Wing's layout, which follows the plan, and places Aisle A's four tables
  * with Row of tables. On Tools, as the market's Admin, they choose the three public questions and
  * turn the map on, which waits for the results; they publish them. A visitor, signed out on a
- * phone, opens the map, finds Kiln & Co by name and reads their table. The organizer publishes the
- * market, and at the door Attendance's map draws the same table as Kiln & Co's, and says West
- * Hall's three are on no layout.
+ * phone, opens the map, finds Kiln & Co by name and reads their table. The organizer moves the
+ * market to Market Days, and at the door Attendance's map draws the same table as Kiln & Co's, and
+ * says Aisle B's three, in South Wing, are on no layout.
  */
 test('a market past Draft with no layout gets a public map a visitor reads a vendor on', async ({
   authenticatedPage: page,
