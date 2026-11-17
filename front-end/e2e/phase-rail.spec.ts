@@ -165,11 +165,11 @@ test.describe('The phase rail', () => {
     await expect(page.getByTestId('phase-rail')).toBeVisible({ timeout: 15000 });
     await expect(page.getByTestId('phase-rail-market-page-link')).toHaveAttribute(
       'href',
-      new RegExp(`/${seed.slug}$`),
+      new RegExp(`${marketPagePath(seed.slug)}$`),
     );
     await expect(page.getByTestId('phase-rail-vendor-page-link')).toHaveAttribute(
       'href',
-      new RegExp(`/${seed.slug}/vendor$`),
+      new RegExp(`${vendorPagePath(seed.slug)}$`),
     );
 
     // A market taking applications by form carries it from its first phase after draft. Intake
@@ -193,11 +193,11 @@ test.describe('The phase rail', () => {
     const formSlug = marketNameToSlug(formMarket.marketName);
     await expect(page.getByTestId('phase-rail-market-page-link')).toHaveAttribute(
       'href',
-      new RegExp(`/${formSlug}$`),
+      new RegExp(`${marketPagePath(formSlug)}$`),
     );
     await expect(page.getByTestId('phase-rail-vendor-page-link')).toHaveAttribute(
       'href',
-      new RegExp(`/${formSlug}/vendor$`),
+      new RegExp(`${vendorPagePath(formSlug)}$`),
     );
   });
 
@@ -258,8 +258,8 @@ test.describe('The phase rail on a phone', () => {
   }) => {
     await page.goto(marketScreenPath(seed.marketId, 'attendance'));
     for (const [testId, name, end] of [
-      ['phase-rail-market-page', 'Market page', `/${seed.marketSlug}`],
-      ['phase-rail-vendor-page', 'Vendor page', `/${seed.marketSlug}/vendor`],
+      ['phase-rail-market-page', 'Market page', marketPagePath(seed.marketSlug)],
+      ['phase-rail-vendor-page', 'Vendor page', vendorPagePath(seed.marketSlug)],
     ] as const) {
       const chip = page.getByTestId(testId);
       await expect(chip).toBeVisible({ timeout: 15000 });
@@ -355,8 +355,8 @@ test.describe('The phase rail on a phone', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(marketScreenPath(seed.marketId, 'attendance'));
     for (const [testId, end] of [
-      ['phase-rail-market-page', `/${seed.marketSlug}`],
-      ['phase-rail-vendor-page', `/${seed.marketSlug}/vendor`],
+      ['phase-rail-market-page', marketPagePath(seed.marketSlug)],
+      ['phase-rail-vendor-page', vendorPagePath(seed.marketSlug)],
     ] as const) {
       const link = page.getByTestId(testId).getByRole('link');
       await expect(link).toHaveText(new RegExp(`${end}$`), { timeout: 15000 });

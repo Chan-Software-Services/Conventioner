@@ -2,7 +2,7 @@ import { test, expect, TEST_USER, BACKEND_URL, APP_API } from './fixtures';
 import { seedApplicantMarket } from './helpers/seedApplicantMarket';
 import { seedPublishedMarketWithAssignments } from './helpers/seeds';
 import { transitionMarket } from './helpers/seedPhaseMarket';
-import { marketScreenPath } from './helpers/marketScreens';
+import { marketPagePath, marketScreenPath, vendorPagePath } from './helpers/marketScreens';
 
 /**
  * The rail's public addresses read in full and point at the right page (E30/F01/S03).
@@ -50,11 +50,11 @@ test.describe("The rail's addresses", () => {
     // (ADR 0022), and its market page says it has ended (T469).
     await expect(marketPage.locator('a')).toHaveAttribute(
       'href',
-      new RegExp(`/${seed.marketSlug}$`),
+      new RegExp(`${marketPagePath(seed.marketSlug)}$`),
     );
     await expect(vendorPage.locator('a')).toHaveAttribute(
       'href',
-      new RegExp(`/${seed.marketSlug}/vendor$`),
+      new RegExp(`${vendorPagePath(seed.marketSlug)}$`),
     );
   });
 

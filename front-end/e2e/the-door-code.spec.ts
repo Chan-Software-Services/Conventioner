@@ -4,6 +4,7 @@ import { seedPublishedMarketWithAssignments } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
 import { LoginPage } from './pages/LoginPage';
+import { vendorPagePath } from './helpers/marketScreens';
 
 /**
  * The door code on Attendance (ADR 0022): shown full screen on whatever stands at the entrance, or
@@ -155,7 +156,7 @@ test('an Editor makes the door code, reads it full screen and makes a new one', 
   expect(second).not.toBe(first);
   await expect(door.doorCodeQr).toHaveAttribute(
     'data-url',
-    new RegExp(`/${marketSlug}/vendor\\?door=${second}$`),
+    new RegExp(`${vendorPagePath(marketSlug)}\\?door=${second}$`),
   );
 
   // Closed and opened again, it is the new code the server holds.
