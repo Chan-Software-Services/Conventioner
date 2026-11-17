@@ -7,9 +7,14 @@
  * by the market Manage market is open on, or by what its confirmation was opened with, and handed to
  * the dialog that sent it, so the shell holds that dialog while it writes and a second press sends
  * nothing. An answer that lands after Manage market was closed, or opened on another market, leaves
- * the dialog the person is in alone, and so does a re-read of the market it had been open on.
+ * the dialog the person is in alone.
+ *
+ * Its own copy of the market is a keyed read (`useServerRead`, T277 ticket 11), keyed by the market
+ * it is open on: a read of the market it had been open on never lands in another opening, each
+ * write is sent to the address of that key, and a write's re-read overtakes every read asked before
+ * it, so an older answer never puts back what the write changed.
  */
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, shallowRef, watch } from 'vue';
 import {
   type Market,
   MarketPhase,
@@ -21,6 +26,7 @@ import { api, getApiErrorMessage, getApiErrorStatus, isMarketChanged } from '@/u
 import { parseMarketFromApi } from '@/utils/market';
 import { useMarketStore } from '@/stores/market';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
+import { useServerRead } from '@/utils/useServerRead';
 import AppDialog from '@/components/AppDialog.vue';
 import EmailAddress from '@/components/EmailAddress.vue';
 import HandOnMarketDialog from '@/components/HandOnMarketDialog.vue';
@@ -56,9 +62,6 @@ const emit = defineEmits<{
   manageClose: [];
 }>();
 
-const marketData = ref<Market | null>(null);
-const loading = ref(false);
-const errorMessage = ref('');
 const renameValue = ref('');
 const showAddUserForm = ref(false);
 const newUserEmail = ref('');
@@ -102,6 +105,60 @@ const handingOn = ref(false);
 
 /** The market Manage market is open on, or nothing while it is closed: each change is an opening. */
 const openOn = () => (props.manageOpen ? (props.market?.id ?? null) : null);
+
+/**
+ * Manage market's own read of the market it is open on, from the opening's first read to each
+ * write's re-read.
+ */
+const read = useServerRead<string, Market>(
+  openOn,
+  (id) =>
+    api
+      .get(`/markets/${encodeURIComponent(id)}`)
+      .then((response) => parseMarketFromApi(response.data.market)),
+  { failure: 'The market could not be loaded.' },
+);
+// The rename field takes each name a read brings that differs from the last, so a re-read after
+// an add, a role change or a refused rename leaves a name being typed alone.
+watch(
+  () => read.data.value?.name,
+  (name) => {
+    if (name !== undefined) renameValue.value = name;
+  },
+);
+/**
+ * After the opening's first read failed, the opener's copy of the same market, with each change
+ * to who may do what taken into it: what the dialog works on until a read lands, kept through each
+ * write's re-read, so the dialog still works on a bad network as it did. Forgotten on a move.
+ */
+const openersCopy = shallowRef<Market | null>(null);
+watch(read.key, () => (openersCopy.value = null), { flush: 'sync' });
+watch(read.phase, (phase) => {
+  const opener = props.market;
+  if (phase === 'failed' && !openersCopy.value && opener && opener.id === read.key.value) {
+    openersCopy.value = opener;
+  }
+});
+/** The market as Manage market last read it, or the opener's copy after its first read failed. */
+const marketData = computed(() => read.data.value ?? openersCopy.value);
+/** Its first read is out: the dialog names the market it was opened on, and says it is loading. */
+const loading = computed(() => read.phase.value === 'loading' && !marketData.value);
+/** A read that failed, said by the shell: the first, or a re-read with the market kept. */
+const errorMessage = computed(() =>
+  read.phase.value === 'failed' || read.phase.value === 'refresh_failed' ? read.sentence.value : '',
+);
+/** The market's name: as last read, or the opener's until the first read lands. */
+const shownName = computed(() => marketData.value?.name ?? props.market?.name ?? '');
+
+/**
+ * Reads the market again after a write sent in this opening, `isCurrent` its submission's: the read
+ * overtakes any asked before it, so an older answer never lands after it. Once Manage market has
+ * moved on, nothing is read.
+ */
+async function rereadAfterAWrite(isCurrent: () => boolean) {
+  if (isCurrent()) await read.reread();
+}
+
 /** What a confirmation over Manage market is open on: nothing once Manage market closes. */
 const over =
   <T,>(asked: () => T) =>
@@ -140,27 +197,11 @@ const deletion = useDialogSubmit({
   opening: over(() => (deleteConfirming.value ? props.market?.id : null)),
   failure: 'The market was not deleted.',
 });
-/**
- * Counts Manage market's openings, so a read of the market it was open on that lands after it was
- * closed, or opened on another market, writes nothing into the one the person is in. Kept for the
- * reads no write sends, and so no submission holds: the one as it opens and the one after a
- * permissions change (`market-changed`). A write's own re-read goes by its submission's
- * `isCurrent`, keyed by the same opening.
- */
-let openings = 0;
-
-/** Whether Manage market is still in the opening it is in now. */
-function thisOpening(): () => boolean {
-  const at = openings;
-  return () => at === openings;
-}
-
+// Each opening starts clean: the read itself moves with the market it is open on.
 watch(
   () => [props.manageOpen, props.market] as const,
-  async ([open, market]) => {
-    openings++;
+  ([open, market]) => {
     if (open && market) {
-      marketData.value = market;
       renameValue.value = market.name;
       showAddUserForm.value = false;
       deleteConfirming.value = false;
@@ -168,39 +209,11 @@ watch(
       peopleWords.value = '';
       roleChange.value = null;
       handingOn.value = false;
-      errorMessage.value = '';
       userError.value = null;
-      await fetchMarket();
-    } else {
-      loading.value = false;
-      marketData.value = null;
     }
   },
   { immediate: true },
 );
-
-/**
- * Reads the market Manage market is open on into its copy. `isCurrent` says whether the opening the
- * read is for still stands, a write's from its submission: once Manage market has moved on, nothing
- * is read, and a read that lands after it writes nothing.
- */
-async function fetchMarket(showLoading = true, isCurrent = thisOpening()) {
-  if (!marketData.value || !isCurrent()) return;
-  if (showLoading) loading.value = true;
-  errorMessage.value = '';
-  try {
-    const response = await api.get(`/markets/${encodeURIComponent(marketData.value.id)}`);
-    if (!isCurrent()) return;
-    const m = response.data.market;
-    marketData.value = parseMarketFromApi(m);
-    renameValue.value = marketData.value.name;
-  } catch (err) {
-    if (!isCurrent()) return;
-    errorMessage.value = getApiErrorMessage(err, 'The market could not be loaded.');
-  } finally {
-    if (showLoading && isCurrent()) loading.value = false;
-  }
-}
 
 /** The open market, re-read when it is this one: a write here may change what it shows. */
 function refreshTheOpenMarket(marketId: string | undefined) {
@@ -290,21 +303,22 @@ const renameRefusal = computed(() => actionRefusal(marketData.value, MarketActio
 async function handleAddUser() {
   const email = newUserEmail.value.trim();
   const market = marketData.value;
-  if (!market || !email) return;
+  const marketId = read.key.value;
+  if (!market || !marketId || !email) return;
   const role = newUserRole.value;
   await addUser.submit(
     async (isCurrent) => {
       try {
-        await api.post(`/markets/${encodeURIComponent(market.id)}/roles`, {
+        await api.post(`/markets/${encodeURIComponent(marketId)}/roles`, {
           user_email: email,
           role,
         });
       } catch (err) {
         // The market changed under the add (ADR 0024): who has access is re-read, the sentence kept.
-        if (isMarketChanged(err)) await fetchMarket(false, isCurrent);
+        if (isMarketChanged(err)) await rereadAfterAWrite(isCurrent);
         throw err;
       }
-      await fetchMarket(false, isCurrent);
+      await rereadAfterAWrite(isCurrent);
     },
     {
       done: () => {
@@ -356,25 +370,26 @@ function cancelRemove() {
 async function handleRemoveUser() {
   const target = removing.value;
   const market = marketData.value;
-  if (!market || !target) return;
+  const marketId = read.key.value;
+  if (!market || !marketId || !target) return;
   await removal.submit(
     async (isCurrent) => {
       userError.value = null;
       try {
         await api.delete(
-          `/markets/${encodeURIComponent(market.id)}/roles/${encodeURIComponent(target.userId)}`,
+          `/markets/${encodeURIComponent(marketId)}/roles/${encodeURIComponent(target.userId)}`,
         );
       } catch (err) {
         if (getApiErrorStatus(err) !== 404) {
           // The market changed under the removal (ADR 0024): the list behind is re-read, the
           // confirmation kept open with the sentence.
-          if (isMarketChanged(err)) await fetchMarket(false, isCurrent);
+          if (isMarketChanged(err)) await rereadAfterAWrite(isCurrent);
           throw err;
         }
       }
       // Held until the confirmation closes: during the re-read its Remove would send a second
       // removal.
-      await fetchMarket(false, isCurrent);
+      await rereadAfterAWrite(isCurrent);
     },
     {
       done: async () => {
@@ -431,7 +446,8 @@ function cancelRoleChange() {
 async function handleRoleChange() {
   const target = roleChange.value;
   const market = marketData.value;
-  if (!market || !target) return;
+  const marketId = read.key.value;
+  if (!market || !marketId || !target) return;
   await roleChanging.submit(
     async (isCurrent) => {
       // A refusal closes the confirmation as a change does: what the write answers is its refusal's
@@ -439,7 +455,7 @@ async function handleRoleChange() {
       let refusal = '';
       try {
         await api.put(
-          `/markets/${encodeURIComponent(market.id)}/roles/${encodeURIComponent(target.userId)}`,
+          `/markets/${encodeURIComponent(marketId)}/roles/${encodeURIComponent(target.userId)}`,
           { role: target.role },
         );
       } catch (err) {
@@ -447,7 +463,7 @@ async function handleRoleChange() {
       }
       // Held until the confirmation closes: during the re-read its confirm would send a second
       // write.
-      await fetchMarket(false, isCurrent);
+      await rereadAfterAWrite(isCurrent);
       return refusal;
     },
     {
@@ -481,30 +497,31 @@ const renameAllowed = computed(() => marketData.value?.phase === MarketPhase.Dra
  */
 async function handleRename() {
   const market = marketData.value;
+  const marketId = read.key.value;
   const name = renameValue.value.trim();
-  if (!market || name === market.name) return;
+  if (!market || !marketId || name === market.name) return;
   await rename.submit(
     async (isCurrent) => {
       try {
         // Its own write, carrying only the name - not the whole market (E21/F03/S04).
-        await api.put(`/markets/${encodeURIComponent(market.id)}/name`, { name });
+        await api.put(`/markets/${encodeURIComponent(marketId)}/name`, { name });
       } catch (err) {
         // The market changed under the rename (ADR 0024), most likely leaving draft: it is read
         // again, so the field gives way to why the name is fixed, the sentence kept.
-        if (isMarketChanged(err)) await fetchMarket(false, isCurrent);
+        if (isMarketChanged(err)) await rereadAfterAWrite(isCurrent);
         throw err;
       }
-      await fetchMarket(false, isCurrent);
+      await rereadAfterAWrite(isCurrent);
     },
     {
       done: () => {
         changesMade.value++;
         // The open market may be this one: a rename is a write, so the store re-reads it.
-        refreshTheOpenMarket(market.id);
+        refreshTheOpenMarket(marketId);
       },
       // Renamed after Manage market moved on: the open market still takes the new name.
       late: (answer) => {
-        if (answer.ok) refreshTheOpenMarket(market.id);
+        if (answer.ok) refreshTheOpenMarket(marketId);
       },
     },
   );
@@ -529,30 +546,31 @@ function cancelHandOn() {
  */
 async function handleHandOn(userId: string) {
   const market = marketData.value;
-  if (!market) return;
+  const marketId = read.key.value;
+  if (!market || !marketId) return;
   await handOn.submit(
     async (isCurrent) => {
       try {
-        await api.post(`/markets/${encodeURIComponent(market.id)}/hand-on`, { userId });
+        await api.post(`/markets/${encodeURIComponent(marketId)}/hand-on`, { userId });
       } catch (err) {
         if (isMarketChanged(err) || getApiErrorStatus(err) === 400)
-          await fetchMarket(false, isCurrent);
+          await rereadAfterAWrite(isCurrent);
         throw err;
       }
-      await fetchMarket(false, isCurrent);
+      await rereadAfterAWrite(isCurrent);
     },
     {
       done: async () => {
         changesMade.value++;
         // The open market may be this one: what this person may do on it changed with their role.
-        refreshTheOpenMarket(market.id);
+        refreshTheOpenMarket(marketId);
         handingOn.value = false;
         // Once the dialog has closed and the page behind it is no longer inert.
         await nextTick();
         peopleList.value?.focus();
       },
       late: (answer) => {
-        if (answer.ok) refreshTheOpenMarket(market.id);
+        if (answer.ok) refreshTheOpenMarket(marketId);
       },
     },
   );
@@ -571,8 +589,9 @@ const publicPages = computed(() => {
 /** One delete however often it is pressed; the confirmation holds until it answers. */
 async function handleDeleteConfirm() {
   const market = marketData.value;
-  if (!market) return;
-  await deletion.submit(() => api.delete(`/markets/${encodeURIComponent(market.id)}`), {
+  const marketId = read.key.value;
+  if (!market || !marketId) return;
+  await deletion.submit(() => api.delete(`/markets/${encodeURIComponent(marketId)}`), {
     done: () => {
       deleteConfirming.value = false;
       emit('manageClose');
@@ -584,9 +603,14 @@ function handleDeleteCancel() {
   deleteConfirming.value = false;
 }
 
-/** A change to who may do what answers the table, which this copy of the market then shows. */
+/**
+ * A change to who may do what answers the table, which this copy of the market then shows: taken
+ * into the read for the market it is open on, and a re-read asked before it is asked again.
+ */
 function handleTableChanged(table: PermissionTableRow[]) {
-  if (marketData.value) marketData.value = { ...marketData.value, permissionTable: table };
+  const marketId = read.key.value;
+  if (marketId) read.adopt(marketId, (market) => ({ ...market, permissionTable: table }));
+  if (openersCopy.value) openersCopy.value = { ...openersCopy.value, permissionTable: table };
   changesMade.value++;
 }
 
@@ -624,7 +648,7 @@ async function closeAddUser() {
     :submission="[addUser, rename]"
     @close="emit('manageClose')"
   >
-    <p v-if="marketData" class="market-name">{{ marketData.name }}</p>
+    <p v-if="shownName" class="market-name">{{ shownName }}</p>
 
     <p v-if="loading" class="empty-state">Loading...</p>
     <div v-else-if="marketData" class="content">
@@ -807,7 +831,7 @@ async function closeAddUser() {
         v-if="marketData.permissionTable?.length"
         :market="marketData"
         @changed="handleTableChanged"
-        @market-changed="fetchMarket(false)"
+        @market-changed="read.reread()"
       />
       <!-- Every change on the market, newest first, a page at a time (E40/F01/S03): after the
            people and who may do what (E39/F01/S04). -->

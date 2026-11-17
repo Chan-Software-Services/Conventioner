@@ -55,11 +55,12 @@ export type UndoOutcome =
 
 /**
  * The verdict on offer to undo, its timer, and the undo itself. `adopt` takes each application the
- * server answered with into the view's list.
+ * server answered with into the view's list, with the market the undo was sent on, so a view keyed
+ * by market takes it only while that market is open (T421).
  */
 export function useVerdictUndo(
   market: Ref<Market | null | undefined>,
-  adopt: (app: Application) => void,
+  adopt: (app: Application, marketId: string) => void,
 ) {
   const offered = ref<UndoOffer | null>(null);
   /** Why the undo on offer was refused, said on its line in place of the button. */
@@ -104,7 +105,7 @@ export function useVerdictUndo(
     try {
       if (on.items.length === 1) {
         const undone = await undoVerdict(marketId, on.items[0]!);
-        adopt(undone);
+        adopt(undone, marketId);
         withdraw();
         void useMarketStore().refresh();
         return { kind: 'undone', applications: [undone] };
@@ -116,7 +117,7 @@ export function useVerdictUndo(
     } catch (err) {
       // Someone wrote over it since: the list takes what is really there, and the line says who.
       const changed = changedSinceSeen(err);
-      if (changed) adopt(changed.application);
+      if (changed) adopt(changed.application, marketId);
       refusal.value = changed?.message || getApiErrorMessage(err, 'Could not undo the verdict.');
       return { kind: 'refused' };
     } finally {

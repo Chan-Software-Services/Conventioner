@@ -49,6 +49,7 @@ sources:
   - T283
   - T315
   - T411
+  - T421
 ---
 
 # Ending and managing a market
@@ -140,6 +141,9 @@ Covered by:
 
 Each of these writes belongs to the dialog it was sent from (T411): while "Add" and the list's re-read are out nothing closes Manage market, and while a removal or a role change and its re-read are out nothing closes its confirmation, Cancel and the close drawn disabled; a second press sends nothing.
 An answer that lands after Manage market was closed, or opened on another market, writes nothing into the one open, its re-read of the market included.
+Opened on one market, Manage market shows that market's name with "Loading..." until its read lands, never the last market's people, and every write goes to the market it shows; a re-read asked before a write that answers after the write's own re-read changes nothing, so a rename, a role or a change to who may do what is never put back on screen (T421).
+When its first read failed, Manage market works on the opener's copy of the market, with the failure said: a change to who may do what is taken into that copy, and it stays drawn while a write's re-read is out, never "Loading..." in its place, until a read lands.
+The rename field takes a read's name only when it differs from the last one read, so a re-read after an add, a role change or a refused rename leaves a name being typed alone.
 
 The organization line says "Belongs to <organization>. Its admins run it; its members can view it."
 Covered by:
@@ -151,6 +155,7 @@ Covered by:
 - [`everyone-with-access.spec.ts`](../../../front-end/e2e/everyone-with-access.spec.ts) (the walk's case, and at 390 nothing overflowing and each Remove a 44px target, on one edge)
 - `manageMarketMeetsAChangedMarket.test.ts` (a role's add, change and take refused over a changed market)
 - `manageMarketPeople.test.ts` (an add held, sent once, and its answer kept out of Manage market opened on another market)
+- `manageMarketReadsTheMarketItOpened.test.ts` (opened on another market while the last one's read is out, Loading and its name, a failed read of the last market said nowhere, a failed first read said over the opener's copy, a table change taken into it and it kept drawn through a write's re-read, a name being typed kept over a re-read that brings the same name, and an older re-read never undoing a rename or a table change)
 - [`people-at-scale-market.spec.ts`](../../../front-end/e2e/people-at-scale-market.spec.ts) (the list at 154 people: a page at a time, finding one person, the place kept, someone just added; on a phone at 390 and 320)
 - [`removing-someone-asks-first.spec.ts`](../../../front-end/e2e/removing-someone-asks-first.spec.ts) (the confirmation's words, Cancel, Escape, confirming and where focus goes, someone removed in another window included, at 1440 and 390; at 390 the address in Remove's and a role change's title broken only before its "@" or a dot)
 - `the-manage-market-dialog-holds-together.spec.ts`
@@ -206,6 +211,7 @@ Covered by:
 - `a-market-name-fits-one-line.spec.ts`
 - `manageMarketMeetsAChangedMarket.test.ts` (a rename refused over a market that left draft)
 - `manageMarketPeople.test.ts` (a rename held, sent once, and its refusal kept out of Manage market opened on another market)
+- `manageMarketReadsTheMarketItOpened.test.ts` (a rename sent to the market shown after another's read answered late, and its name kept over a re-read asked before it)
 - `public-address.spec.ts`
 
 ## L4a. Transfer ownership

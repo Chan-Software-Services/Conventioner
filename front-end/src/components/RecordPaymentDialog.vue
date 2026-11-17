@@ -16,6 +16,9 @@
  * Its write belongs to its opening (T411): nothing closes it while it records, and an answer that
  * lands after it was closed and opened again leaves the new opening alone, handing on the account it
  * carries (`refreshed`) so the account behind the dialog is true.
+ *
+ * `sending` hands its parent each write as it is sent: how a parent hears of a write that outlives
+ * the dialog, since once the dialog is gone nothing it would say is heard.
  */
 import { computed, ref, watch } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
@@ -54,6 +57,8 @@ const emit = defineEmits<{
   /** A press refused as already recorded, or an edit of an entry changed meanwhile: the account
    * as it stands, with the dialog still open. */
   refreshed: [account: VendorAccount];
+  /** A write as it is sent, for a parent that outlives the dialog to hear how it answered. */
+  sending: [write: Promise<VendorAccount>];
 }>();
 
 const amount = ref('');
@@ -128,19 +133,26 @@ async function save(): Promise<void> {
   };
   const failure =
     props.mode === 'edit' ? 'The change could not be saved.' : 'It could not be recorded.';
-  await submission.submit(() => send(fields), {
-    done: (account) => emit('saved', account),
-    refused: (err) => {
-      const standing = accountAsItStands(err);
-      if (standing) emit('refreshed', standing);
-      return getApiErrorMessage(err, failure);
+  await submission.submit(
+    () => {
+      const write = send(fields);
+      emit('sending', write);
+      return write;
     },
-    // An earlier opening's answer: the account behind the dialog takes it, and this opening stays.
-    late: (answer) => {
-      const standing = answer.ok ? answer.answer : accountAsItStands(answer.error);
-      if (standing) emit('refreshed', standing);
+    {
+      done: (account) => emit('saved', account),
+      refused: (err) => {
+        const standing = accountAsItStands(err);
+        if (standing) emit('refreshed', standing);
+        return getApiErrorMessage(err, failure);
+      },
+      // An earlier opening's answer: the account behind the dialog takes it, and this opening stays.
+      late: (answer) => {
+        const standing = answer.ok ? answer.answer : accountAsItStands(answer.error);
+        if (standing) emit('refreshed', standing);
+      },
     },
-  });
+  );
 }
 </script>
 
