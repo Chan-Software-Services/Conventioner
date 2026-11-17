@@ -116,8 +116,9 @@ describe('useUpdatedWords', () => {
     expect(wrapper.text()).toBe('Updated 5 minutes ago');
 
     // Read again between two ticks: the clock is behind the read, which is now.
-    vi.setSystemTime(READ + 5 * 60 * 1000 + 8 * 1000);
-    at.value = Date.now();
+    const again = READ + 5 * 60 * 1000 + 8 * 1000;
+    vi.setSystemTime(again);
+    at.value = again;
     await wrapper.vm.$nextTick();
     expect(wrapper.text()).toBe('Updated just now');
     wrapper.unmount();
@@ -125,7 +126,8 @@ describe('useUpdatedWords', () => {
 
   it('stops its clock when the screen goes', async () => {
     vi.useFakeTimers();
-    const { wrapper } = mountWords(Date.now());
+    vi.setSystemTime(READ);
+    const { wrapper } = mountWords(READ);
     expect(vi.getTimerCount()).toBe(1);
     wrapper.unmount();
     expect(vi.getTimerCount()).toBe(0);
@@ -133,15 +135,17 @@ describe('useUpdatedWords', () => {
 
   it('starts no clock outside a scope that could stop it, and still says the read', () => {
     vi.useFakeTimers();
-    const words = useUpdatedWords(ref<number | null>(Date.now()));
+    vi.setSystemTime(READ);
+    const words = useUpdatedWords(ref<number | null>(READ));
     expect(vi.getTimerCount()).toBe(0);
     expect(words.value).toBe('Updated just now');
   });
 
   it('runs its clock for the effect scope that called it, and stops it with that scope', () => {
     vi.useFakeTimers();
+    vi.setSystemTime(READ);
     const scope = effectScope();
-    scope.run(() => useUpdatedWords(ref<number | null>(Date.now())));
+    scope.run(() => useUpdatedWords(ref<number | null>(READ)));
     expect(vi.getTimerCount()).toBe(1);
     scope.stop();
     expect(vi.getTimerCount()).toBe(0);
