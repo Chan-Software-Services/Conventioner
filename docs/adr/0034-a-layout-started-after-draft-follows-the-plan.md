@@ -36,6 +36,7 @@ Its organizers asked to draw the floorplan afterwards, by hand.
 ## Consequences
 
 - An organizer lays out a location past Draft as [planning](../business/flows/planning.md#e6-a-locations-layout) says, each section counted "<placed> of <count>".
+- So a market planned without a layout can still have a [day's map](../business/flows/the-markets-map.md), public and on Attendance.
 - The layout page and the editor's commands work in three ways: open (a layout started in Draft, in Draft), following (this layout, in any phase) and settled (a layout started in Draft, past Draft).
 - Past Draft a seat is still settled: a layout that follows the plan draws the plan's seats and moves none of them, because a number names a seat with a vendor at it, so it never moves when another table is removed.
 - A layout started in Draft works exactly as before, in Draft and past it.

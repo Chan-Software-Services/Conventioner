@@ -32,5 +32,6 @@ And after the market, its plan, verdicts, seats and check-ins are the only accou
 ## Flows
 
 - [Publishing, and the door on market day](../flows/market-day-door.md): the door code, the vendor's check-in on their vendor page and the organizer's Attendance.
+- [The market's map](../flows/the-markets-map.md): the public map a visitor finds a vendor on, and Attendance's map the organizer directs a vendor by.
 - [The vendor drawer](../flows/vendor-drawer.md): one vendor's notes and seats, opened from Attendance.
 - [Ending and managing a market](../flows/ending-and-managing-a-market.md): archiving, and what an archived market keeps.

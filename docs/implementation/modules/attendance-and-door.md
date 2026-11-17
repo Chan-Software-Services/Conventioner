@@ -239,5 +239,6 @@ The QR code's box is a square the window's width that gives up height where the 
 The page an organizer works from at the door, and the record a market leaves behind.
 The phase record that says whether a market ran is `back-end/phase_record.py`; the date "today" is the viewer's own (`calendarToday` in [the market guide](market-guide.md)).
 Publishing, the door code, the vendor's check-in on their vendor page and Attendance, as the people at the door use them, are [the door on market day](../../business/flows/market-day-door.md).
+Directing a vendor from Attendance's map is [K9 of the market's map](../../business/flows/the-markets-map.md#k9-an-organizer-directs-a-vendor-from-attendances-map).
 
 The glossary concept it serves: [Placement and pin](../../business/concepts/placement-and-pin.md).
