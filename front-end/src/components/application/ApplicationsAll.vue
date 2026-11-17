@@ -16,7 +16,8 @@
  * The rows stand in a `ListFrame` (T223): a find field by name or address, its words in the address
  * as `search`, 50 rows and "Show 50 more". A selection only ever holds rows on screen, so `drawn`
  * drives it: Select all, what it says it left out and the ticks all read what the frame drew. Export
- * opens on the words too.
+ * opens on the words too. The field, the statuses, Mine and Assigned to stand on one compact line
+ * pinned flush under the tab's toolbar, with no words over them on screen (T466).
  *
  * The tab's toolbar draws the list's read time, Refresh and Export from what this view exposes
  * (`ReviewViewTools`, T466), and the tab's `lead` slot, its lines while applications are open, stands
@@ -73,6 +74,7 @@ import ListFrame from '@/components/ListFrame.vue';
 import ReadFailed from '@/components/ReadFailed.vue';
 import EmailAddress from '@/components/EmailAddress.vue';
 import SearchPicker from '@/components/SearchPicker.vue';
+import SegmentedControl from '@/components/SegmentedControl.vue';
 import type { AddressPart } from '@/utils/addressParts';
 import type { ReviewViewTools } from '@/components/application/reviewViewTools';
 
@@ -648,69 +650,54 @@ async function decideSelection() {
       :noun="APPLICATION_NOUN"
       :findKey="SEARCH_KEY"
       findLabel="Find by name or address"
+      labelAsPlaceholder
+      pinnedTools
       :state="listState"
       testid="applications-all-list"
       @drawn="rowsDrawn"
     >
       <template #filters>
-        <!-- Named by the words over it, with what the statuses that are not plain mean (E38/F05/S01). -->
-        <div class="all-filter-group">
-          <span id="applications-all-filter-label" class="field-label">Filter</span>
-          <div class="all-filters">
-            <div
-              class="all-status"
-              role="group"
-              aria-labelledby="applications-all-filter-label"
-              aria-describedby="applications-all-filter-hint"
-            >
-              <button
-                v-for="option in ALL_VIEW_FILTERS"
-                :key="option.id"
-                type="button"
-                class="btn btn--compact"
-                :class="option.id === filter ? 'btn--primary' : 'btn--secondary'"
-                :aria-pressed="option.id === filter"
-                :data-testid="`applications-all-filter-${option.id}`"
-                @click="setQuery({ status: option.id === 'all' ? null : option.id })"
-              >
-                {{ option.label }}
-              </button>
-            </div>
-            <label class="all-mine">
-              <input
-                type="checkbox"
-                :checked="mine"
-                data-testid="applications-all-mine"
-                @change="
-                  setQuery({ mine: ($event.target as HTMLInputElement).checked ? '1' : null })
-                "
-              />
-              Mine: the follow-ups I own
-            </label>
-            <SearchPicker
-              v-if="assignedTo"
-              class="all-assigned"
-              :model-value="assignedTo"
-              :groups="assignedGroups"
-              :finds="findsAssigned"
-              :cap="PEOPLE_CAP"
-              holds-choice
-              list-over
-              label="Assigned to"
-              placeholder="Type an address…"
-              testid="applications-all-assigned-to"
-              @update:model-value="assignTo($event as string)"
-            />
-          </div>
-        </div>
+        <!-- Named for a screen reader, with what the statuses that are not plain mean (E38/F05/S01). -->
+        <SegmentedControl
+          :options="ALL_VIEW_FILTERS"
+          :model-value="filter"
+          label="Filter"
+          describedBy="applications-all-filter-hint"
+          wrapsOnAPhone
+          testid="applications-all-filter"
+          @update:model-value="setQuery({ status: $event === 'all' ? null : $event })"
+        />
+        <label class="all-mine">
+          <input
+            type="checkbox"
+            :checked="mine"
+            data-testid="applications-all-mine"
+            @change="setQuery({ mine: ($event.target as HTMLInputElement).checked ? '1' : null })"
+          />
+          Mine: the follow-ups I own
+        </label>
+        <SearchPicker
+          v-if="assignedTo"
+          class="all-assigned"
+          :model-value="assignedTo"
+          :groups="assignedGroups"
+          :finds="findsAssigned"
+          :cap="PEOPLE_CAP"
+          holds-choice
+          list-over
+          label="Assigned to"
+          placeholder="Type an address…"
+          testid="applications-all-assigned-to"
+          @update:model-value="assignTo($event as string)"
+        />
       </template>
 
       <template #aboveRows>
-        <p id="applications-all-filter-hint" class="all-filter-hint">
+        <p id="applications-all-filter-hint" class="visually-hidden">
           Open is not decided yet. Needs follow-up waits on someone reaching out to the applicant.
         </p>
-        <!-- What the tab says over the review while applications are open: under the tools and the
-             filters' own hint, over the rows, so the tools stand still in every stage (T466). -->
+        <!-- What the tab says over the review while applications are open: under the tools, over
+             the rows, so the tools stand still in every stage (T466). -->
         <slot name="lead" />
 
         <!-- The rows shown, ticked at once (E38/F05/S02); a reviewer's, as the ticks are. -->
@@ -1057,44 +1044,6 @@ async function decideSelection() {
   gap: var(--space-3);
 }
 
-/* A row of its own, under the find field. */
-.all-filter-group {
-  display: flex;
-  flex: 1 1 100%;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.all-filter-group .field-label {
-  margin-bottom: 0;
-}
-
-/* It speaks of the filters over it, so it stands 4px under them, not the frame's gap of 12. */
-.all-filter-hint {
-  margin: calc(-1 * var(--space-2)) 0 0;
-  font-size: var(--text-xs);
-  color: var(--mm-text-muted);
-}
-
-.all-filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.all-status {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-
-/* "All" is a word wide; a target is never narrower than it is tall. */
-.all-status .btn {
-  min-width: var(--target-min);
-}
-
 .all-mine {
   display: inline-flex;
   align-items: center;
@@ -1110,7 +1059,7 @@ async function decideSelection() {
  * wide. The label stands beside the field until the field would be too short to read an address, and
  * then over it.
  */
-.all-filters .all-assigned {
+.all-view .all-assigned {
   flex: 1 1 22rem;
   flex-flow: row wrap;
   align-items: center;
@@ -1119,15 +1068,15 @@ async function decideSelection() {
   max-width: 28rem;
 }
 
-.all-assigned :deep(.field-label) {
+.all-view .all-assigned :deep(.field-label) {
   margin-bottom: 0;
   font-size: var(--text-sm);
   color: var(--mm-black);
   white-space: nowrap;
 }
 
-/* As tall as the compact status buttons beside it, so the filter row is one height. */
-.all-assigned :deep(.field) {
+/* As tall as the compact statuses and the find field beside it, so the line is one height. */
+.all-view .all-assigned :deep(.field) {
   flex: 1 1 14rem;
   width: auto;
   min-width: 0;

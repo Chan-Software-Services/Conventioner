@@ -48,10 +48,18 @@ export const LIST_FIND_FROM = 12;
  *   `ReadFailed` unless the screen brings its own, and its Try again is the `retry` event. With no
  *   `items` the `empty` slot says why, or "No <many>." without one; the words alone finding nothing
  *   is the count line's to say.
+ * - `labelAsPlaceholder` keeps the field's label for a screen reader alone and shows its words in
+ *   the empty field, for a line too compact for a label over it.
+ * - `pinnedTools` draws the tools as a `ToolRow`'s start, the field compact, bled to the edges of a
+ *   market screen's gutter so its rule runs edge to edge, and from 1024px sticky flush under the
+ *   `PinnedTools` block it stands under, by that block's `--pinned-tools-h`, so neither moves as the
+ *   rows scroll (T466, release walk F7). The count line is then small, 4px over the first row and
+ *   the frame's gap under the row's rule, reading as the list's.
  */
 import { computed, nextTick, ref, useId, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import ReadFailed from '@/components/ReadFailed.vue';
+import ToolRow from '@/components/ToolRow.vue';
 import { withoutQueryKey } from '@/utils/routeQuery';
 
 const props = withDefaults(
@@ -77,6 +85,10 @@ const props = withDefaults(
     findKey?: string;
     /** The field's label, with `finds`. */
     findLabel?: string;
+    /** The label for a screen reader alone, its words the field's placeholder. */
+    labelAsPlaceholder?: boolean;
+    /** The tools as a compact tool row, pinned under the screen's `PinnedTools` from 1024px. */
+    pinnedTools?: boolean;
     state?: 'ready' | 'loading' | 'failed';
     /** What a failed read says, `getApiErrorMessage`'s on a screen. */
     failedMessage?: string;
@@ -226,21 +238,35 @@ async function showMore(): Promise<void> {
 </script>
 
 <template>
-  <div ref="frame" class="list-frame" :data-testid="testid">
-    <div
+  <div
+    ref="frame"
+    class="list-frame"
+    :class="{ 'list-frame--pinned-tools': pinnedTools }"
+    :data-testid="testid"
+  >
+    <!-- A tool row takes its test id as a prop, a plain block as an attribute. -->
+    <component
+      :is="pinnedTools ? ToolRow : 'div'"
       v-if="showsField || $slots.filters"
-      class="list-frame__tools"
-      :data-testid="`${testid}-tools`"
+      v-bind="pinnedTools ? { testid: `${testid}-tools` } : { 'data-testid': `${testid}-tools` }"
+      :class="pinnedTools ? 'list-frame__tools--pinned' : 'list-frame__tools'"
     >
       <div v-if="showsField" class="list-frame__find">
-        <label class="field-label" :for="fieldId">{{ findLabel }}</label>
+        <label
+          class="field-label"
+          :class="{ 'visually-hidden': labelAsPlaceholder }"
+          :for="fieldId"
+          >{{ findLabel }}</label
+        >
         <input
           :id="fieldId"
           ref="field"
           :value="typed"
+          :placeholder="labelAsPlaceholder ? findLabel : undefined"
           type="search"
           autocomplete="off"
           class="field"
+          :class="{ 'field--compact': pinnedTools }"
           :name="`${testid}-find`"
           :data-testid="`${testid}-find`"
           @input="setTyped(($event.target as HTMLInputElement).value)"
@@ -249,7 +275,7 @@ async function showMore(): Promise<void> {
         />
       </div>
       <div v-if="$slots.filters" class="list-frame__filters"><slot name="filters" /></div>
-    </div>
+    </component>
 
     <slot name="aboveRows" />
 
@@ -275,7 +301,12 @@ async function showMore(): Promise<void> {
     </div>
     <template v-else>
       <!-- Announced: a reader stays in the field while the rows change under it. -->
-      <p v-if="showsCount" class="list-frame__words" role="status" :data-testid="`${testid}-count`">
+      <p
+        v-if="showsCount"
+        class="list-frame__words list-frame__count"
+        role="status"
+        :data-testid="`${testid}-count`"
+      >
         {{ countLine }}
       </p>
       <slot v-if="found.length && $slots.rows" name="rows" :rows="rowsShown" />
@@ -357,10 +388,37 @@ async function showMore(): Promise<void> {
   align-self: flex-start;
 }
 
+/*
+ * Pinned tools: a tool row bled across the market screen's gutter, so its rule runs edge to edge,
+ * and from 1024px flush under the screen's `PinnedTools` block, under it as that block is under the
+ * frame. `--pinned-tools-h` is set on that block's root, which this row stands inside.
+ */
+.list-frame__tools--pinned {
+  margin-inline: calc(-1 * var(--space-6));
+}
+
+/* The list's own count: small, the frame's 12px under the rule and 4px over the first row. */
+.list-frame--pinned-tools .list-frame__count {
+  margin-block-end: calc(-1 * var(--space-2));
+  font-size: var(--text-xs);
+}
+
+@media (width >= 1024px) {
+  .list-frame__tools--pinned {
+    position: sticky;
+    top: calc(var(--banner-h) + var(--market-frame-h) + var(--pinned-tools-h, 0px));
+    z-index: 9;
+  }
+}
+
 @media (width <= 640px) {
   .list-frame__find {
     flex-basis: 100%;
     max-width: none;
+  }
+
+  .list-frame__tools--pinned {
+    margin-inline: calc(-1 * var(--space-4));
   }
 }
 </style>

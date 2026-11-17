@@ -664,9 +664,13 @@ for (const size of PHONE_AND_DESK) {
       await press(all.assignedTo.option(last));
       await expect(all.assignedTo.field).toHaveValue(last);
 
+      // Export ends the toolbar over the filters line, at the same inner edge (T466).
       const rowEnd = await page
-        .locator('.all-filters')
-        .evaluate((row) => row.getBoundingClientRect().right);
+        .getByTestId('applications-all-list-tools')
+        .evaluate(
+          (row) =>
+            row.getBoundingClientRect().right - parseFloat(getComputedStyle(row).paddingRight),
+        );
       const exportEnd = await all.exportButton.evaluate(
         (button) => button.getBoundingClientRect().right,
       );

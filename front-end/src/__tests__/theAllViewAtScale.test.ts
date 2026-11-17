@@ -190,6 +190,73 @@ describe('the find field', () => {
   });
 });
 
+/**
+ * The search, the statuses and Mine on one compact line pinned under the toolbar (T466, release
+ * walk F7): no words over them on screen, every name and description kept for a screen reader.
+ */
+describe('the one line of tools', () => {
+  const tools = (wrapper: View) => wrapper.get('[data-testid="applications-all-list-tools"]');
+  const statuses = (wrapper: View) => wrapper.get('[data-testid="applications-all-filter"]');
+
+  it('stands as the pinned tool row, the field named by hidden words that are its placeholder', async () => {
+    const wrapper = await allView();
+    expect(tools(wrapper).classes()).toContain('list-frame__tools--pinned');
+    const input = wrapper.get('[data-testid="applications-all-list-find"]');
+    expect(input.attributes('placeholder')).toBe('Find by name or address');
+    const label = wrapper.get(`label[for="${input.attributes('id')}"]`);
+    expect(label.classes()).toContain('visually-hidden');
+  });
+
+  it('holds the statuses, then Mine, in the row, with no "Filter" on screen', async () => {
+    const wrapper = await allView();
+    const start = tools(wrapper).get('.tool-row__start');
+    expect(start.find('[data-testid="applications-all-filter"]').exists()).toBe(true);
+    expect(start.find('[data-testid="applications-all-mine"]').exists()).toBe(true);
+    expect(wrapper.findAll('.field-label').map((label) => label.text())).not.toContain('Filter');
+  });
+
+  it('draws the statuses as one segmented control named Filter and described by the hidden hint', async () => {
+    const wrapper = await allView();
+    const group = statuses(wrapper);
+    expect(group.classes()).toEqual(expect.arrayContaining(['segmented', 'segmented--wraps']));
+    expect(group.attributes('role')).toBe('group');
+    expect(group.attributes('aria-label')).toBe('Filter');
+    const hint = wrapper.get(`#${group.attributes('aria-describedby')}`);
+    expect(hint.text()).toBe(
+      'Open is not decided yet. Needs follow-up waits on someone reaching out to the applicant.',
+    );
+    expect(hint.classes()).toContain('visually-hidden');
+    expect(group.findAll('button').map((button) => button.attributes('data-testid'))).toEqual([
+      'applications-all-filter-all',
+      'applications-all-filter-undecided',
+      'applications-all-filter-needs_follow_up',
+      'applications-all-filter-reviewer_approved',
+      'applications-all-filter-reviewer_rejected',
+    ]);
+  });
+
+  it('presses the status in the address, and Any status drops it from the address', async () => {
+    route.query = { mine: '1' };
+    const wrapper = await allView();
+    const pressed = () =>
+      statuses(wrapper)
+        .findAll('button')
+        .filter((button) => button.attributes('aria-pressed') === 'true')
+        .map((button) => button.text());
+    expect(pressed()).toEqual(['Any status']);
+
+    await wrapper.get('[data-testid="applications-all-filter-undecided"]').trigger('click');
+    await flushPromises();
+    expect(replace).toHaveBeenLastCalledWith({ query: { mine: '1', status: 'undecided' } });
+    expect(pressed()).toEqual(['Open']);
+
+    await wrapper.get('[data-testid="applications-all-filter-all"]').trigger('click');
+    await flushPromises();
+    expect(replace).toHaveBeenLastCalledWith({ query: { mine: '1' } });
+    expect(pressed()).toEqual(['Any status']);
+  });
+});
+
 describe('the count line and the first page', () => {
   it('says how many of the whole, under a filter', async () => {
     fetchMarketApplications.mockResolvedValue([

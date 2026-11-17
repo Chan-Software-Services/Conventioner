@@ -9,6 +9,7 @@ import { marketScreenPath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { withUser } from './helpers/withUser';
 import { namelessControls } from './helpers/accessibleNames';
+import { mongoEval } from './helpers/mongo';
 import { ApplicationsAllPage } from './pages/ApplicationsAllPage';
 import { putVerdict } from './helpers/putVerdict';
 
@@ -92,11 +93,11 @@ test('every application, filtered, held and decided from the drawer', async ({
 });
 
 /**
- * All comes first and is the default, and both controls say what they are in words that are also
- * their names (E38/F05/S01); saved links to All, and to One by one at an application, still open
- * what they did.
+ * All comes first and is the default, and both controls are named, the statuses described by what
+ * the ones that are not plain mean (E38/F05/S01), for a screen reader since the line is compact
+ * (T466); saved links to All, and to One by one at an application, still open what they did.
  */
-test('the review opens on All, its views and its filter named on screen', async ({
+test('the review opens on All, its views and its filter named', async ({
   authenticatedPage: page,
   request,
 }) => {
@@ -129,7 +130,10 @@ test('the review opens on All, its views and its filter named on screen', async 
     'Approved',
     'Rejected',
   ]);
-  await expect(page.getByText('Open is not decided yet.')).toBeVisible();
+  await expect(filter).toHaveAccessibleDescription(
+    'Open is not decided yet. Needs follow-up waits on someone reaching out to the applicant.',
+  );
+  await expect(page.getByText('Filter', { exact: true })).toHaveCount(0);
   expect(await namelessControls(page), 'the All view').toEqual([]);
 
   // "Open" keeps the address it had as "To review", and lists what awaits a verdict.
@@ -150,6 +154,76 @@ test('the review opens on All, its views and its filter named on screen', async 
   await expect(all.rows).toHaveCount(2);
   await page.goto(`${marketScreenPath(marketId, 'applications')}?application=${theo}`);
   await expect(page.getByTestId('app-monitor-email')).toHaveText('theo@thistle.test');
+});
+
+/**
+ * The search, the statuses and Mine stand on one compact line under the toolbar, no words over them
+ * on screen, the statuses one joined box; the count is small, 12px under the line's rule and 4px
+ * over the first row, reading as the list's (T466, release walk F7).
+ */
+test('the search and the filters stand on one compact line, the count small over the rows', async ({
+  authenticatedPage: page,
+  request,
+}) => {
+  const { marketId } = await seedPhaseMarket(
+    request,
+    BACKEND_URL,
+    TEST_USER.email,
+    TEST_USER.password,
+    { intakeMode: 'form' },
+  );
+  await transitionMarket(request, BACKEND_URL, TEST_USER.email, marketId, 'applications');
+  // One past the 12 a list shows with no find field, decided, then the review closed, so no line
+  // of the open review's stands between the tools and the count.
+  const now = new Date().toISOString();
+  const applications = Array.from({ length: 13 }, (_, at) => ({
+    id: `one-line-${marketId}-${at}`,
+    market_id: marketId,
+    applicant_email: `one-line-${at}@vendor.test`,
+    form_data: { name: 'Test App', category: 'Crafts' },
+    status: 'reviewer_approved',
+    application_type: 'main',
+    submitted_at: now,
+    updated_at: now,
+  }));
+  mongoEval(`db.applications.insertMany(${JSON.stringify(applications)})`);
+  await transitionMarket(request, BACKEND_URL, TEST_USER.email, marketId, 'assignment');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const all = new ApplicationsAllPage(page);
+  await all.goto(marketId);
+  await expect(all.rows).toHaveCount(13);
+
+  await expect(all.find).toHaveAccessibleName('Find by name or address');
+  await expect(all.find).toHaveAttribute('placeholder', 'Find by name or address');
+  await expect(page.getByText('Find by name or address', { exact: true })).toHaveCount(1);
+  await expect(page.getByText('Find by name or address', { exact: true })).toHaveClass(
+    /visually-hidden/,
+  );
+
+  const box = async (testid: string) => (await page.getByTestId(testid).boundingBox())!;
+  const middle = (at: { y: number; height: number }) => Math.round(at.y + at.height / 2);
+  const tools = await box('applications-all-list-tools');
+  const field = await box('applications-all-list-find');
+  const statuses = await box('applications-all-filter');
+  const mine = (await page.locator('label').filter({ has: all.mine }).boundingBox())!;
+  expect(field.height, 'the field is compact').toBe(28);
+  expect(statuses.height, 'the statuses are compact').toBe(28);
+  expect(tools.height, 'the line: 28px controls, 12px over and under, and the rule').toBe(53);
+  expect([middle(statuses), middle(mine)], 'the field, the statuses and Mine on one line').toEqual([
+    middle(field),
+    middle(field),
+  ]);
+  const anyStatus = await box('applications-all-filter-all');
+  const open = await box('applications-all-filter-undecided');
+  expect(open.x, 'the statuses join at one edge').toBe(anyStatus.x + anyStatus.width);
+
+  const count = page.getByTestId('applications-all-list-count');
+  await expect(count).toHaveText('13 applications');
+  await expect(count).toHaveCSS('font-size', '12px');
+  const counted = (await count.boundingBox())!;
+  const first = (await all.rows.first().boundingBox())!;
+  expect(Math.round(counted.y - (tools.y + tools.height)), "12px under the line's rule").toBe(12);
+  expect(Math.round(first.y - (counted.y + counted.height)), '4px over the first row').toBe(4);
 });
 
 /**
