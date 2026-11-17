@@ -23,7 +23,7 @@ vi.mock('@/utils/doorCode', async (original) => ({
 }));
 vi.mock('@/utils/signedIn', () => ({ signedInEmail: () => 'door@example.com' }));
 
-const URL_OF = (code: string) => `https://conventioner.io/harbour-night-market?door=${code}`;
+const URL_OF = (code: string) => `https://conventioner.io/harbour-night-market/vendor?door=${code}`;
 const CODE = (code: string) => ({
   code,
   madeAt: '2026-11-21T15:20:00+00:00',
