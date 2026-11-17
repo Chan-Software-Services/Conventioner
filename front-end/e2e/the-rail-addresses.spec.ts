@@ -35,7 +35,11 @@ test.describe("The rail's addresses", () => {
       for (const chip of [marketPage, vendorPage]) {
         await expect(chip).toBeVisible();
         const link = chip.locator('a');
-        const cut = await link.evaluate((a) => a.scrollWidth > a.clientWidth);
+        // The address breaks at any character and shows one line, so a cut one runs on to a
+        // hidden second line rather than past the link's right edge.
+        const cut = await link.evaluate(
+          (a) => a.scrollWidth > a.clientWidth || a.scrollHeight > a.clientHeight,
+        );
         expect(cut, `${await link.textContent()} is cut off at ${width}px`).toBe(false);
       }
     }
