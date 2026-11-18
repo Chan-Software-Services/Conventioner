@@ -357,6 +357,16 @@ html.fills-the-window {
   scrollbar-gutter: auto;
 }
 
+/*
+ * The page holds still behind a modal (T473): `inert` takes no scroll, so a wheel or a drag over a
+ * dialog's scrim moved the page behind it. `useInertBehind` puts this class on `<html>` while any
+ * modal is open. Hidden overflow keeps the page where it was, and the gutter above keeps its width,
+ * so nothing moves as the class comes and goes; what the modal holds still scrolls in its own box.
+ */
+html.holds-still {
+  overflow: hidden;
+}
+
 /* On a phone's browser `100vh` is the window with its bars hidden, taller than the one shown while
    they are, so a page and a shell at least that tall scroll by the bars' height: while the page
    fills the window they take the window shown, `100dvh`, and every other page keeps `100vh`. */
