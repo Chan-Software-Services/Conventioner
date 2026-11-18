@@ -21,7 +21,7 @@ const PARTS: SplitPart[] = [
   },
   { label: 'Approved', value: 'reviewer_approved', count: 20, fill: '--mm-green', to: to('a') },
   { label: 'Rejected', value: 'reviewer_rejected', count: 4, fill: '--mm-red', to: to('r') },
-  { label: 'Cancelled', value: 'cancelled', count: 4, fill: '--mm-chart-grey' },
+  { label: 'Elsewhere', value: 'elsewhere', count: 4, fill: '--mm-chart-yellow' },
 ];
 
 function mountBar(parts = PARTS) {
@@ -40,13 +40,13 @@ describe('SplitBar', () => {
       'undecided',
       'reviewer_approved',
       'reviewer_rejected',
-      'cancelled',
+      'elsewhere',
     ]);
     expect(drawn.map((part) => part.attributes('style'))).toEqual([
       'flex-grow: 12; background: var(--mm-blue);',
       'flex-grow: 20; background: var(--mm-green);',
       'flex-grow: 4; background: var(--mm-red);',
-      'flex-grow: 4; background: var(--mm-chart-grey);',
+      'flex-grow: 4; background: var(--mm-chart-yellow);',
     ]);
   });
 
@@ -72,7 +72,7 @@ describe('SplitBar', () => {
     expect(links.map((link) => link.props('to'))).toEqual([to('undecided'), to('a'), to('r')]);
     const line = (value: string) => wrapper.find(`[data-testid="split"][data-value="${value}"]`);
     expect(line('needs_follow_up').element.tagName).toBe('DIV');
-    expect(line('cancelled').element.tagName).toBe('DIV');
+    expect(line('elsewhere').element.tagName).toBe('DIV');
   });
 
   it('wears each part’s fill on its legend swatch', () => {

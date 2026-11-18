@@ -355,14 +355,16 @@ The card's was extracted from the newer screens, where it is already used 77 tim
 
 ```css
 --shadow-card:
-  0 0 0 1px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.07), 0 6px 14px rgba(0, 0, 0, 0.08);
+  0 0 0 1px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.07),
+  0 6px 14px rgba(0, 0, 0, 0.08);
 ```
 
 **What floats over a map takes the second, `--shadow-float`** (T465): the public map's sheet, its day and hall dropdowns, its zoom and legend pills and its bubble.
 The card's shadow, with its 1px ring, reads heavy over a pale map, so this one is softer and wider, and what it lifts draws its own edge in `--mm-border-soft`.
 
 ```css
---shadow-float: 0 1px 2px rgba(39, 35, 35, 0.06), 0 8px 24px rgba(39, 35, 35, 0.08);
+--shadow-float:
+  0 1px 2px rgba(39, 35, 35, 0.06), 0 8px 24px rgba(39, 35, 35, 0.08);
 ```
 
 **A card that informs is flat**, where the cards worked in are lifted: on the [layout's page](implementation/modules/floorplan-placement.md#the-editor) the Sections card stands on `--mm-beige` with a 1px `--mm-border` edge and no shadow, so the white, lifted card of the selection or the tool under it reads as the one in hand (T422, the QC walk of 2026-11-16); its quiet lines take `--mm-text-muted-on-beige`, since `--mm-text-muted` is 4.23:1 there.
@@ -406,7 +408,7 @@ The other fills such a control is drawn in step once, on hover: `--mm-yellow-hov
 The deep focus border reads less on a darker fill: 3.17:1 on `--mm-green-hover`, 2.80 on `--mm-green-pressed`, 2.68 on `--mm-red-hover` and 2.37 on `--mm-red-pressed`, against 3.26, 2.74, 2.68 and 2.28 under the opacity it replaced.
 
 **A mark that carries no text is held to the non-text bar, 3:1**: the bar's current-tab dot, `--mm-green` on `--mm-black`, measures 3.39:1, and the test pins it, so a bar retinted darker or a green lightened for a light ground cannot take it under unnoticed.
-A chart's marks are held to the same 3:1 on the white card they are drawn on (T201): the review's split bar fills Open, Needs follow-up, Approved and Rejected with `--mm-blue`, `--mm-chart-yellow`, `--mm-green` and `--mm-red`, a status no filter lists with `--mm-chart-grey`, a grey of its own, each part set apart by a 2px white gap so neighbouring fills need no contrast with each other.
+A chart's marks are held to the same 3:1 on the white card they are drawn on (T201): the review's split bar fills Open, Needs follow-up, Approved and Rejected with `--mm-blue`, `--mm-chart-yellow`, `--mm-green` and `--mm-red`, every application in one of the four, each part set apart by a 2px white gap so neighbouring fills need no contrast with each other.
 `--mm-yellow` is 2.15:1 on white, too faint for a mark, so a chart's yellow is its own token, `--mm-chart-yellow` (`#bd8619`, 3.19:1), darker and never under text; `contrast.test.ts` lists the chart marks and holds each to 3:1 on white.
 A meter bar (`MeterBar`, the Stats tab's room, money and check-in) fills its value in `--mm-green` up to its mark and in `--mm-chart-yellow`, the charts' attention fill, past it, on a `--mm-beige` track; the mark is a 2px `--mm-black` line standing a hairline over and under the track, and a row's bars in one card share one scale, the card's largest value or mark.
 Room marks the tables on every row; Money marks owed only when more was paid, and Check-in a day's expected only when that day is short of the card's largest, since a mark at the track's end says nothing the end does not.
