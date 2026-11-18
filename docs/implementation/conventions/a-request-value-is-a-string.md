@@ -65,7 +65,7 @@ Each is refused, and nothing changes: no password, no verified flag, no counted 
 Its collections match as the database does, an operator included, so a lookup that let a non-string through would find what the database finds.
 A reset, a verification and a sign-in with the right string still work.
 
-CodeQL's `py/nosql-injection` is the automated backstop: it is in the default suite GitHub's default setup runs on every pull request and weekly on `dev` ([CI and the gate](../testing/ci-and-the-gate.md#codeql)), and it flags a request value that reaches a MongoDB filter unchecked.
+CodeQL's `py/nosql-injection` is the automated backstop: it is in the default suite CodeQL's workflow runs on every pull request to `dev`, every push and trial commit there and weekly ([CI and the gate](../testing/ci-and-the-gate.md#codeql)), and it flags a request value that reaches a MongoDB filter unchecked.
 The test is the net for the endpoints above; the rule catches the endpoint nobody listed.
 
 What breaks it: `data.get(key)` handed to a filter, or to anything that builds one, without `string_field()`.
