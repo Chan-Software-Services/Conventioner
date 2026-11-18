@@ -15,6 +15,8 @@ export class ApplicationsAllPage {
 
   readonly rows: Locator;
   readonly mine: Locator;
+  /** Mine's label, the box and its words: the line's target. */
+  readonly mineLabel: Locator;
   readonly selection: Locator;
   readonly selectAll: Locator;
   readonly selectAllSkipped: Locator;
@@ -55,6 +57,7 @@ export class ApplicationsAllPage {
     this.page = page;
     this.rows = page.getByTestId('applications-all-row');
     this.mine = page.getByTestId('applications-all-mine');
+    this.mineLabel = page.getByTestId('applications-all-mine-label');
     this.selection = page.getByTestId('applications-all-selection');
     this.selectAll = page.getByTestId('applications-all-select-all');
     this.selectAllSkipped = page.getByTestId('applications-all-select-all-skipped');

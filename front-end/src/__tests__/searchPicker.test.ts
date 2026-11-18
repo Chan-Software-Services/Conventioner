@@ -2899,3 +2899,23 @@ describe('one choice held past the cap (T263)', () => {
     wrapper.unmount();
   });
 });
+
+/*
+ * Given `compact`, the field stands as tall as the compact controls beside it in a toolbar, as
+ * Attendance's map search does beside the count (T466); without it the field is a plain one.
+ */
+describe('compact', () => {
+  it('gives its field the compact height', () => {
+    const wrapper = mount(SearchPicker, {
+      props: { modelValue: '', groups: GROUPS, finds, label: 'Who', testid: 'who', compact: true },
+    });
+    expect(field(wrapper).classes()).toEqual(['field', 'field--compact']);
+    wrapper.unmount();
+  });
+
+  it('leaves the field a plain one without it', () => {
+    const wrapper = picker();
+    expect(field(wrapper).classes()).toEqual(['field']);
+    wrapper.unmount();
+  });
+});

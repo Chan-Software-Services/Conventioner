@@ -14,6 +14,7 @@ import ApplicationMonitor from '@/components/application/ApplicationMonitor.vue'
 import { ApplicationStatus, type Application, type Market } from '@/assets/types/datatypes';
 import { MarketAction } from '@/utils/marketActions';
 import { answersRefusing } from './support/servedAnswers';
+import { pressRefresh } from './support/reviewViewTools';
 import { servedReview } from './support/servedReview';
 
 const ME = 'ana@example.com';
@@ -331,7 +332,7 @@ describe('a chosen reviewer', () => {
     expect(text(wrapper, 'app-monitor-share-done')).toContain('Your share is done.');
 
     stored.push(application('fay', 6, ME));
-    await wrapper.get('[data-testid="applications-refresh"]').trigger('click');
+    await pressRefresh(wrapper);
     await flushPromises();
 
     expect(shown(wrapper)).toBe('fay@vendor.test');
@@ -344,7 +345,7 @@ describe('a chosen reviewer', () => {
     expect(shown(wrapper)).toBe('amy@vendor.test');
 
     stored[0].status = ApplicationStatus.ReviewerRejected;
-    await wrapper.get('[data-testid="applications-refresh"]').trigger('click');
+    await pressRefresh(wrapper);
     await flushPromises();
 
     expect(wrapper.find('[data-testid="app-monitor-card"]').exists()).toBe(false);
@@ -362,7 +363,7 @@ describe('a chosen reviewer', () => {
     stored.forEach((app) => {
       if (app.reviewer?.email === ME) app.status = ApplicationStatus.ReviewerApproved;
     });
-    await wrapper.get('[data-testid="applications-refresh"]').trigger('click');
+    await pressRefresh(wrapper);
     await flushPromises();
 
     answerNext(served(application('cal', 3, ME)));

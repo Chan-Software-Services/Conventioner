@@ -6,7 +6,8 @@
  * Fit on the map's bottom-right corner as the editor's zoom stands, and the legend under the map
  * naming each tone as the page words it. In a box a phone's width the zoom stands under the map, at
  * the legend's end, where it covers none of a small map; a phone keeps the buttons, the one-finger
- * way to zoom that a pinch needs beside it.
+ * way to zoom that a pinch needs beside it. A page may give a short `note` for the legend row's
+ * end, and may leave the switch out (`locationSwitch`) where it draws its own.
  *
  * It holds no market state and reads no store and no API: the page hands it its locations, seats
  * and legend (`dayMap.ts` turns the public answer and the roster into them), keeps the open
@@ -44,8 +45,12 @@ const props = withDefaults(
     /** More seats or tables outlined, as a search marks the vendors it finds. */
     marked?: readonly string[];
     legend: readonly DayMapLegendItem[];
+    /** A short line at the legend row's end, under the map's right, as Attendance's read time. */
+    note?: string;
+    /** Whether to draw the location switch; off for a page that draws its own. */
+    locationSwitch?: boolean;
   }>(),
-  { marked: () => [] },
+  { marked: () => [], note: '', locationSwitch: true },
 );
 
 const locationId = defineModel<string>('locationId', { required: true });
@@ -114,19 +119,23 @@ const swatches = computed(() => {
 
 <template>
   <div class="day-map" :class="{ 'day-map--fills': fills }" data-testid="day-map">
+    <FilterToggles
+      v-if="locationSwitch && locations.length > 1 && open && !fills"
+      class="day-map__locations"
+      :options="switches"
+      label="Location"
+      testid="day-map-locations"
+      :modelValue="open.id"
+      :rest="open.id"
+      @update:modelValue="locationId = $event as string"
+    />
     <div class="day-map__grid">
-      <FilterToggles
-        v-if="locations.length > 1 && open && !fills"
-        class="day-map__locations"
-        :options="switches"
-        label="Location"
-        testid="day-map-locations"
-        :modelValue="open.id"
-        :rest="open.id"
-        @update:modelValue="locationId = $event as string"
-      />
-
-      <div v-if="open" class="day-map__frame" :style="fills ? undefined : { aspectRatio: shape }">
+      <div
+        v-if="open"
+        class="day-map__frame"
+        data-testid="day-map-frame"
+        :style="fills ? undefined : { aspectRatio: shape }"
+      >
         <LayoutMap
           ref="map"
           :layout="open.layout"
@@ -208,14 +217,15 @@ const swatches = computed(() => {
           <span>{{ item.label }}</span>
         </li>
       </ul>
+      <p v-if="note" class="day-map__note" data-testid="day-map-note">{{ note }}</p>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* The switch, the map and the legend stack; the zoom stands over the map's bottom-right corner,
-   placed in the map's cell (an absolute grid item takes its area as its box), until the box is a
-   phone's width, where it moves under the map. */
+/* The switch over the grid, then the map and the legend stack; the zoom stands over the map's
+   bottom-right corner, placed in the map's cell (an absolute grid item takes its area as its box),
+   until the box is a phone's width, where it moves under the map. */
 .day-map {
   container-type: inline-size;
   min-width: 0;
@@ -226,14 +236,22 @@ const swatches = computed(() => {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
-    'switch switch'
     'map map'
     'legend legend';
   gap: var(--space-3);
 }
 
+/* A note takes the legend row's end, so a map with none keeps the legend the whole width. */
+.day-map__grid:has(> .day-map__note) {
+  grid-template-areas:
+    'map map'
+    'legend note';
+}
+
+/* Over the grid rather than a row of it, so a map with no switch has no empty row and no gap over
+   it (T466): the grid's gap is the switch's own margin. */
 .day-map__locations {
-  grid-area: switch;
+  margin-block-end: var(--space-3);
 }
 
 /* The map's box: the hall's shape across the width it is given, no taller than most of the
@@ -377,13 +395,29 @@ const swatches = computed(() => {
   height: 14px;
 }
 
+/* The note at the legend row's end, 4px under the map: the grid's 12px gap less 8px. */
+.day-map__note {
+  grid-area: note;
+  align-self: start;
+  margin: calc(-1 * var(--space-2)) 0 0;
+  text-align: end;
+  font-size: var(--text-xs);
+  color: var(--mm-text-muted);
+}
+
 /* A phone's width: the zoom under the map, at the legend's end, covering none of it. */
 @container (width < 30rem) {
   .day-map__grid {
     grid-template-areas:
-      'switch switch'
       'map map'
       'legend zoom';
+  }
+
+  .day-map__grid:has(> .day-map__note) {
+    grid-template-areas:
+      'map map'
+      'legend zoom'
+      'note note';
   }
 
   .day-map__zoom {

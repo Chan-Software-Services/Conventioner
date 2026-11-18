@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
 import { h } from 'vue';
 import ListFrame from '@/components/ListFrame.vue';
+import { stylesOf, valueOf } from './support/sfcStyles';
 
 interface Row {
   id: string;
@@ -849,5 +850,100 @@ describe('with showAll, a list read whole by asking', () => {
     const [rowsNow, left] = drawnEvents.at(-1)!;
     expect(rowsNow).toHaveLength(30);
     expect(left).toBe(0);
+  });
+});
+
+/**
+ * A screen whose tools stand on one compact line pinned under its toolbar (T466, release walk F7):
+ * the field named for a screen reader alone, its words its placeholder, and the tools a `ToolRow`
+ * bled to the screen's edges, sticky from 1024px under the `PinnedTools` block over it.
+ */
+describe('labelAsPlaceholder', () => {
+  it('names the field for a screen reader alone, and shows the words in the empty field', async () => {
+    const { wrapper } = await mountFrame({ labelAsPlaceholder: true });
+    const label = wrapper.get('label');
+    expect(label.text()).toBe('Find by name or address');
+    expect(label.classes()).toContain('visually-hidden');
+    expect(label.attributes('for')).toBe(field(wrapper).attributes('id'));
+    expect(field(wrapper).attributes('placeholder')).toBe('Find by name or address');
+  });
+
+  it('leaves the label on screen and the field empty of words without it', async () => {
+    const { wrapper } = await mountFrame();
+    expect(wrapper.get('label').classes()).not.toContain('visually-hidden');
+    expect(field(wrapper).attributes('placeholder')).toBeUndefined();
+  });
+});
+
+describe('pinnedTools', () => {
+  const tools = (wrapper: VueWrapper) => wrapper.get('[data-testid="frame-tools"]');
+  const filters = { filters: () => h('button', { 'data-testid': 'a-filter' }, 'Open') };
+
+  it('draws the field and the filters as the start of a tool row, with no end', async () => {
+    const { wrapper } = await mountFrame({ pinnedTools: true }, filters);
+    expect(tools(wrapper).classes()).toEqual(
+      expect.arrayContaining(['tool-row', 'list-frame__tools--pinned']),
+    );
+    const start = tools(wrapper).get('.tool-row__start');
+    expect(start.find('[data-testid="frame-find"]').exists()).toBe(true);
+    expect(start.find('[data-testid="a-filter"]').exists()).toBe(true);
+    expect(tools(wrapper).find('.tool-row__end').exists()).toBe(false);
+  });
+
+  it('makes the field compact, and the count line the small one over the rows', async () => {
+    const { wrapper } = await mountFrame({ pinnedTools: true });
+    expect(field(wrapper).classes()).toEqual(expect.arrayContaining(['field', 'field--compact']));
+    expect(wrapper.get('[data-testid="frame"]').classes()).toContain('list-frame--pinned-tools');
+    expect(wrapper.get('[data-testid="frame-count"]').classes()).toContain('list-frame__count');
+  });
+
+  it('draws the filters alone in the row once the list is too short for a field', async () => {
+    const { wrapper } = await mountFrame({ pinnedTools: true, items: rows(3) }, filters);
+    expect(field(wrapper).exists()).toBe(false);
+    expect(tools(wrapper).get('.tool-row__start').find('[data-testid="a-filter"]').exists()).toBe(
+      true,
+    );
+  });
+
+  it('draws no row with no field and no filters', async () => {
+    const { wrapper } = await mountFrame({ pinnedTools: true, items: rows(3) });
+    expect(wrapper.find('[data-testid="frame-tools"]').exists()).toBe(false);
+  });
+
+  it('leaves every other frame as it was: plain tools, a full-height field, no pinned class', async () => {
+    const { wrapper } = await mountFrame({}, filters);
+    expect(tools(wrapper).classes()).toEqual(['list-frame__tools']);
+    expect(tools(wrapper).find('.tool-row__start').exists()).toBe(false);
+    expect(field(wrapper).classes()).not.toContain('field--compact');
+    expect(wrapper.get('[data-testid="frame"]').classes()).toEqual(['list-frame']);
+  });
+
+  describe('its look, as the stylesheet ships it', () => {
+    const styles = stylesOf('ListFrame.vue');
+    const PINNED = '.list-frame__tools--pinned';
+    const COUNT = '.list-frame--pinned-tools .list-frame__count';
+
+    it("bleeds the row to the screen's edges, the market screen's gutter at a desk and on a phone", () => {
+      expect(valueOf(styles, PINNED, 'margin-inline')).toBe('calc(-1 * var(--space-6))');
+      expect(valueOf(styles, PINNED, 'margin-inline', '(width <= 640px)')).toBe(
+        'calc(-1 * var(--space-4))',
+      );
+    });
+
+    it('sticks from 1024px flush under the pinned block over it, under that block', () => {
+      const DESK = '(width >= 1024px)';
+      expect(valueOf(styles, PINNED, 'position')).toBeNull();
+      expect(valueOf(styles, PINNED, 'position', DESK)).toBe('sticky');
+      expect(valueOf(styles, PINNED, 'top', DESK)).toBe(
+        'calc(var(--banner-h) + var(--market-frame-h) + var(--pinned-tools-h))',
+      );
+      expect(valueOf(styles, PINNED, 'z-index', DESK)).toBe('9');
+    });
+
+    it("sets the count small, 4px over the first row and the frame's 12px under the rule", () => {
+      expect(valueOf(styles, COUNT, 'font-size')).toBe('var(--text-xs)');
+      expect(valueOf(styles, COUNT, 'margin-block-end')).toBe('calc(-1 * var(--space-2))');
+      expect(valueOf(styles, '.list-frame', 'gap')).toBe('var(--space-3)');
+    });
   });
 });

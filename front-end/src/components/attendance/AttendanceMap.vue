@@ -6,16 +6,21 @@
  *
  * A press on a vendor's table, or on their half of a shared one, asks the page to open their drawer,
  * as a press on their row does; the open vendor's seat is the picked one. A press on a table with no
- * vendor says so under the map and opens nothing. The search marks the vendors it finds. The
- * vendors the map cannot draw are counted under it, with the way back to the list: those here with
- * no table, and those whose table is on no layout.
+ * vendor says so under the map and opens nothing. A vendor picked in the page's search opens the
+ * same way, so their seat is the picked one; typing alone marks nothing (T466). The vendors the map
+ * cannot draw are counted under it, with the way back to the list: those here with
+ * no table, and those whose table is on no layout. The legend names "No vendor" only on a day the
+ * open location draws a table or half nobody sits at (`drawsAFreePart`), and the read time the page
+ * gives stands under the map as the day map's note.
  *
  * Nothing here writes: check-in, Undo and notes stay on the list (D39). The open location is the
- * page's own state, in the address as `location`, replaced, as the day is.
+ * page's own state, in the address as `location`, chosen in the page's toolbar (T466), so the day
+ * map draws no location switch of its own.
  */
 import { computed, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import type { Market } from '@/assets/types/datatypes';
+import { laidOutLocations, openLocationId } from '@/components/attendance/laidOutLocations';
 import DayMap from '@/components/daymap/DayMap.vue';
 import {
   rosterSeats,
@@ -23,6 +28,7 @@ import {
   type DayMapLocation,
   type RosterSeatRow,
 } from '@/components/daymap/dayMap';
+import { drawsAFreePart } from '@/components/daymap/freeParts';
 import { tableCode } from '@/components/layout/layoutDrawing';
 import { useFloorplanImage } from '@/components/layout/useFloorplanImage';
 import { layoutPath } from '@/utils/market';
@@ -34,14 +40,14 @@ const props = defineProps<{
   /** The roster's rows, every date's; the map draws `date`'s. */
   rows: readonly RosterSeatRow[];
   date: string;
-  /** The vendors the search finds on `date`, by email; empty with nothing typed. */
-  found: readonly string[];
   /** The vendor whose drawer is open, by email, or null. */
   openVendor: string | null;
   /** What the list calls a vendor not here: "Not yet", or "Did not come" once the day is over. */
   notHere: string;
   /** How many are here on `date` with no table that day. */
   hereWithoutSeat: number;
+  /** When the roster was last read, in words, under the map's bottom right. */
+  updated?: string;
 }>();
 
 const emit = defineEmits<{
@@ -52,38 +58,12 @@ const emit = defineEmits<{
 }>();
 
 const route = useRoute();
-const router = useRouter();
 
-/**
- * The locations laid out as the map draws them, in the plan's order, as the public map's server
- * chooses them (`mapped_locations`): a layout with a scale, and a table numbered in one of the
- * location's own sections.
- */
-const laidOut = computed(() => {
-  const plan = props.market?.setupObject;
-  return (plan?.locations ?? []).flatMap((location) => {
-    const layout = plan?.floorplans?.find((each) => each.locationId === location.id);
-    if (!location.id || !layout?.scalePxPerUnit || layout.scalePxPerUnit <= 0) return [];
-    const sections = (plan?.sections ?? []).filter(
-      (section) => section.id && section.location?.id === location.id,
-    );
-    const ids = new Set(sections.map((section) => section.id));
-    const numbered = layout.tables.some(
-      (table) => table.sectionId && ids.has(table.sectionId) && table.number !== null,
-    );
-    return numbered ? [{ id: location.id, name: location.name, layout, sections }] : [];
-  });
-});
+/** The locations laid out, by the one rule the page's location select reads too. */
+const laidOut = computed(() => laidOutLocations(props.market?.setupObject));
 
 /** The open location: the address's, else the first laid out. */
-const openId = computed(() => {
-  const asked = String(route.query.location ?? '');
-  return laidOut.value.find((each) => each.id === asked)?.id ?? laidOut.value[0]?.id ?? '';
-});
-
-function chooseLocation(location: string) {
-  void router.replace({ query: { ...route.query, location } });
-}
+const openId = computed(() => openLocationId(laidOut.value, String(route.query.location ?? '')));
 
 /** Only the open location's image is read, with the session, as the layout page reads it. */
 const { url: imageUrl } = useFloorplanImage(
@@ -110,17 +90,22 @@ const drawn = computed(() =>
 const seats = computed(() => drawn.value.seats);
 const offLayout = computed(() => drawn.value.notOnALayout.length);
 
+/** The open location as the map draws it, for what its legend names. */
+const openLocation = computed(() => laidOut.value.find((each) => each.id === openId.value));
+
+/** "No vendor" only on a day the open map draws a table or half nobody sits at. */
 const legend = computed<DayMapLegendItem[]>(() => [
   { tone: 'filled', label: 'Here' },
   { tone: 'outlined', label: props.notHere === 'Not yet' ? 'Expected' : props.notHere },
-  { tone: 'free', label: 'No vendor' },
+  ...(openLocation.value && drawsAFreePart(openLocation.value, seats.value)
+    ? [{ tone: 'free' as const, label: 'No vendor' }]
+    : []),
 ]);
 
-/** A table with no vendor pressed, which the note under the map names; none once a vendor opens,
- *  or the search marks what it finds. */
+/** A table with no vendor pressed, which the note under the map names; none once a vendor opens. */
 const freeTable = ref<string | null>(null);
 watch(
-  () => [props.date, openId.value, props.openVendor, props.found.join('\n')],
+  () => [props.date, openId.value, props.openVendor],
   () => (freeTable.value = null),
 );
 
@@ -129,9 +114,6 @@ const seatKeyOf = (email: string) =>
 
 const picked = computed(
   () => (props.openVendor ? seatKeyOf(props.openVendor) : null) ?? freeTable.value,
-);
-const marked = computed(() =>
-  props.found.map(seatKeyOf).filter((key): key is string => key !== null),
 );
 
 /** "Table Aisle A 4: no vendor on Nov 18, 2026.", for the table pressed with nobody at it, the day
@@ -188,9 +170,9 @@ const mayChangeSetup = computed(() => mayTake(props.market, MarketAction.ChangeS
         :locationId="openId"
         :seats="seats"
         :picked="picked"
-        :marked="marked"
         :legend="legend"
-        @update:locationId="chooseLocation"
+        :note="updated"
+        :locationSwitch="false"
         @pick="pick"
       />
       <p

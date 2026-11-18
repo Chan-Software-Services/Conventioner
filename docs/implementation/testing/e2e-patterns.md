@@ -67,7 +67,8 @@ How to run the suite is [TESTING.md](../../TESTING.md#end-to-end-e2e-tests); the
 **Every selector is a `data-testid`, named `viewname-element`** (`login-email-input`, `markets-create-button`), so a spec never depends on a CSS class or on the words on screen.
 Adding a `data-testid` changes no behaviour; a view gains them as specs need them.
 **The one exception is a location's layout** (T257): its map's tables are found by their accessible names ("Gold row 5, Standard 6 ft"), and its toolbar's tools, its menus' items, its location links and its sections' swatches by role and name ([`LayoutPage.ts`](../../../front-end/e2e/pages/LayoutPage.ts)), since what its specs prove is what a screen reader hears: a table's code and type are read back from its name, as the spec of the layout asks.
-A layout's day map (T422) is found the same way, on the public map ([`PublicMapPage.ts`](../../../front-end/e2e/pages/PublicMapPage.ts)) and on Attendance's map ([`AttendanceStatusPage.ts`](../../../front-end/e2e/pages/AttendanceStatusPage.ts)): a table, or a half of a shared one, by the start of its name ("Aisle A 3, Standard 6 ft, left half").
+A layout's day map (T422) is found the same way, on the public map ([`PublicMapPage.ts`](../../../front-end/e2e/pages/PublicMapPage.ts)) and on Attendance's map ([`AttendanceStatusPage.ts`](../../../front-end/e2e/pages/AttendanceStatusPage.ts)): a table, or a half of a shared one, by the start of its name ("Aisle A 3, Standard 6 ft, left half"); Attendance chooses its location with its toolbar's select (`locationSelect`), by the option's label (T466).
+The map's box, its border round the drawing, is `mapFrame` (`day-map-frame`), so a spec measures where the map stands without its class.
 Everything else on the page is found by its `data-testid`.
 
 **A page object wraps one screen** ([`front-end/e2e/pages/`](../../../front-end/e2e/pages/)): it holds `getByTestId()` locators and exposes action methods, and a spec calls those methods rather than reaching for locators of its own.
@@ -79,6 +80,7 @@ A new page follows the existing ones (`LoginPage`, `MarketsPage`, `NewMarketPage
 Its `decideOnReviewSetup` follows the rail's "Decide what reviewers read first" to Review setup and chooses "Nothing leads the card" and "No automatic rejections", so a walk that opens Review through the screens decides as an organizer does ([review waits on the review setup](../../business/rules/review-waits-on-the-review-setup.md)).
 On a form of essential questions alone the rail offers the form first (T260), so `decideOnReviewSetupAskingNothingOfTheirOwn` waits for that offer by its name, opens Review setup as the form tab's last step and decides the same way.
 A dialog that more than one screen opens has an object of its own (`FollowUpDialog`, opened from One by one's card and from the All view's drawer), so a test id renamed in it is one line to change for every spec that drives the dialog through the object.
+A picker of people is one too: [`PersonChooser`](../../../front-end/e2e/pages/PersonChooser.ts) wraps a `SearchPicker` by its test id, its rows found by address, and `AttendanceStatusPage.mapSearch` is one, Attendance's map search (T466).
 
 **The Application Form tab is a sequence of steps** (E33/F01): the builder, the preview and the highlights are never all on screen.
 A spec opens the step it asserts on, with `ApplicationFormPage.openStep(step)`, whose header is `form-step-<step>` and whose body is `form-step-body-<step>`.

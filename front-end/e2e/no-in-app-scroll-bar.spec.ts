@@ -9,8 +9,9 @@ import { seedPublishedMarketWithAssignments } from './helpers/seeds';
  *
  * A browser that draws classic bars gave a dialog's bar the room inside its window, which squared its
  * right corners and lay over the export dialog's list. Each of these opens something that overflows
- * on such a browser, and finds no room given to a bar on its scroller or anywhere else, with the
- * page's own bar still drawn.
+ * on such a browser, and finds no room given to a bar on its scroller or anywhere else. Behind a
+ * picker's list the page's own bar is still drawn; behind a dialog or the drawer the page is held
+ * still, so its bar is gone and its gutter kept (T473).
  */
 
 /** Scrolls and overflows: a test that measured a box with nothing to scroll would pass on nothing. */
@@ -29,6 +30,30 @@ async function expectNoBarButThePage(page: Page, scrollerTestid: string) {
   await expect.poll(() => pageBarWidth(page), "the page's own bar").toBeGreaterThan(0);
 }
 
+/** The page's own box, which keeps the bar's room whether a bar is drawn there or not. */
+function pageBoxWidth(page: Page): Promise<number> {
+  return page.evaluate(() => document.documentElement.getBoundingClientRect().width);
+}
+
+/**
+ * As `expectNoBarButThePage`, behind a modal: it holds the page still (`html.holds-still`), so the
+ * page's bar is gone too, by design, while its gutter is kept and nothing behind moves sideways.
+ */
+async function expectNoBarAndThePageHeld(
+  page: Page,
+  scrollerTestid: string,
+  pageWidthBeforeOpening: number,
+) {
+  const scroller = await expectOverflowing(page, scrollerTestid);
+  expect(await barWidth(scroller), `${scrollerTestid}'s bar`).toBe(0);
+  expect(await barsDrawn(page), 'what draws a bar under body').toEqual([]);
+  await expect.poll(() => pageBarWidth(page), "the page's own bar, gone while held").toBe(0);
+  expect(await pageBoxWidth(page), "the page's width, its gutter kept").toBe(
+    pageWidthBeforeOpening,
+  );
+  await expect(page.locator('html')).toHaveClass(/(^|\s)holds-still(\s|$)/);
+}
+
 test.describe('on a browser that draws classic scroll bars', () => {
   test('a dialog scrolling whole draws no bar and keeps its round corners', async ({
     playwright,
@@ -36,6 +61,7 @@ test.describe('on a browser that draws classic scroll bars', () => {
   }) => {
     await withClassicBars({ playwright, baseURL }, { width: 1280, height: 720 }, async (page) => {
       await openEntry(page, 'dialog');
+      const pageWidth = await pageBoxWidth(page);
       await page
         .getByRole('region', { name: 'A short dialog: the whole window scrolls' })
         .getByRole('button')
@@ -43,7 +69,7 @@ test.describe('on a browser that draws classic scroll bars', () => {
       const window = page.getByTestId('library-window-window');
       await expect(window).toBeVisible();
 
-      await expectNoBarButThePage(page, 'library-window-scroll');
+      await expectNoBarAndThePageHeld(page, 'library-window-scroll', pageWidth);
       const corners = await window.evaluate((el) => {
         const style = getComputedStyle(el);
         return [style.borderTopRightRadius, style.borderBottomRightRadius];
@@ -55,13 +81,14 @@ test.describe('on a browser that draws classic scroll bars', () => {
   test('a dialog scrolling its body draws no bar', async ({ playwright, baseURL }) => {
     await withClassicBars({ playwright, baseURL }, { width: 1280, height: 720 }, async (page) => {
       await openEntry(page, 'dialog');
+      const pageWidth = await pageBoxWidth(page);
       await page
         .getByRole('region', { name: 'A long dialog: only the body' })
         .getByRole('button')
         .click();
       await expect(page.getByTestId('library-body-window')).toBeVisible();
 
-      await expectNoBarButThePage(page, 'library-body-body');
+      await expectNoBarAndThePageHeld(page, 'library-body-body', pageWidth);
     });
   });
 
@@ -81,10 +108,11 @@ test.describe('on a browser that draws classic scroll bars', () => {
       await tables.goto(seed.marketId);
       const seat = page.getByTestId('tables-seat-occupied').first();
       await expect(seat).toBeVisible({ timeout: 10000 });
+      const pageWidth = await pageBoxWidth(page);
       await tables.openVendor(seat);
       await expect(page.getByTestId('vendors-detail-panel')).toBeVisible();
 
-      await expectNoBarButThePage(page, 'vendors-detail-content');
+      await expectNoBarAndThePageHeld(page, 'vendors-detail-content', pageWidth);
     });
   });
 

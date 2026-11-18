@@ -151,7 +151,7 @@ Covered by:
 
 1. "Check-in" shows from Market Days on, in Market Days and in the archive of a market that ran ([the phase record](../../implementation/modules/phase-record.md)'s `ran`); an archived market that never reached its days has none.
 2. "Checked in each day" is a row per market date: the date, "18 of 24 checked in", and a bar of those checked in, every day on the scale of the day with the most expected; a day expected short of it has a black line at its own expected, where its whole ends inside the track.
-   Expected and checked in are the door's own count of the day, [Attendance](../../implementation/modules/attendance-and-door.md)'s "18/24": a row each for every seat the stored assignment holds that day, here when its vendor has checked in, by an organizer at the door or by the vendor on their vendor page.
+   Expected and checked in are the door's own count of the day, [Attendance](../../implementation/modules/attendance-and-door.md)'s "18 of 24 checked in": a row each for every seat the stored assignment holds that day, here when its vendor has checked in, by an organizer at the door or by the vendor on their vendor page.
 3. Beside the figures, how many are missing: "6 not yet" while the day may still come, "6 did not come" once it is over, past or the market archived, as the door words a row; either opens Attendance on that day (`?date=`).
    A day with nobody missing says "Everyone is in" and links nowhere; a day nobody is assigned to says "Nobody is assigned" with no bar.
 4. Every row is drawn on one scale, the card's largest expected, so the days compare; the bar is hidden from a screen reader, which hears the row as "Friday, May 8, 2099: 1 of 2 checked in, 1 not yet".
