@@ -8,12 +8,13 @@ scripts/tests/test_deploy_proof.py runs them against stubs as its dry run. Two c
         Whether the Test workflow passed on a push to `main` at that commit. Every check `main`'s
         rulesets require is a job of the Test workflow, so a Test run that concluded `success` has
         passed them all and is the proof. The rulesets' list is open to read access
-        (`GET /repos/{owner}/{repo}/rules/branches/main`), but proving it would mean finding each
-        named check's newest run at the commit, apart from the checks of the same names that a
-        commit promoted from `dev` keeps from its `dev` run, to catch only a required check from
-        outside the Test workflow, which `main` has none of: a ruleset that requires one needs
-        this proof to read it too. The newest run by `run_number` decides; a re-run of failed jobs
-        is the same run (read by scripts/github_runs.py, as Promote reads `dev`'s). It fails closed: an error from GitHub refuses, with no retry.
+        (`GET /repos/{owner}/{repo}/rules/branches/main`), but checking each check it names would
+        mean finding that check's newest run at the commit, told apart from the same-named checks
+        a commit promoted from `dev` keeps from its `dev` run, and would catch only a required
+        check from outside the Test workflow, which `main` has none of. A ruleset that adds one
+        must be read here too. The newest run by `run_number` decides; a re-run of failed jobs is
+        the same run (read by scripts/github_runs.py, as Promote reads `dev`'s). It fails closed:
+        an error from GitHub refuses, with no retry.
         Needs GITHUB_REPOSITORY and GITHUB_TOKEN;
         GITHUB_API_URL defaults to https://api.github.com.
 
