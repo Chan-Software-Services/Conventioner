@@ -673,6 +673,62 @@ describe('who reviews which application (E38/F07/S02)', () => {
     ]);
   });
 
+  /**
+   * The deal of what the status migration found in nobody's share (T277 ticket 02): recorded under
+   * the migration's action, with no actor, since an operator's migration, not a person, marked it.
+   */
+  function fromNobodysShare(entry: MarketHistoryEntry): MarketHistoryEntry {
+    return {
+      ...entry,
+      action: 'review_state_migrated',
+      actor: null,
+      detail: { ...(entry.detail as object), cause: 'arrived' },
+    } as MarketHistoryEntry;
+  }
+
+  it('words the deal of an application from nobody’s share, in the vendor’s own history too', () => {
+    const one = fromNobodysShare(dealt([SAM], [KAI]));
+
+    expect(said(entryParts(one, { names: NAMES }))).toBe(
+      `The application of [Ana Rivera] was dealt to ${SAM} from nobody's share`,
+    );
+    expect(
+      said(entryParts(one, { names: NAMES, path: IntakeMode.Csv, own: 'ana@ember.test' })),
+    ).toBe(`The application was dealt to ${SAM} from nobody's share`);
+    expect(entryChanges(one, { path: IntakeMode.Csv, own: 'ana@ember.test' }).changed).toEqual([
+      { field: 'Reviewer', before: KAI, after: SAM },
+    ]);
+  });
+
+  it('words the deal of a follow-up from nobody’s share, in the vendor’s own history too', () => {
+    const many = fromNobodysShare(handedOn());
+    const one = { ...many, vendors: ['ben@ember.test'], subject: { application_ids: ['app-1'] } };
+
+    expect(said(entryParts(one, { names: NAMES }))).toBe(
+      `The follow-up of [Ben Okafor] was dealt to ${SAM} from nobody's share`,
+    );
+    expect(
+      said(entryParts(many, { names: NAMES, path: IntakeMode.Csv, own: 'ben@ember.test' })),
+    ).toBe(`The follow-up was dealt to ${SAM} from nobody's share`);
+    expect(entryChanges(many, { path: IntakeMode.Csv, own: 'ben@ember.test' }).changed).toEqual([
+      { field: 'Reviewer', before: KAI, after: SAM },
+      { field: 'Follow-up owner', before: KAI, after: SAM },
+    ]);
+  });
+
+  it('words the deal of several from nobody’s share by how many, follow-ups among them', () => {
+    expect(said(entryParts(fromNobodysShare(dealt([SAM, KAI, SAM])), { names: NAMES }))).toBe(
+      "3 open applications were dealt among 2 reviewers from nobody's share",
+    );
+    expect(said(entryParts(fromNobodysShare(handedOn()), { names: NAMES }))).toBe(
+      "1 open application and 1 follow-up were dealt among 1 reviewer from nobody's share",
+    );
+    expect(entryChanges(fromNobodysShare(dealt([SAM, KAI]))).changed).toEqual([
+      { field: 'ana@ember.test', before: 'none', after: SAM },
+      { field: 'ben@ember.test', before: 'none', after: KAI },
+    ]);
+  });
+
   it('opens a change of reviewers to the lists before and after, one address a line', () => {
     expect(entryChanges(reviewers(['a@x.test'], ['a@x.test', 'c@x.test'])).changed).toEqual([
       { field: 'Reviewers', before: 'a@x.test', after: 'a@x.test\nc@x.test' },

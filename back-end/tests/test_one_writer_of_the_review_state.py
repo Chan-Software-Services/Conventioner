@@ -68,6 +68,7 @@ EXCEPTIONS: Dict[Tuple[str, str], str] = {
     ("reset_database", "reset_database"): (
         "an operator script emptying every collection of a local database, which it names by a "
         "variable the walk cannot read"),
+    ("migrations.migrate_application_status", "written"): _A_MIGRATION,
     ("migrations.migrate_submitted_at_to_iso", "migrate"): _A_MIGRATION,
     ("migrations.migrate_table_share_answer", "migrate"): _A_MIGRATION,
     ("migrations.migrate_tier_preference_per_date", "migrate"): _A_MIGRATION,

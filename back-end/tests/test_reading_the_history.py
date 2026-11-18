@@ -545,6 +545,24 @@ class TestTheEndpoint:
         assert ids(payments["entries"]) == ["e-00003", "e-00001"]
         assert ids(assignment["entries"]) == ["e-00003", "e-00002"]
 
+    def test_applications_reads_the_deal_of_what_the_status_migration_marked(
+            self, market, history, monkeypatch):
+        """T277 ticket 02: an application the migration found in nobody's share is dealt by the
+        next deal, recorded under the migration's action with no actor, which is no row of the
+        table, so Applications reads it beside the other deals; its actions stay its rows."""
+        _as(monkeypatch, MarketRole.VIEWER)
+        entry(history, 1, action="choose-reviewers", kind="dealt")
+        entry(history, 2, action=History.REVIEW_STATE_MIGRATED, kind="dealt", actor=None)
+        entry(history, 3, action="assign", kind="assigned")
+
+        applications, _status = MarketsApi.get_history(
+            MARKET, "viewer@x.test", {"group": "Applications"})
+
+        assert ids(applications["entries"]) == ["e-00002", "e-00001"]
+        groups = {group["group"]: [a["id"] for a in group["actions"]]
+                  for group in applications["groups"]}
+        assert History.REVIEW_STATE_MIGRATED not in groups["Applications"]
+
     @pytest.mark.parametrize("args", [
         {"group": "Not a group"},
         {"group": "Reading"},
