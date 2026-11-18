@@ -12,6 +12,7 @@ describes:
   - back-end/migrations/create_applications_collection.py
   - back-end/migrations/migrate_submitted_at_to_iso.py
   - back-end/application_status.py
+  - back-end/review_team.py
   - back-end/tests/test_one_writer_of_the_review_state.py
   - back-end/tests/test_the_review_state_table.py
   - back-end/tests/test_changed_answers_are_one_event.py
@@ -211,7 +212,7 @@ With no reviewers chosen nothing deals, and the marks wait for the deal a choice
 
 Every deal holds the market by a lease on its team (`reviewTeam.dealing`, `{by, until}`, on [the market document](market-document.md)), taken only while no other deal's lease stands and running out after 30 seconds, so a deal that stopped half way lets the next one in.
 A change of reviewers holds it from writing its team to writing its turn, and a deal of what waits from reading the turn to writing it, so the turn is only ever read and written by the one deal holding the market, and no order of a change and a move deals an application twice or skips a reviewer.
-Every write a deal makes to the market names its lease and reads whether it matched, so one whose lease ran out is never written as if it held the market: a change of reviewers is then refused with "The reviewers are being dealt applications right now. Try again in a moment.", and a deal of what waits logs that its applications are dealt and the turn did not move on.
+Every write a deal makes to the market names its lease and reads whether it matched, so one whose lease ran out and was taken by another deal is never written as if it held the market: a change of reviewers is then refused with "The reviewers are being dealt applications right now. Try again in a moment.", and a deal of what waits logs that its applications are dealt and the turn did not move on.
 A change of reviewers waits up to about five seconds for another deal to let go, and is refused in the same words if none does.
 A move never waits: its application is marked before its write tries to hold the market, so it deals every marked application if it can hold the market, and if another deal holds it, that deal deals them, since every deal looks for marked applications after letting go.
 It looks again for as long as any wait, it can hold the market and its last round dealt or settled one, however long a burst of moves runs, and once more after a round that failed, before that round's error goes on.
