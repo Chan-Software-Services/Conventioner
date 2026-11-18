@@ -2,6 +2,7 @@ import {
   ApplicationStatus,
   type Application,
   type ApplicationForm,
+  type ReviewState,
 } from '@/assets/types/datatypes';
 import {
   applicationAnswerRows,
@@ -87,22 +88,20 @@ export function inArrivalOrder<T extends Pick<Application, 'submittedAt'>>(apps:
     .map(({ app }) => app);
 }
 
-/** Awaiting a verdict, and nobody is chasing it yet. */
-const AWAITING: readonly string[] = [ApplicationStatus.Open, ApplicationStatus.UnderReview];
-
-/** Waiting on its applicant, with someone reaching out (E34/F02/S01). */
+/** Waiting on its applicant, with someone reaching out (E34/F02/S01), as the server reads it. */
 export function followUps(applications: Application[]): Application[] {
-  return inArrivalOrder(applications.filter((a) => a.status === ApplicationStatus.NeedsFollowUp));
+  return inArrivalOrder(applications.filter((a) => a.review.state === 'follow_up'));
 }
 
 /**
- * What the one-by-one review walks: the undecided in the order they arrived, and the follow-ups
+ * What the one-by-one review walks: the open ones in the order they arrived, and the follow-ups
  * after them only when the reviewer asks (E34/F02/S01) - a follow-up waits on its applicant, so it
- * is not the next thing to decide.
+ * is not the next thing to decide. Each by the state the server serves (ADR 0037), so an old
+ * spelling of open is walked as open.
  */
 export function reviewQueue(applications: Application[], includeFollowUps: boolean): Application[] {
-  const waiting = inArrivalOrder(applications.filter((a) => AWAITING.includes(a.status)));
-  return includeFollowUps ? [...waiting, ...followUps(applications)] : waiting;
+  const open = inArrivalOrder(applications.filter((a) => a.review.state === 'open'));
+  return includeFollowUps ? [...open, ...followUps(applications)] : open;
 }
 
 /**
@@ -110,30 +109,22 @@ export function reviewQueue(applications: Application[], includeFollowUps: boole
  * filter lists them, "needing a follow-up" for follow-ups alone, and both for a stretch of both, so
  * a follow-up taken into the walk is never called open.
  */
-export function queueCountWord(queue: Pick<Application, 'status'>[]): string {
-  const following = queue.some((a) => a.status === ApplicationStatus.NeedsFollowUp);
-  const open = queue.some((a) => a.status !== ApplicationStatus.NeedsFollowUp);
+export function queueCountWord(queue: Pick<Application, 'review'>[]): string {
+  const following = queue.some((a) => a.review.state === 'follow_up');
+  const open = queue.some((a) => a.review.state !== 'follow_up');
   if (!following) return 'open';
   return open ? 'open or needing a follow-up' : 'needing a follow-up';
 }
 
 /**
- * Reviewed: everything the queue is done with, whatever became of it since, newest verdict first.
- *
- * Deliberately "neither awaiting nor followed up" rather than "approved or rejected". An
- * application does not stay at its reviewer verdict: assignment carries it to `assigned` or
- * `unassigned`, offers to `assignment_sent`, and the sweep into market days to `vendor_accepted` or
- * `vendor_refused`. A list of the two reviewer verdicts alone would drop each application the
- * moment the market moved on.
+ * Reviewed: everything the queue is done with, newest verdict first - every application the server
+ * reads as decided (`review.undecided` false), so one the old offers flow carried on to another
+ * status still reads as the verdict it carried.
  */
-export function reviewed<T extends Pick<Application, 'status' | 'verdictAt' | 'submittedAt'>>(
+export function reviewed<T extends Pick<Application, 'review' | 'verdictAt' | 'submittedAt'>>(
   applications: T[],
 ): T[] {
-  return newestVerdictFirst(
-    applications.filter(
-      (a) => !AWAITING.includes(a.status) && a.status !== ApplicationStatus.NeedsFollowUp,
-    ),
-  );
+  return newestVerdictFirst(applications.filter((a) => !a.review.undecided));
 }
 
 /**
@@ -182,21 +173,28 @@ export function allViewFilter(asked: unknown): AllViewFilter {
   return ALL_VIEW_FILTERS.some((f) => f.id === asked) ? (asked as AllViewFilter) : 'all';
 }
 
+/** The served state each filter but "Any status" lists; the filters' ids stay the addresses. */
+const LISTS: Record<Exclude<AllViewFilter, 'all'>, ReviewState> = {
+  undecided: 'open',
+  [ApplicationStatus.NeedsFollowUp]: 'follow_up',
+  [ApplicationStatus.ReviewerApproved]: 'approved',
+  [ApplicationStatus.ReviewerRejected]: 'rejected',
+};
+
 /**
- * Whether the All view lists an application of this status under this filter: a filter is decided
- * by status alone, so the Stats tab can count the filters from counts by status.
+ * Whether the All view lists an application in this served state (`review.state`) under this
+ * filter: a filter is decided by the state alone, so the Stats tab can count the filters from the
+ * server's counts by state.
  */
-export function allViewLists(filter: AllViewFilter, status: string): boolean {
-  if (filter === 'all') return true;
-  if (filter === 'undecided') return AWAITING.includes(status);
-  return status === filter;
+export function allViewLists(filter: AllViewFilter, state: ReviewState): boolean {
+  return filter === 'all' || LISTS[filter] === state;
 }
 
 /**
- * The applications the All view lists: those with the status asked for - "Open" is every one
+ * The applications the All view lists: those in the state asked for - "Open" is every one
  * awaiting a verdict - with Mine, only the follow-ups the viewer owns, and with a reviewer named
- * (E38/F07/S04), only that reviewer's share (`inShareOf`: dealt to them, decided ones included,
- * and the follow-ups they own, whoever they were dealt to).
+ * (E38/F07/S04), only that reviewer's share (`inShareOf`: the server's share, dealt to them,
+ * decided ones included, and the follow-ups they own, whoever they were dealt to).
  */
 export function allViewApplications(
   applications: Application[],
@@ -209,9 +207,9 @@ export function allViewApplications(
   return inArrivalOrder(
     applications.filter(
       (a) =>
-        allViewLists(filter, a.status) &&
+        allViewLists(filter, a.review.state) &&
         (!mine ||
-          (a.status === ApplicationStatus.NeedsFollowUp &&
+          (a.review.state === 'follow_up' &&
             (a.followUpOwner?.email ?? '').toLowerCase() === viewer)) &&
         (!reviewer || inShareOf(a, reviewer)),
     ),

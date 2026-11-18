@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { overrideText } from '@/utils/placementReason';
 import { verdictLine } from '@/utils/verdicts';
 import { ApplicationStatus } from '@/assets/types/datatypes';
+import { servedReview } from './support/servedReview';
 
 describe('what a placement by hand overrides', () => {
   it('says first that they were not approved', () => {
@@ -30,6 +31,7 @@ describe('the verdict a drawer shows', () => {
     expect(
       verdictLine({
         status: ApplicationStatus.ReviewerRejected,
+        ...servedReview('rejected'),
         verdictBy: { kind: 'person', userId: 'u-1', email: 'alex@market.test' },
         verdictAt: null,
         verdictReason: null,
@@ -41,6 +43,7 @@ describe('the verdict a drawer shows', () => {
     expect(
       verdictLine({
         status: ApplicationStatus.ReviewerRejected,
+        ...servedReview('rejected'),
         verdictBy: null,
         verdictAt: null,
         verdictReason: null,
@@ -52,6 +55,7 @@ describe('the verdict a drawer shows', () => {
     expect(
       verdictLine({
         status: ApplicationStatus.Open,
+        ...servedReview('open'),
         verdictBy: null,
         verdictAt: null,
         verdictReason: null,

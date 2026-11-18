@@ -23,7 +23,11 @@ the product's own readers:
   applications as ``csv_import`` reads each row through the mapping the start saved, each with the
   status dealt it;
 - How full, each section's tables used on each date, is ``market_stats.fill_of`` over the rows
-  ``api.markets.derive_market_table_rows`` draws for that plan with the fixture's seats stored.
+  ``api.markets.derive_market_table_rows`` draws for that plan with the fixture's seats stored;
+- each application's review state (``review``) is ``review_team.review_of``, the server's own
+  reader, over a ``ReviewView`` of the fixture's 12 chosen reviewers, everyone holding a role, so
+  the library reads the state as every screen is served it; each follow-up is owned by the
+  reviewer it was dealt to, as marking one gives it to whoever marks it.
 
 What no file holds (each application's status and reviewer, each person's role, who reviews, who
 sits where, each vendor's Discord state and what they have paid) is dealt here from a seeded
@@ -55,8 +59,10 @@ import market_stats as MarketStats  # noqa: E402
 import essential_fields as EssentialFields  # noqa: E402
 import payments as Payments  # noqa: E402
 import pricing as Pricing  # noqa: E402
+import review_team as ReviewTeam  # noqa: E402
 from datatypes import table_code_for  # noqa: E402
 from market_documents import market_from_document  # noqa: E402
+from utils.email_address import normalized_email  # noqa: E402
 
 CORPUS = os.path.join(BACK_END, "tests", "test_data", "google_forms")
 OUTPUT = os.path.join(os.path.dirname(BACK_END), "front-end", "src", "dev", "library",
@@ -184,6 +190,23 @@ def _applications(rng: random.Random, proposal: Dict[str, Any], named,
          "status": status[app_id], "reviewer": reviewer[app_id]}
         for app_id, row in zip(ids, named)
     ]
+
+
+def _with_review(applications, people) -> None:
+    """Gives each application the review state the server serves it (``review_of``), as stored
+    with its reviewer's address, and a follow-up owned by its reviewer, over a view of the
+    fixture's chosen reviewers in which everyone holds a role on the market."""
+    email = {person["id"]: person["email"] for person in people}
+    reviewers = {a["reviewer"] for a in applications}
+    view = ReviewTeam.ReviewView(
+        chosen=frozenset(normalized_email(email[reviewer]) for reviewer in reviewers),
+        may_own=frozenset(email), intake=None)
+    for application in applications:
+        reviewer = {"user_id": application["reviewer"], "email": email[application["reviewer"]]}
+        stored = {"status": application["status"], "reviewer": reviewer}
+        if application["status"] == "needs_follow_up":
+            stored["follow_up_owner"] = reviewer
+        application["review"] = ReviewTeam.review_of(stored, view)
 
 
 def _people(rng: random.Random, proposal: Dict[str, Any], rows) -> List[Dict[str, Any]]:
@@ -402,6 +425,7 @@ def fixture() -> Dict[str, Any]:
     room = _room(market_doc, headers, rows, applications)
     fill = _fill(market_doc, applications, seats)
     _with_export(rng, applications, named, proposal, market_doc, seats)
+    _with_review(applications, people)
     return {
         "applications": applications,
         "people": people,

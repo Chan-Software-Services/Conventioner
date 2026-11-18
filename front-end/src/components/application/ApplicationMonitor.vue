@@ -183,11 +183,12 @@ function stopShowingReviewed() {
   });
 }
 
+/** By the state the server serves, so they agree with the All view's Approved and Rejected. */
 const approvedCount = computed(
-  () => applications.value.filter((a) => a.status === ApplicationStatus.ReviewerApproved).length,
+  () => applications.value.filter((a) => a.review.state === 'approved').length,
 );
 const rejectedCount = computed(
-  () => applications.value.filter((a) => a.status === ApplicationStatus.ReviewerRejected).length,
+  () => applications.value.filter((a) => a.review.state === 'rejected').length,
 );
 /** The verdict split is only legible while the verdicts are still on the applications. */
 const verdictsStillLegible = computed(() => approvedCount.value + rejectedCount.value > 0);
@@ -1103,7 +1104,7 @@ function submittedOn(app: Application): string {
         </p>
         <!-- Who is reaching out, and who can be handed it (E34/F02/S01). A Viewer reads the recorded
              owner as plain text - the people it could be handed to are a verdict-giver's list. -->
-        <template v-if="current.status === ApplicationStatus.NeedsFollowUp">
+        <template v-if="current.review.state === 'follow_up'">
           <SearchPicker
             v-if="decides"
             class="follow-up-owner-picker"
@@ -1385,7 +1386,7 @@ function submittedOn(app: Application): string {
             <!-- The action is a quiet button beside the verdict, never a second verdict, and never
                  what the dialog opens on, which one stray Enter would make. -->
             <button
-              v-if="changes && app.status === ApplicationStatus.ReviewerRejected"
+              v-if="changes && app.review.state === 'rejected'"
               type="button"
               class="btn btn--secondary btn--compact"
               :disabled="saving"

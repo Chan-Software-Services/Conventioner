@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ApplicationStatus, type Application, type Market } from '@/assets/types/datatypes';
 import {
+  inShareOf,
   assignedAddress,
   assignedTo,
   assignedToGroups,
@@ -14,6 +15,7 @@ import {
   selectionDealtLine,
 } from '@/utils/reviewers';
 import { partsText, type AddressPart } from '@/utils/addressParts';
+import { servedReview } from './support/servedReview';
 
 /**
  * Whose share an application is, for the reader, and the warning on deciding someone else's
@@ -21,6 +23,8 @@ import { partsText, type AddressPart } from '@/utils/addressParts';
  */
 const SAM = 'sam@example.com';
 const ANA = 'ana@example.com';
+/** A reviewer removed from the team: what was dealt to them still carries their address. */
+const CARL = 'carl@example.com';
 
 const chosen: Pick<Market, 'reviewTeam'> = {
   reviewTeam: {
@@ -32,17 +36,30 @@ const chosen: Pick<Market, 'reviewTeam'> = {
 };
 const noneChosen: Pick<Market, 'reviewTeam'> = { reviewTeam: { reviewers: [] } };
 
+/** An application as stored, with the review the server serves it (`served`). */
 function application(
   status: ApplicationStatus,
   reviewer: string | null,
+  served: ReturnType<typeof servedReview>,
   owner?: string,
-): Pick<Application, 'status' | 'reviewer' | 'followUpOwner'> {
+): Pick<Application, 'status' | 'reviewer' | 'followUpOwner' | 'review'> {
   return {
     status,
     reviewer: reviewer ? { userId: 'u', email: reviewer } : null,
     followUpOwner: owner ? { userId: 'o', email: owner } : null,
+    review: served.review,
   };
 }
+
+/** Open, dealt to a chosen reviewer: theirs. */
+const openOf = (reviewer: string) =>
+  application(ApplicationStatus.Open, reviewer, servedReview('open', { share: [reviewer] }));
+/** Open, still carrying a removed reviewer's address: in nobody's share, waiting for the deal. */
+const stranded = application(
+  ApplicationStatus.Open,
+  CARL,
+  servedReview('open', { share: [], waiting: true }),
+);
 
 /** The reviewer line's words, as one string, as their accessible name reads; null when none. */
 const line = (...args: Parameters<typeof reviewerLine>) => {
@@ -56,93 +73,139 @@ const addressesIn = (parts: AddressPart[] | null) =>
 
 describe('reviewerLine', () => {
   it('names the reviewer an application was dealt to', () => {
-    expect(line(application(ApplicationStatus.Open, SAM), ANA, chosen)).toBe(`Reviewer: ${SAM}`);
+    expect(line(openOf(SAM), ANA, chosen)).toBe(`Reviewer: ${SAM}`);
+  });
+
+  it('says "not dealt yet" for one in nobody’s share, though it carries a removed reviewer', () => {
+    expect(line(stranded, ANA, chosen)).toBe('Reviewer: not dealt yet');
+    expect(addressesIn(reviewerLine(stranded, ANA, chosen))).toEqual([]);
+  });
+
+  it('names a chosen reviewer who can no longer review here: the share stays theirs', () => {
+    const unable = {
+      reviewTeam: {
+        reviewers: [
+          { email: ANA, able: false },
+          { email: SAM, able: true },
+        ],
+      },
+    };
+    expect(line(openOf(ANA), SAM, unable)).toBe(`Reviewer: ${ANA}`);
   });
 
   it('hands the reviewer’s address over as a part of its own, cut at its "@"', () => {
     const hyphened = 'rv-sam-lee@example.com';
     expect(
       addressesIn(
-        reviewerLine(application(ApplicationStatus.Open, hyphened), ANA, {
+        reviewerLine(openOf(hyphened), ANA, {
           reviewTeam: { reviewers: [{ email: hyphened, able: true }] },
         }),
       ),
     ).toEqual([{ kind: 'address', local: 'rv-sam-lee', domain: '@example.com' }]);
-    expect(
-      addressesIn(reviewerLine(application(ApplicationStatus.Open, SAM), SAM, chosen)),
-    ).toEqual([]);
+    expect(addressesIn(reviewerLine(openOf(SAM), SAM, chosen))).toEqual([]);
   });
 
   it('says "you" for the reader’s own, whatever the case of either address', () => {
-    expect(line(application(ApplicationStatus.Open, 'Sam@Example.com'), SAM, chosen)).toBe(
-      'Reviewer: you',
-    );
+    expect(line(openOf('Sam@Example.com'), SAM, chosen)).toBe('Reviewer: you');
   });
 
   it('names the reviewer of a decided application too: it stays the record of whose it was', () => {
-    expect(line(application(ApplicationStatus.ReviewerApproved, SAM), ANA, chosen)).toBe(
+    const approved = servedReview('approved', { share: [SAM] });
+    expect(line(application(ApplicationStatus.ReviewerApproved, SAM, approved), ANA, chosen)).toBe(
       `Reviewer: ${SAM}`,
     );
   });
 
   it('says nothing for an application never dealt', () => {
-    expect(line(application(ApplicationStatus.Open, null), ANA, chosen)).toBeNull();
+    // With reviewers chosen an undealt one waits for the deal; with none, it is first come.
+    expect(
+      line(application(ApplicationStatus.Open, null, servedReview('open')), ANA, noneChosen),
+    ).toBeNull();
   });
 
   it('says nothing with no reviewers chosen, even on one dealt before', () => {
-    expect(line(application(ApplicationStatus.Open, SAM), ANA, noneChosen)).toBeNull();
-    expect(line(application(ApplicationStatus.Open, SAM), ANA, null)).toBeNull();
+    const dealtBefore = application(ApplicationStatus.Open, SAM, servedReview('open'));
+    expect(line(dealtBefore, ANA, noneChosen)).toBeNull();
+    expect(line(dealtBefore, ANA, null)).toBeNull();
   });
 });
 
 describe('dealtElsewhere', () => {
   it('answers whom an open application is dealt to, when that is someone else', () => {
-    expect(dealtElsewhere(application(ApplicationStatus.Open, SAM), ANA, chosen)).toBe(SAM);
-    expect(dealtElsewhere(application(ApplicationStatus.UnderReview, SAM), ANA, chosen)).toBe(SAM);
+    expect(dealtElsewhere(openOf(SAM), ANA, chosen)).toBe(SAM);
+    // An old spelling of open, which the server serves as open.
+    const stored = application(
+      ApplicationStatus.UnderReview,
+      SAM,
+      servedReview('open', { share: [SAM] }),
+    );
+    expect(dealtElsewhere(stored, ANA, chosen)).toBe(SAM);
+  });
+
+  it('answers null for one in nobody’s share, though it carries a removed reviewer’s address', () => {
+    expect(dealtElsewhere(stranded, ANA, chosen)).toBeNull();
+  });
+
+  it('answers a chosen reviewer who can no longer review here: it is still their share', () => {
+    expect(dealtElsewhere(openOf(ANA), SAM, chosen)).toBe(ANA);
   });
 
   it('counts a follow-up as someone else’s too: it is not decided yet', () => {
-    expect(dealtElsewhere(application(ApplicationStatus.NeedsFollowUp, SAM), ANA, chosen)).toBe(
+    const followUp = application(
+      ApplicationStatus.NeedsFollowUp,
+      SAM,
+      servedReview('follow_up', { share: [SAM] }),
       SAM,
     );
+    expect(dealtElsewhere(followUp, ANA, chosen)).toBe(SAM);
   });
 
   it('answers null to the owner of a follow-up dealt to someone else: it is in their share too', () => {
+    const owned = servedReview('follow_up', { share: [SAM, ANA] });
     expect(
       dealtElsewhere(
-        application(ApplicationStatus.NeedsFollowUp, SAM, 'ANA@example.com'),
+        application(ApplicationStatus.NeedsFollowUp, SAM, owned, 'ANA@example.com'),
         ANA,
         chosen,
       ),
     ).toBeNull();
     // Owning it is a follow-up's alone: an open application keeps no owner's share.
-    expect(dealtElsewhere(application(ApplicationStatus.Open, SAM, ANA), ANA, chosen)).toBe(SAM);
+    const open = application(
+      ApplicationStatus.Open,
+      SAM,
+      servedReview('open', { share: [SAM] }),
+      ANA,
+    );
+    expect(dealtElsewhere(open, ANA, chosen)).toBe(SAM);
   });
 
   it('answers null for the reader’s own, compared in lower case', () => {
-    expect(
-      dealtElsewhere(
-        application(ApplicationStatus.Open, 'SAM@example.com'),
-        'sam@EXAMPLE.com',
-        chosen,
-      ),
-    ).toBeNull();
+    expect(dealtElsewhere(openOf('SAM@example.com'), 'sam@EXAMPLE.com', chosen)).toBeNull();
   });
 
   it('answers null for a decided application: deciding it again is a change, not a share', () => {
-    for (const status of [ApplicationStatus.ReviewerApproved, ApplicationStatus.ReviewerRejected]) {
-      expect(dealtElsewhere(application(status, SAM), ANA, chosen)).toBeNull();
-    }
+    const approved = servedReview('approved', { share: [SAM] });
+    const rejected = servedReview('rejected', { share: [SAM] });
+    expect(
+      dealtElsewhere(application(ApplicationStatus.ReviewerApproved, SAM, approved), ANA, chosen),
+    ).toBeNull();
+    expect(
+      dealtElsewhere(application(ApplicationStatus.ReviewerRejected, SAM, rejected), ANA, chosen),
+    ).toBeNull();
   });
 
   it('answers null for an application with no reviewer', () => {
-    expect(dealtElsewhere(application(ApplicationStatus.Open, null), ANA, chosen)).toBeNull();
+    const undealt = application(
+      ApplicationStatus.Open,
+      null,
+      servedReview('open', { waiting: true }),
+    );
+    expect(dealtElsewhere(undealt, ANA, chosen)).toBeNull();
   });
 
   it('answers null with no reviewers chosen: a follow-up keeps its reviewer, but nothing is dealt', () => {
-    expect(
-      dealtElsewhere(application(ApplicationStatus.NeedsFollowUp, SAM), ANA, noneChosen),
-    ).toBeNull();
+    const kept = application(ApplicationStatus.NeedsFollowUp, SAM, servedReview('follow_up'), SAM);
+    expect(dealtElsewhere(kept, ANA, noneChosen)).toBeNull();
   });
 });
 
@@ -256,17 +319,41 @@ describe('the "Assigned to" filter (E38/F07/S04)', () => {
 });
 
 describe('myShare (E38/F07/S04)', () => {
+  const followUp = (reviewer: string, owner: string) =>
+    application(
+      ApplicationStatus.NeedsFollowUp,
+      reviewer,
+      servedReview('follow_up', { share: [reviewer, owner] }),
+      owner,
+    );
   const queue = [
-    { id: 'a', ...application(ApplicationStatus.Open, ANA) },
-    { id: 'b', ...application(ApplicationStatus.Open, SAM) },
-    { id: 'c', ...application(ApplicationStatus.NeedsFollowUp, SAM, ANA) },
-    { id: 'd', ...application(ApplicationStatus.NeedsFollowUp, ANA, SAM) },
+    { id: 'a', ...openOf(ANA) },
+    { id: 'b', ...openOf(SAM) },
+    { id: 'c', ...followUp(SAM, ANA) },
+    { id: 'd', ...followUp(ANA, SAM) },
+    { id: 'e', ...stranded },
+    // A follow-up whose owner holds no role on the market any more: its reviewer's alone.
+    {
+      id: 'f',
+      ...application(
+        ApplicationStatus.NeedsFollowUp,
+        SAM,
+        servedReview('follow_up', { share: [SAM], waiting: true }),
+        CARL,
+      ),
+    },
   ];
   const ids = (reader: string, market = chosen) => myShare(queue, reader, market).map((a) => a.id);
 
   it('holds what was dealt to the reader and the follow-ups they own, wherever dealt', () => {
     expect(ids(ANA)).toEqual(['a', 'c', 'd']);
-    expect(ids(SAM)).toEqual(['b', 'c', 'd']);
+    expect(ids(SAM)).toEqual(['b', 'c', 'd', 'f']);
+  });
+
+  it('is the server’s share: what waits for the deal is not the removed reviewer’s or owner’s', () => {
+    expect(inShareOf(stranded, CARL)).toBe(false);
+    expect(inShareOf(queue[5]!, CARL)).toBe(false);
+    expect(inShareOf(queue[5]!, SAM)).toBe(true);
   });
 
   it('is empty for someone not chosen, and with nobody chosen', () => {

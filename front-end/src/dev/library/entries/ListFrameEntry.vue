@@ -31,6 +31,7 @@ import {
   assignedToGroups,
   assignedToOptions,
   findsAssignedTo,
+  inShareOf,
   reviewerLine,
 } from '@/utils/reviewers';
 import ApplicationRow from '../parts/ApplicationRow.vue';
@@ -93,14 +94,14 @@ const assignedLabel = computed(
 const inShare = computed(() => {
   const address = assignedAddress(assigned.value, READER);
   return address
-    ? applications.filter(({ reviewer }) => addressOf(reviewer) === address)
+    ? applications.filter((application) => inShareOf(application, address))
     : applications;
 });
 const statusOptions = computed<FilterToggle[]>(() =>
   ALL_VIEW_FILTERS.map(({ id, label }) => ({
     id,
     label,
-    count: inShare.value.filter((application) => allViewLists(id, application.status)).length,
+    count: inShare.value.filter((application) => allViewLists(id, application.review.state)).length,
   })),
 );
 const statusLabelNow = computed(
@@ -110,7 +111,7 @@ const statusLabelNow = computed(
 const filterKey = computed(() => `${status.value} ${assigned.value}`);
 const filtered = computed(() =>
   inShare.value.filter((application) =>
-    allViewLists(status.value as AllViewFilter, application.status),
+    allViewLists(status.value as AllViewFilter, application.review.state),
   ),
 );
 
@@ -134,8 +135,8 @@ function selectAllShown(): void {
   for (const { id } of onScreen.value) ticked.add(id);
 }
 /** "Reviewer: you" on the reader's own, as today's row says it. */
-const reviewerWords = ({ status, reviewer }: LibraryApplication) =>
-  reviewerLine({ status, reviewer: { email: addressOf(reviewer) } }, READER, TEAM) ?? [];
+const reviewerWords = ({ review, reviewer }: LibraryApplication) =>
+  reviewerLine({ review, reviewer: { email: addressOf(reviewer) } }, READER, TEAM) ?? [];
 
 /** The role each person holds here: the demo's own, so a change is seen to land. */
 const ROLES = Object.values(MarketRole);

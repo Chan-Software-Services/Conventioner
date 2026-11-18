@@ -1,4 +1,4 @@
-import { ApplicationStatus } from '@/assets/types/datatypes';
+import type { ReviewState } from '@/assets/types/datatypes';
 import type { ExportFilters, ExportPreview, ExportStatus } from '@/utils/vendorExport';
 import { fixture } from './fixture';
 
@@ -13,13 +13,15 @@ type Vendor = (typeof fixture.applications)[number];
 
 const { export: offered, seats } = fixture;
 
-/** `_STATUS_OF`: the review's statuses as the export names them. */
-const STATUS_OF: Partial<Record<ApplicationStatus, ExportStatus>> = {
-  [ApplicationStatus.Open]: 'open',
-  [ApplicationStatus.UnderReview]: 'open',
-  [ApplicationStatus.NeedsFollowUp]: 'follow_up',
-  [ApplicationStatus.ReviewerApproved]: 'approved',
-  [ApplicationStatus.ReviewerRejected]: 'rejected',
+/**
+ * `status_of`: each served review state as the export names it. The server names an approval by
+ * adding "added"; the fixture holds no vendor added by hand, so every approval here is "approved".
+ */
+const STATUS_OF: Record<ReviewState, ExportStatus> = {
+  open: 'open',
+  follow_up: 'follow_up',
+  approved: 'approved',
+  rejected: 'rejected',
 };
 
 type Seat = (typeof seats)[number];
@@ -53,9 +55,9 @@ const answerValues = (answer: string | string[] | undefined) =>
 function vendorsKept(filters: ExportFilters, reader: string): Vendor[] {
   const search = filters.search.trim().toLowerCase();
   return fixture.applications.filter((vendor) => {
-    const status = STATUS_OF[vendor.status];
+    const status = STATUS_OF[vendor.review.state];
     const { answers, discordState, payment } = vendor.export;
-    if (filters.statuses.length && !(status && filters.statuses.includes(status))) return false;
+    if (filters.statuses.length && !filters.statuses.includes(status)) return false;
     // The fixture holds no follow-up's owner: the reviewer it is dealt to stands in.
     if (filters.mine && !(status === 'follow_up' && vendor.reviewer === reader)) return false;
     if (!placedMatches(vendor, filters)) return false;
@@ -116,7 +118,7 @@ function textCell(vendor: Vendor, columnId: string): string {
     name: vendor.name,
     preferredName: vendor.export.preferredName,
     email: vendor.email,
-    status: labelOf(offered.statuses, STATUS_OF[vendor.status]),
+    status: labelOf(offered.statuses, STATUS_OF[vendor.review.state]),
     datesPlaced: String(seatsOf(vendor).size),
     priceGroup: vendor.export.payment.group,
     discordUsername: vendor.export.discordUsername,

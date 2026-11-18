@@ -1904,8 +1904,8 @@ def outside_the_run(
 
 def _placeable(vendor: SolverVendor, outside: Optional[Application]) -> Dict[str, Any]:
     """One vendor the place dialog may offer: what they answered, whether the run reads them, and -
-    for an applicant outside it - their status and who gave it, which the dialog's "Not approved"
-    warning words, or that they were added by hand with nothing answered to check a seat against."""
+    for an applicant outside it - their status, who gave it and whether the review left them
+    undecided, which the dialog's "Not approved" warning words, or that they were added by hand with nothing answered to check a seat against."""
     not_approved = None
     if outside is not None and is_not_approved(outside):
         not_approved = {
@@ -1913,6 +1913,8 @@ def _placeable(vendor: SolverVendor, outside: Optional[Application]) -> Dict[str
             "verdictBy": ApplicantsApi.giver_payload(outside.verdict_by),
             "verdictAt": outside.verdict_at,
             "verdictReason": outside.verdict_reason,
+            # Whether the review left them undecided, which the warning reads, never the status.
+            "undecided": ReviewState.is_undecided(outside.model_dump()),
         }
     return {
         # Said, never inferred (E36/F02/S04): a vendor added by hand is approved and still outside
