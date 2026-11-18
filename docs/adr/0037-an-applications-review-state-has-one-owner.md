@@ -8,6 +8,7 @@ describes:
   - back-end/tests/test_changed_answers_are_one_event.py
   - back-end/datatypes.py#ApplicationOrigin
   - back-end/review_team.py#review_of
+  - back-end/migrations/migrate_application_status.py
 verified: 2026-11-18
 sources:
   - T277
@@ -50,6 +51,8 @@ A rule about how an application moves between states could be kept only if every
   Its second check fails a module outside the owner, `tests/` and `migrations/` that reads a status the review no longer writes (`ApplicationStatus.UNDER_REVIEW`, the old offers flow's statuses, `CANCELLED`), so no reader spells a state out again beside `state_of`; its one exception, listed with its reason, is the offers stage's count of sent offers, which nothing enters and T277 ticket 14 removes.
 - **The state is served, and every reader outside the owner counts with it** (T277 ticket 02, phase 2): every application an organizer reads carries `review` (its state read down to four, `State.served`; whether it is undecided; whose share it is in; whether it waits for the deal), read by [`back-end/review_team.py`](../../back-end/review_team.py)'s `review_of` over one `ReviewView` of the market per request ([the served review state](../implementation/data/application-document.md#the-served-review-state)).
   Begin assignment's guard counts with the owner's `undecided_counts`, walked off `state_of`, and the export's status and the table-share notice read `state_of`, so no stored spelling of a state reads as another anywhere.
+- **A one-time migration brings stored applications to the machine** ([`back-end/migrations/migrate_application_status.py`](../../back-end/migrations/migrate_application_status.py), [the migration](../implementation/data/application-document.md#the-migration)): each spelling of open becomes `open`, an old offers flow's status the approval or rejection `state_of` reads it as, a missing origin what `origin_of` reads, and each application `is_waiting` reads as waiting on a market with chosen reviewers is marked for the deal under `review_state_migrated`, with no actor, so the next deal deals it.
+  It applies the owner's own rules and needs no boot marker, since an unmigrated application already reads as it would store it.
 
 ## Consequences
 
@@ -63,6 +66,7 @@ A rule about how an application moves between states could be kept only if every
 - A test that patches a write patches `ReviewState`, and one that rebinds the collection still rebinds `ApplicationsApi.applications_collection`.
 - An application stored with no status, or `under_review`, holds Begin assignment like any open one, and a card in nobody's share is served so: no screen can warn that it is dealt to a reviewer who was removed.
 - Every organizer read takes the view its route built, with no default, so a test calling one directly builds a view by hand.
+- An application left in nobody's share before every move was marked is dealt by the next deal after the migration runs, and the market's history says it was dealt "from nobody's share"; until then it is served waiting.
 
 ## Considered and rejected
 
@@ -75,4 +79,6 @@ A rule about how an application moves between states could be kept only if every
 - **An answers write per source** (the applicant's, the import's, the organizer's, each deciding what a change does): three writers deciding the same question three ways is what T277 found; one event with the source as a value says once which change undoes which verdict.
 - **Moving the collection's binding into the owner**: every fake and the real-MongoDB world would rebind two names, and the storage contract would leave the module that owns it.
 - **The front end deriving the state from the status**, as each screen did: the queue, One by one's counts, the All view's filters, the card's warning, the vendors list, the Stats tab, the export and the guard each held their own list, and "undecided" had four meanings among them, so the same application read differently on two screens.
+- **A boot marker for the migration**, as a change of a stored shape the app could not read has: the owner reads every unmigrated application as the migration would store it, so a release that refused to boot until it ran would only stop the market for nothing.
+- **The migration judging who is able on its own** (an open application dealt to a chosen reviewer who may no longer review, marked): it would deal that reviewer's share away silently; it marks what `is_waiting` reads, and leaves ableness to the deal.
 - **A served share by ableness** (an open application's share only while its reviewer may still review): it would take an unable chosen reviewer's share away silently, against the dealing rule that they keep it until an Admin removes them.

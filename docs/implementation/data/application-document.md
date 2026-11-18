@@ -22,6 +22,9 @@ describes:
   - back-end/review_team.py#is_waiting
   - back-end/review_team.py#review_of
   - back-end/tests/test_every_organizer_read_serves_the_review_state.py
+  - back-end/migrations/migrate_application_status.py
+  - back-end/tests/test_migrate_application_status.py
+  - back-end/tests/real_mongo/test_the_application_status_migration_on_the_server.py
 verified: 2026-11-18
 sources:
   - wayfinding/v0-1-0/map
@@ -212,7 +215,7 @@ The stored `status` stays served beside it, for the labels; `review.state` is wh
 
 ```ts
 interface ApplicationReview {
-  state: "open" | "follow_up" | "approved" | "rejected"; // State.served
+  state: 'open' | 'follow_up' | 'approved' | 'rejected'; // State.served
   undecided: boolean; // open or follow_up: no verdict yet
   share: string[]; // whose share it is in, reviewer first; [] with no reviewers chosen
   waiting: boolean; // what a deal reaching it would move
@@ -226,7 +229,7 @@ Every organizer read takes the view its route built, and none has a default, so 
 - **Its share** (`share_of`), each address once, as `normalized_email` spells it: with no reviewers chosen, none; an open one, its reviewer while they are one of the chosen reviewers, able or not, since a chosen reviewer who may no longer review keeps their share until an Admin removes them ([the dealing rule](../../business/rules/the-review-is-dealt-among-chosen-reviewers.md)); a follow-up, its reviewer while chosen, then its owner while the owner holds any role on the market, whether or not they may be chosen to review; a decided one, the reviewer it was dealt to, whoever they are now, as the record of whose share it was.
 - **Waiting** (`is_waiting`): reviewers are chosen, and it is open with a reviewer who is not one of them (none, or a removed one), or a follow-up whose owner holds no role on the market.
   It is exactly what a deal reaching it would move, who is able aside, which stays the deal's own judgment while it holds the market ([below](#waiting-for-the-deal)).
-  An application is served waiting whether or not it is marked: one stored in nobody's share before every move was marked (T277 P1, P2, P3, P5) waits, and nothing marks it.
+  An application is served waiting whether or not it is marked: one stored in nobody's share before every move was marked (T277 P1, P2, P3, P5) waits until [the migration](#the-migration) marks it.
 - The claim (`claim_next_for_review`) hands a chosen reviewer their share first by the stored reviewer and owner (`_in_share_of`), since `api/applications.py` cannot import `review_team.py`, which imports it; for every chosen reviewer who may ask, that is exactly whether `share_of` holds them, which a test pins over every state.
 
 ### Waiting for the deal
@@ -246,6 +249,22 @@ The deal, for each marked application in arrival order, with the roles read with
 `settle_waiting` is held on the status and the mark as the deal read them, `deal` on the status and the reviewer, `deal_follow_up` on the owner, so a move landing in between keeps its mark for the next round.
 The deal's history entry names the reviewer before as stored, and a follow-up's owner before, under the write that marked it ([the market's history](history.md)).
 With no reviewers chosen nothing deals, and the marks wait for the deal a choice of reviewers makes.
+
+### The migration
+
+[`back-end/migrations/migrate_application_status.py`](../../../back-end/migrations/migrate_application_status.py) stores, on each application of each live market, whatever still differs from what the owner reads, in one update:
+
+- `under_review`, a missing status and `""` become `open`;
+- an old offers flow's status becomes `reviewer_approved`, and `cancelled` becomes `reviewer_rejected`, its giver and time kept, only when `state_of` reads it so as the same state: a `cancelled` whose giver is a rule would become the rule's rejection, which the rules judge again, so it is left whole and listed;
+- a missing origin is stored as `origin_of` reads it with the market's intake;
+- on a market with chosen reviewers, an application `is_waiting` reads as waiting and not yet marked is marked `arriving: {actor: null, action: "review_state_migrated"}`, so the next deal on the market deals it and records it under that action with no actor, through the deal's own door ([waiting for the deal](#waiting-for-the-deal)); the market's history reads it as dealt "from nobody's share", and its Applications group reads it.
+
+Every rule it applies is the owner's (`state_of`, `origin_of`, `is_waiting`), so it marks exactly what the screens are served as waiting, and records nothing itself.
+Each write is held by the application's id on every field it read (`HELD_FIELDS`), null and absent alike; one that changed meanwhile is read again with its market, three times, then listed as skipped.
+It prints first the count of the live markets' applications in each stored status, decision 9.6's read-only count of production when run with `--dry-run`, then market and application ids, never an address.
+**It has no boot marker**: an unmigrated application reads correctly through the owner, which applies the migration's own rules, so the migration only makes the stored values the owner's, and is safe to run again.
+When to run it is in [operations](../../OPERATIONS.md#starting-a-database-and-migrations).
+[`tests/test_migrate_application_status.py`](../../../back-end/tests/test_migrate_application_status.py) runs it over every stored shape and then deals its marks through a reviewer's next card, and [`tests/real_mongo/test_the_application_status_migration_on_the_server.py`](../../../back-end/tests/real_mongo/test_the_application_status_migration_on_the_server.py) runs it on the server: a dry run, a run and a second, one stopped after its first write, and a write landing between its read and its write.
 
 ### Added vendors, and what is recorded
 

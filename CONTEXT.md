@@ -116,7 +116,7 @@ Handing the open applications out among the reviewers, round robin in the order 
 _Avoid_: Assign (means giving a vendor a table)
 
 **Waiting**:
-An undecided application in no share the review still holds, while reviewers are chosen: open with a reviewer who is not one of the chosen reviewers (none, or a removed one), or a follow-up whose owner holds no role on the market. Served on every application an organizer reads. The write that moves an application into open or back into a follow-up, or hands its follow-up on, marks it for the deal, so the next deal takes it: it keeps it with an able reviewer, or a follow-up with an owner who still holds a role here, or deals it to the next reviewer in turn. With nobody chosen able to review, a marked one keeps waiting until someone is, and a reviewer's next card deals it then.
+An undecided application in no share the review still holds, while reviewers are chosen: open with a reviewer who is not one of the chosen reviewers (none, or a removed one), or a follow-up whose owner holds no role on the market. Served on every application an organizer reads. The write that moves an application into open or back into a follow-up, or hands its follow-up on, marks it for the deal, so the next deal takes it: it keeps it with an able reviewer, or a follow-up with an owner who still holds a role here, or deals it to the next reviewer in turn. With nobody chosen able to review, a marked one keeps waiting until someone is, and a reviewer's next card deals it then. One stored waiting before every such write marked it is marked by the status migration, so the next deal takes it too.
 _Avoid_: Unassigned, stranded (what waiting replaced: an application left in nobody's share for good)
 
 **Solver-relevant answer**:
