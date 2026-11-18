@@ -5,9 +5,11 @@ describes:
   - back-end/public_map.py
   - back-end/public_answers.py
   - back-end/market_documents.py#public_map_market_by_slug
-verified: 2026-11-17
+  - back-end/market_documents.py#public_map_is_open
+verified: 2026-11-18
 sources:
   - T422
+  - T469
 status: accepted
 ---
 
@@ -34,11 +36,12 @@ The answers are free text: a business name can be an email address, a website ca
 - **What is published is cleaned on the server**, in one pure module, [`back-end/public_answers.py`](../../back-end/public_answers.py): a name that reads as an email address anywhere in it is withheld and a name is cut at 80 characters; a website is published only as an `http` or `https` address with a host, at most 200 characters, a bare domain given `https://`; an Instagram answer only as a handle of 1 to 30 letters, digits, dots and underscores.
   Anything else is null, never shown raw.
 - **The map reads the answers as the organizer reads them**: an organizer's update of an answer stands in its place (`effective_answers`), so a misspelt name is fixed in the vendor drawer.
-- **The map opens with the results and closes with the market**: one gate beside the vendor page's lookup, `public_map_market_by_slug` in [`back-end/market_documents.py`](../../back-end/market_documents.py), serves it only while the vendor page finds the market, its results are out, it is not archived, the switch is on, its name question is still a text question of the form and a location is laid out; a market that fails it answers byte for byte as a slug naming no market ([a gated market answers as absent](../business/rules/a-gated-market-answers-as-absent.md)).
+- **The map opens with the results and closes with the market**: one gate beside the vendor page's lookup, `public_map_market_by_slug` in [`back-end/market_documents.py`](../../back-end/market_documents.py), serves it only while the vendor page finds the market and `public_map_is_open` holds: its results are out, it is not archived, the switch is on, its name question is still a text question of the form and a location is laid out; a market that fails it answers byte for byte as a slug naming no market ([a gated market answers as absent](../business/rules/a-gated-market-answers-as-absent.md)).
 - **A vendor's address joins a seat to its application on the server and is never in the answer.**
 
 It narrows ADR 0018: the answers a market keeps stay as that ADR keeps them, and these three alone may be shown outside the market's team, cleaned, while the map is on.
 It stands beside ADR 0022: the vendor page is still where a vendor reads their own seat signed in; the map shows anyone the seats with the chosen answers, never a vendor's own application.
+The map is shown at the market's own address, `/<market>`, on the market page, whenever that gate holds, and `/<market>/map` lands there ([ADR 0039](0039-a-markets-address-is-its-public-page.md)); the vendor page's read says whether it holds as `mapOpen`, from the same `public_map_is_open`, and says nothing else of the map.
 
 How the map is read, its gate, its answer and its image: [the public map](../implementation/modules/public-map.md).
 

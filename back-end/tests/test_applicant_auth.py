@@ -909,8 +909,9 @@ class TestTheCodeEmail:
     sign-in.
     """
 
-    def test_it_links_to_the_markets_own_vendor_page(self, monkeypatch):
-        """The link a vendor receives is the one they keep: the market's page (ADR 0022)."""
+    def test_it_links_to_the_markets_vendor_page(self, monkeypatch):
+        """The link a vendor receives is the one they keep: the market's vendor page,
+        ``/<slug>/vendor`` (ADR 0022, T469)."""
         # Not the module fixture: it replaces the very function under test.
         import resend
         import utils.email as email_mod
@@ -929,8 +930,8 @@ class TestTheCodeEmail:
         )
 
         for body in (sent[0]["html"], sent[0]["text"]):
-            assert "https://app.test/harbour-night-market\"" in body or (
-                "https://app.test/harbour-night-market\n" in body)
+            assert "https://app.test/harbour-night-market/vendor\"" in body or (
+                "https://app.test/harbour-night-market/vendor\n" in body)
             assert "your page for" in body
             assert "your application" not in body.lower()
             assert "/markets/" not in body

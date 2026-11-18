@@ -36,6 +36,7 @@ from market_documents import (
     market_doc_key,
     market_from_document,
     market_serves_applicants,
+    public_map_is_open,
     results_are_out,
     vendor_page_market_by_slug,
 )
@@ -271,23 +272,20 @@ MARKET_NOT_FOUND = "Market not found. Check the URL and try again."
 
 
 def get_vendor_page(market_slug: str) -> Tuple[Dict[str, Any], int]:
-    """What a market's vendor page needs before anyone signs in (ADR 0022).
+    """What a market's vendor page, at ``/<slug>/vendor``, needs before anyone signs in (ADR 0022).
 
+    The market page at ``/<slug>`` reads the same answer to choose its map, call or notice
+    (ADR 0039).
     Served for a market ``vendor_page_market_by_slug`` serves, and otherwise the same 404 a slug
     naming nothing gets. ``ended`` is an archived market that ran, whose page is the record of where
     its vendors sat; ``rememberUntil`` is the date "Remember me" would end, or null once the
-    market's last date has passed.
+    market's last date has passed; ``mapOpen`` is whether the public map is open
+    (``public_map_is_open``), the gate the map's own read is built on.
     """
     from db_config import get_database
     db = get_database()
-    market_doc = vendor_page_market_by_slug(
-        db["markets"],
-        market_slug,
-        fields=(
-            "id", "phase", "applicationsStopped", "resultsPublished", "setupObject",
-            "phaseHistory",
-        ),
-    )
+    # The whole document, read once: ``mapOpen`` reads the market's form, layouts and settings.
+    market_doc = vendor_page_market_by_slug(db["markets"], market_slug)
     if not market_doc:
         return {"error": MARKET_NOT_FOUND}, 404
 
@@ -301,6 +299,7 @@ def get_vendor_page(market_slug: str) -> Tuple[Dict[str, Any], int]:
         "marketDates": dates,
         "ended": AttendanceApi.ended_after_it_ran(market_doc),
         "rememberUntil": RememberedSignIns.remembered_until_date(dates, RememberedSignIns.now()),
+        "mapOpen": public_map_is_open(market_doc),
     }, 200
 
 

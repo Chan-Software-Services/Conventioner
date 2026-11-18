@@ -25,7 +25,7 @@ describes:
   - back-end/api/markets.py#_market_change
   - back-end/tests/test_a_change_records_under_the_row_it_asked.py
   - back-end/tests/test_only_an_asking_writes_a_markets_history.py
-verified: 2026-11-17
+verified: 2026-11-18
 sources:
   - E39
   - E39/F01/S01
@@ -154,7 +154,7 @@ Default: Viewer.
 
 Asked by:
 
-- `GET /markets/:id/history` (Manage market's History section, a vendor's drawer's History tab with `?vendor=`, and Assignment history with `?group=Assignment`)
+- `GET /markets/:id/history` (Manage market's History section, a vendor's drawer's History tab with `?own=`, and Assignment history with `?group=Assignment`)
 - `GET /markets/:id/permission-history` (the changes to the market's table)
 
 ### Export CSV (`export-csv`)

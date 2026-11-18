@@ -296,6 +296,9 @@ test.describe('Choosing what leads the card, in a dialog', () => {
     const monitor = await aQueue(request, page);
     await expect(monitor.chooseHighlightsButton).toHaveText('Choose what leads the card');
     await expect(monitor.chooseHighlightsButton).not.toHaveAttribute('aria-expanded');
+    // The opener first, as a reviewer scrolls to it: a click scrolls an opener below the fold into
+    // view, and that scroll, not the dialog, would move the card between the two measures.
+    await monitor.chooseHighlightsButton.scrollIntoViewIfNeeded();
     const approve = await monitor.approveButton.boundingBox();
 
     await monitor.openChooseHighlights();

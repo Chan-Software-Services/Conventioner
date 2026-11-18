@@ -32,6 +32,7 @@ sources:
   - T318
   - T277
   - T316
+  - T469
 ---
 
 # The market lifecycle at a glance
@@ -153,9 +154,9 @@ Covered by:
 
 ## Where the check-in address lives
 
-Once a market has a vendor page, the rail carries its address as a chip between the spine and the moves, with Copy; it is the one place the product tells the organizer the address vendors use, from applying or their result to checking in with the door code.
-The chip stays on an archived market that ran, whose page stays up as its record ([an archived market that ran stays a record](../rules/an-archived-market-that-ran-stays-a-record.md)); before publishing there is none, since it would lead to a page that does not exist yet.
-A form market's vendor page has a chip of its own on the same row, "Vendor page", from the first phase after Draft ([a gated market answers as absent](../rules/a-gated-market-answers-as-absent.md)).
+Once a market has a vendor page, the rail carries the market's two addresses as chips between the spine and the moves, each with Copy: "Market page", the market's own address, `/<market>`, for anyone, and "Vendor page", `/<market>/vendor`, the address vendors use, from applying or their result to checking in with the door code.
+The chips stay on an archived market that ran, whose vendor page stays up as its record ([an archived market that ran stays a record](../rules/an-archived-market-that-ran-stays-a-record.md)); a Google Form market has none before its results are published or it reaches its market days, since they would lead to pages that do not exist yet.
+A form market has them from the first phase after Draft ([a gated market answers as absent](../rules/a-gated-market-answers-as-absent.md)).
 
 The spine, the addresses and the moves share one row at the organizer's screen width; where the row cannot hold them, the addresses and the moves take a second row together ([the phase rail](../../implementation/modules/phase-rail.md)).
 A market that leaves the spine freezes it at the furthest phase it reached and says in words what became of it, such as "It was published and ran its market days.": a struck-through spine alone reads as stopped, not as archived.

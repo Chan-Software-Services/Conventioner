@@ -168,9 +168,9 @@ test('deleting is a destructive dialog that opens on Cancel and says what goes',
   await expect(page.getByTestId('manage-market-delete-consequence')).toContainText(
     'its applications, its assignments, its check-in records',
   );
-  // A form market taking applications has a public page, and it goes too.
+  // A form market taking applications has its public pages, and they go too (T469).
   await expect(page.getByTestId('manage-market-delete-public')).toHaveText(
-    'Its vendor page will stop working for anyone who has the link.',
+    'Its market page and vendor page will stop working for anyone who has the links.',
   );
   await expect(manage.deleteCancelButton).toBeFocused();
 

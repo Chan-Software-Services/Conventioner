@@ -1093,6 +1093,169 @@ describe('a selection’s verdict in a vendor’s own history', () => {
   });
 });
 
+describe('an entry the server narrowed to one vendor’s own part', () => {
+  // What `?own=` serves for Ben (the back end's `vendors_own_part`): his application alone, and
+  // how many the whole entry was about.
+  const BEN = 'ben@ember.test';
+  const own = { names: NAMES, path: IntakeMode.Csv, own: BEN };
+  const pairs: Array<[string, MarketHistoryEntry, MarketHistoryEntry]> = [
+    [
+      'a selection’s verdicts',
+      entry({
+        action: 'give-verdicts',
+        kind: 'verdicts',
+        vendors: ['ana@ember.test', BEN, 'cal@ember.test'],
+        subject: { application_ids: ['a1', 'a2', 'a3'] },
+        detail: {
+          before: { a1: { status: 'open' }, a2: { status: 'open' }, a3: { status: 'open' } },
+          after: {
+            a1: { status: 'reviewer_approved' },
+            a2: { status: 'reviewer_approved' },
+            a3: { status: 'reviewer_approved' },
+          },
+          dealt_to: { a1: 'sam@example.com', a2: 'kai@ember.test' },
+        },
+      }),
+      entry({
+        action: 'give-verdicts',
+        kind: 'verdicts',
+        vendors: [BEN],
+        subject: { application_ids: ['a2'] },
+        detail: {
+          before: { a2: { status: 'open' } },
+          after: { a2: { status: 'reviewer_approved' } },
+          dealt_to: { a2: 'kai@ember.test' },
+        },
+        applicationCount: 3,
+      }),
+    ],
+    [
+      'a selection’s verdicts undone',
+      entry({
+        action: 'give-verdicts',
+        kind: 'verdicts_undone',
+        vendors: ['ana@ember.test', BEN],
+        subject: { application_ids: ['a1', 'a2'] },
+        detail: {
+          before: { a1: { status: 'reviewer_approved' }, a2: { status: 'reviewer_approved' } },
+          after: { a1: { status: 'open' }, a2: { status: 'open' } },
+        },
+      }),
+      entry({
+        action: 'give-verdicts',
+        kind: 'verdicts_undone',
+        vendors: [BEN],
+        subject: { application_ids: ['a2'] },
+        detail: {
+          before: { a2: { status: 'reviewer_approved' } },
+          after: { a2: { status: 'open' } },
+        },
+        applicationCount: 2,
+      }),
+    ],
+    [
+      'a deal',
+      entry({
+        action: 'choose-reviewers',
+        kind: 'dealt',
+        vendors: ['ana@ember.test', BEN],
+        subject: { application_ids: ['a1', 'a2'] },
+        detail: {
+          cause: 'reviewers_changed',
+          before: { a1: { reviewer: null }, a2: { reviewer: null } },
+          after: { a1: { reviewer: 'sam@example.com' }, a2: { reviewer: 'kai@ember.test' } },
+        },
+      }),
+      entry({
+        action: 'choose-reviewers',
+        kind: 'dealt',
+        vendors: [BEN],
+        subject: { application_ids: ['a2'] },
+        detail: {
+          cause: 'reviewers_changed',
+          before: { a2: { reviewer: null } },
+          after: { a2: { reviewer: 'kai@ember.test' } },
+        },
+        applicationCount: 2,
+      }),
+    ],
+    [
+      'a Discord check',
+      entry({
+        action: 'connect-discord',
+        kind: 'discord_checked',
+        vendors: [BEN, 'ana@ember.test'],
+        subject: { application_ids: ['a4', 'a2', 'a1'] },
+        detail: {
+          before: { a4: null, a2: null, a1: null },
+          after: { a4: 'not_found', a2: 'in_server', a1: 'has_role' },
+          addresses: { a4: null, a2: BEN, a1: 'ana@ember.test' },
+          counts: { has_role: 1, in_server: 1, not_found: 1 },
+        },
+      }),
+      entry({
+        action: 'connect-discord',
+        kind: 'discord_checked',
+        vendors: [BEN],
+        subject: { application_ids: ['a2'] },
+        detail: {
+          before: { a2: null },
+          after: { a2: 'in_server' },
+          addresses: { a2: BEN },
+          counts: { has_role: 1, in_server: 1, not_found: 1 },
+        },
+        applicationCount: 3,
+      }),
+    ],
+    [
+      'a "Give roles" run',
+      entry({
+        action: 'connect-discord',
+        kind: 'discord_roles_given',
+        vendors: ['ana@ember.test', BEN],
+        subject: { application_ids: ['a1', 'a2'] },
+        detail: {
+          role_name: 'Vendor Nov 2026',
+          given: ['a1', 'a2'],
+          before: { a1: 'in_server', a2: 'in_server' },
+          after: { a1: 'has_role', a2: 'has_role' },
+          addresses: { a1: 'ana@ember.test', a2: BEN },
+          counts: { given: 2 },
+        },
+      }),
+      entry({
+        action: 'connect-discord',
+        kind: 'discord_roles_given',
+        vendors: [BEN],
+        subject: { application_ids: ['a2'] },
+        detail: {
+          role_name: 'Vendor Nov 2026',
+          given: ['a2'],
+          before: { a2: 'in_server' },
+          after: { a2: 'has_role' },
+          addresses: { a2: BEN },
+          counts: { given: 2 },
+        },
+        applicationCount: 2,
+      }),
+    ],
+  ];
+
+  it.each(pairs)('reads %s as the whole entry reads in the vendor’s history', (_, whole, mine) => {
+    expect(said(entryParts(mine, own))).toBe(said(entryParts(whole, own)));
+    expect(entryChanges(mine, own)).toEqual(entryChanges(whole, own));
+  });
+
+  it('says how many others a selection decided with the vendor’s application', () => {
+    expect(said(entryParts(pairs[0][2], own))).toBe(
+      'dana@ember.test set the application and 2 others to Approved, dealt to kai@ember.test',
+    );
+    expect(said(entryParts(pairs[1][2], own))).toBe(
+      'dana@ember.test undid their verdicts on the application and 1 other: Approved back to Open',
+    );
+  });
+});
+
 /** A placement, read from the stored detail; a vendor in it is named by name and email. */
 describe('a placement', () => {
   const ON_THE_DAY = ' on Nov 19, 2026';
