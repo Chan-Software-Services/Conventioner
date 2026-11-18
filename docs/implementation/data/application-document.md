@@ -266,7 +266,8 @@ With no reviewers chosen nothing deals, and the marks wait for the deal a choice
 - on a market with chosen reviewers, an application `is_waiting` reads as waiting and not yet marked is marked `arriving: {actor: null, action: "review_state_migrated"}`, so the next deal on the market deals it and records it under that action with no actor, through the deal's own door ([waiting for the deal](#waiting-for-the-deal)); the market's history reads it as dealt "from nobody's share", and its Applications group reads it.
 
 Every rule it applies is the owner's (`state_of`, `origin_of`, `is_waiting`), so it marks exactly what the screens are served as waiting, and records nothing itself.
-Each write is held by the application's id on every field it read (`HELD_FIELDS`), null and absent alike; one that changed meanwhile is read again with its market, up to three tries in all, then listed as skipped.
+Each write is held by the application's id on every field it read (`HELD_FIELDS`), null and absent alike, by the owner's own rule (`held_as_read`, as every write of an application holds what it read); one that changed meanwhile is read again with its market, up to three tries in all, then listed as skipped.
+One gone meanwhile, its market deleted, is left gone and not listed, as it needs nothing; a market whose document stops reading as a market on a retry is left from that application on, and said, and the run goes on to the other markets.
 It prints first the count of the live markets' applications in each stored status, decision 9.6's read-only count of production when run with `--dry-run`, then market and application ids, never an address.
 **It has no boot marker**: an unmigrated application reads correctly through the owner, which applies the migration's own rules, so the migration only makes the stored values the owner's, and is safe to run again.
 When to run it is in [operations](../../OPERATIONS.md#starting-a-database-and-migrations).

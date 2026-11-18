@@ -538,7 +538,9 @@ def _as_read(value: Any) -> Any:
     return value if value is not None else {"$in": [None]}
 
 
-def _held(doc: Dict[str, Any], *fields: str) -> Dict[str, Any]:
+def held_as_read(doc: Dict[str, Any], *fields: str) -> Dict[str, Any]:
+    """The filter holding each of ``fields`` as ``doc`` was read, null and absent alike: what a
+    write of an application holds (ADR 0024), the status migration's among them."""
     return {field: _as_read(doc.get(field)) for field in fields}
 
 
@@ -578,7 +580,7 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
     if state not in TABLE[type(event)]:
         return Refused()
     now = now or datetime.now(timezone.utc)
-    held = _held(doc, "status", "verdict_at")
+    held = held_as_read(doc, "status", "verdict_at")
 
     if isinstance(event, (GiveVerdict, ChangeVerdict)):
         if event.status not in MARKED_STATUSES:
@@ -587,11 +589,11 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
         if state is State.APPROVED_ADDED and not rejected:
             return Refused(ADDED_ONLY_REJECTED)
         sets, unset = _a_persons_verdict(doc, event.status, event.by, event.owner, now)
-        pins = {**held, **_held(doc, "updated_at")}
+        pins = {**held, **held_as_read(doc, "updated_at")}
         if isinstance(event, GiveVerdict):
             # What its giver's undo returns it to, held as it is kept (E38/F10/S01).
             sets["undo_to"] = undo_to_of(doc)
-            pins.update(_held(doc, "follow_up_owner"))
+            pins.update(held_as_read(doc, "follow_up_owner"))
         else:
             unset.append("undo_to")
         return Move(to=state_of({**doc, **sets}), set=sets, unset=tuple(unset), pins=pins)
@@ -624,7 +626,7 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
                  "verdict_by": VerdictGiver(kind="rule", rule=event.rule).model_dump(),
                  "verdict_at": now.isoformat(), "verdict_reason": event.reason},
             unset=("follow_up_owner", "undo_to", ApplicationsApi.ARRIVING_FIELD, *_CLAIM),
-            pins={**held, **_held(doc, "updated_at")},
+            pins={**held, **held_as_read(doc, "updated_at")},
         )
 
     if isinstance(event, RuleReturns):
@@ -633,7 +635,7 @@ def move(doc: Dict[str, Any], event: Event, now: Optional[datetime] = None) -> U
             set={"status": ApplicationStatus.OPEN.value,
                  ApplicationsApi.ARRIVING_FIELD: event.arrival.stored()},
             unset=(*_VERDICT, "follow_up_owner", "undo_to", *_CLAIM),
-            pins={**held, **_held(doc, "updated_at")},
+            pins={**held, **held_as_read(doc, "updated_at")},
         )
 
     # HandOnFollowUp: held on its still needing one, whoever marked it; what an undo returns to

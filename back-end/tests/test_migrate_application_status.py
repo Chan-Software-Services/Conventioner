@@ -10,6 +10,7 @@ reads: ``open`` for each spelling of open, the approval or rejection an old stat
 origin, and on a market with chosen reviewers the mark that makes the next deal deal it.
 """
 import copy
+from types import SimpleNamespace
 
 import pytest
 
@@ -434,6 +435,35 @@ def test_an_application_changed_on_every_try_is_skipped_and_listed(
 
     assert stored(app_id)["status"] == "under_review"
     assert (f"skipped 1 application(s) that changed on every try: {app_id}. Run it again."
+            in capsys.readouterr().out)
+
+
+def test_a_market_unreadable_on_a_retry_is_left_and_the_run_goes_on(
+        database, applications, monkeypatch, capsys):
+    """Its stored document stops reading as a market between a try and the next: what is left of
+    it is left and said, and the other markets are still brought over."""
+    db = database()
+    db.collections["applications"] = ChangedOnEachWrite(applications, 1)
+    first = plant("v1", status="under_review")
+    plant("v2", status="under_review")
+    elsewhere = plant("v3", market_id=CSV, status="under_review", reviewer=None)
+    real = MarketsApi.load_market_context
+    reads = {"form": 0}
+
+    def unreadable_on_the_retry(market_id, *args, **kwargs):
+        if market_id == FORM:
+            reads["form"] += 1
+            if reads["form"] > 1:
+                return SimpleNamespace(market=None, organization=None)
+        return real(market_id, *args, **kwargs)
+
+    monkeypatch.setattr(MarketsApi, "load_market_context", unreadable_on_the_retry)
+
+    assert migrate(db) == 1
+
+    assert stored(first)["status"] == "under_review"
+    assert stored(elsewhere)["status"] == "open"
+    assert (f"  - market {FORM}: left from application {first} on, it cannot be read"
             in capsys.readouterr().out)
 
 

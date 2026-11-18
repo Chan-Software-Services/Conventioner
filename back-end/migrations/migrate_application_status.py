@@ -30,7 +30,8 @@ deals the rest, so a change of reviewers landing during the run moves nothing it
 Each write holds the application as read, every field the judgment read (null and absent alike);
 one that changed meanwhile is read again, with its market, up to three tries, then listed as
 skipped. One whose status no state names is left and listed; one gone meanwhile, its market
-deleted, is left gone.
+deleted, is left gone, unlisted, as it needs nothing. A market whose stored document does not read
+as a market is left and said, from the start or from the application whose retry found it so.
 
 **No boot marker**: an unmigrated application reads correctly through ``state_of``, ``origin_of``
 and ``is_waiting``, which apply this migration's own rules, so the migration only makes the stored
@@ -211,6 +212,12 @@ def migrate(db=None, dry_run: bool = False) -> int:
             app_id = doc.get("id")
             try:
                 judgment = set_one(applications, market_id, doc, view, dry_run)
+            except MarketUnreadable:
+                # A retry read the market again, and it no longer reads as one: the rest of it is
+                # left, as a market unreadable from the start is.
+                print(f"  - market {market_id}: left from application {app_id} on, "
+                      "it cannot be read")
+                break
             except Unreadable:
                 unreadable.append(str(app_id))
                 continue
@@ -245,8 +252,9 @@ def set_one(
 ) -> Optional[Judgment]:
     """Judge one application and write what it needs: the judgment written, or None when it needs
     nothing (or it, or its market, is gone); ``ChangedOnEveryTry`` when it changed between the
-    read and the write on every try. A try after the first reads the market's view again with
-    the application, so both are as fresh as each other."""
+    read and the write on every try; ``MarketUnreadable`` when a try after the first finds the
+    market no longer reads as one. A try after the first reads the market's view again with the
+    application, so both are as fresh as each other."""
     for attempt in range(TRIES):
         if attempt:
             view = _view_of(market_id)
@@ -264,13 +272,10 @@ def set_one(
 
 
 def written(applications, doc: Mapping[str, Any], fields: Dict[str, Any]) -> bool:
-    """Store ``fields``, holding the application as read, by its id as the owner's writes hold it,
-    on every field the judgment read (``HELD_FIELDS``), null and absent alike; whether it
+    """Store ``fields``, holding the application as read, by its id and by the owner's rule
+    (``ReviewState.held_as_read``), on every field the judgment read (``HELD_FIELDS``); whether it
     landed."""
-    holding: Dict[str, Any] = {"id": doc["id"]}
-    for field in HELD_FIELDS:
-        value = doc.get(field)
-        holding[field] = value if value is not None else {"$in": [None]}
+    holding = {"id": doc["id"], **ReviewState.held_as_read(doc, *HELD_FIELDS)}
     return bool(applications.update_one(holding, {"$set": fields}).matched_count)
 
 
