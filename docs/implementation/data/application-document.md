@@ -126,7 +126,7 @@ This section states the transition table once; every other node points here rath
 ### The states, and how they are stored
 
 An application is in one of six states (`State`), read off the stored fields by `state_of`, the one rule every reader of the state reads: the review state's own events, Begin assignment's guard, [the export](../../business/flows/vendors.md), the table-share notice and the review state every organizer read is served ([below](#the-served-review-state)).
-The deal's pool and the claim filter on the owner's `UNDECIDED_STATUSES`, the stored spellings of open, and the Stats tab still counts the stored statuses.
+The deal's pool and the claim filter on the owner's `UNDECIDED_STATUSES`, the stored spellings of open, and the Stats tab counts each served state (`states`, [`market_stats.py`](../../../back-end/market_stats.py), [the Stats tab](../../business/flows/stats.md)), serving the stored statuses beside it (`statuses`) only for a front end built before it, which a deploy that promotes the back end first leaves reading the new back end for a while.
 No state is stored itself, so no stored status changes its spelling:
 
 | State              | Stored as                                                                                                                                                                |
@@ -230,6 +230,10 @@ Every organizer read takes the view its route built, and none has a default, so 
 - **Waiting** (`is_waiting`): reviewers are chosen, and it is open with a reviewer who is not one of them (none, or a removed one), or a follow-up whose owner holds no role on the market.
   It is exactly what a deal reaching it would move, who is able aside, which stays the deal's own judgment while it holds the market ([below](#waiting-for-the-deal)).
   An application is served waiting whether or not it is marked: one stored in nobody's share before every move was marked (T277 P1, P2, P3, P5) waits until [the migration](#the-migration) marks it.
+- **The screens read it, never the status**: One by one's queue, its follow-ups and its reviewed list, its approved and rejected counts, the All view's filters and its "Assigned to", the card's and the drawer's "Reviewer:" line and "dealt to" warning, a selection's count of those dealt to others, the verdict lines and the Stats tab ([`reviewQueue.ts`](../../../front-end/src/utils/reviewQueue.ts), [`reviewers.ts`](../../../front-end/src/utils/reviewers.ts), [`verdicts.ts`](../../../front-end/src/utils/verdicts.ts), [`applicantStats.ts`](../../../front-end/src/utils/applicantStats.ts)).
+  One in nobody's share, waiting, reads "Reviewer: not dealt yet" and warns of no one, though it may still carry a removed reviewer's address ([dividing the review](../../business/flows/review.md#dividing-the-review)).
+  What compares the stored status with the status a write would give stays on `status`: the verdict buttons, a follow-up already marked, a selection's "already at that status", the undo's line.
+  The applicant's own read carries no review (`ApplicantApplication`), and a unit test fails a front-end module that names the old spelling of open or declares a list of statuses for a state (`noScreenSpellsAReviewStateOut.test.ts`); unit-test fixtures state the review they stand for with `servedReview` (`front-end/src/__tests__/support/servedReview.ts`).
 - The claim (`claim_next_for_review`) hands a chosen reviewer their share first by the stored reviewer and owner (`_in_share_of`), since `api/applications.py` cannot import `review_team.py`, which imports it; for every chosen reviewer who may ask, that is exactly whether `share_of` holds them, which a test pins over every state.
 
 ### Waiting for the deal

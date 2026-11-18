@@ -25,6 +25,7 @@ sources:
   - T270
   - T263
   - T411
+  - T452
 ---
 
 # The review is dealt among chosen reviewers
@@ -73,6 +74,7 @@ With nobody able, nothing is dealt, and what came into open meanwhile waits: the
 **A follow-up is in its owner's share too** (E38/F07/S04): marking a follow-up never moves its reviewer, and a follow-up stays with whoever holds it, so reaching out is its owner's work.
 A reviewer's share is therefore the applications dealt to them and the follow-ups they own, wherever those were dealt, and one follow-up can be in two shares: the share it was dealt to and its owner's.
 Every reader of a share counts it so: the All view's "Assigned to" filter for anyone's share, whoever reads it; the card's and drawer's warning, which its owner is not shown; and One by one's share, its count and what it hands out first.
+Each reads the share the server serves, never the stored reviewer and owner: an application in nobody's share, its reviewer removed, or a follow-up whose owner holds no role on the market, is in no share at all, though it may still carry their address, and every row and card says "Reviewer: not dealt yet" and warns of no one until the next deal deals it.
 
 ## Who may
 
@@ -102,6 +104,6 @@ One by one hands a chosen reviewer their own share first, and once it is done sa
 - A choice and the deal it made are entries of [the market's history](../../implementation/data/history.md), worded on Manage market's History and, for one vendor, in their drawer ([reading the market's history](../flows/reading-the-markets-history.md)).
 - The Reviewers panel on the Applications tab ([`ReviewersPanel.vue`](../../../front-end/src/components/market/ReviewersPanel.vue)) says the reviewers in one line ([`NameList.vue`](../../../front-end/src/components/NameList.vue), each reviewer drawn by [`ReviewerName.vue`](../../../front-end/src/components/market/ReviewerName.vue)), whose "and N more" opens the whole list, and changes them, through one picker, a `SearchPicker` of several choices, its people from [`front-end/src/utils/personChoice.ts`](../../../front-end/src/utils/personChoice.ts) ([`ReviewerPicker.vue`](../../../front-end/src/components/market/ReviewerPicker.vue)), and the words [`front-end/src/utils/reviewTeam.ts`](../../../front-end/src/utils/reviewTeam.ts) holds ([reviewing applications](../flows/review.md#dividing-the-review)).
   Its Change dialog holds by its submission through the save and the market's re-read (T411).
-  Whose share each application is, and the warning on deciding another's, are worded by [`front-end/src/utils/reviewers.ts`](../../../front-end/src/utils/reviewers.ts) for the All view's rows, its drawer and One by one's card, and the same file decides what the All view's "Assigned to" filter offers and opens on, and which of One by one's queue is the reader's share, by one test of whose share an application is (`inShareOf`) ([reviewing applications](../flows/review.md#dividing-the-review)).
+  Whose share each application is, and the warning on deciding another's, are worded by [`front-end/src/utils/reviewers.ts`](../../../front-end/src/utils/reviewers.ts) for the All view's rows, its drawer and One by one's card, and the same file decides what the All view's "Assigned to" filter offers and opens on, and which of One by one's queue is the reader's share, by one test of whose share an application is (`inShareOf`), which reads the served share ([reviewing applications](../flows/review.md#dividing-the-review), [ADR 0037](../../adr/0037-an-applications-review-state-has-one-owner.md)).
   `POST /markets/:id/review/next` hands a chosen reviewer their share first, and with `mineOnly` nothing else (`claim_next_for_review` and `_in_share_of` in [`back-end/api/applications.py`](../../../back-end/api/applications.py)).
   The same picker is offered as an own-form market opens applications, in the phase rail's dialog ([the phase rail](../../implementation/modules/phase-rail.md), [taking applications](../flows/taking-applications.md#h1-open-applications)), and on a Google Form market's first import, in its preview step ([`CsvImportView.vue`](../../../front-end/src/views/CsvImportView.vue), [the import](../flows/import.md#h2a-first-import-everything-maps)).

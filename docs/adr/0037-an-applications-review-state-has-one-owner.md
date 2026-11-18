@@ -9,6 +9,8 @@ describes:
   - back-end/datatypes.py#ApplicationOrigin
   - back-end/review_team.py#review_of
   - back-end/migrations/migrate_application_status.py
+  - front-end/src/__tests__/noScreenSpellsAReviewStateOut.test.ts
+  - front-end/src/__tests__/support/servedReview.ts
 verified: 2026-11-18
 sources:
   - T277
@@ -51,6 +53,8 @@ A rule about how an application moves between states could be kept only if every
   Its second check fails a module outside the owner, `tests/` and `migrations/` that reads a status the review no longer writes (`ApplicationStatus.UNDER_REVIEW`, the old offers flow's statuses, `CANCELLED`), so no reader spells a state out again beside `state_of`; its one exception, listed with its reason, is the offers stage's count of sent offers, which nothing enters and T277 ticket 14 removes.
 - **The state is served, and every reader outside the owner counts with it** (T277 ticket 02, phase 2): every application an organizer reads carries `review` (its state read down to four, `State.served`; whether it is undecided; whose share it is in; whether it waits for the deal), read by [`back-end/review_team.py`](../../back-end/review_team.py)'s `review_of` over one `ReviewView` of the market per request ([the served review state](../implementation/data/application-document.md#the-served-review-state)).
   Begin assignment's guard counts with the owner's `undecided_counts`, walked off `state_of`, and the export's status and the table-share notice read `state_of`, so no stored spelling of a state reads as another anywhere.
+- **The screens read the served state, never the status**: One by one, the All view and its drawer, the verdict lines and the Stats tab decide what is open, decided, in whose share and waiting from `review`, and the Stats tab counts the server's count of each state (`states`); the stored status stays for the labels and for comparing with the status a write would give.
+  A front-end unit test ([`noScreenSpellsAReviewStateOut.test.ts`](../../front-end/src/__tests__/noScreenSpellsAReviewStateOut.test.ts)) fails a module that names the old spelling of open or declares a list of statuses for a state, and the unit tests' fixtures state the review they stand for ([`servedReview`](../../front-end/src/__tests__/support/servedReview.ts)), so none derives it from a status.
 - **A one-time migration brings stored applications to the machine** ([`back-end/migrations/migrate_application_status.py`](../../back-end/migrations/migrate_application_status.py), [the migration](../implementation/data/application-document.md#the-migration)): each spelling of open becomes `open`, an old offers flow's status the approval or rejection `state_of` reads it as, a missing origin what `origin_of` reads, and each application `is_waiting` reads as waiting on a market with chosen reviewers is marked for the deal under `review_state_migrated`, with no actor, so the next deal deals it.
   It applies the owner's own rules and needs no boot marker, since an unmigrated application already reads as it would store it.
 
@@ -67,6 +71,8 @@ A rule about how an application moves between states could be kept only if every
 - An application stored with no status, or `under_review`, holds Begin assignment like any open one, and a card in nobody's share is served so: no screen can warn that it is dealt to a reviewer who was removed.
 - Every organizer read takes the view its route built, with no default, so a test calling one directly builds a view by hand.
 - An application left in nobody's share before every move was marked is dealt by the next deal after the migration runs, and the market's history says it was dealt "from nobody's share"; until then it is served waiting.
+- A card in nobody's share says "Reviewer: not dealt yet" on every screen, and warns of no one: an open one whose reviewer was removed, or that arrived while nobody chosen was able, or a follow-up whose owner holds no role on the market.
+- A screen's every new reader of the state reads `review`, so the unit tests and the component library's fixture carry it too; a fixture without it fails the type check.
 
 ## Considered and rejected
 
@@ -77,6 +83,8 @@ A rule about how an application moves between states could be kept only if every
 - **Each route deciding its own move**: the review route, the undo, the rules and the follow-up's hand-on each kept the conditions of their write, which is how the eight writers came to disagree; a pure `move` is the one answer a preview and a write share.
 - **Keeping origin as a reading of `added_by`**: the record of who added a vendor cannot also say they have applied since, so an added vendor a re-import brought in stayed out of the run; clearing `added_by` would lose who added them.
 - **An answers write per source** (the applicant's, the import's, the organizer's, each deciding what a change does): three writers deciding the same question three ways is what T277 found; one event with the source as a value says once which change undoes which verdict.
+- **The front end deriving the state from the status**, as each screen did before: the queue, the reviewers' share, the verdict lines and the Stats tab held four lists of what "undecided" means, which disagreed with the server and with each other on an old spelling of open and on a status the old offers flow left behind.
+- **Serving the share by who is able to review**: a chosen reviewer who can no longer review here keeps their share until an Admin removes them ([the dealing rule](../business/rules/the-review-is-dealt-among-chosen-reviewers.md)); a share by ableness would show their work as not dealt yet, and the migration would deal it away silently.
 - **Moving the collection's binding into the owner**: every fake and the real-MongoDB world would rebind two names, and the storage contract would leave the module that owns it.
 - **The front end deriving the state from the status**, as each screen did: the queue, One by one's counts, the All view's filters, the card's warning, the vendors list, the Stats tab, the export and the guard each held their own list, and "undecided" had four meanings among them, so the same application read differently on two screens.
 - **A boot marker for the migration**, as a change of a stored shape the app could not read has: the owner reads every unmigrated application as the migration would store it, so a release that refused to boot until it ran would only stop the market for nothing.
