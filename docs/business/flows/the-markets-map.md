@@ -8,8 +8,9 @@ describes:
 verified: 2026-11-18
 sources:
   - T422
-  - T469
   - T465
+  - T466
+  - T469
 ---
 
 # The market's map: published, found and directed by
@@ -80,12 +81,14 @@ Covered by:
 **Task:** "A vendor at the door asks where their table is."
 
 1. Attendance, the open day, "Map" beside "List" ([`AttendanceMap.vue`](../../../front-end/src/components/attendance/AttendanceMap.vue)) ([K5](market-day-door.md#k5-watch-attendance), step 9).
-2. "Find a vendor" ("Name, email or table"): type their name or address.
-   Expect their table outlined on the map, drawn filled once they are here and outlined while they are expected.
-3. Point them to it; or press their table, or their half of a shared one, to open their [drawer](vendor-drawer.md) on its Application tab, as their name on the list does.
+2. "Find a vendor" ("Name, email or table"): type part of their name (the one they go by or the full one), address or table, and pick them from the dropdown, each row saying where they sit ("Table Aisle A 3, left half", or "No table"), with the mouse or with the arrow keys and Enter.
+   Expect their [drawer](vendor-drawer.md) open on its Application tab, as a press on their table or their name on the list opens it, and their table outlined on the map, drawn filled once they are here and outlined while they are expected; a vendor sitting in the other location switches the map to it, and Back closes the drawer there.
+   Typing alone outlines nothing, and closing the drawer clears the outline (T466).
+3. Point them to it; or press their table, or their half of a shared one, to open their drawer, as their name on the list does.
 4. Check them in on "List" or have them scan the door code ([K2](market-day-door.md#k2-a-vendor-scans-the-door-code-and-is-checked-in)): the map checks nobody in, and their table is drawn filled on the roster's next read.
 
 A press on a table with nobody says "Table <code>: no vendor on <date>." under the map; vendors here with no table, and those at tables on no layout, are counted under it with "Show in the list".
+The legend under the map reads "Here" and "Expected" ("Did not come" once the day is over), and "No vendor" only on a day the open location's map draws a table, or a half of a shared one, nobody sits at; the no-table zones, the stage or the entrance, are still drawn and named on the map, with no legend item (T466).
 Covered by:
 
 - `a-market-past-draft-gets-a-public-map.spec.ts`

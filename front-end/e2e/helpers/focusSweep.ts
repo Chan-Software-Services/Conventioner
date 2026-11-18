@@ -203,14 +203,32 @@ export async function installTheSweep(page: Page): Promise<void> {
         // A marker drawn before the words, as a disclosure's is, takes about 16px.
         return room > wordsSlack ? room : null;
       };
-      const squareCorners = (w: CSSStyleDeclaration): string | null => {
+      // A segmented control's option (T466) joined to a neighbour flush on one side, so its box
+      // squares the two corners on that side: the focus border follows the option's own shape.
+      const joinedSides = (node: Element): { left: boolean; right: boolean } => {
+        const sides = { left: false, right: false };
+        if (!node.matches('.segmented__option')) return sides;
+        const edges = node.getBoundingClientRect();
+        for (const next of [node.previousElementSibling, node.nextElementSibling]) {
+          if (!next?.matches('.segmented__option')) continue;
+          const them = next.getBoundingClientRect();
+          if (Math.abs(them.top - edges.top) > 0.5) continue;
+          if (Math.abs(them.right - edges.left) <= 0.5) sides.left = true;
+          if (Math.abs(them.left - edges.right) <= 0.5) sides.right = true;
+        }
+        return sides;
+      };
+      const squareCorners = (w: CSSStyleDeclaration, node?: Element): string | null => {
+        const joined = node ? joinedSides(node) : { left: false, right: false };
         const corners = [
-          w.borderTopLeftRadius,
-          w.borderTopRightRadius,
-          w.borderBottomRightRadius,
-          w.borderBottomLeftRadius,
+          { radius: w.borderTopLeftRadius, joined: joined.left },
+          { radius: w.borderTopRightRadius, joined: joined.right },
+          { radius: w.borderBottomRightRadius, joined: joined.right },
+          { radius: w.borderBottomLeftRadius, joined: joined.left },
         ];
-        return corners.some((corner) => parseFloat(corner) === 0) ? corners.join(' ') : null;
+        return corners.some((corner) => parseFloat(corner.radius) === 0 && !corner.joined)
+          ? corners.map((corner) => corner.radius).join(' ')
+          : null;
       };
 
       if (el.matches(buttons)) {
@@ -287,7 +305,7 @@ export async function installTheSweep(page: Page): Promise<void> {
         if (w.outlineColor !== wanted) {
           problems.push(`a button's border is ${w.outlineColor}, where ${wanted} would show`);
         }
-        const square = squareCorners(w);
+        const square = squareCorners(w, wearer);
         if (square) problems.push(`a border with square corners: border-radius ${square}`);
         const clippedBy = clipper(wearer);
         if (clippedBy) problems.push(`a border cut off by ${clippedBy}`);

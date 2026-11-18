@@ -306,7 +306,10 @@ export function detectLayout(opts: DetectOptions): Finding[] {
       if (wrong.length) push('scroller-without-a-shade', el, wrong.join(' and '));
     }
 
-    // A child that leaves its parent's box, the parent letting it show.
+    // A child that leaves its parent's box, the parent letting it show. A row bled across a screen's
+    // gutter does so on purpose (T466): it passes where its own negative margin pulls it that far
+    // and the gutter it crosses gives the room, so it stays inside the nearest box padded on that
+    // side. A margin that carries it past that box is still caught, by all it leaves the parent by.
     if (cs.overflowX === 'visible' && cs.display !== 'inline' && cs.display !== 'contents') {
       for (const child of Array.from(el.children)) {
         const ccs = styleOf(child);
@@ -314,9 +317,26 @@ export function detectLayout(opts: DetectOptions): Finding[] {
           continue;
         const cr = rectOf(child);
         if (cr.width === 0 || cr.height === 0) continue;
-        const over = Math.max(cr.right - r.right, r.left - cr.left);
-        if (over > 1)
-          push('child-outside-parent', child, `${Math.round(over)}px outside ${label(el)}`);
+        const over = (side: 'left' | 'right') => {
+          const out = side === 'right' ? cr.right - r.right : r.left - cr.left;
+          if (out <= 1) return 0;
+          const pulled = Math.max(
+            0,
+            -parseFloat(side === 'right' ? ccs.marginRight : ccs.marginLeft) || 0,
+          );
+          if (out - pulled > 1) return out - pulled;
+          const padding = side === 'right' ? 'paddingRight' : 'paddingLeft';
+          let gutter: Element | null = el;
+          while (gutter && !(parseFloat(styleOf(gutter)[padding]) > 0))
+            gutter = gutter.parentElement;
+          if (!gutter) return out;
+          const gr = rectOf(gutter);
+          const inside = side === 'right' ? cr.right <= gr.right + 1 : cr.left >= gr.left - 1;
+          return inside ? 0 : out;
+        };
+        const outside = Math.max(over('left'), over('right'));
+        if (outside > 1)
+          push('child-outside-parent', child, `${Math.round(outside)}px outside ${label(el)}`);
       }
     }
 
