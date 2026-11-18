@@ -373,9 +373,15 @@ def attendance_roster(market_doc: Dict[str, Any]) -> Dict[str, Any]:
     and one seated again elsewhere reads ``here_elsewhere``, never here at a table they never
     reached. A record stored before check-ins kept their table reads as made at the seat held now,
     as it would have been. Seated rows come first on each date, by table; the seatless after them.
+
+    Each row names the vendor as every screen does (``vendor_name``, the name they chose, else the
+    one on their identification) and carries the one on their identification beside it
+    (``vendor_full_name``), so the door's searches find someone who goes by another name by either,
+    as Vendors and Payments do (T466).
     """
     market_id = market_doc.get("id")
     names = ApplicationsApi.vendor_names_for_market(market_id)
+    full_names = ApplicationsApi.vendor_full_names_for_market(market_id)
     check_ins = {
         (doc.get("vendor_email"), doc.get("date")): doc
         for doc in attendance_collection.find({"market_id": market_id})
@@ -386,10 +392,11 @@ def attendance_roster(market_doc: Dict[str, Any]) -> Dict[str, Any]:
         email = normalized_email(str(row.get("email", "")))
         date = str(row.get("date", ""))
         seated.add((email, date))
-        roster.append(_roster_row(email, date, names, row, check_ins.get((email, date))))
+        roster.append(_roster_row(
+            email, date, names, full_names, row, check_ins.get((email, date))))
     for (email, date), check_in in check_ins.items():
         if (email, date) not in seated:
-            roster.append(_roster_row(email, date, names, None, check_in))
+            roster.append(_roster_row(email, date, names, full_names, None, check_in))
     roster.sort(key=lambda r: (
         r["date"], r["state"] == HERE_WITHOUT_SEAT,
         table_code_sort_key(r["table_code"] or ""), str(r["table_choice"] or ""),
@@ -400,8 +407,8 @@ def attendance_roster(market_doc: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _roster_row(
-    email: str, date: str, names: Dict[str, str], seat: Optional[Dict[str, Any]],
-    check_in: Optional[Dict[str, Any]],
+    email: str, date: str, names: Dict[str, str], full_names: Dict[str, str],
+    seat: Optional[Dict[str, Any]], check_in: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
     """One vendor's day at the door: their seat (or none), their check-in (or none), and the
     state the two make."""
@@ -419,6 +426,7 @@ def _roster_row(
         "date": date,
         "vendor_email": email,
         "vendor_name": names.get(email, ""),
+        "vendor_full_name": full_names.get(email, ""),
         "table_code": held,
         "table_choice": seat.get("table_choice"),
         "section": seat.get("section"),

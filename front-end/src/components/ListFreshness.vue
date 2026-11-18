@@ -7,38 +7,34 @@
  * read, not what is: this says how old it is, ageing as it sits, and reads it again on request. The
  * view owns the read; this only shows it and asks for another. `testid` starts its test ids, so
  * each screen's are its own: `<testid>-updated`, `<testid>-refresh`, `<testid>-refresh-error`.
+ * With `showTime` false it draws no time (T466): Attendance says it under its map or over its list.
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { updatedAgo } from '@/utils/updatedAgo';
+import { toRef } from 'vue';
+import { useUpdatedWords } from '@/utils/useUpdatedWords';
 
-const props = defineProps<{
-  /** When the list was last read from the server, in milliseconds, or null before the first. */
-  readAt: number | null;
-  refreshing: boolean;
-  /** Why the last refresh failed, in one line; empty when it did not. */
-  failed: string;
-  testid: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    /** When the list was last read from the server, in milliseconds, or null before the first. */
+    readAt: number | null;
+    refreshing: boolean;
+    /** Why the last refresh failed, in one line; empty when it did not. */
+    failed: string;
+    testid: string;
+    /** `false` draws no time, only Refresh and a failed refresh, for a screen that says it elsewhere. */
+    showTime?: boolean;
+  }>(),
+  { showTime: true },
+);
 const emit = defineEmits<{ refresh: [] }>();
 
-/** Often enough that a minute's turn shows within a few seconds of it. */
-const AGEING_MS = 10_000;
-const now = ref(Date.now());
-let ageing: ReturnType<typeof setInterval> | null = null;
-onMounted(() => (ageing = setInterval(() => (now.value = Date.now()), AGEING_MS)));
-onUnmounted(() => {
-  if (ageing) clearInterval(ageing);
-});
-
-// A read is now: it is said as just now at once, not at the next turn of the clock.
-const words = computed(() =>
-  props.readAt === null ? '' : updatedAgo(props.readAt, Math.max(now.value, props.readAt)),
-);
+const words = useUpdatedWords(toRef(props, 'readAt'));
 </script>
 
 <template>
   <div class="freshness">
-    <span v-if="words" class="freshness-time" :data-testid="`${testid}-updated`">{{ words }}</span>
+    <span v-if="showTime && words" class="freshness-time" :data-testid="`${testid}-updated`">{{
+      words
+    }}</span>
     <button
       type="button"
       class="btn btn--secondary btn--compact"

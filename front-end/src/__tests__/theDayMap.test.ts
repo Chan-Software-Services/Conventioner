@@ -10,6 +10,7 @@ import { mount, type VueWrapper } from '@vue/test-utils';
 import { readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import type { TableTypeObject } from '@/assets/types/datatypes';
+import { stylesOf, valueOf } from './support/sfcStyles';
 import DayMap from '@/components/daymap/DayMap.vue';
 import {
   UNNAMED_SEAT,
@@ -378,6 +379,66 @@ describe('the day map', () => {
     expect(map.findAll('[data-testid="layout-map-read"]')).toHaveLength(2);
   });
 
+  it("draws no note and the switch by default, as the component library's door map has them", () => {
+    const map = dayMap();
+    expect(map.find('[data-testid="day-map-note"]').exists()).toBe(false);
+    expect(map.find('[data-testid="day-map-locations"]').exists()).toBe(true);
+  });
+
+  it("draws its note after the legend, the legend row's end", () => {
+    const map = dayMap({ note: 'Updated just now' });
+    const note = map.get('[data-testid="day-map-note"]');
+    expect(note.text()).toBe('Updated just now');
+    expect(note.element.tagName).toBe('P');
+    expect(note.element.previousElementSibling).toBe(
+      map.get('[data-testid="day-map-legend"]').element,
+    );
+  });
+
+  it('draws no switch with locationSwitch off, for a page that draws its own', () => {
+    const map = dayMap({ locationSwitch: false });
+    expect(map.find('[data-testid="day-map-locations"]').exists()).toBe(false);
+    // The grid opens on the map: nothing over it, not even an empty row.
+    expect(map.get('.day-map__grid').element.firstElementChild?.classList).toContain(
+      'day-map__frame',
+    );
+    expect(map.get('[data-testid="layout-map"]').attributes('aria-label')).toBe(
+      'Upper Hall layout, 2 tables',
+    );
+  });
+
+  it("stands the note at the legend row's end, 4px under the map, small and muted, and under the legend in a phone's box", () => {
+    const styles = stylesOf('daymap/DayMap.vue');
+    const PHONE = '(width < 30rem)';
+    const areas = (selector: string, query = '') =>
+      valueOf(styles, selector, 'grid-template-areas', query)?.replace(/\s+/g, ' ');
+    // With no note the legend keeps the whole row, and a phone's box adds no row for it.
+    expect(areas('.day-map__grid')).toBe("'map map' 'legend legend'");
+    expect(areas('.day-map__grid:has(> .day-map__note)')).toBe("'map map' 'legend note'");
+    expect(areas('.day-map__grid', PHONE)).toBe("'map map' 'legend zoom'");
+    expect(areas('.day-map__grid:has(> .day-map__note)', PHONE)).toBe(
+      "'map map' 'legend zoom' 'note note'",
+    );
+    // The switch stands over the grid, its gap's 12px its own, so a map with no switch keeps no
+    // empty row and no gap over the map (T466).
+    const everyArea: string[] = [];
+    styles.walkDecls('grid-template-areas', (decl) => {
+      everyArea.push(decl.value);
+    });
+    // The four above and the two of a map that fills its box (T465).
+    expect(everyArea).toHaveLength(6);
+    for (const value of everyArea) expect(value).not.toContain("'switch");
+    expect(valueOf(styles, '.day-map__locations', 'margin-block-end')).toBe('var(--space-3)');
+    const note = (property: string) => valueOf(styles, '.day-map__note', property);
+    expect(note('grid-area')).toBe('note');
+    expect(note('align-self')).toBe('start');
+    // The grid's 12px gap less 8px leaves the note 4px under the map.
+    expect(note('margin')).toBe('calc(-1 * var(--space-2)) 0 0');
+    expect(note('text-align')).toBe('end');
+    expect(note('font-size')).toBe('var(--text-xs)');
+    expect(note('color')).toBe('var(--mm-text-muted)');
+  });
+
   it('reads no store and no API: its data is all handed to it', () => {
     for (const file of ['DayMap.vue', 'dayMap.ts']) {
       const source = readFileSync(
@@ -408,9 +469,9 @@ describe('the day map without fills, as Attendance draws it', () => {
     });
     expect(wrapper.html()).toMatchInlineSnapshot(`
       "<div data-v-d4ffb88c="" class="day-map" data-testid="day-map">
+        <div data-v-203e6a75="" data-v-d4ffb88c="" class="filter-toggles day-map__locations" role="group" aria-label="Location" data-testid="day-map-locations"><button data-v-203e6a75="" type="button" class="btn btn--secondary btn--compact filter-toggles__toggle" aria-pressed="true" data-testid="day-map-locations-loc-upper"><span data-v-203e6a75="" class="filter-toggles__words" data-testid="day-map-locations-words">Upper Hall <!--v-if--></span></button><button data-v-203e6a75="" type="button" class="btn btn--secondary btn--compact filter-toggles__toggle" aria-pressed="false" data-testid="day-map-locations-loc-lower"><span data-v-203e6a75="" class="filter-toggles__words" data-testid="day-map-locations-words">Lower Hall <!--v-if--></span></button></div>
         <div data-v-d4ffb88c="" class="day-map__grid">
-          <div data-v-203e6a75="" data-v-d4ffb88c="" class="filter-toggles day-map__locations" role="group" aria-label="Location" data-testid="day-map-locations"><button data-v-203e6a75="" type="button" class="btn btn--secondary btn--compact filter-toggles__toggle" aria-pressed="true" data-testid="day-map-locations-loc-upper"><span data-v-203e6a75="" class="filter-toggles__words" data-testid="day-map-locations-words">Upper Hall <!--v-if--></span></button><button data-v-203e6a75="" type="button" class="btn btn--secondary btn--compact filter-toggles__toggle" aria-pressed="false" data-testid="day-map-locations-loc-lower"><span data-v-203e6a75="" class="filter-toggles__words" data-testid="day-map-locations-words">Lower Hall <!--v-if--></span></button></div>
-          <div data-v-d4ffb88c="" class="day-map__frame" style="aspect-ratio: 29999.999999999996 / 22500;">
+          <div data-v-d4ffb88c="" class="day-map__frame" data-testid="day-map-frame" style="aspect-ratio: 29999.999999999996 / 22500;">
             <layout-map-stub data-v-d4ffb88c="" layout="[object Object]" locationname="Upper Hall" sections="[object Object]" tabletypes="[object Object]" mode="read" imageurl="/api/public/markets/harbour/map/image/loc-upper" imageingrey="true" imagefaded="true" selection="" guides="" carried="" numbers="true" seats="[object Object],[object Object],[object Object]" marked="g1,g2:right"></layout-map-stub>
           </div>
           <div data-v-d4ffb88c="" class="day-map__zoom" role="group" aria-label="Zoom" data-testid="day-map-zoom"><button data-v-d4ffb88c="" type="button" class="btn btn--secondary btn--compact day-map__zoom-button" data-testid="day-map-zoom-out"><span data-v-d4ffb88c="" aria-hidden="true">-</span><span data-v-d4ffb88c="" class="visually-hidden">Zoom out</span></button><button data-v-d4ffb88c="" type="button" class="btn btn--secondary btn--compact day-map__zoom-button" data-testid="day-map-zoom-in"><span data-v-d4ffb88c="" aria-hidden="true">+</span><span data-v-d4ffb88c="" class="visually-hidden">Zoom in</span></button><button data-v-d4ffb88c="" type="button" class="btn btn--secondary btn--compact day-map__zoom-button" data-testid="day-map-fit"> Fit </button></div>
@@ -425,6 +486,7 @@ describe('the day map without fills, as Attendance draws it', () => {
                 <rect data-v-d4ffb88c="" x="0.75" y="0.75" width="22.5" height="12.5" rx="2" fill="var(--layout-floor)" stroke="var(--layout-no-section-edge)" stroke-width="1.5" stroke-dasharray="4 3"></rect>
               </svg><span data-v-d4ffb88c="">No vendor</span></li>
           </ul>
+          <!--v-if-->
         </div>
       </div>"
     `);

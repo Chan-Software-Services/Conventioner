@@ -1731,10 +1731,12 @@ export const SCREEN_GROUPS = {
       ]),
     })),
     {
+      // Past the applications stage the tab says nothing over the review (T466): ready once the
+      // All view's rows are read.
       name: 'market days, the applications',
       who: 'organizer',
       sizes: FITS_A_PHONE,
-      open: at(setup('big', 'applications'), 'market-setup-applications-condition'),
+      open: at(setup('big', 'applications'), 'applications-all-row'),
     },
     {
       // Hover is a state too: the tab bar's hover once set its label to a 25% near-black on the
