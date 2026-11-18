@@ -333,7 +333,7 @@ Every stack's back-end container sets `MONGODB_HOST=mongodb`, so `scripts/th-com
 
 In short (the detail is [RELEASING.md](RELEASING.md)):
 
-- Changes reach `dev` by PR; `dev` requires nine checks, `CodeQL` among them, and `main` six ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)).
+- Changes reach `dev` by PR; `dev` requires eleven checks, CodeQL's three `Analyze (<language>)` among them, and merges a PR through a merge queue, and `main` requires six ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)).
 - Promote a commit whose `dev` CI is green with the Promote workflow, giving it the commit's full sha: Actions, Promote, Run workflow, from `dev`, or `gh workflow run promote.yml --ref dev -f commit=<sha>`; never push to `main` by hand, which its rulesets refuse.
   It refuses a commit whose `dev` Test run has not passed, that is not on `dev`, or that `main` is not an ancestor of, then fast-forwards `main` to it ([how a promotion proves itself](RELEASING.md#how-a-promotion-proves-itself)).
   The Test workflow runs on `main`; once it is green, start the Deploy workflow by hand (Actions, Deploy, Run workflow, from `main`, or `gh workflow run deploy.yml --ref main`), which refuses a commit whose Test run has not passed, builds both projects without giving them a domain and proves each serves this commit, then promotes the back end, waits until `api.conventioner.io` serves the commit, promotes the front end and waits for `conventioner.io` ([how a deploy proves itself](RELEASING.md#how-a-deploy-proves-itself)).

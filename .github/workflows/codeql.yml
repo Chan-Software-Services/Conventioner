@@ -1,0 +1,74 @@
+name: CodeQL
+
+# CodeQL's analysis of the repository, as a workflow of its own (advanced setup), so it runs on a
+# merge queue's trial commit too: dev's ruleset requires the three `Analyze (<language>)` checks
+# on every trial commit, and GitHub's default setup runs nothing there.
+# The default setup must stay off: while it is configured, GitHub refuses this workflow's uploads.
+# The required roll-up check `CodeQL` this replaces is posted only on a pull request, never on a
+# trial commit; dev's ruleset holds a new alert out of the queue with its code scanning rule
+# instead (docs/implementation/testing/ci-and-the-gate.md#codeql).
+# It analyses main too, on a pull request and a push, though main's rules require none of these
+# checks: a hotfix's pull request into main is analysed before it merges, and main's alerts stay
+# current, as under the default setup.
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+  merge_group:
+    types: [checks_requested]
+    branches: [dev]
+  # The default setup's weekly scan of dev, the default branch, so a new query in a CodeQL release
+  # reads code that has not changed.
+  schedule:
+    - cron: "27 4 * * 1"
+
+permissions: {}
+
+# The Test workflow's rule: a push to a pull request's branch cancels the run of its earlier head;
+# a push to dev or main, a trial commit and a scheduled scan each have a group of their own
+# commit, so none is ever cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'pr' || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # The job's name is each check's name, which dev's ruleset requires a check by: renaming it, or a
+  # language, drops a required check.
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    # The default setup's analyses took under 5 minutes on this repository.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # The SARIF upload to code scanning.
+      security-events: write
+      # The workflow run's details, which the upload reads.
+      actions: read
+    strategy:
+      # One language's failure never cancels another's analysis.
+      fail-fast: false
+      # The default setup's languages: its `javascript` and `typescript` are aliases of
+      # `javascript-typescript`. None needs a build. The default suite and no config, so the
+      # threat model stays `remote`, and the category set to the default setup's,
+      # `/language:<language>`, so existing alerts and their dismissals carry over.
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: "/language:${{ matrix.language }}"
