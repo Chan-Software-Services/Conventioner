@@ -250,6 +250,7 @@ The rule is [the review is dealt among chosen reviewers](../rules/the-review-is-
    A reader who decides nothing sees the reviewer's name only, and with no reviewers chosen none of it shows.
    One in nobody's share reads "Reviewer: not dealt yet" and warns of no one, though it may still carry the address of a reviewer since removed: an open one dealt to a reviewer taken off the team, or that arrived while nobody chosen could review, and a follow-up whose owner holds no role on the market and whose reviewer is not chosen (`a-card-in-nobodys-share-waits-to-be-dealt.spec.ts`).
    A follow-up whose owner holds no role but whose reviewer is chosen waits for the deal too, yet is still that reviewer's share, so it names them and warns of them (`reviewers.test.ts`).
+   The line names the first address of the share the server serves, as the warning does, so a follow-up whose reviewer was removed names the owner it stays with, never the removed reviewer.
    A chosen reviewer who can no longer review here keeps their share, named as before, until an Admin takes them off.
    The reviewer's address in the warning and in "Reviewer: <email>" breaks as the history's addresses do ([reading the market's history](reading-the-markets-history.md#l6-read-the-markets-history)).
 8. Each chosen reviewer lands on their own share: the All view opens on "Assigned to: Me", and anyone else's share, or everyone's, is a choice of the same filter away ([the All view](#the-all-view)).

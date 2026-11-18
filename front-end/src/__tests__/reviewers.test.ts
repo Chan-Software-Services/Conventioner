@@ -95,6 +95,22 @@ describe('reviewerLine', () => {
     expect(line(ownerGone, ANA, chosen)).toBe('Reviewer: you');
   });
 
+  it('names the owner a follow-up stays with once its reviewer is removed, as the warning does', () => {
+    // Dealt to Ana, owned by Ben; an Admin removed Ana, so it is Ben's share alone.
+    const ana = 'ana@market.test';
+    const ben = 'ben@market.test';
+    const benAlone = { reviewTeam: { reviewers: [{ email: ben, able: true }] } };
+    const ownersAlone = application(
+      ApplicationStatus.NeedsFollowUp,
+      ana,
+      servedReview('follow_up', { share: [ben] }),
+      ben,
+    );
+    expect(line(ownersAlone, 'cat@market.test', benAlone)).toBe(`Reviewer: ${ben}`);
+    expect(dealtElsewhere(ownersAlone, 'cat@market.test', benAlone)).toBe(ben);
+    expect(line(ownersAlone, ben, benAlone)).toBe('Reviewer: you');
+  });
+
   it('names a chosen reviewer who can no longer review here: the share stays theirs', () => {
     const unable = {
       reviewTeam: {

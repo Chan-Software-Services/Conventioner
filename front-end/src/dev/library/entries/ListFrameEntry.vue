@@ -135,8 +135,8 @@ function selectAllShown(): void {
   for (const { id } of onScreen.value) ticked.add(id);
 }
 /** "Reviewer: you" on the reader's own, as today's row says it. */
-const reviewerWords = ({ review, reviewer }: LibraryApplication) =>
-  reviewerLine({ review, reviewer: { email: addressOf(reviewer) } }, READER, TEAM) ?? [];
+const reviewerWords = ({ review }: LibraryApplication) =>
+  reviewerLine({ review }, READER, TEAM) ?? [];
 
 /** The role each person holds here: the demo's own, so a change is seen to land. */
 const ROLES = Object.values(MarketRole);

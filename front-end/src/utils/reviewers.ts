@@ -14,7 +14,6 @@ import { addressParts, type AddressPart } from '@/utils/addressParts';
 import { findsPerson } from '@/utils/personChoice';
 import { reviewerAddresses } from '@/utils/reviewTeam';
 
-type Dealt = Pick<Application, 'review' | 'reviewer'>;
 type Team = Pick<Market, 'reviewTeam'> | null | undefined;
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -30,35 +29,29 @@ export function inShareOf(application: Pick<Application, 'review'>, address: str
   return application.review.share.some((holder) => same(holder, address));
 }
 
-/**
- * Whom the application was dealt to, while reviewers are chosen: with none, it is first come,
- * first served again, and a follow-up's reviewer kept from before names nobody's share.
- */
-function dealtTo(application: Pick<Application, 'reviewer'>, market: Team): string | null {
-  if (!reviewerAddresses(market).length) return null;
-  return application.reviewer?.email || null;
-}
-
 /** Whether the reader is one of the chosen reviewers, able or not. */
 export function isChosen(reader: string, market: Team): boolean {
   return reviewerAddresses(market).some((address) => same(address, reader));
 }
 
 /**
- * "Reviewer: sam@example.com", or "Reviewer: you" for the reader's own; "Reviewer: not dealt yet"
- * for one waiting for the deal (`review.waiting`) in nobody's share, though it may still carry a
- * removed reviewer's address; null with no reviewers chosen. A waiting follow-up whose owner holds
- * no role on the market is still its chosen reviewer's share while it waits, so it names them, as
- * the warning `dealtElsewhere` gives does.
+ * Whose share the application is in, first of the served share (`review.share`), as the warning
+ * `dealtElsewhere` names it: "Reviewer: sam@example.com", or "Reviewer: you" for the reader's own.
+ * "Reviewer: not dealt yet" for one waiting for the deal (`review.waiting`) in nobody's share,
+ * though it may still carry a removed reviewer's address; null with no reviewers chosen, or for
+ * one in nobody's share that does not wait. A waiting follow-up whose owner holds no role on the
+ * market is still its chosen reviewer's share while it waits, so it names them, and a follow-up
+ * whose reviewer was removed names the owner it stays with, never the stored reviewer.
  */
 export function reviewerLine(
-  application: Dealt,
+  application: Pick<Application, 'review'>,
   reader: string,
   market: Team,
 ): AddressPart[] | null {
   const { waiting, share } = application.review;
+  if (!reviewerAddresses(market).length) return null;
   if (waiting && !share.length) return [{ kind: 'text', text: 'Reviewer: not dealt yet' }];
-  const reviewer = dealtTo(application, market);
+  const reviewer = share[0];
   if (!reviewer) return null;
   if (same(reviewer, reader)) return [{ kind: 'text', text: 'Reviewer: you' }];
   return [{ kind: 'text', text: 'Reviewer: ' }, ...addressParts(reviewer)];
