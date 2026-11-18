@@ -2,8 +2,9 @@
 
 A shell that ran a stack, or ``scripts/nm-test.sh``'s E2E phase, may have exported
 ``DISABLE_CAPTCHA``, ``DISABLE_EMAIL`` or ``DISCORD_FAKE``. The suite turns the escape hatch on for
-every run, which honours each, so an exported ``DISCORD_FAKE=true`` sent every Discord test to the
-fake's store, and they failed there while passing in CI, whose ``backend`` job sets none.
+every run, which honours each, so an exported ``DISCORD_FAKE=true`` handed Discord's credentials and
+requests to the fake, and most Discord connection tests failed there while passing in CI, whose
+``backend`` job sets none.
 ``conftest.py`` therefore clears each switch before any test runs, and a test that needs one sets it
 itself. This is what keeps that true.
 """
