@@ -152,7 +152,7 @@ The E2E specs open the page signed out on [the seeded market day](../testing/e2e
 - [`the-public-map-vendors.spec.ts`](../../../front-end/e2e/the-public-map-vendors.spec.ts): the answer as received holding no private detail, the search finding by each public field and never by a private one, a pick, the whole list, the first row's room under the field and its fade.
 
 [`PublicMapPage.ts`](../../../front-end/e2e/pages/PublicMapPage.ts) is their page object; the map's tables are found by their accessible names, as a layout's are ([E2E patterns](../testing/e2e-patterns.md)).
-The four layout sweeps walk the page before a pick, with the shared table picked whole, and with its right half picked (`SCREENS` in `e2e/helpers/screens.ts`).
+The three public map screens of the screen sweeps walk the page before a pick, with the shared table picked whole, and with its right half picked (`SCREENS` in `e2e/helpers/screens.ts`).
 Each opens the seed's first day by its address (`publicMapAt`), since the page opens on the browser's today, and a sweep seeded before midnight would otherwise open on the seed's second day, where the shared table seats nobody.
 
 ## Why
