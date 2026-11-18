@@ -356,6 +356,19 @@ describe('useInertBehind', () => {
       }
     });
 
+    it('is given back, with the marks, when an open modal walks again and finds no part', async () => {
+      const page = buildPage();
+      const part = ref<HTMLElement | null>(page.panel);
+      mountWith(ref(true), () => [part.value]);
+      await nextTick();
+      expect(holdsStill()).toBe(true);
+
+      part.value = null;
+      await nextTick();
+      expect(holdsStill()).toBe(false);
+      expect(document.querySelectorAll('[inert]')).toHaveLength(0);
+    });
+
     it('is not held by a modal open with nothing on the page to be', async () => {
       mountWith(ref(true), () => [null]);
       await nextTick();

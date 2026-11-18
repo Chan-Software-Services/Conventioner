@@ -138,7 +138,11 @@ export function useInertBehind(
     // a component with a fragment root hands back a comment node: that would join the spine while
     // the real panel became a sibling of it, so the modal would mark ITSELF out of play.
     const parts = partsOf().filter((el): el is HTMLElement => el instanceof HTMLElement);
-    if (parts.length === 0) return;
+    // No part on the page: nothing to hold the page for, so the scroll goes back with the marks.
+    if (parts.length === 0) {
+      giveTheScrollBack();
+      return;
+    }
     holdTheScroll();
 
     // Every ancestor of every part, so the walk below can tell the modal's own branch apart.
