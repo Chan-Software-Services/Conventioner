@@ -46,7 +46,7 @@ describes:
   - front-end/e2e/screen-sweeps-vendors-to-signed-out.spec.ts
   - front-end/e2e/screen-sweeps-plan.spec.ts
   - front-end/e2e/helpers/screenSweeps.ts
-verified: 2026-11-13
+verified: 2026-11-18
 sources:
   - wayfinding/claims-and-room/map
   - wayfinding/claims-and-room/01
