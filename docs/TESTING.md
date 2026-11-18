@@ -173,6 +173,7 @@ Most shared fakes in `back-end/tests/conftest.py` read a filter with `mongo_matc
 So a read that fetches too little, or a write the server would apply otherwise, fails here rather than in production.
 Shared module stubs live in `back-end/tests/conftest.py`, which also points the `.env` loader at a path that does not exist.
 The suite reads no `.env`, so a stale one on your machine cannot change its result.
+It turns `ALLOW_INSECURE_LOCAL_DEV` on unless the shell set it, and clears `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` before any test runs, so a shell that exported a stack's switches cannot change its result either; a test that needs a switch sets it itself, and `test_the_suite_reads_no_switch_from_its_shell.py` keeps that true.
 
 ### The real-MongoDB suite
 
