@@ -85,24 +85,25 @@ function counted(shares: DealtShare[]): { many: string; among: number } {
 }
 
 /**
- * The action the status migration marked what it found in nobody's share under (T277 ticket 02):
- * the deal that took the mark records it under this, with no actor.
+ * The action the status migration marked what it found waiting for the deal under (T277 ticket
+ * 02): the deal that took the mark records it under this, with no actor.
  */
 const MIGRATED = 'review_state_migrated';
 
 /**
- * The deal of what the status migration found in nobody's share: nobody dealt it, so it reads as
- * the application dealt, "from nobody's share", one by its vendor (or as the vendor's own line),
- * several by how many.
+ * The deal of what the status migration found waiting for the deal: nobody dealt it, so it reads
+ * as the application dealt, "having waited for the deal", one by its vendor (or as the vendor's own
+ * line), several by how many. Most were in nobody's share, but a follow-up whose owner left the
+ * market was still in its chosen reviewer's, so the words say only that it waited.
  */
-function fromNobodysShare(
+function havingWaited(
   shares: DealtShare[],
   one: DealtShare | undefined,
   mine: DealtShare | undefined,
   text: (words: string) => MarketHistoryPart,
   who: (email: unknown) => MarketHistoryPart,
 ): MarketHistoryPart[] {
-  const from = " from nobody's share";
+  const from = ', having waited for the deal';
   if (one) {
     const what = one.followUp ? 'follow-up' : 'application';
     const named = mine ? [text(`The ${what}`)] : [text(`The ${what} of `), who(one.vendor)];
@@ -387,8 +388,8 @@ export const readers: HistoryReaders = {
               text(` was dealt to ${one.after} as it arrived`),
             ];
       }
-      // What the status migration found in nobody's share, dealt by the next deal: nobody dealt it.
-      if (entry.action === MIGRATED) return fromNobodysShare(shares, one, mine, text, who);
+      // What the status migration found waiting, dealt by the next deal: nobody dealt it.
+      if (entry.action === MIGRATED) return havingWaited(shares, one, mine, text, who);
       if (one?.followUp) {
         const followUp = mine
           ? [text('the follow-up')]

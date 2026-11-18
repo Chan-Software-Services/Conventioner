@@ -2,10 +2,10 @@
 
 Phase 1 gave the review state one owner, which reads every stored spelling as the state it stands
 for (``ReviewState.state_of``), each missing origin by the market's intake (``origin_of``) and an
-application in nobody's share as waiting for the deal (``review_team.is_waiting``). Stored
+application the next deal would move as waiting for the deal (``review_team.is_waiting``). Stored
 applications still carry the old spellings (``under_review``, a missing status, the old offers
-flow's statuses) and no ``origin``, and one left in nobody's share by the bugs phase 1 fixed (T277
-P1, P2, P3, P5) was never marked, so no deal will take it. The migration stores what the owner
+flow's statuses) and no ``origin``, and one left waiting by the bugs phase 1 fixed (T277 P1, P2,
+P3, P5) was never marked, so no deal will take it. The migration stores what the owner
 reads: ``open`` for each spelling of open, the approval or rejection an old status stands for, the
 origin, and on a market with chosen reviewers the mark that makes the next deal deal it.
 """

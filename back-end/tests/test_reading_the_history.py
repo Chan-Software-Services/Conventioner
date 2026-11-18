@@ -547,7 +547,7 @@ class TestTheEndpoint:
 
     def test_applications_reads_the_deal_of_what_the_status_migration_marked(
             self, market, history, monkeypatch):
-        """T277 ticket 02: an application the migration found in nobody's share is dealt by the
+        """T277 ticket 02: an application the migration found waiting for the deal is dealt by the
         next deal, recorded under the migration's action with no actor, which is no row of the
         table, so Applications reads it beside the other deals; its actions stay its rows."""
         _as(monkeypatch, MarketRole.VIEWER)

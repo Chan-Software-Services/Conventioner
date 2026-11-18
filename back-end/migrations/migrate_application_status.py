@@ -3,9 +3,11 @@
 
 The review state has one owner (``application_status.py``), which reads every stored spelling as
 the state it stands for (``state_of``), a missing origin by the market's intake (``origin_of``), and
-an application in nobody's share as waiting for the deal (``review_team.is_waiting``). Applications
-stored before it still carry the old spellings and no origin, and one left in nobody's share by the
-bugs phase 1 fixed (T277 P1, P2, P3, P5) was never marked for the deal, so no deal will take it.
+an application the next deal would move as waiting for the deal (``review_team.is_waiting``).
+Applications stored before it still carry the old spellings and no origin, and one left waiting by
+the bugs phase 1 fixed (T277 P1, P2, P3, P5), most in nobody's share and a follow-up whose owner
+holds no role on the market in its chosen reviewer's, was never marked for the deal, so no deal
+will take it.
 
 It first prints how many applications of the live markets (``tombstone.live``) are stored in each
 status, Daniel's read-only count of production (decision 9.6) when run with ``--dry-run``. Then, for

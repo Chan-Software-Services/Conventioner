@@ -674,10 +674,12 @@ describe('who reviews which application (E38/F07/S02)', () => {
   });
 
   /**
-   * The deal of what the status migration found in nobody's share (T277 ticket 02): recorded under
-   * the migration's action, with no actor, since an operator's migration, not a person, marked it.
+   * The deal of what the status migration found waiting for the deal (T277 ticket 02): recorded
+   * under the migration's action, with no actor, since an operator's migration, not a person,
+   * marked it. Some were in nobody's share, a follow-up whose owner left in its reviewer's, so the
+   * line says only that it waited.
    */
-  function fromNobodysShare(entry: MarketHistoryEntry): MarketHistoryEntry {
+  function afterTheMigration(entry: MarketHistoryEntry): MarketHistoryEntry {
     return {
       ...entry,
       action: 'review_state_migrated',
@@ -686,44 +688,44 @@ describe('who reviews which application (E38/F07/S02)', () => {
     } as MarketHistoryEntry;
   }
 
-  it('words the deal of an application from nobody’s share, in the vendor’s own history too', () => {
-    const one = fromNobodysShare(dealt([SAM], [KAI]));
+  it('words the deal of a migrated application as having waited, in the vendor’s own history too', () => {
+    const one = afterTheMigration(dealt([SAM], [KAI]));
 
     expect(said(entryParts(one, { names: NAMES }))).toBe(
-      `The application of [Ana Rivera] was dealt to ${SAM} from nobody's share`,
+      `The application of [Ana Rivera] was dealt to ${SAM}, having waited for the deal`,
     );
     expect(
       said(entryParts(one, { names: NAMES, path: IntakeMode.Csv, own: 'ana@ember.test' })),
-    ).toBe(`The application was dealt to ${SAM} from nobody's share`);
+    ).toBe(`The application was dealt to ${SAM}, having waited for the deal`);
     expect(entryChanges(one, { path: IntakeMode.Csv, own: 'ana@ember.test' }).changed).toEqual([
       { field: 'Reviewer', before: KAI, after: SAM },
     ]);
   });
 
-  it('words the deal of a follow-up from nobody’s share, in the vendor’s own history too', () => {
-    const many = fromNobodysShare(handedOn());
+  it('words the deal of a migrated follow-up as having waited, in the vendor’s own history too', () => {
+    const many = afterTheMigration(handedOn());
     const one = { ...many, vendors: ['ben@ember.test'], subject: { application_ids: ['app-1'] } };
 
     expect(said(entryParts(one, { names: NAMES }))).toBe(
-      `The follow-up of [Ben Okafor] was dealt to ${SAM} from nobody's share`,
+      `The follow-up of [Ben Okafor] was dealt to ${SAM}, having waited for the deal`,
     );
     expect(
       said(entryParts(many, { names: NAMES, path: IntakeMode.Csv, own: 'ben@ember.test' })),
-    ).toBe(`The follow-up was dealt to ${SAM} from nobody's share`);
+    ).toBe(`The follow-up was dealt to ${SAM}, having waited for the deal`);
     expect(entryChanges(many, { path: IntakeMode.Csv, own: 'ben@ember.test' }).changed).toEqual([
       { field: 'Reviewer', before: KAI, after: SAM },
       { field: 'Follow-up owner', before: KAI, after: SAM },
     ]);
   });
 
-  it('words the deal of several from nobody’s share by how many, follow-ups among them', () => {
-    expect(said(entryParts(fromNobodysShare(dealt([SAM, KAI, SAM])), { names: NAMES }))).toBe(
-      "3 open applications were dealt among 2 reviewers from nobody's share",
+  it('words the deal of several migrated ones by how many, follow-ups among them', () => {
+    expect(said(entryParts(afterTheMigration(dealt([SAM, KAI, SAM])), { names: NAMES }))).toBe(
+      '3 open applications were dealt among 2 reviewers, having waited for the deal',
     );
-    expect(said(entryParts(fromNobodysShare(handedOn()), { names: NAMES }))).toBe(
-      "1 open application and 1 follow-up were dealt among 1 reviewer from nobody's share",
+    expect(said(entryParts(afterTheMigration(handedOn()), { names: NAMES }))).toBe(
+      '1 open application and 1 follow-up were dealt among 1 reviewer, having waited for the deal',
     );
-    expect(entryChanges(fromNobodysShare(dealt([SAM, KAI]))).changed).toEqual([
+    expect(entryChanges(afterTheMigration(dealt([SAM, KAI]))).changed).toEqual([
       { field: 'ana@ember.test', before: 'none', after: SAM },
       { field: 'ben@ember.test', before: 'none', after: KAI },
     ]);

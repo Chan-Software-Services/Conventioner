@@ -336,12 +336,12 @@ One block per action, in the order of [the actions table](../modules/market-acti
 
 **`review_state_migrated`**
 
-- `dealt`: the deal of the applications [the status migration](application-document.md#the-migration) found in nobody's share and marked, by whichever deal next held the market, with no actor
+- `dealt`: the deal of the applications [the status migration](application-document.md#the-migration) found waiting for the deal and marked, by whichever deal next held the market, with no actor
   - Vendors, subject and detail: as an arrival's `dealt`, a follow-up's `follow_up_owner` beside its `reviewer`
 
 An undo reads "<actor> undid their verdict on <vendor>: Rejected back to Open", a selection's "undid their verdicts on N applications: …".
 A verdict on someone else's share reads "…, dealt to <address>", and nothing is added when its reviewer decided it or it was never dealt; an entry written before reviewers existed reads as it always did.
-A `dealt` entry is worded by its kind, whichever action dealt it (an applicant's own arrival as their application dealt, never as their deal; the migration's as "The application of <vendor> was dealt to <address> from nobody's share", or "N open applications and K follow-ups were dealt among M reviewers from nobody's share"), and its vendors and application ids are in the same order, so one vendor's History tab reads that vendor's own line of a deal of many.
+A `dealt` entry is worded by its kind, whichever action dealt it (an applicant's own arrival as their application dealt, never as their deal; the migration's as "The application of <vendor> was dealt to <address>, having waited for the deal", or "N open applications and K follow-ups were dealt among M reviewers, having waited for the deal"), and its vendors and application ids are in the same order, so one vendor's History tab reads that vendor's own line of a deal of many.
 
 ### What an organization records
 

@@ -70,7 +70,7 @@ A rule about how an application moves between states could be kept only if every
 - A test that patches a write patches `ReviewState`, and one that rebinds the collection still rebinds `ApplicationsApi.applications_collection`.
 - An application stored with no status, or `under_review`, holds Begin assignment like any open one, and a card in nobody's share is served so: no screen can warn that it is dealt to a reviewer who was removed.
 - Every organizer read takes the view its route built, with no default, so a test calling one directly builds a view by hand.
-- An application left in nobody's share before every move was marked is dealt by the next deal after the migration runs, and the market's history says it was dealt "from nobody's share"; until then it is served waiting.
+- An application left waiting before every move was marked is dealt by the next deal after the migration runs, and the market's history says it was dealt "having waited for the deal", true of one in nobody's share and of a follow-up still in its chosen reviewer's alike; until then it is served waiting.
 - A card in nobody's share says "Reviewer: not dealt yet" on every screen, and warns of no one: an open one whose reviewer was removed, or that arrived while nobody chosen was able, or a follow-up whose owner holds no role on the market and whose reviewer is not chosen.
   A follow-up whose owner holds no role but whose reviewer is chosen waits too, yet stays in that reviewer's share, so it names them and warns of them, as every other reader of its share does (Daniel's answer of 2026-11-18).
 - A screen's every new reader of the state reads `review`, so the unit tests and the component library's fixture carry it too; a fixture without it fails the type check.
