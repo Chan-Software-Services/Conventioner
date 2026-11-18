@@ -153,6 +153,7 @@ The E2E specs open the page signed out on [the seeded market day](../testing/e2e
 
 [`PublicMapPage.ts`](../../../front-end/e2e/pages/PublicMapPage.ts) is their page object; the map's tables are found by their accessible names, as a layout's are ([E2E patterns](../testing/e2e-patterns.md)).
 The four layout sweeps walk the page before a pick, with the shared table picked whole, and with its right half picked (`SCREENS` in `e2e/helpers/screens.ts`).
+Each opens the seed's first day by its address (`publicMapAt`), since the page opens on the browser's today, and a sweep seeded before midnight would otherwise open on the seed's second day, where the shared table seats nobody.
 
 ## Why
 
