@@ -1730,7 +1730,9 @@ def get_history(
     ``args`` are the request's: ``before`` (the cursor the last page answered with), ``actor``,
     ``group`` (a group of the table), ``vendor``, ``since`` and ``until`` (ISO instants, the first
     kept and the second not), and ``day`` (a market day, ``YYYY-MM-DD``: that day's entries and
-    those about no one day). The first page also answers what the filters may offer: the
+    those about no one day); or, in place of ``vendor``, ``own``, a vendor whose own history it is:
+    the entries naming them, as ``vendor`` reads, each their part alone
+    (``History.vendors_own_part``). The first page also answers what the filters may offer: the
     people who changed something, and the groups.
     """
     context = load_market_context(market_id)
@@ -1760,12 +1762,24 @@ def get_history(
     before = args.get("before")
     if before and History.parse_cursor(before) is None:
         return {"error": "That page of the history could not be read."}, 400
+    own = args.get("own")
+    if own and args.get("vendor"):
+        return {"error": "The history is one vendor's own, or narrowed by a vendor, not both."}, 400
 
     entries, after = History.entries_page(
         market_id, before=before or None, actor=args.get("actor") or None, actions=actions,
         kinds=_HISTORY_GROUP_ALSO_READS.get(group, ()),
-        vendor=args.get("vendor") or None, since=since, until=until, day=day or None,
+        vendor=own or args.get("vendor") or None, since=since, until=until, day=day or None,
     )
+    names = ApplicationsApi.vendor_names_for_market(market_id)
+    if own:
+        # One vendor's own history (their drawer's): each entry their part alone, and the names of
+        # the vendors those parts still hold, so it sends no other vendor of a selection, a deal or
+        # a Discord check. The Vendor filter's read keeps each entry whole, as the market's
+        # sentences name every vendor of it.
+        entries = [History.vendors_own_part(entry, own) for entry in entries]
+        held = {email for entry in entries for email in entry.get("vendors") or []}
+        names = {email: name for email, name in names.items() if email in held}
     body: Dict[str, Any] = {
         # Only the entry's own fields are recased: its subject and detail are served as stored,
         # since their keys are data (a question's key, an application's id).
@@ -1777,7 +1791,7 @@ def get_history(
         ],
         "next": after,
         # Names against addresses, so an entry reads as people.
-        "vendorNames": ApplicationsApi.vendor_names_for_market(market_id),
+        "vendorNames": names,
     }
     if not before:
         body["actors"] = History.actors(market_id)

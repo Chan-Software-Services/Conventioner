@@ -14,6 +14,7 @@ import { publishResults } from '@/utils/applicantApi';
 import { MarketAction, actionRefusal, mayTake } from '@/utils/marketActions';
 import { outcomeHeadline } from '@/utils/applicantOutcome';
 import { useMarketStore } from '@/stores/market';
+import { vendorPagePath } from '@/utils/market';
 import { useCopyAddress } from '@/utils/useCopyAddress';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import AppDialog from '@/components/AppDialog.vue';
@@ -60,7 +61,7 @@ const NOT_ASSIGNED = outcomeHeadline({ outcome: 'not_assigned' });
  * so the confirmation gives the organizer the address to share.
  */
 const vendorPageUrl = computed(() =>
-  props.market?.slug ? `${window.location.origin}/${props.market.slug}` : '',
+  props.market?.slug ? `${window.location.origin}${vendorPagePath(props.market.slug)}` : '',
 );
 const { copied, copy } = useCopyAddress();
 

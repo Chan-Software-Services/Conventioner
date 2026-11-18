@@ -177,8 +177,8 @@ describe("where vendors read it: the market's vendor page (ADR 0022)", () => {
       'No email is sent',
     );
     const address = confirm.find('[data-testid="publish-results-address-url"]');
-    expect(address.text()).toBe(`${window.location.origin}/spring-market`);
-    expect(address.attributes('href')).toBe(`${window.location.origin}/spring-market`);
+    expect(address.text()).toBe(`${window.location.origin}/spring-market/vendor`);
+    expect(address.attributes('href')).toBe(`${window.location.origin}/spring-market/vendor`);
   });
 
   it('copies the address', async () => {
@@ -191,7 +191,7 @@ describe("where vendors read it: the market's vendor page (ADR 0022)", () => {
     await copy.trigger('click');
     await wrapper.vm.$nextTick();
 
-    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/spring-market`);
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/spring-market/vendor`);
     expect(copy.text()).toBe('Copied');
     vi.unstubAllGlobals();
   });

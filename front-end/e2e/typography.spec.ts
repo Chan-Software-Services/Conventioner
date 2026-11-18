@@ -1,5 +1,10 @@
 import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
-import { marketScreenPath, marketSetupPath } from './helpers/marketScreens';
+import {
+  marketPagePath,
+  marketScreenPath,
+  marketSetupPath,
+  vendorPagePath,
+} from './helpers/marketScreens';
 import { ensureTestOrg, seedPublishedMarketWithAssignments } from './helpers/seeds';
 import type { Page } from '@playwright/test';
 
@@ -193,10 +198,18 @@ test.describe('No element falls through to a user-agent font', () => {
   });
 
   test('the vendor page, which no organizer login protects', async ({ page }) => {
-    await page.goto(`/${marketSlug}`);
+    await page.goto(vendorPagePath(marketSlug));
     await expect(page.getByTestId('vendor-page-market-name')).toBeVisible({
       timeout: 10000,
     });
+
+    await expectNoUserAgentFont(page, '/<slug>/vendor');
+  });
+
+  test("the market page, the market's own address for anyone", async ({ page }) => {
+    // Its results are out and it has no public map, so its page is a notice (T469).
+    await page.goto(marketPagePath(marketSlug));
+    await expect(page.getByTestId('market-page-notice')).toBeVisible({ timeout: 10000 });
 
     await expectNoUserAgentFont(page, '/<slug>');
   });

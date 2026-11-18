@@ -5,17 +5,18 @@ describes:
   - front-end/src/components/market/MarketPublicMapCard.vue
   - front-end/src/views/PublicMapView.vue
   - front-end/src/components/attendance/AttendanceMap.vue
-verified: 2026-11-17
+verified: 2026-11-18
 sources:
   - T422
-  - T466
   - T465
+  - T466
+  - T469
 ---
 
 # The market's map: published, found and directed by
 
 **Who:** the market's Admin or owner publishes the map; a visitor, with no account, finds a vendor on it; an organizer at the door directs a vendor by Attendance's map.
-**Where they start:** the Admin on the market's Tools tab; the visitor at the map's address, `/<market-slug>/map`, from a link or a printed QR code; the organizer on the Attendance tab.
+**Where they start:** the Admin on the market's Tools tab; the visitor at the market's own address, `/<market-slug>`, the market page, which shows the map while it is open ([ADR 0039](../../adr/0039-a-markets-address-is-its-public-page.md)), from a link or a printed QR code; the organizer on the Attendance tab.
 **Serves:** [The door on market day](../intents/the-door-on-market-day.md).
 
 A location's layout ([E6](planning.md#e6-a-locations-layout)) is each market day's map in two places: a public page anyone opens, and Attendance's map beside its list.
@@ -33,9 +34,9 @@ How it is built is [the public map](../../implementation/modules/public-map.md),
 2. "Public name": choose the form's short text question that holds each vendor's business or artist name; "Website" and "Instagram" are chosen the same way, or left at "Not shown".
    Each choice saves at once; until a public name is chosen the switch is disabled, with "Choose the public name's question first." under it.
 3. Turn on "Show the public map".
-   Expect the address, `/<market-slug>/map` under the app's origin, with "Copy link" and "Open the map", which opens it in a new tab.
+   Expect the address, the market page's `/<market-slug>` under the app's origin, with "Copy link" and "Open the map", which opens it in a new tab.
 4. Until the map can open, the card says the first thing it still lacks: "Lay out a location first: the map draws the market's layouts." with "Open the layout", then "The map opens once results are published."; on an archived market "An archived market's map is closed.".
-   Meanwhile its address answers as an address that names no market, so seats are never public before vendors are told them.
+   Meanwhile the market page shows what it shows with no map (the application call while the market takes applications, else a notice such as "Applications are closed." or "The map isn't published yet."), and the map's own read answers as an address that names no market, so seats are never public before vendors are told them.
 
 The switch and the three questions are the "Publish the map" row's, an Admin's by default ([what each role may do](../rules/what-each-role-may-do.md)); an Editor or a Viewer reads the card with its controls disabled and the row's sentence.
 The market's history reads each change in words, "turned the public map on" or "set the public map's name to “Business name”" ([L6](reading-the-markets-history.md)).
@@ -49,7 +50,7 @@ Covered by:
 **Status:** Works (read from the code as of T465; `the-public-map.spec.ts`, `the-public-map-vendors.spec.ts`, `the-public-map-bubble.spec.ts`, `the-public-map-half.spec.ts` and `the-public-map-phone-card.spec.ts`).
 **Task (visitor):** "You are at the market. Find the ceramics stall."
 
-1. Open the map's address ([`PublicMapView.vue`](../../../front-end/src/views/PublicMapView.vue)); it opens on today when today is a market date, else the next, else the last.
+1. Open the market's address, or a link to `/<market-slug>/map`, which lands there with its day, location, table and half ([`PublicMapView.vue`](../../../front-end/src/views/PublicMapView.vue)); it opens on today when today is a market date, else the next, else the last.
    Expect one sheet filling the window on a soft backdrop in the market's own section colours, the page never scrolling: the market's name in bold over a marker stroke with "vendor map" under it, the day ("Nov 18") and, at a market of two halls or more, the hall as two dropdowns at the map's top right, and the hall filling the rest, each table taken drawn in its section's colours and each free one a grey dashed outline, with a legend naming the hall's sections ("Section A") and "Free table" on a day the hall has one.
    The no-table zones and their labels ("Stage") are drawn to orient by, with no legend item.
 2. "Find a vendor", over every named vendor of the day: type part of their public name, their website, their Instagram handle, their table's code or their section's name, and pick them from the dropdown.
@@ -64,9 +65,10 @@ Covered by:
 5. On a phone, pinch and drag the map; at a desk, "Zoom in", "Zoom out" and "Fit" on the map's corner, or Ctrl and the wheel, and a drag once zoomed.
 
 The address keeps the day, the location, the table and the half picked, so a link or a QR code opens one vendor's table, or their half of a shared one, on one day; a value it does not know falls back to the opening day or the first location, and a half the table is not split into on that day opens the whole table.
-It works signed out, on a phone and at a desk, with the logo alone in the app bar, as the vendor page shows it.
+It works signed out, on a phone and at a desk, with the logo and "Vendor sign-in" to the vendor page alone in the app bar, "Your vendor page" for a tab signed in there ([the app bar](../../implementation/modules/app-bar.md)).
 Covered by:
 
+- `the-market-page.spec.ts`
 - `the-public-map-bubble.spec.ts`
 - `the-public-map-half.spec.ts`
 - `the-public-map-phone-card.spec.ts`

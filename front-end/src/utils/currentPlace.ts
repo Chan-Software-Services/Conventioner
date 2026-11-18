@@ -54,3 +54,42 @@ export function standsApart(
 ): boolean {
   return isVendorFacing(route) && route.params.marketSlug !== absentVendorPage.value;
 }
+
+/**
+ * The way to a market's vendor page the app bar offers (T469): its slug, and whether this tab's
+ * vendor is signed in for it, which the bar's words follow.
+ */
+export interface VendorLink {
+  slug: string;
+  signedIn: boolean;
+}
+
+/**
+ * The market page that answered found (T469), while that answer stands. The page tells whether the
+ * tab is signed in for it, since it holds the vendor's sign-in: the bar, in the entry chunk every
+ * page loads, leaves the vendor's store to the pages that use it.
+ */
+const foundMarketPage = shallowRef<VendorLink | null>(null);
+
+/**
+ * The market page says whether its read of `slug` found the market (the call, a notice or the
+ * map), and, found, whether this tab is signed in for it.
+ */
+export function marketPageAnswered(slug: string, found: boolean, signedIn = false): void {
+  if (found) foundMarketPage.value = { slug, signedIn };
+  else if (foundMarketPage.value?.slug === slug) foundMarketPage.value = null;
+}
+
+/**
+ * The app bar's link to the vendor's side (T469), or none: on a market page that answered found
+ * and still stands apart, so never while it loads, after a failed read, or once the page (or the
+ * map it shows) answered "Page not found".
+ */
+export function vendorLinkFor(
+  route: Pick<RouteLocationNormalizedLoaded, 'name' | 'matched' | 'params'>,
+): VendorLink | null {
+  const found = foundMarketPage.value;
+  const slug = route.params.marketSlug;
+  if (route.name !== 'market-page' || typeof slug !== 'string' || found?.slug !== slug) return null;
+  return standsApart(route) ? found : null;
+}

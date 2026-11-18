@@ -12,6 +12,19 @@ export function marketSetupPath(marketId: string, page: string = 'setup'): strin
   return `/markets/${encodeURIComponent(marketId)}/${page}`;
 }
 
+/**
+ * A market's own address, `/<slug>`: its market page, for anyone (T469). The specs' twin of
+ * `marketPagePath` in `src/utils/market.ts`, since the E2E helpers import nothing from `src/`.
+ */
+export function marketPagePath(slug: string): string {
+  return `/${encodeURIComponent(slug)}`;
+}
+
+/** A market's vendor page, `/<slug>/vendor` (T469): the twin of `src/utils/market.ts`'s. */
+export function vendorPagePath(slug: string): string {
+  return `${marketPagePath(slug)}/vendor`;
+}
+
 /** Open one of a market's pages, the plan when none is named. */
 export async function openMarketSetup(page: Page, marketId: string, tab?: string): Promise<void> {
   await page.goto(marketSetupPath(marketId, tab));

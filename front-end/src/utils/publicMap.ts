@@ -1,9 +1,9 @@
 /**
- * The public map page, `/<market-slug>/map` (T422): its two reads, the public answer and a
- * location's floorplan image, and what the page makes of the answer. Everything a vendor is shown
- * by comes from the three answers the server cleaned (D28); the links are built here again only
- * from those values, and only as an `http`/`https` address or an Instagram handle, so nothing else
- * can ever become a link.
+ * The public map page, shown at `/<market-slug>` on the market page while open (T422, ADR 0039):
+ * its two reads, the public answer and a location's floorplan image, and what the page makes of the
+ * answer. Everything a vendor is shown by comes from the three answers the server cleaned (D28); the
+ * links are built here again only from those values, and only as an `http`/`https` address or an
+ * Instagram handle, so nothing else can ever become a link.
  */
 import { tableCode } from '@/components/layout/layoutDrawing';
 import {

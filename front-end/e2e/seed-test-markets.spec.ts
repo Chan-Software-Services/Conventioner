@@ -2,6 +2,7 @@ import { test, expect, BACKEND_URL, VendorPage } from './fixtures';
 import { runBackendScript } from './helpers/backendScript';
 import { mongoEval } from './helpers/mongo';
 import { createApplicantLoginChallenge } from './helpers/seedApplicantMarket';
+import { marketPagePath, vendorPagePath } from './helpers/marketScreens';
 import { loginViaApi, marketNameToSlug } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 
@@ -69,11 +70,17 @@ test.describe('The test markets', () => {
         db.markets.find({ name: { $in: ${NAMES} } }).toArray().map((m) => m.id) } })`),
     ).toBe('0');
 
-    // The online market takes a vendor's sign-in; the Google Form market reads as no market.
-    await page.goto(`/${marketNameToSlug(ONLINE)}`);
+    // The address it prints is the online market's page, calling for applications (T469); its
+    // vendor page takes a vendor's sign-in; the Google Form market reads as no market at either.
+    await page.goto(marketPagePath(marketNameToSlug(ONLINE)));
+    await expect(page.getByTestId('market-page-name')).toHaveText(ONLINE);
+    await expect(page.getByTestId('market-page-call')).toBeVisible();
+    await page.goto(vendorPagePath(marketNameToSlug(ONLINE)));
     await expect(page.getByTestId('vendor-page-market-name')).toHaveText(ONLINE);
-    await page.goto(`/${marketNameToSlug(GOOGLE_FORM)}`);
-    await expect(page.getByTestId('page-not-found')).toBeVisible();
+    for (const path of [marketPagePath, vendorPagePath]) {
+      await page.goto(path(marketNameToSlug(GOOGLE_FORM)));
+      await expect(page.getByTestId('page-not-found')).toBeVisible();
+    }
   });
 
   test('a market a failed run left in draft is finished by the next', async ({ request }) => {
@@ -102,7 +109,7 @@ test.describe('The test markets', () => {
     const slug = marketNameToSlug(ONLINE);
 
     const login = new VendorPage(page);
-    await page.goto(`/${slug}`);
+    await page.goto(vendorPagePath(slug));
     await login.requestCode(vendor);
     createApplicantLoginChallenge(marketId(ONLINE), vendor, code);
     await login.enterCode(code);

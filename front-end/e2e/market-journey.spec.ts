@@ -12,6 +12,7 @@ import {
   ResultPage,
   VendorPage,
 } from './fixtures';
+import { vendorPagePath } from './helpers/marketScreens';
 import { ensureTestOrg, marketNameToSlug } from './helpers/seeds';
 import { createApplicantLoginChallenge } from './helpers/seedApplicantMarket';
 import { hideDevToolsPanel } from './helpers/hideDevToolsPanel';
@@ -264,7 +265,7 @@ test.describe('The MVP journey', () => {
     await hideDevToolsPanel(vendorContext);
     const vendorPage = await vendorContext.newPage();
     const login = new VendorPage(vendorPage);
-    await vendorPage.goto(`/${slug}`);
+    await vendorPage.goto(vendorPagePath(slug));
     await login.requestCode(VENDOR);
     await expect(login.codeInput).toBeVisible();
     createApplicantLoginChallenge(marketId, VENDOR, '864213');

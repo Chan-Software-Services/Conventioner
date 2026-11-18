@@ -8,7 +8,7 @@ import {
   BACKEND_URL,
   APP_API,
 } from './fixtures';
-import { marketScreenPath, marketSetupPath } from './helpers/marketScreens';
+import { marketScreenPath, marketSetupPath, vendorPagePath } from './helpers/marketScreens';
 import { seedAssignedMarket } from './helpers/seedAssignedMarket';
 import { SEED_MARKET_DATE, ensureTestOrgAuthenticated } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
@@ -270,7 +270,7 @@ test.describe('Tier 2 - Publish market', () => {
 
     // Its vendors reach their vendor page, where they check in; it is open to every published
     // market, however its vendors arrived (ADR 0022).
-    await page.goto(`/${slug}`);
+    await page.goto(vendorPagePath(slug));
     await expect(page.getByTestId('vendor-page-market-name')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('vendor-sign-in-email-input')).toBeVisible({ timeout: 5000 });
     await expect(page.getByTestId('vendor-page-not-found')).toHaveCount(0);

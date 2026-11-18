@@ -35,6 +35,6 @@ One line per node, sorted by file name.
 - [The phase record](phase-record.md) - `phaseHistory`: every phase a market entered, `phases_reached()`, and what an older market can prove
 - [The organization's people](organization-people.md) - `organization_people.py`: the one writer of an organization's people map, its table, one conditional write holding the places it judged, the lists as its mirror, the 409
 - [Placements](placements.md) - the one writer of `assignmentObject`: four EDITOR doors, pins, the held seat, orphans, what a read shows
-- [The public map page](public-map-page.md) - `/<slug>/map`, `PublicMapView` and `components/publicmap/`: one sheet filling the window, the day, location, table and half in the query, the bubble at a desk and the card over the panel on a phone, the vendor search, the backdrop
+- [The public map page](public-map-page.md) - `PublicMapView` and `components/publicmap/`, shown at `/<slug>` on the market page while the map is open: one sheet filling the window, the day, location, table and half in the query, the bubble at a desk and the card over the panel on a phone, the vendor search, the backdrop
 - [The public map](public-map.md) - `public_map.py`: the Public map card's settings, one gate beside the vendor page's, an allowlisted read and its image, `public_answers.py`'s cleaning
 - [Vendor notes](vendor-notes.md) - `vendor_notes.py`: the organizer's note, the sheet's line and the handled mark, in a collection no applicant endpoint reads

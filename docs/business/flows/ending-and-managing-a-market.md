@@ -50,6 +50,7 @@ sources:
   - T315
   - T411
   - T421
+  - T469
 ---
 
 # Ending and managing a market
@@ -239,7 +240,7 @@ Covered by:
 ## L5. Delete a market
 
 **Status:** Works (walked live; what it names read from the code as of bug 43's fix and E30/F01/S03).
-Owner only, in any phase: "Delete market" opens "Delete <market>?", which names what goes ("This deletes the market with its applications, its assignments, its check-in records and the record of who changed what. It cannot be undone."), adds "Its vendor page will stop working for anyone who has the link." while its vendor page answers (a form market after draft, a Google Form market once its results are published or it reached its market days), and opens on Cancel (bug 43).
+Owner only, in any phase: "Delete market" opens "Delete <market>?", which names what goes ("This deletes the market with its applications, its assignments, its check-in records and the record of who changed what. It cannot be undone."), adds "Its market page and vendor page will stop working for anyone who has the links." while its vendor page answers (a form market after draft, a Google Form market once its results are published or it reached its market days), and opens on Cancel (bug 43).
 Everything the market kept beside itself is deleted with it (bug 47).
 "Delete market" sends one delete however often it is pressed, and nothing closes the confirmation until it answers; a refusal is said in it, and the next opening starts without it (T411).
 Covered by:
