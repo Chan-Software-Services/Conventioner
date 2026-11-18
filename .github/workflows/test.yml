@@ -31,8 +31,8 @@ env:
   ACTIONLINT_VERSION: 1.7.12
   ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
 
-# Each job's `name:` is its check's name, which branch protection requires a check by: renaming a
-# required job drops its check from the required list.
+# Each job's `name:` is its check's name, which the rules of dev and main require a check by:
+# renaming a required job drops its check from the required list.
 jobs:
   backend:
     name: backend
@@ -463,8 +463,8 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  # The one check to require: it passes only when every shard did, so branch protection names a
-  # single job whatever the shard count becomes. It runs whatever the shards' result, so a failed
+  # The one check to require: it passes only when every shard did, so the rules name a single job
+  # whatever the shard count becomes. It runs whatever the shards' result, so a failed
   # shard fails it, but not on a run that was cancelled, which would post a red check on the head
   # a later push made moot.
   e2e:
