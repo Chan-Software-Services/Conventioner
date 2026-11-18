@@ -148,11 +148,11 @@ const vendorCandidates = computed(() => {
 });
 
 /**
- * The vendor the history is narrowed to: the drawer's, the one the filter names, or an address
- * typed whole that no loaded entry names yet; none while it names several or nobody.
+ * The vendor the Vendor filter narrows the history to: the one it names, or an address typed whole
+ * that no loaded entry names yet; none while it names several or nobody. A vendor's own history
+ * asks for its vendor by `own` instead (`filters`).
  */
 const narrowedTo = computed(() => {
-  if (ownVendor.value) return ownVendor.value;
   const typed = vendorText.value.trim();
   if (vendorCandidates.value.length === 1) return vendorCandidates.value[0];
   if (!vendorCandidates.value.length && typed.includes('@')) return typed.toLowerCase();
@@ -172,11 +172,17 @@ const vendorHint = computed(() =>
 
 const vendorHintId = useId();
 
+/**
+ * What the read is narrowed by. A vendor's own history asks for `own`, so the server answers each
+ * entry naming them as their part alone (a selection's verdicts, a deal or a Discord check without
+ * its other vendors); the Vendor filter asks for `vendor`, whose entries come whole, since the
+ * market's sentences name every vendor of them.
+ */
 const filters = computed(() => ({
   actor: actor.value,
   group: props.assignment ? ASSIGNMENT_GROUP : group.value,
   day: marketDay.value,
-  vendor: narrowedTo.value,
+  ...(ownVendor.value ? { own: ownVendor.value } : { vendor: narrowedTo.value }),
   since: from.value ? dayStarts(from.value) : '',
   until: to.value ? dayEnds(to.value) : '',
 }));

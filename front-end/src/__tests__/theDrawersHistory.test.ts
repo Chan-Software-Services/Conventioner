@@ -96,12 +96,12 @@ describe('one vendor’s history', () => {
     const history = mountFor('Ana@Ember.test');
     await flushPromises();
 
-    expect(asked).toEqual(['/markets/market-1/history?vendor=ana%40ember.test']);
+    expect(asked).toEqual(['/markets/market-1/history?own=ana%40ember.test']);
     expect(history.findAll('[data-testid="market-history-entry"]')).toHaveLength(2);
 
     await view.showSentinels();
 
-    expect(asked.at(-1)).toBe('/markets/market-1/history?vendor=ana%40ember.test&before=cursor-1');
+    expect(asked.at(-1)).toBe('/markets/market-1/history?own=ana%40ember.test&before=cursor-1');
     expect(history.findAll('[data-testid="market-history-entry"]')).toHaveLength(3);
   });
 
@@ -202,7 +202,7 @@ describe('the drawer’s History tab', () => {
       'Payment',
       'History',
     ]);
-    expect(historyRead()).toEqual(['/markets/market-1/history?vendor=ana%40ember.test']);
+    expect(historyRead()).toEqual(['/markets/market-1/history?own=ana%40ember.test']);
     expect(drawer.get('[data-testid="vendor-drawer-panel-history"]').text()).toContain(
       'dana@ember.test changed the note on Ana Rivera',
     );
@@ -222,7 +222,7 @@ describe('the drawer’s History tab', () => {
 
     await view.showSentinels();
 
-    expect(asked.at(-1)).toBe('/markets/market-1/history?vendor=ana%40ember.test&before=cursor-1');
+    expect(asked.at(-1)).toBe('/markets/market-1/history?own=ana%40ember.test&before=cursor-1');
     expect(panel.findAll('[data-testid="market-history-entry"]')).toHaveLength(2);
   });
 
