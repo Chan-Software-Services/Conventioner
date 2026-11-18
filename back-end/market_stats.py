@@ -12,8 +12,9 @@ Who applied: every application by its served review state, how many were added b
 time each of the others applied. The page counts the states into the Applications tab's All view
 filters, which list by the served state, so the two agree; the stored statuses go out beside them
 for a front end built before the states (``count_applicants``). Times go out rather than days
-because the server keeps no time zone for a market, and a day is the reader's. Beside them, when applications opened and closed, from the phase record
-(``intake_window``), which bound the page's chart of applications over time (T201).
+because the server keeps no time zone for a market, and a day is the reader's. Beside them, when
+applications opened and closed, from the phase record (``intake_window``), which bound the page's
+chart of applications over time (T201).
 
 Room: per market date, and per tier over the dates, the tables asked against the plan's tables
 (``count_room``, T201), from Draft on, so a draft shows its tables with nothing asked.

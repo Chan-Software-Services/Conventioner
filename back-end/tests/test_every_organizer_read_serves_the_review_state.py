@@ -1,12 +1,12 @@
 """Every application an organizer reads is served its review state (T277 ticket 02, phase 2).
 
-Each screen used to work an application's review state out again from its stored status, each by
-its own list of statuses, so they disagreed with the server and with each other: an application
-stored with no status passed Begin assignment, and a card warned "This application is dealt to ..."
-for one in nobody's share, its reviewer removed before the deal marked every move. The server now
-reads it once, by the owner's rule, and serves it beside ``origin`` as ``review``: its state, whether
-it awaits a verdict, whose share it is in (reviewer first) and whether it waits for the deal. The
-list, the next card, a verdict's answer, an undo's, a follow-up's hand-on and an update of a vendor's
+Each screen used to work an application's review state out again from its stored status, each by its
+own list of statuses, so they disagreed with the server and with each other: an application stored
+with no status passed Begin assignment, and a card warned "This application is dealt to ..." for one
+in nobody's share, its reviewer removed before the deal marked every move. The server now reads it
+once, by the owner's rule, and serves it beside ``origin`` as ``review``: its state, whether it
+awaits a verdict, whose share it is in (reviewer first) and whether it waits for the deal. The list,
+the next card, a verdict's answer, an undo's, a follow-up's hand-on and an update of a vendor's
 answers each serve it, over one view of the market read once per request.
 
 Each case is set up through the routes, as an organizer reaches it, but for the shapes no route

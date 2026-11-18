@@ -1677,12 +1677,11 @@ _HISTORY_GROUPS_LEFT_OUT = frozenset({"Reading"})
 #: choice is Choose reviewers' and a chosen reviewer's verdicts are Give verdicts' (E38/F07/S03).
 _HISTORY_ROWS_LEFT_OUT = frozenset({Actions.REVIEW_WHEN_CHOSEN})
 #: Entries recorded under another group's row, or under none, that a group reads too, as (action,
-#: kind): a free's
-#: $0 taken back as the day is seated again, and an Admin's amount dropped with a day a run drops,
-#: are recorded under Assign, the row the seating or the run asked, and each undoes a change to
-#: what is owed, so Payments reads it beside that change (E44/F01/S02, T335). And the deal of an
-#: application the status migration found in nobody's share, recorded under no row of the table,
-#: is a deal of applications, so Applications reads it beside the others (T277 ticket 02).
+#: kind): a free's $0 taken back as the day is seated again, and an Admin's amount dropped with a
+#: day a run drops, are recorded under Assign, the row the seating or the run asked, and each undoes
+#: a change to what is owed, so Payments reads it beside that change (E44/F01/S02, T335). And the
+#: deal of an application the status migration found in nobody's share, recorded under no row of the
+#: table, is a deal of applications, so Applications reads it beside the others (T277 ticket 02).
 _HISTORY_GROUP_ALSO_READS = {"Payments": ((Actions.ASSIGN.id, History.OWED_TAKEN_BACK),
                                           (Actions.ASSIGN.id, History.OWED_DROPPED)),
                              "Applications": ((History.REVIEW_STATE_MIGRATED, History.DEALT),)}
@@ -1905,7 +1904,8 @@ def outside_the_run(
 def _placeable(vendor: SolverVendor, outside: Optional[Application]) -> Dict[str, Any]:
     """One vendor the place dialog may offer: what they answered, whether the run reads them, and -
     for an applicant outside it - their status, who gave it and whether the review left them
-    undecided, which the dialog's "Not approved" warning words, or that they were added by hand with nothing answered to check a seat against."""
+    undecided, which the dialog's "Not approved" warning words, or that they were added by hand
+    with nothing answered to check a seat against."""
     not_approved = None
     if outside is not None and is_not_approved(outside):
         not_approved = {
