@@ -155,4 +155,33 @@ describe('Delete organization', () => {
     expect(wrapper.emitted('deleted')).toBeUndefined();
     expect(wrapper.emitted('close')).toBeUndefined();
   });
+
+  it("names both of a market's pages that stop working: its market page and its vendor page (T469)", async () => {
+    api.get.mockResolvedValue({
+      data: {
+        canDelete: true,
+        blockingMarkets: [],
+        marketsToDelete: [
+          DRAFT,
+          {
+            ...DRAFT,
+            id: 'market-2',
+            name: 'Harbour Night Market',
+            phase: 'archived',
+            phaseLabel: 'Archived',
+            ran: true,
+            placements: 12,
+            publicSlug: 'harbour-night-market',
+          },
+        ],
+      },
+    });
+    await openDialog();
+
+    const urls = document.body.querySelectorAll('[data-testid="delete-org-public-url"]');
+    expect(urls).toHaveLength(1);
+    expect(urls[0]!.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      'Its market page, /harbour-night-market, and vendor page, /harbour-night-market/vendor, will stop working for anyone who has the links.',
+    );
+  });
 });

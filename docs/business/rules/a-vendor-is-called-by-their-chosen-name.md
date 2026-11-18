@@ -47,7 +47,7 @@ Neither is solver-relevant, so correcting a spelling reopens no review, and the 
 The results download carries both too: the name they chose, then their full name, then the address.
 
 **A search finds a vendor by name or address**: the Vendors page reads "Filter by name or email…", and the search on the results also matches their short text answers.
-The Vendors and Payments pages and the export find them by the name on their identification as well as the one they chose, so someone going by another name can be found by either, and Applications All and the search on the results do too.
+The Vendors and Payments pages and the export find them by the name on their identification as well as the one they chose, so someone going by another name can be found by either, and Applications All, the search on the results and the door's search, on its list and its map, do too.
 
 ## Where it is kept
 

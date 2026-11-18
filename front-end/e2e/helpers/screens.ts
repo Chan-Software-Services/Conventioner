@@ -4,7 +4,13 @@ import { EmailVerificationPage } from '../pages/EmailVerificationPage';
 import { LayoutPage } from '../pages/LayoutPage';
 import { MarketsPage } from '../pages/MarketsPage';
 import { OrganizationsPage } from '../pages/OrganizationsPage';
-import { marketScreenPath, marketSetupPath, oneByOnePath } from './marketScreens';
+import {
+  marketPagePath,
+  marketScreenPath,
+  marketSetupPath,
+  oneByOnePath,
+  vendorPagePath,
+} from './marketScreens';
 import { mongoEval } from './mongo';
 import { createApplicantLoginChallenge } from './seedApplicantMarket';
 import { loginViaApi, UPPER_HALL_SECTIONED_TABLES, UPPER_HALL_TABLES } from './seeds';
@@ -154,10 +160,12 @@ const marketAddress =
   (market: keyof TheScreensSeed, rest = '') =>
   (seed: TheScreensSeed) =>
     `/markets/${(seed[market] as { marketId: string }).marketId}${rest}`;
-const slug =
-  (market: keyof TheScreensSeed, rest = '') =>
-  (seed: TheScreensSeed) =>
-    `/${(seed[market] as { marketSlug: string }).marketSlug}${rest}`;
+/** `market`'s vendor page, `/<slug>/vendor` (T469). */
+const vendorPage = (market: keyof TheScreensSeed) => (seed: TheScreensSeed) =>
+  vendorPagePath((seed[market] as { marketSlug: string }).marketSlug);
+/** `market`'s own address, `/<slug>`: its market page, for anyone (T469). */
+const marketPage = (market: keyof TheScreensSeed) => (seed: TheScreensSeed) =>
+  marketPagePath((seed[market] as { marketSlug: string }).marketSlug);
 const fixed = (path: string) => () => path;
 
 /**
@@ -482,14 +490,15 @@ function layoutAt(
 }
 
 /**
- * The day map market's public map (T422), its address carrying `query` (a table picked, a half of
- * it) when given, once its floorplan has drawn and `shows` is on screen: the hall, or a part of the
- * card, which shows only once a table is picked (T465).
+ * The day map market's public map (T422) at its market page, `/<slug>` (ADR 0039), its address
+ * carrying `query` (a table picked, a half of it) when given, once its floorplan has drawn and
+ * `shows` is on screen: the hall, or a part of the card, which shows only once a table is picked
+ * (T465).
  */
 function publicMapAt(query: Record<string, string> = {}, shows = 'public-map-hall') {
   return async (page: Page, seed: TheScreensSeed) => {
     const search = new URLSearchParams(query).toString();
-    await page.goto(`/${seed.dayMap.slug}/map${search ? `?${search}` : ''}`);
+    await page.goto(`${marketPage('dayMap')(seed)}${search ? `?${search}` : ''}`);
     await expect(page.getByTestId('layout-map-image')).toHaveAttribute('href', /^blob:/, {
       timeout: 15000,
     });
@@ -1718,10 +1727,12 @@ export const SCREEN_GROUPS = {
       ]),
     })),
     {
+      // Past the applications stage the tab says nothing over the review (T466): ready once the
+      // All view's rows are read.
       name: 'market days, the applications',
       who: 'organizer',
       sizes: FITS_A_PHONE,
-      open: at(setup('big', 'applications'), 'market-setup-applications-condition'),
+      open: at(setup('big', 'applications'), 'applications-all-row'),
     },
     {
       // Hover is a state too: the tab bar's hover once set its label to a 25% near-black on the
@@ -1905,24 +1916,39 @@ export const SCREEN_GROUPS = {
       open: publicMapAt({ table: 'north-table-3', half: 'right' }, 'public-map-card-half'),
     },
     {
+      // A market's own address while it takes applications (T469): its name, dates and the call,
+      // with Apply and "Already applied? Sign in" to the vendor page.
+      name: 'the market page, its application call',
+      who: 'nobody',
+      sizes: PUBLIC,
+      open: at(marketPage('open'), 'market-page-call'),
+    },
+    {
+      // Once its page stops taking applications, a notice says so, with "Vendor sign-in".
+      name: 'the market page, applications closed',
+      who: 'nobody',
+      sizes: PUBLIC,
+      open: at(marketPage('closed'), 'market-page-notice'),
+    },
+    {
       // A market's vendor page, signed out (ADR 0022): its name and the email step.
       name: 'the vendor page, signed out',
       who: 'nobody',
       sizes: PUBLIC,
-      open: at(slug('open'), 'vendor-sign-in-email-input'),
+      open: at(vendorPage('open'), 'vendor-sign-in-email-input'),
     },
     {
       name: 'the vendor page, an organizer signed in',
       who: 'organizer',
       sizes: PUBLIC,
-      open: at(slug('open'), 'vendor-sign-in-email-input'),
+      open: at(vendorPage('open'), 'vendor-sign-in-email-input'),
     },
     {
       name: 'the vendor page, the code step',
       who: 'nobody',
       sizes: PUBLIC,
       open: async (page, seed) => {
-        await at(slug('open'), 'vendor-sign-in-email-input')(page, seed);
+        await at(vendorPage('open'), 'vendor-sign-in-email-input')(page, seed);
         // An address of its own each time: the screen sweeps open this once at each of its sizes,
         // and one address may ask for only so many codes (`sign_in_limits`).
         const address = `e2e-screens-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
@@ -1937,7 +1963,7 @@ export const SCREEN_GROUPS = {
       who: 'nobody',
       sizes: PUBLIC,
       open: async (page, seed) => {
-        await at(slug('open'), 'vendor-sign-in-email-input')(page, seed);
+        await at(vendorPage('open'), 'vendor-sign-in-email-input')(page, seed);
         const address = `e2e-screens-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
         await page.getByTestId('vendor-sign-in-email-input').fill(address);
         await page.getByTestId('vendor-sign-in-request-btn').click();
@@ -1953,7 +1979,7 @@ export const SCREEN_GROUPS = {
       name: 'the vendor page, signed in',
       who: 'applicant',
       sizes: PUBLIC,
-      open: at(slug('open'), 'vendor-page-status'),
+      open: at(vendorPage('open'), 'vendor-page-status'),
     },
     {
       // The form, opened in place on the vendor page by Edit (ADR 0022).
@@ -1961,7 +1987,7 @@ export const SCREEN_GROUPS = {
       who: 'applicant',
       sizes: PUBLIC,
       open: async (page, seed) => {
-        await at(slug('open'), 'vendor-page-edit-btn')(page, seed);
+        await at(vendorPage('open'), 'vendor-page-edit-btn')(page, seed);
         await page.getByTestId('vendor-page-edit-btn').click();
         await visible(page, 'apply-form');
       },
@@ -1985,7 +2011,7 @@ export const SCREEN_GROUPS = {
             });
           },
         );
-        await at(slug('open'), 'vendor-page-edit-btn')(page, seed);
+        await at(vendorPage('open'), 'vendor-page-edit-btn')(page, seed);
         await page.getByTestId('vendor-page-edit-btn').click();
         await visible(page, 'apply-form');
         await page.getByTestId('apply-submit-button').click();
@@ -2051,10 +2077,10 @@ function seatOn(date: string, checkedInAt: string | null = null) {
 }
 
 /**
- * A vendor signed in at `market`'s page, their own read answered with `seats` (today's date given):
- * the screen sweeps open each state at each of its sizes, and a real sign-in each time would pass
- * the limits a caller and an address may sign in by (`sign_in_limits`). The page's own read is the
- * server's.
+ * A vendor signed in at `market`'s vendor page, their own read answered with `seats` (today's date
+ * given): the screen sweeps open each state at each of its sizes, and a real sign-in each time
+ * would pass the limits a caller and an address may sign in by (`sign_in_limits`). The page's own
+ * read is the server's.
  */
 function asAVendorAt(
   market: 'big' | 'archived',
@@ -2088,7 +2114,7 @@ function asAVendorAt(
     await page.route(`**/public/markets/${marketSlug}/applicant/application`, (route) =>
       route.fulfill({ json: { application } }),
     );
-    await page.goto(`/${marketSlug}`);
+    await page.goto(vendorPagePath(marketSlug));
     await visible(page, ready);
   };
 }

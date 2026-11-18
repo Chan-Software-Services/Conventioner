@@ -7,7 +7,9 @@
  * rule says who sees what: a known signed-in organizer gets all of it, on every route but a
  * vendor's page, and nobody else gets more than the logo, with no per-role list. A vendor's page
  * (`vendorFacing`) is the vendors', so it shows the logo alone to everyone, the organizer who opens
- * it too (T260), unless it answered "Page not found". At 640px and below, the market frame's
+ * it too (T260), unless it answered "Page not found". On the market page, once it found its
+ * market, that row also carries the way to the vendor's side, `/<market>/vendor` (T469), read
+ * "Your vendor page" by a tab signed in for that market. At 640px and below, the market frame's
  * break, the menu button stands for the links and the account menu, in CSS, so the two layouts
  * never disagree with the frame's.
  *
@@ -26,7 +28,8 @@ import SignOutEverywhereDialog from '@/components/SignOutEverywhereDialog.vue';
 import IconCloseRound from '@/components/icons/IconCloseRound.vue';
 import IconExpandDown from '@/components/icons/IconExpandDown.vue';
 import IconMenu from '@/components/icons/IconMenu.vue';
-import { currentPlace, standsApart, type AppPlace } from '@/utils/currentPlace';
+import { currentPlace, standsApart, vendorLinkFor, type AppPlace } from '@/utils/currentPlace';
+import { vendorPagePath } from '@/utils/market';
 import { signOut } from '@/utils/sessionEnded';
 import { useEscapeToClose } from '@/utils/useEscapeToClose';
 import { useFocusGoesBack } from '@/utils/useFocusGoesBack';
@@ -50,6 +53,14 @@ const user = inject<Ref<string | null>>('user', ref(null));
 const here = computed(() => currentPlace(route));
 /** The organizer the bar is for: none on a vendor's page, which stands apart from the app. */
 const organizer = computed(() => (standsApart(route) ? null : user.value));
+
+/** The market page's way to the vendor's side, once the page found its market (T469). */
+const vendorLink = computed(() => {
+  const link = vendorLinkFor(route);
+  if (link === null) return null;
+  const label = link.signedIn ? 'Your vendor page' : 'Vendor sign-in';
+  return { to: vendorPagePath(link.slug), label };
+});
 
 function leave() {
   closeSheet();
@@ -176,13 +187,23 @@ onUnmounted(stopWatchingTheWindow);
           <IconMenu v-else aria-hidden="true" />
         </button>
       </template>
-      <img
-        v-else
-        class="app-bar-logo"
-        alt="Conventioner"
-        data-testid="app-bar-logo"
-        src="@/assets/brand/conventioner-logo.svg"
-      />
+      <template v-else>
+        <img
+          class="app-bar-logo"
+          alt="Conventioner"
+          data-testid="app-bar-logo"
+          src="@/assets/brand/conventioner-logo.svg"
+        />
+        <RouterLink
+          v-if="vendorLink"
+          :to="vendorLink.to"
+          class="app-bar-link app-bar-vendor-link"
+          :data-words="vendorLink.label"
+          data-testid="app-bar-vendor-link"
+        >
+          {{ vendorLink.label }}
+        </RouterLink>
+      </template>
     </div>
 
     <template v-if="sheetOpen">
@@ -341,6 +362,16 @@ onUnmounted(stopWatchingTheWindow);
   left: 0;
   height: 2px;
   background: var(--mm-green);
+}
+
+/* At the row's end, the band's full height (a thumb's target on a phone), its words on the gutter's
+   edge as the logo's are on the other. */
+.app-bar-vendor-link {
+  flex: none;
+  align-self: stretch;
+  margin-right: calc(-1 * var(--space-3));
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 /* The account gives way first, by its address, when the window is short of room. */

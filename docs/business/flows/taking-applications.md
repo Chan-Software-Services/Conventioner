@@ -22,6 +22,7 @@ sources:
   - T204
   - T260
   - T263
+  - T469
 ---
 
 # Taking applications
@@ -52,7 +53,7 @@ A verdict can be given from the first application ([review](review.md)); Begin a
    Cancel or Escape closes it and saves nothing.
    Anyone else who may move the market gets the move at once, with no dialog.
 3. Expect Applications, landing on the Applications page, which carries the dot; the form is locked from now on ([F4](form-tab.md#f4-the-form-lock)).
-4. The rail shows "Vendor page" with the market's own address, `/<slug>`, and "Copy" on one line, shortening the address rather than wrapping (bug 11), and on a phone "Vendor page" as the link with "Copy" (T142); it stays there in every phase after Draft until the market is archived, and after that only if it ran.
+4. The rail shows "Market page" with the market's own address, `/<slug>`, whose application call says "Applications are open." with "Apply", and "Vendor page" with `/<slug>/vendor`, where vendors sign in and apply, each with "Copy" on one line, shortening the address rather than wrapping (bug 11), and on a phone each name as the link with "Copy" (T142); they stay there in every phase after Draft until the market is archived, and after that only if the market ran.
 5. The rail says "Applications are open on your vendor page: review them as they arrive. Every application is decided: Begin assignment.", or, while one is undecided, "… Finish deciding: …".
 
 Covered by:

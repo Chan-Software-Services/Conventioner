@@ -1,12 +1,20 @@
 import type { Locator, Page } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
-import { marketScreenPath, marketSetupPath } from './helpers/marketScreens';
+import {
+  marketPagePath,
+  marketScreenPath,
+  marketSetupPath,
+  vendorPagePath,
+} from './helpers/marketScreens';
 import { seedApplicantMarket } from './helpers/seedApplicantMarket';
 import { seedPhaseMarket } from './helpers/seedPhaseMarket';
 
 /**
- * A market's frame is the same on every page of it, and the rail is one row at 1440 (bugs 11 and
- * 12, and items 12 and 13 of bug 43; E26/F10/S01; settles claims-and-room 07).
+ * A market's frame is the same on every page of it, and the rail's addresses and next step are one
+ * row at 1440 (bugs 11 and 12, and items 12 and 13 of bug 43; E26/F10/S01; settles claims-and-room
+ * 07): with two addresses, the market page and the vendor page, each whole, beside the spine where
+ * they fit and on the rail's designed second row for a longer address, such as the test stack's
+ * (E30/F01/S03, T469).
  *
  * Each screen placed the frame itself, so it sat at x 16 on most pages, x 0 on Start from your
  * Google Form and the floorplan wizard, and x 32 on the import - and the last two had no card and
@@ -30,7 +38,7 @@ async function frameOn(page: Page, path: string) {
   return box(page.getByTestId('market-bar'));
 }
 
-test('the rail holds the vendor page and the next step on one row at 1440', async ({
+test("the rail holds the market's two addresses, whole, and the next step on one row at 1440", async ({
   authenticatedPage: page,
   request,
 }) => {
@@ -42,17 +50,30 @@ test('the rail holds the vendor page and the next step on one row at 1440', asyn
   );
   await page.goto(marketSetupPath(marketId, 'applications'));
 
-  const spine = await box(page.getByTestId('phase-rail-spine'));
-  const chip = page.getByTestId('phase-rail-vendor-page');
+  const market = page.getByTestId('phase-rail-market-page');
+  const vendor = page.getByTestId('phase-rail-vendor-page');
   const next = page.getByTestId('phase-transition-assignment');
-  expect(Math.abs(middle(await box(chip)) - middle(spine))).toBeLessThan(4);
-  expect(Math.abs(middle(await box(next)) - middle(spine))).toBeLessThan(4);
+  // On one row, whichever row the two whole addresses ask for: beside the spine where they fit,
+  // else under it.
+  const row = middle(await box(market));
+  expect(Math.abs(middle(await box(vendor)) - row)).toBeLessThan(4);
+  expect(Math.abs(middle(await box(next)) - row)).toBeLessThan(4);
 
-  // Shortened to fit, never lost: the whole address is the link, its hover text, and what Copy copies.
-  const link = chip.getByRole('link');
-  await expect(link).toHaveAttribute('href', new RegExp(`/${marketSlug}$`));
-  await expect(link).toHaveAttribute('title', new RegExp(`/${marketSlug}$`));
-  await expect(page.getByTestId('phase-rail-vendor-page-copy')).toBeVisible();
+  // Each whole: the address it shows, the link, its hover text, and what Copy copies.
+  for (const [chip, end] of [
+    [market, marketPagePath(marketSlug)],
+    [vendor, vendorPagePath(marketSlug)],
+  ] as const) {
+    const link = chip.getByRole('link');
+    await expect(link).toHaveText(new RegExp(`${end}$`));
+    expect(
+      await link.evaluate((a) => a.scrollWidth > a.clientWidth || a.scrollHeight > a.clientHeight),
+      `${end} is cut`,
+    ).toBe(false);
+    await expect(link).toHaveAttribute('href', new RegExp(`${end}$`));
+    await expect(link).toHaveAttribute('title', new RegExp(`${end}$`));
+    await expect(chip.getByRole('button', { name: 'Copy' })).toBeVisible();
+  }
 });
 
 test('where the rail cannot hold one row, the address and the next step share the second', async ({

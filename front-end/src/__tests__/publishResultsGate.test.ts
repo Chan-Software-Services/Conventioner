@@ -35,7 +35,11 @@ function marketTaking(intakeMode?: IntakeMode, publish: Partial<Market> = {}): M
 }
 
 async function mounted(market: Market) {
-  const wrapper = mount(PublishResults, { props: { market } });
+  // The dialog teleports to the body; stubbed, it renders in place, where the wrapper reads it.
+  const wrapper = mount(PublishResults, {
+    props: { market },
+    global: { stubs: { teleport: true } },
+  });
   await wrapper.vm.$nextTick();
   return wrapper;
 }
@@ -173,8 +177,8 @@ describe("where vendors read it: the market's vendor page (ADR 0022)", () => {
       'No email is sent',
     );
     const address = confirm.find('[data-testid="publish-results-address-url"]');
-    expect(address.text()).toBe(`${window.location.origin}/spring-market`);
-    expect(address.attributes('href')).toBe(`${window.location.origin}/spring-market`);
+    expect(address.text()).toBe(`${window.location.origin}/spring-market/vendor`);
+    expect(address.attributes('href')).toBe(`${window.location.origin}/spring-market/vendor`);
   });
 
   it('copies the address', async () => {
@@ -187,7 +191,7 @@ describe("where vendors read it: the market's vendor page (ADR 0022)", () => {
     await copy.trigger('click');
     await wrapper.vm.$nextTick();
 
-    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/spring-market`);
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/spring-market/vendor`);
     expect(copy.text()).toBe('Copied');
     vi.unstubAllGlobals();
   });
@@ -204,11 +208,35 @@ describe('before the assignment (E38/F05, Daniel on 2026-10-29)', () => {
     },
   );
 
-  it('offers it again from the assignment on, published or not', async () => {
-    const days = await mounted(
+  it('offers it again from the assignment on', async () => {
+    const days = await mounted(marketTaking(IntakeMode.Form, { phase: MarketPhase.MarketDays }));
+    expect(days.find(button).exists()).toBe(true);
+  });
+});
+
+describe('once published (T466, release walk F7)', () => {
+  it.each([MarketPhase.Assignment, MarketPhase.Offers])(
+    'says so quietly in %s, a dot and the words, with no button',
+    async (phase) => {
+      const wrapper = await mounted(
+        marketTaking(IntakeMode.Form, { phase, resultsPublished: true }),
+      );
+
+      const status = wrapper.get('[data-testid="applications-published-badge"]');
+      expect(status.text()).toBe('Results published · vendors can see them');
+      expect(status.classes()).not.toContain('chip');
+      expect(status.find('.publish-status-dot').attributes('aria-hidden')).toBe('true');
+      expect(wrapper.find(button).exists()).toBe(false);
+      expect(wrapper.find(hint).exists()).toBe(false);
+    },
+  );
+
+  it('says nothing in market days, where results are out by definition', async () => {
+    const wrapper = await mounted(
       marketTaking(IntakeMode.Form, { phase: MarketPhase.MarketDays, resultsPublished: true }),
     );
-    expect(days.find('[data-testid="applications-published-badge"]').exists()).toBe(true);
+
+    expect(wrapper.html()).toBe('<!--v-if-->');
   });
 });
 

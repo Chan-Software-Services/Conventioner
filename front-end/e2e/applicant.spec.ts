@@ -1,4 +1,5 @@
 import { test, expect, BACKEND_URL, TEST_USER, VendorPage } from './fixtures';
+import { vendorPagePath } from './helpers/marketScreens';
 import {
   seedApplicantMarket,
   seedApplicationDoc,
@@ -200,9 +201,9 @@ test.describe('Public applicant login - anti-oracle', () => {
     // challenge we seeded survives in the database. Now verify with it.
     await login.enterCode(knownCode);
 
-    // On success the page signs them in where they are, at the market's own address.
+    // On success the page signs them in where they are, at the vendor page's address.
     await expect(login.signedInAs).toContainText(APPLICANT_EMAIL, { timeout: 5000 });
-    await expect(page).toHaveURL(new RegExp(`/${market.marketSlug}$`));
+    await expect(page).toHaveURL(new RegExp(`${vendorPagePath(market.marketSlug)}$`));
     await expect(login.status).toContainText('Submitted');
   });
 });

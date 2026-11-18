@@ -93,6 +93,8 @@
  *   else.
  * - Given `hideLabel`, its label is `.visually-hidden`: the screen's row says it, and the label stays
  *   for a reader.
+ * - Given `compact`, its field is `.field--compact`, as tall as the compact controls beside it in a
+ *   toolbar's row.
  * - Given `invalid`, its field is `aria-invalid="true"` and ringed in red, as a field is on Pricing;
  *   the words saying why are the caller's, through `describedBy`.
  * - An option that is `disabled` may not be taken, as a target another column holds: drawn muted with
@@ -163,6 +165,8 @@ const props = defineProps<
     wordsAreValue?: boolean;
     /** The screen's row says what this is: the label stays for a reader, out of view. */
     hideLabel?: boolean;
+    /** Its field stands as tall as the compact controls beside it in a toolbar's row. */
+    compact?: boolean;
     /** Its field reads as wrong, and says so to a reader. */
     invalid?: boolean;
     /** On one choice: each is added elsewhere, so the field empties, ready for the next word. */
@@ -664,6 +668,7 @@ function onFocus(): void {
       type="text"
       role="combobox"
       class="field"
+      :class="{ 'field--compact': compact }"
       autocomplete="off"
       spellcheck="false"
       aria-autocomplete="list"

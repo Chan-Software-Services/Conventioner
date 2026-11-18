@@ -80,6 +80,10 @@ def door(monkeypatch):
     monkeypatch.setattr(
         ApplicationsApi, "vendor_names_for_market", lambda _id: {"ana@example.com": "Ana"},
     )
+    monkeypatch.setattr(
+        ApplicationsApi, "vendor_full_names_for_market",
+        lambda _id: {"ana@example.com": "Anastasia Fixture"},
+    )
     state.update(markets=markets, attendance=attendance)
     return state
 
@@ -118,6 +122,16 @@ class TestTheRoster:
             if r["vendorEmail"] == "ben@example.com"
         )
         assert row["vendorName"] == ""
+        assert row["vendorFullName"] == ""
+
+    def test_carries_the_full_name_beside_the_name_shown(self, door):
+        """The door's searches find a vendor who goes by another name by the name on their
+        identification too, as Vendors and Payments do (T466)."""
+        row = next(
+            r for r in AttendanceApi.attendance_roster(door["markets"].doc)["roster"]
+            if r["vendorEmail"] == "ana@example.com" and r["date"] == D1
+        )
+        assert (row["vendorName"], row["vendorFullName"]) == ("Ana", "Anastasia Fixture")
 
 
 class TestAnOrganizerChecksAVendorIn:

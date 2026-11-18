@@ -251,10 +251,10 @@ def _send_code_email(
 ) -> bool:
     """Send the sign-in code to the vendor's email address, through ``send_mail``.
 
-    It links to the market's own vendor page, ``/<slug>``, by its public address: the link a vendor
-    receives is the one they keep (ADR 0022). Its subject carries the code's number, ``sequence``,
-    and never the code: a mail client threads emails by subject, and with one subject for all it
-    buried the newest code under an older one, which a vendor then typed (T191 F22).
+    It links to the market's vendor page, ``/<slug>/vendor``, by its public address: the link a
+    vendor receives is the one they keep (ADR 0022). Its subject carries the code's number,
+    ``sequence``, and never the code: a mail client threads emails by subject, and with one subject
+    for all it buried the newest code under an older one, which a vendor then typed (T191 F22).
 
     The market's name is the one value here someone else typed: anyone can name a market and ask
     for a code to any address. So the HTML holds it escaped wherever it appears, and the subject and
@@ -263,7 +263,7 @@ def _send_code_email(
     Returns True when the email was accepted by the provider (or disabled in dev),
     False when it was not.
     """
-    page_url = f"{frontend_url()}/{market_slug}"
+    page_url = f"{frontend_url()}/{market_slug}/vendor"
     name_in_html = html.escape(market_name, quote=True)
     name_in_words = one_line(market_name)
 

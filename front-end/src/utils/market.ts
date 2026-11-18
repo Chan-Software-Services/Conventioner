@@ -21,6 +21,20 @@ export function marketPath(marketId: string, page?: MarketPage | MarketFlow): st
   return page ? `${base}/${page}` : base;
 }
 
+/**
+ * A market's own address, `/<slug>`: its market page, for anyone (T469), which shows the public map
+ * while it is open, the application call while the market takes applications, and a notice
+ * otherwise. The one builder of it: nothing spells `/${slug}` by hand.
+ */
+export function marketPagePath(slug: string): string {
+  return `/${encodeURIComponent(slug)}`;
+}
+
+/** A market's vendor page, `/<slug>/vendor` (T469, ADR 0022): sign-in, the application, the result. */
+export function vendorPagePath(slug: string): string {
+  return `${marketPagePath(slug)}/vendor`;
+}
+
 /** A location's layout, or with no location the market's first (T257). */
 export function layoutPath(marketId: string, locationId?: string): string {
   const path = marketPath(marketId, 'layout');

@@ -4,6 +4,7 @@
  * The Vendors page's and the All view's Export, and the Assignments page's Download CSV, were drawn for everyone
  * who could open the page: right while the row's default is Viewer, the same as Read, but a market
  * that raised the row would have offered a button whose file the server refuses with a 403.
+ * The All view's Export stands in the review's toolbar, drawn from what the view exposes (T466).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -16,6 +17,7 @@ import type { Market } from '@/assets/types/datatypes';
 import { MarketAction } from '@/utils/marketActions';
 import { answersRefusing } from './support/servedAnswers';
 import { MARKET_ID, serveMarket } from './support/marketScreen';
+import { toolsOf } from './support/reviewViewTools';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 
@@ -90,7 +92,7 @@ describe.each([
     await flushPromises();
 
     expect(wrapper.find('[data-testid="applications-all-list-empty"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="applications-all-export-button"]').exists()).toBe(offered);
+    expect(toolsOf(wrapper).mayExport).toBe(offered);
   });
 
   it(`Assignments ${offered ? 'offers' : 'hides'} Download CSV`, async () => {

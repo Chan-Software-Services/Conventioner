@@ -9,7 +9,7 @@ describes:
   - back-end/tests/fixtures/component_library_fixture.py
   - back-end/tests/test_component_library_fixture.py
   - front-end/e2e/helpers/componentLibrary.ts
-verified: 2026-11-17
+verified: 2026-11-18
 sources:
   - T200
   - T191
@@ -79,6 +79,8 @@ The `charts` entry draws the Stats tab's charts on the fixture, in the tab's ord
 
 The `components` entry draws each reusable component that exists today, the real one as its screens mount it; [`ListFreshness`](../../../front-end/src/components/ListFreshness.vue), which says when a list was last read beside Refresh, is drawn never read, just read, read five minutes before, refreshing and failed, with a `ReadOut` of the reads asked for (T318).
 Its [`RowMenu`](../../../front-end/src/components/RowMenu.vue) is drawn as the Payments tab's two menus and the app bar's account menu, and as the layout map's Floorplan menu, choices that stay chosen opening above their button, the second and third disabled while the first is unticked (T422).
+
+The `toolbars` entry draws the parts Attendance's and Applications' toolbars are built from (T466): a [`ToolRow`](../../../front-end/src/components/ToolRow.vue) with the fixture's market days in a `.field--compact` select at its start and, at its end, three [`ToolGroup`](../../../front-end/src/components/ToolGroup.vue)s, a [`SegmentedControl`](../../../front-end/src/components/SegmentedControl.vue) of List and Map, Print roster with Door code, and a `ListFreshness` with no time; a second row whose search takes the room its count leaves; the All view's five statuses as a segmented control that wraps on a phone; and a [`PinnedTools`](../../../front-end/src/components/PinnedTools.vue) over the fixture's first 60 applicants in a `ScrollBox`, which gives the box no banner or frame height so the block pins at its top from 1024px wide; each panel spans its section, as a toolbar spans its card, and every press is read out.
 
 The page uses only the design tokens, the primitives and the app's components; Stylelint holds its files as it holds every file, so a raw colour, size or spacing is an error there.
 A state the pointer or the keyboard makes (hover, held down, focus) is drawn held beside the live control by a class of the entry's own that copies what `primitives.css`, or the component it mounts, draws for it (`FileDropZone`'s focus halo); the live control is the one to trust.

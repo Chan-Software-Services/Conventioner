@@ -3,12 +3,15 @@ import { test, expect, BACKEND_URL, NO_ORG_USER, TEST_USER } from './fixtures';
 import { LoginPage } from './pages/LoginPage';
 import { MarketsPage } from './pages/MarketsPage';
 import { grantMarketRole } from './helpers/grantMarketRole';
-import { marketScreenPath } from './helpers/marketScreens';
+import { marketPagePath, marketScreenPath, vendorPagePath } from './helpers/marketScreens';
 import { plantSignInCode } from './helpers/accountSecrets';
 import { seedApplicantMarket } from './helpers/seedApplicantMarket';
 import { ensureTestOrg, marketNameToSlug, seedMarketWithVendors } from './helpers/seeds';
 import { settle } from './helpers/settle';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { signInOnThePage } from './helpers/vendorSignIn';
+import { MarketPage } from './pages/MarketPage';
+import { VendorPage } from './pages/VendorPage';
 
 /**
  * The app bar (T209): the way between an organizer's places, always in sight and always the same.
@@ -828,10 +831,16 @@ for (const size of SIZES) {
       draftSlug = marketNameToSlug(draft.marketName);
     });
 
-    test('signed out, sign-in, a password page, a public page and Page not found show the logo alone', async ({
+    test('signed out, sign-in, a password page, a vendor page and Page not found show the logo alone', async ({
       page,
     }) => {
-      for (const path of ['/login', '/reset-password-request', `/${marketSlug}`, '/no/such/page']) {
+      const paths = [
+        '/login',
+        '/reset-password-request',
+        vendorPagePath(marketSlug),
+        '/no/such/page',
+      ];
+      for (const path of paths) {
         await page.goto(path);
         await expect(page.locator('main')).not.toBeEmpty();
         await expectLogoAlone(page);
@@ -841,8 +850,65 @@ for (const size of SIZES) {
     // The vendor page is the vendor's (T260): an organizer opening their own market's page reads it
     // as a vendor would, with none of the organizer app's way about.
     test('signed in, the vendor page shows the logo alone', async ({ authenticatedPage: page }) => {
-      await page.goto(`/${marketSlug}`);
+      await page.goto(vendorPagePath(marketSlug));
       await expect(page.locator('main')).not.toBeEmpty();
+      await expectLogoAlone(page);
+    });
+
+    /**
+     * The market page's bar (T469): the logo, and at the row's end one link to the vendor page, a
+     * thumb's target in a bar that stays one 44px row.
+     */
+    async function expectTheVendorLink(page: Page, words: string): Promise<void> {
+      await expect(bar(page).getByAltText('Conventioner', { exact: true })).toBeVisible();
+      const vendorLink = bar(page).getByRole('link');
+      await expect(vendorLink).toHaveCount(1);
+      await expect(vendorLink).toHaveText(words);
+      await expect(vendorLink).toHaveAttribute('href', vendorPagePath(marketSlug));
+      await expect(bar(page).getByRole('navigation')).toHaveCount(0);
+      await expect(bar(page).getByRole('button')).toHaveCount(0);
+      expect((await bar(page).boundingBox())?.height).toBe(44);
+      const box = await vendorLink.boundingBox();
+      expect(box?.height).toBeGreaterThanOrEqual(44);
+      expect(box?.y).toBe(0);
+      const windowWidth = page.viewportSize()!.width;
+      expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(windowWidth);
+    }
+
+    test('signed out, the market page carries Vendor sign-in to the vendor page', async ({
+      page,
+    }) => {
+      await new MarketPage(page).goto(marketSlug);
+      await expectTheVendorLink(page, 'Vendor sign-in');
+
+      await press(bar(page).getByRole('link', { name: 'Vendor sign-in' }));
+      await expect(page).toHaveURL(new RegExp(`${vendorPagePath(marketSlug)}$`));
+      await expect(new VendorPage(page).emailInput).toBeVisible();
+      await expectLogoAlone(page);
+    });
+
+    test('a vendor signed in in this tab reads "Your vendor page" on the market page', async ({
+      page,
+    }) => {
+      const vendorPage = new VendorPage(page);
+      await vendorPage.goto(marketSlug);
+      const vendor = `e2e-bar-vendor-${size.phone ? 'phone' : 'desk'}-${Date.now()}@example.com`;
+      await signInOnThePage(vendorPage, marketId, vendor);
+
+      await new MarketPage(page).goto(marketSlug);
+      await expectTheVendorLink(page, 'Your vendor page');
+    });
+
+    test('signed in, the market page carries the vendor link alone, as a vendor reads it', async ({
+      authenticatedPage: page,
+    }) => {
+      await new MarketPage(page).goto(marketSlug);
+      await expectTheVendorLink(page, 'Vendor sign-in');
+    });
+
+    test('signed out, a market page naming no market shows the logo alone', async ({ page }) => {
+      await page.goto(marketPagePath('no-such-market-zz'));
+      await expect(page.getByTestId('market-page-not-found')).toBeVisible();
       await expectLogoAlone(page);
     });
 
@@ -857,14 +923,20 @@ for (const size of SIZES) {
       });
     });
 
-    // A one-segment address is the vendor page's route, which answers "Page not found" itself for a
-    // slug naming no market and for a gated market, a draft's even to its own organizer. That is no
-    // vendor's page, so the organizer keeps the full bar there, as at a deeper address.
-    test("signed in, a one-segment Page not found and a draft's page keep the full bar", async ({
+    // A market's two addresses, its page and its vendor page, answer "Page not found" themselves for
+    // a slug naming no market and for a gated market, a draft's even to its own organizer (T469).
+    // That is no vendor's page, so the organizer keeps the full bar there, as at a deeper address,
+    // and the market page's bar has no vendor link.
+    test("signed in, a market's Page not found and a draft's pages keep the full bar", async ({
       authenticatedPage: page,
     }) => {
-      for (const path of ['/no-such-market-zz', `/${draftSlug}`]) {
-        await page.goto(path);
+      for (const slug of ['no-such-market-zz', draftSlug]) {
+        await page.goto(marketPagePath(slug));
+        await expect(page.getByTestId('market-page-not-found')).toBeVisible();
+        await expectFullBar(page);
+        await expect(page.getByTestId('app-bar-vendor-link')).toHaveCount(0);
+
+        await page.goto(vendorPagePath(slug));
         await expect(page.getByTestId('vendor-page-not-found')).toBeVisible();
         await expectFullBar(page);
       }
@@ -1097,13 +1169,18 @@ for (const size of SIZES) {
         }
       };
 
-      await visit(['/login', '/reset-password-request', `/${marketSlug}`, '/no/such/page']);
+      await visit([
+        '/login',
+        '/reset-password-request',
+        marketPagePath(marketSlug),
+        '/no/such/page',
+      ]);
 
       const login = new LoginPage(page);
       await login.login(TEST_USER.email, TEST_USER.password);
       await login.waitForMarkets();
       probes = 0;
-      await visit(['/reset-password-request', `/${marketSlug}`, '/no/such/page']);
+      await visit(['/reset-password-request', marketPagePath(marketSlug), '/no/such/page']);
 
       // That the count can move at all: an organizer's page does probe.
       await page.goto('/markets');
