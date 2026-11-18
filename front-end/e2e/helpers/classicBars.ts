@@ -45,7 +45,10 @@ export function barWidth(locator: Locator): Promise<number> {
   });
 }
 
-/** The width the page's own bar takes of the window, which the app leaves alone. */
+/**
+ * The width the page's own bar takes of the window, which the app leaves alone but while a modal
+ * holds the page still, when the bar is gone and its gutter kept.
+ */
 export function pageBarWidth(page: Page): Promise<number> {
   return page.evaluate(() => window.innerWidth - document.documentElement.clientWidth);
 }
