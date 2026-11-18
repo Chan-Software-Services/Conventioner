@@ -72,7 +72,7 @@ A rule about how an application moves between states could be kept only if every
 - Every organizer read takes the view its route built, with no default, so a test calling one directly builds a view by hand.
 - An application left in nobody's share before every move was marked is dealt by the next deal after the migration runs, and the market's history says it was dealt "from nobody's share"; until then it is served waiting.
 - A card in nobody's share says "Reviewer: not dealt yet" on every screen, and warns of no one: an open one whose reviewer was removed, or that arrived while nobody chosen was able, or a follow-up whose owner holds no role on the market and whose reviewer is not chosen.
-  A follow-up whose owner holds no role but whose reviewer is chosen waits too, yet stays in that reviewer's share until the deal hands it on, so it names them and warns of them, as every other reader of its share does (Daniel's answer of 2026-11-18).
+  A follow-up whose owner holds no role but whose reviewer is chosen waits too, yet stays in that reviewer's share, so it names them and warns of them, as every other reader of its share does (Daniel's answer of 2026-11-18).
 - A screen's every new reader of the state reads `review`, so the unit tests and the component library's fixture carry it too; a fixture without it fails the type check.
 
 ## Considered and rejected

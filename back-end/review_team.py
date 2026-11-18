@@ -193,9 +193,9 @@ def is_waiting(doc: Dict[str, Any], view: ReviewView) -> bool:
     """Whether this application waits for the deal: undecided, reviewers are chosen, and open
     with a reviewer who is not one of the chosen reviewers (none, or a removed one), so in nobody's
     share, or a follow-up whose owner holds no role on the market, which stays in its reviewer's
-    share while they are chosen (``share_of``) until the deal hands it on. Exactly what
-    a deal reaching it would move, who is able aside, which stays the deal's own judgment while it
-    holds the market (``_deal_arriving``)."""
+    share while they are chosen (``share_of``). Exactly what a deal reaching it would move, who is
+    able aside, which stays the deal's own judgment while it holds the market
+    (``_deal_arriving``)."""
     if not view.chosen:
         return False
     state = ReviewState.state_of(doc)

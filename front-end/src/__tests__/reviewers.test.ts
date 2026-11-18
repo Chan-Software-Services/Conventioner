@@ -82,8 +82,8 @@ describe('reviewerLine', () => {
   });
 
   it('names the chosen reviewer of a waiting follow-up still in their share', () => {
-    // Its owner holds no role on the market any more: the next deal hands it on, but until then
-    // it is still Ana's share, and every reader is warned it is dealt to her, so the line says so too.
+    // Its owner holds no role on the market any more, so it waits for the deal, but it is still
+    // Ana's share, and every reader is warned it is dealt to her, so the line says so too.
     const ownerGone = application(
       ApplicationStatus.NeedsFollowUp,
       ANA,
