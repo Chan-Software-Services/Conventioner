@@ -3,6 +3,7 @@ layer: implementation
 kind: testing
 describes:
   - .github/workflows/test.yml
+  - .github/workflows/codeql.yml
   - .github/dependabot.yml
   - .no-mistakes.yaml
   - scripts/nm-test.sh
@@ -37,6 +38,7 @@ sources:
   - T317
   - T375
   - T424
+  - T464
 ---
 
 # CI and the gate
@@ -51,7 +53,8 @@ What each suite covers is [TESTING.md](../../TESTING.md); how a commit reaches p
 Its token is read-only (`permissions: contents: read`, and on the `e2e` job `actions: read` too, for the newest `test-map` artifact, another run's), every action is pinned by its full commit SHA with the version in a comment beside it, which [Dependabot](#dependabot) bumps together, and no checkout keeps its git credentials (`persist-credentials: false`), since no job pushes.
 No `${{ }}` expression is written inside a `run:` script: a value reaches the shell through the step's `env:` and is read as a variable.
 A push to a pull request's branch cancels the run of its earlier head (`concurrency`); a push to `dev` or `main` never cancels one, since each commit there keeps the checks a promotion reads, and neither does a trial commit, whose group is its own queue branch and commit.
-Every job but `e2e-shard` (whose checks are `e2e shard <n>/10`) sets `name:` to its id, the name branch protection requires its check by, so renaming a job drops a required check.
+Every job but `e2e-shard` (whose checks are `e2e shard <n>/10`) sets `name:` to its id, the name `dev`'s and `main`'s rules require its check by, so renaming a job drops a required check.
+CodeQL's analysis is [a workflow of its own](#codeql), whose three checks `dev` requires too.
 
 Each job is one block, what it runs one item a line ([two features never share a line](../conventions/two-features-never-share-a-line.md)); a new job is a block beside the job it is most like, and a new step of a job is one item beside the step it is most like.
 
@@ -75,8 +78,8 @@ Each job is one block, what it runs one item a line ([two features never share a
 **`real-data-and-workflows`**
 
 - four short checks in one job, so [one run fits the account's 20 jobs](#the-e2e-shards): on a pull request only, [`real_data_check.py`](../../../scripts/real_data_check.py) on the PR's commits since the base branch ("No real data in the PR's commits") and then on every file of the merge it checks out ("No real data anywhere in the tree"), then gitleaks 8.28.0 (checksum-verified, fully redacted) on the same commits, which lets by only the fingerprints in the root `.gitleaksignore` (a fixture value gitleaks takes for a key, in a commit already pushed, which only a force-push could take out of the range), the backstop to the git hooks and the gate, which run the checker before anything is pushed ([real data never leaves the PC](../conventions/security-invariants.md#real-data-never-leaves-the-pc))
-- on every run, [zizmor](https://docs.zizmor.sh/) 1.31.1 (checksum-verified) with `--offline` over the repository, which audits the four workflows (Test, Deploy, Release Please and Promote), the [shared e2e actions](#the-e2e-stack-and-its-caches) and `dependabot.yml` without a token, where any finding fails the job and its log names the audit, file and line, an accepted finding is ignored on the line zizmor reports, with its audit and the reason after it (`# zizmor: ignore[<audit>] <reason>`), and there is no zizmor config file, so nothing is ignored wholesale
-- then [actionlint](https://github.com/rhysd/actionlint) 1.7.12 (checksum-verified) over the four workflows: their syntax, expressions, job references and action inputs (a local action's against its `action.yml`), and each `run:` script through the runner's shellcheck, which zizmor's security audits do not read, but not a composite action's own scripts, where any finding fails the job and its log names the file, line and rule
+- on every run, [zizmor](https://docs.zizmor.sh/) 1.31.1 (checksum-verified) with `--offline` over the repository, which audits the five workflows (Test, CodeQL, Deploy, Release Please and Promote), the [shared e2e actions](#the-e2e-stack-and-its-caches) and `dependabot.yml` without a token, where any finding fails the job and its log names the audit, file and line, an accepted finding is ignored on the line zizmor reports, with its audit and the reason after it (`# zizmor: ignore[<audit>] <reason>`), and there is no zizmor config file, so nothing is ignored wholesale
+- then [actionlint](https://github.com/rhysd/actionlint) 1.7.12 (checksum-verified) over the five workflows: their syntax, expressions, job references and action inputs (a local action's against its `action.yml`), and each `run:` script through the runner's shellcheck, which zizmor's security audits do not read, but not a composite action's own scripts, where any finding fails the job and its log names the file, line and rule
 - last, on a pull request only, zizmor without `--offline`, given the run's read-only token, for the audits that look actions up on GitHub (an impostor commit, a known-vulnerable action or a confused ref behind a pin), with `--format github`, so each finding is an annotation on the pull request, and `continue-on-error`, so a finding or an outage of GitHub's API never fails the job
 
 **`docker-build`**
@@ -107,11 +110,12 @@ Each job is one block, what it runs one item a line ([two features never share a
 - not a required check, and never run on a pull request
 - it continues on error (`continue-on-error: true`), so a map that fails is not made but never decides the run's conclusion or Promote, which reads it
 
-**`dev`'s branch protection requires nine checks, and `main`'s rulesets six.**
+**`dev`'s ruleset requires eleven checks, and `main`'s rulesets six.**
 Both require `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, `e2e` and `real-data-and-workflows`.
-`dev` also requires `knowledge-graph`, [`CodeQL`](#codeql) and `agent-review`, a commit status the agent team's reviewer sets on a pull request's head rather than a CI job.
-`dev`'s protection binds admins too (`enforce_admins`), so nothing merges into it, the merge of `main` back into `dev` included, without all nine, short of changing the protection itself; `main`'s rulesets let an admin bypass them through a pull request only, which is how the Release PR merges with `--admin`, and let no one but the Promote workflow's App push to `main` ([RELEASING.md](../../RELEASING.md#branch-model), [ADR 0027](../../adr/0027-main-moves-only-through-promote.md)).
-`e2e` is a job of its own so protection names one check whatever the shard count becomes.
+`dev` also requires `knowledge-graph`, [CodeQL's](#codeql) `Analyze (actions)`, `Analyze (javascript-typescript)` and `Analyze (python)`, each of its ten from GitHub Actions, and `agent-review`, a commit status the agent team's reviewer sets on a pull request's head rather than a CI job, from any source.
+`dev`'s rules are one ruleset with a merge queue: a pull request into `dev` merges only through the queue, by a merge commit, once every required check has passed on its head and again on [the queue's trial commit](#a-merge-queues-trial-commit), and its `code_scanning` rule holds back one that brings in [a new CodeQL alert](#codeql).
+The ruleset has no bypass actor, so nothing merges into `dev`, the merge of `main` back into it included, without all eleven, short of changing the ruleset itself; `main`'s rulesets let an admin bypass them through a pull request only, which is how the Release PR merges with `--admin`, and let no one but the Promote workflow's App push to `main` ([RELEASING.md](../../RELEASING.md#branch-model), [ADR 0027](../../adr/0027-main-moves-only-through-promote.md)).
+`e2e` is a job of its own so the rules name one check whatever the shard count becomes.
 It runs whatever the shards' result, so a failed shard fails it, but not on a cancelled run (`if: ${{ !cancelled() }}`), which would post a red `e2e` on the head a later push made moot.
 `e2e-repeat` is not required: it is read over its first week, and then made required or dropped.
 `knowledge-graph` fails a pull request that changes a described file without touching its node or bumping `verified`: its drift step is part of the required check.
@@ -126,9 +130,10 @@ Within a shard the tests share one database (`workers: 1`); never across shards.
 
 ## A merge queue's trial commit
 
-**Every required check the Test workflow makes runs on the commit a merge queue builds for `dev`.**
-The `merge_group` trigger (`checks_requested`, for `dev` alone, since `main` moves only through Promote) runs the workflow on the trial commit GitHub builds for a queued pull request on its own `gh-readonly-queue/dev/...` branch, a run separate from the pull request's and the push's, so the queue gets every required check the Test workflow makes on the commit it would merge.
-`dev`'s two other required checks, `CodeQL` and `agent-review`, come from outside this workflow, and nothing in this repository makes either on a trial commit.
+**Every required check a workflow makes runs on the commit a merge queue builds for `dev`.**
+The `merge_group` trigger (`checks_requested`, for `dev` alone, since `main` moves only through Promote) runs the Test workflow and [the CodeQL workflow](#codeql) on the trial commit GitHub builds for a queued pull request on its own `gh-readonly-queue/dev/...` branch, runs separate from the pull request's and the push's, so the queue gets the Test workflow's seven required checks and CodeQL's three on the commit it would merge.
+`dev`'s one other required check, `agent-review`, comes from outside this repository: the agent team posts it on the trial commit.
+The roll-up `CodeQL` check is not required, since GitHub posts it only on a pull request, never on a trial commit.
 On it `github.base_ref` and `github.event.pull_request` are empty, since they belong to a pull request's event, and each job reads its event as follows:
 
 | Job                                                                   | On a trial commit                                                                                                                                                                                                  |
@@ -140,9 +145,12 @@ On it `github.base_ref` and `github.event.pull_request` are empty, since they be
 | `e2e`                                                                 | its `if: ${{ !cancelled() }}`, which reads no event; the selection audit's steps, each `if: github.event_name == 'pull_request'`, are skipped, as on a push                                                        |
 | `e2e-repeat`                                                          | skipped (`if: github.event_name == 'pull_request'`), as on a push; not a required check                                                                                                                            |
 | `test-map`                                                            | skipped (`if:` a push to `dev`), as on a push to `main`; not a required check                                                                                                                                      |
+| CodeQL's `analyze`, the three `Analyze (<language>)` checks           | every step, as on a push: none has an `if:`                                                                                                                                                                        |
 
-Its concurrency group is `Test-<its queue branch's ref>-<its sha>`, so no other run shares it and none is cancelled.
-Promotion never reads it: [`promote_check.py`](../../../scripts/promote_check.py) reads only a run on a push to `dev`, which the queue's merge starts on the same commit.
+Each workflow's concurrency group is `<its name>-<its queue branch's ref>-<its sha>` (`Test-...`, `CodeQL-...`), so no other run shares it and none is cancelled.
+The queue builds at most two trial commits at once: one asks for 19 of [the account's 20 jobs](#the-e2e-shards), so a third would only wait for runners, while a second fills the runners the first leaves idle in its long `e2e` tail.
+The queue drops an entry whose required check has not reported within 120 minutes, above the 98 the slowest of 80 recent Test runs took.
+Promotion never reads a trial commit's run: [`promote_check.py`](../../../scripts/promote_check.py) reads only a run on a push to `dev`, which the queue's merge starts on the same commit.
 
 ## The e2e shards
 
@@ -167,7 +175,7 @@ The first timings came from run 42493172818's list-reporter times, before the re
 **Ten shards, since the suite is the run's critical path.**
 With six, the slowest shard ended a median 21.5 minutes into a run, while every other job was done by 2.7; a shard is about 3 minutes of setup and its share of the suite, so ten bring a shard to about 12 minutes at about 13 more runner-minutes of setup a run.
 That holds while runners are free: the account is on GitHub Free, which runs 20 jobs at once across the repository.
-One pull request's run asks for 20, so it fits alone: 17 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, the ten shards and `e2e-repeat`), `e2e` only once the shards are done, and CodeQL's three; a push to `dev` or `main`, or a trial commit, starts 16 Test jobs, with no `e2e-repeat`, and on `dev` `test-map` starts once the shards are done, beside `e2e`.
+One pull request's run asks for 20, so it fits alone: 17 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, the ten shards and `e2e-repeat`), `e2e` only once the shards are done, and CodeQL's three; a push to `dev` or a trial commit starts 16 Test jobs, with no `e2e-repeat`, and CodeQL's three, 19 in all, as does a push to `main`; on `dev` `test-map` starts once the shards are done, beside `e2e`.
 That is why the five short checks (drift, the real-data scan with gitleaks, zizmor offline, zizmor online and actionlint) are steps of `knowledge-graph` and `real-data-and-workflows`: as five jobs of their own they made one run ask for 24, more than the account runs at once.
 With another run going, shards still wait: on one such run four shards queued 9 to 12 minutes, and the run ended at 23 minutes while each shard's own time was 10.5 to 12.5.
 The matrix lists the shards and their `total`, which move together.
@@ -236,13 +244,18 @@ It reads modules, not text, so a shipped file that imports the fixture or a part
 
 ## CodeQL
 
-GitHub's CodeQL default setup, a repository setting with no workflow file here, analyses `actions`, `javascript-typescript` and `python` with the default suite, on every pull request to `dev` and weekly on `dev`.
-Each pull request gets an `Analyze (actions)`, an `Analyze (javascript-typescript)` and an `Analyze (python)` check, and a `CodeQL` check from `github-advanced-security` that reports the alerts new in the code it changed.
+[`.github/workflows/codeql.yml`](../../../.github/workflows/codeql.yml), CodeQL's advanced setup, analyses `actions`, `javascript-typescript` and `python` with the default suite and no config, on every pull request and push to `dev` or `main`, every [trial commit](#a-merge-queues-trial-commit) for `dev`, and weekly on `dev`.
+Its one job, `analyze`, makes an `Analyze (actions)`, an `Analyze (javascript-typescript)` and an `Analyze (python)` check, one runner each, none needing a build (`build-mode: none`), and sets each analysis's category to the default setup's, `/language:<language>`, so the alerts the default setup found and their dismissals carry over.
+Its token has `contents: read`, `security-events: write` for the upload and `actions: read`, its actions are pinned as [the Test workflow's](#ci) are, and its concurrency is the Test workflow's rule.
 It is the automated backstop for [a request value is a string](../conventions/a-request-value-is-a-string.md) (`py/nosql-injection`) and [an exception never reaches a client](../conventions/an-exception-never-reaches-a-client.md) (`py/stack-trace-exposure`).
-**`CodeQL` is a required check on `dev`** (since 2026-10-28): it fails a pull request that brings in a new security alert of medium severity or above, or a new standard alert of severity error.
-Those are the repository's check-run failure thresholds (Settings, Code security, protection rules): "Medium or higher" for security alerts, lowered from the default "High or higher" because `py/stack-trace-exposure` is a medium, and "Only errors" for standard alerts, which have a rule severity rather than a security one.
-The three `Analyze (<language>)` checks are not themselves required: they make the analyses the `CodeQL` check reads.
-`main`'s six checks are unchanged: nearly every commit reaches `main` by [promotion](../../RELEASING.md#how-a-promotion-proves-itself) from `dev`, where it has already passed `CodeQL`, and the others are the Release PR, merged with `--admin`, and a [hotfix](../../RELEASING.md#hotfixes).
+
+**The three `Analyze (<language>)` checks are required on `dev`**, from GitHub Actions, so an analysis runs and passes on every trial commit before it merges.
+GitHub's CodeQL default setup, a repository setting, runs nothing on a trial commit, and must stay off: while it is configured, GitHub refuses the workflow's uploads.
+A pull request also gets a `CodeQL` check from `github-advanced-security` that reports the alerts new in the code it changed; it is not required, since GitHub posts it only on a pull request, so a queue requiring it would wait on every trial commit until the entry timed out.
+**`dev`'s ruleset's `code_scanning` rule holds the alert bar instead**: a pull request that brings in a new security alert of medium severity or above (`security_alerts_threshold` `medium_or_higher`), or a new standard alert of severity error (`alerts_threshold` `errors`), cannot enter the queue.
+Security alerts are held from medium, below GitHub's default of high, because `py/stack-trace-exposure` is a medium; standard alerts, which have a rule severity rather than a security one, at errors only.
+`main`'s six checks are unchanged: nearly every commit reaches `main` by [promotion](../../RELEASING.md#how-a-promotion-proves-itself) from `dev`, where it has already been analysed, and the others are the Release PR, merged with `--admin`, and a [hotfix](../../RELEASING.md#hotfixes).
+The workflow analyses `main` too, on every pull request and push to it, though `main`'s rules require none of its checks: a hotfix's pull request into `main` is analysed before it merges, and `main`'s alerts stay current, as under the default setup.
 
 ## Dependabot
 
