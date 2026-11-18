@@ -48,11 +48,11 @@ An arrival never waits for the market: **every move into open, an undo back into
 The deal holding the market judges who may review: it keeps an able reviewer, or a follow-up's owner who may still own one here (anyone with a role on the market, whether or not they may be chosen to review), deals the rest to the next in turn, and with nobody able leaves the mark for the next deal, which a reviewer's next card starts.
 So a verdict undone after a change of reviewers, or after its reviewer was removed, is dealt as an arrival is, and no open application sits in nobody's share while an able reviewer exists.
 Each of the deal's writes to an application is held on the application as the deal read it, so a verdict or a hand-on landing mid-deal is never written over.
-How a deal holds the market, what it writes and what each write is held on are described once, in [the application document](../implementation/data/application-document.md#the-deal).
+How a deal holds the market, what it writes and what each write is held on are described in [the application document](../implementation/data/application-document.md#the-deal).
 `tests/test_every_order_of_a_deal.py` proves it by enumeration rather than by picking orders: an arrival landed before every step of a change, to a new team and to none, a change landed before every step of an arrival, an arrival before every step of another, and an undo, a rule's return and a re-import before every step of a change that removes their reviewer, and that change before every step of each; every order checks that no open application sits outside every share while an able reviewer exists.
 The same cases run over a real MongoDB server in `tests/real_mongo/test_every_order_of_a_deal_on_the_server.py`, where the lease's hold is also raced by ten deals at once ([the real-MongoDB suite](../implementation/testing/real-mongo-suite.md#the-market-sides-guarantees)).
 A decided application stays where it is, and so does a follow-up, unless its owner is a reviewer the change removed: then it is dealt with the open applications and handed, still a follow-up, to the reviewer it goes to.
-An unchanged set writes and records nothing; no reviewers returns every open application to first come, first served.
+An unchanged set, once the last change finished, writes and records nothing; no reviewers returns every open application to first come, first served.
 
 **Choosing is a row of the market's table**, "Choose reviewers" (default Admin, [ADR 0019](0019-a-markets-permissions-are-a-table.md)), open while the review is (draft through the stage) and refused on an archived market.
 A reviewer is chosen from the people the chooser may hand a follow-up to, so someone outside the market's organization is never offered its people.
