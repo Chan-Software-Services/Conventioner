@@ -43,6 +43,7 @@ sources:
   - T263
   - T421
   - T411
+  - T452
 ---
 
 # Vendors
@@ -66,7 +67,9 @@ At 320 the longer "Checking Discord…" or "Giving roles…" takes the second bu
 2. "N of M vendors assigned" counts the vendors who need a table, the approved applicants and the vendors added by hand, and never a rejected applicant (bug 10); a filter or search reads "N of M vendors shown".
    The line is in the muted ink and its counts in the brand green, each at AA on white; it once dimmed the whole line with opacity, which took the counts to 3.2:1 (T162 review).
 3. Each row of a vendor who needs a table shows Assigned or Unassigned and "N of M dates", against the dates they could have had; a vendor added by hand needs a table on every market day, and shows "Added" beside it; a rejected applicant shows "Rejected".
+   "Added" and every market day are read from where the vendor came from as the server serves it (`origin` `added`, [the application document](../../implementation/data/application-document.md#the-states-and-how-they-are-stored)), never from who added them: an added vendor whose answers arrived since, by an import or their own save, is an applicant, with no "Added" and their own dates within reach, while their drawer still says who added them (T277 P7).
 4. "Unassigned only" lists the vendors who need a table and hold none, and with a date chosen those with none that day, a vendor added by hand included (E38/F08/S02); it and "Rejected only", shown when anyone was rejected, narrow the list, each cleared with its "×"; the Assignments page's filters (Date, Section, Tier, Table) narrow it to where vendors are placed, and are kept across the two pages.
+   "Rejected only" reads the served review state (`review.state` `rejected`), so it lists every rejected application, a person's, a rule's and a stored spelling of the old offers flow alike, as the Applications tab's Rejected filter does; the chip's words stay the stored status's label.
 5. The Assignments page's "N unassigned" link, and the Stats tab's "N vendors unassigned" ([the market's statistics](stats.md)), open this list filtered, as "Unassigned only", and count the same vendors.
 6. The list draws 50 rows, with "Showing 50 of 120" above them while the cap leaves rows off and "Show 50 more" below, which hands the focus to the first new row ([a list frame](../../design-system.md#the-primitive-layer)).
    The line in step 2 counts the rest, so the frame says nothing once every row is drawn.
@@ -87,6 +90,7 @@ Covered by:
 - `the-drawer-reads-the-application-when-the-tables-cannot.spec.ts`, the refused read
 - `the-market-on-a-phone.spec.ts`, on a phone and at a desk: the page, every tab of the drawer, a payment recorded and an Editor's Update info
 - `the-open-vendor-reads-as-selected.spec.ts`, the open row's look
+- `theVendorsListReadsTheServedState.test.ts`, "Added", the dates within reach and "Rejected only" read the served origin and state
 - `vendors-and-limits.spec.ts`
 - `vendors.spec.ts`
 
