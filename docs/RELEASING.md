@@ -15,7 +15,7 @@ describes:
   - .github/workflows/promote.yml
   - scripts/promote_check.py
   - scripts/github_runs.py
-verified: 2026-11-17
+verified: 2026-11-18
 sources:
   - T74
   - T254

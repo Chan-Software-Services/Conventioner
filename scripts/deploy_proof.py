@@ -5,11 +5,15 @@ The workflow cannot be run off production, so its decisions live here, where
 scripts/tests/test_deploy_proof.py runs them against stubs as its dry run. Two commands:
 
     green --commit <sha>
-        Whether the Test workflow passed on a push to `main` at that commit. Every check `main`
-        requires is a job of the Test workflow, and branch protection's own list needs an admin
-        token to read, so a Test run that concluded `success` is the proof. The newest run by
-        `run_number` decides; a re-run of failed jobs is the same run (read by scripts/github_runs.py,
-        as Promote reads `dev`'s). It fails closed: an error from GitHub refuses, with no retry.
+        Whether the Test workflow passed on a push to `main` at that commit. Every check `main`'s
+        rulesets require is a job of the Test workflow, so a Test run that concluded `success` has
+        passed them all and is the proof. The rulesets' list is open to read access
+        (`GET /repos/{owner}/{repo}/rules/branches/main`), but proving it would mean finding each
+        named check's newest run at the commit, apart from the checks of the same names that a
+        commit promoted from `dev` keeps from its `dev` run, to catch only a required check from
+        outside the Test workflow, which `main` has none of: a ruleset that requires one needs
+        this proof to read it too. The newest run by `run_number` decides; a re-run of failed jobs
+        is the same run (read by scripts/github_runs.py, as Promote reads `dev`'s). It fails closed: an error from GitHub refuses, with no retry.
         Needs GITHUB_REPOSITORY and GITHUB_TOKEN;
         GITHUB_API_URL defaults to https://api.github.com.
 
