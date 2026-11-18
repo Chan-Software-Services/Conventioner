@@ -34,15 +34,15 @@ This project uses a **dev → main promotion flow**:
 
 - **`dev`** is the default/integration branch.
   All feature branches and bugfix PRs target `dev`.
-  CI (`.github/workflows/test.yml`) runs on every push and PR to `dev`, and on a merge queue's trial commit for it ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)).
+  CI (`.github/workflows/test.yml`) and CodeQL (`.github/workflows/codeql.yml`) run on every push and PR to `dev`, and on a merge queue's trial commit for it ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)).
 - **`main`** is the deploy-only branch.
   It is deployed only by hand, through the Deploy workflow, and is reached **only** by promoting `dev` → `main` as a deliberate, versioned release.
   Never commit or open PRs directly against `main` (the release-please Release PR and a `hotfix/` PR are the exceptions, [below](#hotfixes)).
 
 **Both branches are protected**: a PR into either needs the `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, `e2e` and `real-data-and-workflows` checks to pass (`e2e` passes only when every shard does).
-A PR into `dev` also needs `knowledge-graph`, `CodeQL` and `agent-review`, nine in all; `main` asks only the six ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)).
-Branches need not be up to date before merging, because a promotion is only ever made from a commit whose own `dev` run passed.
-`dev`'s is a branch protection rule that binds admins too (`enforce_admins`): nothing merges into `dev`, the merge of `main` back into it included, without all nine checks, short of changing the protection itself; force pushes to it are blocked.
+A PR into `dev` also needs `knowledge-graph`, CodeQL's three `Analyze (<language>)` checks and `agent-review`, eleven in all; `main` asks only the six ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)).
+Branches need not be up to date before merging, because a promotion is only ever made from a commit whose own `dev` run passed, and a PR into `dev` merges through a merge queue, which runs the checks again on the commit it would merge.
+`dev`'s is a ruleset with no bypass actor, so it binds admins too: nothing merges into `dev`, the merge of `main` back into it included, without all eleven checks, short of changing the ruleset itself; its code scanning rule holds back a PR with a new CodeQL alert ([CodeQL](implementation/testing/ci-and-the-gate.md#codeql)), and force pushes to it and its deletion are blocked.
 `main`'s are two rulesets ([ADR 0027](adr/0027-main-moves-only-through-promote.md)).
 "main is promoted or merged" takes a change only through a pull request, except from the Promote workflow's GitHub App, the only actor that may push to `main` ([how a promotion proves itself](#how-a-promotion-proves-itself)).
 "main is tested" requires the six checks, keeps `main`'s history linear, and blocks force pushes and deletion; the App is held to it too, so the commit it pushes must already have passed the six, as a commit whose `dev` run passed has.
@@ -108,7 +108,7 @@ No checkout in them keeps git credentials (`persist-credentials: false`).
    - A version bump in `.release-please-manifest.json`
    - An updated `CHANGELOG.md` with all changes since the last release
 5. **A maintainer reviews and merges the Release PR**, squashed, as an admin: `gh pr merge <n> --squash --admin`.
-   release-please opens it with GitHub's built-in token, and GitHub runs no workflows for that token, so the PR never gets the checks branch protection asks for; it changes only the manifest and the changelog.
+   release-please opens it with GitHub's built-in token, and GitHub runs no workflows for that token, so the PR never gets the checks `main`'s rulesets ask for; it changes only the manifest and the changelog.
    On merge, release-please automatically:
    - Creates a **git tag** (e.g., `v1.0.0`)
    - Creates a **GitHub Release** with the changelog content
