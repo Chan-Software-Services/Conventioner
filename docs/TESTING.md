@@ -4,8 +4,8 @@ kind: testing
 describes:
   - front-end/playwright.config.ts
   - scripts/seed_fixture.sh
-  - scripts/nm-test.sh
   - scripts/lib/stack-identity.sh
+  - scripts/nm-test.sh
 verified: 2026-11-14
 sources:
   - E34/F03/S02
@@ -444,9 +444,9 @@ Connecting through the card skips Discord's approval screen under it, and connec
 
 ## CI Pipeline
 
-Pushes and PRs to `main` or `dev`, and a merge queue's trial commit for `dev`, run `.github/workflows/test.yml`.
+Pushes and PRs to `main` or `dev`, and a merge queue's trial commit for `dev`, run `.github/workflows/test.yml` and CodeQL's `.github/workflows/codeql.yml`, which also runs weekly on `dev`.
 [CI and the gate](implementation/testing/ci-and-the-gate.md) says what each job runs, which checks
-branch protection requires (nine on `dev`, `CodeQL` among them, and six on `main`, `real-data-and-workflows` on both), why a flaky test fails the build, and what the no-mistakes gate
+the rules require (eleven on `dev`, CodeQL's three `Analyze (<language>)` among them, and six on `main`, `real-data-and-workflows` on both), why a flaky test fails the build, and what the no-mistakes gate
 runs through `scripts/nm-test.sh` (the real-data checks alone, since CI runs every suite before a merge).
 
 ## Stack limits

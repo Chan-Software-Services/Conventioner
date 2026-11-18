@@ -480,6 +480,22 @@ for (const size of PHONE_AND_DESK) {
           `applicant_email: ${JSON.stringify(applicant)} }).follow_up_owner.email`,
       );
 
+    // The follow-up's save goes on to hand the next card over, a round trip after the dialog shuts,
+    // and holds the card's verdicts until it has. Taking the follow-ups in before then asks for the
+    // hand-out again, and a late answer can put another card up after advanceTo has reached the
+    // marked one. Once the save is done, taking them in hands nothing out, since the walk keeps the
+    // card up, and the count says when the marked one is in the walk.
+    const backToTheFollowUp = async (
+      page: Page,
+      monitor: ApplicationMonitorPage,
+      marked: string,
+    ) => {
+      await expect(monitor.approveButton).toBeEnabled();
+      await page.getByTestId('app-monitor-include-follow-ups').check();
+      await expect(monitor.progress).toContainText('needing a follow-up');
+      await monitor.advanceTo(marked);
+    };
+
     test('is handed to one found by typing, then on from the card to another', async ({
       authenticatedPage: page,
       request,
@@ -513,8 +529,7 @@ for (const size of PHONE_AND_DESK) {
       expect(ownerOf(seed.marketId, applicant)).toBe(first);
 
       // The card: its owner is one the first page never draws.
-      await page.getByTestId('app-monitor-include-follow-ups').check();
-      await monitor.advanceTo(applicant);
+      await backToTheFollowUp(page, monitor, applicant);
       const { followUpOwner } = monitor;
       await expect(followUpOwner.field).toHaveValue(first);
       await expectLaidOut(page, 'the card with its chooser');
@@ -563,8 +578,7 @@ for (const size of PHONE_AND_DESK) {
         await page.keyboard.press('Escape');
         await followUp.confirm();
 
-        await page.getByTestId('app-monitor-include-follow-ups').check();
-        await monitor.advanceTo(applicant);
+        await backToTheFollowUp(page, monitor, applicant);
         await expect(monitor.followUpOwner.field).toHaveValue(seed.owner.email);
         await expectLaidOut(page, 'the card at 320');
         await press(monitor.followUpOwner.field);
