@@ -44,6 +44,7 @@ sources:
   - T335
   - T318
   - T422
+  - T452
 ---
 
 # Reading the market's history
@@ -133,6 +134,7 @@ A vendor's drawer reads the same history narrowed to that vendor on its History 
 The list has no box of its own there: its entries scroll with the drawer's body, and the next 25 arrive as their end comes into view.
 There, on the Vendors page, another vendor a change names opens in the same drawer, as the page's own vendor would, rather than following the link, so one Back still closes the drawer (E38/F13/S01); on any other page, and opened in a new tab, it is the link to Vendors.
 A deal of many applications ([the review is dealt among chosen reviewers](../rules/the-review-is-dealt-among-chosen-reviewers.md)) reads there as that vendor's own line, "dealt the application to <address>", and opens to their reviewer alone, before and after; in the market's History it reads "chose the reviewers: …", "changed the reviewers: added …, removed …" or "removed every reviewer", and "dealt N open applications among M reviewers", or "dealt the application of <vendor> to <address>" when it moved one, and a removed reviewer's follow-up "dealt the follow-up of <vendor> from <address> to <address>"; a verdict on someone else's share ends ", dealt to <address>", and in a selection's sentence each such vendor is followed by "(dealt to <address>)"; an applicant's own arrival reads "The application of <vendor> was dealt to <address> as it arrived", in their drawer "The application was dealt to <address> as it arrived".
+An application an operator's migration found in nobody's share, dealt by the next deal, reads "The application of <vendor> was dealt to <address> from nobody's share" (a follow-up "The follow-up of <vendor> was dealt to <address> from nobody's share"), in their drawer "The application was dealt to <address> from nobody's share", and several "N open applications and K follow-ups were dealt among M reviewers from nobody's share"; it reads under Applications in "Kind of change".
 A verdict given to, changed on or undone on a selection of applications reads there as that vendor's own line too, "set the application and 49 others to Approved" or "undid their verdicts on the application and 49 others: Approved back to Open", with ", dealt to <address>" when their application was someone else's share, and opens to their verdict alone, before and after; no other vendor of the selection is named there, while the market's History keeps the selection's whole sentence, each vendor named, with its rows as step 4 says.
 A Discord check reads there as that vendor's own line, "checked who is in the Discord server: Not found", and opens to their state alone, before and after; a check that left their state as it was names them not, and is not in their list.
 A "Give roles" run reads "gave the Discord role “Vendor Nov 2026”" in the drawer of a vendor it gave the role, and "… to the assigned vendors: Not found" in that of a vendor whose state it changed otherwise.
