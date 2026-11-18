@@ -154,7 +154,7 @@ Default: Viewer.
 
 Asked by:
 
-- `GET /markets/:id/history` (Manage market's History section, a vendor's drawer's History tab with `?vendor=`, and Assignment history with `?group=Assignment`)
+- `GET /markets/:id/history` (Manage market's History section, a vendor's drawer's History tab with `?own=`, and Assignment history with `?group=Assignment`)
 - `GET /markets/:id/permission-history` (the changes to the market's table)
 
 ### Export CSV (`export-csv`)
