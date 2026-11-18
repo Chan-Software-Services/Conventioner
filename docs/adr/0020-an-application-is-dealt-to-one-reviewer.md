@@ -38,7 +38,7 @@ Absent, both read as before this existed: no reviewers, first come, first served
 
 **The deal is strict round robin, in arrival order.**
 One module, [`back-end/review_team.py`](../../back-end/review_team.py), decides both fields; the writes of an application's `reviewer` are [`back-end/application_status.py`](../../back-end/application_status.py)'s, called only from there ([ADR 0037](0037-an-applications-review-state-has-one-owner.md)).
-Choosing reviewers stores the team with its turn reset, then deals every open application (the state `open`, as [ADR 0037](0037-an-applications-review-state-has-one-owner.md) reads it) round robin from the first reviewer in the order they arrived, and sets the turn to how many it dealt; the first reviewers in address order take the remainder, and the next arrivals go first to those who got one fewer.
+Choosing reviewers stores the team with its turn reset, then deals every open application (stored `open` or `under_review`; one stored with no status waits for [the status migration](../implementation/data/application-document.md#the-migration) to store `open`) round robin from the first reviewer in the order they arrived, and sets the turn to how many it dealt; the first reviewers in address order take the remainder, and the next arrivals go first to those who got one fewer.
 A deal never counts what each reviewer has left open.
 
 **Every deal holds the market, so the turn has one writer at a time.**
