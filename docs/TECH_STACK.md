@@ -270,7 +270,9 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 
 - **GitHub Actions** - CI pipeline (`.github/workflows/test.yml`)
   - Runs on pushes and pull requests to `main` or `dev`, and on a merge queue's trial commit for `dev`
-  - Its jobs, what each runs and which checks branch protection requires: [CI and the gate](implementation/testing/ci-and-the-gate.md)
+  - Its jobs, what each runs and which checks the rules of `dev` and `main` require: [CI and the gate](implementation/testing/ci-and-the-gate.md)
+- **GitHub Actions** - CodeQL's analysis (`.github/workflows/codeql.yml`)
+  - Runs on pushes and pull requests to `main` or `dev`, on a merge queue's trial commit for `dev`, and weekly on `dev`; its three `Analyze (<language>)` checks are required on `dev`: [CodeQL](implementation/testing/ci-and-the-gate.md#codeql)
 - **GitHub Actions** - Release automation (`.github/workflows/release-please.yml`)
   - Runs [release-please](https://github.com/googleapis/release-please) on pushes to `main`
   - Opens/updates a Release PR (version bump + CHANGELOG) that, when merged, tags a release
