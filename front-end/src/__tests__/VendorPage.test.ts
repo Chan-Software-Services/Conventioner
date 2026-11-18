@@ -98,6 +98,7 @@ function pageOf(overrides: Partial<VendorPageInfo> = {}): VendorPageRead {
       marketDates: ['2099-08-01'],
       ended: false,
       rememberUntil: '2099-08-01',
+      mapOpen: false,
       ...overrides,
     },
     notFound: false,
@@ -343,6 +344,65 @@ describe('what the page tells the app bar', () => {
     wrapper.unmount();
 
     expect(vendorPage('spring-market')).toBe(true);
+  });
+});
+
+/**
+ * The market's dates under its name, and while the map is open a way to it at the market's own
+ * address (T469, K1), so the vendor's side is never only a form.
+ */
+describe("the market's dates and the way to its map (T469)", () => {
+  const dates = (wrapper: Awaited<ReturnType<typeof mountPage>>) =>
+    wrapper.get('[data-testid="vendor-page-dates"]');
+  const mapLink = (wrapper: Awaited<ReturnType<typeof mountPage>>) =>
+    wrapper.findComponent<typeof RouterLinkStub>('[data-testid="vendor-page-map-link"]');
+
+  describe.each([
+    ['signed out', () => {}],
+    ['signed in', signIn],
+  ])('%s', (_name, arrive) => {
+    beforeEach(() => {
+      arrive();
+      fetchApplicantApplication.mockResolvedValue(application());
+    });
+
+    it("lists each of the market's dates in the long format, under its name", async () => {
+      fetchVendorPage.mockResolvedValue(pageOf({ marketDates: ['2099-08-01', '2099-08-02'] }));
+      const wrapper = await mountPage();
+
+      expect(dates(wrapper).attributes('aria-label')).toBe('Market dates');
+      expect(
+        dates(wrapper)
+          .findAll('li')
+          .map((li) => li.text()),
+      ).toEqual(['Saturday, August 1, 2099', 'Sunday, August 2, 2099']);
+      const header = wrapper.get('.vendor-page-header');
+      expect(header.find('[data-testid="vendor-page-dates"]').exists()).toBe(true);
+    });
+
+    it('lists no dates for a market that has none', async () => {
+      fetchVendorPage.mockResolvedValue(pageOf({ marketDates: [] }));
+      const wrapper = await mountPage();
+
+      expect(has(wrapper, 'vendor-page-market-name')).toBe(true);
+      expect(has(wrapper, 'vendor-page-dates')).toBe(false);
+    });
+
+    it('links "See the market map" to the market\'s own address while the map is open', async () => {
+      fetchVendorPage.mockResolvedValue(pageOf({ mapOpen: true }));
+      const wrapper = await mountPage();
+
+      expect(mapLink(wrapper).text()).toBe('See the market map');
+      expect(mapLink(wrapper).props('to')).toBe('/spring-market');
+    });
+
+    it('has no map link while the map is not open', async () => {
+      fetchVendorPage.mockResolvedValue(pageOf({ mapOpen: false }));
+      const wrapper = await mountPage();
+
+      expect(has(wrapper, 'vendor-page-dates')).toBe(true);
+      expect(has(wrapper, 'vendor-page-map-link')).toBe(false);
+    });
   });
 });
 

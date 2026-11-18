@@ -52,6 +52,7 @@ sources:
   - T421
   - T422
   - T411
+  - T469
 ---
 
 # Attendance and the door
@@ -145,7 +146,7 @@ It writes through `record_attendance` with `checked_in_via: door_code`, through 
 Both read their body with `json_object`, so a body that is not a JSON object is `A JSON object is required`, 400 ([a request value is a string](../conventions/a-request-value-is-a-string.md)).
 
 **The vendor page checks a scanned vendor in for today, after the sign-in it may take** ([`VendorCheckIn.vue`](../../../front-end/src/components/vendorPage/VendorCheckIn.vue), [`VendorPage.vue`](../../../front-end/src/views/VendorPage.vue)).
-The QR code opens `/<slug>?door=<code>`: the page keeps the code in this tab's `sessionStorage` (the application store's `holdDoorCode`) and takes it off the address at once with `router.replace`, and "Sign in, and you'll be checked in for today." stands over the sign-in while it waits.
+The QR code opens `/<slug>/vendor?door=<code>`, and a poster printed while the vendor page was at `/<slug>` still works, since `/<slug>?door=<code>` goes on to it ([every market page has an address](../conventions/every-market-page-has-an-address.md#old-addresses)): the page keeps the code in this tab's `sessionStorage` (the application store's `holdDoorCode`) and takes it off the address at once with `router.replace`, and "Sign in, and you'll be checked in for today." stands over the sign-in while it waits.
 Once the vendor's own read has loaded, the check-in section takes the code (`takeDoorCode`, used once) and checks them in for today's seat; with no seat today, before the market's days or once it has ended, it says so instead (`scannedCodeRefusal`) and sends nothing, and a seat already checked in to sends nothing either.
 A sign-in that ran out mid-check-in (401) takes the page back to the sign-in with the code held again for that vendor's address, so it checks them in after their next sign-in.
 A held code checks in only the vendor who scanned it, since vendors may share a device at the door: scanned with nobody signed in, it is held for no address until the sign-in sends a code to one (`requestCode`), and a sign-in at the market by any other address drops it unused (`holdSignIn`); `takeDoorCode` gives it to no other address.
@@ -223,7 +224,7 @@ So `leave_out_what_no_read_serves` in [`back-end/market_documents.py`](../../../
 A code is 6 characters of `23456789ABCDEFGHJKLMNPQRSTUVWXYZ` (no 0, O, 1 or I), each drawn by `secrets`.
 Making one loads through the change loader, answers 409 outside `market_days`, and writes through [the market write](market-write.md), holding the phase it was loaded in, so a market archived since it was loaded is not changed and the request answers the one 409 with [its sentence](market-write.md#what-it-answers); a new code replaces the old at once, so every poster of the old one stops working.
 It records `door_code_made` through the loader's Check vendors in asking, with the organizer as the actor and `replaced` in its detail, never the code.
-Its `url`, the address the QR code opens, is the vendor page with the code, `<FRONTEND_URL>/<slug>?door=<code>`.
+Its `url`, the address the QR code opens, is the vendor page with the code, `<FRONTEND_URL>/<slug>/vendor?door=<code>` (`door_url`, the slug and the code each quoted).
 
 **Attendance offers "Door code" in Market Days to whoever may check vendors in** (`offersDoorCode` in [`doorCode.ts`](../../../front-end/src/utils/doorCode.ts)), and it opens [`DoorCodeScreen.vue`](../../../front-end/src/components/DoorCodeScreen.vue) over the whole window: the market's name, the QR code, the code in two groups of three ("K7M 4QP"), "Scan with your phone's camera to check in", and who made it and when.
 It is a modal, not an `AppDialog`, which is a small window: it holds the page behind inert, takes Escape while on top and gives focus back to "Door code", as [every modal](../conventions/dialogs.md) does, and its one confirmation, "Make a new door code?", is an `AppDialog` teleported beside it that opens on Cancel.

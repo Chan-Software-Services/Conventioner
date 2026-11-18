@@ -26,6 +26,7 @@ sources:
   - T316
   - T422
   - T421
+  - T469
 ---
 
 # Publishing, and the door on market day
@@ -45,7 +46,7 @@ Both read the stored assignment, so a vendor placed, swapped or freed by hand is
 
 1. Rail: "Publish market", the main button in Assignment.
 2. "Publish market?": "Publishing opens the market's days: every vendor you assigned checks in on their vendor page with the door code you show at the entrance, from Attendance. The tables they see are the ones you have now." and "A published market cannot be returned to an earlier phase."; focus starts on Cancel.
-3. Expect Market Days, landing on Attendance, and "Vendor page" with its address and "Copy" in the rail; the rail says "Print each day's roster, then check vendors in at the door."
+3. Expect Market Days, landing on Attendance, and "Market page" and "Vendor page", each with its address and "Copy", in the rail; the rail says "Print each day's roster, then check vendors in at the door."
 
 Disabled before the click, with the rail naming the first blocker:
 
@@ -68,7 +69,8 @@ Covered by:
 **Status:** Works (read from the code as of T202, `checkin.spec.ts`).
 **Task (vendor):** "You are at the market's entrance. Check in."
 
-1. Scan the door code's QR code with the phone's own camera; it opens the market's vendor page, `/<market-slug>?door=<code>`, and the code goes from the address at once.
+1. Scan the door code's QR code with the phone's own camera; it opens the market's vendor page, `/<market-slug>/vendor?door=<code>`, and the code goes from the address at once.
+   A poster printed before the vendor page moved holds `/<market-slug>?door=<code>`, which goes on to the same address ([ADR 0039](../../adr/0039-a-markets-address-is-its-public-page.md)).
 2. Signed out, the page says "Sign in, and you'll be checked in for today." over the sign-in: an email address, then the code mailed to it ([applying online](applying-online.md)).
 3. Expect, once signed in, today's seat on top, "Today", the date and the table in words with its size and location, and "Checked in at <time>" with "Undo"; their other days are listed below.
 

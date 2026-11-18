@@ -9,7 +9,7 @@ describes:
   - back-end/app.py#publish_market_results
   - back-end/guards.py#AssignmentNotBeforeReviewGuard
   - back-end/guards.py#AssignmentComputedGuard
-verified: 2026-11-16
+verified: 2026-11-18
 sources:
   - wayfinding/readable-journey/01
   - wayfinding/rejection-visibility/02

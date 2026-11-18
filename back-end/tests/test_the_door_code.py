@@ -97,7 +97,7 @@ class TestReadingIt:
         assert set(body) == {"code", "madeAt", "madeBy", "url"}
         assert body["madeBy"] == ORGANIZER
         assert body["madeAt"]
-        assert body["url"] == f"https://conventioner.test/harbour-night-market?door={body['code']}"
+        assert body["url"] == f"https://conventioner.test/harbour-night-market/vendor?door={body['code']}"
 
     def test_it_is_read_in_any_phase_for_whoever_may_check_vendors_in(self, client, world):
         code = made(client)["code"]

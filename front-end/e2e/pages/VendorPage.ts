@@ -1,8 +1,9 @@
 import type { Locator, Page } from '@playwright/test';
+import { vendorPagePath } from '../helpers/marketScreens';
 import { ChoiceField } from './ChoiceField';
 
 /**
- * A market's vendor page, `/<slug>` (ADR 0022): signed out, the market's name and the sign-in (an
+ * A market's vendor page, `/<slug>/vendor` (ADR 0022, T469): signed out, the market's name and the sign-in (an
  * address, then a six-digit code mailed to it, no password); signed in, where the vendor stands
  * and their application, which Apply and Edit open as a form on the page itself.
  *
@@ -19,7 +20,7 @@ export class VendorPage {
 
   /** Open the page and wait for the market to answer: its name, or "page not found". */
   async goto(marketSlug: string) {
-    await this.page.goto(`/${marketSlug}`);
+    await this.page.goto(vendorPagePath(marketSlug));
     await this.page
       .getByTestId('vendor-page-market-name')
       .or(this.page.getByTestId('page-not-found'))
@@ -28,12 +29,12 @@ export class VendorPage {
   }
 
   /**
-   * Everything a visitor is shown at `/<slug>`, as text, with the slug they typed masked out: a
+   * Everything a visitor is shown at `/<slug>/vendor`, as text, with the slug they typed masked out: a
    * market with no vendor page must read exactly as a slug that names nothing, so the whole page
    * is compared, not one part of it.
    */
   async renderedText(slug: string): Promise<string> {
-    await this.page.goto(`/${slug}`);
+    await this.page.goto(vendorPagePath(slug));
     await this.page.waitForLoadState('networkidle');
     const text = (await this.page.locator('body').innerText()).trim();
     return text.split(slug).join('<slug>');
@@ -41,6 +42,16 @@ export class VendorPage {
 
   get marketName(): Locator {
     return this.page.getByTestId('vendor-page-market-name');
+  }
+
+  /** The market's dates under its name, one item a date; absent for a market with none (T469). */
+  get dates(): Locator {
+    return this.page.getByTestId('vendor-page-dates');
+  }
+
+  /** "See the market map", to the market's own address, while the public map is open (T469). */
+  get mapLink(): Locator {
+    return this.page.getByTestId('vendor-page-map-link');
   }
 
   get notFound(): Locator {
@@ -180,7 +191,7 @@ export class VendorPage {
 
   /** Open the page as the door's QR code does, on `?door=<code>`. */
   async gotoWithDoorCode(marketSlug: string, code: string) {
-    await this.page.goto(`/${marketSlug}?door=${encodeURIComponent(code)}`);
+    await this.page.goto(`${vendorPagePath(marketSlug)}?door=${encodeURIComponent(code)}`);
     await this.marketName.or(this.page.getByTestId('page-not-found')).waitFor();
   }
 

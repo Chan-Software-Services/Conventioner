@@ -1,9 +1,10 @@
-"""One vendor page per market, at its own address (T202, ADR 0022).
+"""One vendor page per market, at `/<slug>/vendor` (T202, ADR 0022, ADR 0039).
 
 `vendor_page_market_by_slug` decides whether a market has a vendor page, and every vendor read and
 sign-in goes through it. The page's own public read, `GET /public/markets/<slug>/vendor-page`, says
-what the page needs before anyone signs in, and answers a market the gate does not serve exactly as
-it answers a slug that names nothing, so a stranger learns nothing of a draft or a gated market.
+what the page needs before anyone signs in, which the market page at `/<slug>` reads too, and
+answers a market the gate does not serve exactly as it answers a slug that names nothing, so a
+stranger learns nothing of a draft or a gated market.
 """
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -19,6 +20,9 @@ import remembered_sign_ins as RememberedSignIns
 from conftest import FakeSlugMarketsCollection, stored_market
 from datatypes import MarketPhase, market_name_slug
 from market_documents import vendor_page_market_by_slug
+from test_the_public_map import (  # noqa: F401 - the world fixture by name
+    _a_form_markets_results_not_out, _archived, _no_layout, _off, world,
+)
 
 SLUG = market_name_slug("Test Market")
 VENDOR = "vendor@example.com"
@@ -119,6 +123,7 @@ class TestThePagesPublicRead:
             "marketDates": ["2099-08-01", "2099-08-02"],
             "ended": False,
             "rememberUntil": body["rememberUntil"],
+            "mapOpen": False,
         }
 
     def test_a_stopped_form_takes_no_applications(self, client, markets):
@@ -166,6 +171,31 @@ class TestThePagesPublicRead:
 
         assert refused == unknown
         assert refused[0] == 404
+
+
+def _everything_open(doc):
+    """The map's world as it is: in its market days, the switch on, two locations laid out."""
+
+
+class TestTheMapFlag:
+    """`mapOpen` says whether the market's address shows its public map, so it must say exactly
+    what the map's own read would answer (T469): both read one statement of the map's gate."""
+
+    @pytest.mark.parametrize(
+        ("state", "is_open"),
+        [(_everything_open, True), (_off, False), (_no_layout, False),
+         (_a_form_markets_results_not_out, False), (_archived, False)],
+        ids=["everything-open", "switch-off", "nothing-laid-out", "results-not-out", "archived"],
+    )
+    def test_it_is_whether_the_map_answers(self, client, world, state, is_open):
+        state(world.doc)
+
+        page = client.get(f"/public/markets/{SLUG}/vendor-page")
+        the_map = client.get(f"/public/markets/{SLUG}/map")
+
+        assert page.status_code == 200
+        assert the_map.status_code == (200 if is_open else 404)
+        assert page.get_json()["mapOpen"] is is_open
 
 
 class TestRememberUntil:

@@ -2,7 +2,8 @@
 /**
  * The Public map card, on the market's Tools tab, after Discord's (T422, D25, D26, D30).
  *
- * The public map is a page anyone may open at `/<slug>/map`, with no sign-in, drawing each market
+ * The public map is a page anyone may open at the market's own address, `/<slug>`, with no sign-in
+ * (T469): once the map is open it is what the market page shows. It draws each market
  * day's tables and who is at them. It publishes three answers of each vendor and nothing else of
  * them (ADR 0035): the form's short text questions an Admin points at here for the public name,
  * the website and the Instagram handle. The switch turns it on, and only once a name is chosen.
@@ -22,7 +23,7 @@ import ChoiceField from '@/components/ChoiceField.vue';
 import ElementSettingContainer from '@/components/elements/ElementSettingContainer.vue';
 import { api, getApiErrorMessage } from '@/utils/api';
 import { formTextQuestions } from '@/utils/discordQuestion';
-import { layoutPath } from '@/utils/market';
+import { layoutPath, marketPagePath } from '@/utils/market';
 import { MarketAction, actionRefusal } from '@/utils/marketActions';
 import { useCopyAddress } from '@/utils/useCopyAddress';
 import { vendorsWereTold } from '@/utils/vendorPage';
@@ -131,10 +132,10 @@ const missing = computed<'archived' | 'layout' | 'results' | null>(() => {
   return null;
 });
 
-/** The map's address: the vendor page's, `/<slug>`, as the rail and Publish results build it, and
- * `/map` under it (D31). */
+/** The map's address: the market page's, `/<slug>`, as the rail's "Market page" builds it, which
+ * shows the map once it is open (D31, T469). */
 const mapUrl = computed(() =>
-  props.market.slug ? `${window.location.origin}/${props.market.slug}/map` : '',
+  props.market.slug ? `${window.location.origin}${marketPagePath(props.market.slug)}` : '',
 );
 const { copied, copy } = useCopyAddress();
 </script>

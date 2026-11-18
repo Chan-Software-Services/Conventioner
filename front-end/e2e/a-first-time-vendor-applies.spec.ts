@@ -1,4 +1,5 @@
 import { test, expect, TEST_USER, BACKEND_URL, VendorPage } from './fixtures';
+import { vendorPagePath } from './helpers/marketScreens';
 import {
   createApplicantLoginChallenge,
   planSetupObject,
@@ -32,7 +33,7 @@ test('a brand-new address requests a code, signs in, applies and sees it submitt
 
   // The real request, through the page.
   const login = new VendorPage(page);
-  await page.goto(`/${market.marketSlug}`);
+  await page.goto(vendorPagePath(market.marketSlug));
   await login.requestCode(NEW_VENDOR);
   await expect(login.codeInput).toBeVisible();
 
@@ -41,11 +42,11 @@ test('a brand-new address requests a code, signs in, applies and sees it submitt
   await login.enterCode(CODE);
 
   // Signed in with nothing to load: "Apply", not "Sign In" again, then the empty form, on the
-  // market's own address (ADR 0022).
+  // vendor page's own address, `/<market>/vendor` (ADR 0022).
   await expect(login.info).toContainText('You have not applied to this market yet.');
   await login.applyButton.click();
   await expect(login.form).toBeVisible({ timeout: 30000 });
-  await expect(page).toHaveURL(new RegExp(`/${market.marketSlug}$`));
+  await expect(page).toHaveURL(new RegExp(`${vendorPagePath(market.marketSlug)}$`));
   await expect(login.essentialEmail).toContainText(NEW_VENDOR);
 
   await login.fullNameInput.fill('Ada Newcomer');
@@ -84,7 +85,7 @@ test('a vendor a rule rejects as they apply reads "Submitted", as anyone would',
 
   const vendor = 'turned-away-vendor@example.com';
   const login = new VendorPage(page);
-  await page.goto(`/${market.marketSlug}`);
+  await page.goto(vendorPagePath(market.marketSlug));
   await login.requestCode(vendor);
   createApplicantLoginChallenge(market.marketId, vendor, CODE);
   await login.enterCode(CODE);
@@ -118,7 +119,7 @@ test('signing in does not assume the vendor has applied', async ({ page, request
     TEST_USER.password,
   );
   const login = new VendorPage(page);
-  await page.goto(`/${market.marketSlug}`);
+  await page.goto(vendorPagePath(market.marketSlug));
 
   await expect(page.getByTestId('vendor-sign-in-email-step')).not.toContainText('used to apply');
   await login.requestCode(NEW_VENDOR);

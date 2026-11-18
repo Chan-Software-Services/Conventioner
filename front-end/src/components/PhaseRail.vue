@@ -12,8 +12,9 @@
  *   beside it, with the market's position marked and completed stages filled.
  * - **The actions.** One prominent forward action; back and destructive edges behind a menu.
  *   Which is which is read off the spine, not special-cased per phase.
- * - **The vendor page's address.** The market's one public page, with Copy, from the moment it
- *   has one: nothing in the product used to tell the organizer its address existed (`E10/F01/S02`).
+ * - **The market's addresses.** Its market page, for the public, and its vendor page, for its
+ *   vendors, each with Copy, from the moment the market has them: nothing in the product used to
+ *   tell the organizer its address existed (`E10/F01/S02`, T469).
  * - **The next step** (E31/F02/S02). One sentence for the market's phase and intake path, from
  *   `utils/marketGuide.ts`, linking to where it is done. A move the server would refuse is drawn
  *   disabled and the sentence is its first blocker, so the rail says no before the click.
@@ -39,7 +40,7 @@ import { useEscapeToClose } from '@/utils/useEscapeToClose';
 import ScrollBox from '@/components/ScrollBox.vue';
 import AppDialog from '@/components/AppDialog.vue';
 import OpenApplicationsDialog from '@/components/market/OpenApplicationsDialog.vue';
-import { isHere, marketPath, resolutionPath } from '@/utils/market';
+import { isHere, marketPagePath, marketPath, resolutionPath, vendorPagePath } from '@/utils/market';
 import {
   blockersFor,
   firstInTheWay,
@@ -157,33 +158,27 @@ function stepState(index: number): 'done' | 'current' | 'todo' | 'frozen' {
   return 'todo';
 }
 
-// ── The vendor page's URL (ADR 0022) ───────────────────────────────────────
+// ── The market's addresses (ADR 0022, T469) ────────────────────────────────
 
 /**
- * A market's vendor page, `/<slug>`, from the moment it has one: the one address its vendors keep,
- * from applying, or from their results on a Google Form market, to the last market day
- * (`sharesVendorPage`).
+ * The market's public addresses, each a chip on the rail, from the moment it has them: its market
+ * page, `/<slug>`, which the organizer shares with the public, then its vendor page,
+ * `/<slug>/vendor`, the one address its vendors keep, from applying, or from their results on a
+ * Google Form market, to checking in at the door on the last market day (`sharesVendorPage`).
  *
- * Before then the page answers as a market that does not exist, and a chip would hand the
- * organizer a link to a page that deliberately tells them nothing. Archived, it stays only for a
- * market that ran: its page is then the record of where its vendors sat.
+ * Before then both pages answer as a market that does not exist, and a chip would hand the
+ * organizer a link to a page that deliberately tells them nothing. Archived, they stay only for a
+ * market that ran: its vendor page is then the record of where its vendors sat.
  */
-const vendorPageUrl = computed(() => {
-  if (!props.market || !sharesVendorPage(props.market)) return '';
-  const slug = props.market.slug;
-  if (!slug) return '';
-  return `${window.location.origin}/${slug}`;
+const addresses = computed(() => {
+  const slug = props.market?.slug;
+  if (!props.market || !slug || !sharesVendorPage(props.market)) return [];
+  const origin = window.location.origin;
+  return [
+    { id: 'market-page', label: 'Market page', url: `${origin}${marketPagePath(slug)}` },
+    { id: 'vendor-page', label: 'Vendor page', url: `${origin}${vendorPagePath(slug)}` },
+  ];
 });
-
-/**
- * The market's public addresses, each a chip on the rail: its vendor page, where its vendors also
- * check in, with the door code (ADR 0022).
- */
-const addresses = computed(() =>
-  [{ id: 'vendor-page', label: 'Vendor page', url: vendorPageUrl.value }].filter(
-    (address) => address.url,
-  ),
-);
 
 /** The app's phone break (`base.css`), where a chip names its address rather than showing it. */
 const onAPhone = useMediaQuery('(width <= 640px)');
@@ -570,7 +565,13 @@ function cancelPending() {
       <!-- The rail's end: the public addresses and the actions travel together, so a row that cannot
            hold them all gives them a second row of their own rather than leaving a lone button
            beside an empty band (bug 11, claims-and-room 07). -->
-      <div class="phase-rail-end" :class="{ 'phase-rail-end--addresses': addresses.length }">
+      <div
+        class="phase-rail-end"
+        :class="{
+          'phase-rail-end--addresses': addresses.length,
+          'phase-rail-end--both': addresses.length > 1,
+        }"
+      >
         <!-- Publishing put a public page on the air and nothing has ever said so (E10/F01/S02). -->
         <div
           v-for="address in addresses"
@@ -963,7 +964,10 @@ function cancelPending() {
  * The addresses and the actions, as one item of the row (bug 11). With only actions it is as wide as
  * they are. With an address it asks for room enough to show a useful part of one beside them, and
  * takes a row of its own where the row has less - so at the workspace width the rail is one row, and
- * below it the second row is designed: addresses at its start, actions at its end (E30/F01/S03).
+ * below it the second row is designed: addresses at its start, actions at its end. With both
+ * addresses it asks for room to show each whole, so it stays beside the spine only where both whole
+ * addresses and the actions fit there, and takes the second row for a long address: 34rem fitted
+ * beside the spine and squeezed the two into "localhost:5…" (E30/F01/S03).
  */
 .phase-rail-end {
   display: flex;
@@ -982,7 +986,40 @@ function cancelPending() {
   flex: 1 1 34rem;
 }
 
-/* The vendor page's address, with Copy (E18/F04/S02). */
+.phase-rail-end--both {
+  flex-basis: auto;
+  flex-wrap: wrap;
+}
+
+/* Both addresses share the end's row with the actions, each shortening alike to make room and
+   never past its floor: as wide as its whole address they took a row each, with More… alone beside
+   an empty band at 1920 (T142). Above the phone break only, as is the tablet's rule within it: a
+   phone's rail is under 45rem too, and the phone's own rule below is the one that sizes its chips. */
+@media (width > 640px) {
+  .phase-rail-end--both .url-chip {
+    flex: 1 1 18rem;
+    max-width: max-content;
+  }
+
+  /* Narrower than both floors, the gaps and More… (about 703px of rail), as the door, Tools and
+     the Assignments page are on a tablet, a chip takes a row of its own and More… stands beside the
+     second: the two filled the first row and left More… alone on the next (T142). */
+  @container phase-rail (width < 45rem) {
+    .phase-rail-end--both {
+      row-gap: var(--space-2);
+    }
+
+    /* As tall as More… beside the second, so the two read as a pair: alone, the first was 5px
+       less. */
+    .phase-rail-end--both .url-chip {
+      flex-basis: calc(50% + var(--space-6));
+      max-width: none;
+      min-height: var(--control-height);
+    }
+  }
+}
+
+/* A market's address, with Copy: the market page, then the vendor page (E18/F04/S02, T469). */
 .url-chip {
   display: flex;
   align-items: center;

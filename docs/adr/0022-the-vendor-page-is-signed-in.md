@@ -6,11 +6,12 @@ describes:
   - back-end/api/applicants.py#get_vendor_page
   - back-end/remembered_sign_ins.py
   - front-end/src/views/VendorPage.vue
-verified: 2026-11-10
+verified: 2026-11-18
 sources:
   - T202
   - T191
   - T318
+  - T469
 status: accepted
 ---
 
@@ -28,16 +29,18 @@ And at the sign-in a mistyped code was burnt on its first try, while the page we
 
 ## Decision
 
-**One vendor page per market, at the market's own address, `/<slug>`.**
+**One vendor page per market, at `/<slug>/vendor`.**
+Amended 2026-11-18 (T469, [ADR 0039](0039-a-markets-address-is-its-public-page.md)): the vendor page was at the market's own address, `/<slug>`, which is now the market page, for anyone; the vendor page moved to `/<slug>/vendor`, and `/<slug>?door=<code>` goes on to it, so a poster printed before still checks a vendor in.
 Signed out, it names the market and asks for an email address and then the code sent to it.
 Signed in, it shows what fits the market's state: the application while applications are open, the application read-only and "Submitted" while the review and the assignment run, the result ("You have a table" with each day's table, or "You did not get assigned") once results are published, check-in on the market days, and the record of where the vendor sat and when they came once the market is archived after running ([an archived market that ran stays a record](../business/rules/an-archived-market-that-ran-stays-a-record.md)).
 It replaces the bare market home, the separate sign-in page, "Your application", the application form page and the public check-in page; their addresses (`/apply`, `/applicant-login`, `/applicant/dashboard`, `/check-in` under the slug) are deleted, not redirected, since nobody uses them (Daniel).
 The code email links to it and calls it "your page for <market>".
+Under the market's name it shows the market's dates, signed in or out, and while the public map is open a link to it, "See the market map".
 
 **One lookup decides whether a market has a vendor page**: `vendor_page_market_by_slug` in [`back-end/market_documents.py`](../../back-end/market_documents.py), a market at the slug, not a draft, and either its intake mode is `form`, or it is `csv` and its results are published or it has reached `market_days`.
 Everything else answers as a slug that names nothing, as [a gated market answers as absent](../business/rules/a-gated-market-answers-as-absent.md) requires.
 The sign-in, the vendor's own read and the vendor's check-in go through it; applying stays behind `applicant_intake_market_by_slug`, which only a `form` market passes.
-`GET /public/markets/<slug>/vendor-page` (`get_vendor_page` in [`back-end/api/applicants.py`](../../back-end/api/applicants.py)) says what the page needs before sign-in, or the gate's not-found; the page itself is [`front-end/src/views/VendorPage.vue`](../../front-end/src/views/VendorPage.vue), a thin frame over one section component per part.
+`GET /public/markets/<slug>/vendor-page` (`get_vendor_page` in [`back-end/api/applicants.py`](../../back-end/api/applicants.py)) says what the page needs before sign-in, or the gate's not-found, and the market page at `/<slug>` reads the same answer, so the one lookup gates both; the page itself is [`front-end/src/views/VendorPage.vue`](../../front-end/src/views/VendorPage.vue), a thin frame over one section component per part.
 
 **Every vendor read and write is behind the emailed code.**
 No vendor's seats, result or check-in is readable or changeable without signing in as that vendor.
@@ -81,7 +84,7 @@ Publish results says vendors read their result on the vendor page, that no email
 
 ## Consequences
 
-- The organizer's rail shows one "Vendor page" chip with the address and Copy, where it showed the application page's.
+- The organizer's rail shows a "Vendor page" chip with the address and Copy, where it showed the application page's; since ADR 0039 a "Market page" chip stands before it.
 - A vendor keeps one link from applying to the last market day.
 - A vendor with a dead phone, no signal or a mistyped imported address is checked in by the organizer at Attendance; editing a vendor's address is not part of this.
 - An imported vendor now signs in, which proves the address the code was sent to; still nothing is mailed to an address that did not ask ([an imported email is asserted](../business/rules/an-imported-email-is-asserted.md)).

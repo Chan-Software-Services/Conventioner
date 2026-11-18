@@ -517,8 +517,8 @@ def main():
     print()
     print(f"Organizer:   {FRONTEND}/login  ({EMAIL} / {PASSWORD})")
     if slug:
-        print(f"Public page: {FRONTEND}/{slug}")
-        print(f"Public map:  {FRONTEND}/{slug}/map")
+        print(f"Market page: {FRONTEND}/{slug}")
+        print(f"Vendor page: {FRONTEND}/{slug}/vendor")
 
 
 try:

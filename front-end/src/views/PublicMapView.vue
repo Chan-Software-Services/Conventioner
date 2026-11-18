@@ -1,8 +1,10 @@
 <script setup lang="ts">
 /**
- * A market's public map, at `/<market-slug>/map` (T422, D31 to D35): anyone, with no sign-in, picks
- * a market day and a location, presses a table or finds a vendor by name, and reads the public
- * name, website and Instagram the organizer chose to publish, and nothing else of them (D26).
+ * A market's public map, at the market's own address, `/<market-slug>`, where the market page
+ * (`MarketPublicView`) shows it while the map is open, keyed by the slug; `/<market-slug>/map` lands
+ * there (T422, D31 to D35, ADR 0039). Anyone, with no sign-in, picks a market day and a location,
+ * presses a table or finds a vendor by name, and reads the public name, website and Instagram the
+ * organizer chose to publish, and nothing else of them (D26).
  *
  * It is one sheet filling the window under the app bar, on the paper of its backdrop, and the page
  * never scrolls (T465): the map side holds the market's name, the day and hall selects at its top
@@ -97,7 +99,7 @@ watch(map, (now) => {
   document.title = now ? `${now.marketName} map` : titleBefore;
 });
 
-/** Each read is numbered, so one answering after the address moved to another market is dropped. */
+/** Each read is numbered, so only the latest is kept, and none once the page has gone. */
 let reads = 0;
 
 async function load() {
@@ -188,15 +190,6 @@ function forgetImages() {
   for (const id of Object.keys(imageUrls)) delete imageUrls[id];
   asked.clear();
 }
-
-// The app's one RouterView is unkeyed, so an in-app move to another market's map keeps this page:
-// it reads that market's map afresh, its images with it. A move off the page reads nothing.
-watch(marketSlug, (now, before) => {
-  if (now === before || route.name !== 'public-map') return;
-  forgetImages();
-  map.value = null;
-  void load();
-});
 
 onUnmounted(() => {
   gone = true;

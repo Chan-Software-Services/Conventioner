@@ -43,7 +43,7 @@ Finished. A market that has run and is over, or one abandoned before it ever ran
 _Avoid_: Published, closed
 
 **Intake mode**:
-How a market receives its vendors - by importing a CSV, or through the public application form. Exactly one, chosen while the market is a draft and frozen thereafter. It decides whether vendors apply on the market's page and when that page first answers (a CSV market's once its results are published), but never gates check-in, and never gates authoring the form itself: a CSV market still has an application form, because the essential questions define the offering the CSV maps onto.
+How a market receives its vendors - by importing a CSV, or through the public application form. Exactly one, chosen while the market is a draft and frozen thereafter. It decides whether vendors apply on the market's vendor page and when its market page and vendor page first answer (a CSV market's once its results are published), but never gates check-in, and never gates authoring the form itself: a CSV market still has an application form, because the essential questions define the offering the CSV maps onto.
 See [Intake mode](docs/business/concepts/intake-mode.md).
 
 **CSV import**:
@@ -58,6 +58,23 @@ What the product suggests each column of a CSV becomes - a plan fact, an essenti
 _Avoid_: Draft (a phase), suggestion, guess
 
 ### Applying
+
+**Market page**:
+A market's public page, at its own address `/<market>`, for anyone, signed in or out, in every stage.
+It is the **application call** while the market takes applications, the **public map** while the map is open, and otherwise a notice of where the market stands: applications are closed, the map isn't published yet, or the market has ended.
+Each leads to the **vendor page**; a market with no vendor page answers "Page not found" here, as an address naming nothing does.
+_Avoid_: Market home, landing page, vendor page (that is the vendor's side)
+See [ADR 0039](docs/adr/0039-a-markets-address-is-its-public-page.md).
+
+**Application call**:
+The **market page** while a market whose vendors apply on its page takes applications: its name, its dates, "Applications are open.", Apply and a sign-in for a vendor who already applied, both leading to the **vendor page**.
+_Avoid_: Application page, application form (the form is on the vendor page)
+
+**Vendor page**:
+A market's page for its vendors, at `/<market>/vendor`, behind the emailed sign-in code: the sign-in, the application, the result, the seats and the door's check-in, with the market's dates and, while the map is open, a link to the **market page**.
+The sign-in code email and the door's QR code open it, and the organizer shares it for vendors.
+_Avoid_: Market page (that is the public one), applicant portal
+See [ADR 0022](docs/adr/0022-the-vendor-page-is-signed-in.md).
 
 **Applicant**:
 A vendor-to-be who has applied to a market. Keyed by email and called by the name they chose, and authenticated separately from organizers via an emailed login code. The email is the identifier the system matches on; the name is what people read.
@@ -264,7 +281,7 @@ The drawing of a location's **layout** on one **market date**, each table drawn 
 _Avoid_: Floorplan, seating chart
 
 **Public map**:
-The **day map** anyone may open at the market's address, with no sign-in, showing only the answers the organizer chose to publish: a public name, a website and an Instagram handle.
+The **day map** the **market page** shows while the map is open, to anyone with no sign-in, showing only the answers the organizer chose to publish: a public name, a website and an Instagram handle.
 Off until an Admin turns it on, and open only once results are out and until the market is archived.
 Its address may name one table, and one half of a shared table, so a vendor's link or QR code opens their half alone.
 _Avoid_: Vendor map, directory; "vendor map" is only the page's subtitle to visitors (Daniel's design), never a name for the page in code or docs

@@ -10,7 +10,9 @@ describes:
   - front-end/src/utils/vendorDrawer.ts
   - front-end/src/utils/market.ts#isHere
   - front-end/src/utils/market.ts#layoutPath
-verified: 2026-11-14
+  - front-end/src/utils/market.ts#marketPagePath
+  - front-end/src/utils/market.ts#vendorPagePath
+verified: 2026-11-18
 sources:
   - wayfinding/readable-journey/map
   - wayfinding/the-assignment-tab/01
@@ -32,6 +34,7 @@ sources:
   - T223
   - T257
   - T422
+  - T469
 ---
 
 # Every market page has an address
@@ -53,13 +56,17 @@ The routes are in [`front-end/src/router/index.ts`](../../../front-end/src/route
   `/markets/:marketId/layout` alone opens the market's first named location's layout, and its address is built by `layoutPath(marketId, locationId)` beside `marketPath()` ([the layout page](../modules/floorplan-placement.md#the-layout-page), T257).
 - `/dev/components` and `/dev/components/:entry` are not market pages either: they are the [component library](../modules/component-library.md), registered only in a development build, so in production they are "page not found" as any unknown address is.
 - `/discord/connected` is not a market page: it is where Discord's approval screen sends the organizer back, its market named by the state it carries, in the tab Connect Discord opened; it says the outcome and links to that market's Tools ([the Discord connection](../modules/discord.md)).
-- `/:marketSlug` alone is the vendor page, [`VendorPage`](../../../front-end/src/views/VendorPage.vue), flagged `meta.vendorFacing` so the app bar shows it the vendors' way to everyone, an organizer included.
-  A slug naming no market, or a gated market's (a draft's included), answers "Page not found" on the same route, and the organizer keeps the full bar there ([the app bar](../modules/app-bar.md)).
-- `/:marketSlug/map` is the market's [public map](../modules/public-map-page.md), [`PublicMapView`](../../../front-end/src/views/PublicMapView.vue), public and `meta.vendorFacing` as the vendor page is, answering "Page not found" alike while the map is closed; it keeps its day, location and table in its query, `?date=<YYYY-MM-DD>&location=<id>&table=<id>`, with `router.replace`, so a printed link or QR code opens one table on one day.
+- `/:marketSlug` alone is the market page (`market-page`, [ADR 0039](../../adr/0039-a-markets-address-is-its-public-page.md)), [`MarketPublicView`](../../../front-end/src/views/MarketPublicView.vue), for anyone in every stage: the market's [public map](../modules/public-map-page.md), [`PublicMapView`](../../../front-end/src/views/PublicMapView.vue), while it is open, the application call while the market takes applications, and otherwise a notice of where it stands.
+  The map keeps its day, location and table in the query, `?date=<YYYY-MM-DD>&location=<id>&table=<id>`, with `router.replace`, so a printed link or QR code opens one table on one day.
+- `/:marketSlug/vendor` is the vendor page (`vendor-page`), [`VendorPage`](../../../front-end/src/views/VendorPage.vue), where a vendor signs in and reads their application, result and seats ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)).
+- Both are public and flagged `meta.vendorFacing`, so the app bar shows them the vendors' way to everyone, an organizer included.
+  A slug naming no market, or a gated market's (a draft's included), answers "Page not found" alike on both routes, and the organizer keeps the full bar there ([the app bar](../modules/app-bar.md)).
+  A deeper address under a slug (`/<slug>/vendor/<anything>`, `/<slug>/apply`) falls to the catch-all, "Page not found".
 - `/markets/:marketId` alone is [`MarketLanding`](../../../front-end/src/views/MarketLanding.vue), which opens the market, shows the frame's arrival, and then replaces itself with the page the market is worked on in its phase: `currentPage` in [the market guide](../modules/market-guide.md), a reading of the guide's table.
   Opening a market from the list, its "Previously opened" line or a new market all come through it ([`openMarket`](../../../front-end/src/utils/market.ts)), so none of them has to know which page a phase belongs to.
 
-**Every address is built with [`marketPath()`](../../../front-end/src/utils/market.ts)**; nothing spells a market path by hand.
+**Every address is built with [`marketPath()`](../../../front-end/src/utils/market.ts)**, and the market page's and the vendor page's with `marketPagePath()` and `vendorPagePath()` beside it, each slug encoded; nothing spells a market path by hand.
+The E2E specs build the two public ones with the twins of the same name in `front-end/e2e/helpers/marketScreens.ts`, but for `intake-mode.spec.ts`, which walks every address under a slug, deeper ones that name no page among them, as the slug and a suffix.
 
 ## A page's own state is replaced, the drawer's opening is pushed
 
@@ -73,6 +80,8 @@ Two old names of a market's pages forward, each with its query: `/markets/:marke
 The Assignment and Result pages took those names ([the assignment and its result](../../business/flows/assignment-and-result.md)) after production's release of 2026-10-18, which still serves the old ones, so they are what organizers have bookmarked; they can go after a release or two.
 `/dashboard`, where signing in landed until Markets took over, and `/` forward to `/markets`.
 `/markets/:marketId/floorplan`, the floorplan beta's wizard, forwards to `/markets/:marketId/layout`, which opens the market's first location's layout, since a location's layout took the beta's place (T257).
+`/:marketSlug/map`, the public map's address before T469, forwards to `/:marketSlug` with its query and hash, so a shared link opens the same day, location and table.
+`/:marketSlug?door=<code>`, which a door poster printed while the market's address was the vendor page holds, forwards to `/:marketSlug/vendor?door=<code>`, on the way in (the route's `beforeEnter`) and on a second scan in an open tab (the market page's watch of the query).
 
 Nothing else is kept for an old link, since nothing links to it:
 
@@ -91,7 +100,7 @@ The blocker panel compares the resolved full address.
 ## What breaks it
 
 - A screen that reads its market from anything but the route's id.
-- A link built by string concatenation instead of `marketPath()`.
+- A link built by string concatenation instead of `marketPath()`, `marketPagePath()` or `vendorPagePath()`.
 - A `resolution_link` naming an old address: it would be followed through a forward, or to "Page not found".
 - A new market page added without its route, so it cannot be bookmarked.
 
