@@ -110,7 +110,7 @@ async function dragAndPlace(
 }
 
 test.describe('Rows fill a hall', () => {
-  test('a hall shown whole is fitted again as the window is made taller, narrower and shorter, and a view zoomed is kept', async ({
+  test('a hall shown whole is fitted again as the window is made taller, then narrower, then as it was, and a view zoomed is kept', async ({
     authenticatedPage: page,
     request,
   }) => {
