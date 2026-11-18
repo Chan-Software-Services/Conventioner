@@ -6,14 +6,20 @@ with thousands of entries reads its first page as quickly as a market with ten, 
 asks Mongo for one page and a cursor, never for the whole history.
 """
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
-from conftest import FakeMarketsCollection, mongo_matches, mongo_project, stored_market
+from conftest import (
+    FakeMarketsCollection, mongo_matches, mongo_project, sessions_load_through_get_user,
+    stored_market,
+)
 
+import app as app_module
 import api.market_actions as Actions
 import api.markets as MarketsApi
 import api.permissions as PermissionsApi
+import api.users as UsersApi
 import history as History
 from datatypes import MarketRole
 from lookup_indexes import LOOKUP_INDEXES
@@ -602,6 +608,261 @@ class TestTheEndpoint:
         _body, status = MarketsApi.get_history("nope", "viewer@x.test", {})
 
         assert status == 404
+
+
+ANA, BEN, CY = "ana@x.test", "ben@x.test", "cy@x.test"
+NAMES = {ANA: "Ana Vendor", BEN: "Ben Vendor", CY: "Cy Vendor"}
+
+
+def _selection(history, minutes=1):
+    """A selection's verdicts over three vendors, Ben's application dealt to someone else."""
+    return entry(
+        history, minutes, kind="verdicts", vendors=[ANA, BEN, CY],
+        subject={"application_ids": ["a1", "a2", "a3"]},
+        detail={
+            "before": {"a1": {"status": "pending"}, "a2": {"status": "pending"},
+                       "a3": {"status": "pending"}},
+            "after": {"a1": {"status": "approved"}, "a2": {"status": "approved"},
+                      "a3": {"status": "approved"}},
+            "dealt_to": {"a1": "priya@x.test", "a2": "sam@x.test"},
+        })
+
+
+def _deal(history, minutes=2):
+    """A deal of two applications among the reviewers, one of them a follow-up handed on."""
+    return entry(
+        history, minutes, action="choose-reviewers", kind="dealt", vendors=[BEN, ANA],
+        subject={"application_ids": ["a2", "a1"]},
+        detail={
+            "cause": "reviewers_changed",
+            "before": {"a2": {"reviewer": None}, "a1": {"reviewer": None}},
+            "after": {"a2": {"reviewer": "sam@x.test"},
+                      "a1": {"reviewer": "priya@x.test", "follow_up_owner": "priya@x.test"}},
+        })
+
+
+def _check(history, minutes=3):
+    """A Discord check whose vendors leave out an application with no address, so they do not
+    pair with its ids by position: each address is in the detail by id."""
+    return entry(
+        history, minutes, action="connect-discord", kind="discord_checked", vendors=[BEN, ANA],
+        subject={"application_ids": ["a4", "a2", "a1"]},
+        detail={
+            "before": {"a4": None, "a2": None, "a1": None},
+            "after": {"a4": "not_found", "a2": "in_server", "a1": "has_role"},
+            "addresses": {"a4": None, "a2": BEN, "a1": ANA},
+            "counts": {"has_role": 1, "in_server": 1, "not_found": 1},
+        })
+
+
+def _roles_given(history, minutes=4):
+    return entry(
+        history, minutes, action="connect-discord", kind="discord_roles_given",
+        vendors=[ANA, CY], subject={"application_ids": ["a1", "a3"]},
+        detail={
+            "role_name": "Vendor Nov 2026", "given": ["a1", "a3"],
+            "before": {"a1": "in_server", "a3": "in_server"},
+            "after": {"a1": "has_role", "a3": "has_role"},
+            "addresses": {"a1": ANA, "a3": CY},
+            "counts": {"given": 2},
+        })
+
+
+def _served(body, entry_id):
+    [served] = [each for each in body["entries"] if each["id"] == entry_id]
+    return served
+
+
+class TestOneVendorsOwnPart:
+    """What a vendor's drawer reads (T468 review note 1): the entries naming the vendor, each
+    many-vendor one narrowed to the vendor's own application, and the names of only the vendors
+    those entries still hold, so the server sends no more than the drawer shows."""
+
+    @pytest.fixture(autouse=True)
+    def names(self, market, monkeypatch):
+        monkeypatch.setattr(MarketsApi.ApplicationsApi, "vendor_names_for_market",
+                            lambda _market_id: dict(NAMES))
+        _as(monkeypatch, MarketRole.VIEWER)
+
+    def test_a_selections_verdicts_are_narrowed_to_the_vendors_own_application(self, history):
+        _selection(history)
+
+        body, status = MarketsApi.get_history(MARKET, "viewer@x.test", {"own": "Ana@X.test"})
+
+        assert status == 200
+        served = _served(body, "e-00001")
+        assert served["vendors"] == [ANA]
+        assert served["subject"] == {"application_ids": ["a1"]}
+        assert served["detail"] == {
+            "before": {"a1": {"status": "pending"}},
+            "after": {"a1": {"status": "approved"}},
+            "dealt_to": {"a1": "priya@x.test"},
+        }
+        # How many the selection decided, so the drawer still says "and 2 others".
+        assert served["applicationCount"] == 3
+        assert body["vendorNames"] == {ANA: "Ana Vendor"}
+
+    def test_a_deal_is_narrowed_to_the_vendors_own_share(self, history):
+        _deal(history)
+
+        body, _status = MarketsApi.get_history(MARKET, "viewer@x.test", {"own": ANA})
+
+        served = _served(body, "e-00002")
+        assert served["vendors"] == [ANA]
+        assert served["subject"] == {"application_ids": ["a1"]}
+        assert served["detail"] == {
+            "cause": "reviewers_changed",
+            "before": {"a1": {"reviewer": None}},
+            "after": {"a1": {"reviewer": "priya@x.test", "follow_up_owner": "priya@x.test"}},
+        }
+        assert served["applicationCount"] == 2
+        assert body["vendorNames"] == {ANA: "Ana Vendor"}
+
+    def test_a_discord_check_is_narrowed_by_the_address_it_holds_for_each_application(
+            self, history):
+        _check(history)
+
+        body, _status = MarketsApi.get_history(MARKET, "viewer@x.test", {"own": ANA})
+
+        served = _served(body, "e-00003")
+        assert served["vendors"] == [ANA]
+        assert served["subject"] == {"application_ids": ["a1"]}
+        assert served["detail"] == {
+            "before": {"a1": None},
+            "after": {"a1": "has_role"},
+            "addresses": {"a1": ANA},
+            # How many the check found in each state names no vendor: it is the check's own.
+            "counts": {"has_role": 1, "in_server": 1, "not_found": 1},
+        }
+        assert served["applicationCount"] == 3
+
+    def test_a_roles_run_is_narrowed_to_whether_the_vendor_was_given_the_role(self, history):
+        _roles_given(history)
+
+        body, _status = MarketsApi.get_history(MARKET, "viewer@x.test", {"own": CY})
+
+        served = _served(body, "e-00004")
+        assert served["vendors"] == [CY]
+        assert served["subject"] == {"application_ids": ["a3"]}
+        assert served["detail"]["given"] == ["a3"]
+        assert served["detail"]["addresses"] == {"a3": CY}
+        assert served["detail"]["role_name"] == "Vendor Nov 2026"
+        assert body["vendorNames"] == {CY: "Cy Vendor"}
+
+    def test_only_the_entries_naming_the_vendor_are_read(self, history):
+        _selection(history)
+        _deal(history)
+        entry(history, 5, vendors=[BEN])
+        entry(history, 6, action="assign", kind="assigned")
+
+        body, _status = MarketsApi.get_history(MARKET, "viewer@x.test", {"own": CY})
+
+        assert ids(body["entries"]) == ["e-00001"]
+
+    def test_an_entry_about_the_vendor_alone_is_served_whole(self, history):
+        alone = entry(history, 1, vendors=[ANA], subject={"application_id": "a1"})
+
+        body, _status = MarketsApi.get_history(MARKET, "viewer@x.test", {"own": ANA})
+
+        [served] = body["entries"]
+        assert served["vendors"] == [ANA]
+        assert served["subject"] == alone["subject"]
+        assert served["detail"] == alone["detail"]
+        assert "applicationCount" not in served
+
+    def test_a_swap_keeps_the_vendor_they_traded_with_and_their_name(self, history):
+        """Whom they traded seats with is the vendor's own change, not someone else's part."""
+        seats = {"date": "2026-11-19", "seats": [{"email": ANA, "table_code": "A1"},
+                                                 {"email": BEN, "table_code": "B2"}]}
+        entry(history, 1, action="assign", kind="swapped", vendors=[ANA, BEN],
+              subject={"date": "2026-11-19"}, detail=seats)
+
+        body, _status = MarketsApi.get_history(MARKET, "viewer@x.test", {"own": ANA})
+
+        [served] = body["entries"]
+        assert served["vendors"] == [ANA, BEN]
+        assert served["detail"] == seats
+        assert body["vendorNames"] == {ANA: "Ana Vendor", BEN: "Ben Vendor"}
+
+    def test_an_entry_whose_vendors_do_not_pair_with_its_applications_is_served_whole(
+            self, history):
+        """An application with no address is left out of ``vendors``, so a selection holding one
+        cannot say which id is the vendor's by position: it is served as stored."""
+        stored = entry(history, 1, kind="verdicts", vendors=[ANA, BEN],
+                       subject={"application_ids": ["a1", "a2", "a5"]},
+                       detail={"before": {}, "after": {}})
+
+        body, _status = MarketsApi.get_history(MARKET, "viewer@x.test", {"own": ANA})
+
+        [served] = body["entries"]
+        assert served["vendors"] == stored["vendors"]
+        assert served["subject"] == stored["subject"]
+
+    def test_a_later_page_is_narrowed_too(self, history):
+        _selection(history, minutes=0)
+        for minutes in range(1, History.PAGE_SIZE + 1):
+            entry(history, minutes, vendors=[ANA])
+
+        first, _status = MarketsApi.get_history(MARKET, "viewer@x.test", {"own": ANA})
+        more, _status = MarketsApi.get_history(
+            MARKET, "viewer@x.test", {"own": ANA, "before": first["next"]})
+
+        assert _served(more, "e-00000")["vendors"] == [ANA]
+        assert more["vendorNames"] == {ANA: "Ana Vendor"}
+
+    def test_a_vendor_filter_beside_it_is_refused(self, history):
+        body, status = MarketsApi.get_history(
+            MARKET, "viewer@x.test", {"own": ANA, "vendor": BEN})
+
+        assert status == 400
+        assert body["error"]
+
+    def test_the_vendor_filter_still_answers_each_many_vendor_entry_whole(self, history):
+        """Manage market's Vendor filter reads the market's own sentences, which name every
+        vendor of a selection, a deal or a Discord check: it is answered whole, as before."""
+        stored = [_selection(history), _deal(history), _check(history), _roles_given(history)]
+
+        body, _status = MarketsApi.get_history(MARKET, "viewer@x.test", {"vendor": ANA})
+
+        assert ids(body["entries"]) == ["e-00004", "e-00003", "e-00002", "e-00001"]
+        for each in stored:
+            served = _served(body, each["id"])
+            assert served["vendors"] == each["vendors"]
+            assert served["subject"] == each["subject"]
+            assert served["detail"] == each["detail"]
+            assert "applicationCount" not in served
+        assert body["vendorNames"] == NAMES
+
+    def test_the_route_reads_it_from_the_request(self, monkeypatch):
+        monkeypatch.setattr(app_module.login_manager, "session_protection", None)
+        sessions_load_through_get_user(monkeypatch)
+        monkeypatch.setattr(UsersApi, "get_user", lambda email: SimpleNamespace(
+            id="user-1", email=email, is_active=True, is_authenticated=True,
+            is_anonymous=False, get_id=lambda e=email: e))
+        asked = []
+        monkeypatch.setattr(MarketsApi, "get_history",
+                            lambda _market_id, _user, args: (asked.append(args) or {}, 200))
+        client = app_module.app.test_client()
+        with client.session_transaction() as session:
+            session["_user_id"] = "viewer@x.test"
+            session["_fresh"] = True
+
+        response = client.get(f"/markets/{MARKET}/history?own=ana%40x.test")
+
+        assert response.status_code == 200
+        [args] = asked
+        assert args["own"] == ANA and args["vendor"] == ""
+
+    def test_the_whole_history_answers_each_many_vendor_entry_whole(self, history):
+        stored = [_selection(history), _deal(history), _check(history), _roles_given(history)]
+
+        body, _status = MarketsApi.get_history(MARKET, "viewer@x.test", {})
+
+        for each in stored:
+            served = _served(body, each["id"])
+            assert (served["vendors"], served["subject"], served["detail"]) == (
+                each["vendors"], each["subject"], each["detail"])
+        assert body["vendorNames"] == NAMES
 
 
 class TestTheRow:

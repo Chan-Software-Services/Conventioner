@@ -5,6 +5,7 @@ import {
   type ApplicantMarketSeed,
 } from './helpers/seedApplicantMarket';
 import { seedPublishedMarketWithAssignments } from './helpers/seeds';
+import { marketPagePath, vendorPagePath } from './helpers/marketScreens';
 import type { Page } from '@playwright/test';
 
 const SCREENSHOT_DIR = 'e2e-screenshots/intake-mode';
@@ -31,6 +32,19 @@ async function finalPath(page: Page, slug: string, suffix: string): Promise<stri
   return new URL(page.url()).pathname.split(slug).join('<slug>');
 }
 
+/**
+ * The market's own address (its market page), its vendor page (T469), and addresses under them
+ * that name no page, old and new.
+ */
+const GATED_SUFFIXES = [
+  '',
+  '/vendor',
+  '/apply',
+  '/applicant-login',
+  '/applicant/dashboard',
+  '/vendor/apply',
+];
+
 test.describe('Intake mode - a CSV market has no public applicant surface', () => {
   let csvMarket: ApplicantMarketSeed;
 
@@ -44,7 +58,7 @@ test.describe('Intake mode - a CSV market has no public applicant surface', () =
     );
   });
 
-  for (const suffix of ['', '/apply', '/applicant-login', '/applicant/dashboard']) {
+  for (const suffix of GATED_SUFFIXES) {
     test(`a stranger at /<slug>${suffix} is shown what an unknown market shows`, async ({
       page,
     }) => {
@@ -66,7 +80,7 @@ test.describe('Intake mode - a CSV market has no public applicant surface', () =
 
   // "Page not found" offers an organizer who is signed in another way onward. It decides on the
   // person and never on the address, so the market's own owner reads the two alike too.
-  for (const suffix of ['', '/apply', '/applicant-login', '/applicant/dashboard']) {
+  for (const suffix of GATED_SUFFIXES) {
     test(`an organizer signed in at /<slug>${suffix} is shown what an unknown market shows`, async ({
       authenticatedPage: page,
     }) => {
@@ -82,15 +96,27 @@ test.describe('Intake mode - a CSV market has no public applicant surface', () =
   }) => {
     // A sign-in page once drew its form and answered "sent" for a code it never sends (E32/F03/S01).
     for (const slug of [csvMarket.marketSlug, UNKNOWN_SLUG]) {
-      await page.goto(`/${slug}`);
+      await page.goto(vendorPagePath(slug));
       await expect(page.getByTestId('vendor-page-not-found')).toBeVisible({ timeout: 10000 });
       await expect(page.getByTestId('vendor-page-market-name')).toHaveCount(0);
       await expect(page.getByTestId('vendor-sign-in-email-input')).toHaveCount(0);
     }
 
-    await page.goto(`/${csvMarket.marketSlug}`);
+    await page.goto(vendorPagePath(csvMarket.marketSlug));
     await expect(page.getByTestId('vendor-page-not-found')).toBeVisible({ timeout: 10000 });
     await page.screenshot({ path: `${SCREENSHOT_DIR}/01-csv-market-home.png`, fullPage: true });
+  });
+
+  test('its market page says the page does not exist, rather than naming it or calling for applications', async ({
+    page,
+  }) => {
+    for (const slug of [csvMarket.marketSlug, UNKNOWN_SLUG]) {
+      await page.goto(marketPagePath(slug));
+      await expect(page.getByTestId('market-page-not-found')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByTestId('market-page-name')).toHaveCount(0);
+      await expect(page.getByTestId('market-page-call')).toHaveCount(0);
+      await expect(page.getByTestId('market-page-notice')).toHaveCount(0);
+    }
   });
 
   test('its vendors still reach their page, where they check in, once it runs', async ({
@@ -107,7 +133,7 @@ test.describe('Intake mode - a CSV market has no public applicant surface', () =
       TEST_USER.email,
       TEST_USER.password,
     );
-    await page.goto(`/${running.marketSlug}`);
+    await page.goto(vendorPagePath(running.marketSlug));
 
     await expect(page.getByTestId('vendor-page-market-name')).toHaveText(running.marketName, {
       timeout: 10000,
@@ -131,7 +157,7 @@ test.describe('Intake mode - a form market keeps its applicant surface', () => {
   });
 
   test('its vendor page names the market and asks for an email address', async ({ page }) => {
-    await page.goto(`/${formMarket.marketSlug}`);
+    await page.goto(vendorPagePath(formMarket.marketSlug));
 
     await expect(page.getByTestId('vendor-page-market-name')).toHaveText(formMarket.marketName, {
       timeout: 10000,
@@ -154,6 +180,18 @@ test.describe('Intake mode - a form market keeps its applicant surface', () => {
       await expect(page).toHaveURL(new RegExp(`/${formMarket.marketSlug}${suffix}$`));
     });
   }
+
+  // Its two pages are `/<slug>` and `/<slug>/vendor` (T469): nothing under them is a page.
+  for (const suffix of ['/vendor/apply', '/apply', '/check-in']) {
+    test(`/<slug>${suffix} reads as any page that is not there`, async ({ page }) => {
+      await page.goto(`/${formMarket.marketSlug}${suffix}`);
+
+      await expect(page.getByTestId('page-not-found')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByTestId('vendor-sign-in-email-input')).toHaveCount(0);
+      await expect(page.getByTestId('market-page-call')).toHaveCount(0);
+      await expect(page).toHaveURL(new RegExp(`/${formMarket.marketSlug}${suffix}$`));
+    });
+  }
 });
 
 test.describe('Intake mode - a market that stops serving applicants', () => {
@@ -168,7 +206,7 @@ test.describe('Intake mode - a market that stops serving applicants', () => {
       TEST_USER.password,
     );
     const login = new VendorPage(page);
-    await page.goto(`/${market.marketSlug}`);
+    await page.goto(vendorPagePath(market.marketSlug));
     await login.requestCode(SIGNED_IN_VENDOR);
     createApplicantLoginChallenge(market.marketId, SIGNED_IN_VENDOR, '531642');
     await login.enterCode('531642');
@@ -183,7 +221,7 @@ test.describe('Intake mode - a market that stops serving applicants', () => {
     });
     expect(back.ok(), await back.text()).toBeTruthy();
 
-    await page.goto(`/${market.marketSlug}`);
+    await page.goto(vendorPagePath(market.marketSlug));
     await expect(page.getByTestId('page-not-found')).toBeVisible();
     await expect(page.getByText('Check your connection')).toHaveCount(0);
   });

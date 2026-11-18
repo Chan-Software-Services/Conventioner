@@ -5,9 +5,10 @@ import { inTheWindow, PHONE_AND_DESK } from './helpers/phoneWindow';
 import { seedMarketDayMap, type SeededMarketDayMap } from './helpers/seedMarketDayMap';
 
 /**
- * The vendor panel on a market's public map (T422 ticket 09, T465 ticket 06), `/<slug>/map`, opened
- * signed out on the seam's seeded market: today five vendors are named, at North Wing's Aisle A and
- * South Wing's Aisle B, Aisle A 3 shared by Loom House and Paper Moth Press.
+ * The vendor panel on a market's public map (T422 ticket 09, T465 ticket 06), at the market's own
+ * address, `/<slug>`, opened signed out on the seam's seeded market: today five vendors are named,
+ * at North Wing's Aisle A and South Wing's Aisle B, Aisle A 3 shared by Loom House and Paper Moth
+ * Press.
  *
  * "Find a vendor" drops down the vendors the words find by the public name, the website's host, the
  * Instagram handle, the table code or the section name, and never by an email address, a full name

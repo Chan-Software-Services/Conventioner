@@ -15,6 +15,7 @@ sources:
   - bug/9
   - T202
   - T318
+  - T469
 ---
 
 # An archived market that ran stays a record
@@ -32,7 +33,7 @@ That page was public, so anyone could read any vendor's seats there; the record 
 Whether a market ran is a fact a phase cannot hold, since `archived` follows a market that ran and a draft abandoned alike; the [phase record](../../implementation/modules/phase-record.md) says it (E26/F06/S03, [ADR 0012](../../adr/0012-a-market-remembers-every-phase-it-entered.md)), and placements are no proof, since a market can be assigned and archived without ever being published.
 
 **So deleting an archived market that ran takes a live URL off the air and destroys the record of a market that happened.**
-Both doors that delete one say so before it is done: deleting its organization names, per market, whether it ran and the address that stops resolving, and records the deletion in the trail first ([when an organization may be deleted](when-an-organization-may-be-deleted.md)); the market's own Delete names the vendor page that stops working.
+Both doors that delete one say so before it is done: deleting its organization names, per market, whether it ran and the market page and vendor page that stop resolving, and records the deletion in the trail first ([when an organization may be deleted](when-an-organization-may-be-deleted.md)); the market's own Delete names the market page and vendor page that stop working.
 
 ## Where it is kept
 

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 /**
- * A market's vendor page, at its own address `/<slug>` (ADR 0022).
+ * A market's vendor page, at `/<slug>/vendor` (ADR 0022, T469), under the market page at `/<slug>`.
  *
  * The one page a vendor uses at a market: signed out, it names the market and asks for an email
  * address and then the code sent to it; signed in, it shows where they stand and their
- * application, as the market's state allows. This view is a thin frame; each part is a section
- * component reading the one page state in the application store.
+ * application, as the market's state allows. Under the market's name, signed in or out, it lists
+ * the market's dates and, while the public map is open, links to it at the market's own address
+ * (T469). This view is a thin frame; each part is a section component reading the one page state
+ * in the application store.
  *
  * It reads the market before drawing anything, so a slug is never printed back before the server
  * has said there is a page here. A market with no vendor page (a draft, a Google Form market
@@ -27,6 +29,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useApplicationStore } from '@/stores/application';
 import { vendorPageAnswered } from '@/utils/currentPlace';
+import { marketPagePath } from '@/utils/market';
+import { getFormattedDate } from '@/utils/utils';
 import PageNotFound from '@/components/PageNotFound.vue';
 import VendorSignIn from '@/components/vendorPage/VendorSignIn.vue';
 import VendorStatus from '@/components/vendorPage/VendorStatus.vue';
@@ -54,6 +58,7 @@ onUnmounted(() => vendorPageAnswered(answeredFor, false));
 
 const signedIn = computed(() => store.isAuthenticatedFor(marketSlug.value));
 const vendorName = computed(() => store.application?.vendorName || '');
+const marketPage = computed(() => marketPagePath(marketSlug.value));
 
 async function load() {
   state.value = 'loading';
@@ -152,6 +157,24 @@ onMounted(() => {
     <template v-else>
       <header class="vendor-page-header">
         <h1 data-testid="vendor-page-market-name">{{ store.page?.marketName }}</h1>
+        <ul
+          v-if="store.page?.marketDates.length"
+          class="vendor-page-dates"
+          aria-label="Market dates"
+          data-testid="vendor-page-dates"
+        >
+          <li v-for="date in store.page.marketDates" :key="date">
+            {{ getFormattedDate(date) ?? date }}
+          </li>
+        </ul>
+        <RouterLink
+          v-if="store.page?.mapOpen"
+          :to="marketPage"
+          class="link-alone"
+          data-testid="vendor-page-map-link"
+        >
+          See the market map
+        </RouterLink>
         <p v-if="signedIn" class="vendor-page-who" data-testid="vendor-page-signed-in-as">
           Signed in as
           <strong>{{ vendorName || store.applicantEmail }}</strong>
@@ -208,6 +231,10 @@ onMounted(() => {
 }
 
 .vendor-page-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
   text-align: center;
 }
 
@@ -220,8 +247,16 @@ onMounted(() => {
   overflow-wrap: anywhere;
 }
 
+.vendor-page-dates {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+  color: var(--mm-black);
+}
+
 .vendor-page-who {
-  margin: var(--space-2) 0 0;
+  margin: 0;
   font-size: var(--text-sm);
   color: var(--mm-black);
   overflow-wrap: anywhere;

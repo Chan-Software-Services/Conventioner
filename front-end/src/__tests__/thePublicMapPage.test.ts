@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 /**
- * The public map page (T422 ticket 09), `/<market-slug>/map`: anyone, signed out, picks a day and a
+ * The public map page (T422 ticket 09), shown at `/<market-slug>` by the market page while the map
+ * is open, `/<market-slug>/map` landing there (ADR 0039): anyone, signed out, picks a day and a
  * location, presses a table or finds a vendor by name, and reads the public name, website and
  * Instagram the organizer chose to publish. The day, the location and the table live in the
  * address; a market whose map is not open reads "Page not found", as an address naming nothing.
@@ -52,7 +53,7 @@ const routing = vi.hoisted(() => ({
 vi.mock('vue-router', async () => {
   const { reactive } = await import('vue');
   routing.route = reactive({
-    name: 'public-map',
+    name: 'market-page',
     params: { marketSlug: 'harbour-night-market' },
     query: {} as Record<string, string>,
     hash: '',
@@ -314,7 +315,7 @@ let wrapper: VueWrapper | null = null;
 
 beforeEach(() => {
   routing.route.query = {};
-  routing.route.name = 'public-map';
+  routing.route.name = 'market-page';
   routing.route.params = { marketSlug: 'harbour-night-market' };
   routing.replace.mockClear();
   fetchPublicMap.mockReset();
@@ -495,35 +496,18 @@ describe('the page', () => {
     expect(page.text()).not.toContain('Press a table');
   });
 
-  it("reads another market's map when the address moves to it, the page kept", async () => {
-    const page = await open();
-    fetchPublicMap.mockResolvedValue({
-      map: { ...ANSWER, marketName: 'River Craft Fair' },
-      notFound: false,
-      failed: false,
-    });
-    fetchPublicMapImage.mockClear();
-    vi.mocked(URL.createObjectURL).mockReturnValue('blob:river-image');
-
-    routing.route.params = { marketSlug: 'river-craft-fair' };
-    await flushPromises();
-
-    expect(fetchPublicMap).toHaveBeenLastCalledWith('river-craft-fair');
-    expect(page.get('[data-testid="public-map-heading"]').text()).toBe('River Craft Fair');
-    expect(fetchPublicMapImage).toHaveBeenCalledWith('river-craft-fair', 'loc-upper');
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:map-image');
-    expect(page.get('[data-testid="layout-map-image"]').attributes('href')).toBe(
-      'blob:river-image',
-    );
-  });
-
-  it('reads nothing more once the address leaves the page', async () => {
+  it("reads its market's map once, leaving another market's to a page of its own", async () => {
+    // The market page keys the map by the slug, so a move to another market mounts a new map, which
+    // reads that market's afresh; this one reads nothing more, there or off the page.
     await open();
     fetchPublicMap.mockClear();
+    fetchPublicMapImage.mockClear();
+    routing.route.params = { marketSlug: 'river-craft-fair' };
+    await flushPromises();
     routing.route.name = 'vendor-page';
-    routing.route.params = { marketSlug: 'harbour-night-market-2' };
     await flushPromises();
     expect(fetchPublicMap).not.toHaveBeenCalled();
+    expect(fetchPublicMapImage).not.toHaveBeenCalled();
   });
 });
 

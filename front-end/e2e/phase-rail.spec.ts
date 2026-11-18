@@ -1,5 +1,10 @@
 import { test, expect, TEST_USER, BACKEND_URL, APP_API } from './fixtures';
-import { marketScreenPath, marketSetupPath } from './helpers/marketScreens';
+import {
+  marketPagePath,
+  marketScreenPath,
+  marketSetupPath,
+  vendorPagePath,
+} from './helpers/marketScreens';
 import { seedAssignedMarket, type AssignedSeedResult } from './helpers/seedAssignedMarket';
 import { seedApplication } from './helpers/seedApplication';
 import { seedPhaseMarket } from './helpers/seedPhaseMarket';
@@ -103,40 +108,68 @@ test.describe('The phase rail', () => {
     expect(smallestGap).toBeGreaterThan(0);
   });
 
-  test("the vendor page's address is on the rail once published, and copies in one action", async ({
+  test("the market page's and the vendor page's addresses are on the rail once published, and each copies in one action", async ({
     authenticatedPage: page,
   }) => {
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     await openMarket(page, marketSetupPath(seed.marketId, 'setup'));
-    // Vendors check in there, with the door code: the check-in page it stood beside is gone.
+    // Vendors check in on the vendor page, with the door code: the check-in page is gone.
     await expect(page.getByTestId('phase-rail-checkin')).toHaveCount(0);
 
-    const chip = page.getByTestId('phase-rail-vendor-page');
-    await expect(chip).toBeVisible({ timeout: 15000 });
-    // The whole address is the link; what it shows is shortened to fit the rail (bug 11).
-    const url = (await page.getByTestId('phase-rail-vendor-page-link').getAttribute('href')) ?? '';
-    await expect(page.getByTestId('phase-rail-vendor-page-link')).toHaveAttribute('title', url);
+    // The market page first, for the public, then the vendor page, for its vendors (T469).
+    await expect(page.getByTestId('phase-rail-vendor-page')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.url-chip')).toHaveCount(2);
+    expect(
+      await page
+        .locator('.url-chip')
+        .evaluateAll((chips) => chips.map((chip) => chip.getAttribute('data-testid'))),
+    ).toEqual(['phase-rail-market-page', 'phase-rail-vendor-page']);
 
-    await page.getByTestId('phase-rail-vendor-page-copy').click();
-    await expect(page.getByTestId('phase-rail-vendor-page-copy')).toHaveText('Copied');
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(url);
+    const urls: Record<string, string> = {};
+    for (const [testId, label, path] of [
+      ['phase-rail-market-page', 'Market page', marketPagePath(seed.slug)],
+      ['phase-rail-vendor-page', 'Vendor page', vendorPagePath(seed.slug)],
+    ] as const) {
+      const chip = page.getByTestId(testId);
+      await expect(chip).toContainText(label);
+      // The whole address is the link; what it shows is shortened to fit the rail (bug 11).
+      const link = page.getByTestId(`${testId}-link`);
+      const url = (await link.getAttribute('href')) ?? '';
+      expect(new URL(url).pathname).toBe(path);
+      await expect(link).toHaveAttribute('title', url);
 
-    // And it is the page publishing actually put on the air.
-    await page.goto(new URL(url).pathname);
-    await expect(page.locator('body')).not.toContainText('Page not found');
+      await page.getByTestId(`${testId}-copy`).click();
+      await expect(page.getByTestId(`${testId}-copy`)).toHaveText('Copied');
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(url);
+      urls[testId] = url;
+    }
+
+    // And each is the page publishing actually put on the air: the market page, whose map is
+    // off, says so, and the vendor page names the market.
+    await page.goto(new URL(urls['phase-rail-market-page']).pathname);
+    await expect(page.getByTestId('market-page-notice-line')).toHaveText(
+      "The map isn't published yet.",
+      { timeout: 15000 },
+    );
+    await page.goto(new URL(urls['phase-rail-vendor-page']).pathname);
+    await expect(page.getByTestId('vendor-page-market-name')).toBeVisible({ timeout: 15000 });
   });
 
-  test('a CSV market carries the vendor page chip once its results are out, and a form market from applications', async ({
+  test("a CSV market carries the market's chips once its results are out, and a form market from applications", async ({
     authenticatedPage: page,
   }) => {
     // The seeded market takes its vendors by import, and published its results earlier in the
-    // file, so its vendor page answers and the chip points at it (ADR 0022). Before its results
+    // file, so its pages answer and the chips point at them (ADR 0022, T469). Before its results
     // it shows none (`a-google-form-markets-vendor-page.spec.ts`).
     await openMarket(page, marketSetupPath(seed.marketId, 'setup'));
     await expect(page.getByTestId('phase-rail')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId('phase-rail-market-page-link')).toHaveAttribute(
+      'href',
+      new RegExp(`${marketPagePath(seed.slug)}$`),
+    );
     await expect(page.getByTestId('phase-rail-vendor-page-link')).toHaveAttribute(
       'href',
-      new RegExp(`/${seed.slug}$`),
+      new RegExp(`${vendorPagePath(seed.slug)}$`),
     );
 
     // A market taking applications by form carries it from its first phase after draft. Intake
@@ -157,9 +190,14 @@ test.describe('The phase rail', () => {
 
     const chip = page.getByTestId('phase-rail-vendor-page');
     await expect(chip).toBeVisible({ timeout: 15000 });
+    const formSlug = marketNameToSlug(formMarket.marketName);
+    await expect(page.getByTestId('phase-rail-market-page-link')).toHaveAttribute(
+      'href',
+      new RegExp(`${marketPagePath(formSlug)}$`),
+    );
     await expect(page.getByTestId('phase-rail-vendor-page-link')).toHaveAttribute(
       'href',
-      new RegExp(`/${marketNameToSlug(formMarket.marketName)}$`),
+      new RegExp(`${vendorPagePath(formSlug)}$`),
     );
   });
 
@@ -184,7 +222,7 @@ test.describe('The phase rail', () => {
 
 /**
  * The rail on a phone (T142): only the bar pins there, so the rail stands at the top of the page,
- * and a market's address, More… and the next step have to read in the room a phone has.
+ * and a market's two addresses, More… and the next step have to read in the room a phone has.
  * It squeezed the application page into a 171x148px box showing one character of its address, and
  * put the door's check-in list under a rail that ran to 409px of 844.
  */
@@ -215,12 +253,13 @@ test.describe('The phase rail on a phone', () => {
     expect((await box(door)).y).toBeLessThanOrEqual(340);
   });
 
-  test('draws the address as one line: its name as the link, and Copy', async ({
+  test('draws each address as one line: its name as the link, and Copy', async ({
     authenticatedPage: page,
   }) => {
     await page.goto(marketScreenPath(seed.marketId, 'attendance'));
     for (const [testId, name, end] of [
-      ['phase-rail-vendor-page', 'Vendor page', `/${seed.marketSlug}`],
+      ['phase-rail-market-page', 'Market page', marketPagePath(seed.marketSlug)],
+      ['phase-rail-vendor-page', 'Vendor page', vendorPagePath(seed.marketSlug)],
     ] as const) {
       const chip = page.getByTestId(testId);
       await expect(chip).toBeVisible({ timeout: 15000 });
@@ -249,12 +288,12 @@ test.describe('The phase rail on a phone', () => {
     }
   });
 
-  test("sizes the address chip by the phone's own rule", async ({ authenticatedPage: page }) => {
-    // It asks for just over half its row. The tablet's rule, for a rail under 45rem, matched a
-    // phone's rail too and set its own basis on the chips, so a change to the phone's rule never
-    // reached them; both lay out alike here, so only the basis tells.
+  test("sizes both address chips by the phone's own rule", async ({ authenticatedPage: page }) => {
+    // Each asks for just over half its row, so two never share one. The tablet's rule, for a rail
+    // under 45rem, matched a phone's rail too and set its own basis on both chips, so a change to
+    // the phone's rule never reached them; both lay out alike here, so only the basis tells.
     await page.goto(marketScreenPath(seed.marketId, 'attendance'));
-    for (const testId of ['phase-rail-vendor-page']) {
+    for (const testId of ['phase-rail-market-page', 'phase-rail-vendor-page']) {
       const chip = page.getByTestId(testId);
       await expect(chip).toBeVisible({ timeout: 15000 });
       expect(await chip.evaluate((el) => getComputedStyle(el).flexBasis), testId).toBe(
@@ -269,7 +308,8 @@ test.describe('The phase rail on a phone', () => {
     await page.goto(marketScreenPath(seed.marketId, 'attendance'));
     await expect(page.getByTestId('phase-rail-vendor-page')).toBeVisible({ timeout: 15000 });
 
-    const apply = await box(page.getByTestId('phase-rail-vendor-page'));
+    const market = await box(page.getByTestId('phase-rail-market-page'));
+    const vendor = await box(page.getByTestId('phase-rail-vendor-page'));
     const more = await box(page.getByTestId('phase-rail-menu-button'));
     const rail = await box(page.getByTestId('phase-rail'));
     const apart = (a: Box, b: Box) =>
@@ -277,12 +317,22 @@ test.describe('The phase rail on a phone', () => {
       b.x + b.width <= a.x ||
       a.y + a.height <= b.y ||
       b.y + b.height <= a.y;
-    for (const [a, b] of [[apply, more]]) {
+    for (const [a, b] of [
+      [market, vendor],
+      [market, more],
+      [vendor, more],
+    ]) {
       expect(apart(a, b), `${JSON.stringify(a)} and ${JSON.stringify(b)} overlap`).toBe(true);
     }
-    // In reading order: the chips, then More… at the row's end, inside the rail.
-    expect(apply.x).toBeLessThan(more.x);
-    expect(apply.y).toBeLessThanOrEqual(more.y);
+    // In reading order: the market page, the vendor page, then More… at the row's end, inside
+    // the rail.
+    expect(market.y).toBeLessThanOrEqual(vendor.y);
+    expect(vendor.x).toBeLessThan(more.x);
+    expect(vendor.y).toBeLessThanOrEqual(more.y);
+    for (const chip of [market, vendor]) {
+      expect(chip.x).toBeGreaterThanOrEqual(rail.x);
+      expect(chip.x + chip.width).toBeLessThanOrEqual(rail.x + rail.width);
+    }
     expect(more.x + more.width).toBeLessThanOrEqual(rail.x + rail.width);
     expect(rail.x + rail.width).toBeLessThanOrEqual(390);
   });
@@ -304,8 +354,13 @@ test.describe('The phase rail on a phone', () => {
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(marketScreenPath(seed.marketId, 'attendance'));
-    const link = page.getByTestId('phase-rail-vendor-page').getByRole('link');
-    await expect(link).toHaveText(new RegExp(`/${seed.marketSlug}$`), { timeout: 15000 });
+    for (const [testId, end] of [
+      ['phase-rail-market-page', marketPagePath(seed.marketSlug)],
+      ['phase-rail-vendor-page', vendorPagePath(seed.marketSlug)],
+    ] as const) {
+      const link = page.getByTestId(testId).getByRole('link');
+      await expect(link).toHaveText(new RegExp(`${end}$`), { timeout: 15000 });
+    }
   });
 });
 
@@ -368,6 +423,7 @@ test.describe("The rail's end wraps only when it must", () => {
     const items = await rail
       .locator(
         [
+          '[data-testid="phase-rail-market-page"]',
           '[data-testid="phase-rail-vendor-page"]',
           '[data-testid="phase-rail-fix"]',
           '[data-testid^="phase-transition-"]',

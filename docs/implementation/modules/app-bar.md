@@ -19,6 +19,7 @@ describes:
   - front-end/src/views/PasswordResetView.vue
   - front-end/e2e/the-app-bar.spec.ts
   - front-end/src/__tests__/theBarsCurrentPlace.test.ts
+  - front-end/src/__tests__/theAppBarsVendorLink.test.ts
 verified: 2026-11-14
 sources:
   - T209
@@ -28,6 +29,7 @@ sources:
   - T311
   - T422
   - T411
+  - T469
 ---
 
 # The app bar
@@ -60,16 +62,25 @@ It holds Change password, Sign out and [Sign out everywhere](#sign-out-everywher
 
 ## Who sees what
 
-**One rule: a known signed-in organizer gets the full bar, on every route but a market's vendor page, and nobody else gets more than the logo.**
+**One rule: a known signed-in organizer gets the full bar, on every route but a market's market page and vendor page, and nobody else gets more than the logo, but for the market page's link to the vendor page.**
 There is no list by role, since a role belongs to a market or an organization and not to the account.
 So a Viewer's bar is an Owner's, an organizer with no organization has Organizations to make one in, sign-in shows a vendor the logo alone, and an organizer who opens "Page not found" keeps the full bar, with no place marked current.
 
-**A market's vendor page stands apart from the organizer app, and shows the logo alone, with no link, to everyone** (T260), and so does its [public map](public-map-page.md) (T422).
-It is the vendors' page, so an organizer who opens their own market's page reads it as a vendor would, with neither the places nor the account menu.
-The route says so with `meta.vendorFacing`, which [`isVendorFacing`](../../../front-end/src/utils/currentPlace.ts) reads, and [`theBarsCurrentPlace.test.ts`](../../../front-end/src/__tests__/theBarsCurrentPlace.test.ts) holds that the vendor page and the public map are the only routes that set it.
-The public map tells the bar its slug answered absent as the vendor page does, below.
-That route also answers "Page not found" itself, for a one-segment address naming no market and for a gated market's page, a draft's even to its own organizer ([a gated market answers as absent](../../business/rules/a-gated-market-answers-as-absent.md)).
-That is no vendor's page, so [`VendorPage`](../../../front-end/src/views/VendorPage.vue) tells the bar its slug answered absent (`vendorPageAnswered`) and, when the page goes, takes that back for the slug it answered for, since by then the route is already the next page's; and [`standsApart`](../../../front-end/src/utils/currentPlace.ts), which the bar reads, then gives the organizer the full bar there as at any deeper unknown address.
+**A market's two public pages stand apart from the organizer app, to everyone** (T260): the market page at `/<market>`, which shows the [public map](public-map-page.md) while it is open (T422), and the vendor page at `/<market>/vendor` ([ADR 0039](../../adr/0039-a-markets-address-is-its-public-page.md)).
+They are the vendors' and the shoppers' pages, so an organizer who opens their own market's reads it as a vendor would, with neither the places nor the account menu.
+The routes say so with `meta.vendorFacing`, which [`isVendorFacing`](../../../front-end/src/utils/currentPlace.ts) reads, and [`theBarsCurrentPlace.test.ts`](../../../front-end/src/__tests__/theBarsCurrentPlace.test.ts) holds that `market-page` and `vendor-page` are the only routes that set it.
+The vendor page shows the logo alone, with no link.
+
+**The market page's bar carries one link, to the vendor page**, at the end of the logo's row, once the page has answered found (the call, a notice or the map): "Vendor sign-in", or "Your vendor page" for a tab signed in for that market (the application store's `isAuthenticatedFor`, which the market page reads), to `vendorPagePath(slug)`, `app-bar-vendor-link`, 44px tall on a phone, so the map's own design needs no vendor control.
+The market page tells the bar its slug answered found (`marketPageAnswered`), with whether the tab is signed in for it, again as a sign-in starts or ends there, and takes that back as it goes or moves to another slug; `vendorLinkFor`, which the bar reads, names the slug and that sign-in only on `market-page`, for the slug that answered found, while the bar stands apart.
+The market page holds the vendor's sign-in, so the bar, in the entry chunk every page loads, never imports the application store: importing it put about 9.9 KB more on every first paint, past [the bundle budget](../testing/ci-and-the-gate.md#the-bundle-budget).
+So the link never shows while the page is loading, after a failed read, or once the page, or the map under it, answered "Page not found": an unknown slug's page reads as it did.
+What a visitor reads in the bar over the map is [the market's map](../../business/flows/the-markets-map.md#k8-a-visitor-finds-a-vendor).
+[`theAppBarsVendorLink.test.ts`](../../../front-end/src/__tests__/theAppBarsVendorLink.test.ts) mounts the bar over the app's router view in each state, and `the-app-bar.spec.ts` reads the link signed out, as a signed-in vendor and as the organizer, at a desk and on a phone.
+
+The market page and the map under it tell the bar their slug answered absent as the vendor page does, below.
+Each route also answers "Page not found" itself, for a slug naming no market (`/<slug>` and `/<slug>/vendor` alike) and for a gated market's pages, a draft's even to its own organizer ([a gated market answers as absent](../../business/rules/a-gated-market-answers-as-absent.md)).
+That is no vendor's page, so [`VendorPage`](../../../front-end/src/views/VendorPage.vue), [`MarketPublicView`](../../../front-end/src/views/MarketPublicView.vue) and `PublicMapView` each tell the bar its slug answered absent (`vendorPageAnswered`) and, when the page goes, takes that back for the slug it answered for, since by then the route is already the next page's; and [`standsApart`](../../../front-end/src/utils/currentPlace.ts), which the bar reads, then gives the organizer the full bar there as at any deeper unknown address.
 While the page is still reading its market, and when the read failed, the bar stands apart.
 
 **The bar's reading of who is signed in is one, the shell's.**

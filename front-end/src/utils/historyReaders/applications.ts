@@ -172,9 +172,10 @@ function ownVerdict(entry: MarketHistoryEntry, own: string): SelectedVerdict | u
     : undefined;
 }
 
-/** "the application", and how many others the selection decided with it, when any. */
+/** "the application", and how many others the selection decided with it, when any: as the whole
+ * selection counts them, on one the server narrowed to the vendor's own application too. */
 function andOthers(entry: MarketHistoryEntry): string {
-  const others = entry.vendors.length - 1;
+  const others = (entry.applicationCount ?? entry.vendors.length) - 1;
   return `the application${others > 0 ? ` and ${plural(others, 'other', 'others')}` : ''}`;
 }
 
