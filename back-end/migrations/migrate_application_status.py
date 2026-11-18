@@ -61,8 +61,8 @@ from datatypes import ApplicationStatus  # noqa: E402
 from market_documents import MARKETS_COLLECTION  # noqa: E402
 from tombstone import live  # noqa: E402
 
-#: How many times an application that changed between its read and its write is read and judged
-#: again.
+#: How many times an application is judged and written in all, the first try included, before one
+#: that changed between its read and its write on every try is listed as skipped.
 TRIES = 3
 
 #: The action the migration's mark names, which the deal that takes it records under.
