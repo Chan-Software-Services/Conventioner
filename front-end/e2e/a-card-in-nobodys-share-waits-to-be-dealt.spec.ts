@@ -15,7 +15,7 @@ import { ManageMarketPage } from './pages/ManageMarketPage';
  *
  * Ana alone is chosen to review; the owner then takes her role away in Manage market, which leaves
  * her chosen, as the dealing rule keeps a reviewer until an Admin takes them off, but able to
- * review nothing. A vendor applies on the market's page, and the deal, finding nobody able, leaves
+ * review nothing. A vendor applies on the market's vendor page, and the deal, finding nobody able, leaves
  * the application in nobody's share, waiting for the next deal. The All view's row and its drawer
  * read "Reviewer: not dealt yet", and the drawer warns of nobody it would be decided for. Before
  * the server served the review state, the row named no reviewer at all.
@@ -57,10 +57,10 @@ test('an application in nobody’s share reads "not dealt yet", warning of no on
     takeTheRoleAway(organizer, market.marketName, ANA),
   );
 
-  // A vendor applies on the market's own page, an address of this run's own.
+  // A vendor applies on the market's vendor page, with an address of this run's own.
   const vendor = `stranded-${Date.now()}@moss.test`;
   const login = new VendorPage(page);
-  await page.goto(`/${market.marketSlug}`);
+  await login.goto(market.marketSlug);
   await login.requestCode(vendor);
   await expect(login.codeInput).toBeVisible();
   createApplicantLoginChallenge(market.marketId, vendor, CODE);
