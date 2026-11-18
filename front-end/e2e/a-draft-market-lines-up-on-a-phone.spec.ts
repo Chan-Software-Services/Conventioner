@@ -13,7 +13,8 @@ import { seedDraftMarket } from './helpers/seedDraftMarket';
  *
  * Its Stats shows the rail with the first step, Draft, the current one: its ring, an outline 4px
  * outside the dot, was cut at the spine's left edge, since on a phone the spine scrolls sideways
- * and so clips what is drawn past it.
+ * and so clips what is drawn past it. There the step is inset by the ring, so the ring's outer
+ * edge stands on the rail's line.
  */
 
 /** Where the first character of a text is drawn, rather than the box it stands in. */
@@ -53,7 +54,7 @@ const ringAndClips = (page: Page) =>
         bottom: b.bottom,
       });
     }
-    return { ring, dotLeft: d.left, clips };
+    return { ring, clips };
   });
 
 let marketId: string;
@@ -71,8 +72,8 @@ for (const size of PHONE_AND_DESK) {
       const note = page.getByTestId('market-tab-note');
       await expect(note).toHaveText('Opens when the market is published.', { timeout: 15000 });
 
-      // The rail's line is where its first step's dot stands.
-      const rail = (await page.locator('.phase-step-dot').first().boundingBox())!;
+      // The rail's line is where its list of steps starts.
+      const rail = (await page.locator('.phase-spine').boundingBox())!;
       expect(await textLeft(note), "the note's words start where the rail's do").toBe(rail.x);
       // On a phone the phone's gutter, 16px inside the card's own 16px; at a desk the desk's 24px.
       expect(rail.x).toBe(size.phone ? 32 : 40);
@@ -84,7 +85,7 @@ for (const size of PHONE_AND_DESK) {
         timeout: 15000,
       });
 
-      const { ring, dotLeft, clips } = await ringAndClips(page);
+      const { ring, clips } = await ringAndClips(page);
       for (const clip of clips) {
         expect(ring.left, `the ring inside ${clip.what} at its left`).toBeGreaterThanOrEqual(
           clip.left,
@@ -93,8 +94,9 @@ for (const size of PHONE_AND_DESK) {
         expect(ring.top, `at its top`).toBeGreaterThanOrEqual(clip.top);
         expect(ring.bottom, `at its bottom`).toBeLessThanOrEqual(clip.bottom);
       }
-      // The dot itself keeps its place on the rail's line.
-      expect(dotLeft).toBe(size.phone ? 32 : 40);
+      // On a phone, where the spine clips, the ring's outer edge stands on the rail's line; at a
+      // desk, where nothing clips, the dot does, as it did.
+      expect(ring.left).toBe(size.phone ? 32 : 36);
     });
   });
 }
