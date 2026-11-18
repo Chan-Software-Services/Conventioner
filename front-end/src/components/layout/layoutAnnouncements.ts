@@ -159,7 +159,7 @@ export function saidRowAdded(
   return `Added ${first} to ${last.number}.`;
 }
 
-/** What the path holds: a count of tables, or, while the strip's Gap or Aisle refuses, that
+/** What the path holds: a count of tables, or, while the tool card's Gap or Aisle refuses, that
  *  field's sentence, since the path then holds and places none. */
 export type RowHolds = number | string;
 
