@@ -241,6 +241,29 @@ class TestADealChecksItsHold:
         [deal] = _entries(world, History.DEALT)
         assert len(deal["subject"]["application_ids"]) == 7
 
+    def test_a_change_whose_lease_ran_out_with_no_deal_taking_the_market_still_finishes(
+            self, world, monkeypatch):
+        # A write is held on the lease being this deal's, not on its time: a lease that ran out is
+        # refused only once another deal has taken the market over it.
+        markets = world.markets
+        real = markets.update_one
+        lapsed = []
+
+        def update_one(query, update):
+            if not lapsed and the_last_write(update):
+                lapsed.append(True)
+                markets.doc["reviewTeam"]["dealing"]["until"] = "2000-01-01T00:00:00+00:00"
+            return real(query, update)
+
+        monkeypatch.setattr(markets, "update_one", update_one)
+
+        response = _choose([ANA, BEN, CAT])
+
+        assert lapsed == [True]
+        assert response.status_code == 200, response.get_json()
+        assert _team(world)["turn"] == 7
+        assert not _unfinished(world)
+
     def test_the_same_choice_once_the_other_deal_let_go_finishes_it(self, world, monkeypatch):
         another_deal_takes_the_market_before(world, monkeypatch, the_last_write)
         _choose([ANA, BEN, CAT])
