@@ -81,6 +81,20 @@ describe('reviewerLine', () => {
     expect(addressesIn(reviewerLine(stranded, ANA, chosen))).toEqual([]);
   });
 
+  it('names the chosen reviewer of a waiting follow-up still in their share', () => {
+    // Its owner holds no role on the market any more: the next deal hands it on, but until then
+    // it is still Ana's share, and every reader is warned it is dealt to her, so the line says so too.
+    const ownerGone = application(
+      ApplicationStatus.NeedsFollowUp,
+      ANA,
+      servedReview('follow_up', { share: [ANA], waiting: true }),
+      CARL,
+    );
+    expect(line(ownerGone, SAM, chosen)).toBe(`Reviewer: ${ANA}`);
+    expect(dealtElsewhere(ownerGone, SAM, chosen)).toBe(ANA);
+    expect(line(ownerGone, ANA, chosen)).toBe('Reviewer: you');
+  });
+
   it('names a chosen reviewer who can no longer review here: the share stays theirs', () => {
     const unable = {
       reviewTeam: {

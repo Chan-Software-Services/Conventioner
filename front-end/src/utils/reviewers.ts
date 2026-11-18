@@ -46,15 +46,18 @@ export function isChosen(reader: string, market: Team): boolean {
 
 /**
  * "Reviewer: sam@example.com", or "Reviewer: you" for the reader's own; "Reviewer: not dealt yet"
- * for one in no share the review still holds (`review.waiting`), which the next deal takes, though
- * it may still carry a removed reviewer's address; null with no reviewers chosen.
+ * for one waiting for the deal (`review.waiting`) in nobody's share, though it may still carry a
+ * removed reviewer's address; null with no reviewers chosen. A waiting follow-up whose owner holds
+ * no role on the market is still its chosen reviewer's share until the next deal hands it on, so
+ * it names them, as the warning `dealtElsewhere` gives does.
  */
 export function reviewerLine(
   application: Dealt,
   reader: string,
   market: Team,
 ): AddressPart[] | null {
-  if (application.review.waiting) return [{ kind: 'text', text: 'Reviewer: not dealt yet' }];
+  const { waiting, share } = application.review;
+  if (waiting && !share.length) return [{ kind: 'text', text: 'Reviewer: not dealt yet' }];
   const reviewer = dealtTo(application, market);
   if (!reviewer) return null;
   if (same(reviewer, reader)) return [{ kind: 'text', text: 'Reviewer: you' }];

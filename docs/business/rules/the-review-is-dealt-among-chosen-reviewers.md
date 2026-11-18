@@ -74,7 +74,8 @@ With nobody able, nothing is dealt, and what came into open meanwhile waits: the
 **A follow-up is in its owner's share too** (E38/F07/S04): marking a follow-up never moves its reviewer, and a follow-up stays with whoever holds it, so reaching out is its owner's work.
 A reviewer's share is therefore the applications dealt to them and the follow-ups they own, wherever those were dealt, and one follow-up can be in two shares: the share it was dealt to and its owner's.
 Every reader of a share counts it so: the All view's "Assigned to" filter for anyone's share, whoever reads it; the card's and drawer's warning, which its owner is not shown; and One by one's share, its count and what it hands out first.
-Each reads the share the server serves, never the stored reviewer and owner: an application in nobody's share, its reviewer removed, or a follow-up whose owner holds no role on the market, is in no share at all, though it may still carry their address, and every row and card says "Reviewer: not dealt yet" and warns of no one until the next deal deals it.
+Each reads the share the server serves, never the stored reviewer and owner: an application whose reviewer was removed, or a follow-up whose owner holds no role on the market and whose reviewer is not chosen, is in no share at all, though it may still carry their address, and every row and card says "Reviewer: not dealt yet" and warns of no one until the next deal deals it.
+A follow-up whose owner holds no role but whose reviewer is chosen stays in that reviewer's share until the next deal hands it on, and every row and card names them.
 
 ## Who may
 

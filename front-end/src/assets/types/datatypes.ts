@@ -679,7 +679,10 @@ export interface ApplicationReview {
   undecided: boolean;
   /** The addresses whose share it is in, its reviewer first; empty with no reviewers chosen. */
   share: string[];
-  /** Undecided, reviewers are chosen, and in no share the review still holds: the deal takes it. */
+  /**
+   * Undecided, reviewers are chosen, and the next deal would move it: open in nobody's share, or a
+   * follow-up whose owner holds no role on the market, still in its chosen reviewer's share if any.
+   */
   waiting: boolean;
 }
 
