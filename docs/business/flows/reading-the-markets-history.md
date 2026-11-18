@@ -15,7 +15,7 @@ describes:
   - front-end/e2e/an-address-breaks-only-before-its-at.spec.ts
   - front-end/src/utils/historyReaders/
   - front-end/src/utils/personChoice.ts
-verified: 2026-11-17
+verified: 2026-11-18
 sources:
   - E40/F01/S03
   - E40/F01/S04
@@ -137,7 +137,7 @@ A deal of many applications reads there as that vendor's own line, "dealt the ap
 A verdict given to, changed on or undone on a selection of applications reads there as that vendor's own line too, "set the application and 49 others to Approved" or "undid their verdicts on the application and 49 others: Approved back to Open", with ", dealt to <address>" when their application was someone else's share, and opens to their verdict alone, before and after; no other vendor of the selection is named there, while the market's History keeps the selection's whole sentence, each vendor named, with its rows as step 4 says.
 A Discord check reads there as that vendor's own line, "checked who is in the Discord server: Not found", and opens to their state alone, before and after; a check that left their state as it was names them not, and is not in their list.
 A "Give roles" run reads "gave the Discord role “Vendor Nov 2026”" in the drawer of a vendor it gave the role, and "… to the assigned vendors: Not found" in that of a vendor whose state it changed otherwise.
-The server narrows it to the changes that name the vendor, so a run of the assignment, which names nobody, is in no vendor's list, and each of a selection, a deal, a Discord check or a "Give roles" run to the vendor's own part, so it sends none of their other vendors, nor their names ([`?own=`](../../implementation/data/history.md#reading-it)); Manage market's "Vendor" filter reads each whole, as its sentences name every vendor of it.
+The server narrows it to the changes that name the vendor, so a run of the assignment, which names nobody, is in no vendor's list, and each of a selection, a deal, a Discord check or a "Give roles" run whose applications it can tell apart to the vendor's own part, so it sends none of their other vendors, nor their names ([`?own=`](../../implementation/data/history.md#reading-it)); Manage market's "Vendor" filter reads each whole, as its sentences name every vendor of it.
 Someone below the row is shown no History tab, as no History section.
 
 "Assignment history" on the Assignments page reads the same history narrowed to the Assignment kind of change ([J13](placing-by-hand.md#j13-assignment-history)): the same component, in [`AssignmentHistoryDialog.vue`](../../../front-end/src/components/AssignmentHistoryDialog.vue), asking `group=Assignment` on every read, so the same sentences, in the same order, "Before and after" and paging.
