@@ -896,6 +896,13 @@ function cancelPending() {
   .phase-step {
     flex-shrink: 0;
   }
+
+  /* The box scrolls here, so it clips what is drawn past its edge: a current first step, a draft's,
+     had its ring, 4px outside the dot (below), cut at the left. It is inset by the ring, so the ring
+     is whole and its outer edge stands on the rail's line, where a first step's dot does. */
+  .phase-step--current:first-child {
+    padding-inline-start: var(--space-1);
+  }
 }
 
 .phase-step {

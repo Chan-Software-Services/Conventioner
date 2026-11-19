@@ -15,6 +15,7 @@ sources:
   - T277
   - T316
   - T421
+  - T474
   - wayfinding/the-market-frame/map
   - wayfinding/the-market-frame/01
   - wayfinding/the-order-of-the-work/map
@@ -109,7 +110,8 @@ At 720x900 the whole block and Payments' toolbar pinned 459px, half a portrait t
 
 **The phone's gutter follows the screen's layout, not the window.**
 A screen that keeps the 1000px desktop floor (every market screen but those [the design language](../../design-system.md#layout) lists as fitting a phone) is a desk's layout scrolled sideways in a phone's window, so its page keeps the desk's 24px inset there.
-The frame's own insets follow it: the card takes `market-fits-a-phone` only where the screen fits a phone by its route's `meta.fitsAPhone` (`fitsAPhone` in [`utils/fitsAPhone.ts`](../../../front-end/src/utils/fitsAPhone.ts), as `App.vue` lifts the floor by), and the phone's 16px gutter of the bar's row, the rail, the page row and the read-only note is scoped to it.
+The frame's own insets follow it: the card takes `market-fits-a-phone` only where the screen fits a phone by its route's `meta.fitsAPhone` (`fitsAPhone` in [`utils/fitsAPhone.ts`](../../../front-end/src/utils/fitsAPhone.ts), as `App.vue` lifts the floor by), and the phone's 16px gutter of the bar's row, the rail, the page row, the read-only note, the failed re-read line and a tab's note is scoped to it.
+A draft market's Attendance, its tab's note in place of the page, stood that note's words at x 40 under a rail at 32 on a phone, until the note took the gutter too; `a-draft-market-lines-up-on-a-phone.spec.ts` holds the note's words on the rail's first step at 390 and at 1440.
 `meta.fitsAPhone` is `true` for every page of a route, or the list of the `page` values that fit on a route that is several pages: Market Setup's view carries `['applications']`, so its Applications page fits a phone and its plan, form and Settings do not, and `MarketSetupView` lifts its own 1000px floor by the same `fitsAPhone` answer (T180).
 The meta is typed (a `RouteMeta` augmentation in `fitsAPhone.ts`), so a misspelt page fails the type check.
 Scoped to the window instead, at 390 on Payments, while it kept the floor, the market's name, the rail, the page row's labels and the read-only note stood 8px left of the page's own notes and titles (T153 review finding 7).
