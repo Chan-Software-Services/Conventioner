@@ -154,7 +154,7 @@ Covered by:
 
 ## Where the check-in address lives
 
-Once a market has a vendor page, the rail carries the market's two addresses as chips between the spine and the moves, each with Copy: "Market page", the market's own address, `/<market>`, for anyone, and "Vendor page", `/<market>/vendor`, the address vendors use, from applying or their result to checking in with the door code.
+Once a market has a vendor page, the rail carries the market's two addresses as chips between the spine and the moves, each with Copy: "Market page", the market's own address, `/<market>`, for anyone, and "Vendor page", `/<market>/vendor`, the address vendors use, from applying or their result to checking in with the door code where the market lets them.
 The chips stay on an archived market that ran, whose vendor page stays up as its record ([an archived market that ran stays a record](../rules/an-archived-market-that-ran-stays-a-record.md)); a Google Form market has none before its results are published or it reaches its market days, since they would lead to pages that do not exist yet.
 A form market has them from the first phase after Draft ([a gated market answers as absent](../rules/a-gated-market-answers-as-absent.md)).
 
