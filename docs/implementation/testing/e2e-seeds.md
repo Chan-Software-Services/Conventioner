@@ -269,11 +269,12 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
 
 - Leaves: a location's layout started on a market in Draft as the page starts it, calibrated to `metresAcross` when given, with `tables` (each naming its section by id) and `zones` (each turned by its `rotation`, none unless given) on it; `seedLayout()` and `seedAssignedMarket({ laidOut })` call it
 - Notes: its tables' ids are `table-1` on, or `tablePrefix` and their place, which a market of two layouts sets for each, since a seat names its table by id alone
+- With `image`, the floorplan uploaded is that PNG in place of `fixtures/test-floorplan.png` (`LAYOUT_FLOORPLAN_PATH`); `fixtures/test-floorplan-second.png` (`SECOND_FLOORPLAN_PATH`) is a second fixture hall of the same 4:3 shape at 960 by 720 pixels, of other bytes, so a map's two images are told apart (T501)
 
 **`seedMarketDayMap()`** ([file](../../../front-end/e2e/helpers/seedMarketDayMap.ts))
 
 - Leaves: a `form` market in `market_days`, today its first date and tomorrow its second, for every spec of the day map, the public map and Attendance's map (T422):
-  - North Wing laid out in Draft with Aisle A's four tables in a row and a stage turned 30 degrees, and South Wing with Aisle B's three, each layout's tables with ids of its own
+  - North Wing laid out in Draft with Aisle A's four tables in a row and a stage turned 30 degrees, and South Wing with Aisle B's three, each layout's tables with ids of its own, North Wing on `fixtures/test-floorplan.png` and South Wing on `fixtures/test-floorplan-second.png`, each hall 30 m by 22.5 m
   - seven vendors seated by hand today on an allocation (`allocateThenFreeEverySeat()`), two of them sharing Aisle A 3 as its left and right halves, and two seated tomorrow
   - the first vendor checked in today at the door, and an organizer's note on the second
   - the form's three short text questions, a business name, a website and an Instagram handle, answered by most vendors in the shapes the map cleans, one answering none and one giving an email address as their business name
