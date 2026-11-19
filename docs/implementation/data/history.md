@@ -15,7 +15,7 @@ describes:
   - back-end/api/organizations.py#get_default_permission_history
   - back-end/tests/test_the_history.py
   - back-end/tests/test_only_an_asking_writes_a_markets_history.py
-verified: 2026-11-18
+verified: 2026-11-19
 sources:
   - wayfinding/readable-journey/08
   - E40/F01/S01
@@ -116,7 +116,7 @@ One block per action, in the order of [the actions table](../modules/market-acti
   - Detail: `name`
 - `plan`: a Market Setup card, or the intake mode (`PUT /markets/:id/plan`)
   - Detail: whichever of `market_dates`, `tiers`, `locations`, `sections` and `intake_mode` changed; never the layouts or the table types, which the plan write keeps as stored and their own writes record (an entry written before T257 may name `floorplans`)
-  - With no actor: a swap of two locations' names past draft, by an operator's script ([`swap_location_names.py`](../../../back-end/migrations/swap_location_names.py)), its detail the `locations` and `sections` before and after ([the setup settles on leaving draft](../../business/rules/the-setup-settles-on-leaving-draft.md#where-it-is-kept))
+  - With no actor: a swap of two locations' names past draft, by an operator's script ([`swap_location_names.py`](../../../back-end/migrations/swap_location_names.py)), its detail whichever of `locations` and `sections` changed, before and after ([the setup settles on leaving draft](../../business/rules/the-setup-settles-on-leaving-draft.md#where-it-is-kept))
 - `pricing`: the Pricing card, in the same plan write ([a price follows the table](../../business/rules/a-price-follows-the-table.md))
   - Subject: `currency`, the market's, so the prices can be written in it
   - Detail: whichever of `currency`, `half_table_percent`, `groups` (each `{name, conditions, prices}`, the whole list) and `everyone_else` (each tier's `{tier, cents}`) changed; a market never priced is the card's defaults before (CAD, 50, no group, no price), so its first price records only the prices typed

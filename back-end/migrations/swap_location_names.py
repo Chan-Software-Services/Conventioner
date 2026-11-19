@@ -22,8 +22,9 @@ the same location under its new name. It does not count the assignment's ``revis
 results do not read as changed, and it sends nothing to anyone.
 
 **It records the swap in the market's history**, as one entry of the kind a change on Market Setup
-records (``plan``, under the Market Setup row), with no actor and the locations and sections
-before and after, so Manage market reads "Someone changed Market Setup: locations and sections".
+records (``plan``, under the Market Setup row), with no actor and whichever of the locations and
+sections changed, before and after. Manage market reads "Someone changed Market Setup: locations
+and sections" when either location holds a section, and "locations" alone when neither does.
 A dry run records none, and a second run records a second entry.
 
 **The market's earlier history also holds the names, as text, and is left as written**, by the
@@ -143,7 +144,8 @@ class Swap(NamedTuple):
     layouts: int
     #: What becomes of the allocation's record of the plan: a sentence.
     record: str
-    #: The history entry's detail: the plan's locations and sections before and after.
+    #: The history entry's detail: whichever of the plan's locations and sections changed, before
+    #: and after.
     detail: Dict[str, Any]
 
 
