@@ -129,7 +129,8 @@ Covered by:
    A vendor checked in and then moved or swapped reads where they checked in, "9:41 AM by you, at table North Wing 2", in an attention chip, so they are sent to their new table.
    Under the day's seats, "Checked in, with no table on this date (<n>)" lists each vendor checked in and then freed, their table "No table", so a free never hides an arrival; they count toward no day's tally.
    A vendor checked out keeps that status and gains a second chip after it, "Out 4:05 PM by you", or by the organizer's address, or "Scanned out at 4:05 PM" for their own ([K10](#k10-check-a-vendor-out)).
-5. While the market is in Market Days, "Check in" and "Undo" on each row check a vendor in at the door, for someone who may check vendors in; a checked-in row offers "Check out" before its "Undo" ([K10](#k10-check-a-vendor-out)).
+5. While the market is in Market Days, each row ends in at most one button, for someone who may check vendors in: "Check in" checks a vendor in at the door, and a checked-in row offers "Check out" in its place ([K10](#k10-check-a-vendor-out)).
+   Each undo is a quiet "Undo?" just left of the chip it undoes: the check-in's by the status chip, the check-out's by the departure chip.
    "Check in" is offered on today and past days, so a tap missed in the rush is put right after, and never on a day to come, which the server refuses too: "That day has not begun yet, so nobody can be checked in for it."
    A Viewer is offered neither: they read the frame's "You can view this market but not change it. …", the rail's "Follow who has checked in at the door.", and each row ending at its status (E38/F15/S04).
 6. In Market Days, someone who may check vendors in opens "Door code", beside "Print roster" in the toolbar: the market's name, its QR code, the code as "K7M 4QP" and "Scan with your phone's camera to check in or out", full screen, for the tablet or laptop that stands at the entrance.
@@ -152,7 +153,7 @@ Covered by:
    On the map, "Find a vendor" is a search with a dropdown of the day's vendors, found by the name they go by, the full name on their identification, address or table, each row saying where they sit; picking one opens their drawer and outlines their table, switching the map to their location when it is the other one, and closing the drawer clears the outline; typing alone outlines nothing (T466).
    The map changes as the roster reads itself again, and the dropdown keeps its words and stays open through a re-read.
    Under the map, "<n> here with no table" and "<n> vendors are at tables not on a layout." count the vendors it cannot draw, each with "Show in the list", which opens the list showing all; with no location laid out it says "No location has a layout yet." alone, with "Open the layout" for whoever may change the setup.
-   Check in and Undo stay on the list: the map and the drawer check nobody in, so a Viewer reads the map as an Editor does.
+   Check in, Check out and Undo? stay on the list: the map and the drawer check nobody in or out, so a Viewer reads the map as an Editor does.
 
 It lists everyone expected on the day, so it shows who is missing; "Nobody is assigned on this date." on a date with nobody.
 It works at a phone's width, as only the other organizer screens that fit a phone do ([attendance and the door](../../implementation/modules/attendance-and-door.md#sharp-edges)), and there its rows keep a gutter at both sides rather than running to the card's edges (T15).
@@ -171,12 +172,12 @@ Covered by:
 
 ## K10. Check a vendor out
 
-**Status:** Works (read from the code as of T496, `the-door-checks-a-vendor-out.spec.ts`, `a-vendor-checks-out.spec.ts`).
+**Status:** Works (read from the code as of T500, `the-door-checks-a-vendor-out.spec.ts`, `a-vendor-checks-out.spec.ts`).
 **Task (organizer):** "A vendor is leaving and has handed back what they borrowed. Record that they left."
 
-1. On Attendance's list, in Market Days, a checked-in vendor's row offers "Check out", the main button, before "Undo", for someone who may check vendors in, on any day with a check-in, a vendor here with no table that day included.
-2. Expect the row to keep its status and gain a second chip, "Out 4:05 PM by you", and one "Undo", which undoes the check-out and brings "Check out" and the check-in's "Undo" back.
-3. A check-in is not undone while the vendor is checked out: the row offers only the check-out's "Undo", and the server answers "Undo the check-out first."
+1. On Attendance's list, in Market Days, a checked-in vendor's row offers "Check out", its one button, for someone who may check vendors in, on any day with a check-in, a vendor here with no table that day included.
+2. Expect the row to keep its status and gain a second chip, "Out 4:05 PM by you", with one "Undo?" just left of that chip, which undoes the check-out and brings "Check out" back, with the check-in's "Undo?" left of its status.
+3. A check-in is not undone while the vendor is checked out: the row has no "Undo?" by its status, only the check-out's "Undo?" by the departure chip, and a check-in's undo sent anyway is answered "Undo the check-out first."
 
 **Task (vendor), at a market that lets vendors check themselves in and out:** "You are leaving. Check out."
 
@@ -205,7 +206,7 @@ Covered by:
 4. Turn it off again: the code is kept, and it and every poster of it work again once the switch is back on.
 
 While it is off a vendor's page offers no check-in, no check-out and no "Undo": today's seat reads "An organizer checks you in at the door.", then "An organizer checks you out at the door." once an organizer has checked them in, and a scanned door code is answered "Vendors are checked in and out by an organizer at this market. Ask at the door." (K2).
-The organizer's own "Check in", "Check out" and "Undo" on Attendance work the same with the switch on or off.
+The organizer's own "Check in", "Check out" and "Undo?" on Attendance work the same with the switch on or off.
 A Viewer is offered no "Door code", so no switch.
 The market's history says who turned it: "… let vendors check themselves in and out" and "… stopped vendors checking themselves in and out".
 Covered by:
