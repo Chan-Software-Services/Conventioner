@@ -22,12 +22,14 @@ results do not read as changed; it sends nothing to anyone and records no histor
 the history already holds that names a location (a layout removed with it) is a record of that day
 and is left as written.
 
-It refuses, writing nothing and exiting 1, when: the market is not found or is a draft (rename it
-on Market Setup); either location is not found, or is named by more than one of the plan's
-locations; both arguments name one location; either location, a section in it, or that section's
-copy of it has no stored id (run ``migrate_layouts.py`` first: an id read from a name would change
-with the name); a section's copy disagrees with the location it names; or a seat's copy of the name
-disagrees with the section it is in.
+It refuses, writing nothing and exiting 1, when: the market is not found, is being deleted, does
+not parse, has no plan or is a draft (rename it on Market Setup); its locations, sections or seats
+are not stored as rows; either location is not found, has no name, or shares its name with another
+of the plan's locations; both arguments name one location; either location, a section in it, or
+that section's copy of it has no stored id (run ``migrate_layouts.py`` first: an id read from a
+name would change with the name); a section's copy disagrees with the location it names; both
+locations hold a section of one name; a seat's copy of the name disagrees with the section it is
+in; or the market changed between the read and the write.
 
 **One write, all or nothing**: the whole swap is a single update of one document, through
 ``write_market``, holding the phase, ``planRevision``, the assignment's ``revision`` and

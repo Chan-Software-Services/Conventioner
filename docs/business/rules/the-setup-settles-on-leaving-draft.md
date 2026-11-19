@@ -14,7 +14,7 @@ describes:
   - back-end/api/floorplans_save.py#save_floorplan_to_market
   - back-end/layout.py#count_refusal
   - back-end/migrations/swap_location_names.py
-verified: 2026-11-16
+verified: 2026-11-19
 sources:
   - wayfinding/the-order-of-the-work/03
   - wayfinding/the-order-of-the-work/map
