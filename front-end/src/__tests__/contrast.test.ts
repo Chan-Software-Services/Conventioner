@@ -314,17 +314,10 @@ describe('the palette carries a contrast contract', () => {
   /*
    * A chart's marks (T201): a bar's fill or a part of a split bar carries no text, so it is held to
    * the 3:1 a graphic needs on the white card it is drawn on, laid over that white where it is
-   * translucent (the grey of a status no filter lists is the muted ink). Each is listed here, those
-   * it shares with the buttons and the text included, so a token retinted for one of those cannot
-   * fade a chart unseen.
+   * translucent. Each is listed here, those it shares with the buttons and the text included, so a
+   * token retinted for one of those cannot fade a chart unseen.
    */
-  const CHART_MARKS = [
-    '--mm-chart-yellow',
-    '--mm-blue',
-    '--mm-green',
-    '--mm-red',
-    '--mm-chart-grey',
-  ];
+  const CHART_MARKS = ['--mm-chart-yellow', '--mm-blue', '--mm-green', '--mm-red'];
 
   for (const mark of CHART_MARKS) {
     it(`${mark} is visible as a chart mark on white`, () => {

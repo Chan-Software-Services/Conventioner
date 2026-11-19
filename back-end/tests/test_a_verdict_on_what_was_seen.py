@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import api.applicants as ApplicantsApi  # noqa: E402
 import api.applications as ApplicationsApi  # noqa: E402
-from conftest import FakeApplicationsCollection, reviewing  # noqa: E402
+from conftest import FakeApplicationsCollection, a_review_view, reviewing  # noqa: E402
 from datatypes import ApplicationStatus, VerdictGiver  # noqa: E402
 
 ALEX = VerdictGiver(kind="person", user_id="user-alex", email="alex@market.test")
@@ -36,10 +36,10 @@ def stored(monkeypatch):
 def test_two_verdicts_on_what_both_saw_the_first_is_written_the_second_refused(stored):
     first, first_status = ApplicantsApi.review_application(
         "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
-        reviewing=reviewing("market-1", ALEX.email), seen=OPEN_AS_SEEN)
+        reviewing=reviewing("market-1", ALEX.email), view=a_review_view(), seen=OPEN_AS_SEEN)
     second, second_status = ApplicantsApi.review_application(
         "market-1", "app-1", ApplicationStatus.REVIEWER_REJECTED, by=SAM,
-        reviewing=reviewing("market-1", SAM.email), seen=OPEN_AS_SEEN)
+        reviewing=reviewing("market-1", SAM.email), view=a_review_view(), seen=OPEN_AS_SEEN)
 
     assert first_status == 200
     assert second_status == 409
@@ -54,12 +54,12 @@ def test_two_verdicts_on_what_both_saw_the_first_is_written_the_second_refused(s
 def test_a_verdict_on_what_is_still_there_is_written(stored):
     ApplicantsApi.review_application(
         "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
-        reviewing=reviewing("market-1", ALEX.email), seen=OPEN_AS_SEEN)
+        reviewing=reviewing("market-1", ALEX.email), view=a_review_view(), seen=OPEN_AS_SEEN)
     as_now = {"status": "reviewer_approved", "verdict_at": stored[0]["verdict_at"]}
 
     _, status = ApplicantsApi.review_application(
         "market-1", "app-1", ApplicationStatus.REVIEWER_REJECTED, by=SAM,
-        reviewing=reviewing("market-1", SAM.email), seen=as_now)
+        reviewing=reviewing("market-1", SAM.email), view=a_review_view(), seen=as_now)
 
     assert status == 200
     assert stored[0]["verdict_by"]["email"] == "sam@market.test"
@@ -72,7 +72,7 @@ def test_a_change_nobody_gave_is_said_plainly(stored):
 
     body, status = ApplicantsApi.review_application(
         "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=SAM,
-        reviewing=reviewing("market-1", SAM.email), seen=OPEN_AS_SEEN)
+        reviewing=reviewing("market-1", SAM.email), view=a_review_view(), seen=OPEN_AS_SEEN)
 
     assert status == 409
     assert body["error"] == "An automatic rejection rejected this application since you opened it."
@@ -86,7 +86,7 @@ def test_answers_changed_since_it_was_opened_refuse_the_verdict(stored):
 
     body, status = ApplicantsApi.review_application(
         "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
-        reviewing=reviewing("market-1", ALEX.email), seen=seen)
+        reviewing=reviewing("market-1", ALEX.email), view=a_review_view(), seen=seen)
 
     assert status == 409
     assert body["error"] == "Its answers changed since you opened it."

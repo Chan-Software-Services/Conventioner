@@ -16,6 +16,7 @@ import { ApplicationStatus, type Application, type Market } from '@/assets/types
 import { MarketAction } from '@/utils/marketActions';
 import { FULL_NAME_KEY } from '@/utils/essentialFields';
 import { answersRefusing } from './support/servedAnswers';
+import { servedReview } from './support/servedReview';
 
 const fetchMarketApplications = vi.fn();
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
@@ -40,6 +41,7 @@ function application(id: string, products?: string): Application {
     marketId: 'm1',
     applicantEmail: `${id}@vendor.test`,
     status: ApplicationStatus.Open,
+    ...servedReview('open'),
     formData: products ? { products } : {},
     submittedAt: '2026-09-15T14:20:18.000Z',
     reviewer: null,

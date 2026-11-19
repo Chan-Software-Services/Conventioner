@@ -16,7 +16,7 @@ Driven through the routes, as an applicant and an organizer reach them.
 """
 import pytest
 
-from conftest import seen_as_stored
+from conftest import a_review_view, seen_as_stored
 from test_choosing_reviewers_deals_the_open_applications import ADMIN, MARKET, _client
 from test_csv_import import GOOD_ROW, MAPPING, _csv
 from test_csv_import import _market_doc as _import_market_doc
@@ -132,7 +132,7 @@ class TestTheApplicantsSave:
         assert doc["status"] == ApplicationStatus.REVIEWER_APPROVED.value
         assert doc["origin"] == "applied"
         assert ReviewState.state_of(doc) is ReviewState.State.APPROVED_BY_A_PERSON
-        assert ApplicantsApi.organizer_view(doc)["origin"] == "applied"
+        assert ApplicantsApi.organizer_view(doc, a_review_view())["origin"] == "applied"
 
     def test_an_added_vendor_rejected_goes_back_to_open_as_an_applicant(self, world):
         added = ReviewState.add(MARKET, VENDOR, {"essential_full_name": "Walk-in Wares"}, ADDER)

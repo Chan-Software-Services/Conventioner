@@ -142,7 +142,7 @@ def client(monkeypatch):
     monkeypatch.setattr(MarketsApi, "markets_collection", FakeMarketsCollection(_market_doc()))
     monkeypatch.setattr(
         ApplicantsApi, "list_market_applications",
-        lambda market_id: ({"applications": [{"applicantEmail": "vendor@example.com"}]}, 200),
+        lambda market_id, view: ({"applications": [{"applicantEmail": "vendor@example.com"}]}, 200),
     )
     reviewed = []
     monkeypatch.setattr(

@@ -138,7 +138,8 @@ def update_vendor_info(
     dealt = ReviewTeam.deal_arrivals(market) if verdicts.returned else 0
     if verdicts.rejected or verdicts.returned or dealt:
         stored = ApplicationsApi.find_application_by_id(application_id) or stored
-    return {"application": ApplicantsApi.organizer_view(stored)}, 200
+    return {"application": ApplicantsApi.organizer_view(
+        stored, ReviewTeam.review_view(market, change.organization))}, 200
 
 
 def _write_updates(

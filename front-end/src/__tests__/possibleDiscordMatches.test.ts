@@ -25,6 +25,7 @@ import {
   type Market,
 } from '@/assets/types/datatypes';
 import { tryEveryClose } from './support/dialogCloses';
+import { servedReview } from './support/servedReview';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
 const refresh = vi.hoisted(() => vi.fn(() => Promise.resolve()));
@@ -45,6 +46,7 @@ function app(id: string, answer?: string, overrides: Partial<Application> = {}):
     applicantEmail: `${id}@thistle.test`,
     formData: answer === undefined ? {} : { [QUESTION]: answer },
     status: ApplicationStatus.ReviewerApproved,
+    ...servedReview('approved'),
     applicationType: ApplicationType.Main,
     updatedAt: '2026-10-01T00:00:00Z',
     ...overrides,

@@ -18,6 +18,7 @@ import application_status as ReviewState  # noqa: E402
 import market_write as MarketWrite  # noqa: E402
 import rejection_rules as Rules  # noqa: E402
 from conftest import (  # noqa: E402
+    a_review_view,
     FakeApplicationsCollection, a_change_of, client_market, complete_setup, reviewing,
     seen_as_read,
 )
@@ -154,7 +155,8 @@ class TestWhatJudgingNeverDoes:
             docs = [dict(doc) for doc in read(market_id, application_id)]
             ApplicantsApi.review_application(
                 "market-123", "a", ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
-                reviewing=reviewing("market-123", ALEX.email), seen=seen_as_read("a"))
+                reviewing=reviewing("market-123", ALEX.email), view=a_review_view(),
+                seen=seen_as_read("a"))
             return docs
 
         monkeypatch.setattr(ApplicationsApi, "judgeable_applications", read_then_a_person_decides)
@@ -172,7 +174,7 @@ class TestWhoSeesTheReason:
                               "verdict_reason": "Did not tick “I understand that no-shows”"})
 
     def test_the_organizer_sees_it(self):
-        served = ApplicantsApi._application_response_organizer(self._rejected())
+        served = ApplicantsApi._application_response_organizer(self._rejected(), a_review_view())
         assert served["verdictReason"] == "Did not tick “I understand that no-shows”"
         assert served["verdictBy"]["kind"] == "rule"
 
@@ -188,7 +190,8 @@ class TestWhoSeesTheReason:
 
         ApplicantsApi.review_application(
             "market-123", "a", ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
-            reviewing=reviewing("market-123", ALEX.email), seen=seen_as_read("a"))
+            reviewing=reviewing("market-123", ALEX.email), view=a_review_view(),
+            seen=seen_as_read("a"))
 
         assert stored[0]["verdict_by"]["kind"] == "person"
         assert "verdict_reason" not in stored[0]

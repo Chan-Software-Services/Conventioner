@@ -17,6 +17,7 @@ import { MarketAction } from '@/utils/marketActions';
 import { applicationsAllSeed } from '@/utils/vendorExport';
 import { answersRefusing } from './support/servedAnswers';
 import { toolsOf } from './support/reviewViewTools';
+import { servedReview } from './support/servedReview';
 
 const ANA = 'ana@example.com';
 const SAM = 'sam@example.com';
@@ -40,8 +41,15 @@ vi.mock('@/utils/applicantApi', async (importOriginal) => {
 });
 vi.mock('@/utils/signedIn', () => ({ signedInEmail: () => signedIn.email }));
 
-function application(id: string, status: ApplicationStatus, reviewer: string | null): Application {
+/** An application as stored, with the review the server serves it while Ana and Sam are chosen. */
+function application(
+  id: string,
+  status: ApplicationStatus,
+  reviewer: string | null,
+  served: ReturnType<typeof servedReview>,
+): Application {
   return {
+    ...served,
     id,
     marketId: 'm1',
     applicantEmail: `${id}@vendor.test`,
@@ -77,11 +85,16 @@ function market({ chosen = true } = {}): Market {
 }
 
 const ROWS = [
-  application('ana-1', ApplicationStatus.Open, ANA),
-  application('sam-1', ApplicationStatus.Open, SAM),
-  application('ana-2', ApplicationStatus.ReviewerApproved, ANA),
-  application('sam-2', ApplicationStatus.Open, SAM),
-  application('never-dealt', ApplicationStatus.ReviewerRejected, null),
+  application('ana-1', ApplicationStatus.Open, ANA, servedReview('open', { share: [ANA] })),
+  application('sam-1', ApplicationStatus.Open, SAM, servedReview('open', { share: [SAM] })),
+  application(
+    'ana-2',
+    ApplicationStatus.ReviewerApproved,
+    ANA,
+    servedReview('approved', { share: [ANA] }),
+  ),
+  application('sam-2', ApplicationStatus.Open, SAM, servedReview('open', { share: [SAM] })),
+  application('never-dealt', ApplicationStatus.ReviewerRejected, null, servedReview('rejected')),
 ];
 
 beforeEach(() => {

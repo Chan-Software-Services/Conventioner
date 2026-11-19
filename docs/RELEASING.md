@@ -371,6 +371,7 @@ python migrations/migrate_organization_people.py      # AFTER the deploy, whenev
 python migrations/migrate_organization_people.py --reconcile  # ONLY after a roll forward over a rollback past the map's release, `--dry-run` first: rebuilds each map from its lists
 python migrations/migrate_assignment_state.py         # AFTER the deploy, `--dry-run` first, and again after any roll forward past a rollback: stores each market's assignment state and its published revision
 python migrations/migrate_owed_day_state.py           # Right AFTER the deploy, `--dry-run` first, and again after any roll forward past a rollback: stores each owed table-day's state, and drops an Admin's amount on a day not held, recording it
+python migrations/migrate_application_status.py       # Right AFTER the deploy, before any organizer uses Begin assignment, `--dry-run` first, and again after any roll forward past a rollback: stores each application's status and origin the review reads, and marks those waiting for the deal
 ```
 
 `migrate_placement_history.py` runs **after** its deploy, not before (E40/F01/S01): it moves every `placement_history` entry into `history` with its fields unchanged and drops the old collection, and a run before the deploy leaves behind whatever the old build writes meanwhile.

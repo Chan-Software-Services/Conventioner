@@ -12,6 +12,12 @@ never moves.
 
 With no reviewers chosen, everything is first come, first served, as before this existed.
 
+**Whose share an application is in is served, never worked out again** (T277 ticket 02): every
+application an organizer reads carries ``review`` (``review_of``), its state, whose share it is in
+(``share_of``) and whether it waits for the deal (``is_waiting``), read over one ``ReviewView`` of
+the market per request (``review_view``), so a list of hundreds reads the people with a role on the
+market once.
+
 **Every move into open, and every hand-on of a follow-up, waits for the deal**: an arrival, an
 undo, a rule's return, a re-import's or an applicant's back to review and a follow-up's hand-on
 each mark their application (``arriving``, ``ReviewState.Arrival``) in their own write, whether
@@ -35,8 +41,9 @@ the log.
 import logging
 import time
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, NamedTuple, Optional, Tuple
 
 import api.applications as ApplicationsApi
 import api.market_actions as Actions
@@ -47,7 +54,7 @@ import history as History
 from assignment.utils import convert_keys_to_camel_case, convert_keys_to_snake_case
 from client_errors import ConflictError
 from datatypes import (
-    ApplicationStatus, Market, MarketPerson, MarketPhase, Organization, ReviewTeam,
+    ApplicationStatus, IntakeMode, Market, MarketPerson, MarketPhase, Organization, ReviewTeam,
 )
 from db_config import get_database
 from market_documents import market_doc_field, market_doc_key, market_from_document
@@ -125,6 +132,87 @@ def served(
     return {"reviewers": [
         {"email": person.email, "able": person.user_id in able} for person in team.reviewers
     ]}
+
+
+# --- The served review state (T277 ticket 02) -----------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ReviewView:
+    """What an organizer's read needs of the market to serve each application's review state, read
+    once per request (``review_view``) however many applications it answers: the chosen
+    reviewers' addresses (``chosen``), the user ids of everyone holding any role on the market
+    (``may_own``), who may keep a follow-up, and the market's intake, which an application stored
+    before its origin was kept is read by. Built by hand where no market is stored: the component
+    library's fixture and the tests."""
+
+    chosen: FrozenSet[str]
+    may_own: FrozenSet[str]
+    intake: Optional[IntakeMode]
+
+
+def review_view(market: Market, organization: Optional[Organization]) -> ReviewView:
+    """The view of ``market`` an organizer's read serves the review state over, from the market
+    and organization its route already loaded. With no reviewers chosen nobody's share is read, so
+    the roles are not read either."""
+    chosen = frozenset(_addresses(team_of(market).reviewers))
+    may_own = (frozenset(PermissionsApi.people_with_market_role(market, organization))
+               if chosen else frozenset())
+    return ReviewView(chosen=chosen, may_own=may_own, intake=market.intake_mode)
+
+
+def _normalized(person: Optional[Dict[str, Any]]) -> str:
+    return normalized_email((person or {}).get("email") or "")
+
+
+def share_of(doc: Dict[str, Any], view: ReviewView) -> List[str]:
+    """The addresses whose share this application is in (ADR 0020), reviewer first, each once.
+
+    None with no reviewers chosen. An open one is its reviewer's while they are one of the chosen
+    reviewers, able or not, since a chosen reviewer who may no longer review keeps their share
+    until an Admin removes them. A follow-up is its reviewer's while they are chosen, and its
+    owner's while the owner holds any role on the market, who keeps it whether or not they may be
+    chosen to review. A decided one stays the share of the reviewer it was dealt to, whoever they
+    are now, as the record of whose share it was."""
+    if not view.chosen:
+        return []
+    state = ReviewState.state_of(doc)
+    reviewer = _normalized(doc.get("reviewer"))
+    if not state.undecided:
+        return [reviewer] if reviewer else []
+    share = [reviewer] if reviewer in view.chosen else []
+    if state is ReviewState.State.FOLLOW_UP:
+        owner = doc.get("follow_up_owner") or {}
+        address = _normalized(owner)
+        if address and owner.get("user_id") in view.may_own and address not in share:
+            share.append(address)
+    return share
+
+
+def is_waiting(doc: Dict[str, Any], view: ReviewView) -> bool:
+    """Whether this application waits for the deal: undecided, reviewers are chosen, and open
+    with a reviewer who is not one of the chosen reviewers (none, or a removed one), so in nobody's
+    share, or a follow-up whose owner holds no role on the market, which stays in its reviewer's
+    share while they are chosen (``share_of``). Exactly what a deal reaching it would move, who is
+    able aside, which stays the deal's own judgment while it holds the market
+    (``_deal_arriving``)."""
+    if not view.chosen:
+        return False
+    state = ReviewState.state_of(doc)
+    if state is ReviewState.State.OPEN:
+        return _normalized(doc.get("reviewer")) not in view.chosen
+    if state is ReviewState.State.FOLLOW_UP:
+        return (doc.get("follow_up_owner") or {}).get("user_id") not in view.may_own
+    return False
+
+
+def review_of(doc: Dict[str, Any], view: ReviewView) -> Dict[str, Any]:
+    """An application's review state as every organizer read serves it (``review``): its state,
+    whether it awaits a verdict, whose share it is in and whether it waits for the deal, so no
+    screen works any of them out again from the stored status."""
+    state = ReviewState.state_of(doc)
+    return {"state": state.served.value, "undecided": state.undecided,
+            "share": share_of(doc, view), "waiting": is_waiting(doc, view)}
 
 
 def choose(

@@ -26,7 +26,7 @@ const { applications, people, reviewers, export: offered } = fixture;
 const statusOptions: FilterToggle[] = ALL_VIEW_FILTERS.map(({ id, label }) => ({
   id,
   label,
-  count: applications.filter(({ status }) => allViewLists(id, status)).length,
+  count: applications.filter(({ review }) => allViewLists(id, review.state)).length,
 }));
 const labelOf = (options: FilterToggle[], ids: string | string[]) =>
   [ids]

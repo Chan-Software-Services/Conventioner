@@ -23,6 +23,7 @@ sources:
   - T263
   - T201
   - T421
+  - T452
 ---
 
 # The market's statistics
@@ -76,9 +77,10 @@ Covered by:
 3. The days are the reader's own calendar: the server keeps no time zone for a market, so it sends only the time each applied, never who, and the page makes the days.
    When applications opened and closed come from the market's [phase record](../../implementation/modules/phase-record.md): the first entry into applications, and the first entry into assignment after it, so a market reopened or sent back to review keeps its first opening; while a market sent back takes applications again, the chart runs to today, so the quiet days since show.
    A market out of applications whose record holds no close, one that predates the record, ends at its last response; a response after the close is still drawn.
-4. "Where the review stands" is one bar of every application split by status, in the Applications tab's All view's order: Open, Needs follow-up, Approved and Rejected, each its own fill, set apart by a white gap.
-   Its legend is the text, a line per status with its count and share, each count what that filter lists; a line opens the All view on its filter, on every reviewer's share ("Assigned to: Anyone"), since the count is everyone's, and a status nobody is in is told but not linked.
-   The server counts every application by its stored status, and the page counts those into the filters through the All view's own test ([`applicantStats.ts`](../../../front-end/src/utils/applicantStats.ts)), so the two pages agree; a status no filter lists is a grey part of its own, linked nowhere.
+4. "Where the review stands" is one bar of every application split by its review state, in the Applications tab's All view's order: Open, Needs follow-up, Approved and Rejected, each its own fill, set apart by a white gap.
+   Its legend is the text, a line per state with its count and share, each count what that filter lists; a line opens the All view on its filter, on every reviewer's share ("Assigned to: Anyone"), since the count is everyone's, and a state nobody is in is told but not linked.
+   The server counts every application by the review state it serves each one ([the served review state](../../implementation/data/application-document.md#the-served-review-state)), and the page counts those into the filters through the All view's own test ([`applicantStats.ts`](../../../front-end/src/utils/applicantStats.ts)), so the two pages agree and "open to review" is the Open filter's count; every state is one filter's, so the parts add up to every application, and a status the review no longer gives, `cancelled` or the old offers flow's, is counted under the filter the server reads it as.
+   The answer still carries every application by its stored status beside the states, for a front end built before them, which a deploy that promotes the back end first leaves reading the new back end for a while; no screen reads it.
 
 Covered by:
 

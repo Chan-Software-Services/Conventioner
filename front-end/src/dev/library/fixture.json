@@ -37,6 +37,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -76,6 +84,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -114,6 +130,14 @@
           "stillOwed": "$40.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -153,6 +177,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -193,6 +225,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -230,6 +270,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -271,6 +319,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -311,6 +367,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -349,6 +413,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -388,6 +460,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -425,6 +505,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -466,6 +554,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -504,6 +600,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -544,6 +648,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -585,6 +697,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -625,6 +745,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -662,6 +790,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -701,6 +837,14 @@
           "stillOwed": "$45.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -740,6 +884,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -782,6 +934,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -821,6 +981,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -861,6 +1029,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -903,6 +1079,14 @@
           "stillOwed": "-$10.00",
           "state": "over"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -942,6 +1126,14 @@
           "stillOwed": "$65.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -980,6 +1172,14 @@
           "stillOwed": "$30.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1019,6 +1219,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1059,6 +1267,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1100,6 +1316,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1139,6 +1363,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1177,6 +1409,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1218,6 +1458,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1256,6 +1504,14 @@
           "stillOwed": "$50.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1294,6 +1550,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1333,6 +1597,14 @@
           "stillOwed": "-$10.00",
           "state": "over"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1373,6 +1645,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1412,6 +1692,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1449,6 +1737,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1493,6 +1789,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1536,6 +1840,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1577,6 +1889,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1616,6 +1936,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1653,6 +1981,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1694,6 +2030,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1732,6 +2076,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1771,6 +2123,14 @@
           "stillOwed": "$15.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1812,6 +2172,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1850,6 +2218,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1890,6 +2266,14 @@
           "stillOwed": "$25.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1930,6 +2314,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -1969,6 +2361,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2008,6 +2408,14 @@
           "stillOwed": "$40.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2046,6 +2454,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2083,6 +2499,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2121,6 +2545,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2160,6 +2592,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2201,6 +2641,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2241,6 +2689,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2279,6 +2735,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2319,6 +2783,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2358,6 +2830,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2394,6 +2874,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2431,6 +2919,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2471,6 +2967,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2510,6 +3014,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2548,6 +3060,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2586,6 +3106,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2623,6 +3151,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2664,6 +3200,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2705,6 +3249,14 @@
           "stillOwed": "$15.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2744,6 +3296,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2782,6 +3342,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2822,6 +3390,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2862,6 +3438,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2902,6 +3486,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2941,6 +3533,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -2981,6 +3581,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3018,6 +3626,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3055,6 +3671,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3096,6 +3720,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3136,6 +3768,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3177,6 +3817,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3213,6 +3861,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3253,6 +3909,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3290,6 +3954,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3331,6 +4003,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3372,6 +4052,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3410,6 +4098,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3449,6 +4145,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3486,6 +4190,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3525,6 +4237,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3566,6 +4286,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3607,6 +4335,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3642,6 +4378,14 @@
           "stillOwed": "-$10.00",
           "state": "over"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3686,6 +4430,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3725,6 +4477,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3761,6 +4521,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3802,6 +4570,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3843,6 +4619,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3881,6 +4665,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3923,6 +4715,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -3963,6 +4763,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4001,6 +4809,14 @@
           "stillOwed": "$15.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4040,6 +4856,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4079,6 +4903,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4116,6 +4948,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4154,6 +4994,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4194,6 +5042,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4232,6 +5088,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4270,6 +5134,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4309,6 +5181,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4347,6 +5227,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4389,6 +5277,14 @@
           "stillOwed": "$15.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4426,6 +5322,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4465,6 +5369,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4504,6 +5416,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4545,6 +5465,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4585,6 +5513,14 @@
           "stillOwed": "$25.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4629,6 +5565,14 @@
           "stillOwed": "$55.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4669,6 +5613,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4708,6 +5660,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4750,6 +5710,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4787,6 +5755,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4826,6 +5802,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4864,6 +5848,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4904,6 +5896,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4943,6 +5943,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -4984,6 +5992,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5023,6 +6039,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5060,6 +6084,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5099,6 +6131,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5140,6 +6180,14 @@
           "stillOwed": "$50.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5177,6 +6225,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5214,6 +6270,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5251,6 +6315,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5289,6 +6361,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5330,6 +6410,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5371,6 +6459,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5409,6 +6505,14 @@
           "stillOwed": "$25.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5446,6 +6550,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5487,6 +6599,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5526,6 +6646,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5566,6 +6694,14 @@
           "stillOwed": "$25.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5605,6 +6741,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5643,6 +6787,14 @@
           "stillOwed": "$40.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5683,6 +6835,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5721,6 +6881,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5760,6 +6928,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5802,6 +6978,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5843,6 +7027,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5879,6 +7071,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5918,6 +7118,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5956,6 +7164,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -5993,6 +7209,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6033,6 +7257,14 @@
           "stillOwed": "$55.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6075,6 +7307,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6111,6 +7351,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6150,6 +7398,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6189,6 +7445,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6228,6 +7492,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6266,6 +7538,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6306,6 +7586,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6343,6 +7631,14 @@
           "stillOwed": "-$10.00",
           "state": "over"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6384,6 +7680,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6422,6 +7726,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6464,6 +7776,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6503,6 +7823,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6542,6 +7870,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6581,6 +7917,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6620,6 +7964,14 @@
           "stillOwed": "-$10.00",
           "state": "over"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6659,6 +8011,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6695,6 +8055,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6733,6 +8101,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6773,6 +8149,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6812,6 +8196,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6848,6 +8240,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6889,6 +8289,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6930,6 +8338,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -6971,6 +8387,14 @@
           "stillOwed": "$50.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7009,6 +8433,14 @@
           "stillOwed": "$25.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7048,6 +8480,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7089,6 +8529,14 @@
           "stillOwed": "$25.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7126,6 +8574,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7164,6 +8620,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7204,6 +8668,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7242,6 +8714,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7282,6 +8762,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7322,6 +8810,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7362,6 +8858,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7400,6 +8904,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7439,6 +8951,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7477,6 +8997,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7514,6 +9042,14 @@
           "stillOwed": "$15.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7553,6 +9089,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7591,6 +9135,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7628,6 +9180,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7667,6 +9227,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7705,6 +9273,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7744,6 +9320,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7784,6 +9368,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7823,6 +9415,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7861,6 +9461,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7900,6 +9508,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7936,6 +9552,14 @@
           "stillOwed": "$40.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -7976,6 +9600,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8013,6 +9645,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8050,6 +9690,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8089,6 +9737,14 @@
           "stillOwed": "$25.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8129,6 +9785,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8170,6 +9834,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8207,6 +9879,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8245,6 +9925,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8285,6 +9973,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8324,6 +10020,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8364,6 +10068,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8403,6 +10115,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8446,6 +10166,14 @@
           "stillOwed": "$25.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8489,6 +10217,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8529,6 +10265,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8566,6 +10310,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8602,6 +10354,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8641,6 +10401,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8679,6 +10447,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8717,6 +10493,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8757,6 +10541,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8793,6 +10585,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8830,6 +10630,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8868,6 +10676,14 @@
           "stillOwed": "$40.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8906,6 +10722,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8942,6 +10766,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -8980,6 +10812,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9019,6 +10859,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9056,6 +10904,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9097,6 +10953,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9135,6 +10999,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9173,6 +11045,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9210,6 +11090,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9247,6 +11135,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9284,6 +11180,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9320,6 +11224,14 @@
           "stillOwed": "$25.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9356,6 +11268,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9395,6 +11315,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9433,6 +11361,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9472,6 +11408,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9511,6 +11455,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9550,6 +11502,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9591,6 +11551,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9629,6 +11597,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9668,6 +11644,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9706,6 +11690,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9745,6 +11737,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9783,6 +11783,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9821,6 +11829,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9860,6 +11876,14 @@
           "stillOwed": "$65.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9895,6 +11919,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9932,6 +11964,14 @@
           "stillOwed": "$15.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -9970,6 +12010,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10007,6 +12055,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10047,6 +12103,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10084,6 +12148,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10123,6 +12195,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10160,6 +12240,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10198,6 +12286,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10237,6 +12333,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10276,6 +12380,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10315,6 +12427,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10353,6 +12473,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10391,6 +12519,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10430,6 +12566,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10468,6 +12612,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10507,6 +12659,14 @@
           "stillOwed": "$55.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10548,6 +12708,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10587,6 +12755,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10627,6 +12803,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10668,6 +12852,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10709,6 +12901,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10745,6 +12945,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10781,6 +12989,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10821,6 +13037,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10858,6 +13082,14 @@
           "stillOwed": "$40.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10898,6 +13130,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10934,6 +13174,14 @@
           "stillOwed": "$15.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -10973,6 +13221,14 @@
           "stillOwed": "$40.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11010,6 +13266,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11050,6 +13314,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11087,6 +13359,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11126,6 +13406,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11164,6 +13452,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11202,6 +13498,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11239,6 +13543,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11279,6 +13591,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11317,6 +13637,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11356,6 +13684,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11393,6 +13729,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11434,6 +13778,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11471,6 +13823,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11513,6 +13873,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11549,6 +13917,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11588,6 +13964,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11628,6 +14012,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11669,6 +14061,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11708,6 +14108,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11747,6 +14155,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11783,6 +14199,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11822,6 +14246,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11860,6 +14292,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11898,6 +14338,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11940,6 +14388,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -11979,6 +14435,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12018,6 +14482,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12057,6 +14529,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12096,6 +14576,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12134,6 +14622,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12174,6 +14670,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "follow_up",
+        "undecided": true,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12215,6 +14719,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12254,6 +14766,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12294,6 +14814,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12332,6 +14860,14 @@
           "stillOwed": "$25.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12369,6 +14905,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12407,6 +14951,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12443,6 +14995,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12481,6 +15041,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12522,6 +15090,14 @@
           "stillOwed": "$15.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12562,6 +15138,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12601,6 +15185,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12640,6 +15232,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12678,6 +15278,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12717,6 +15325,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12753,6 +15369,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12791,6 +15415,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12832,6 +15464,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "zach.murphy99@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12869,6 +15509,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12910,6 +15558,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12948,6 +15604,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -12988,6 +15652,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "robert.bailey11@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13027,6 +15699,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13068,6 +15748,14 @@
           "stillOwed": "$50.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13106,6 +15794,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13146,6 +15842,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13185,6 +15889,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13222,6 +15934,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13259,6 +15979,14 @@
           "stillOwed": "$15.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13297,6 +16025,14 @@
           "stillOwed": "$30.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "elijah.perez35@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13336,6 +16072,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13380,6 +16124,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "charles.wang150@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13418,6 +16170,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13454,6 +16214,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13494,6 +16262,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13532,6 +16308,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13573,6 +16357,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "chloe.walker32@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13610,6 +16402,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "open",
+        "undecided": true,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13647,6 +16447,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13685,6 +16493,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "rejected",
+        "undecided": false,
+        "share": [
+          "connor.collins91@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13723,6 +16539,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "nora.fischer34@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13762,6 +16586,14 @@
           "stillOwed": "$0.00",
           "state": null
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "claire.gomez107@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13802,6 +16634,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "jasmine.alvarez129@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13840,6 +16680,14 @@
           "stillOwed": "$40.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "freya.bell54@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13878,6 +16726,14 @@
           "stillOwed": "$65.00",
           "state": "owes"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13919,6 +16775,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "amy.li139@example.com"
+        ],
+        "waiting": false
       }
     },
     {
@@ -13959,6 +16823,14 @@
           "stillOwed": "$0.00",
           "state": "paid"
         }
+      },
+      "review": {
+        "state": "approved",
+        "undecided": false,
+        "share": [
+          "goran.khan51@example.com"
+        ],
+        "waiting": false
       }
     }
   ],

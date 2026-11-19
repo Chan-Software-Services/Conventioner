@@ -4,13 +4,13 @@ kind: flow
 describes:
   - front-end/src/components/application/ApplicationMonitor.vue
   - front-end/src/components/application/ApplicationsAll.vue
-  - front-end/src/components/application/reviewViewTools.ts
   - front-end/src/components/market/MarketApplicationsTab.vue
   - front-end/src/components/ListFreshness.vue
   - front-end/src/components/market/ReviewersPanel.vue
   - front-end/src/components/market/ReviewerName.vue
   - front-end/src/components/application/VerdictUndoLine.vue
   - front-end/src/utils/verdictUndo.ts
+  - front-end/src/components/application/reviewViewTools.ts
 verified: 2026-11-17
 sources:
   - wayfinding/v0-1-0/map
@@ -62,6 +62,7 @@ sources:
   - T270
   - T411
   - T421
+  - T452
   - T466
 ---
 
@@ -107,7 +108,7 @@ The queue is triage: one application at a time, carrying every answer it holds, 
    The card's address breaks, on a narrow screen, only before its "@" or a dot.
    A table-share request that needs attention shows above the answers, so it is never inside the "N more answers" disclosure, and the vendor's notes below them.
    The name, else the email, is the card's heading, so a screen reader's outline files the notes under the applicant, as it does in the vendor drawer.
-   With reviewers chosen, "Reviewer: <email>" (or "Reviewer: you") under the status says whose share it is ([dividing the review](#dividing-the-review)).
+   With reviewers chosen, "Reviewer: <email>" (or "Reviewer: you") under the status says whose share it is, and "Reviewer: not dealt yet" one in nobody's share, which waits for the next deal ([dividing the review](#dividing-the-review)).
    An answer an organizer updated reads as updated, with "Updated by <address>, <when>; they wrote <their answer>" under it ([an update is kept beside the vendor's answer](../rules/an-update-is-kept-beside-the-vendors-answer.md)).
 3. "Reject" (R), "Needs follow-up" (S), "Next" (N), "Approve" (A); the keyboard letters work.
    The next card shows as a verdict is answered, a moment before the server hands it over, and the buttons wait for that.
@@ -201,7 +202,7 @@ Covered by:
 
 **Status:** Works (read from the code as of E34/F04 and E38/F05: `the-all-view.spec.ts`, `the-list-says-when-it-was-read.spec.ts`; Export, E42/F01/S03: `exporting-from-the-applications-tab.spec.ts`; the reviewer and the warning, E38/F07/S03: `rows-name-their-reviewer.spec.ts`; "Assigned to", E38/F07/S04: `the-all-view-opens-on-my-share.spec.ts`; the search and the pages, T223: `lists-at-scale.spec.ts`).
 
-1. "All" lists every application by name and email, its highlighted answers on one line, its status, who gave the verdict, with reviewers chosen whose share it is ("Reviewer: <email>", or "Reviewer: you"), "Followed up by <email>" and who has it open.
+1. "All" lists every application by name and email, its highlighted answers on one line, its status, who gave the verdict, with reviewers chosen whose share it is ("Reviewer: <email>", "Reviewer: you", or "Reviewer: not dealt yet" for one in nobody's share), "Followed up by <email>" and who has it open.
    The highlighted answers and the status lines share the row's room; with no highlighted answer in any listed row, the rows hold no column for them, so the status lines take that room rather than wrap beside an empty band (`theAllViewsRowsUseTheirRoom.test.ts`).
    The search, the statuses, Mine and "Assigned to" stand on one compact line with a rule under it, pinned flush under the toolbar from 1024px, so neither moves as the rows scroll; on a phone it scrolls with the page and the statuses wrap a small step apart (T466).
    Past 12 applications the search stands first on that line, its placeholder "Find by name or address", the same words as its label, which only a screen reader hears, finding by the legal name, the preferred name or the address, capitals aside, within what the filters leave; its words are [in the address](../../implementation/conventions/every-market-page-has-an-address.md) as `?search=`, so a refresh and a link keep them and Back leaves the page rather than stepping through them.
@@ -236,7 +237,7 @@ Each verdict, follow-up, selection's verdict and undo holds the list while it is
 
 ## Dividing the review
 
-**Status:** Works (read from the code as of E38/F07/S04: `choosing-reviewers-deals-the-open-applications.spec.ts`, `removing-a-reviewer.spec.ts`, `each-arrival-is-dealt.spec.ts`, `a-chosen-reviewer-decides.spec.ts`, `rows-name-their-reviewer.spec.ts`, `the-all-view-opens-on-my-share.spec.ts`, `one-by-one-hands-out-my-share-first.spec.ts`).
+**Status:** Works (read from the code as of E38/F07/S04: `choosing-reviewers-deals-the-open-applications.spec.ts`, `removing-a-reviewer.spec.ts`, `each-arrival-is-dealt.spec.ts`, `a-chosen-reviewer-decides.spec.ts`, `rows-name-their-reviewer.spec.ts`, `the-all-view-opens-on-my-share.spec.ts`, `one-by-one-hands-out-my-share-first.spec.ts`; the served share and "not dealt yet" as of T452: `a-card-in-nobodys-share-waits-to-be-dealt.spec.ts`, `reviewers.test.ts`).
 The rule is [the review is dealt among chosen reviewers](../rules/the-review-is-dealt-among-chosen-reviewers.md).
 
 1. A "Reviewers" panel sits under the line on where the market stands, under the review's tools, while the review is open, and is gone from Assignment on ([`ReviewersPanel.vue`](../../../front-end/src/components/market/ReviewersPanel.vue)).
@@ -256,10 +257,15 @@ The rule is [the review is dealt among chosen reviewers](../rules/the-review-is-
 6. The same picker is offered as an own-form market opens applications, and in a Google Form market's first import, on its preview step, so the reviewers can be chosen before the first application arrives ([taking applications](taking-applications.md#h1-open-applications), [the import](import.md#h2a-first-import-everything-maps)).
 7. Deciding someone else's share is not refused, to anyone who may give verdicts: every row and card names its reviewer, and an open application or follow-up dealt to someone else and not in the reader's share carries the warning on its card, in its drawer and in a selection's confirmation, every time and never as a dialog to click through (I1, [the All view](#the-all-view)); the words are [`front-end/src/utils/reviewers.ts`](../../../front-end/src/utils/reviewers.ts)'s.
    A reader who decides nothing sees the reviewer's name only, and with no reviewers chosen none of it shows.
+   One in nobody's share reads "Reviewer: not dealt yet" and warns of no one, though it may still carry the address of a reviewer since removed: an open one dealt to a reviewer taken off the team, or that arrived while nobody chosen could review, and a follow-up whose owner holds no role on the market and whose reviewer is not chosen (`a-card-in-nobodys-share-waits-to-be-dealt.spec.ts`).
+   A follow-up whose owner holds no role but whose reviewer is chosen waits for the deal too, yet is still that reviewer's share, so it names them and warns of them (`reviewers.test.ts`).
+   The line names the first address of the share the server serves, as the warning does, so a follow-up whose reviewer was removed names the owner it stays with, never the removed reviewer.
+   A chosen reviewer who can no longer review here keeps their share, named as before, until an Admin takes them off.
    The reviewer's address in the warning and in "Reviewer: <email>" breaks as the history's addresses do ([reading the market's history](reading-the-markets-history.md#l6-read-the-markets-history)).
 8. Each chosen reviewer lands on their own share: the All view opens on "Assigned to: Me", and anyone else's share, or everyone's, is a choice of the same filter away ([the All view](#the-all-view)).
 9. One by one hands a chosen reviewer who decides their own share first, in arrival order, and once it is empty says so and offers the rest with "Help with the others" (I1); when what is left of it is open with someone else, it says that instead, under "N in your share": "Every application left in your share is open with another reviewer: …".
    Anyone else, or everyone with no reviewers chosen, walks the whole queue.
+10. Every screen of the review reads whose share an application is in, whether it is decided and whether it waits for the deal from the review state the server serves on it, never from its stored status ([the served review state](../../implementation/data/application-document.md#the-served-review-state)): the queue, the follow-ups and the reviewed list, the tally's approved and rejected counts, the All view's filters and "Assigned to", the reviewer lines and the warnings, so an application stored at an old spelling of open, or at a status the old offers flow left behind, is counted where the server reads it.
 
 ## I3. Choose what leads the card
 

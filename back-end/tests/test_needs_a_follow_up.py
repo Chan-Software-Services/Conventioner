@@ -15,7 +15,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import api.applicants as ApplicantsApi  # noqa: E402
 import api.applications as ApplicationsApi  # noqa: E402
 import api.market_actions as Actions  # noqa: E402
+import application_status as ReviewState  # noqa: E402
 from conftest import (  # noqa: E402
+    a_review_view,
     FakeApplicationsCollection, client_market, let_in, reviewing, seen_as_read,
 )
 from client_errors import BadRequestError  # noqa: E402
@@ -47,7 +49,8 @@ class TestMarkingOne:
     def test_stores_the_status_who_marked_it_and_its_owner_the_marker(self, stored):
         result, status = ApplicantsApi.review_application(
             "market-1", "app-1", ApplicationStatus.NEEDS_FOLLOW_UP, by=ALEX,
-            reviewing=reviewing("market-1", ALEX.email), seen=seen_as_read("app-1"))
+            reviewing=reviewing("market-1", ALEX.email), view=a_review_view(),
+            seen=seen_as_read("app-1"))
 
         assert status == 200
         assert stored[0]["status"] == "needs_follow_up"
@@ -58,18 +61,21 @@ class TestMarkingOne:
     def test_another_owner_may_be_named_at_once(self, stored):
         ApplicantsApi.review_application(
             "market-1", "app-1", ApplicationStatus.NEEDS_FOLLOW_UP, by=ALEX, owner=SAM,
-            reviewing=reviewing("market-1", ALEX.email), seen=seen_as_read("app-1"))
+            reviewing=reviewing("market-1", ALEX.email), view=a_review_view(),
+            seen=seen_as_read("app-1"))
 
         assert stored[0]["follow_up_owner"]["email"] == "sam@market.test"
 
     def test_a_verdict_after_it_clears_the_owner(self, stored):
         ApplicantsApi.review_application(
             "market-1", "app-1", ApplicationStatus.NEEDS_FOLLOW_UP, by=ALEX,
-            reviewing=reviewing("market-1", ALEX.email), seen=seen_as_read("app-1"))
+            reviewing=reviewing("market-1", ALEX.email), view=a_review_view(),
+            seen=seen_as_read("app-1"))
 
         ApplicantsApi.review_application(
             "market-1", "app-1", ApplicationStatus.REVIEWER_APPROVED, by=ALEX,
-            reviewing=reviewing("market-1", ALEX.email), seen=seen_as_read("app-1"))
+            reviewing=reviewing("market-1", ALEX.email), view=a_review_view(),
+            seen=seen_as_read("app-1"))
 
         assert "follow_up_owner" not in stored[0]
 
@@ -78,10 +84,12 @@ class TestReassigningIt:
     def test_the_owner_changes(self, stored):
         ApplicantsApi.review_application(
             "market-1", "app-1", ApplicationStatus.NEEDS_FOLLOW_UP, by=ALEX,
-            reviewing=reviewing("market-1", ALEX.email), seen=seen_as_read("app-1"))
+            reviewing=reviewing("market-1", ALEX.email), view=a_review_view(),
+            seen=seen_as_read("app-1"))
 
         result, status = ApplicantsApi.reassign_follow_up(
-            MARKET, None, "app-1", SAM, let_in(Actions.GIVE_VERDICTS, "market-1", ALEX.email))
+            MARKET, None, "app-1", SAM, let_in(Actions.GIVE_VERDICTS, "market-1", ALEX.email),
+            a_review_view())
 
         assert status == 200
         assert stored[0]["follow_up_owner"]["email"] == "sam@market.test"
@@ -89,17 +97,17 @@ class TestReassigningIt:
 
     def test_only_a_follow_up_has_an_owner(self, stored):
         _, status = ApplicantsApi.reassign_follow_up(
-            MARKET, None, "app-1", SAM, let_in(Actions.GIVE_VERDICTS, "market-1", ALEX.email))
+            MARKET, None, "app-1", SAM, let_in(Actions.GIVE_VERDICTS, "market-1", ALEX.email),
+            a_review_view())
 
         assert status == 409
 
 
 class TestItHoldsTheMarket:
     def test_begin_assignment_waits_naming_the_follow_ups(self, monkeypatch):
-        counts = {("needs_follow_up",): 2, ("open", "under_review"): 0}
         monkeypatch.setattr(ApplicationsApi, "count_applications_for_market", lambda _id: 5)
-        monkeypatch.setattr(ApplicationsApi, "count_applications_with_any_status",
-                            lambda _id, statuses: counts[tuple(statuses)])
+        # None open, two needing a follow-up, as the review state's owner counts them.
+        monkeypatch.setattr(ReviewState, "undecided_counts", lambda _id: (0, 2))
 
         result = AllApplicationsReviewedGuard().evaluate(
             client_market(phase=MarketPhase.APPLICATIONS), None)

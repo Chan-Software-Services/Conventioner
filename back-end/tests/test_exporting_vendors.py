@@ -251,6 +251,42 @@ class TestTheFile:
             "fay@example.com": "Added by hand",
         }
 
+    def test_every_stored_spelling_reads_as_the_state_it_stands_for(self, market, applications):
+        """The file says what the screens say: the review state's one rule reads every stored
+        spelling, so none falls back to its raw status."""
+        market()
+        applications.documents = [
+            _application("open@example.com", "under_review"),
+            _application("rule@example.com", "reviewer_rejected",
+                         verdict_by={"kind": "rule", "rule": "student"}),
+            _application("cancelled@example.com", "cancelled"),
+            _application("offered@example.com", "assignment_sent"),
+            _application("refused@example.com", "vendor_refused"),
+            _application("turned@example.com", "reviewer_rejected", added_by=ADDED_BY,
+                         origin="added"),
+            # Added by hand, then imported: their answers arrived, so they are an applicant.
+            _application("imported@example.com", "reviewer_approved", added_by=ADDED_BY,
+                         origin="imported"),
+        ]
+
+        content, _filename = _file(columns=["email", "status"])
+
+        assert dict(_rows(content)[1:]) == {
+            "open@example.com": "Open",
+            "rule@example.com": "Rejected",
+            "cancelled@example.com": "Rejected",
+            "offered@example.com": "Approved",
+            "refused@example.com": "Approved",
+            "turned@example.com": "Rejected",
+            "imported@example.com": "Approved",
+        }
+        assert _emails(_file(filters={"statuses": ["open"]})[0]) == ["open@example.com"]
+        assert _emails(_file(filters={"statuses": ["rejected"]})[0]) == [
+            "rule@example.com", "cancelled@example.com", "turned@example.com"]
+        assert _emails(_file(filters={"statuses": ["approved"]})[0]) == [
+            "offered@example.com", "refused@example.com", "imported@example.com"]
+        assert _emails(_file(filters={"statuses": ["added"]})[0]) == []
+
     def test_an_unanswered_question_is_a_blank_cell(self, market):
         market()
 

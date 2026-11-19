@@ -153,9 +153,11 @@ def _application_response(
 
 
 def _application_response_organizer(
-    app: Application, now: Optional[datetime] = None,
+    app: Application, view: ReviewTeam.ReviewView, now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
-    """Serialize an application for the organizer-facing API with the raw status always visible."""
+    """Serialize an application for the organizer-facing API with the raw status always visible,
+    and its review state over ``view``, the one view of the market its request built."""
+    doc = app.model_dump()
     return {
         "id": app.id,
         "marketId": app.market_id,
@@ -164,6 +166,7 @@ def _application_response_organizer(
         # beside them who updated which, and what the vendor wrote.
         "formData": ApplicationsApi.effective_answers(app),
         "answerUpdates": _answer_updates_payload(app),
+        # The stored spelling, for its label; ``review.state`` is what every rule reads.
         "status": app.status.value,
         "applicationType": app.application_type.value,
         "mainApplicationId": app.main_application_id,
@@ -183,7 +186,11 @@ def _application_response_organizer(
         "addedAt": app.added_at,
         # How it came to the market, apart from its verdict: whether they applied is read here,
         # never off ``addedBy``, since an added vendor imported since is an applicant (T277 P7).
-        "origin": ReviewState.origin_of(app.model_dump()).value,
+        # One stored before the origin was kept is read by the market's intake (T277 ticket 02).
+        "origin": ReviewState.origin_of(doc, view.intake).value,
+        # Where it stands in its review, whose share it is in and whether it waits for the deal,
+        # read once here so no screen works them out again from the status (T277 ticket 02).
+        "review": ReviewTeam.review_of(doc, view),
     }
 
 
@@ -205,9 +212,9 @@ def _answer_updates_payload(app: Application) -> Dict[str, Any]:
     }
 
 
-def organizer_view(doc: Dict[str, Any]) -> Dict[str, Any]:
-    """A stored application as the organizer reads it."""
-    return _application_response_organizer(Application(**doc))
+def organizer_view(doc: Dict[str, Any], view: ReviewTeam.ReviewView) -> Dict[str, Any]:
+    """A stored application as the organizer reads it, over its request's view of the market."""
+    return _application_response_organizer(Application(**doc), view)
 
 
 def _holder(app: Application, now: Optional[datetime]) -> Optional[Dict[str, Any]]:
@@ -574,8 +581,11 @@ def save_applicant_application(
 # ── Organizer (session-authenticated) endpoints ────────────────────────────
 
 
-def list_market_applications(market_id: str) -> Tuple[Dict[str, Any], int]:
-    """Return every application for a market. Organizer only, always sees raw status."""
+def list_market_applications(
+    market_id: str, view: ReviewTeam.ReviewView,
+) -> Tuple[Dict[str, Any], int]:
+    """Return every application for a market, each served its review state over ``view``, read
+    once for the whole list. Organizer only, always sees raw status."""
     parsed: List[Application] = []
     for doc in ApplicationsApi.list_applications_for_market(market_id):
         try:
@@ -599,7 +609,7 @@ def list_market_applications(market_id: str) -> Tuple[Dict[str, Any], int]:
     for app in parsed:
         notice = unpaired.get(app.applicant_email)
         result.append({
-            **_application_response_organizer(app),
+            **_application_response_organizer(app, view),
             "tableShareNotice": notice.as_payload() if notice else None,
         })
     return {"applications": result}, 200
@@ -607,6 +617,7 @@ def list_market_applications(market_id: str) -> Tuple[Dict[str, Any], int]:
 
 def _share_request(app: Application) -> TableShare.ShareRequest:
     answers = ApplicationsApi.effective_answers(app)
+    state = ReviewState.state_of(app.model_dump())
     return TableShare.ShareRequest(
         email=app.applicant_email,
         table_choice=answers.get(EssentialFields.TABLE_CHOICE_KEY),
@@ -614,12 +625,9 @@ def _share_request(app: Application) -> TableShare.ShareRequest:
             str(answers.get(EssentialFields.TABLE_SHARE_EMAIL_KEY) or ""),
             *(str(a) for a in answers.get(EssentialFields.TABLE_SHARE_ALSO_KEY) or []),
         ),
-        taking_part=app.status not in _NOT_TAKING_PART,
+        # Nobody is seated from a rejected application, whichever spelling it is stored by.
+        taking_part=state.served is not ReviewState.Served.REJECTED,
     )
-
-
-# Applications nobody will be seated from: the solver reads approved ones, and these never will be.
-_NOT_TAKING_PART = (ApplicationStatus.REVIEWER_REJECTED, ApplicationStatus.CANCELLED)
 
 
 #: What a reviewer did to an application, in the words a refused reviewer is told (E34/F03/S01).
@@ -675,7 +683,7 @@ class Reviewing(NamedTuple):
 
 def review_application(
     market_id: str, application_id: str, new_status: ApplicationStatus, by: VerdictGiver,
-    reviewing: Reviewing, owner: Optional[MarketPerson] = None,
+    reviewing: Reviewing, view: ReviewTeam.ReviewView, owner: Optional[MarketPerson] = None,
     seen: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Dict[str, Any], int]:
     """Record a review verdict on an application, and who gave it (E34/F01/S01). Organizer only,
@@ -719,7 +727,7 @@ def review_application(
             return {"error": "Application not found."}, 404
         return {
             "error": _changed_since_seen(now, seen),
-            "application": _application_response_organizer(Application(**now)),
+            "application": _application_response_organizer(Application(**now), view),
         }, 409
 
     stored = ApplicationsApi.find_application_by_id(application_id)
@@ -730,7 +738,7 @@ def review_application(
                         **_dealt_to(app_doc)},
     )
     app = Application(**stored)
-    return {"application": _application_response_organizer(app),
+    return {"application": _application_response_organizer(app, view),
             **(undo_window() if giving else {})}, 200
 
 
@@ -921,7 +929,7 @@ def _undo_one(
 
 def undo_verdict(
     market: Market, organization: Optional[Organization], asked: UndoAsked, by: VerdictGiver,
-    owner_offered: OwnerOffered, giving: Actions.Asked,
+    owner_offered: OwnerOffered, giving: Actions.Asked, view: ReviewTeam.ReviewView,
 ) -> Tuple[Dict[str, Any], int]:
     """Undo the verdict, or the follow-up, this reviewer gave an application (E38/F10/S01).
 
@@ -940,7 +948,7 @@ def undo_verdict(
         reason, status = refused
         if status == 409 and was is not None:
             return {"error": reason,
-                    "application": _application_response_organizer(Application(**was))}, 409
+                    "application": _application_response_organizer(Application(**was), view)}, 409
         return {"error": reason}, status
     giving.record(
         kind=History.VERDICT_UNDONE,
@@ -951,7 +959,8 @@ def undo_verdict(
     # After its entry, so the history reads the undo before the deal it waited for.
     if ReviewTeam.deal_waiting(market, organization):
         now = ApplicationsApi.find_application_by_id(asked[0]) or now
-    return {"application": _application_response_organizer(Application(**now))}, 200
+    # Read after the deal, so its share is what the deal left.
+    return {"application": _application_response_organizer(Application(**now), view)}, 200
 
 
 def undo_selection(
@@ -989,7 +998,7 @@ def undo_selection(
 
 def reassign_follow_up(
     market: Market, organization: Optional[Organization], application_id: str,
-    owner: MarketPerson, giving: Actions.Asked,
+    owner: MarketPerson, giving: Actions.Asked, view: ReviewTeam.ReviewView,
 ) -> Tuple[Dict[str, Any], int]:
     """Hand a follow-up to someone else with a role on the market (E34/F02/S01), recorded through
     ``giving``, the signed-in reviewer's Give verdicts and follow-ups asking; then the deal keeps it
@@ -1010,8 +1019,9 @@ def reassign_follow_up(
         ),
     )
     ReviewTeam.deal_waiting(market, organization)
+    # Read after the deal, so its share is what the deal left.
     app = Application(**ApplicationsApi.find_application_by_id(application_id))
-    return {"application": _application_response_organizer(app)}, 200
+    return {"application": _application_response_organizer(app, view)}, 200
 
 
 def publish_results_refusal(
