@@ -19,7 +19,9 @@ import { calendarToday } from './helpers/vendorSignIn';
  * so its status stopped short of the row's edge. An Editor, who checks vendors in, keeps both.
  *
  * A vendor checked out (T496) reads the same way: a Viewer sees when they were checked out and by
- * whom, ending the row, and no Undo of it; an Editor's row ends in that Undo.
+ * whom, ending the row, and no Undo of it. An Editor's row ends in at most one button, Check in or
+ * Check out, the two one width, and each undo is a quiet "Undo?" just left of the chip it undoes: a
+ * row checked out has no button, and its one "Undo?" stands by when they left, not by its status.
  */
 const VIEWER = { email: 'e2e-door-viewer@example.com', password: 'e2epassword123' };
 const EDITOR = { email: 'e2e-door-editor@example.com', password: 'e2epassword123' };
@@ -70,6 +72,23 @@ async function expectAddressWhole(row: Locator, vendor: string): Promise<void> {
     return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
   });
   expect(lines, `${vendor}'s address is on one line`).toBe(1);
+}
+
+/**
+ * An "Undo?" stands just left of the chip it undoes, on the chip's line, and its tap area is at
+ * least as tall as the chip.
+ */
+async function expectLeftOf(undo: Locator, chip: Locator, what: string): Promise<void> {
+  const undoBox = (await undo.boundingBox())!;
+  const chipBox = (await chip.boundingBox())!;
+  const gap = chipBox.x - (undoBox.x + undoBox.width);
+  expect(gap, `${what} ends just before the chip`).toBeGreaterThanOrEqual(0);
+  expect(gap, `${what} ends just before the chip`).toBeLessThanOrEqual(8);
+  expect(
+    Math.abs(undoBox.y + undoBox.height / 2 - (chipBox.y + chipBox.height / 2)),
+    `${what} is on the chip's line`,
+  ).toBeLessThanOrEqual(1);
+  expect(undoBox.height, `${what} is as tall as the chip`).toBeGreaterThanOrEqual(chipBox.height);
 }
 
 /** Signed in on the test's own page, so the size the test uses is the window the door is drawn in. */
@@ -174,7 +193,7 @@ for (const size of SIZES) {
       }
     });
 
-    test('an Editor is told to check vendors in, and each row ends in its Check in or Undo', async ({
+    test('an Editor is told to check vendors in, each row ends in at most one button, and each "Undo?" stands by its chip', async ({
       page,
     }) => {
       await signIn(page, EDITOR, width);
@@ -187,32 +206,62 @@ for (const size of SIZES) {
         "Print each day's roster, then check vendors in at the door.",
       );
 
-      const checkIn = door.row(NOT_YET).getByTestId('attendance-check-in');
-      const undo = door.row(HERE).getByTestId('attendance-undo');
+      // One button a row at most: Check in, Check out, or none once checked out.
+      const checkIn = door.action(NOT_YET, 'check-in');
+      const checkOut = door.action(HERE, 'check-out');
+      const undo = door.action(HERE, 'undo');
       const undoCheckOut = door.action(OUT, 'undo-check-out');
-      await expect(checkIn).toBeVisible();
-      await expect(undo).toBeVisible();
-      await expect(undoCheckOut).toBeVisible();
-      // Checked in and not out: Check out, then the Undo that ends the row.
-      await expect(door.action(HERE, 'check-out')).toBeVisible();
-      // At a desk the action has its column at the row's end, the status left of it; on a phone the
-      // action is on the vendor's line and the status under it, at the end of each.
+      for (const [vendor, buttons] of [
+        [NOT_YET, ['Check in']],
+        [HERE, ['Check out']],
+        [OUT, []],
+      ] as const) {
+        await expect(door.row(vendor).locator('.btn'), `${vendor}'s buttons`).toHaveText([
+          ...buttons,
+        ]);
+      }
+      await expect(door.action(OUT, 'undo')).toHaveCount(0);
+
+      // Check in and Check out are one width.
+      const checkInBox = (await checkIn.boundingBox())!;
+      const checkOutBox = (await checkOut.boundingBox())!;
+      expect(Math.abs(checkInBox.width - checkOutBox.width), 'Check in and Check out').toBeLessThan(
+        0.5,
+      );
+
+      // Each "Undo?" just left of the chip it undoes: the check-in's by the status, the check-out's
+      // by when they left.
+      await expect(undo).toHaveText('Undo?');
+      await expect(undoCheckOut).toHaveText('Undo?');
+      await expectLeftOf(undo, door.status(HERE), "the check-in's Undo?");
+      await expectLeftOf(undoCheckOut, door.out(OUT), "the check-out's Undo?");
+
+      // At a desk the button has its column at the row's end, the status left of it; on a phone the
+      // button is on the vendor's line and the status under it, at the end of each.
       for (const [vendor, action] of [
         [NOT_YET, checkIn],
-        [HERE, undo],
-        [OUT, undoCheckOut],
+        [HERE, checkOut],
       ] as const) {
         const row = door.row(vendor);
         await expectAddressWhole(row, vendor);
         expect(
           await shortOfTheRowsEnd(row, action),
-          `${vendor}'s action ends the row`,
+          `${vendor}'s button ends the row`,
         ).toBeLessThanOrEqual(1);
         const status = await door.status(vendor).boundingBox();
         const button = await action.boundingBox();
         if (width > 640) expect(status!.x + status!.width).toBeLessThan(button!.x);
         else expect(status!.y).toBeGreaterThan(button!.y);
       }
+      await expectAddressWhole(door.row(OUT), OUT);
+      // Every row's chips end at one edge, a row with no button among them.
+      const chipEnds = await Promise.all(
+        [NOT_YET, HERE, OUT].map(async (vendor) => {
+          const box = (await door.status(vendor).boundingBox())!;
+          return Math.round(box.x + box.width);
+        }),
+      );
+      expect(new Set(chipEnds).size, `the chips' ends ${chipEnds}`).toBe(1);
     });
   });
 }

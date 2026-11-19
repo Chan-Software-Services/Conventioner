@@ -800,6 +800,8 @@ const drawer = useVendorDrawer();
                       @open="drawer.open(row.vendorEmail)"
                     />
                   </span>
+                  <!-- At most one button, of one width whichever it is: the undo of either write is
+                       the "Undo?" beside the chip it undoes, below. -->
                   <span v-if="canCheckIn" class="door-action">
                     <button
                       v-if="!row.checkedInAt && checkInOpen"
@@ -812,41 +814,17 @@ const drawer = useVendorDrawer();
                     >
                       Check in
                     </button>
-                    <!-- Checked out: one Undo, of the check-out, since the check-in's undo is refused
-                         until then. -->
                     <button
-                      v-else-if="row.checkedOutAt"
+                      v-else-if="row.checkedInAt && !row.checkedOutAt"
                       type="button"
-                      class="btn btn--secondary btn--compact"
+                      class="btn btn--primary btn--compact"
                       :disabled="isBusy(row)"
-                      :aria-label="`Undo ${whoFor(row)}'s check-out`"
-                      data-testid="attendance-undo-check-out"
-                      @click="write(row, 'undo-check-out')"
+                      :aria-label="`Check out ${whoFor(row)}`"
+                      data-testid="attendance-check-out"
+                      @click="write(row, 'check-out')"
                     >
-                      Undo
+                      Check out
                     </button>
-                    <template v-else-if="row.checkedInAt">
-                      <button
-                        type="button"
-                        class="btn btn--primary btn--compact"
-                        :disabled="isBusy(row)"
-                        :aria-label="`Check out ${whoFor(row)}`"
-                        data-testid="attendance-check-out"
-                        @click="write(row, 'check-out')"
-                      >
-                        Check out
-                      </button>
-                      <button
-                        type="button"
-                        class="btn btn--secondary btn--compact"
-                        :disabled="isBusy(row)"
-                        :aria-label="`Undo ${whoFor(row)}'s check-in`"
-                        data-testid="attendance-undo"
-                        @click="write(row, 'undo-check-in')"
-                      >
-                        Undo
-                      </button>
-                    </template>
                   </span>
                 </span>
                 <!-- Where they sit and whether they came, one line under the vendor's on a phone, so
@@ -857,18 +835,43 @@ const drawer = useVendorDrawer();
                   }}</span>
                   <!-- Whether they came, then, once checked out, when and by whom (T496). -->
                   <span class="door-chips">
-                    <span
-                      class="chip door-status"
-                      :class="statusTone(row)"
-                      data-testid="attendance-row-status"
-                      >{{ status(row) }}</span
-                    >
-                    <span
-                      v-if="row.checkedOutAt"
-                      class="chip chip--neutral door-out"
-                      data-testid="attendance-row-out"
-                      >{{ departure(row) }}</span
-                    >
+                    <span class="door-line">
+                      <!-- Checked out, the check-in's undo is refused until the check-out's is made,
+                           so a row checked out has its one Undo beside its departure. -->
+                      <button
+                        v-if="canCheckIn && row.checkedInAt && !row.checkedOutAt"
+                        type="button"
+                        class="door-undo"
+                        :disabled="isBusy(row)"
+                        :aria-label="`Undo ${whoFor(row)}'s check-in`"
+                        data-testid="attendance-undo"
+                        @click="write(row, 'undo-check-in')"
+                      >
+                        Undo?
+                      </button>
+                      <span
+                        class="chip door-status"
+                        :class="statusTone(row)"
+                        data-testid="attendance-row-status"
+                        >{{ status(row) }}</span
+                      >
+                    </span>
+                    <span v-if="row.checkedOutAt" class="door-line">
+                      <button
+                        v-if="canCheckIn"
+                        type="button"
+                        class="door-undo"
+                        :disabled="isBusy(row)"
+                        :aria-label="`Undo ${whoFor(row)}'s check-out`"
+                        data-testid="attendance-undo-check-out"
+                        @click="write(row, 'undo-check-out')"
+                      >
+                        Undo?
+                      </button>
+                      <span class="chip chip--neutral door-out" data-testid="attendance-row-out">{{
+                        departure(row)
+                      }}</span>
+                    </span>
                   </span>
                 </span>
                 <VendorNotes
@@ -1009,7 +1012,7 @@ const drawer = useVendorDrawer();
 
 .door-row {
   display: grid;
-  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto 11rem;
+  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-3) var(--space-4);
@@ -1066,13 +1069,67 @@ const drawer = useVendorDrawer();
   white-space: nowrap;
 }
 
-/* Check out and Undo side by side, 11rem at a desk (T496). */
+/* A line of the chips: the "Undo?" of what the chip says, if any, then the chip. */
+.door-line {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+/* The undo of a check-in or a check-out: quiet, muted and underlined, beside the chip it undoes,
+   so the row's one button is the next step. Its tap area is `--target-min` tall and wide, the
+   chip's line grown to it, a thumb's 44px on a phone. */
+.door-undo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--target-min);
+  min-height: var(--target-min);
+  padding: 0 var(--space-1);
+  border: none;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--mm-text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  text-decoration: underline;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.door-undo:hover:not(:disabled) {
+  color: var(--mm-black);
+}
+
+.door-undo:disabled {
+  cursor: not-allowed;
+}
+
+/* One button's width, whichever the row holds, or none: "Check out", the wider of the two labels,
+   drawn unseen in the button's place and type, sizes the cell, and the button fills it. So Check in
+   and Check out are one width, and at a desk every row's chips end at one edge, a row with no
+   button among them. */
 .door-action {
   grid-column: 4;
   grid-row: 1;
-  justify-self: end;
-  display: flex;
-  gap: var(--space-2);
+  display: grid;
+}
+
+.door-action::before {
+  content: 'Check out';
+  grid-area: 1 / 1;
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  visibility: hidden;
+}
+
+.door-action > .btn {
+  grid-area: 1 / 1;
+  width: 100%;
 }
 
 .door-note {
@@ -1106,16 +1163,17 @@ const drawer = useVendorDrawer();
 }
 
 /* A row too narrow for the desk's four columns, a phone's or a tablet's: the vendor on top, where
-   they sit and whether they came beneath, and the buttons within a thumb's reach on the right. Check
-   out and Undo together leave the vendor half the line, so where a piece of their name or address
-   (an address's half before its "@", say) is wider than that, the buttons go under the vendor, at
+   they sit and whether they came beneath, and the button within a thumb's reach on the right. The
+   vendor has the line the button leaves, so where a piece of their name or address (an address's
+   half before its "@", say) is wider than that, the button goes under the vendor, at
    the line's end, and the address is not broken inside the piece (T496). Where
    they sit and whether they came share a line of their own, the status at its end, or under it when
    both do not fit: in the action's column a wide status ("9:44 AM by ...") squeezed the vendor's
    line and broke the address mid-word. By the list's width, not the window's: at 768px the desk's
    columns left the vendor's a third of the row, and the address broke inside its domain (T318).
    64rem is the table's 14rem, room for an address's longer half, a check-in's status with its
-   table, the action's 11rem and the gaps. */
+   table, the action's 11rem, when it held Check out and Undo, and the gaps: its one button now
+   leaves the desk's columns room to spare at the break. */
 @container door-list (width < 64rem) {
   .door-row,
   .door-row--read {
@@ -1135,7 +1193,7 @@ const drawer = useVendorDrawer();
     gap: var(--space-2) var(--space-3);
   }
 
-  /* As narrow as the vendor's widest piece before the buttons leave their line, and the rest of
+  /* As narrow as the vendor's widest piece before the button leaves their line, and the rest of
      the line's width. */
   .door-who {
     flex: 1 1 min-content;
@@ -1169,8 +1227,20 @@ const drawer = useVendorDrawer();
     margin-inline-start: auto;
   }
 
+  /* For whoever may undo, one over the other as at a desk: side by side, an "Undo?" between the
+     two chips read as the undo of either. */
+  .door-row:not(.door-row--read) .door-chips {
+    flex-flow: column;
+    gap: var(--space-1);
+  }
+
   .door-action {
     margin-inline-start: auto;
+  }
+
+  /* A row with no button keeps no room for one on the vendor's line. */
+  .door-action:empty {
+    display: none;
   }
 
   .door-notes {
