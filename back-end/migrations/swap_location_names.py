@@ -22,10 +22,12 @@ the same location under its new name. It does not count the assignment's ``revis
 results do not read as changed, and it sends nothing to anyone.
 
 **It records the swap in the market's history**, as one entry of the kind a change on Market Setup
-records (``plan``, under the Market Setup row), with no actor and whichever of the locations and
-sections changed, before and after. Manage market reads "Someone changed Market Setup: locations
-and sections" when either location holds a section, and "locations" alone when neither does.
-A dry run records none, and a second run records a second entry.
+records (``plan``, under the Market Setup row), with no actor and whichever of the plan's two
+lists, its locations and its sections, changed, each list whole, before and after, as a plan
+save's entry holds them: so the entry holds every location's name, the other locations' among
+them, and every section's row when a section's copy changed. Manage market reads "Someone changed
+Market Setup: locations and sections" when either location holds a section, and "locations" alone
+when neither does. A dry run records none, and a second run records a second entry.
 
 **The market's earlier history also holds the names, as text, and is left as written**, by the
 owner's choice, for a later fix. Three kinds of entry in the ``history`` collection name a location
@@ -76,7 +78,8 @@ shows the first one's "after" as its "before".
 
 Each location is named by its id or its exact name. It prints the market's id, the two locations'
 ids and names, the names of the sections in them, and counts: never a vendor's name or address,
-and no other location's name.
+and no other location's name. That is of what it prints: the history entry a run records holds
+the plan's whole list of locations.
 
 Usage (the production database address passed inline, never from back-end/.env):
     MONGODB_URI='<URI>' python migrations/swap_location_names.py \\
@@ -144,8 +147,8 @@ class Swap(NamedTuple):
     layouts: int
     #: What becomes of the allocation's record of the plan: a sentence.
     record: str
-    #: The history entry's detail: whichever of the plan's locations and sections changed, before
-    #: and after.
+    #: The history entry's detail: whichever of the plan's lists of locations and sections
+    #: changed, each list whole, before and after.
     detail: Dict[str, Any]
 
 

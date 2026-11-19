@@ -236,11 +236,12 @@ If a dry run says the allocation's record of the plan is "left as it is, since i
 It refuses, exiting 1 with nothing written, a draft, a location it does not find, and a plan or a seat whose copy of a name disagrees with the location it belongs to; its docstring lists each refusal.
 The assignment's revision and the published results are left as they are, and nothing is sent to anyone.
 A run records itself in the market's history as one change on Market Setup with no actor, which Manage market reads as "Someone changed Market Setup: locations and sections" when either location holds a section; a dry run records none, and a second run records a second entry.
+That entry holds the plan's whole list of locations, and its whole list of sections when either location holds one, before and after, as a plan save's entry does, so every location's name is in it, not the two alone.
 That entry is a second write, after the swap: if it fails, the names stand swapped with no entry, the script's own output holds a warning naming the market by id, and the next dry run's line "run(s) of this script recorded so far" counts one fewer than were run.
 Do not run again to repair it, since that swaps back.
 The market's history keeps the names as they were when each entry was recorded, in three kinds of entry: a layout's save (`floorplan`) and a layout removed with its location (`floorplan_removed`), whose sentence in Manage market names the location, and a change on Market Setup (`plan`), whose detail holds the locations and sections before and after.
 None is rewritten, by Daniel's choice, for a later fix: a layout's save recorded before the swap still names its location by the old name, and the script prints how many of the first two kinds name either location.
-It prints the market's id, the two locations' names, their sections' names and counts, never a vendor's name or address.
+It prints the market's id, the two locations' names, their sections' names and counts, never a vendor's name or address and no other location's name; that is of what it prints, not of the history entry.
 
 ### When the back end refuses to boot
 
