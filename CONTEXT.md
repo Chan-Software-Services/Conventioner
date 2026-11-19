@@ -258,14 +258,24 @@ See [Payments, and what a vendor owes](docs/implementation/data/payments.md).
 ### At the door
 
 **Check-in**:
-The record that a vendor came on one market date: when, who made it (an organizer at Attendance, or the vendor on their vendor page with the **door code**), and the **table code** of the seat they held when it was made.
-One per vendor per date; undoing it deletes it. Made only in Market Days, and never for a date that has not begun anywhere.
+The record that a vendor came on one market date: when, who made it (an organizer at Attendance, or, where the **self check-in switch** is on, the vendor on their vendor page with the **door code**), and the **table code** of the seat they held when it was made.
+One per vendor per date; undoing it deletes it, and a checked-out one is not undone until its **check-out** is. Made only in Market Days, and never for a date that has not begun anywhere.
 _Avoid_: Attendance for one record (Attendance is the page), arrival
 See [Attendance and the door](docs/implementation/modules/attendance-and-door.md).
 
+**Check-out**:
+The three fields on a **check-in**'s record that say the vendor left: when, and who made it (an organizer at Attendance, or the vendor on their vendor page with the **door code**).
+Undoing it clears them and leaves the check-in. Nothing else reads it: a checked-out vendor still came, in every count and every **roster state**.
+_Avoid_: departure, sign-out
+
 **Door code**:
-The market's one live code, shown at the entrance as a QR code and as six characters, that a vendor types or scans to check themselves in: their proof that they are at the door. A new one ends the old one and every poster of it.
+The market's one live code, shown at the entrance as a QR code and as six characters, that a vendor types or scans to check themselves in, and types to check themselves out: their proof that they are at the door. A new one ends the old one and every poster of it.
+It works only while the **self check-in switch** is on, and is kept while it is off.
 _Avoid_: Check-in code, PIN, password
+
+**Self check-in switch**:
+The market's one switch, "Vendors check themselves in and out", that lets vendors check themselves in and out on their vendor page. Off until someone who may check vendors in turns it on, on the door code's screen in Market Days; while it is off only organizers check vendors in and out.
+_Avoid_: Self-service, kiosk mode, vendor check-in toggle
 
 **Roster**:
 Every vendor the stored assignment places on a market date, and where each stands at the door that day: what Attendance lists, and what the door's counts count.

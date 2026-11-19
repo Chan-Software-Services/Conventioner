@@ -7,7 +7,7 @@ describes:
   - back-end/datatypes.py#AssignmentState
   - back-end/api/markets.py#get_market_for_user
   - back-end/tests/test_the_allocation_table.py
-verified: 2026-11-14
+verified: 2026-11-19
 sources:
   - T277
   - T316

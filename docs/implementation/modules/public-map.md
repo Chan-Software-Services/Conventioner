@@ -19,6 +19,7 @@ verified: 2026-11-17
 sources:
   - T422
   - T469
+  - T496
 ---
 
 # The public map
@@ -92,7 +93,7 @@ A layout stores `followsPlan`, whether it was started after Draft: true on one s
 
 ## Tests
 
-- [`back-end/tests/test_the_public_map.py`](../../../back-end/tests/test_the_public_map.py): the answer's key set at every level, exactly; a marker for an email, a full name, a preferred name, another answer and a note, none of them anywhere in the answer's text; a name that is an email withheld; the organizer's update of a name answered; each gate condition answering byte for byte as an unknown slug, for the read and the image; the image's type and cache header.
+- [`back-end/tests/test_the_public_map.py`](../../../back-end/tests/test_the_public_map.py): the answer's key set at every level, exactly; a marker for an email, a full name, a preferred name, another answer and a note, none of them anywhere in the answer's text; a name that is an email withheld; the organizer's update of a name answered; each gate condition answering byte for byte as an unknown slug, for the read and the image; the image's type and cache header; and the answer the same bytes before a check-in, after it and after a check-out, since the map shows who sits where, never who came or left (T496).
 - [`back-end/tests/test_the_public_map_settings.py`](../../../back-end/tests/test_the_public_map_settings.py): the write and its refusals one by one, its history entry, and a write that changes nothing.
 - [`back-end/tests/test_public_answers.py`](../../../back-end/tests/test_public_answers.py): the cleaning's table for each value, hostile inputs included.
 - The walks every write joins hold it too: it records (`test_every_write_records.py`), names its row (`test_every_check_names_an_action.py`), is refused on an archived market (`test_an_archive_is_read_only.py`), and is refused on a changed market against a real MongoDB (`test_every_held_write_is_refused_on_a_changed_market.py`).

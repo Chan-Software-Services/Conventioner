@@ -49,6 +49,7 @@ sources:
   - T318
   - T315
   - T422
+  - T496
 ---
 
 # What each role may do
@@ -109,7 +110,7 @@ Everything a Viewer may, and:
 - [updating a vendor's info](an-update-is-kept-beside-the-vendors-answer.md)
 - allocating tables and assigning, moving, swapping or freeing a seat
 - [recording a vendor's payment](../../implementation/data/payments.md) (Daniel, T92 Q15: "editors can")
-- check-ins at the door
+- check-ins and check-outs at the door, the door code, and letting vendors check themselves in and out
 
 ### Admin
 

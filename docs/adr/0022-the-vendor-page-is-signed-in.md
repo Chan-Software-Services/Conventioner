@@ -12,6 +12,7 @@ sources:
   - T191
   - T318
   - T469
+  - T496
 status: accepted
 ---
 
@@ -51,6 +52,7 @@ Before that its page answers as absent.
 A Google Form market that went live before this change has its page too, since it reached `market_days`, whether or not its results were published, and its vendors read their tables and check in there as if they were: reaching the market days puts the results out (`results_are_out` in `market_documents.py`).
 
 **Check-in proves presence with a door code.**
+Amended 2026-11-19 (T496, [ADR 0040](0040-vendors-check-themselves-in-and-out-only-where-the-market-turned-it-on.md)): the vendor's own check-in, and the check-out beside it, are open only where the market turned its self check-in switch on, and it is off until someone does; the organizer's check-in below is then the only path.
 Attendance shows a QR code and a short typed code, full screen or printed as a poster; the vendor scans it with their phone's own camera, which opens their vendor page and checks them in for today, signing them in first when they are not.
 The code stays the same until the organizer presses "New code".
 The organizer's own check-in at Attendance stays, the second of two valid paths.

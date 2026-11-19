@@ -4,7 +4,7 @@ kind: flow
 describes:
   - front-end/src/views/AttendanceStatusView.vue
   - front-end/src/components/vendorPage/VendorCheckIn.vue
-verified: 2026-11-04
+verified: 2026-11-19
 sources:
   - brain-dump/2026-10-19#15
   - E10/F01/S02
@@ -28,16 +28,18 @@ sources:
   - T421
   - T466
   - T469
+  - T496
 ---
 
 # Publishing, and the door on market day
 
-**Who:** the market's Admin or owner publishes; an Editor shows the door code and checks vendors in at the door; a vendor, with no account, signs in on their vendor page with a code mailed to them and checks themselves in with the door code.
+**Who:** the market's Admin or owner publishes; an Editor shows the door code and checks vendors in at the door, and out again; a vendor, with no account, signs in on their vendor page with a code mailed to them and, where the market lets them, checks themselves in and out with the door code.
 **Where they start:** the phase rail in Assignment; on the day, the organizer on the Attendance tab and the vendor at the door code's QR code, or at their vendor page.
 **Serves:** [Results go out once, and settle the allocation](../intents/results-go-out-once-and-settle-the-allocation.md) and [The door on market day](../intents/the-door-on-market-day.md).
 
 Publishing opens the market's days; from then on the market is in Market Days, and the door is two pages over one roster of who is placed where: the vendor's own check-in on their vendor page ([`VendorCheckIn.vue`](../../../front-end/src/components/vendorPage/VendorCheckIn.vue)) and the organizer's Attendance ([`AttendanceStatusView.vue`](../../../front-end/src/views/AttendanceStatusView.vue)).
 A vendor's check-in proves presence: it takes their sign-in and the door code the organizer shows at the entrance ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)).
+The vendor's own door is off at every market until someone who may check vendors in turns it on ([K11](#k11-let-vendors-check-themselves-in-and-out), [ADR 0040](../../adr/0040-vendors-check-themselves-in-and-out-only-where-the-market-turned-it-on.md)); until then only organizers check vendors in and out, and K2 to K4 are for a market that turned it on.
 Both read the stored assignment, so a vendor placed, swapped or freed by hand is sent where they were put; how the door works is [attendance and the door](../../implementation/modules/attendance-and-door.md).
 
 ## K1. Publish the market
@@ -76,6 +78,8 @@ Covered by:
 3. Expect, once signed in, today's seat on top, "Today", the date and the table in words with its size and location, and "Checked in at <time>" with "Undo"; their other days are listed below.
 
 A vendor signed in already is checked in at once.
+At a market that has not let vendors check themselves in, the code is dropped and the page says "Vendors are checked in and out by an organizer at this market. Ask at the door.", signed in or out, with no "Sign in, and you'll be checked in for today."; today's seat then shows no "Door code" field and no button, and "An organizer checks you in at the door." ([K11](#k11-let-vendors-check-themselves-in-and-out)).
+A vendor already checked in who scans again is not checked out: the code is put in the "Check out" form's field and nothing is sent ([K10](#k10-check-a-vendor-out)).
 With no seat today the page says "You have no table today, so you are not checked in."; before the market's days "Check-in opens when the market's days begin."; once it has ended "This market has ended, so check-in is closed."; none checks anything in.
 A scanned code is used once: the page reloaded checks nobody in again.
 On a device vendors share at the door, a scanned code checks in only the vendor it is held for: the first address sent a sign-in code, or the vendor whose sign-in ran out as it checked them in; anyone else who signs in next is not checked in, and types the code or scans it again.
@@ -84,6 +88,7 @@ The seats shown are the stored assignment, so a vendor placed, swapped or freed 
 It works alike on a Google Form market, whose vendor page opens once its results are published ([the Google Form path](the-google-form-path.md)).
 Covered by:
 
+- `a-vendor-checks-out.spec.ts`: the scan at a market with the switch off, and a second scan once checked in
 - `checkin.spec.ts`
 
 ## K3. Type the door code
@@ -105,6 +110,7 @@ Covered by:
 
 **Status:** Works (read from the code as of T202).
 "Undo" beside "Checked in at <time>" takes it back, with no door code, and offers "Check in" again, on the day itself only, so a vendor never erases a past day's attendance; the organizer can undo one at the door too (K5).
+Once checked out, the check-in has no "Undo" until the check-out is undone ([K10](#k10-check-a-vendor-out)).
 Covered by:
 
 - `checkin.spec.ts`
@@ -122,11 +128,13 @@ Covered by:
 4. Each vendor placed that day, by table: their name, a link at rest (link ink, underlined, a 44px target on a phone), which opens the [vendor drawer](vendor-drawer.md) and never checks them in; how and when they checked in ("Scanned in at 9:41 AM" for their own, with the door code, "9:41 AM by you" or by the organizer's address), or "Not yet"; and their notes under the row when they have some.
    A vendor checked in and then moved or swapped reads where they checked in, "9:41 AM by you, at table North Wing 2", in an attention chip, so they are sent to their new table.
    Under the day's seats, "Checked in, with no table on this date (<n>)" lists each vendor checked in and then freed, their table "No table", so a free never hides an arrival; they count toward no day's tally.
-5. While the market is in Market Days, "Check in" and "Undo" on each row check a vendor in at the door, for someone who may check vendors in.
+   A vendor checked out keeps that status and gains a second chip after it, "Out 4:05 PM by you", or by the organizer's address, or "Scanned out at 4:05 PM" for their own ([K10](#k10-check-a-vendor-out)).
+5. While the market is in Market Days, "Check in" and "Undo" on each row check a vendor in at the door, for someone who may check vendors in; a checked-in row offers "Check out" before its "Undo" ([K10](#k10-check-a-vendor-out)).
    "Check in" is offered on today and past days, so a tap missed in the rush is put right after, and never on a day to come, which the server refuses too: "That day has not begun yet, so nobody can be checked in for it."
    A Viewer is offered neither: they read the frame's "You can view this market but not change it. …", the rail's "Follow who has checked in at the door.", and each row ending at its status (E38/F15/S04).
-6. In Market Days, someone who may check vendors in opens "Door code", beside "Print roster" in the toolbar: the market's name, its QR code, the code as "K7M 4QP" and "Scan with your phone's camera to check in", full screen, for the tablet or laptop that stands at the entrance.
+6. In Market Days, someone who may check vendors in opens "Door code", beside "Print roster" in the toolbar: the market's name, its QR code, the code as "K7M 4QP" and "Scan with your phone's camera to check in or out", full screen, for the tablet or laptop that stands at the entrance.
    With no code yet it offers "Make a door code".
+   Until "Vendors check themselves in and out" is turned on there, the screen shows no code and offers neither ([K11](#k11-let-vendors-check-themselves-in-and-out)).
    "Print" prints the same poster on one page, and "New code" asks "Make a new door code? The current code and every printed poster of it stop working.", on Cancel, before it makes another; the code stays the same until then.
    A Viewer is offered no Door code, and the server refuses them the code.
 7. The roster reads itself again every 15 seconds while the page is in view, and at once when the tab comes back into view or the browser comes back online, so a vendor who scanned in, or another organizer's check-in, shows with no tap or reload.
@@ -160,6 +168,50 @@ Covered by:
 - `the-door-stays-fresh.spec.ts`
 - `the-door-tools-hold-still.spec.ts`
 - `the-roster-prints.spec.ts`
+
+## K10. Check a vendor out
+
+**Status:** Works (read from the code as of T496, `the-door-checks-a-vendor-out.spec.ts`, `a-vendor-checks-out.spec.ts`).
+**Task (organizer):** "A vendor is leaving and has handed back what they borrowed. Record that they left."
+
+1. On Attendance's list, in Market Days, a checked-in vendor's row offers "Check out", the main button, before "Undo", for someone who may check vendors in, on any day with a check-in, a vendor here with no table that day included.
+2. Expect the row to keep its status and gain a second chip, "Out 4:05 PM by you", and one "Undo", which undoes the check-out and brings "Check out" and the check-in's "Undo" back.
+3. A check-in is not undone while the vendor is checked out: the row offers only the check-out's "Undo", and the server answers "Undo the check-out first."
+
+**Task (vendor), at a market that lets vendors check themselves in and out:** "You are leaving. Check out."
+
+1. On the vendor page, signed in, today's seat shows "Checked in at <time>" with "Undo", then a second "Door code" field and "Check out".
+2. Type the door code, or scan it again, which fills the field and sends nothing, and press "Check out".
+3. Expect "Checked in at <time>", "Checked out at <time>" and one "Undo", which undoes the check-out, with no door code, on the day itself only.
+
+A wrong code says what a check-in's does (K3), and a day with no check-in "You are not checked in on this date."
+The vendor's other days read "(checked in at <time>, checked out at <time>)", and the record of a market that ended "Checked in at <time>, checked out at <time>".
+A check-out changes nothing else: "N of M checked in", "Show", the search, the map, the printed roster, "Did not come", the Stats tab and what a vendor owes read a checked-out vendor as checked in, and freeing or moving them still asks first.
+The market's history says each: "… checked Ana Rivera out on Nov 19, 2026", "… undid the check-out of Ana Rivera …", and for the vendor's own "Ana Rivera checked out with the door code …" ([reading the market's history](reading-the-markets-history.md#l6-read-the-markets-history)).
+Covered by:
+
+- `a-vendor-checks-out.spec.ts`
+- `a-viewer-at-the-door-reads-why.spec.ts`: a Viewer reads the out chip and is offered no button
+- `the-door-checks-a-vendor-out.spec.ts`
+
+## K11. Let vendors check themselves in and out
+
+**Status:** Works (read from the code as of T496, `the-door-code.spec.ts`, `a-vendor-checks-out.spec.ts`).
+**Task:** "You want vendors to check themselves in at the entrance, with the door code. Turn that on."
+
+1. Attendance, in Market Days, "Door code": under the controls, the switch "Vendors check themselves in and out", off at every market until someone turns it on, with "While this is off, only organizers check vendors in and out, on Attendance."
+2. While it is off the screen says "Vendors' own check-in and check-out are off. Turn them on to show the door code." and offers no "Make a door code", "New code" or "Print".
+3. Turn it on: expect the door code, or "Make a door code" when none was made, as K5 has it.
+4. Turn it off again: the code is kept, and it and every poster of it work again once the switch is back on.
+
+While it is off a vendor's page offers no check-in, no check-out and no "Undo": today's seat reads "An organizer checks you in at the door.", then "An organizer checks you out at the door." once an organizer has checked them in, and a scanned door code is answered "Vendors are checked in and out by an organizer at this market. Ask at the door." (K2).
+The organizer's own "Check in", "Check out" and "Undo" on Attendance work the same with the switch on or off.
+A Viewer is offered no "Door code", so no switch.
+The market's history says who turned it: "… let vendors check themselves in and out" and "… stopped vendors checking themselves in and out".
+Covered by:
+
+- `a-vendor-checks-out.spec.ts`: the vendor page with the switch off, and both doors back once it is on
+- `the-door-code.spec.ts`
 
 ## The rules it obeys
 
