@@ -196,7 +196,7 @@ The failed step's log says why, in one `::error::` line; the run's summary says 
 - **A staged back end "runs with ALLOW_INSECURE_LOCAL_DEV on"**: the back-end project's environment sets the hatch, on a host the boot did not see as deployed, or it would have refused. Remove it in Vercel (the back-end project, Settings, Environment Variables), make sure no `back-end/.env` is deployed, and run Deploy again. Nothing was promoted.
 - **A staged back end "does not see that it is deployed"**: none of the platform variables reached its runtime, so its refusal of local switches is not armed. Tick "Enable access to System Environment Variables" in the back-end project's Environment Variables settings on Vercel, then run Deploy again. Nothing was promoted.
 - **"vercel curl exited" in the log of a staged build's check**: the Vercel CLI failed before the address answered.
-  The lines after it, each starting `vercel curl:`, are the last five the CLI wrote to its error output, with the token and any long unbroken value shown as `***`, and without any line that names the bypass or a header.
+  The lines after it, each starting `vercel curl:`, are the last five the CLI wrote to its error output, with the token and any long unbroken value shown as `***`, and without any line that names the bypass, a header or the command the CLI runs.
   curl's "option ... is unknown" means the command line hands curl an option of the CLI's ([how a deploy proves itself](#how-a-deploy-proves-itself), step 3).
   Nothing was promoted.
 - **A staged address answers 401 or 403**: the Protection Bypass for Automation did not apply; check it in the project's Settings, Deployment Protection, and run again.
