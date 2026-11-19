@@ -357,6 +357,7 @@ Asked by:
 
 - `POST` and `DELETE /markets/:id/attendance`
 - `POST` and `DELETE /markets/:id/attendance/check-out`
+- `PUT /markets/:id/self-check-in`
 
 ### Connect Discord and give roles (`connect-discord`)
 
