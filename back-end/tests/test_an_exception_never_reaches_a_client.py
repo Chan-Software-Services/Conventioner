@@ -994,6 +994,10 @@ APPLICANT_REVIEW_IMPORT_AND_DOOR_ROUTES = [
      {"date": "2099-08-01", "doorCode": "K7M4QP"}, VendorCheckInApi, "check_in", SLUG),
     ("delete", f"/public/markets/{SLUG}/vendor/check-in", {"date": "2099-08-01"},
      VendorCheckInApi, "undo_check_in", SLUG),
+    ("post", f"/public/markets/{SLUG}/vendor/check-out",
+     {"date": "2099-08-01", "doorCode": "K7M4QP"}, VendorCheckInApi, "check_out", SLUG),
+    ("delete", f"/public/markets/{SLUG}/vendor/check-out", {"date": "2099-08-01"},
+     VendorCheckInApi, "undo_check_out", SLUG),
     ("post", f"/public/markets/{SLUG}/applicant-login/request-code", {"email": "ana@example.com"},
      ApplicantAuthApi, "request_login_code", SLUG),
     ("post", f"/public/markets/{SLUG}/applicant-login/verify-code",
@@ -1042,6 +1046,13 @@ APPLICANT_REVIEW_IMPORT_AND_DOOR_ROUTES = [
     ("delete", "/markets/market-123/attendance",
      {"vendorEmail": "ana@example.com", "date": "2099-08-01"},
      DoorApi, "undo_check_in", "market-123"),
+    ("post", "/markets/market-123/attendance/check-out",
+     {"vendorEmail": "ana@example.com", "date": "2099-08-01"}, DoorApi, "check_out", "market-123"),
+    ("delete", "/markets/market-123/attendance/check-out",
+     {"vendorEmail": "ana@example.com", "date": "2099-08-01"},
+     DoorApi, "undo_check_out", "market-123"),
+    ("put", "/markets/market-123/self-check-in", {"enabled": True},
+     DoorApi, "set_self_check_in", "market-123"),
     ("get", "/markets/market-123/door-code", None, DoorApi, "door_code", "market-123"),
     ("post", "/markets/market-123/door-code", None, DoorApi, "make_door_code", "market-123"),
 ]
@@ -1366,6 +1377,8 @@ OPTIONAL_BODIES = [
     ("delete", "/markets/<market_id>/placements", None),
     ("post", "/public/markets/<market_slug>/vendor/check-in", MarketPhase.MARKET_DAYS),
     ("delete", "/public/markets/<market_slug>/vendor/check-in", MarketPhase.MARKET_DAYS),
+    ("post", "/public/markets/<market_slug>/vendor/check-out", MarketPhase.MARKET_DAYS),
+    ("delete", "/public/markets/<market_slug>/vendor/check-out", MarketPhase.MARKET_DAYS),
     ("post", "/markets/<market_id>/applications/verdicts", MarketPhase.APPLICATIONS),
     ("post", "/markets/<market_id>/applications/verdicts/undo", MarketPhase.APPLICATIONS),
     ("post", "/markets/<market_id>/review/next", MarketPhase.APPLICATIONS),
@@ -1377,6 +1390,9 @@ OPTIONAL_BODIES = [
     ("post", "/markets/<market_id>/applications/import", MarketPhase.APPLICATIONS),
     ("post", "/markets/<market_id>/attendance", None),
     ("delete", "/markets/<market_id>/attendance", None),
+    ("post", "/markets/<market_id>/attendance/check-out", None),
+    ("delete", "/markets/<market_id>/attendance/check-out", None),
+    ("put", "/markets/<market_id>/self-check-in", None),
 ]
 HANDED_ON = ({"handed_on": True}, 200)
 DELETED = SimpleNamespace(deleted_count=1)

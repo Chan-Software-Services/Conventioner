@@ -769,9 +769,10 @@ function cancelPending() {
       @submit="confirmPending"
     >
       <p class="rail-confirm-text">
-        Publishing opens the market's days: every vendor you assigned checks in on their vendor page
-        with the door code you show at the entrance, from Attendance. The tables they see are the
-        ones you have now.
+        Publishing opens the market's days: you check vendors in and out on Attendance. Vendors
+        check themselves in and out on their vendor page only once you turn on "Vendors check
+        themselves in and out", on the door code's screen. The tables they see are the ones you have
+        now.
       </p>
       <p class="rail-confirm-text">A published market cannot be returned to an earlier phase.</p>
     </AppDialog>

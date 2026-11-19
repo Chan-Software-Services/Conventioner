@@ -40,6 +40,8 @@ DOORS: Dict[str, str] = {
     "review_team._deal_arriving": "ARRIVALS_DEAL_UNASKED",
     "api.vendor_check_in.check_in": "VENDORS_OWN_CHECK_IN_UNASKED",
     "api.vendor_check_in.undo_check_in": "VENDORS_OWN_CHECK_IN_UNASKED",
+    "api.vendor_check_in.check_out": "VENDORS_OWN_CHECK_IN_UNASKED",
+    "api.vendor_check_in.undo_check_out": "VENDORS_OWN_CHECK_IN_UNASKED",
     "seed_test_markets.seed_test_market": "SEEDER_MOVES_UNASKED",
     "migrations.migrate_owed_day_state.record_dropped": "MIGRATION_DROPS_UNASKED",
     "migrations.swap_location_names.record_swapped": "SWAP_RECORDS_UNASKED",

@@ -28,6 +28,7 @@ sources:
   - T335
   - T318
   - T422
+  - T496
 ---
 
 # The real-MongoDB suite
@@ -177,6 +178,7 @@ Each test's name says what it proves.
 | One owed record per vendor's day                 | 20 Admin's amounts and 20 frees through the owner at once on a day with no record, with and without the free's deduction, leave one record: every write lands or raises `OwedDayChanged` (the route's 409), the landed writes are one sequence, each reading the record the one before wrote, and once an Admin's amount landed every state after it keeps one, as set, as the freed line's, or as what a free's $0 replaced              |
 | A free that read no record lands on the one made | staged, with and without the deduction: 20 frees each read the day with no record, 20 Admin's amounts then make it, and only then do the frees write; every free's insert is refused by the index exactly once, and its read again lands it on that record or finds the day kept changing, so without the deduction the Admins' amount stands on the freed line, and with it the $0 standing keeps the Admins' amount as what it replaced |
 | One check-in per vendor's day                    | 20 `record_attendance` calls at once for one seated vendor's day, on a market in `market_days` whose day has begun (`AttendanceApi.today` moved to it), all answer 200 "Checked in", and leave one record and one "checked in" history entry                                                                                                                                                                                              |
+| One check-out per vendor's day                   | 20 `record_check_out` calls at once over a record stored with no check-out fields all answer 200 with one time, the one stored, and leave one "checked out" entry, by the organizer whose write landed; the undo of the check-in is then refused, 409, and of 20 `undo_check_out` calls at once one lands and 19 find no check-out, after which the check-in is undone                                                                    |
 
 MongoDB retries an upsert the unique index refused when its filter is equalities on exactly the index's fields, so a check-in, whose filter is the vendor's day, did not see the refusal: on 8.0, none of 600 check-in upserts, 20 at once a day, reached the client, and the check-in's own retry on `DuplicateKeyError` stays for a server that does not retry.
 An owed day's first record is an insert, whose refusal does come back, and the owner's read again is what lands it; the staged test is what makes every free meet it.

@@ -22,7 +22,7 @@ describes:
   - front-end/e2e/helpers/signInWindow.ts
   - front-end/e2e/helpers/mongoSession.ts
   - front-end/e2e/helpers/mongoScript.ts
-verified: 2026-11-17
+verified: 2026-11-19
 sources:
   - E21/F02/S02
   - E22/F04/S02

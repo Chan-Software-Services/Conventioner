@@ -30,6 +30,10 @@ export const REREAD_MS = 15_000;
  * day's seats so a free never hides an arrival. The tally and the toggles count seats only, as the
  * Stats tab does. Check in is offered on today and past days, never on a day to come.
  *
+ * A vendor checked in is checked out on the same row, and that undone (T496): the row keeps its
+ * status and says beside it when they were checked out and by whom. Nothing else on the page reads
+ * a check-out, so a vendor who left still came.
+ *
  * A paper roster is the door's fallback when the venue's network or the back end fails (T318):
  * "Print roster" prints every vendor of the chosen date by table, whatever the filters on screen
  * say (`DoorRosterPrint`).
@@ -105,7 +109,23 @@ interface RosterRow {
   checkedInBy: string | null;
   /** How a vendor checked themselves in: `door_code`, on their vendor page (ADR 0022). */
   checkedInVia?: string | null;
+  /** When they were checked out, by which organizer (null for the vendor's own) and, for the
+   *  vendor's own, how: `door_code`. A record from before the check-out has none (T496). */
+  checkedOutAt?: string | null;
+  checkedOutBy?: string | null;
+  checkedOutVia?: string | null;
 }
+
+/** The door's four writes, each on a row: a check-in, a check-out, and the undo of either. */
+type DoorWrite = 'check-in' | 'undo-check-in' | 'check-out' | 'undo-check-out';
+
+/** What a write the server refused says when the server gave no sentence of its own. */
+const NOT_WRITTEN: Record<DoorWrite, string> = {
+  'check-in': 'That check-in was not recorded.',
+  'undo-check-in': 'That check-in was not undone.',
+  'check-out': 'That check-out was not recorded.',
+  'undo-check-out': 'That check-out was not undone.',
+};
 
 type Show = 'all' | 'not-yet' | 'here';
 
@@ -420,7 +440,21 @@ function arrival(row: RosterRow, at: string): string {
   // The vendor's own, with the door code they scanned or typed at the entrance.
   if (row.checkedInVia === 'door_code') return `Scanned in at ${at}`;
   if (!row.checkedInBy) return at;
-  return `${at} by ${row.checkedInBy.toLowerCase() === signedInAs.value ? 'you' : row.checkedInBy}`;
+  return `${at} by ${byWhom(row.checkedInBy)}`;
+}
+
+/** The organizer who made a check-in or a check-out: "you" to themselves. */
+function byWhom(organizer: string): string {
+  return organizer.toLowerCase() === signedInAs.value ? 'you' : organizer;
+}
+
+/** When a checked-out vendor was checked out and by whom, in a chip of its own after the status. */
+function departure(row: RosterRow): string {
+  if (!row.checkedOutAt) return '';
+  const at = getTimestampTime(row.checkedOutAt);
+  // The vendor's own, with the door code, on their vendor page.
+  if (row.checkedOutVia === 'door_code') return `Scanned out at ${at}`;
+  return row.checkedOutBy ? `Out ${at} by ${byWhom(row.checkedOutBy)}` : `Out ${at}`;
 }
 
 /** Here at the seat they hold reads positive; anything else asks the door's attention. */
@@ -493,8 +527,10 @@ function holdBusy(key: string, busy: boolean): void {
  * came from, and posts there only: no read asked before it lands, so none undoes it, and an answer
  * after the organizer moved to another market says nothing there. A check-in is here at the seat
  * the row holds; an undo leaves a seat expected, and a row with no seat has nothing left to show.
+ * A check-out is the signed-in organizer's at the time the server answered, and its undo clears
+ * it, the row otherwise as it was (T496).
  */
-async function write(row: RosterRow, method: 'post' | 'delete') {
+async function write(row: RosterRow, what: DoorWrite) {
   const forMarket = rosterRead.key.value;
   if (!forMarket) return;
   const busy = busyKey(forMarket, row);
@@ -503,37 +539,45 @@ async function write(row: RosterRow, method: 'post' | 'delete') {
   const key = rowKey(row);
   const body = { vendorEmail: row.vendorEmail, date: row.date };
   const outcome = await rosterRead.holdWhile(async (id) => {
-    const url = `/markets/${encodeURIComponent(id)}/attendance`;
-    let arrived: Pick<
-      RosterRow,
-      'state' | 'checkedInTableCode' | 'checkedInAt' | 'checkedInBy' | 'checkedInVia'
-    >;
-    if (method === 'post') {
-      const { data } = await api.post<{ checkedInAt: string }>(url, body);
-      arrived = {
+    const checkIn = `/markets/${encodeURIComponent(id)}/attendance`;
+    const checkOut = `${checkIn}/check-out`;
+    let answered: Partial<RosterRow>;
+    if (what === 'check-in') {
+      const { data } = await api.post<{ checkedInAt: string }>(checkIn, body);
+      answered = {
         state: 'here',
         checkedInTableCode: row.tableCode,
         checkedInAt: data.checkedInAt,
         checkedInBy: signedInEmail(),
         checkedInVia: null,
       };
-    } else {
-      await api.delete(url, { data: body });
-      arrived = {
+    } else if (what === 'undo-check-in') {
+      await api.delete(checkIn, { data: body });
+      answered = {
         state: 'expected',
         checkedInTableCode: null,
         checkedInAt: null,
         checkedInBy: null,
         checkedInVia: null,
       };
+    } else if (what === 'check-out') {
+      const { data } = await api.post<{ checkedOutAt: string }>(checkOut, body);
+      answered = {
+        checkedOutAt: data.checkedOutAt,
+        checkedOutBy: signedInEmail(),
+        checkedOutVia: null,
+      };
+    } else {
+      await api.delete(checkOut, { data: body });
+      answered = { checkedOutAt: null, checkedOutBy: null, checkedOutVia: null };
     }
     // Taken while the write still holds the market, so the re-read its end asks is the only one.
     rosterRead.adopt(id, (held) => ({
       ...held,
       roster: held.roster.flatMap((one) => {
         if (rowKey(one) !== key) return [one];
-        if (!hasSeat(one) && method === 'delete') return [];
-        return [{ ...one, ...arrived }];
+        if (!hasSeat(one) && what === 'undo-check-in') return [];
+        return [{ ...one, ...answered }];
       }),
     }));
   });
@@ -541,10 +585,7 @@ async function write(row: RosterRow, method: 'post' | 'delete') {
   if (outcome.kind === 'failed') {
     refusal.value = {
       key: forMarket,
-      sentence: getApiErrorMessage(
-        outcome.error,
-        method === 'post' ? 'That check-in was not recorded.' : 'That check-in was not undone.',
-      ),
+      sentence: getApiErrorMessage(outcome.error, NOT_WRITTEN[what]),
     };
   }
 }
@@ -748,49 +789,87 @@ const drawer = useVendorDrawer();
                 data-testid="attendance-row"
                 :data-vendor="row.vendorEmail"
               >
-                <VendorNameButton
-                  class="door-who"
-                  :email="row.vendorEmail"
-                  :names="names"
-                  testid="attendance-vendor"
-                  @open="drawer.open(row.vendorEmail)"
-                />
+                <!-- The vendor and the action: one line on a phone, the action at its end, and cells
+                     of the row at a desk. -->
+                <span class="door-top">
+                  <span class="door-who">
+                    <VendorNameButton
+                      :email="row.vendorEmail"
+                      :names="names"
+                      testid="attendance-vendor"
+                      @open="drawer.open(row.vendorEmail)"
+                    />
+                  </span>
+                  <span v-if="canCheckIn" class="door-action">
+                    <button
+                      v-if="!row.checkedInAt && checkInOpen"
+                      type="button"
+                      class="btn btn--primary btn--compact"
+                      :disabled="isBusy(row)"
+                      :aria-label="`Check in ${whoFor(row)}`"
+                      data-testid="attendance-check-in"
+                      @click="write(row, 'check-in')"
+                    >
+                      Check in
+                    </button>
+                    <!-- Checked out: one Undo, of the check-out, since the check-in's undo is refused
+                         until then. -->
+                    <button
+                      v-else-if="row.checkedOutAt"
+                      type="button"
+                      class="btn btn--secondary btn--compact"
+                      :disabled="isBusy(row)"
+                      :aria-label="`Undo ${whoFor(row)}'s check-out`"
+                      data-testid="attendance-undo-check-out"
+                      @click="write(row, 'undo-check-out')"
+                    >
+                      Undo
+                    </button>
+                    <template v-else-if="row.checkedInAt">
+                      <button
+                        type="button"
+                        class="btn btn--primary btn--compact"
+                        :disabled="isBusy(row)"
+                        :aria-label="`Check out ${whoFor(row)}`"
+                        data-testid="attendance-check-out"
+                        @click="write(row, 'check-out')"
+                      >
+                        Check out
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn--secondary btn--compact"
+                        :disabled="isBusy(row)"
+                        :aria-label="`Undo ${whoFor(row)}'s check-in`"
+                        data-testid="attendance-undo"
+                        @click="write(row, 'undo-check-in')"
+                      >
+                        Undo
+                      </button>
+                    </template>
+                  </span>
+                </span>
                 <!-- Where they sit and whether they came, one line under the vendor's on a phone, so
                    neither widens the column the action stands in (E38/F15/S04). -->
                 <span class="door-place">
                   <span class="door-table" data-testid="attendance-row-table">{{
                     whereTheySit(row)
                   }}</span>
-                  <span
-                    class="chip door-status"
-                    :class="statusTone(row)"
-                    data-testid="attendance-row-status"
-                    >{{ status(row) }}</span
-                  >
-                </span>
-                <span v-if="canCheckIn" class="door-action">
-                  <button
-                    v-if="!row.checkedInAt && checkInOpen"
-                    type="button"
-                    class="btn btn--primary btn--compact"
-                    :disabled="isBusy(row)"
-                    :aria-label="`Check in ${whoFor(row)}`"
-                    data-testid="attendance-check-in"
-                    @click="write(row, 'post')"
-                  >
-                    Check in
-                  </button>
-                  <button
-                    v-else-if="row.checkedInAt"
-                    type="button"
-                    class="btn btn--secondary btn--compact"
-                    :disabled="isBusy(row)"
-                    :aria-label="`Undo ${whoFor(row)}'s check-in`"
-                    data-testid="attendance-undo"
-                    @click="write(row, 'delete')"
-                  >
-                    Undo
-                  </button>
+                  <!-- Whether they came, then, once checked out, when and by whom (T496). -->
+                  <span class="door-chips">
+                    <span
+                      class="chip door-status"
+                      :class="statusTone(row)"
+                      data-testid="attendance-row-status"
+                      >{{ status(row) }}</span
+                    >
+                    <span
+                      v-if="row.checkedOutAt"
+                      class="chip chip--neutral door-out"
+                      data-testid="attendance-row-out"
+                      >{{ departure(row) }}</span
+                    >
+                  </span>
                 </span>
                 <VendorNotes
                   class="door-notes"
@@ -930,7 +1009,7 @@ const drawer = useVendorDrawer();
 
 .door-row {
   display: grid;
-  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto 7rem;
+  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto 11rem;
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-3) var(--space-4);
@@ -938,7 +1017,7 @@ const drawer = useVendorDrawer();
   border-radius: var(--radius-card);
 }
 
-/* Someone offered no check-in has no action column, so their status ends the row: an empty 7rem
+/* Someone offered no check-in has no action column, so their status ends the row: an empty column
    left each chip standing short of the edge with nothing beside it (E38/F15/S04). */
 .door-row--read {
   grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto;
@@ -950,8 +1029,9 @@ const drawer = useVendorDrawer();
   grid-row: 2;
 }
 
-/* At a desk the table and the status are cells of the row, the table first: the vendor comes first
-   in the markup, for a phone, so each cell is placed. */
+/* At a desk the table and the status are cells of the row, the table first: the vendor and the
+   action come first in the markup, for a phone, so each cell is placed. */
+.door-top,
 .door-place {
   display: contents;
 }
@@ -966,21 +1046,33 @@ const drawer = useVendorDrawer();
 .door-who {
   grid-column: 2;
   grid-row: 1;
-  justify-self: start;
+  display: flex;
   min-width: 0;
 }
 
-.door-status {
+/* The status, and under it when they were checked out, each ending at the column's end: side by
+   side, two long chips ("9:44 AM by" an address, twice) took the vendor's column (T496). */
+.door-chips {
   grid-column: 3;
   grid-row: 1;
-  justify-self: start;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+}
+
+.door-status,
+.door-out {
   white-space: nowrap;
 }
 
+/* Check out and Undo side by side, 11rem at a desk (T496). */
 .door-action {
   grid-column: 4;
   grid-row: 1;
   justify-self: end;
+  display: flex;
+  gap: var(--space-2);
 }
 
 .door-note {
@@ -1014,34 +1106,47 @@ const drawer = useVendorDrawer();
 }
 
 /* A row too narrow for the desk's four columns, a phone's or a tablet's: the vendor on top, where
-   they sit and whether they came beneath, and the button within a thumb's reach on the right. Where
+   they sit and whether they came beneath, and the buttons within a thumb's reach on the right. Check
+   out and Undo together leave the vendor half the line, so where a piece of their name or address
+   (an address's half before its "@", say) is wider than that, the buttons go under the vendor, at
+   the line's end, and the address is not broken inside the piece (T496). Where
    they sit and whether they came share a line of their own, the status at its end, or under it when
    both do not fit: in the action's column a wide status ("9:44 AM by ...") squeezed the vendor's
    line and broke the address mid-word. By the list's width, not the window's: at 768px the desk's
    columns left the vendor's a third of the row, and the address broke inside its domain (T318).
-   60rem is the table's 14rem, room for an address's longer half, a check-in's status with its
-   table, the action's 7rem and the gaps. */
-@container door-list (width < 60rem) {
-  .door-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'who action'
-      'place place'
-      'notes notes';
-    gap: var(--space-2) var(--space-3);
-  }
-
-  /* Nothing beside the vendor, so their line is the row's width. */
+   64rem is the table's 14rem, room for an address's longer half, a check-in's status with its
+   table, the action's 11rem and the gaps. */
+@container door-list (width < 64rem) {
+  .door-row,
   .door-row--read {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      'who'
+      'top'
       'place'
       'notes';
+    gap: var(--space-2) var(--space-3);
   }
 
+  .door-top {
+    grid-area: top;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+  }
+
+  /* As narrow as the vendor's widest piece before the buttons leave their line, and the rest of
+     the line's width. */
   .door-who {
-    grid-area: who;
+    flex: 1 1 min-content;
+  }
+
+  /* A break inside a piece is the last resort still, and no longer counts toward how narrow the
+     vendor may be drawn: `anywhere` made that one character. */
+  .door-who :deep(.vendor-identity-name),
+  .door-who :deep(.vendor-identity-email),
+  .door-who :deep(.email-address) {
+    overflow-wrap: break-word;
   }
 
   .door-place {
@@ -1056,12 +1161,16 @@ const drawer = useVendorDrawer();
     min-width: 0;
   }
 
-  .door-status {
+  /* At the line's end, side by side, the second under the first when both do not fit. */
+  .door-chips {
+    flex-flow: row wrap;
+    justify-content: flex-end;
+    gap: var(--space-2);
     margin-inline-start: auto;
   }
 
   .door-action {
-    grid-area: action;
+    margin-inline-start: auto;
   }
 
   .door-notes {

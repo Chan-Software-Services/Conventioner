@@ -87,14 +87,14 @@ class TestReadingIt:
         response = client.get(PATH)
 
         assert response.status_code == 200
-        assert response.get_json() == {"code": None}
+        assert response.get_json() == {"code": None, "selfCheckIn": False}
 
     def test_it_answers_the_code_who_made_it_when_and_the_address_it_opens(self, client):
         made(client)
 
         body = client.get(PATH).get_json()
 
-        assert set(body) == {"code", "madeAt", "madeBy", "url"}
+        assert set(body) == {"code", "madeAt", "madeBy", "url", "selfCheckIn"}
         assert body["madeBy"] == ORGANIZER
         assert body["madeAt"]
         assert body["url"] == f"https://conventioner.test/harbour-night-market/vendor?door={body['code']}"
@@ -191,6 +191,77 @@ class TestWhoMay:
     def test_a_market_that_does_not_exist_is_not_found(self, client):
         assert client.get("/markets/market-missing/door-code").status_code == 404
         assert client.post("/markets/market-missing/door-code").status_code == 404
+
+
+class TestTheSwitchBesideIt:
+    """The self check-in switch is read and set on the door code's endpoints' terms (T496): the
+    "Check vendors in" row, and apart from the code itself."""
+
+    SWITCH = f"/markets/{MARKET}/self-check-in"
+
+    def test_making_a_code_does_not_turn_it_on(self, client, world):
+        assert made(client)["selfCheckIn"] is False
+        assert "vendorSelfCheckIn" not in world.markets.doc
+
+    def test_the_code_stays_while_it_is_off_and_is_the_same_once_on(self, client, world):
+        code = made(client)["code"]
+
+        on = client.put(self.SWITCH, json={"enabled": True})
+        off = client.put(self.SWITCH, json={"enabled": False})
+
+        assert (on.status_code, off.status_code) == (200, 200)
+        assert on.get_json() == {**client.get(PATH).get_json(), "selfCheckIn": True}
+        assert off.get_json() == client.get(PATH).get_json()
+        assert off.get_json()["code"] == code
+        assert DoorApi.door_code_matches(MARKET, code)
+
+    def test_a_new_code_answers_the_switch_as_it_stands(self, client):
+        client.put(self.SWITCH, json={"enabled": True})
+
+        assert made(client)["selfCheckIn"] is True
+
+    @pytest.mark.parametrize("role", [MarketRole.EDITOR, MarketRole.ADMIN, MarketRole.OWNER])
+    def test_whoever_may_check_vendors_in_sets_it(self, client, world, role):
+        world.holding(role)
+
+        assert client.put(self.SWITCH, json={"enabled": True}).status_code == 200
+        assert world.markets.doc["vendorSelfCheckIn"] is True
+
+    @pytest.mark.parametrize("role", [MarketRole.VIEWER, None])
+    def test_nobody_else_sets_it(self, client, world, role):
+        world.holding(role)
+
+        response = client.put(self.SWITCH, json={"enabled": True})
+
+        assert response.status_code == 403
+        assert "vendorSelfCheckIn" not in world.markets.doc
+        assert world.history.documents == []
+
+    def test_a_viewer_is_refused_before_the_bodys_shape_is(self, client, world):
+        world.holding(MarketRole.VIEWER)
+
+        assert client.put(self.SWITCH, json={"enabled": "yes"}).status_code == 403
+
+    def test_it_follows_the_market_s_own_row(self, client, world):
+        world.markets.doc["permissions"] = {"check-in": {"role": "admin", "source": "market"}}
+
+        world.holding(MarketRole.EDITOR)
+        assert client.put(self.SWITCH, json={"enabled": True}).status_code == 403
+
+        world.holding(MarketRole.ADMIN)
+        assert client.put(self.SWITCH, json={"enabled": True}).status_code == 200
+
+    def test_a_market_that_does_not_exist_is_not_found(self, client):
+        response = client.put("/markets/market-missing/self-check-in", json={"enabled": True})
+
+        assert response.status_code == 404
+
+    def test_the_market_read_serves_it(self, client):
+        before = client.get(f"/markets/{MARKET}").get_json()["market"]
+        client.put(self.SWITCH, json={"enabled": True})
+        after = client.get(f"/markets/{MARKET}").get_json()["market"]
+
+        assert (before["vendorSelfCheckIn"], after["vendorSelfCheckIn"]) == (False, True)
 
 
 class TestTheHistory:

@@ -16,7 +16,7 @@ describes:
   - front-end/e2e/the-public-map.spec.ts
   - back-end/market_documents.py#public_map_is_open
   - front-end/src/views/MarketPublicView.vue
-verified: 2026-11-18
+verified: 2026-11-19
 sources:
   - wayfinding/v0-1-0/06
   - wayfinding/v0-1-0/07

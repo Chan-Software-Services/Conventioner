@@ -229,4 +229,5 @@ export interface MarketSchema {
       name: string;
     }[];
   };
+  vendorSelfCheckIn?: boolean;
 }

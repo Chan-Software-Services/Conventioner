@@ -44,6 +44,7 @@ sources:
   - T335
   - T318
   - T422
+  - T496
 ---
 
 # Reading the market's history
@@ -91,6 +92,7 @@ An organizer reads it to investigate a problem or a mistake, which is why it liv
      - "… changed a payment from Ana Rivera"
      - "… removed a refund to Ana Rivera"
    - The door reads "e2e@example.com checked Ana Rivera in on Nov 19, 2026", a vendor's own check-in "Ana Rivera checked in with the door code on Nov 19, 2026" and its undo "Ana Rivera undid their check-in on their vendor page on Nov 19, 2026", and a door code "e2e@example.com made the door code", or "… made a new door code, which ended the old one and every poster of it", never naming the code ([the door on market day](market-day-door.md#k2-a-vendor-scans-the-door-code-and-is-checked-in)).
+   - A check-out reads "e2e@example.com checked Ana Rivera out on Nov 19, 2026" and its undo "… undid the check-out of Ana Rivera on Nov 19, 2026", a vendor's own "Ana Rivera checked out with the door code on Nov 19, 2026" and "Ana Rivera undid their check-out on their vendor page on Nov 19, 2026", and the self check-in switch "e2e@example.com let vendors check themselves in and out" or "… stopped vendors checking themselves in and out" ([checking a vendor out](market-day-door.md#k10-check-a-vendor-out)).
    - The Discord card reads "e2e@example.com connected the market to the Discord server “Riverside Makers”", "… disconnected the market from the Discord server “Riverside Makers”" and "… changed the Discord card: role and invite link", opening to the server's and the role's names and the username question's label, never Discord's ids or the question's key; a question the entry recorded without its label reads by the form's label, or as its key "(no longer on the form)".
    - "Check Discord" reads "e2e@example.com checked who is in the Discord server: 1 has the role, 2 in the server, 1 not found", opening to each vendor whose state it changed, before ("not checked" the first time) and after, and how many it found in each state ([the Discord connection](../../implementation/modules/discord.md#who-is-in-the-server)).
    - "Give roles" reads "e2e@example.com gave the Discord role “Vendor Nov 2026”: 2 given, 1 already had it, 1 not found", opening to each vendor it gave the role ("Given the role") or whose state it changed, before and after, and how many ended in each group ([giving the role](../../implementation/modules/discord.md#giving-the-role)).

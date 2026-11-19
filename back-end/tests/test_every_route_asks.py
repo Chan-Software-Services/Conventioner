@@ -72,6 +72,8 @@ PUBLIC = {
     ("PUT", "/public/markets/<market_slug>/applicant/application"): APPLICANT_SURFACE,
     ("POST", "/public/markets/<market_slug>/vendor/check-in"): APPLICANT_SURFACE,
     ("DELETE", "/public/markets/<market_slug>/vendor/check-in"): APPLICANT_SURFACE,
+    ("POST", "/public/markets/<market_slug>/vendor/check-out"): APPLICANT_SURFACE,
+    ("DELETE", "/public/markets/<market_slug>/vendor/check-out"): APPLICANT_SURFACE,
     ("GET", "/public/markets/<market_slug>/map"): PUBLIC_MAP,
     ("GET", "/public/markets/<market_slug>/map/image/<location_id>"): PUBLIC_MAP,
 }
