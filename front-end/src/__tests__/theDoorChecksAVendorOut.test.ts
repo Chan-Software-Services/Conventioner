@@ -173,11 +173,31 @@ async function open(): Promise<VueWrapper> {
 const rowOf = (wrapper: VueWrapper, email: string) =>
   wrapper.get(`[data-testid="attendance-row"][data-vendor="${email}"]`);
 
-/** The test ids of a row's buttons in its action, in the markup's order. */
-const actions = (wrapper: VueWrapper, email: string) =>
-  rowOf(wrapper, email)
+/**
+ * What a row offers, by test id: the button that ends it, if any, and each line of its chips, in the
+ * markup's order, an "Undo?" before the chip it undoes.
+ */
+const offers = (wrapper: VueWrapper, email: string) => ({
+  action: rowOf(wrapper, email)
     .findAll('.door-action button')
-    .map((button) => button.attributes('data-testid'));
+    .map((button) => button.attributes('data-testid')),
+  lines: rowOf(wrapper, email)
+    .findAll('.door-line')
+    .map((line) => [...line.element.children].map((part) => part.getAttribute('data-testid'))),
+});
+
+/** A row not yet here: Check in, and its status alone. */
+const NOT_YET_OFFERS = { action: ['attendance-check-in'], lines: [['attendance-row-status']] };
+/** A row checked in: Check out, and the check-in's Undo left of its status. */
+const HERE_OFFERS = {
+  action: ['attendance-check-out'],
+  lines: [['attendance-undo', 'attendance-row-status']],
+};
+/** A row checked out: no button, its status alone, and the check-out's Undo left of its out chip. */
+const OUT_OFFERS = {
+  action: [],
+  lines: [['attendance-row-status'], ['attendance-undo-check-out', 'attendance-row-out']],
+};
 
 const status = (wrapper: VueWrapper, email: string) =>
   rowOf(wrapper, email).get('[data-testid="attendance-row-status"]');
@@ -226,33 +246,38 @@ describe("each row's buttons", () => {
   it('an expected row offers Check in, as before', async () => {
     serve(expected(ANA, 'A1'));
     const wrapper = await open();
-    expect(actions(wrapper, ANA)).toEqual(['attendance-check-in']);
+    expect(offers(wrapper, ANA)).toEqual(NOT_YET_OFFERS);
     expect(outChip(wrapper, ANA).exists()).toBe(false);
   });
 
-  it('a checked-in row offers a primary Check out, then Undo', async () => {
+  it('a checked-in row ends in a primary Check out, its "Undo?" left of its status', async () => {
     serve(here(ANA, 'A1'));
     const wrapper = await open();
-    expect(actions(wrapper, ANA)).toEqual(['attendance-check-out', 'attendance-undo']);
+    expect(offers(wrapper, ANA)).toEqual(HERE_OFFERS);
     const checkOut = button(wrapper, ANA, 'attendance-check-out');
     expect(checkOut.text()).toBe('Check out');
     expect(checkOut.classes()).toEqual(expect.arrayContaining(['btn', 'btn--primary']));
     expect(checkOut.classes()).toContain('btn--compact');
     expect(checkOut.attributes('aria-label')).toBe(`Check out ${ANA}`);
     const undo = button(wrapper, ANA, 'attendance-undo');
-    expect(undo.text()).toBe('Undo');
-    expect(undo.classes()).toContain('btn--secondary');
+    expect(undo.element.tagName).toBe('BUTTON');
+    expect(undo.attributes('type')).toBe('button');
+    expect(undo.text()).toBe('Undo?');
+    expect(undo.classes()).toEqual(['door-undo']);
     expect(undo.attributes('aria-label')).toBe(`Undo ${ANA}'s check-in`);
     expect(outChip(wrapper, ANA).exists()).toBe(false);
   });
 
-  it('a checked-out row offers one Undo, of the check-out', async () => {
+  it('a checked-out row has no button, and one "Undo?", of the check-out, left of its out chip', async () => {
     serve(out(ANA, 'A1', ORGANIZER));
     const wrapper = await open();
-    expect(actions(wrapper, ANA)).toEqual(['attendance-undo-check-out']);
+    expect(offers(wrapper, ANA)).toEqual(OUT_OFFERS);
+    expect(rowOf(wrapper, ANA).find('[data-testid="attendance-undo"]').exists()).toBe(false);
     const undo = button(wrapper, ANA, 'attendance-undo-check-out');
-    expect(undo.text()).toBe('Undo');
-    expect(undo.classes()).toEqual(expect.arrayContaining(['btn--secondary', 'btn--compact']));
+    expect(undo.element.tagName).toBe('BUTTON');
+    expect(undo.attributes('type')).toBe('button');
+    expect(undo.text()).toBe('Undo?');
+    expect(undo.classes()).toEqual(['door-undo']);
     expect(undo.attributes('aria-label')).toBe(`Undo ${ANA}'s check-out`);
   });
 
@@ -273,7 +298,7 @@ describe("each row's buttons", () => {
   it('a vendor here with no table can be checked out', async () => {
     serve(expected(ANA, 'A1'), seatless(CY));
     const wrapper = await open();
-    expect(actions(wrapper, CY)).toEqual(['attendance-check-out', 'attendance-undo']);
+    expect(offers(wrapper, CY)).toEqual(HERE_OFFERS);
 
     holdTheRereads();
     api.post.mockResolvedValue({ data: { message: 'Checked out', checkedOutAt: LEFT } });
@@ -282,7 +307,7 @@ describe("each row's buttons", () => {
 
     expect(api.post).toHaveBeenCalledWith(CHECK_OUT_URL, { vendorEmail: CY, date: TODAY });
     expect(outChip(wrapper, CY).text()).toMatch(/^Out .+ by you$/);
-    expect(actions(wrapper, CY)).toEqual(['attendance-undo-check-out']);
+    expect(offers(wrapper, CY)).toEqual(OUT_OFFERS);
     // Still listed under the day's seats, counted apart.
     expect(wrapper.get('[data-testid="attendance-unseated-heading"]').text()).toBe(
       'Checked in, with no table on this date (1)',
@@ -297,7 +322,7 @@ describe("each row's buttons", () => {
       data: { dates: [yesterday, TODAY], roster: [{ ...here(ANA, 'A1'), date: yesterday }] },
     });
     const wrapper = await open();
-    expect(actions(wrapper, ANA)).toEqual(['attendance-check-out', 'attendance-undo']);
+    expect(offers(wrapper, ANA)).toEqual(HERE_OFFERS);
   });
 });
 
@@ -349,7 +374,7 @@ describe("a checked-out row's chips", () => {
     serve(old as unknown as Row);
     const wrapper = await open();
     expect(outChip(wrapper, ANA).exists()).toBe(false);
-    expect(actions(wrapper, ANA)).toEqual(['attendance-check-out', 'attendance-undo']);
+    expect(offers(wrapper, ANA)).toEqual(HERE_OFFERS);
   });
 });
 
@@ -368,7 +393,7 @@ describe('a check-out and its undo', () => {
     expect(api.post).toHaveBeenCalledWith(CHECK_OUT_URL, { vendorEmail: ANA, date: TODAY });
     expect(outChip(wrapper, ANA).text()).toMatch(/^Out \d{1,2}:\d{2}\s[AP]M by you$/);
     expect(status(wrapper, ANA).text()).toMatch(/ by you$/);
-    expect(actions(wrapper, ANA)).toEqual(['attendance-undo-check-out']);
+    expect(offers(wrapper, ANA)).toEqual(OUT_OFFERS);
     expect(rosterReads()).toBe(2);
 
     api.delete.mockResolvedValue({ data: { message: 'Check-out undone' } });
@@ -382,7 +407,7 @@ describe('a check-out and its undo', () => {
     expect(outChip(wrapper, ANA).exists()).toBe(false);
     // Still checked in: the undo of a check-out is not the undo of the check-in.
     expect(status(wrapper, ANA).text()).toMatch(/ by you$/);
-    expect(actions(wrapper, ANA)).toEqual(['attendance-check-out', 'attendance-undo']);
+    expect(offers(wrapper, ANA)).toEqual(HERE_OFFERS);
     expect(rosterReads()).toBe(3);
   });
 
@@ -433,7 +458,7 @@ describe('a check-out and its undo', () => {
       data: { vendorEmail: ANA, date: TODAY },
     });
     expect(status(wrapper, ANA).text()).toBe('Not yet');
-    expect(actions(wrapper, ANA)).toEqual(['attendance-check-in']);
+    expect(offers(wrapper, ANA)).toEqual(NOT_YET_OFFERS);
   });
 });
 

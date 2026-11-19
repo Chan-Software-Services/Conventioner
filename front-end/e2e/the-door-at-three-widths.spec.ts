@@ -17,8 +17,8 @@ import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
  * The door on whichever device stands at the entrance (T318): a phone in the organizer's hand, a
  * tablet on the table, a laptop at the desk.
  *
- * At each, an organizer checks a vendor in and undoes it, reads when the roster was read and reads
- * it again, sees Print roster, and reads a vendor here at
+ * At each, an organizer checks a vendor in and out and undoes each, reads when the roster was read
+ * and reads it again, sees Print roster, and reads a vendor here at
  * another table than the one they hold and one here with no table at all, with nothing scrolling
  * sideways, every target a thumb's 44px on the phone, and no address broken mid-word.
  *
@@ -213,6 +213,19 @@ for (const size of THREE_WINDOWS) {
       await expectInside(door.row(COMES), 'the row checked in');
       await expectFits(page, 'the door, a vendor checked in');
       await expectNoLayoutFault(page, 'the door, a vendor checked in');
+
+      // A check-out and its undo: the row checked out has no button, and its one "Undo?", a thumb's
+      // 44px on the phone like every target, by when they left.
+      await press(door.action(COMES, 'check-out'));
+      await expect(door.out(COMES)).toHaveText(/^Out \d{1,2}:\d{2}\s[AP]M by you$/);
+      await expect(door.row(COMES).locator('.btn')).toHaveCount(0);
+      await expect(door.action(COMES, 'undo')).toHaveCount(0);
+      await expectInside(door.row(COMES), 'the row checked out');
+      await expectFits(page, 'the door, a vendor checked out');
+      await expectNoLayoutFault(page, 'the door, a vendor checked out');
+      await press(door.action(COMES, 'undo-check-out'));
+      await expect(door.out(COMES)).toHaveCount(0);
+      await expect(door.action(COMES, 'check-out')).toBeEnabled();
 
       await press(door.row(COMES).getByTestId('attendance-undo'));
       await expect(door.status(COMES)).toHaveText('Not yet');
