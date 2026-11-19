@@ -8,6 +8,11 @@
  * their vendor page with the code. "Print" lays the same poster on one page, with nothing of the
  * app around it; "New code" asks first, then ends the old code and every poster of it.
  *
+ * Under the controls stands the market's self check-in switch, "Vendors check themselves in and
+ * out" (T496), since the door code is the vendor's door. While it is off the poster's place says
+ * so, and no code is shown, made or printed: the code stays stored, and it and every poster of it
+ * work again once the switch is turned on.
+ *
  * A modal over the whole window rather than an `AppDialog`, which is a small window over the page:
  * it holds the page behind inert, takes Escape while it is on top, and gives focus back to what
  * opened it, as every modal here does ([dialogs](docs/implementation/conventions/dialogs.md)). Its
@@ -21,7 +26,13 @@ import EmailAddress from '@/components/EmailAddress.vue';
 import ReadFailed from '@/components/ReadFailed.vue';
 import ScrollBox from '@/components/ScrollBox.vue';
 import { getApiErrorMessage } from '@/utils/api';
-import { doorCodeInWords, makeDoorCode, readDoorCode, type DoorCode } from '@/utils/doorCode';
+import {
+  doorCodeInWords,
+  makeDoorCode,
+  readDoorCode,
+  setSelfCheckIn,
+  type DoorCode,
+} from '@/utils/doorCode';
 import { qrDrawing } from '@/utils/qrDrawing';
 import { signedInEmail } from '@/utils/signedIn';
 import { useEscapeToClose } from '@/utils/useEscapeToClose';
@@ -35,9 +46,12 @@ const emit = defineEmits<{ close: [] }>();
 
 const door = ref<DoorCode | null>(null);
 const readError = ref('');
-/** The first code's making, from the empty state; a new code's is the confirmation's own. */
-const makeError = ref('');
+/** The screen's error line: the first code's making, from the empty state, or the switch's write.
+ *  A new code's failure is the confirmation's own. */
+const screenError = ref('');
 const making = ref(false);
+/** The switch's write is out: it is held, so one turn is one write. */
+const switching = ref(false);
 const confirming = ref(false);
 const newCode = useDialogSubmit({
   opening: () => confirming.value,
@@ -46,6 +60,7 @@ const newCode = useDialogSubmit({
 
 const closeButton = ref<HTMLButtonElement | null>(null);
 const printButton = ref<HTMLButtonElement | null>(null);
+const switchInput = ref<HTMLInputElement | null>(null);
 
 const modalRoot = useModalRoot(() => true);
 useEscapeToClose(
@@ -54,7 +69,10 @@ useEscapeToClose(
 );
 useFocusGoesBack(() => true);
 
-const live = computed(() => (door.value?.code ? door.value : null));
+/** Vendors check themselves in and out here; null until the door code is read. */
+const selfCheckIn = computed(() => door.value?.selfCheckIn ?? null);
+/** The code to show: none while the switch is off, though the market keeps it. */
+const live = computed(() => (door.value?.selfCheckIn && door.value.code ? door.value : null));
 const drawing = computed(() => (live.value ? qrDrawing(live.value.url) : null));
 
 const madeBy = computed(() => {
@@ -75,11 +93,11 @@ async function load(): Promise<void> {
 async function makeFirst(): Promise<void> {
   if (making.value) return;
   making.value = true;
-  makeError.value = '';
+  screenError.value = '';
   try {
     door.value = await makeDoorCode(props.marketId);
   } catch (err: unknown) {
-    makeError.value = getApiErrorMessage(err, 'No new door code was made.');
+    screenError.value = getApiErrorMessage(err, 'No new door code was made.');
     return;
   } finally {
     making.value = false;
@@ -99,8 +117,32 @@ async function confirmNew(): Promise<void> {
   });
 }
 
+/**
+ * The switch, turned. It is held as turned while its write is out, the screen under it as stored,
+ * then both show what the server answered; a refused turn was never the market's, so it goes back.
+ */
+async function turnSelfCheckIn(): Promise<void> {
+  const input = switchInput.value;
+  if (!input || switching.value) return;
+  switching.value = true;
+  screenError.value = '';
+  try {
+    door.value = await setSelfCheckIn(props.marketId, input.checked);
+  } catch (err: unknown) {
+    screenError.value = getApiErrorMessage(err, 'That was not saved.');
+  } finally {
+    switching.value = false;
+  }
+  // The box holds what was clicked, which Vue leaves alone where the stored state did not change.
+  input.checked = door.value?.selfCheckIn ?? false;
+  // Held, the switch lost the focus it was turned with; focus moved on since is left where it is.
+  await nextTick();
+  const focused = document.activeElement;
+  if (!focused || focused === document.body || focused === input) input.focus();
+}
+
 function askForANewCode(): void {
-  makeError.value = '';
+  screenError.value = '';
   confirming.value = true;
 }
 
@@ -158,17 +200,40 @@ onMounted(async () => {
             </span>
           </div>
 
+          <div v-if="selfCheckIn !== null" class="door-code-self">
+            <label class="door-code-self-label" for="door-code-self-switch">
+              <input
+                id="door-code-self-switch"
+                ref="switchInput"
+                type="checkbox"
+                role="switch"
+                :checked="selfCheckIn"
+                :disabled="switching"
+                aria-describedby="door-code-self-help"
+                data-testid="door-code-self-switch"
+                @change="turnSelfCheckIn"
+              />
+              <span>Vendors check themselves in and out</span>
+            </label>
+            <p id="door-code-self-help" class="door-code-self-help">
+              While this is off, only organizers check vendors in and out, on Attendance.
+            </p>
+          </div>
+
           <div class="door-code-poster">
             <h1 class="door-code-market" data-testid="door-code-market">{{ marketName }}</h1>
             <ReadFailed v-if="readError" name="door-code" :message="readError" @retry="load" />
             <p v-else-if="!door" class="door-code-note">Loading…</p>
+            <p v-else-if="!selfCheckIn" class="door-code-note" data-testid="door-code-off">
+              Vendors' own check-in and check-out are off. Turn them on to show the door code.
+            </p>
             <template v-else-if="live && drawing">
               <svg
                 class="door-code-qr"
                 :viewBox="`0 0 ${drawing.side} ${drawing.side}`"
                 shape-rendering="crispEdges"
                 role="img"
-                aria-label="QR code to check in"
+                aria-label="QR code to check in or out"
                 :data-url="live.url"
                 data-testid="door-code-qr"
               >
@@ -179,7 +244,7 @@ onMounted(async () => {
                 {{ doorCodeInWords(live.code) }}
               </p>
               <p class="door-code-instruction" data-testid="door-code-instruction">
-                Scan with your phone's camera to check in
+                Scan with your phone's camera to check in or out
               </p>
               <!-- Who made it and when, for whoever stands the screen at the door; not on the poster. -->
               <p class="door-code-made" data-testid="door-code-made">
@@ -201,8 +266,8 @@ onMounted(async () => {
                 Make a door code
               </button>
             </template>
-            <p v-if="makeError" class="door-code-error" role="alert">
-              {{ makeError }}
+            <p v-if="screenError" class="door-code-error" role="alert">
+              {{ screenError }}
             </p>
           </div>
         </div>
@@ -255,6 +320,25 @@ onMounted(async () => {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-4);
+}
+
+/* The switch and its help line, under the controls and never on the poster. */
+.door-code-self-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target-min);
+  font-size: var(--text-sm);
+}
+
+.door-code-self-label:has(input:disabled) {
+  color: var(--mm-text-muted);
+}
+
+.door-code-self-help {
+  margin: 0;
+  color: var(--mm-text-muted);
+  font-size: var(--text-xs);
 }
 
 .door-code-made {
@@ -362,6 +446,7 @@ onMounted(async () => {
   }
 
   .door-code-controls,
+  .door-code-self,
   .door-code-made,
   .door-code-error {
     display: none;

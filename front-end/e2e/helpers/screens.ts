@@ -14,6 +14,7 @@ import {
 import { mongoEval } from './mongo';
 import { createApplicantLoginChallenge } from './seedApplicantMarket';
 import { loginViaApi, UPPER_HALL_SECTIONED_TABLES, UPPER_HALL_TABLES } from './seeds';
+import { letVendorsCheckThemselvesIn } from './selfCheckIn';
 import { calendarToday } from './vendorSignIn';
 import { FIRST_IMPORT, LATER_IMPORT, SCREENS_EDITOR, type TheScreensSeed } from './seedTheScreens';
 import { settle } from './settle';
@@ -1411,12 +1412,31 @@ export const SCREEN_GROUPS = {
       open: at(screen('dayMap', 'tools'), 'public-map-address'),
     },
     // The door code over the attendance (ADR 0022), on the tablet or laptop at the entrance or the
-    // phone in the organizer's hand: before one is made, full screen, and New code's confirmation.
+    // phone in the organizer's hand: with the self check-in switch off (T496), where the screen
+    // shows no code and says why, then with it on: before a code is made, full screen, and New
+    // code's confirmation.
+    {
+      name: 'the door code, vendors not checking themselves in',
+      who: 'organizer',
+      sizes: FITS_A_PHONE,
+      open: async (page, seed) => {
+        const off = await page.request.put(
+          `${APP_API}/markets/${seed.big.marketId}/self-check-in`,
+          { data: { enabled: false } },
+        );
+        expect(off.ok(), await off.text()).toBeTruthy();
+        await at(screen('big', 'attendance'), 'attendance-row', [
+          'attendance-door-code',
+          'door-code-off',
+        ])(page, seed);
+      },
+    },
     {
       name: 'the door code, none made yet',
       who: 'organizer',
       sizes: FITS_A_PHONE,
       open: async (page, seed) => {
+        await letVendorsCheckThemselvesIn(page.request, seed.big.marketId);
         mongoEval(
           `db.markets.updateOne({ id: '${seed.big.marketId}' }, { $unset: { doorCode: 1 } })`,
         );
@@ -1436,6 +1456,7 @@ export const SCREEN_GROUPS = {
       who: 'organizer',
       sizes: FITS_A_PHONE,
       open: async (page, seed) => {
+        await letVendorsCheckThemselvesIn(page.request, seed.big.marketId);
         const made = await page.request.post(`${APP_API}/markets/${seed.big.marketId}/door-code`);
         expect(made.ok(), await made.text()).toBeTruthy();
         await at(
@@ -2084,7 +2105,9 @@ function seatOn(date: string, checkedInAt: string | null = null) {
  * A vendor signed in at `market`'s vendor page, their own read answered with `seats` (today's date
  * given): the screen sweeps open each state at each of its sizes, and a real sign-in each time
  * would pass the limits a caller and an address may sign in by (`sign_in_limits`). The page's own
- * read is the server's.
+ * read is the server's, so a market in its days has its self check-in switch turned on first, in
+ * the database since nobody here is signed in to turn it: the vendor's own controls are offered
+ * only where it is on (T496), and the door code's states turn it off and on.
  */
 function asAVendorAt(
   market: 'big' | 'archived',
@@ -2093,6 +2116,11 @@ function asAVendorAt(
 ) {
   return async (page: Page, seed: TheScreensSeed) => {
     const { marketId, marketSlug } = seed[market];
+    if (market === 'big') {
+      mongoEval(
+        `db.markets.updateOne({ id: '${marketId}' }, { $set: { vendorSelfCheckIn: true } })`,
+      );
+    }
     const session = {
       marketId,
       marketSlug,
