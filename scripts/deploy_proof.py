@@ -28,18 +28,20 @@ scripts/tests/test_deploy_proof.py runs them against stubs as its dry run. Two c
         --own is a staged deployment's generated `https://<name>.vercel.app` address, which never
         changes what it serves, so another commit, no commit or a 4xx is refused at once, and only
         no answer, a 5xx or a back end still `unavailable` is retried (default 120s, every 10s).
-        It reads through the pinned Vercel CLI's `vercel curl` (VERCEL_CLI and VERCEL_TOKEN),
-        which adds the project's Protection Bypass for Automation header, so it works whether
-        Deployment Protection is on or off.
+        It reads through the pinned Vercel CLI's `vercel curl` (VERCEL_CLI, and VERCEL_TOKEN,
+        which the CLI reads from its environment), which adds the project's Protection Bypass for
+        Automation header, so it works whether Deployment Protection is on or off.
 
         --domain is a production domain, which serves the old build until the edge moves, so any
         answer that is not this commit is waited for (default 300s, every 5s), with one line per
         wait. It runs the system curl, and holds no token.
 
 Exit codes: 0 proven, 1 refused or timed out, 2 a usage error. Each refusal is one `::error::`
-line. Nothing printed holds a token, a command line or the CLI's own output (which could hold the
-bypass secret, which GitHub would not mask), or more than 200 characters of a response body; curl
-never runs with -v or -L, which would print or follow the bypass header.
+line. Nothing printed holds a token, a command line or more than 200 characters of a response
+body. A CLI that fails has its last lines of stderr printed as its reason, without the token, any
+line that names the bypass or a header, or any long unbroken value (the bypass secret is one, and
+GitHub would not mask it); curl never runs with -v or -L, which would print or follow the bypass
+header.
 """
 import argparse
 import json
@@ -213,34 +215,71 @@ def fetch_plain(url: str) -> Answer:
         return read_answer(headers_file, body_file)
 
 
+# A line of the CLI's output that may hold the bypass secret it adds, which is left out whole.
+UNSAFE_LINE = re.compile(r"bypass|header|authorization|executing", re.IGNORECASE)
+# A long unbroken value, which may be a secret nothing names.
+OPAQUE = re.compile(r"[A-Za-z0-9_]{20,}")
+ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+REASON_LINES = 5
+
+
+def cli_reason(stderr_file: Path, secrets: List[str]) -> List[str]:
+    """The last lines a failed CLI wrote to stderr, as they may be printed.
+
+    A line that names the bypass, a header or the command the CLI runs is left out; in the rest,
+    each known secret and each long unbroken value reads `***`, and a line is cut to the excerpt's
+    length. Each is printed after `vercel curl: `, so none can start a workflow command.
+    """
+    try:
+        text = stderr_file.read_text("utf-8", errors="replace")
+    except OSError:
+        return []
+    lines = []
+    for raw in text.splitlines():
+        line = " ".join("".join(c for c in ANSI.sub("", raw) if c.isprintable() or c.isspace()).split())
+        if not line or UNSAFE_LINE.search(line):
+            continue
+        for secret in secrets:
+            line = line.replace(secret, "***")
+        lines.append(OPAQUE.sub("***", line)[:EXCERPT])
+    return lines[-REASON_LINES:]
+
+
 def vercel_fetch(cli: str, token: str) -> Callable[[str], Answer]:
     """GET through `vercel curl`, which adds the deployment's Protection Bypass for Automation header.
 
-    Every curl flag goes after `--`, since `-S` and `-d` are also short forms of the CLI's own
-    options. The command and the CLI's output are never printed: they hold the token, and the CLI
-    may print the bypass secret it adds.
+    The CLI reads the token from VERCEL_TOKEN in its environment, never from the command line:
+    `curl` keeps only its own options (`--yes` among them) and hands every other argument to
+    curl, a `--token` after it included. Every curl flag goes after `--`, since `-S` and `-d` are
+    also short forms of the CLI's own options. The command is never printed, and of the CLI's
+    output only a failure's reason, as cli_reason leaves it.
     """
+    secrets = [value for value in (token, os.environ.get("VERCEL_AUTOMATION_BYPASS_SECRET")) if value]
 
     def fetch(url: str) -> Answer:
         with tempfile.TemporaryDirectory() as scratch:
-            headers_file, body_file = Path(scratch, "headers"), Path(scratch, "body")
-            command = ["npx", "--yes", cli, "curl", url, "--yes", "--token", token,
+            headers_file, body_file, stderr_file = Path(scratch, "headers"), Path(scratch, "body"), Path(scratch, "stderr")
+            command = ["npx", "--yes", cli, "curl", url, "--yes",
                        "--", *CURL_FLAGS, "-D", str(headers_file), "-o", str(body_file)]
-            try:
-                result = subprocess.run(
-                    command,
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=CLI_TIMEOUT,
-                )
-            except subprocess.TimeoutExpired:
-                say(f"vercel curl did not finish within {CLI_TIMEOUT}s")
-                return Answer()
-            if result.returncode != 0:
-                say(f"vercel curl exited {result.returncode}")
-                return Answer()
-            return read_answer(headers_file, body_file)
+            # To a file, not a pipe, which a child of a CLI killed at the timeout could hold open.
+            with open(stderr_file, "wb") as stderr:
+                try:
+                    code = subprocess.run(
+                        command,
+                        env={**os.environ, "VERCEL_TOKEN": token},
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=stderr,
+                        timeout=CLI_TIMEOUT,
+                    ).returncode
+                except subprocess.TimeoutExpired:
+                    code = None
+            if code == 0:
+                return read_answer(headers_file, body_file)
+            say(f"vercel curl did not finish within {CLI_TIMEOUT}s" if code is None else f"vercel curl exited {code}")
+            for line in cli_reason(stderr_file, secrets):
+                say(f"vercel curl: {line}")
+            return Answer()
 
     return fetch
 
