@@ -26,6 +26,7 @@ import utils.email as Email
 from assignment.lifecycle import Allocation
 from datatypes import MarketPhase, market_name_slug
 from market_documents import market_from_document
+from market_write import MarketChanged, write_market
 from swap_location_names import Refused, main, swap
 
 MARKET = "market-123"
@@ -38,6 +39,7 @@ GOLD = {"id": 0, "name": "Gold"}
 SIX_FOOT = {"id": "tt-six", "name": "Standard 6 ft", "widthMm": 1830, "depthMm": 760}
 FORM = {"fields": [{"key": "business_name", "label": "Business name", "type": "text"}]}
 ANA, BEN, CLEO = "ana@ember.test", "ben@kiln.test", "cleo@loom.test"
+TOMBSTONE = {"at": "2099-08-01T00:00:00+00:00", "by": "user-1", "trail_id": "t-1"}
 
 
 def _table(table_id, number, x):
@@ -103,12 +105,12 @@ def settled_market(phase=MarketPhase.MARKET_DAYS, published=True, **overrides):
 class Database:
     """The markets the script reads, in the one collection ``write_market`` writes."""
 
-    def __init__(self, markets_collection):
+    def __init__(self, markets_collection, history_collection):
         self.markets = markets_collection
+        self.history = history_collection
 
     def __getitem__(self, name):
-        assert name == "markets", name
-        return self.markets
+        return {"markets": self.markets, "history": self.history}[name]
 
 
 @pytest.fixture
@@ -132,10 +134,12 @@ def database(monkeypatch, market_records):
 
         class _Db(dict):
             def __getitem__(self, name):
+                if name == "history":
+                    return market_records.history
                 return markets if name == "markets" else FakeSlugMarketsCollection([])
 
         monkeypatch.setattr(test_db_config, "get_database", lambda *_a, **_kw: _Db())
-        return Database(markets)
+        return Database(markets, market_records.history)
     return make
 
 
@@ -227,6 +231,7 @@ def test_nothing_but_the_names_and_the_plans_fingerprint_is_written(database):
     swap(MARKET, "North Wing", "South Wing", db)
 
     expected = renamed(copy.deepcopy(doc))
+    expected["planRevision"] = 8
     expected["assignmentObject"]["madeFrom"]["plan"] = made_from_now(stored(db))["plan"]
     assert stored(db) == expected
     assert expected["assignmentObject"]["madeFrom"]["plan"] != doc["assignmentObject"]["madeFrom"]["plan"]
@@ -251,7 +256,8 @@ def test_a_second_run_restores_the_first_state_exactly(database):
     assert stored(db) != doc
     swap(MARKET, "North Wing", "South Wing", db)
 
-    assert stored(db) == doc
+    # Every value but the plan's revision, which counts each run as every write of the plan does.
+    assert stored(db) == {**doc, "planRevision": 9}
 
 
 # --- the dry run ------------------------------------------------------------------------------
@@ -309,7 +315,7 @@ def test_published_results_stay_published_on_the_same_revision(database):
     assert after["assignmentObject"]["publishedRevision"] == 5
     assert after["assignmentObject"]["state"] == "run"
     assert after["resultsPublished"] is True
-    assert after["planRevision"] == 7
+    assert after["planRevision"] == 8
     assert after["phase"] == doc["phase"]
     assert Lifecycle.allocation(market_from_document(copy.deepcopy(after))) is Allocation.PUBLISHED
 
@@ -395,6 +401,20 @@ def _a_draft(doc):
     doc["phase"] = "draft"
 
 
+def _a_plan_that_does_not_parse(doc):
+    doc["setupObject"]["locations"] = "North Wing, South Wing"
+
+
+def _no_plan(doc):
+    del doc["setupObject"]
+
+
+def _a_section_of_one_name_in_both(doc):
+    doc["setupObject"]["sections"].append(
+        {"id": "sec-twin", "name": "Aisle A", "count": 1, "location": copy.deepcopy(SOUTH),
+         "tier": GOLD})
+
+
 REFUSALS = [
     ("a location that is not the plan's", None, ("North Wing", "West Wing"), "no location"),
     ("the same location twice", None, ("North Wing", "North Wing"), "the same location"),
@@ -407,7 +427,7 @@ REFUSALS = [
     ("a section's copy with no stored id", _no_id_on_the_copy, ("North Wing", "South Wing"),
      "no stored id"),
     ("a section's copy under another name", _another_name_on_the_copy,
-     ("North Wing", "South Wing"), "under the name 'West Wing'"),
+     ("North Wing", "South Wing"), "under another name"),
     ("a section's copy with another location's id", _another_id_on_the_copy,
      ("North Wing", "South Wing"), "another location's id"),
     ("a seat's copy naming neither location", _a_seat_naming_another_location,
@@ -419,6 +439,11 @@ REFUSALS = [
     ("two locations of one name", _a_second_location_of_the_name, ("loc-north", "South Wing"),
      "More than one location"),
     ("a draft", _a_draft, ("North Wing", "South Wing"), "is a draft"),
+    ("a market that does not parse", _a_plan_that_does_not_parse, ("North Wing", "South Wing"),
+     "does not parse"),
+    ("a market with no plan", _no_plan, ("North Wing", "South Wing"), "has no plan"),
+    ("a section of one name in both locations", _a_section_of_one_name_in_both,
+     ("North Wing", "South Wing"), "Both locations hold a section named 'Aisle A'"),
 ]
 
 
@@ -430,11 +455,14 @@ def test_it_refuses_and_writes_nothing(database, change, locations, words):
         change(doc)
     db = database(copy.deepcopy(doc))
 
-    with pytest.raises(Refused, match=words):
+    with pytest.raises(Refused, match=words) as refusal:
         swap(MARKET, *locations, db)
 
     assert stored(db) == doc
     assert db.markets.last_update is None
+    # A refusal names the two locations given and no other.
+    if "West Wing" not in locations:
+        assert "West Wing" not in str(refusal.value)
 
 
 def test_it_refuses_a_market_that_is_not_there(database):
@@ -462,6 +490,92 @@ def test_a_market_changed_between_the_read_and_the_write_is_left(database):
         swap(MARKET, "North Wing", "South Wing", db)
 
     assert stored(db) == {**doc, "assignmentObject": {**doc["assignmentObject"], "revision": 6}}
+
+
+def test_a_market_being_deleted_by_the_time_of_the_write_is_left(database):
+    class DeletingAfterTheRead(FakeSlugMarketsCollection):
+        """The market's deletion starts once the script has read it."""
+
+        def find_one(self, query, projection=None):
+            found = super().find_one(query, projection)
+            if found is not None and "deleting" not in self.docs[0]:
+                self.docs[0]["deleting"] = dict(TOMBSTONE)
+            return found
+
+    doc = settled_market()
+    db = database(doc, collection=DeletingAfterTheRead)
+
+    with pytest.raises(Refused, match="gone, or being deleted"):
+        swap(MARKET, "North Wing", "South Wing", db)
+
+    assert stored(db) == {**doc, "deleting": TOMBSTONE}
+
+
+# --- a write that read the market before the swap ---------------------------------------------
+
+def test_a_plan_write_that_read_the_market_before_the_swap_is_refused(database):
+    db = database(settled_market())
+    read_before = copy.deepcopy(stored(db))
+
+    swap(MARKET, "North Wing", "South Wing", db)
+    swapped = copy.deepcopy(stored(db))
+
+    with pytest.raises(MarketChanged):
+        write_market(read_before, {"$set": {"setupObject": read_before["setupObject"]}},
+                     revisions={"planRevision": read_before["planRevision"]})
+    assert stored(db) == swapped
+
+
+def test_a_seat_write_that_read_the_market_before_the_swap_lands_and_the_next_run_refuses(
+        database):
+    """Why the script is run while no organizer is working on the market: the assignment's
+    revision is left unmoved, so published results do not read as changed, and so a seat written
+    by hand from a read before the swap is not refused. It stores the seats as it read them, under
+    the old names over the swapped plan, and the next run says so and writes nothing."""
+    db = database(settled_market())
+    read_before = copy.deepcopy(stored(db))
+    swap(MARKET, "North Wing", "South Wing", db)
+
+    write_market(
+        read_before,
+        {"$set": {"assignmentObject.vendorAssignments":
+                  read_before["assignmentObject"]["vendorAssignments"]}},
+        revisions={"assignmentObject.revision": 5})
+    disagreeing = copy.deepcopy(stored(db))
+
+    with pytest.raises(Refused, match="which the plan does not put there"):
+        swap(MARKET, "North Wing", "South Wing", db, dry_run=True)
+    assert stored(db) == disagreeing
+
+
+# --- the market's history ---------------------------------------------------------------------
+
+def _entry(kind, location, market_id=MARKET):
+    return {"id": f"h-{kind}-{location}-{market_id}", "market_id": market_id,
+            "actor": "owner@example.com", "at": "2099-07-01T00:00:00+00:00",
+            "action": "change-setup", "kind": kind, "vendors": [],
+            "subject": {"floorplan_id": "fp-north", "location": location}, "detail": {}}
+
+
+def test_it_counts_the_history_entries_naming_either_location_and_leaves_them(
+        database, market_records, capsys):
+    db = database(settled_market())
+    for entry in (
+        _entry("floorplan", "North Wing"), _entry("floorplan", "North Wing"),
+        _entry("floorplan", "South Wing"), _entry("floorplan_removed", "South Wing"),
+        # Not counted: another location's, another market's, and a kind that names none.
+        _entry("floorplan", "East Wing"), _entry("floorplan", "North Wing", "market-other"),
+        _entry("table_types", "North Wing"),
+    ):
+        market_records.history.insert_one(entry)
+    before = copy.deepcopy(market_records.history.documents)
+
+    swap(MARKET, "North Wing", "South Wing", db, dry_run=True)
+    swap(MARKET, "North Wing", "South Wing", db)
+
+    assert market_records.history.documents == before
+    line = "the market's history: 3 layout save(s) and 1 layout removal(s) name either location"
+    assert capsys.readouterr().out.count(line) == 2
 
 
 # --- the command ------------------------------------------------------------------------------

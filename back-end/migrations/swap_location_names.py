@@ -6,7 +6,8 @@ so the app refuses to rename a location or move a section once applicants rely o
 two sections were set up under each other's location name, this script puts each under the name of
 the place it is in: the two locations trade names and keep everything else.
 
-Every stored copy of a location's name is on the market's own document, and each is rewritten:
+Each copy of a location's name the market's pages read as the name now is on the market's own
+document, and each is rewritten:
 
 - ``setupObject.locations[].name``, the location itself;
 - ``setupObject.sections[].location.name``, each section's copy of its location;
@@ -18,30 +19,52 @@ Every stored copy of a location's name is on the market's own document, and each
 
 It keeps every id (location, section, table), so a layout, which names its location by id, stays on
 the same location under its new name. It does not count the assignment's ``revision``, so published
-results do not read as changed; it sends nothing to anyone and records no history entry. An entry
-the history already holds that names a location (a layout removed with it) is a record of that day
-and is left as written.
+results do not read as changed; it sends nothing to anyone and records no history entry.
+
+**The market's history also holds the names, as text, and is left as written.** Three kinds of
+entry in the ``history`` collection name a location as it was called when they were recorded:
+
+- ``floorplan``, each save of a layout, whose ``subject.location`` Manage market reads into its
+  sentence;
+- ``floorplan_removed``, a layout removed with its location, with the same subject;
+- ``plan``, a change on Market Setup, whose detail holds the locations and sections before and
+  after.
+
+So after the swap an entry of a layout's save still names its location by the old name, which now
+means the other place. The script counts the market's ``floorplan`` and ``floorplan_removed``
+entries naming either location and prints the two counts, so the operator knows they are there.
 
 It refuses, writing nothing and exiting 1, when: the market is not found, is being deleted, does
-not parse, has no plan or is a draft (rename it on Market Setup); its locations, sections or seats
-are not stored as rows; either location is not found, has no name, or shares its name with another
-of the plan's locations; both arguments name one location; either location, a section in it, or
-that section's copy of it has no stored id (run ``migrate_layouts.py`` first: an id read from a
-name would change with the name); a section's copy disagrees with the location it names; both
-locations hold a section of one name; a seat's copy of the name disagrees with the section it is
-in; or the market changed between the read and the write.
+not parse, has no plan or is a draft (rename it on Market Setup); either location is not found, or
+shares its name with another of the plan's locations; both arguments name one location; either
+location, a section in it, or that section's copy of it has no stored id (run
+``migrate_layouts.py`` first: an id read from a name would change with the name); a section's copy
+disagrees with the location it names; both locations hold a section of one name; a seat's copy of
+the name disagrees with the section it is in; or the market changed between the read and the
+write.
 
 **One write, all or nothing**: the whole swap is a single update of one document, through
 ``write_market``, holding the phase, ``planRevision``, the assignment's ``revision`` and
-``madeFrom`` as read. It lands whole or not at all, and a market that changed since the read
-refuses it with nothing written. There is no half-way state to repair.
+``madeFrom`` as read, and counting ``planRevision``, as every write of the plan does. It lands
+whole or not at all, and a market whose held keys moved since the read refuses it with nothing
+written. There is no half-way state to repair.
 
-**A second run of the same swap swaps back**, restoring every value this script wrote. So run
-``--dry-run`` first and read which section sits under which name before and after, run it once,
-and run ``--dry-run`` again: the second dry run shows the first one's "after" as its "before".
+**Run it while no organizer is working on the market.** A plan or layout save that read the market
+before the swap is refused after it, since the plan's revision moved. A seat written by hand is
+not: the assignment's ``revision`` is left as it was, so a placement, a free or a swap of seats
+whose request read the market just before the swap and wrote just after puts every seat back under
+the old names, over the swapped plan. The next ``--dry-run`` shows it: it refuses with a stored
+seat naming a location "which the plan does not put there". The seats' names are then put right
+in the database by hand, each to its section's location, before anything is run again.
+
+**A second run of the same swap swaps back**, restoring every value this script wrote but
+``planRevision``, which counts each run. So run ``--dry-run`` first and read which section sits
+under which name before and after, run it once, and run ``--dry-run`` again: the second dry run
+shows the first one's "after" as its "before".
 
 Each location is named by its id or its exact name. It prints the market's id, the two locations'
-ids and names, the sections' names and counts: never a vendor's name or address.
+ids and names, the names of the sections in them, and counts: never a vendor's name or address,
+and no other location's name.
 
 Usage (the production database address passed inline, never from back-end/.env):
     MONGODB_URI='<URI>' python migrations/swap_location_names.py \\
@@ -59,6 +82,9 @@ from pydantic import ValidationError  # noqa: E402
 import market_write as MarketWrite  # noqa: E402
 from assignment.made_from import fingerprint  # noqa: E402
 from datatypes import MarketPhase  # noqa: E402
+from history import (  # noqa: E402
+    FLOORPLAN, FLOORPLAN_REMOVED, HISTORY_COLLECTION, MARKET_ID_FIELD,
+)
 from market_documents import MARKETS_COLLECTION, market_doc_key, market_from_document  # noqa: E402
 from market_write import MarketChanged, MarketNotFoundError, write_market  # noqa: E402
 from tombstone import live  # noqa: E402
@@ -101,14 +127,6 @@ def _has_id(row: Mapping[str, Any]) -> bool:
     return isinstance(row.get("id"), str) and bool(row["id"].strip())
 
 
-def _rows(value: Any, what: str) -> List[Dict[str, Any]]:
-    if value is None:
-        return []
-    if not isinstance(value, list) or not all(isinstance(row, dict) for row in value):
-        raise Refused(f"The market's {what} are not stored as a list of rows.")
-    return value
-
-
 def _named(locations: List[Dict[str, Any]], wanted: str) -> Dict[str, Any]:
     """The one location ``wanted`` names, by id or else by exact name."""
     found = ([place for place in locations if place.get("id") == wanted]
@@ -138,9 +156,10 @@ def judged(document: Mapping[str, Any], first: str, second: str) -> Swap:
     setup = document.get(SETUP)
     if not isinstance(setup, dict):
         raise Refused("The market has no plan.")
-    locations = _rows(setup.get("locations"), "locations")
-    sections = _rows(setup.get("sections"), "sections")
-    rows = _rows((document.get(ASSIGNMENT) or {}).get("vendorAssignments"), "seats")
+    # Lists of rows, each location with a name: the parse above refuses anything else.
+    locations: List[Dict[str, Any]] = setup["locations"]
+    sections: List[Dict[str, Any]] = setup["sections"]
+    rows: List[Dict[str, Any]] = (document.get(ASSIGNMENT) or {}).get("vendorAssignments") or []
 
     one, other = _named(locations, first), _named(locations, second)
     if one is other:
@@ -148,8 +167,6 @@ def judged(document: Mapping[str, Any], first: str, second: str) -> Swap:
     for place in (one, other):
         if not _has_id(place):
             raise Refused(f"The location {place.get('name')!r} has no stored id. {NEEDS_IDS}")
-        if not isinstance(place.get("name"), str):
-            raise Refused(f"The location {place['id']} has no name.")
         if sum(1 for each in locations if each.get("name") == place["name"]) > 1:
             raise Refused(
                 f"More than one location is named {place['name']!r}, so a copy of the name does "
@@ -180,7 +197,7 @@ def judged(document: Mapping[str, Any], first: str, second: str) -> Swap:
         if held_name != name_before[held_id]:
             raise Refused(
                 f"The section {label!r} holds the id of the location {name_before[held_id]!r} "
-                f"under the name {held_name!r}.")
+                "under another name.")
         if not _has_id(section):
             raise Refused(f"The section {label!r} has no stored id. {NEEDS_IDS}")
         section_names[held_id].add(label)
@@ -203,8 +220,8 @@ def judged(document: Mapping[str, Any], first: str, second: str) -> Swap:
             continue
         if any(section_name in names for names in section_names.values()):
             raise Refused(
-                f"A stored seat in the section {section_name!r} names the location "
-                f"{held_name!r}, which is not that section's.")
+                f"A stored seat in the section {section_name!r} names a location that is not "
+                "that section's.")
         new_rows.append(row)
 
     setting: Dict[str, Any] = {LOCATIONS: new_locations, SECTIONS: new_sections}
@@ -230,6 +247,16 @@ def judged(document: Mapping[str, Any], first: str, second: str) -> Swap:
         locations=[(place["id"], place["name"], name_after[place["id"]]) for place in (one, other)],
         sections=shown, rows_changed=rows_changed, rows_stored=len(rows), layouts=layouts,
         record=record)
+
+
+def _history_entries_naming(history, market_id: str, names: set) -> Tuple[int, int]:
+    """How many of the market's history entries of a layout's save, and of a layout removed with
+    its location, name one of ``names`` as their subject's location. Read only."""
+    counts = {FLOORPLAN: 0, FLOORPLAN_REMOVED: 0}
+    for entry in history.find({MARKET_ID_FIELD: market_id, "kind": {"$in": list(counts)}}):
+        if (entry.get("subject") or {}).get("location") in names:
+            counts[entry["kind"]] += 1
+    return counts[FLOORPLAN], counts[FLOORPLAN_REMOVED]
 
 
 def swap(market_id: str, first: str, second: str, db=None, dry_run: bool = False) -> Swap:
@@ -261,11 +288,15 @@ def swap(market_id: str, first: str, second: str, db=None, dry_run: bool = False
           f"{judgment.rows_stored} stored seat(s); {judgment.layouts} layout(s), each kept on "
           "its location's id")
     print(f"  - the allocation's record of the plan: {judgment.record}")
+    saved, removed = _history_entries_naming(
+        db[HISTORY_COLLECTION], market_id, {before for _id, before, _after in judgment.locations})
+    print(f"  - the market's history: {saved} layout save(s) and {removed} layout removal(s) name "
+          "either location as it was called then, and stay as written")
 
     if not dry_run:
         try:
-            write_market(document, {"$set": judgment.setting},
-                         holds=(PLAN_REVISION, REVISION, MADE_FROM))
+            write_market(document, {"$set": judgment.setting}, holds=(REVISION, MADE_FROM),
+                         revisions={PLAN_REVISION: document.get(PLAN_REVISION)})
         except MarketNotFoundError as error:
             raise Refused("The market is gone, or being deleted.") from error
         except MarketChanged as error:

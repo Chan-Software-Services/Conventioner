@@ -1,6 +1,7 @@
 """``migrations/swap_location_names.py`` on the server, run as an operator runs it: on the configured
 database, its one write through ``write_market``, which holds a sub-document (``madeFrom``) while
-setting a key inside it and holds a revision the market may never have stored. The hermetic fakes
+setting a key inside it and counts a revision the market may never have stored, and its read of
+the ``history`` collection. The hermetic fakes
 only model those conditions.
 """
 import copy
@@ -89,13 +90,14 @@ def test_the_swap_lands_whole_and_a_second_run_swaps_back(real_db):
         market_from_document(copy.deepcopy(after)).setup_object, [], [])["plan"]
     assert made_from["plan"] != before["assignmentObject"]["madeFrom"]["plan"]
     assert (after["assignmentObject"]["revision"], after["assignmentObject"]["publishedRevision"],
-            after["planRevision"], after["resultsPublished"]) == (4, 4, 3, True)
+            after["planRevision"], after["resultsPublished"]) == (4, 4, 4, True)
 
     swap(MARKET, "North Wing", "South Wing")
-    assert stored(markets) == before
+    # Every value but the plan's revision, which counts each run.
+    assert stored(markets) == {**before, "planRevision": 5}
 
 
-def test_a_market_that_never_stored_a_plan_revision_is_swapped(real_db):
+def test_a_market_that_never_stored_a_plan_revision_is_swapped_and_counts_one(real_db):
     markets = real_db["markets"]
     markets.insert_one(settled_market())
     assert "planRevision" not in stored(markets)
@@ -104,7 +106,27 @@ def test_a_market_that_never_stored_a_plan_revision_is_swapped(real_db):
 
     assert names(stored(markets))["locations"] == [
         ("loc-north", "South Wing"), ("loc-south", "North Wing")]
-    assert "planRevision" not in stored(markets)
+    assert stored(markets)["planRevision"] == 1
+
+
+def test_it_counts_the_history_entries_naming_either_location_and_leaves_them(real_db, capsys):
+    real_db["markets"].insert_one(settled_market())
+    history = real_db["history"]
+    for number, (kind, location) in enumerate((
+            ("floorplan", "North Wing"), ("floorplan_removed", "South Wing"),
+            ("floorplan", "West Wing"))):
+        history.insert_one({
+            "id": f"h-{number}", "market_id": MARKET, "actor": "owner@example.com",
+            "at": "2099-07-01T00:00:00+00:00", "action": "change-setup", "kind": kind,
+            "vendors": [], "subject": {"floorplan_id": "fp-north", "location": location},
+            "detail": {}})
+    before = list(history.find({}, {"_id": 0}).sort("id", 1))
+
+    swap(MARKET, "North Wing", "South Wing")
+
+    assert list(history.find({}, {"_id": 0}).sort("id", 1)) == before
+    assert ("the market's history: 1 layout save(s) and 1 layout removal(s) name either location"
+            in capsys.readouterr().out)
 
 
 def test_a_refusal_writes_nothing(real_db):
@@ -114,7 +136,7 @@ def test_a_refusal_writes_nothing(real_db):
     markets.insert_one(document)
     before = stored(markets)
 
-    with pytest.raises(Refused, match="is not that section's"):
+    with pytest.raises(Refused, match="not that section's"):
         swap(MARKET, "North Wing", "South Wing")
 
     assert stored(markets) == before
