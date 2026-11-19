@@ -37,9 +37,9 @@ const FREED = `door-freed-${at}@example.com`;
 /** Never comes. */
 const WAITING = `door-waiting-${at}@example.com`;
 
-/** Each window, and the row layout the door gives it: a phone's (two columns) or a desk's (four). */
+/** Each window, and the row layout the door gives it: a phone's (one column) or a desk's (four). */
 const THREE_WINDOWS = [
-  { ...PHONE_AND_DESK[0], rows: 2 },
+  { ...PHONE_AND_DESK[0], rows: 1 },
   {
     name: 'on a tablet',
     phone: false,
@@ -49,7 +49,7 @@ const THREE_WINDOWS = [
       hasTouch: true,
       deviceScaleFactor: 2,
     },
-    rows: 2,
+    rows: 1,
   },
   { ...PHONE_AND_DESK[1], rows: 4 },
 ] as const;
@@ -134,7 +134,7 @@ async function expectNoLayoutFault(page: Page, what: string): Promise<void> {
 const toTheMiddle = (row: Locator) =>
   row.evaluate((el) => el.scrollIntoView({ block: 'center', behavior: 'instant' }));
 
-/** The number of columns a row's grid lays out: four at a desk, two on a phone. */
+/** The number of columns a row's grid lays out: four at a desk, one on a phone, its lines stacked. */
 const columnsOf = (page: Page, email: string) =>
   new AttendanceStatusPage(page)
     .row(email)

@@ -17,11 +17,16 @@ import { calendarToday } from './helpers/vendorSignIn';
  * Two things looked off beside it, for the same role on the same screen: the rail told the Viewer
  * "Check vendors in at the door.", and at a desk each row kept the empty column a Check in stands in,
  * so its status stopped short of the row's edge. An Editor, who checks vendors in, keeps both.
+ *
+ * A vendor checked out (T496) reads the same way: a Viewer sees when they were checked out and by
+ * whom, ending the row, and no Undo of it; an Editor's row ends in that Undo.
  */
 const VIEWER = { email: 'e2e-door-viewer@example.com', password: 'e2epassword123' };
 const EDITOR = { email: 'e2e-door-editor@example.com', password: 'e2epassword123' };
 const HERE = 'alice@example.com';
 const NOT_YET = 'bob@example.com';
+/** Checked in, then out. */
+const OUT = 'carol@example.com';
 
 const SIZES = [
   {
@@ -84,10 +89,10 @@ test.beforeAll(async ({ request }) => {
     BACKEND_URL,
     TEST_USER.email,
     TEST_USER.password,
-    { marketDate: calendarToday() },
+    { marketDate: calendarToday(), vendors: [HERE, NOT_YET, OUT] },
   ));
-  // The seed leaves the owner's session on `request`: they give each person their role, and check
-  // one vendor in, so the door has a row an Undo would stand on.
+  // The seed leaves the owner's session on `request`: they give each person their role, check one
+  // vendor in, so the door has a row an Undo would stand on, and check another in and out.
   for (const [person, role] of [
     [VIEWER, 'viewer'],
     [EDITOR, 'editor'],
@@ -97,10 +102,16 @@ test.beforeAll(async ({ request }) => {
     });
     expect(res.ok(), await res.text()).toBeTruthy();
   }
-  const checkIn = await request.post(`${BACKEND_URL}/markets/${marketId}/attendance`, {
-    data: { vendorEmail: HERE, date: calendarToday() },
-  });
-  expect(checkIn.ok(), await checkIn.text()).toBeTruthy();
+  for (const [vendorEmail, path] of [
+    [HERE, 'attendance'],
+    [OUT, 'attendance'],
+    [OUT, 'attendance/check-out'],
+  ] as const) {
+    const res = await request.post(`${BACKEND_URL}/markets/${marketId}/${path}`, {
+      data: { vendorEmail, date: calendarToday() },
+    });
+    expect(res.ok(), await res.text()).toBeTruthy();
+  }
 });
 
 for (const size of SIZES) {
@@ -127,6 +138,8 @@ for (const size of SIZES) {
 
       await expect(door.checkIns).toHaveCount(0);
       await expect(door.undos).toHaveCount(0);
+      await expect(door.checkOuts).toHaveCount(0);
+      await expect(door.checkOutUndos).toHaveCount(0);
 
       // The rail says what a Viewer may do at the door, and leaves the rest to the line above.
       await expect(page.getByTestId('phase-rail-next')).toHaveText(
@@ -139,6 +152,24 @@ for (const size of SIZES) {
         expect(
           await shortOfTheRowsEnd(door.row(vendor), door.status(vendor)),
           `${vendor}'s status ends the row`,
+        ).toBeLessThanOrEqual(1);
+      }
+
+      // A vendor checked out: their status as it was, then when they were checked out and by whom,
+      // which ends the row; at a desk the two stand one over the other, each at the row's end.
+      await expect(door.status(OUT)).toHaveText(new RegExp(`by ${TEST_USER.email}$`));
+      await expect(door.out(OUT)).toHaveText(
+        new RegExp(`^Out \\d{1,2}:\\d{2}\\s[AP]M by ${TEST_USER.email}$`),
+      );
+      await expectAddressWhole(door.row(OUT), OUT);
+      expect(
+        await shortOfTheRowsEnd(door.row(OUT), door.out(OUT)),
+        'the check-out ends the row',
+      ).toBeLessThanOrEqual(1);
+      if (width > 640) {
+        expect(
+          await shortOfTheRowsEnd(door.row(OUT), door.status(OUT)),
+          'the status ends the row too',
         ).toBeLessThanOrEqual(1);
       }
     });
@@ -158,13 +189,18 @@ for (const size of SIZES) {
 
       const checkIn = door.row(NOT_YET).getByTestId('attendance-check-in');
       const undo = door.row(HERE).getByTestId('attendance-undo');
+      const undoCheckOut = door.action(OUT, 'undo-check-out');
       await expect(checkIn).toBeVisible();
       await expect(undo).toBeVisible();
+      await expect(undoCheckOut).toBeVisible();
+      // Checked in and not out: Check out, then the Undo that ends the row.
+      await expect(door.action(HERE, 'check-out')).toBeVisible();
       // At a desk the action has its column at the row's end, the status left of it; on a phone the
       // action is on the vendor's line and the status under it, at the end of each.
       for (const [vendor, action] of [
         [NOT_YET, checkIn],
         [HERE, undo],
+        [OUT, undoCheckOut],
       ] as const) {
         const row = door.row(vendor);
         await expectAddressWhole(row, vendor);

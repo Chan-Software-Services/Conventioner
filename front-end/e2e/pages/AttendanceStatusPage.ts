@@ -34,6 +34,9 @@ export class AttendanceStatusPage {
   /** Every row's Check in and Undo, offered only to whoever may check vendors in. */
   readonly checkIns: Locator;
   readonly undos: Locator;
+  /** Every checked-in row's Check out, and every checked-out row's Undo of it (T496). */
+  readonly checkOuts: Locator;
+  readonly checkOutUndos: Locator;
   /**
    * When the roster was last read, over the list (on the map it is the day map's note), Refresh,
    * and the line a failed re-read leaves under the toolbar's end (T318, T466).
@@ -102,6 +105,8 @@ export class AttendanceStatusPage {
     this.readOnly = page.getByTestId('market-read-only');
     this.checkIns = page.getByTestId('attendance-check-in');
     this.undos = page.getByTestId('attendance-undo');
+    this.checkOuts = page.getByTestId('attendance-check-out');
+    this.checkOutUndos = page.getByTestId('attendance-undo-check-out');
     this.updated = page.getByTestId('attendance-updated');
     this.refresh = page.getByTestId('attendance-refresh');
     this.refreshError = page.getByTestId('attendance-refresh-error');
@@ -181,6 +186,22 @@ export class AttendanceStatusPage {
    */
   status(vendorEmail: string): Locator {
     return this.row(vendorEmail).getByTestId('attendance-row-status');
+  }
+
+  /**
+   * On a checked-out row, after its status: when they were checked out and who made it, "Out 4:05 PM
+   * by you" or, for the vendor's own, "Scanned out at 4:05 PM" (T496).
+   */
+  out(vendorEmail: string): Locator {
+    return this.row(vendorEmail).getByTestId('attendance-row-out');
+  }
+
+  /** A row's Check in, Check out, Undo of the check-in or Undo of the check-out, by its test id. */
+  action(
+    vendorEmail: string,
+    which: 'check-in' | 'undo' | 'check-out' | 'undo-check-out',
+  ): Locator {
+    return this.row(vendorEmail).getByTestId(`attendance-${which}`);
   }
 
   /** Where a vendor sits on the date shown, "Table ..." or "No table" (T318). */
