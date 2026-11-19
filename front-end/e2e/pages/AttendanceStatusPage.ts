@@ -56,7 +56,7 @@ export class AttendanceStatusPage {
   readonly doorCodeMade: Locator;
   readonly doorCodeMarket: Locator;
   readonly doorCodeValue: Locator;
-  /** "Scan with your phone's camera to check in". */
+  /** "Scan with your phone's camera to check in or out". */
   readonly doorCodeInstruction: Locator;
   /** The QR code, an SVG whose `data-url` is the address it encodes. */
   readonly doorCodeQr: Locator;
