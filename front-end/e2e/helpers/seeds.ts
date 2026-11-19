@@ -532,6 +532,12 @@ export const LAYOUT_FLOORPLAN_PATH = fileURLToPath(
   new URL('../fixtures/test-floorplan.png', import.meta.url),
 );
 
+/** A second floor plan, of other bytes and pixels (960 x 720 px, the first's 4:3 hall), for a
+ *  market whose two locations' images must be told apart (T501); fixture data. */
+export const SECOND_FLOORPLAN_PATH = fileURLToPath(
+  new URL('../fixtures/test-floorplan-second.png', import.meta.url),
+);
+
 /** The two halls `seedLayout` gives its market, and their sections. */
 export const UPPER_HALL = { id: 'loc-upper-hall', name: 'Upper Hall' };
 export const LOWER_HALL = { id: 'loc-lower-hall', name: 'Lower Hall' };
@@ -718,12 +724,12 @@ export async function seedSettledLayout(
 }
 
 /**
- * Start a location's layout on a market in Draft, as the layout page does (T257): its floorplan
- * `fixtures/test-floorplan.png` uploaded and saved, and calibrated to `metresAcross` when given. On
- * a calibrated layout `tables` and `zones` are placed by a second save, each table of the market's
- * first table type, the "Standard 6 ft" the layout's start gave a market with none, its section
- * named by id and numbered 1 to N in each section in the order given. The layout as stored: its id
- * and its revision.
+ * Start a location's layout on a market in Draft, as the layout page does (T257): its floorplan,
+ * the PNG at `image` (`fixtures/test-floorplan.png` unless given), uploaded and saved, and
+ * calibrated to `metresAcross` when given. On a calibrated layout `tables` and `zones` are placed
+ * by a second save, each table of the market's first table type, the "Standard 6 ft" the layout's
+ * start gave a market with none, its section named by id and numbered 1 to N in each section in the
+ * order given. The layout as stored: its id and its revision.
  */
 export async function startLayout(
   request: APIRequestContext,
@@ -738,6 +744,8 @@ export async function startLayout(
     /** What each table's id starts with, `table` unless given: a market of two layouts gives each
      *  its own, since a seat names its table by id alone. */
     tablePrefix?: string;
+    /** The floorplan's PNG, by path: `LAYOUT_FLOORPLAN_PATH` unless given. */
+    image?: string;
   },
 ): Promise<{ id: string; revision: number }> {
   if ((options.tables?.length || options.zones?.length) && !options.metresAcross)
@@ -748,7 +756,7 @@ export async function startLayout(
       file: {
         name: 'hall.png',
         mimeType: 'image/png',
-        buffer: readFileSync(LAYOUT_FLOORPLAN_PATH),
+        buffer: readFileSync(options.image ?? LAYOUT_FLOORPLAN_PATH),
       },
     },
   });

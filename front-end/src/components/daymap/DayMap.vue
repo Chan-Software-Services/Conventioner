@@ -49,6 +49,9 @@ const props = withDefaults(
     note?: string;
     /** Whether to draw the location switch; off for a page that draws its own. */
     locationSwitch?: boolean;
+    /** True while the page waits for the open location's image: the map draws the floor alone,
+     *  as `LayoutMap` does (T501). False unless given. */
+    imagePending?: boolean;
   }>(),
   { marked: () => [], note: '', locationSwitch: true },
 );
@@ -143,6 +146,7 @@ const swatches = computed(() => {
           :sections="open.sections"
           :tableTypes="tableTypes"
           :imageUrl="open.imageUrl"
+          :imagePending="imagePending"
           :seats="seats"
           :marked="marks"
           mode="read"

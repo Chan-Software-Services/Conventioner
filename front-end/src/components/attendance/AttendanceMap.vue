@@ -13,6 +13,11 @@
  * open location draws a table or half nobody sits at (`drawsAFreePart`), and the read time the page
  * gives stands under the map as the day map's note.
  *
+ * A location's tables and its floorplan appear together (T501): the open location's image is read
+ * first and the others' behind it (`useFloorplanImages`), the tables wait for it for at most two
+ * seconds, then stand on the floor with "Loading the floorplan..." under the map until it lands, and
+ * an image that cannot be loaded leaves them there with a line saying so.
+ *
  * Nothing here writes: check-in, Undo and notes stay on the list (D39). The open location is the
  * page's own state, in the address as `location`, chosen in the page's toolbar (T466), so the day
  * map draws no location switch of its own.
@@ -30,7 +35,8 @@ import {
 } from '@/components/daymap/dayMap';
 import { drawsAFreePart } from '@/components/daymap/freeParts';
 import { tableCode } from '@/components/layout/layoutDrawing';
-import { useFloorplanImage } from '@/components/layout/useFloorplanImage';
+import { useFloorplanImages, type FloorplanImageSource } from '@/components/layout/floorplanImages';
+import { api } from '@/utils/api';
 import { layoutPath } from '@/utils/market';
 import { MarketAction, mayTake } from '@/utils/marketActions';
 import { getShortDate } from '@/utils/utils';
@@ -65,15 +71,32 @@ const laidOut = computed(() => laidOutLocations(props.market?.setupObject));
 /** The open location: the address's, else the first laid out. */
 const openId = computed(() => openLocationId(laidOut.value, String(route.query.location ?? '')));
 
-/** Only the open location's image is read, with the session, as the layout page reads it. */
-const { url: imageUrl } = useFloorplanImage(
+/** Each laid-out location's image, read with the session as the layout page reads it: the open
+ *  location's first, then the others in the background, so a later switch costs no wait (T501). */
+const imageSources = computed<FloorplanImageSource[]>(() =>
+  laidOut.value.flatMap(({ layout }) => {
+    const id = layout.imageGridfsId;
+    return id ? [{ key: id, fetch: () => fetchFloorplanImage(id) }] : [];
+  }),
+);
+
+async function fetchFloorplanImage(id: string): Promise<Blob> {
+  const { data } = await api.get<Blob>(`/floorplans/${encodeURIComponent(id)}`, {
+    responseType: 'blob',
+  });
+  return data;
+}
+
+const { open: image } = useFloorplanImages(
+  imageSources,
   computed(() => laidOut.value.find((each) => each.id === openId.value)?.layout.imageGridfsId),
 );
 
+/** The open location drawn with its own image alone, and no other location's. */
 const locations = computed<DayMapLocation[]>(() =>
   laidOut.value.map((each) => ({
     ...each,
-    imageUrl: each.id === openId.value ? imageUrl.value : '',
+    imageUrl: each.id === openId.value ? image.value.url : '',
   })),
 );
 
@@ -173,8 +196,25 @@ const mayChangeSetup = computed(() => mayTake(props.market, MarketAction.ChangeS
         :legend="legend"
         :note="updated"
         :locationSwitch="false"
+        :imagePending="image.pending"
         @pick="pick"
       />
+      <p
+        v-if="image.slow"
+        class="door-map__note"
+        aria-live="polite"
+        data-testid="attendance-map-image-loading"
+      >
+        Loading the floorplan...
+      </p>
+      <p
+        v-else-if="image.failed"
+        class="door-map__note"
+        aria-live="polite"
+        data-testid="attendance-map-image-failed"
+      >
+        The floorplan could not be loaded. The tables are drawn without it.
+      </p>
       <p
         v-if="freeNote"
         class="door-map__note"
