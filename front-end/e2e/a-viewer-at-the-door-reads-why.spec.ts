@@ -1,6 +1,6 @@
-import type { Locator, Page } from '@playwright/test';
+import { request as apiRequest, type Locator, type Page } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
-import { seedPublishedMarketWithAssignments } from './helpers/seeds';
+import { loginViaApi, seedPublishedMarketWithAssignments } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
 import { LoginPage } from './pages/LoginPage';
@@ -29,6 +29,10 @@ const HERE = 'alice@example.com';
 const NOT_YET = 'bob@example.com';
 /** Checked in, then out. */
 const OUT = 'carol@example.com';
+/** Checked in by the Editor, whose address the owner reads on its chip. */
+const IN_BY_EDITOR = 'dave@example.com';
+/** Checked in and out by the Editor. */
+const OUT_BY_EDITOR = 'erin@example.com';
 
 const SIZES = [
   {
@@ -108,7 +112,7 @@ test.beforeAll(async ({ request }) => {
     BACKEND_URL,
     TEST_USER.email,
     TEST_USER.password,
-    { marketDate: calendarToday(), vendors: [HERE, NOT_YET, OUT] },
+    { marketDate: calendarToday(), vendors: [HERE, NOT_YET, OUT, IN_BY_EDITOR, OUT_BY_EDITOR] },
   ));
   // The seed leaves the owner's session on `request`: they give each person their role, check one
   // vendor in, so the door has a row an Undo would stand on, and check another in and out.
@@ -131,6 +135,21 @@ test.beforeAll(async ({ request }) => {
     });
     expect(res.ok(), await res.text()).toBeTruthy();
   }
+  // The Editor checks two in and one of them out, so another organizer reads their address,
+  // a long one, on the chips.
+  const editor = await apiRequest.newContext({ ignoreHTTPSErrors: true });
+  await loginViaApi(editor, BACKEND_URL, EDITOR.email, EDITOR.password);
+  for (const [vendorEmail, path] of [
+    [IN_BY_EDITOR, 'attendance'],
+    [OUT_BY_EDITOR, 'attendance'],
+    [OUT_BY_EDITOR, 'attendance/check-out'],
+  ] as const) {
+    const res = await editor.post(`${BACKEND_URL}/markets/${marketId}/${path}`, {
+      data: { vendorEmail, date: calendarToday() },
+    });
+    expect(res.ok(), await res.text()).toBeTruthy();
+  }
+  await editor.dispose();
 });
 
 for (const size of SIZES) {
@@ -262,6 +281,46 @@ for (const size of SIZES) {
         }),
       );
       expect(new Set(chipEnds).size, `the chips' ends ${chipEnds}`).toBe(1);
+    });
+
+    test('an organizer reads another\'s long address beside each "Undo?", inside the row', async ({
+      page,
+    }) => {
+      await signIn(page, TEST_USER, width);
+      const door = new AttendanceStatusPage(page);
+      await door.goto(marketId);
+      await expect(door.out(OUT_BY_EDITOR)).toHaveText(new RegExp(`by ${EDITOR.email}$`));
+      await expect(door.status(IN_BY_EDITOR)).toHaveText(new RegExp(`by ${EDITOR.email}$`));
+      for (const [vendor, parts] of [
+        [IN_BY_EDITOR, [door.status(IN_BY_EDITOR), door.action(IN_BY_EDITOR, 'undo')]],
+        [
+          OUT_BY_EDITOR,
+          [
+            door.status(OUT_BY_EDITOR),
+            door.out(OUT_BY_EDITOR),
+            door.action(OUT_BY_EDITOR, 'undo-check-out'),
+          ],
+        ],
+      ] as const) {
+        const row = door.row(vendor);
+        await row.scrollIntoViewIfNeeded();
+        const content = await row.evaluate((el) => {
+          const box = el.getBoundingClientRect();
+          const style = getComputedStyle(el);
+          return {
+            left: box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft),
+            right: box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight),
+          };
+        });
+        for (const part of parts) {
+          const box = (await part.boundingBox())!;
+          const what = `${vendor}'s ${await part.getAttribute('data-testid')}`;
+          expect(box.x, `${what} starts inside the row`).toBeGreaterThanOrEqual(content.left - 0.5);
+          expect(box.x + box.width, `${what} ends inside the row`).toBeLessThanOrEqual(
+            content.right + 0.5,
+          );
+        }
+      }
     });
   });
 }

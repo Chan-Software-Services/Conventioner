@@ -1103,6 +1103,7 @@ const drawer = useVendorDrawer();
 }
 
 .door-undo:disabled {
+  text-decoration: none;
   cursor: not-allowed;
 }
 
@@ -1232,6 +1233,13 @@ const drawer = useVendorDrawer();
   .door-row:not(.door-row--read) .door-chips {
     flex-flow: column;
     gap: var(--space-1);
+    max-width: 100%;
+  }
+
+  /* A chip too wide to share its line, "by" another organizer's address, keeps the row's width,
+     and its "Undo?" goes under it, at the line's end, still after the chip it undoes. */
+  .door-line {
+    flex-wrap: wrap-reverse;
   }
 
   .door-action {
