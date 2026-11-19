@@ -230,6 +230,7 @@ def judged(document: Mapping[str, Any], first: str, second: str) -> Swap:
     ]
 
     new_sections, shown, section_names = [], [], {one["id"]: set(), other["id"]: set()}
+    elsewhere: Dict[Any, set] = {}
     for section in sections:
         held = section.get("location")
         if not isinstance(held, dict):
@@ -241,6 +242,7 @@ def judged(document: Mapping[str, Any], first: str, second: str) -> Swap:
                 raise Refused(
                     f"The section {label!r} names the location {held_name!r} with "
                     + ("another location's id." if _has_id(held) else f"no stored id. {NEEDS_IDS}"))
+            elsewhere.setdefault(held_name, set()).add(label)
             new_sections.append(section)
             continue
         if held_name != name_before[held_id]:
@@ -267,7 +269,8 @@ def judged(document: Mapping[str, Any], first: str, second: str) -> Swap:
             new_rows.append({**row, "location": name_after[id_of[held_name]]})
             rows_changed += 1
             continue
-        if any(section_name in names for names in section_names.values()):
+        if (any(section_name in names for names in section_names.values())
+                and section_name not in elsewhere.get(held_name, set())):
             raise Refused(
                 f"A stored seat in the section {section_name!r} names a location that is not "
                 "that section's.")

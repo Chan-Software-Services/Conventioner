@@ -545,6 +545,45 @@ def test_it_refuses_and_writes_nothing(database, market_records, change, locatio
         assert "West Wing" not in str(refusal.value)
 
 
+def _a_section_named_as_the_norths_in_the_east(doc):
+    """The East Wing holds an "Aisle A" too, with a seat in it: section names are the location's."""
+    doc["setupObject"]["sections"].append(
+        {"id": "sec-east-a", "name": "Aisle A", "count": 1, "location": copy.deepcopy(EAST),
+         "tier": GOLD})
+    doc["assignmentObject"]["vendorAssignments"].append(
+        _seat(CLEO, DAY_TWO, "Aisle A 1", "Aisle A", "East Wing"))
+
+
+def test_a_seat_in_a_third_locations_section_of_a_shared_name_is_left_as_stored(
+        database, market_records):
+    doc = settled_market()
+    _a_section_named_as_the_norths_in_the_east(doc)
+    db = database(copy.deepcopy(doc))
+
+    swap(MARKET, "North Wing", "South Wing", db)
+
+    seats = stored(db)["assignmentObject"]["vendorAssignments"]
+    assert seats[-1] == doc["assignmentObject"]["vendorAssignments"][-1]
+    assert [seat["location"] for seat in seats] == [
+        "South Wing", "South Wing", "North Wing", "East Wing", "East Wing"]
+    assert len(market_records.history.documents) == 1
+
+
+def test_a_seat_in_one_of_the_two_under_a_section_the_plan_puts_elsewhere_is_refused(
+        database, market_records):
+    doc = settled_market()
+    _a_section_named_as_the_norths_in_the_east(doc)
+    doc["assignmentObject"]["vendorAssignments"][2]["section"] = "Aisle E"
+    db = database(copy.deepcopy(doc))
+
+    with pytest.raises(Refused, match="does not put there"):
+        swap(MARKET, "North Wing", "South Wing", db)
+
+    assert stored(db) == doc
+    assert db.markets.last_update is None
+    assert market_records.history.documents == []
+
+
 def test_it_refuses_a_market_that_is_not_there(database, market_records):
     db = database(settled_market())
 
