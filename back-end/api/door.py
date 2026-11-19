@@ -164,9 +164,10 @@ def set_self_check_in(
     its vendors check themselves in and out on their vendor page, and undo either
     (``api/vendor_check_in.py``). The organizer's door never reads it.
 
-    The body is read here, after the person is let in, so a stranger is refused before its shape
-    is: it holds ``enabled``, a JSON boolean, and no other key, else 400
-    ``SELF_CHECK_IN_MALFORMED``.
+    The body's keys are read here, after the person is let in, so a stranger sending a JSON object
+    is refused before its keys are: it holds ``enabled``, a JSON boolean, and no other key, else
+    400 ``SELF_CHECK_IN_MALFORMED``. A body that is not a JSON object is the route's own 400,
+    before that.
 
     Held to the "Check vendors in" row through the change loader, only in ``market_days``, as
     making the door code is. It is apart from the door code: the code stays stored while the
