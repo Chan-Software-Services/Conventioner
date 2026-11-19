@@ -187,6 +187,55 @@ describe("the attendance map's floorplan choices", () => {
     expect(image(map).classes()).toContain('layout-map__image--colour');
   });
 
+  describe('unticked Show, while the image is still loading', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      localStorage.setItem(choiceKey('showImage'), '0');
+    });
+    afterEach(() => vi.useRealTimers());
+
+    async function aMapWhoseImageIsHeld() {
+      let answer: { resolve: (value: unknown) => void; reject: (reason: unknown) => void };
+      api.get.mockReturnValue(
+        new Promise((resolve, reject) => {
+          answer = { resolve, reject };
+        }),
+      );
+      const map = mount(AttendanceMap, {
+        props: {
+          market: market(),
+          rows: [],
+          date: '2099-08-01',
+          openVendor: null,
+          notHere: 'Not yet',
+          hereWithoutSeat: 0,
+        },
+        global: { stubs: { RouterLink: true } },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      return { map, answer: answer! };
+    }
+
+    const said = (map: VueWrapper, id: string) =>
+      map.find(`[data-testid="attendance-map-image-${id}"]`).exists();
+
+    it('draws the tables at once, and says nothing of the image past the wait', async () => {
+      const { map } = await aMapWhoseImageIsHeld();
+      expect(map.findAll('[data-testid="layout-table"]')).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(map.findAll('[data-testid="layout-table"]')).toHaveLength(1);
+      expect(said(map, 'loading')).toBe(false);
+    });
+
+    it('says nothing when the image fails', async () => {
+      const { map, answer } = await aMapWhoseImageIsHeld();
+      answer.reject(new Error('offline'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(said(map, 'failed')).toBe(false);
+      expect(map.findAll('[data-testid="layout-table"]')).toHaveLength(1);
+    });
+  });
+
   it("shows only when the open location's layout has an image", async () => {
     const map = await aMap();
     expect(map.find('[data-testid="attendance-map-floorplan"]').exists()).toBe(true);

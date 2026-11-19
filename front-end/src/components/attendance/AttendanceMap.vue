@@ -209,7 +209,7 @@ const mayChangeSetup = computed(() => mayTake(props.market, MarketAction.ChangeS
         :legend="legend"
         :note="updated"
         :locationSwitch="false"
-        :imagePending="image.pending"
+        :imagePending="image.pending && showImage"
         :showImage="showImage"
         :imageInGrey="imageInGrey"
         :imageFaded="imageFaded"
@@ -246,7 +246,7 @@ const mayChangeSetup = computed(() => mayTake(props.market, MarketAction.ChangeS
         </label>
       </div>
       <p
-        v-if="image.slow"
+        v-if="showImage && image.slow"
         class="door-map__note"
         aria-live="polite"
         data-testid="attendance-map-image-loading"
@@ -254,7 +254,7 @@ const mayChangeSetup = computed(() => mayTake(props.market, MarketAction.ChangeS
         Loading the floorplan...
       </p>
       <p
-        v-else-if="image.failed"
+        v-else-if="showImage && image.failed"
         class="door-map__note"
         aria-live="polite"
         data-testid="attendance-map-image-failed"

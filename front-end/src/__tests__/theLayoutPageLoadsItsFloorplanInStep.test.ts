@@ -258,6 +258,27 @@ describe("a move between two locations' layouts", () => {
   });
 });
 
+describe('with "Show the floorplan" unticked', () => {
+  beforeEach(() => localStorage.setItem('conventioner.layout.showImage', '0'));
+  afterEach(() => localStorage.removeItem('conventioner.layout.showImage'));
+
+  it.each([
+    ['in the editor', answersRefusing()],
+    ['where the layout is read', VIEWER_ANSWERS],
+  ])('draws the tables at once while the image loads, %s', async (_where, answers) => {
+    market = served({ actionRefusals: answers });
+    held.add('img-upper');
+    held.add('img-lower');
+    const wrapper = await mountPage();
+    expect(drawn(wrapper)).toEqual({ image: '', pending: false, layout: UPPER.id });
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(drawn(wrapper)).toEqual({ image: '', pending: false, layout: UPPER.id });
+
+    await moveTo(LOWER);
+    expect(drawn(wrapper)).toEqual({ image: '', pending: false, layout: LOWER.id });
+  });
+});
+
 describe("a location's image that cannot be loaded", () => {
   it("says the page's line, and draws the tables on the floor", async () => {
     failing.add('img-upper');

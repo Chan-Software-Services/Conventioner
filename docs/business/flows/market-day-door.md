@@ -151,6 +151,7 @@ Covered by:
    The no-table zones, the stage or the entrance, stay drawn and named on the map, with no legend item.
    A location's tables and its floorplan appear together, never one location's tables over another's floorplan: the other locations' floorplans load in the background once the open one has, so a later switch is instant, and a reload downloads none of them again (T501).
    If the floorplan takes more than two seconds, the tables are drawn on the plain floor with "Loading the floorplan..." under the map until it comes; one that cannot be loaded leaves them there with "The floorplan could not be loaded. The tables are drawn without it.", and is tried again the next time its location opens.
+   With "Show the floorplan" unticked the tables are drawn at once and neither line shows.
    Under the legend, where the location has a floorplan, "Show the floorplan", "Greyscale" and "Faded" change how it is drawn, the same choices as the Layout page's, so one made on either page holds on the other; every organizer and viewer who sees the map has them.
    A shared table is two halves, each its own vendor's.
    A press on a vendor's table opens their drawer, as their name on the list does, and Back closes it on the map; a press on a table with nobody says "Table Aisle A 4: no vendor on Nov 17, 2026." under the map.

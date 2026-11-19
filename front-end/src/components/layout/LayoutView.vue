@@ -277,7 +277,6 @@ const { open: image } = useFloorplanImages(
   computed(() => floorplan.value?.imageGridfsId),
 );
 const imageUrl = computed(() => image.value.url);
-const imagePending = computed(() => image.value.pending);
 const imageFailed = computed(() => image.value.failed);
 
 const scaleText = computed(() => metresAcross(floorplan.value) ?? 'Not calibrated');
@@ -293,6 +292,9 @@ const imageInGrey = rememberedChoice('imageInGrey', true);
 /** Whether it is drawn at half strength, as it is by default, so the tables stand out over a busy
  *  plan; unticked, at full strength. A choice of the person viewing, kept in their browser. */
 const imageFaded = rememberedChoice('imageFaded', true);
+/** Whether the tables wait for the open image: only while it is shown, since unticked the hall is
+ *  drawn on its floor and an image still loading holds nothing back. */
+const imagePending = computed(() => image.value.pending && showImage.value);
 /** Whether the Layout settings dialog is open. */
 const settingsOpen = ref(false);
 
