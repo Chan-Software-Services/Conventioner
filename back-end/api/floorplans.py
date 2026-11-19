@@ -7,7 +7,8 @@ import io
 import logging
 import traceback
 
-from flask import Blueprint, request, jsonify, send_file
+from bson import ObjectId
+from flask import Blueprint, Response, request, jsonify, send_file
 from flask_login import login_required
 from PIL import Image as PILImage
 
@@ -149,16 +150,38 @@ def get_floorplan(gridfs_id: str):
     on it), an archived market's too. To anyone else, and for an unknown image or one stored
     without a market, the image is not there: every refusal answers 404 "Image not found", so the
     answer never tells a stranger that an id names an image.
+
+    The browser alone keeps the image, and asks about its copy on every use (T501): the answer is
+    ``Cache-Control: private, no-cache`` with a strong ``ETag`` of the image's id, since the bytes
+    under an id never change (a replaced floorplan gets a new id). A request whose
+    ``If-None-Match`` names that tag, or ``*``, gets ``304`` with no body, after the access check
+    and without reading the image, so a reload downloads no body. ``private`` keeps it out of any
+    shared cache; no ``max-age`` is given, since the browser would then use its copy unasked and
+    show it to a person who lost their role, or to the next person on a shared device, until it
+    ran out. A refusal is the same 404 with or without a tag, so a tag reveals nothing.
     """
     if image_refusal(gridfs_id, Actions.READ, edits=False):
         return jsonify({"error": "Image not found"}), 404
+
+    tag = str(ObjectId(gridfs_id))
+    if request.if_none_match.contains_weak(tag):
+        unchanged = Response(status=304)
+        return _asked_about_again(unchanged, tag)
 
     image_data = get_image(gridfs_id)
     if image_data is None:
         return jsonify({"error": "Image not found"}), 404
 
     mimetype = detect_mimetype(image_data)
-    return send_file(io.BytesIO(image_data), mimetype=mimetype)
+    return _asked_about_again(send_file(io.BytesIO(image_data), mimetype=mimetype), tag)
+
+
+def _asked_about_again(response: Response, tag: str) -> Response:
+    """The signed-in image's cache rule on ``response``: kept by the browser alone, asked about on
+    every use, by its tag."""
+    response.headers["Cache-Control"] = "private, no-cache"
+    response.set_etag(tag)
+    return response
 
 
 # ── DELETE /api/floorplans/<gridfs_id> ───────────────────────────────────────
