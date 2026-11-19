@@ -50,7 +50,7 @@ describes:
   - front-end/src/components/ToolRow.vue
   - front-end/src/components/ToolGroup.vue
   - front-end/src/components/PinnedTools.vue
-verified: 2026-11-13
+verified: 2026-11-18
 sources:
   - wayfinding/claims-and-room/map
   - wayfinding/claims-and-room/01
@@ -111,8 +111,8 @@ sources:
   - T201
   - T315
   - T422
-  - T466
   - T469
+  - T466
 ---
 
 # Conventioner's design language

@@ -494,11 +494,15 @@ function layoutAt(
  * carrying `query` (a table picked, a half of it) when given, once its floorplan has drawn and
  * `shows` is on screen: the hall, or a part of the card, which shows only once a table is picked
  * (T465).
+ *
+ * The address names the seed's first day: the map opens on the browser's today otherwise, and a
+ * sweep whose `beforeAll` seeded before midnight would open on the seed's second day, where the
+ * shared table seats nobody and no card shows.
  */
 function publicMapAt(query: Record<string, string> = {}, shows = 'public-map-hall') {
   return async (page: Page, seed: TheScreensSeed) => {
-    const search = new URLSearchParams(query).toString();
-    await page.goto(`${marketPage('dayMap')(seed)}${search ? `?${search}` : ''}`);
+    const search = new URLSearchParams({ date: seed.dayMap.today, ...query }).toString();
+    await page.goto(`${marketPage('dayMap')(seed)}?${search}`);
     await expect(page.getByTestId('layout-map-image')).toHaveAttribute('href', /^blob:/, {
       timeout: 15000,
     });
