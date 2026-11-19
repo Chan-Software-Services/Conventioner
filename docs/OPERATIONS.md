@@ -277,6 +277,7 @@ MONGODB_URI='<URI>' .venv/bin/python migrations/rename_location.py <market-id> '
 The location is named by its id or its exact name.
 The dry run prints the location's id, its name before and after, and each section in it; read it before the run.
 **A rename is undone by a second run giving the old name**, which restores every value the first wrote but the plan's revision, which counts each run; the last line above is that run's dry run, and shows the first one's "after" as its "before".
+That holds but for an old name that is empty or starts or ends with a space, which the script refuses as a new name: the first dry run shows the old name in quotes, and the way back from such a name is the backup.
 The new name is stored as given.
 Market Setup stores a location's name as typed, trims nothing, sets no limit and does not refuse two locations of one name; the script is stricter, since a seat's copy of a name must say which location it means.
 It refuses, exiting 1 with nothing written: a name that is empty or only spaces, that starts or ends with a space, that the location already has, or that another of the market's locations has; a name a section's or a seat's copy already holds; and each case the swap refuses that applies to one location (a draft, a location it does not find or that shares its name, a location or section with no stored id, a plan or a seat whose copy of the name disagrees with the location it belongs to).

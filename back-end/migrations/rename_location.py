@@ -81,9 +81,11 @@ plan's". The seats' names are then put right in the database by hand, each to it
 location, before anything is run again.
 
 **A rename is undone by a second run giving the old name**, which restores every value this script
-wrote but ``planRevision``, which counts each run. So run ``--dry-run`` first and read the name and
-the sections under it before and after, run it once, and run ``--dry-run`` of the way back: it
-shows the first one's "after" as its "before".
+wrote but ``planRevision``, which counts each run; but for an old name that is empty or starts or
+ends with a space, which the script refuses as a new name: the first dry run shows the old name in
+quotes, and the way back from such a name is the backup. So run ``--dry-run`` first and read the
+name and the sections under it before and after, run it once, and run ``--dry-run`` of the way
+back: it shows the first one's "after" as its "before".
 
 The location is named by its id or its exact name. It prints the market's id, the location's id,
 its old and new name, the names of the sections in it, and counts: never a vendor's name or
