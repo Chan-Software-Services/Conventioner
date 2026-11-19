@@ -584,6 +584,22 @@ def test_a_seat_in_one_of_the_two_under_a_section_the_plan_puts_elsewhere_is_ref
     assert market_records.history.documents == []
 
 
+def test_a_seat_naming_a_location_that_lacks_its_section_is_refused_though_a_third_holds_the_name(
+        database, market_records):
+    """The seat's own location decides: the East Wing's "Aisle A" does not excuse a West Wing seat."""
+    doc = settled_market()
+    _a_section_named_as_the_norths_in_the_east(doc)
+    _a_seat_naming_another_location(doc)
+    db = database(copy.deepcopy(doc))
+
+    with pytest.raises(Refused, match="not that section's"):
+        swap(MARKET, "North Wing", "South Wing", db)
+
+    assert stored(db) == doc
+    assert db.markets.last_update is None
+    assert market_records.history.documents == []
+
+
 def test_it_refuses_a_market_that_is_not_there(database, market_records):
     db = database(settled_market())
 
