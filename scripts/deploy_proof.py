@@ -40,8 +40,9 @@ Exit codes: 0 proven, 1 refused or timed out, 2 a usage error. Each refusal is o
 line. Nothing printed holds a token, a command line or more than 200 characters of a response
 body. A CLI that fails has its last lines of stderr printed as its reason, without the token, any
 line that names the bypass or a header, or any long unbroken value (the bypass secret is one, and
-GitHub would not mask it); curl never runs with -v or -L, which would print or follow the bypass
-header.
+GitHub would not mask it); a bypass secret given in VERCEL_AUTOMATION_BYPASS_SECRET, which the CLI
+uses in place of the project's when it is set, is taken out too. curl never runs with -v or -L,
+which would print or follow the bypass header.
 """
 import argparse
 import json

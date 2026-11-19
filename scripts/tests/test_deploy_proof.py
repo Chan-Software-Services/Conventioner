@@ -48,6 +48,8 @@ APP = '<!doctype html><html><body><div id="app"></div></body></html>'
 
 # A value with no word beside it to say what it is, as a secret in the CLI's output may be.
 OPAQUE = "Ab1" * 11
+# A bypass secret given in the environment: short and broken, so only its exact match hides it.
+GIVEN_BYPASS = "given-by.env"
 
 FAKE_NPX = """#!{python}
 import json, os, re, subprocess, sys
@@ -87,6 +89,7 @@ print("Executing: curl --header 'x-vercel-protection-bypass: {bypass}'", " ".joi
 if os.environ.get("FAKE_NPX_EXIT"):
     print("\\x1b[31mError:\\x1b[39m could not reach the deployment with", token, "or {opaque}", file=sys.stderr)
     print("::error::a line that starts as a workflow command", file=sys.stderr)
+    print("given", os.environ.get("VERCEL_AUTOMATION_BYPASS_SECRET", "nothing"), file=sys.stderr)
     print("told on stdout:", token, "{bypass}", " ".join(argv))
     sys.exit(int(os.environ["FAKE_NPX_EXIT"]))
 if not token:
@@ -607,6 +610,7 @@ def test_own_reads_through_vercel_curl_with_the_token_for_the_cli_and_every_curl
 
 def test_a_failing_cli_is_no_answer_and_says_why_without_what_it_was_given(stub, env, npx_log):
     env["FAKE_NPX_EXIT"] = "3"
+    env["VERCEL_AUTOMATION_BYPASS_SECRET"] = GIVEN_BYPASS
     stub.serve("/healthz", healthz())
 
     code, output = prove_own(env)
@@ -614,6 +618,7 @@ def test_a_failing_cli_is_no_answer_and_says_why_without_what_it_was_given(stub,
     assert code == 1
     assert "vercel curl exited 3" in output
     assert "vercel curl: Error: could not reach the deployment with *** or ***" in output
+    assert "vercel curl: given ***" in output and GIVEN_BYPASS not in output
     assert "vercel curl: Vercel CLI 64.5.0 ***" in output
     assert errors(output) == [
         f"::error::The staged back end at {STAGED} did not serve within 0.4s; last answer: no answer."
