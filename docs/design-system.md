@@ -113,6 +113,7 @@ sources:
   - T422
   - T469
   - T466
+  - T501
 ---
 
 # Conventioner's design language
@@ -486,7 +487,10 @@ A free table's dashed edge is the grey of a table in no section, 4.03 on the flo
 - a seat or table marked, as a search marks it or a press picks it, takes the selection's outline: round the table, or round the half its seat holds;
 - the legend under the map is one line of swatches, each 24 by 14px drawn in its tone in the open location's first section's colours, with the page's word for it at `--text-sm` ("Here", "Expected", "No vendor"); on Attendance, "No vendor" stands only on a day the open location's map draws a free table or half, and a no-table zone has no item; a day map that fills its box draws none, and its caller's legend stands in its slot: the public map's is a pill naming each section of the open hall in its colours and "Free table" on a day the hall has one, each with a 14px swatch at `--text-xs` (T465);
 - the zoom stands on the map's bottom-right corner, as the editor's does: Zoom out, Zoom in and Fit as compact secondary buttons on a white card with the card's shadow; each press zooms by half again or a third less about the map's middle, Ctrl and the wheel zoom about the pointer at a desk, a mouse drag pans once zoomed, a plain wheel scrolls the page, and a phone pinches and drags; in a box narrower than 30rem the zoom stands under the map at the legend's end instead, with no card, so it covers none of a phone's small map, and the phone keeps the buttons as the one-finger way to zoom a pinch needs beside it (WCAG 2.5.1); a day map that fills its box, the public map's (T465), draws the zoom as a floating white pill with `--shadow-float` and borderless buttons over the map's bottom-right corner, its caller's legend pill over the bottom-left, and in a box narrower than 30rem both pills in one row under the map;
-- two locations or more are switched by a row of filter toggles above the map, the open one pressed, unless its caller draws the choice: the public map's hall select, for a map that fills its box, and Attendance's location select in its toolbar (T466).
+- two locations or more are switched by a row of filter toggles above the map, the open one pressed, unless its caller draws the choice: the public map's hall select, for a map that fills its box, and Attendance's location select in its toolbar (T466);
+- a location's tables and its floorplan appear together (T501): while the floorplan loads the map draws the floor alone at its own size, so nothing moves when they come, for at most two seconds, then the tables on the floor until the image joins them; on Attendance a line under the map says "Loading the floorplan..." then, or "The floorplan could not be loaded. The tables are drawn without it.", at `--text-sm` in `--mm-black`, and the public map says nothing;
+- on Attendance the floorplan is drawn as on the layout page, in grey and at half strength unless the person unticks them, and under the legend stand the layout page's three ticks, "Show the floorplan", "Greyscale" and "Faded", one wrapping line of the app's checkbox and its words at `--text-sm`, `--space-4` apart and drawn `--space-2` up toward the legend, each label a 44px target, Greyscale and Faded disabled while the floorplan is hidden, shown only where the open location has a floorplan;
+- on the public map the floorplan is the original, in its own colours and at full strength, with no control over it: a visitor sees the venue as the organizer drew it.
 
 ### The brand green is `--mm-green` (`#36826f`)
 
