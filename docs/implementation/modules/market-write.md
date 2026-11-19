@@ -52,7 +52,7 @@ describes:
   - back-end/assignment/lifecycle.py#store
   - back-end/assignment/lifecycle.py#publish
   - back-end/migrations/migrate_assignment_state.py
-verified: 2026-11-17
+verified: 2026-11-19
 sources:
   - T244
   - T274
@@ -157,6 +157,7 @@ Elsewhere:
 - Every write of the assignment, a run, a placement, a free and a swap (`store` in [`back-end/assignment/lifecycle.py`](../../../back-end/assignment/lifecycle.py), which [`back-end/api/placements.py`](../../../back-end/api/placements.py) calls), counting `assignmentObject.revision` from the one read; a run also holds `resultsPublished`, so an allocation never lands after Publish results, and no placement lands on a market archived a moment before ([placements](placements.md#the-four-doors)).
   The Tables page reads its grid again on the refusal and says the sentence in the seat's dialog ([placing by hand](../../business/flows/placing-by-hand.md)).
 - The assignment state's migration (`set_one` in [`back-end/migrations/migrate_assignment_state.py`](../../../back-end/migrations/migrate_assignment_state.py)), holding the state, `madeFrom`, `resultsPublished`, `publishedRevision` and the assignment's `revision` as it judged them, the revision held but not counted, since the rows are unchanged; a market changed meanwhile is judged again, up to three tries ([the assignment's lifecycle](assignment-lifecycle.md#the-migration)).
+- The swap of two locations' names (`swap` in [`back-end/migrations/swap_location_names.py`](../../../back-end/migrations/swap_location_names.py)), an operator's script, holding the phase, the assignment's `revision` and `madeFrom` as read, and `planRevision`, which it counts, since it writes the plan; the assignment's `revision` is held and not counted, so published results do not read as changed, and so a seat written by hand from a read before the swap is not refused, which is why it is run while no organizer is working on the market ([the setup settles on leaving draft](../../business/rules/the-setup-settles-on-leaving-draft.md#where-it-is-kept)).
 
 ## The form's revision
 
