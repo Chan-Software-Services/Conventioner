@@ -153,12 +153,13 @@ def get_floorplan(gridfs_id: str):
 
     The browser alone keeps the image, and asks about its copy on every use (T501): the answer is
     ``Cache-Control: private, no-cache`` with a strong ``ETag`` of the image's id, since the bytes
-    under an id never change (a replaced floorplan gets a new id). A request whose
-    ``If-None-Match`` names that tag, or ``*``, gets ``304`` with no body, after the access check
-    and without reading the image, so a reload downloads no body. ``private`` keeps it out of any
-    shared cache; no ``max-age`` is given, since the browser would then use its copy unasked and
-    show it to a person who lost their role, or to the next person on a shared device, until it
-    ran out. A refusal is the same 404 with or without a tag, so a tag reveals nothing.
+    under an id never change (a replaced floorplan gets a new id). A request whose ``If-None-Match``
+    names that tag, its weak form or ``*`` gets ``304`` with no body, after the access check and
+    without reading the image, so a reload downloads no body. ``private`` keeps it out of any shared
+    cache; no ``max-age`` is given, since the browser would then use its copy unasked and show it to
+    a person who lost their role, or to the next person on a shared device, until it ran out. A
+    refusal is the same 404 with or without a tag, so a tag reveals nothing, and a signed-out
+    request is the 401 every floorplan route answers.
     """
     if image_refusal(gridfs_id, Actions.READ, edits=False):
         return jsonify({"error": "Image not found"}), 404
