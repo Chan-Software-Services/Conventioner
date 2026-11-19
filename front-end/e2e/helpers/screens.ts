@@ -2069,7 +2069,33 @@ export const SCREEN_GROUPS = {
       open: asAVendorAt(
         'big',
         (today) => [seatOn(today, `${today}T09:41:00+00:00`), seatOn('2099-08-22')],
-        'vendor-check-in-undo-btn',
+        'vendor-check-out-btn',
+      ),
+    },
+    {
+      // Both chips and the one Undo, and a past day that reads both times (T496).
+      name: 'the vendor page, checked out',
+      who: 'nobody',
+      sizes: PUBLIC,
+      open: asAVendorAt(
+        'big',
+        (today) => [
+          seatOn(today, `${today}T09:41:00+00:00`, `${today}T16:05:00+00:00`),
+          seatOn('2099-08-22', '2099-08-22T09:41:00+00:00', '2099-08-22T16:05:00+00:00'),
+        ],
+        'vendor-check-out-undo-btn',
+      ),
+    },
+    {
+      // The switch off: no control, and who checks them out.
+      name: 'the vendor page, checked in at the door',
+      who: 'nobody',
+      sizes: PUBLIC,
+      open: asAVendorAt(
+        'big',
+        (today) => [seatOn(today, `${today}T09:41:00+00:00`), seatOn('2099-08-22')],
+        'vendor-check-in-at-door',
+        false,
       ),
     },
     {
@@ -2090,7 +2116,11 @@ export const SCREEN_GROUPS = {
 export const SCREENS: Screen[] = Object.values(SCREEN_GROUPS).flat();
 
 /** One seat, as the vendor's own read lists it. */
-function seatOn(date: string, checkedInAt: string | null = null) {
+function seatOn(
+  date: string,
+  checkedInAt: string | null = null,
+  checkedOutAt: string | null = null,
+) {
   return {
     date,
     tableCode: 'Indoors 12',
@@ -2098,6 +2128,7 @@ function seatOn(date: string, checkedInAt: string | null = null) {
     section: 'Indoors',
     location: 'Indoors - the old cannery warehouse',
     checkedInAt,
+    checkedOutAt,
   };
 }
 
@@ -2105,20 +2136,22 @@ function seatOn(date: string, checkedInAt: string | null = null) {
  * A vendor signed in at `market`'s vendor page, their own read answered with `seats` (today's date
  * given): the screen sweeps open each state at each of its sizes, and a real sign-in each time
  * would pass the limits a caller and an address may sign in by (`sign_in_limits`). The page's own
- * read is the server's, so a market in its days has its self check-in switch turned on first, in
- * the database since nobody here is signed in to turn it: the vendor's own controls are offered
- * only where it is on (T496), and the door code's states turn it off and on.
+ * read is the server's, so a market in its days has its self check-in switch set first, in the
+ * database since nobody here is signed in to turn it: on unless a state is of the switch off, since
+ * the vendor's own controls are offered only where it is on (T496), and the door code's states
+ * turn it off and on.
  */
 function asAVendorAt(
   market: 'big' | 'archived',
   seats: (today: string) => ReturnType<typeof seatOn>[],
   ready: string,
+  selfCheckIn = true,
 ) {
   return async (page: Page, seed: TheScreensSeed) => {
     const { marketId, marketSlug } = seed[market];
     if (market === 'big') {
       mongoEval(
-        `db.markets.updateOne({ id: '${marketId}' }, { $set: { vendorSelfCheckIn: true } })`,
+        `db.markets.updateOne({ id: '${marketId}' }, { $set: { vendorSelfCheckIn: ${selfCheckIn} } })`,
       );
     }
     const session = {
