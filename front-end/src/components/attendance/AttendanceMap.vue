@@ -16,7 +16,10 @@
  * A location's tables and its floorplan appear together (T501): the open location's image is read
  * first and the others' behind it (`useFloorplanImages`), the tables wait for it for at most two
  * seconds, then stand on the floor with "Loading the floorplan..." under the map until it lands, and
- * an image that cannot be loaded leaves them there with a line saying so.
+ * an image that cannot be loaded leaves them there with a line saying so. Under the legend, where
+ * the open location has an image, the Layout page's three ticks, Show the floorplan, Greyscale and
+ * Faded, are the same choices kept under the same names, so one made on either page holds on the
+ * other, for everyone who sees the map.
  *
  * Nothing here writes: check-in, Undo and notes stay on the list (D39). The open location is the
  * page's own state, in the address as `location`, chosen in the page's toolbar (T466), so the day
@@ -36,6 +39,7 @@ import {
 import { drawsAFreePart } from '@/components/daymap/freeParts';
 import { tableCode } from '@/components/layout/layoutDrawing';
 import { useFloorplanImages, type FloorplanImageSource } from '@/components/layout/floorplanImages';
+import { rememberedChoice } from '@/components/layout/layoutViewChoices';
 import { api } from '@/utils/api';
 import { layoutPath } from '@/utils/market';
 import { MarketAction, mayTake } from '@/utils/marketActions';
@@ -100,6 +104,12 @@ const locations = computed<DayMapLocation[]>(() =>
   })),
 );
 
+/** How the floorplan is drawn under the tables: the Layout page's own choices, by its own names and
+ *  defaults, so either page's is the other's (T501). */
+const showImage = rememberedChoice('showImage', true);
+const imageInGrey = rememberedChoice('imageInGrey', true);
+const imageFaded = rememberedChoice('imageFaded', true);
+
 const tableTypes = computed(() => props.market?.setupObject?.tableTypes ?? []);
 
 /** Each seat named as the list names its vendor: their name, else their address. */
@@ -115,6 +125,9 @@ const offLayout = computed(() => drawn.value.notOnALayout.length);
 
 /** The open location as the map draws it, for what its legend names. */
 const openLocation = computed(() => laidOut.value.find((each) => each.id === openId.value));
+
+/** The floorplan's ticks stand only where the open location has an image to draw. */
+const hasImage = computed(() => Boolean(openLocation.value?.layout.imageGridfsId));
 
 /** "No vendor" only on a day the open map draws a table or half nobody sits at. */
 const legend = computed<DayMapLegendItem[]>(() => [
@@ -197,8 +210,41 @@ const mayChangeSetup = computed(() => mayTake(props.market, MarketAction.ChangeS
         :note="updated"
         :locationSwitch="false"
         :imagePending="image.pending"
+        :showImage="showImage"
+        :imageInGrey="imageInGrey"
+        :imageFaded="imageFaded"
         @pick="pick"
       />
+      <div
+        v-if="hasImage"
+        class="door-map__ticks"
+        role="group"
+        aria-label="Floorplan"
+        data-testid="attendance-map-floorplan"
+      >
+        <label class="door-map__tick">
+          <input v-model="showImage" type="checkbox" data-testid="attendance-map-show-image" />
+          <span>Show the floorplan</span>
+        </label>
+        <label class="door-map__tick">
+          <input
+            v-model="imageInGrey"
+            type="checkbox"
+            :disabled="!showImage"
+            data-testid="attendance-map-image-grey"
+          />
+          <span>Greyscale</span>
+        </label>
+        <label class="door-map__tick">
+          <input
+            v-model="imageFaded"
+            type="checkbox"
+            :disabled="!showImage"
+            data-testid="attendance-map-image-faded"
+          />
+          <span>Faded</span>
+        </label>
+      </div>
       <p
         v-if="image.slow"
         class="door-map__note"
@@ -286,6 +332,26 @@ const mayChangeSetup = computed(() => mayTake(props.market, MarketAction.ChangeS
   flex-wrap: wrap;
   align-items: center;
   gap: 0 var(--space-2);
+}
+
+/* The floorplan's ticks, one line under the legend that wraps on a phone, each label a 44px target
+   with its box inside it, as the Layout page's Floorplan card draws them. */
+.door-map__ticks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-4);
+  /* Up toward the legend, so the ticks read as its own line rather than a row of their own: the
+     label's 44px height already stands its box clear of the legend. */
+  margin-block-start: calc(-1 * var(--space-2));
+}
+
+.door-map__tick {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target-min);
+  font-size: var(--text-sm);
+  color: var(--mm-black);
 }
 
 .door-map__link {
