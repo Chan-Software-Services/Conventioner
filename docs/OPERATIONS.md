@@ -215,7 +215,7 @@ A record that changed between the script's read and its write on three tries is 
 
 A market past Draft whose sections were set up under each other's location name is put right by [`swap_location_names.py`](../back-end/migrations/swap_location_names.py), since the app refuses the rename once [the setup has settled](business/rules/the-setup-settles-on-leaving-draft.md).
 It trades the two locations' names in the plan, in each section's copy of its location and in each stored seat's copy, and keeps every id, so a layout stays on its location under the new name.
-It needs no deploy: it changes one market's document, which the running release reads as it is.
+It needs no deploy: it changes one market's document and adds one history entry, of a kind the running release already reads.
 Run it from `back-end/` in a checkout that holds the script and whose `back-end/` otherwise equals production's, so the plan's fingerprint is computed as that release computes it: `git diff <production's commit> HEAD -- back-end ':!back-end/tests'` lists the script alone.
 **Run it while no organizer is working on the market**: a seat assigned, freed or swapped by hand from a read just before the swap is not refused, since the assignment's revision is left unmoved, and puts every seat back under the old names over the swapped plan.
 Take a `mongodump` first ([backups](#backups-and-restoring)), then:
@@ -229,14 +229,17 @@ MONGODB_URI='<URI>' .venv/bin/python migrations/swap_location_names.py <market-i
 Each location is named by its id or its exact name.
 The dry run prints each of the two locations and each section in them with the name it sits under before and after; read it before the run.
 **A second run swaps back**, so run it once: the dry run after it shows the first one's "after" as its "before".
-The write is one update of the market's document, so it lands whole or not at all; a market whose plan, seats or phase changed between the read and the write is refused with nothing written, and running it again reads it afresh.
+The swap is one update of the market's document, so it lands whole or not at all; a market whose plan, seats or phase changed between the read and the write is refused with nothing written, and running it again reads it afresh.
 It counts the plan's revision, as every write of the plan does, so a plan or layout save that read the market before the swap is refused as a market that changed.
 If the dry run after the run refuses with a stored seat naming a location "which the plan does not put there", a seat was written by hand across the swap: stop, and put the seats' names right in the database by hand, each to its section's location.
 If a dry run says the allocation's record of the plan is "left as it is, since it already differs from the plan as read" on a market whose allocation the app shows as current, stop: the checkout computes the fingerprint differently from the release.
 It refuses, exiting 1 with nothing written, a draft, a location it does not find, and a plan or a seat whose copy of a name disagrees with the location it belongs to; its docstring lists each refusal.
-The assignment's revision and the published results are left as they are, nothing is sent to anyone, and no history entry is recorded.
+The assignment's revision and the published results are left as they are, and nothing is sent to anyone.
+A run records itself in the market's history as one change on Market Setup with no actor, which Manage market reads as "Someone changed Market Setup: locations and sections"; a dry run records none, and a second run records a second entry.
+That entry is a second write, after the swap: if it fails, the names stand swapped with no entry, the script's own output holds a warning naming the market by id, and the next dry run's line "run(s) of this script recorded so far" counts one fewer than were run.
+Do not run again to repair it, since that swaps back.
 The market's history keeps the names as they were when each entry was recorded, in three kinds of entry: a layout's save (`floorplan`) and a layout removed with its location (`floorplan_removed`), whose sentence in Manage market names the location, and a change on Market Setup (`plan`), whose detail holds the locations and sections before and after.
-None is rewritten, so a layout's save recorded before the swap still names its location by the old name; the script prints how many of the first two kinds name either location.
+None is rewritten, by Daniel's choice, for a later fix: a layout's save recorded before the swap still names its location by the old name, and the script prints how many of the first two kinds name either location.
 It prints the market's id, the two locations' names, their sections' names and counts, never a vendor's name or address.
 
 ### When the back end refuses to boot

@@ -5,7 +5,8 @@ operator's way to put two sections that were set up under each other's location 
 tests read the market the way its pages do (the plan, a vendor's result, the door's roster, the
 organizer's tables, the public map) before and after the swap, and hold the script to what it must
 leave alone: every id, the layout's location, the assignment's revision, the published results,
-the attendance records, the history, and everyone's inbox.
+the attendance records, the history's earlier entries, and everyone's inbox. A run records itself
+in the history as one change on Market Setup.
 """
 import copy
 
@@ -320,7 +321,7 @@ def test_published_results_stay_published_on_the_same_revision(database):
     assert Lifecycle.allocation(market_from_document(copy.deepcopy(after))) is Allocation.PUBLISHED
 
 
-def test_it_sends_nothing_and_records_nothing_beside_the_market(database, market_records):
+def test_it_sends_nothing_and_changes_no_other_record(database, market_records):
     db = database(settled_market())
     attendance = copy.deepcopy(market_records.attendance.documents)
 
@@ -328,9 +329,87 @@ def test_it_sends_nothing_and_records_nothing_beside_the_market(database, market
     swap(MARKET, "North Wing", "South Wing", db)
 
     assert market_records.attendance.documents == attendance
-    assert market_records.history.documents == []
     assert market_records.payments.documents == []
     assert market_records.amounts_owed.documents == []
+
+
+# --- the swap's own entry in the market's history ---------------------------------------------
+
+def plan_fields(doc):
+    """The plan's locations and sections as a plan write's entry holds them."""
+    plan = market_from_document(copy.deepcopy(doc)).setup_object.model_dump()
+    return {"locations": plan["locations"], "sections": plan["sections"]}
+
+
+def recorded(market_records):
+    return [{key: value for key, value in entry.items() if key not in ("_id", "id", "at")}
+            for entry in market_records.history.documents]
+
+
+def test_a_run_records_one_plan_change_with_no_actor(database, market_records):
+    doc = settled_market()
+    db = database(doc)
+
+    swap(MARKET, "North Wing", "South Wing", db)
+
+    assert recorded(market_records) == [{
+        "market_id": MARKET, "actor": None, "action": "change-setup", "kind": "plan",
+        "vendors": [], "subject": {},
+        "detail": {"before": plan_fields(doc), "after": plan_fields(stored(db))},
+    }]
+    [entry] = recorded(market_records)
+    assert [place["name"] for place in entry["detail"]["before"]["locations"]] == [
+        "North Wing", "South Wing", "East Wing"]
+    assert [place["name"] for place in entry["detail"]["after"]["locations"]] == [
+        "South Wing", "North Wing", "East Wing"]
+
+
+def test_a_dry_run_records_nothing(database, market_records):
+    db = database(settled_market())
+
+    swap(MARKET, "North Wing", "South Wing", db, dry_run=True)
+
+    assert market_records.history.documents == []
+
+
+def test_a_second_run_records_a_second_entry_and_each_run_counts_those_before(
+        database, market_records, capsys):
+    doc = settled_market()
+    db = database(doc)
+
+    swap(MARKET, "North Wing", "South Wing", db)
+    assert "0 run(s) of this script recorded so far" in capsys.readouterr().out
+    swap(MARKET, "North Wing", "South Wing", db)
+    assert "1 run(s) of this script recorded so far" in capsys.readouterr().out
+
+    first, second = recorded(market_records)
+    assert (second["detail"]["before"], second["detail"]["after"]) == (
+        first["detail"]["after"], first["detail"]["before"])
+    swap(MARKET, "North Wing", "South Wing", db, dry_run=True)
+    assert "2 run(s) of this script recorded so far" in capsys.readouterr().out
+
+
+def test_an_entry_that_fails_to_write_leaves_the_swap_and_the_next_dry_run_shows_it(
+        database, market_records, monkeypatch, capsys):
+    doc = settled_market()
+    db = database(doc)
+
+    def fail(_entry):
+        raise ConnectionError("the history could not be reached")
+
+    with monkeypatch.context() as patched:
+        patched.setattr(market_records.history, "insert_one", fail)
+        swap(MARKET, "North Wing", "South Wing", db)
+
+    assert stored(db)["setupObject"]["locations"][0] == {"id": "loc-north", "name": "South Wing"}
+    assert market_records.history.documents == []
+    capsys.readouterr()
+
+    swap(MARKET, "North Wing", "South Wing", db, dry_run=True)
+
+    printed = capsys.readouterr().out
+    assert "location loc-north: 'South Wing' -> 'North Wing'" in printed
+    assert "0 run(s) of this script recorded so far" in printed
 
 
 def test_an_allocation_that_read_as_current_still_does(database):
@@ -449,7 +528,7 @@ REFUSALS = [
 
 @pytest.mark.parametrize("change,locations,words", [case[1:] for case in REFUSALS],
                          ids=[case[0] for case in REFUSALS])
-def test_it_refuses_and_writes_nothing(database, change, locations, words):
+def test_it_refuses_and_writes_nothing(database, market_records, change, locations, words):
     doc = settled_market()
     if change:
         change(doc)
@@ -460,21 +539,23 @@ def test_it_refuses_and_writes_nothing(database, change, locations, words):
 
     assert stored(db) == doc
     assert db.markets.last_update is None
+    assert market_records.history.documents == []
     # A refusal names the two locations given and no other.
     if "West Wing" not in locations:
         assert "West Wing" not in str(refusal.value)
 
 
-def test_it_refuses_a_market_that_is_not_there(database):
+def test_it_refuses_a_market_that_is_not_there(database, market_records):
     db = database(settled_market())
 
     with pytest.raises(Refused, match="No market"):
         swap("market-gone", "North Wing", "South Wing", db)
 
     assert db.markets.last_update is None
+    assert market_records.history.documents == []
 
 
-def test_a_market_changed_between_the_read_and_the_write_is_left(database):
+def test_a_market_changed_between_the_read_and_the_write_is_left(database, market_records):
     class ChangedAfterTheRead(FakeSlugMarketsCollection):
         """Another write, a seat moved by hand, lands once the script has read the market."""
 
@@ -490,9 +571,10 @@ def test_a_market_changed_between_the_read_and_the_write_is_left(database):
         swap(MARKET, "North Wing", "South Wing", db)
 
     assert stored(db) == {**doc, "assignmentObject": {**doc["assignmentObject"], "revision": 6}}
+    assert market_records.history.documents == []
 
 
-def test_a_market_being_deleted_by_the_time_of_the_write_is_left(database):
+def test_a_market_being_deleted_by_the_time_of_the_write_is_left(database, market_records):
     class DeletingAfterTheRead(FakeSlugMarketsCollection):
         """The market's deletion starts once the script has read it."""
 
@@ -509,6 +591,7 @@ def test_a_market_being_deleted_by_the_time_of_the_write_is_left(database):
         swap(MARKET, "North Wing", "South Wing", db)
 
     assert stored(db) == {**doc, "deleting": TOMBSTONE}
+    assert market_records.history.documents == []
 
 
 # --- a write that read the market before the swap ---------------------------------------------
@@ -571,9 +654,12 @@ def test_it_counts_the_history_entries_naming_either_location_and_leaves_them(
     before = copy.deepcopy(market_records.history.documents)
 
     swap(MARKET, "North Wing", "South Wing", db, dry_run=True)
+    assert market_records.history.documents == before
     swap(MARKET, "North Wing", "South Wing", db)
 
-    assert market_records.history.documents == before
+    # Every entry there before is as it was; the run adds its own after them.
+    assert market_records.history.documents[:len(before)] == before
+    assert len(market_records.history.documents) == len(before) + 1
     line = "the market's history: 3 layout save(s) and 1 layout removal(s) name either location"
     assert capsys.readouterr().out.count(line) == 2
 

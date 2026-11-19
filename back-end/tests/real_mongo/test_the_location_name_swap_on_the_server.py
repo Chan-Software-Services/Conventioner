@@ -1,7 +1,7 @@
 """``migrations/swap_location_names.py`` on the server, run as an operator runs it: on the configured
 database, its one write through ``write_market``, which holds a sub-document (``madeFrom``) while
 setting a key inside it and counts a revision the market may never have stored, and its read of
-the ``history`` collection. The hermetic fakes
+the ``history`` collection, where a run then records itself. The hermetic fakes
 only model those conditions.
 """
 import copy
@@ -75,6 +75,7 @@ def test_the_swap_lands_whole_and_a_second_run_swaps_back(real_db):
 
     swap(MARKET, "North Wing", "South Wing", dry_run=True)
     assert stored(markets) == before
+    assert list(real_db["history"].find({})) == []
 
     swap(MARKET, "North Wing", "South Wing")
 
@@ -95,6 +96,12 @@ def test_the_swap_lands_whole_and_a_second_run_swaps_back(real_db):
     swap(MARKET, "North Wing", "South Wing")
     # Every value but the plan's revision, which counts each run.
     assert stored(markets) == {**before, "planRevision": 5}
+    entries = list(real_db["history"].find({}, {"_id": 0}).sort("at", 1))
+    assert [(entry["market_id"], entry["actor"], entry["action"], entry["kind"])
+            for entry in entries] == [(MARKET, None, "change-setup", "plan")] * 2
+    assert [place["name"] for place in entries[0]["detail"]["after"]["locations"]] == [
+        "South Wing", "North Wing"]
+    assert entries[1]["detail"]["before"] == entries[0]["detail"]["after"]
 
 
 def test_a_market_that_never_stored_a_plan_revision_is_swapped_and_counts_one(real_db):
@@ -124,7 +131,9 @@ def test_it_counts_the_history_entries_naming_either_location_and_leaves_them(re
 
     swap(MARKET, "North Wing", "South Wing")
 
-    assert list(history.find({}, {"_id": 0}).sort("id", 1)) == before
+    # Each entry there before is as it was; the run's own is the one more.
+    assert list(history.find({"kind": {"$ne": "plan"}}, {"_id": 0}).sort("id", 1)) == before
+    assert history.count_documents({}) == len(before) + 1
     assert ("the market's history: 1 layout save(s) and 1 layout removal(s) name either location"
             in capsys.readouterr().out)
 
@@ -140,3 +149,4 @@ def test_a_refusal_writes_nothing(real_db):
         swap(MARKET, "North Wing", "South Wing")
 
     assert stored(markets) == before
+    assert list(real_db["history"].find({})) == []

@@ -19,10 +19,16 @@ document, and each is rewritten:
 
 It keeps every id (location, section, table), so a layout, which names its location by id, stays on
 the same location under its new name. It does not count the assignment's ``revision``, so published
-results do not read as changed; it sends nothing to anyone and records no history entry.
+results do not read as changed, and it sends nothing to anyone.
 
-**The market's history also holds the names, as text, and is left as written.** Three kinds of
-entry in the ``history`` collection name a location as it was called when they were recorded:
+**It records the swap in the market's history**, as one entry of the kind a change on Market Setup
+records (``plan``, under the Market Setup row), with no actor and the locations and sections
+before and after, so Manage market reads "Someone changed Market Setup: locations and sections".
+A dry run records none, and a second run records a second entry.
+
+**The market's earlier history also holds the names, as text, and is left as written**, by the
+owner's choice, for a later fix. Three kinds of entry in the ``history`` collection name a location
+as it was called when they were recorded:
 
 - ``floorplan``, each save of a layout, whose ``subject.location`` Manage market reads into its
   sentence;
@@ -43,11 +49,16 @@ disagrees with the location it names; both locations hold a section of one name;
 the name disagrees with the section it is in; or the market changed between the read and the
 write.
 
-**One write, all or nothing**: the whole swap is a single update of one document, through
-``write_market``, holding the phase, ``planRevision``, the assignment's ``revision`` and
-``madeFrom`` as read, and counting ``planRevision``, as every write of the plan does. It lands
-whole or not at all, and a market whose held keys moved since the read refuses it with nothing
-written. There is no half-way state to repair.
+**The swap is one write, all or nothing; its history entry is a second write.** The whole swap is
+a single update of the market's document, through ``write_market``, holding the phase,
+``planRevision``, the assignment's ``revision`` and ``madeFrom`` as read, and counting
+``planRevision``, as every write of the plan does. It lands whole or not at all, and a market
+whose held keys moved since the read refuses it with nothing written. The entry is written after
+it, into another collection. A failure between the two leaves the names swapped and no entry: the
+history logs a warning naming the market by id, and the script still says it swapped. The next
+``--dry-run`` shows it: the names stand swapped, and its line counting the runs of this script
+the history records counts one fewer than were run. Nothing is repaired by running again, which
+would swap back; the missing entry is the only loss.
 
 **Run it while no organizer is working on the market.** A plan or layout save that read the market
 before the swap is refused after it, since the plan's revision moved. A seat written by hand is
@@ -79,6 +90,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pydantic import ValidationError  # noqa: E402
 
+import api.market_actions as Actions  # noqa: E402
+import history as History  # noqa: E402
 import market_write as MarketWrite  # noqa: E402
 from assignment.made_from import fingerprint  # noqa: E402
 from datatypes import MarketPhase  # noqa: E402
@@ -97,6 +110,15 @@ SECTIONS = f"{SETUP}.sections"
 ROWS = f"{ASSIGNMENT}.vendorAssignments"
 MADE_FROM = f"{ASSIGNMENT}.madeFrom"
 REVISION = f"{ASSIGNMENT}.revision"
+
+#: Why the swap is recorded under the Market Setup row with no request asking it
+#: (``History.unasked``).
+SWAP_RECORDS_UNASKED = (
+    "an operator's script, run from a shell and never a request: it changes the plan's locations "
+    "and sections past draft, and records it as a plan write records its change, with no actor")
+
+#: The plan's fields the swap changes, as a plan write's entry names them.
+RECORDED_FIELDS = ("locations", "sections")
 
 NEEDS_IDS = "Run migrations/migrate_layouts.py first, which stores the ids every read gives."
 
@@ -121,6 +143,8 @@ class Swap(NamedTuple):
     layouts: int
     #: What becomes of the allocation's record of the plan: a sentence.
     record: str
+    #: The history entry's detail: the plan's locations and sections before and after.
+    detail: Dict[str, Any]
 
 
 def _has_id(row: Mapping[str, Any]) -> bool:
@@ -141,6 +165,26 @@ def _named(locations: List[Dict[str, Any]], wanted: str) -> Dict[str, Any]:
 def _plan_fingerprint(document: Mapping[str, Any]) -> str:
     """The plan's fingerprint as a run records it and the market read compares it."""
     return fingerprint(market_from_document(dict(document)).setup_object, [], [])["plan"]
+
+
+def _recorded_plan(document: Mapping[str, Any]) -> Dict[str, Any]:
+    """The plan's locations and sections as a plan write's entry holds them."""
+    plan = market_from_document(dict(document)).setup_object.model_dump()
+    return {field: plan.get(field) for field in RECORDED_FIELDS}
+
+
+def record_swapped(market_id: str, detail: Mapping[str, Any]) -> None:
+    """The swap's entry in the market's history: a change on Market Setup, with no actor."""
+    History.unasked(market_id, None, Actions.CHANGE_SETUP, because=SWAP_RECORDS_UNASKED).record(
+        kind=History.PLAN, detail=dict(detail))
+
+
+def _runs_recorded(history, market_id: str) -> int:
+    """How many runs of this script the market's history records: its ``plan`` entries with no
+    actor, which nothing else writes. Read only."""
+    return sum(
+        1 for entry in history.find({MARKET_ID_FIELD: market_id, "kind": History.PLAN})
+        if entry.get("actor") is None and entry.get("action") == Actions.CHANGE_SETUP.id)
 
 
 def judged(document: Mapping[str, Any], first: str, second: str) -> Swap:
@@ -246,7 +290,7 @@ def judged(document: Mapping[str, Any], first: str, second: str) -> Swap:
         setting=setting,
         locations=[(place["id"], place["name"], name_after[place["id"]]) for place in (one, other)],
         sections=shown, rows_changed=rows_changed, rows_stored=len(rows), layouts=layouts,
-        record=record)
+        record=record, detail=History.changes(_recorded_plan(document), _recorded_plan(after)))
 
 
 def _history_entries_naming(history, market_id: str, names: set) -> Tuple[int, int]:
@@ -273,6 +317,10 @@ def swap(market_id: str, first: str, second: str, db=None, dry_run: bool = False
         raise RuntimeError(
             "swap_location_names reads the markets write_market writes: pass the configured "
             "database, or none")
+    if not History.records_in(db):
+        raise RuntimeError(
+            "swap_location_names records in the history the history module writes: pass the "
+            "configured database, or none")
 
     document = markets.find_one(live({"id": market_id}))
     if document is None:
@@ -292,6 +340,8 @@ def swap(market_id: str, first: str, second: str, db=None, dry_run: bool = False
         db[HISTORY_COLLECTION], market_id, {before for _id, before, _after in judgment.locations})
     print(f"  - the market's history: {saved} layout save(s) and {removed} layout removal(s) name "
           "either location as it was called then, and stay as written")
+    print(f"  - the market's history: {_runs_recorded(db[HISTORY_COLLECTION], market_id)} run(s) "
+          "of this script recorded so far")
 
     if not dry_run:
         try:
@@ -303,6 +353,7 @@ def swap(market_id: str, first: str, second: str, db=None, dry_run: bool = False
             raise Refused(
                 "The market changed between the read and the write, so nothing was written. "
                 "Run it again.") from error
+        record_swapped(market_id, judgment.detail)
     print("\nwould swap the two names." if dry_run else "\nswapped the two names.")
     return judgment
 
