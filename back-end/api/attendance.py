@@ -369,7 +369,9 @@ def record_check_out(
 
     One update, filtered to a day not yet checked out, so two check-outs at once leave one time
     and one "checked out" entry: the second matches nothing, answers the stored time, and writes
-    and records nothing. A day with no record is 404 ``NO_CHECK_IN``.
+    and records nothing. Where the first was undone before the second read that time, the second
+    writes after all, so "Checked out" is never answered with no time. A day with no record is 404
+    ``NO_CHECK_IN``.
 
     Only in the market's days, on its own read of the phase, and a market archived between that
     read and the write has the three fields unset again, held to the time this call wrote, with no
@@ -386,19 +388,24 @@ def record_check_out(
 
     vendor_day = _vendor_day(market_id, vendor_email, date)
     checked_out_at = datetime.now(timezone.utc).isoformat()
-    # A null matches a missing field: a record made before check-outs is not checked out.
-    written = attendance_collection.find_one_and_update(
-        {**vendor_day, "checked_out_at": None},
-        {"$set": {
-            "checked_out_at": checked_out_at,
-            "checked_out_by": recorder.actor,
-            "checked_out_via": via,
-        }})
-    if written is None:
+    while True:
+        # A null matches a missing field: a record made before check-outs is not checked out.
+        written = attendance_collection.find_one_and_update(
+            {**vendor_day, "checked_out_at": None},
+            {"$set": {
+                "checked_out_at": checked_out_at,
+                "checked_out_by": recorder.actor,
+                "checked_out_via": via,
+            }})
+        if written is not None:
+            break
         stored = attendance_collection.find_one(vendor_day)
         if stored is None:
             return {"error": NO_CHECK_IN}, 404
-        return {"message": "Checked out", "checkedOutAt": stored.get("checked_out_at")}, 200
+        if stored.get("checked_out_at") is not None:
+            return {"message": "Checked out", "checkedOutAt": stored["checked_out_at"]}, 200
+        # The check-out that held the record was undone before this read: the vendor is not
+        # checked out, so this one writes after all.
 
     closed = _closed_since(market_id)
     if closed:
@@ -480,13 +487,13 @@ def _take_back_a_delete(removed: Dict[str, Any]) -> None:
 
 def _record_door(
     recorder: History.Recorder, vendor_email: str, date: str, via: Optional[str], kind: str,
-    fact: str, now: bool,
+    fact: str, became: bool,
 ) -> None:
     """A check-in, a check-out or the undo of either, by the organizer who made it, through the
     "Check vendors in" row their request asked; or the vendor's own, on their vendor page, through
     the unasked door with no actor beside the vendor it names and ``via`` saying how
     (``VIA_DOOR_CODE``, ``VIA_VENDOR_PAGE``). ``fact`` is the detail's key, ``checked_in`` or
-    ``checked_out``, and ``now`` what it became.
+    ``checked_out``, and ``became`` what it became.
 
     An entry written before the vendor page carries ``via: "check_in_page"``: the public check-in
     page it names asked only an address and a date, and proved no one. The history's readers still
@@ -495,7 +502,7 @@ def _record_door(
     vendor = normalized_email(vendor_email)
     recorder.record(
         kind=kind, vendors=[vendor], subject={"date": date.strip()},
-        detail=lambda: {**History.changes({fact: not now}, {fact: now}),
+        detail=lambda: {**History.changes({fact: not became}, {fact: became}),
                         **({"via": via} if via else {})},
     )
 

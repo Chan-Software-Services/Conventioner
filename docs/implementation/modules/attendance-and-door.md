@@ -170,7 +170,8 @@ A checked-out vendor still came: a row's `state` and its place in the order, `ch
 It is one `find_one_and_update` filtered to the vendor's day with `checked_out_at: None`, which matches a missing field, on a real server too.
 
 - Matched: 200 `{"message": "Checked out", "checkedOutAt": <time>}` and a `checked_out` entry.
-- Not matched, and the day has a record: the vendor is checked out already, so it answers 200 with the stored time, writes nothing and records nothing; two check-outs at once leave one time and one entry.
+- Not matched, and the day's record has a check-out's time: the vendor is checked out already, so it answers 200 with the stored time, writes nothing and records nothing; two check-outs at once leave one time and one entry.
+- Not matched, and the day's record has no check-out's time: the check-out that held the record was undone before this read, so it writes again, and "Checked out" is never answered with no time.
 - Not matched, and no record: 404, "No check-in found for this vendor on this date".
 
 `undo_check_out` unsets the three fields, leaving the check-in as it is, with one `find_one_and_update` filtered to a day that is checked out: 200 `{"message": "Check-out undone"}` and a `check_out_undone` entry, or 404, "No check-out found for this vendor on this date".

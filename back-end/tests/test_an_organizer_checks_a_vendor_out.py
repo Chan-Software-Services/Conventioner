@@ -143,6 +143,29 @@ class TestASecondCheckOut:
             first["checkedOutAt"], OWNER)
         assert kinds(here) == [History.CHECKED_OUT]
 
+    def test_one_undone_before_the_second_reads_it_is_written_by_the_second(self, here):
+        """Another check-out held the record when this one's write looked, and was undone before
+        this one read the day: the vendor is not checked out, so "Checked out" with no time would
+        be untrue. The second writes."""
+        write = here.attendance.find_one_and_update
+        missed = []
+
+        def matching_nothing_once(*args, **kwargs):
+            if not missed:
+                missed.append(args)
+                return None
+            return write(*args, **kwargs)
+
+        here.patch(here.attendance, "find_one_and_update", matching_nothing_once)
+
+        answer, status = AttendanceApi.record_check_out(at_the_door(MARKET, OWNER), VENDOR, DATE)
+
+        assert status == 200
+        [record] = here.attendance.documents
+        assert answer == {"message": "Checked out", "checkedOutAt": record["checked_out_at"]}
+        assert answer["checkedOutAt"] is not None
+        assert kinds(here) == [History.CHECKED_OUT]
+
 
 class TestItsUndo:
     def test_it_clears_the_check_out_and_keeps_the_check_in(self, client, here):
