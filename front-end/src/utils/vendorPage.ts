@@ -1,6 +1,7 @@
 /**
- * A market's vendor page, `/<slug>` (ADR 0022): what it reads before sign-in, and which sections
- * it shows a signed-in vendor in each state of the market.
+ * A market's vendor page, `/<slug>/vendor` (ADR 0022): what it reads before sign-in, and which
+ * sections it shows a signed-in vendor in each state of the market. The market page at `/<slug>`
+ * (T469) reads the same answer, and chooses here what it shows.
  */
 import type { ApplicantSeat, Application, Market } from '@/assets/types/datatypes';
 import { IntakeMode, MarketPhase } from '@/assets/types/datatypes';
@@ -20,6 +21,13 @@ export interface VendorPageInfo {
   ended: boolean;
   /** The date "Remember me" would end, `YYYY-MM-DD`, or null once the market's last date passed. */
   rememberUntil: string | null;
+  /** The market's public map is open now: its read would answer (`public_map_is_open`, T469). */
+  mapOpen: boolean;
+  /**
+   * The market's self check-in switch (T496): vendors check themselves in and out on this page.
+   * Off until an organizer turns it on, and a read without it is off.
+   */
+  selfCheckIn?: boolean;
 }
 
 /**
@@ -42,6 +50,37 @@ export async function fetchVendorPage(marketSlug: string): Promise<VendorPageRea
     const status = (err as { response?: { status?: number } })?.response?.status;
     return { page: null, notFound: status === 404, failed: status !== 404 };
   }
+}
+
+/**
+ * What the market page at `/<slug>` shows (T469), in this order: the public map whenever the
+ * server says it is open, in any stage; the application call while a form market takes
+ * applications; and otherwise a notice of where the market stands (`marketPageNotice`).
+ */
+export type MarketPageShows = 'map' | 'call' | 'notice';
+
+export function marketPageShows(
+  page: Pick<VendorPageInfo, 'mapOpen' | 'intakeMode' | 'takesApplications'>,
+): MarketPageShows {
+  if (page.mapOpen) return 'map';
+  if (page.intakeMode === IntakeMode.Form && page.takesApplications) return 'call';
+  return 'notice';
+}
+
+/** The market page's notice lines (T469). */
+export const MARKET_ENDED = 'This market has ended.';
+export const MAP_NOT_PUBLISHED = "The map isn't published yet.";
+export const APPLICATIONS_CLOSED = 'Applications are closed.';
+
+/**
+ * The notice's line: an archived market has ended, whether or not it ran; one whose results are
+ * out has a map to come; any other has stopped taking applications (stopped, in Assignment, or in
+ * Offers before its results).
+ */
+export function marketPageNotice(page: Pick<VendorPageInfo, 'phase' | 'resultsPublished'>): string {
+  if (page.phase === MarketPhase.Archived) return MARKET_ENDED;
+  if (page.resultsPublished) return MAP_NOT_PUBLISHED;
+  return APPLICATIONS_CLOSED;
 }
 
 /**
@@ -156,6 +195,53 @@ export function checkInSection(
   }
   if (page.ended) return { mode: 'record', today: null, others: seats };
   return { mode: 'none', today: null, others: [] };
+}
+
+/**
+ * The server's sentence for a vendor's own check-in or check-out while the market's switch is off
+ * (`SELF_CHECK_IN_OFF` in `api/vendor_check_in.py`), said by the page to a door code scanned then.
+ */
+export const SELF_CHECK_IN_OFF =
+  'Vendors are checked in and out by an organizer at this market. Ask at the door.';
+
+/** What today's card says in place of its controls while the switch is off (T496). */
+export const CHECKED_IN_AT_THE_DOOR = 'An organizer checks you in at the door.';
+export const CHECKED_OUT_AT_THE_DOOR = 'An organizer checks you out at the door.';
+
+/**
+ * Is the door this market's organizers' alone? In its market days with the switch off. Asked in
+ * the server's order: before its days and once it has ended the phase answers first
+ * (`scannedCodeRefusal`), since the switch is set only in market days.
+ */
+export function onlyOrganizersCheckIn(
+  page: Pick<VendorPageInfo, 'phase' | 'selfCheckIn'>,
+): boolean {
+  return page.phase === MarketPhase.MarketDays && !page.selfCheckIn;
+}
+
+/**
+ * The line today's card shows while the switch is off: who checks them in before a check-in, who
+ * checks them out after it, and nothing once they are checked out.
+ */
+export function atTheDoorLine(
+  seat: Pick<ApplicantSeat, 'checkedInAt' | 'checkedOutAt'>,
+): string | null {
+  if (!seat.checkedInAt) return CHECKED_IN_AT_THE_DOOR;
+  return seat.checkedOutAt ? null : CHECKED_OUT_AT_THE_DOOR;
+}
+
+/**
+ * When a vendor came and left on a seat's day, as the other days and the record say it:
+ * "checked in at 9:41 AM, checked out at 4:05 PM", the check-in alone before a check-out, and
+ * null with no check-in. `timeOf` words a stored time.
+ */
+export function cameAndLeft(
+  seat: Pick<ApplicantSeat, 'checkedInAt' | 'checkedOutAt'>,
+  timeOf: (at: string) => string,
+): string | null {
+  if (!seat.checkedInAt) return null;
+  const came = `checked in at ${timeOf(seat.checkedInAt)}`;
+  return seat.checkedOutAt ? `${came}, checked out at ${timeOf(seat.checkedOutAt)}` : came;
 }
 
 /** The sentences a scanned door code is answered with when it checks nobody in (story 47). */

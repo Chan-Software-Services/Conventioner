@@ -1,5 +1,6 @@
 import { marketScreenPath } from '../helpers/marketScreens';
 import type { Locator, Page } from '@playwright/test';
+import { PersonChooser } from './PersonChooser';
 
 /**
  * Page object for the organizer's Attendance page (/markets/:marketId/attendance): one market date
@@ -9,7 +10,23 @@ export class AttendanceStatusPage {
   readonly page: Page;
   readonly summary: Locator;
   readonly rows: Locator;
+  /** The list's search, which filters its rows. */
   readonly search: Locator;
+  /**
+   * The map's search in its place (T466): a search with a dropdown of the day's vendors, by
+   * address, a pick opening that vendor's drawer.
+   */
+  readonly mapSearch: PersonChooser;
+  /**
+   * The tools pinned under the market's frame at a desk (T466): the toolbar, then the count row of
+   * the count, the list's Show buttons and the search.
+   */
+  readonly tools: Locator;
+  readonly toolbar: Locator;
+  readonly bar: Locator;
+  /** The toolbar's day, and on the map with two locations laid out or more, its location. */
+  readonly dateSelect: Locator;
+  readonly locationSelect: Locator;
   /** The frame's line saying why the person looking may change nothing, above the door (T15). */
   readonly readOnly: Locator;
   /** "Checked in, with no table on this date (n)", over the rows of vendors here with no seat (T318). */
@@ -17,13 +34,18 @@ export class AttendanceStatusPage {
   /** Every row's Check in and Undo, offered only to whoever may check vendors in. */
   readonly checkIns: Locator;
   readonly undos: Locator;
-  /** When the roster was last read, Refresh, and the line a failed re-read leaves (T318). */
+  /** Every checked-in row's Check out, and every checked-out row's Undo of it (T496). */
+  readonly checkOuts: Locator;
+  readonly checkOutUndos: Locator;
+  /**
+   * When the roster was last read, over the list (on the map it is the day map's note), Refresh,
+   * and the line a failed re-read leaves under the toolbar's end (T318, T466).
+   */
   readonly updated: Locator;
   readonly refresh: Locator;
   readonly refreshError: Locator;
-  /** "Print roster", the note asking for it before a day, and the sheet it prints (T318). */
+  /** "Print roster" and the sheet it prints (T318). */
   readonly print: Locator;
-  readonly printNote: Locator;
   readonly printSheet: Locator;
   readonly printRows: Locator;
   /** "Door code", offered in Market Days to whoever may check vendors in (ADR 0022). */
@@ -34,7 +56,7 @@ export class AttendanceStatusPage {
   readonly doorCodeMade: Locator;
   readonly doorCodeMarket: Locator;
   readonly doorCodeValue: Locator;
-  /** "Scan with your phone's camera to check in". */
+  /** "Scan with your phone's camera to check in or out". */
   readonly doorCodeInstruction: Locator;
   /** The QR code, an SVG whose `data-url` is the address it encodes. */
   readonly doorCodeQr: Locator;
@@ -45,11 +67,13 @@ export class AttendanceStatusPage {
   readonly newCodeConfirm: Locator;
   readonly newCodeConfirmButton: Locator;
   readonly newCodeCancel: Locator;
-  /** "List" and "Map" in the tools row (T422): the roster as its list, or as the open day's map. */
+  /** "List" and "Map" in the toolbar (T422): the roster as its list, or as the open day's map. */
   readonly viewList: Locator;
   readonly viewMap: Locator;
   /** The map of the open day, its drawing, its legend's lines and the line a free table leaves. */
   readonly dayMap: Locator;
+  /** The day map's box, its border round the drawing. */
+  readonly mapFrame: Locator;
   readonly map: Locator;
   readonly legend: Locator;
   readonly mapNote: Locator;
@@ -71,15 +95,22 @@ export class AttendanceStatusPage {
     this.summary = page.getByTestId('attendance-summary');
     this.rows = page.getByTestId('attendance-row');
     this.search = page.getByTestId('attendance-search');
+    this.mapSearch = new PersonChooser(page, 'attendance-map-search');
+    this.tools = page.getByTestId('attendance-tools');
+    this.toolbar = page.getByTestId('attendance-toolbar');
+    this.bar = page.getByTestId('attendance-bar');
+    this.dateSelect = page.getByTestId('attendance-date-select');
+    this.locationSelect = page.getByTestId('attendance-location-select');
     this.unseatedHeading = page.getByTestId('attendance-unseated-heading');
     this.readOnly = page.getByTestId('market-read-only');
     this.checkIns = page.getByTestId('attendance-check-in');
     this.undos = page.getByTestId('attendance-undo');
+    this.checkOuts = page.getByTestId('attendance-check-out');
+    this.checkOutUndos = page.getByTestId('attendance-undo-check-out');
     this.updated = page.getByTestId('attendance-updated');
     this.refresh = page.getByTestId('attendance-refresh');
     this.refreshError = page.getByTestId('attendance-refresh-error');
     this.print = page.getByTestId('attendance-print');
-    this.printNote = page.getByTestId('attendance-print-note');
     this.printSheet = page.getByTestId('attendance-print-sheet');
     this.printRows = page.getByTestId('attendance-print-row');
     this.doorCodeButton = page.getByTestId('attendance-door-code');
@@ -100,6 +131,7 @@ export class AttendanceStatusPage {
     this.viewList = page.getByTestId('attendance-view-list');
     this.viewMap = page.getByTestId('attendance-view-map');
     this.dayMap = page.getByTestId('attendance-map');
+    this.mapFrame = this.dayMap.getByTestId('day-map-frame');
     this.map = this.dayMap.getByTestId('layout-map');
     this.legend = this.dayMap.getByTestId('day-map-legend-item');
     this.mapNote = page.getByTestId('attendance-map-note');
@@ -143,11 +175,6 @@ export class AttendanceStatusPage {
     await this.page.goto(marketScreenPath(marketId, 'attendance'));
   }
 
-  /** The tab for one market date. */
-  date(date: string): Locator {
-    return this.page.getByTestId(`attendance-date-${date}`);
-  }
-
   /** One vendor's row on the date shown. */
   row(vendorEmail: string): Locator {
     return this.page.locator(`[data-testid="attendance-row"][data-vendor="${vendorEmail}"]`);
@@ -159,6 +186,22 @@ export class AttendanceStatusPage {
    */
   status(vendorEmail: string): Locator {
     return this.row(vendorEmail).getByTestId('attendance-row-status');
+  }
+
+  /**
+   * On a checked-out row, after its status: when they were checked out and who made it, "Out 4:05 PM
+   * by you" or, for the vendor's own, "Scanned out at 4:05 PM" (T496).
+   */
+  out(vendorEmail: string): Locator {
+    return this.row(vendorEmail).getByTestId('attendance-row-out');
+  }
+
+  /** A row's Check in, Check out, Undo of the check-in or Undo of the check-out, by its test id. */
+  action(
+    vendorEmail: string,
+    which: 'check-in' | 'undo' | 'check-out' | 'undo-check-out',
+  ): Locator {
+    return this.row(vendorEmail).getByTestId(`attendance-${which}`);
   }
 
   /** Where a vendor sits on the date shown, "Table ..." or "No table" (T318). */

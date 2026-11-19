@@ -4,8 +4,8 @@ kind: testing
 describes:
   - front-end/playwright.config.ts
   - scripts/seed_fixture.sh
-  - scripts/nm-test.sh
   - scripts/lib/stack-identity.sh
+  - scripts/nm-test.sh
 verified: 2026-11-14
 sources:
   - E34/F03/S02
@@ -173,6 +173,7 @@ Most shared fakes in `back-end/tests/conftest.py` read a filter with `mongo_matc
 So a read that fetches too little, or a write the server would apply otherwise, fails here rather than in production.
 Shared module stubs live in `back-end/tests/conftest.py`, which also points the `.env` loader at a path that does not exist.
 The suite reads no `.env`, so a stale one on your machine cannot change its result.
+It turns `ALLOW_INSECURE_LOCAL_DEV` on unless the shell set it, and clears `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` before any test runs, so a shell that exported a stack's switches cannot change its result either; a test that needs a switch sets it itself, and `test_the_suite_reads_no_switch_from_its_shell.py` keeps that true.
 
 ### The real-MongoDB suite
 
@@ -379,6 +380,7 @@ The page objects in `front-end/e2e/pages/` are these, one a line, sorted by clas
 - `LayoutPage` (a location's layout page: its upload, calibration, map and tools)
 - `LoginPage`
 - `ManageMarketPage`
+- `MarketPage` (a market's market page, `/<slug>`: its application call, its notice and its link to the vendor page)
 - `MarketSetupPage`
 - `MarketsPage`
 - `NewMarketPage`
@@ -387,7 +389,7 @@ The page objects in `front-end/e2e/pages/` are these, one a line, sorted by clas
 - `PasswordResetPage`
 - `PaymentsPage`
 - `PersonChooser` (a chooser of one person: "Who will follow up", "Followed up by", "Assigned to", the history's "Who")
-- `PublicMapPage` (a market's public map, `/<slug>/map`: its days, the day map's tables by their names, the card and the find field)
+- `PublicMapPage` (a market's public map, shown at `/<slug>` while it is open: its days, the day map's tables by their names, the card and the find field)
 - `ResultPage`
 - `ReviewerChooser` (the several-choice chooser of reviewers, in the panel's dialog, Open applications and the first import)
 - `ReviewersPanel` (the Applications tab's Reviewers panel: its line, its Change dialog and its read-only list)
@@ -397,7 +399,7 @@ The page objects in `front-end/e2e/pages/` are these, one a line, sorted by clas
 - `ToolsPage`
 - `UpdateInfoDialog` (the vendor drawer's Update info dialog)
 - `VendorExportDialog` (the export dialog, wherever it opens)
-- `VendorPage` (a market's vendor page, `/<slug>`: its sign-in, what a signed-in vendor reads, and the application form opened on it)
+- `VendorPage` (a market's vendor page, `/<slug>/vendor`: its sign-in, its dates and map link, what a signed-in vendor reads, and the application form opened on it)
 - `VendorsPage`
 
 ### Bypassing CAPTCHA and email in tests

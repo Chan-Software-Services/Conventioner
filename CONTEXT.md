@@ -43,7 +43,7 @@ Finished. A market that has run and is over, or one abandoned before it ever ran
 _Avoid_: Published, closed
 
 **Intake mode**:
-How a market receives its vendors - by importing a CSV, or through the public application form. Exactly one, chosen while the market is a draft and frozen thereafter. It decides whether vendors apply on the market's page and when that page first answers (a CSV market's once its results are published), but never gates check-in, and never gates authoring the form itself: a CSV market still has an application form, because the essential questions define the offering the CSV maps onto.
+How a market receives its vendors - by importing a CSV, or through the public application form. Exactly one, chosen while the market is a draft and frozen thereafter. It decides whether vendors apply on the market's vendor page and when its market page and vendor page first answer (a CSV market's once its results are published), but never gates check-in, and never gates authoring the form itself: a CSV market still has an application form, because the essential questions define the offering the CSV maps onto.
 See [Intake mode](docs/business/concepts/intake-mode.md).
 
 **CSV import**:
@@ -58,6 +58,23 @@ What the product suggests each column of a CSV becomes - a plan fact, an essenti
 _Avoid_: Draft (a phase), suggestion, guess
 
 ### Applying
+
+**Market page**:
+A market's public page, at its own address `/<market>`, for anyone, signed in or out, in every stage.
+It is the **application call** while the market takes applications, the **public map** while the map is open, and otherwise a notice of where the market stands: applications are closed, the map isn't published yet, or the market has ended.
+Each leads to the **vendor page**; a market with no vendor page answers "Page not found" here, as an address naming nothing does.
+_Avoid_: Market home, landing page, vendor page (that is the vendor's side)
+See [ADR 0039](docs/adr/0039-a-markets-address-is-its-public-page.md).
+
+**Application call**:
+The **market page** while a market whose vendors apply on its page takes applications: its name, its dates, "Applications are open.", Apply and a sign-in for a vendor who already applied, both leading to the **vendor page**.
+_Avoid_: Application page, application form (the form is on the vendor page)
+
+**Vendor page**:
+A market's page for its vendors, at `/<market>/vendor`, behind the emailed sign-in code: the sign-in, the application, the result, the seats and the door's check-in, with the market's dates and, while the map is open, a link to the **market page**.
+The sign-in code email and the door's QR code open it, and the organizer shares it for vendors.
+_Avoid_: Market page (that is the public one), applicant portal
+See [ADR 0022](docs/adr/0022-the-vendor-page-is-signed-in.md).
 
 **Applicant**:
 A vendor-to-be who has applied to a market. Keyed by email and called by the name they chose, and authenticated separately from organizers via an emailed login code. The email is the identifier the system matches on; the name is what people read.
@@ -241,14 +258,24 @@ See [Payments, and what a vendor owes](docs/implementation/data/payments.md).
 ### At the door
 
 **Check-in**:
-The record that a vendor came on one market date: when, who made it (an organizer at Attendance, or the vendor on their vendor page with the **door code**), and the **table code** of the seat they held when it was made.
-One per vendor per date; undoing it deletes it. Made only in Market Days, and never for a date that has not begun anywhere.
+The record that a vendor came on one market date: when, who made it (an organizer at Attendance, or, where the **self check-in switch** is on, the vendor on their vendor page with the **door code**), and the **table code** of the seat they held when it was made.
+One per vendor per date; undoing it deletes it, and a checked-out one is not undone until its **check-out** is. Made only in Market Days, and never for a date that has not begun anywhere.
 _Avoid_: Attendance for one record (Attendance is the page), arrival
 See [Attendance and the door](docs/implementation/modules/attendance-and-door.md).
 
+**Check-out**:
+The three fields on a **check-in**'s record that say the vendor left: when, and who made it (an organizer at Attendance, or the vendor on their vendor page with the **door code**).
+Undoing it clears them and leaves the check-in. Nothing else reads it: a checked-out vendor still came, in every count and every **roster state**.
+_Avoid_: departure, sign-out
+
 **Door code**:
-The market's one live code, shown at the entrance as a QR code and as six characters, that a vendor types or scans to check themselves in: their proof that they are at the door. A new one ends the old one and every poster of it.
+The market's one live code, shown at the entrance as a QR code and as six characters, that a vendor types or scans to check themselves in, and types to check themselves out: their proof that they are at the door. A new one ends the old one and every poster of it.
+It works only while the **self check-in switch** is on, and is kept while it is off.
 _Avoid_: Check-in code, PIN, password
+
+**Self check-in switch**:
+The market's one switch, "Vendors check themselves in and out", that lets vendors check themselves in and out on their vendor page. Off until someone who may check vendors in turns it on, on the door code's screen in Market Days; while it is off only organizers check vendors in and out.
+_Avoid_: Self-service, kiosk mode, vendor check-in toggle
 
 **Roster**:
 Every vendor the stored assignment places on a market date, and where each stands at the door that day: what Attendance lists, and what the door's counts count.
@@ -264,7 +291,7 @@ The drawing of a location's **layout** on one **market date**, each table drawn 
 _Avoid_: Floorplan, seating chart
 
 **Public map**:
-The **day map** anyone may open at the market's address, with no sign-in, showing only the answers the organizer chose to publish: a public name, a website and an Instagram handle.
+The **day map** the **market page** shows while the map is open, to anyone with no sign-in, showing only the answers the organizer chose to publish: a public name, a website and an Instagram handle.
 Off until an Admin turns it on, and open only once results are out and until the market is archived.
 Its address may name one table, and one half of a shared table, so a vendor's link or QR code opens their half alone.
 _Avoid_: Vendor map, directory; "vendor map" is only the page's subtitle to visitors (Daniel's design), never a name for the page in code or docs

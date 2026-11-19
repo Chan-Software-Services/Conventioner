@@ -6,7 +6,7 @@ import {
   seedApplicantMarket,
 } from './helpers/seedApplicantMarket';
 import { transitionMarket } from './helpers/seedPhaseMarket';
-import { marketSetupPath } from './helpers/marketScreens';
+import { marketPagePath, marketSetupPath, vendorPagePath } from './helpers/marketScreens';
 import { hideDevToolsPanel } from './helpers/hideDevToolsPanel';
 import { putVerdict } from './helpers/putVerdict';
 
@@ -126,19 +126,24 @@ for (const [label, viewport] of [
       await expect(organizer.getByTestId('phase-rail-next')).toContainText(
         'Vendors have not been told whether they have a table.',
       );
+      await expect(organizer.getByTestId('phase-rail-market-page')).toHaveCount(0);
       await expect(organizer.getByTestId('phase-rail-vendor-page')).toHaveCount(0);
       await expect(organizer.getByTestId('applications-publish-button')).toBeEnabled();
       const setup = new MarketSetupPage(organizer);
       const confirm = await setup.openPublishResults(market.marketId);
       await expect(confirm).toContainText('1 vendor will read "You have a table"');
       await expect(confirm.getByTestId('publish-results-address-url')).toHaveText(
-        new RegExp(`/${market.marketSlug}$`),
+        new RegExp(`${vendorPagePath(market.marketSlug)}$`),
       );
       await setup.confirmPublishResults();
-      // Its address is now one to share, on the rail.
+      // Its addresses are now ones to share, on the rail (T469).
+      await expect(organizer.getByTestId('phase-rail-market-page-link')).toHaveAttribute(
+        'href',
+        new RegExp(`${marketPagePath(market.marketSlug)}$`),
+      );
       await expect(organizer.getByTestId('phase-rail-vendor-page-link')).toHaveAttribute(
         'href',
-        new RegExp(`/${market.marketSlug}$`),
+        new RegExp(`${vendorPagePath(market.marketSlug)}$`),
       );
 
       // The vendor signs in with the address their response gave, and reads their table.

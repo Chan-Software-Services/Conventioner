@@ -4,7 +4,9 @@
  *
  * It was in the one-by-one review's header, and the rail's "Publish results" leads to the
  * Applications page: with All the page's default, it would have led to a page without it. It is a
- * step for the market, not for a view, so it sits over the switch, from the assignment on.
+ * step for the market, not for a view, so it stands in the review's toolbar beside the view switch,
+ * from the assignment on (T466). Once results are out it is a quiet status there, "Results
+ * published · vendors can see them", until market days, when it is always true and says nothing.
  */
 import { computed, ref, watch } from 'vue';
 import { MarketPhase, type Market } from '@/assets/types/datatypes';
@@ -12,6 +14,7 @@ import { publishResults } from '@/utils/applicantApi';
 import { MarketAction, actionRefusal, mayTake } from '@/utils/marketActions';
 import { outcomeHeadline } from '@/utils/applicantOutcome';
 import { useMarketStore } from '@/stores/market';
+import { vendorPagePath } from '@/utils/market';
 import { useCopyAddress } from '@/utils/useCopyAddress';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import AppDialog from '@/components/AppDialog.vue';
@@ -28,6 +31,8 @@ const FROM_THE_ASSIGNMENT: readonly string[] = [
   MarketPhase.MarketDays,
 ];
 const itsPhase = computed(() => FROM_THE_ASSIGNMENT.includes(props.market?.phase ?? ''));
+/** In market days results are out by definition, so the status would say what is always true. */
+const marketDays = computed(() => props.market?.phase === MarketPhase.MarketDays);
 /**
  * Whether this person may publish results at all: the table's Publish results row (E39/F01/S02),
  * not the row that moves the phase. Whether they can yet is `publishReason`, which disables the
@@ -56,7 +61,7 @@ const NOT_ASSIGNED = outcomeHeadline({ outcome: 'not_assigned' });
  * so the confirmation gives the organizer the address to share.
  */
 const vendorPageUrl = computed(() =>
-  props.market?.slug ? `${window.location.origin}/${props.market.slug}` : '',
+  props.market?.slug ? `${window.location.origin}${vendorPagePath(props.market.slug)}` : '',
 );
 const { copied, copy } = useCopyAddress();
 
@@ -91,7 +96,7 @@ async function publish() {
 </script>
 
 <template>
-  <div v-if="market && itsPhase && publishes" class="publish-row">
+  <div v-if="market && itsPhase && publishes && !(published && marketDays)" class="publish-row">
     <button
       v-if="!published"
       class="publish-button"
@@ -111,52 +116,59 @@ async function publish() {
     <span v-else-if="!published" class="publish-hint" data-testid="applications-publish-hint">
       Vendors read whether they have a table on the market's vendor page. No email is sent.
     </span>
-    <span v-if="published" class="chip chip--positive" data-testid="applications-published-badge">
-      Results published
+    <span v-if="published" class="publish-status" data-testid="applications-published-badge">
+      <span class="publish-status-dot" aria-hidden="true"></span>
+      Results published · vendors can see them
     </span>
 
-    <!-- What publishing tells whom, before it does (E36/F04/S01): it cannot be undone. -->
-    <AppDialog
-      :open="confirming"
-      title="Publish results"
-      testid="publish-results"
-      :confirm-label="publishing ? 'Publishing…' : 'Publish results'"
-      :submission="submission"
-      @close="confirming = false"
-      @submit="publish"
-    >
-      <p v-if="outcomes" class="publish-outcomes">
-        {{ outcomes.haveATable }}
-        {{ outcomes.haveATable === 1 ? 'vendor will read' : 'vendors will read' }}
-        "{{ HAS_A_TABLE }}". {{ outcomes.notAssigned }} will read "{{ NOT_ASSIGNED }}".
-      </p>
-      <p class="publish-outcomes" data-testid="publish-results-telling">
-        Vendors read their result on the market's vendor page. No email is sent, so share the page's
-        address with them.
-      </p>
-      <div v-if="vendorPageUrl" class="publish-address" data-testid="publish-results-address">
-        <a
-          class="publish-address-url"
-          :href="vendorPageUrl"
-          target="_blank"
-          rel="noopener"
-          data-testid="publish-results-address-url"
-          >{{ vendorPageUrl }}</a
-        >
-        <button
-          type="button"
-          class="btn btn--secondary btn--compact"
-          data-testid="publish-results-address-copy"
-          @click="copy(vendorPageUrl)"
-        >
-          {{ copied === vendorPageUrl ? 'Copied' : 'Copy' }}
-        </button>
-      </div>
-      <p class="publish-outcomes">
-        Publishing cannot be undone, and tables cannot be allocated again after it: assignments
-        change only by hand.
-      </p>
-    </AppDialog>
+    <!--
+      What publishing tells whom, before it does (E36/F04/S01): it cannot be undone. Teleported to
+      the body: the button stands in the review's pinned toolbar, whose sticky block is a stacking
+      context from 1024px, which would hold the dialog under the market's frame and the app bar.
+    -->
+    <Teleport to="body">
+      <AppDialog
+        :open="confirming"
+        title="Publish results"
+        testid="publish-results"
+        :confirm-label="publishing ? 'Publishing…' : 'Publish results'"
+        :submission="submission"
+        @close="confirming = false"
+        @submit="publish"
+      >
+        <p v-if="outcomes" class="publish-outcomes">
+          {{ outcomes.haveATable }}
+          {{ outcomes.haveATable === 1 ? 'vendor will read' : 'vendors will read' }}
+          "{{ HAS_A_TABLE }}". {{ outcomes.notAssigned }} will read "{{ NOT_ASSIGNED }}".
+        </p>
+        <p class="publish-outcomes" data-testid="publish-results-telling">
+          Vendors read their result on the market's vendor page. No email is sent, so share the
+          page's address with them.
+        </p>
+        <div v-if="vendorPageUrl" class="publish-address" data-testid="publish-results-address">
+          <a
+            class="publish-address-url"
+            :href="vendorPageUrl"
+            target="_blank"
+            rel="noopener"
+            data-testid="publish-results-address-url"
+            >{{ vendorPageUrl }}</a
+          >
+          <button
+            type="button"
+            class="btn btn--secondary btn--compact"
+            data-testid="publish-results-address-copy"
+            @click="copy(vendorPageUrl)"
+          >
+            {{ copied === vendorPageUrl ? 'Copied' : 'Copy' }}
+          </button>
+        </div>
+        <p class="publish-outcomes">
+          Publishing cannot be undone, and tables cannot be allocated again after it: assignments
+          change only by hand.
+        </p>
+      </AppDialog>
+    </Teleport>
   </div>
 </template>
 
@@ -166,7 +178,23 @@ async function publish() {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
-  margin-bottom: var(--space-4);
+}
+
+/* Quiet: the step is done, and the toolbar only says so. */
+.publish-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--mm-text-muted);
+}
+
+.publish-status-dot {
+  flex: none;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--mm-green);
 }
 
 .publish-button {

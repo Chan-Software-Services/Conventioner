@@ -30,9 +30,22 @@ export const REREAD_MS = 15_000;
  * day's seats so a free never hides an arrival. The tally and the toggles count seats only, as the
  * Stats tab does. Check in is offered on today and past days, never on a day to come.
  *
+ * A vendor checked in is checked out on the same row, and that undone (T496): the row keeps its
+ * status and says beside it when they were checked out and by whom. Nothing else on the page reads
+ * a check-out, so a vendor who left still came.
+ *
  * A paper roster is the door's fallback when the venue's network or the back end fails (T318):
  * "Print roster" prints every vendor of the chosen date by table, whatever the filters on screen
- * say (`DoorRosterPrint`), and in Market Days a note asks for it on each day still to be run.
+ * say (`DoorRosterPrint`).
+ *
+ * Its tools are one toolbar and a count row, pinned under the market's frame at a desk (T466,
+ * release walk F5): the date and, on the map, the location as selects, List and Map, the paper
+ * tools and Refresh last, in the markup's order, which is the Tab order; then the count, the list's
+ * filters and the search. When the roster was read stands over the list, or under the map.
+ *
+ * On the map the search finds one vendor of the day and picking them opens their drawer, so the
+ * map outlines their seat, on their location when it is the other one (T466, release walk F3);
+ * typing alone outlines nothing. On the list the search filters the rows.
  */
 import { MarketAction, mayTake } from '@/utils/marketActions';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
@@ -44,9 +57,16 @@ import { getShortDate, getTimestampTime } from '@/utils/utils';
 import { tableInWords } from '@/utils/placementChange';
 import { vendorMatches, type VendorNames } from '@/utils/vendorIdentity';
 import MarketFrame from '@/components/MarketFrame.vue';
+import SearchPicker, { type PickerGroup, type PickerOption } from '@/components/SearchPicker.vue';
 import VendorDrawer from '@/components/VendorDrawer.vue';
-import FilterToggles from '@/components/FilterToggles.vue';
 import AttendanceMap from '@/components/attendance/AttendanceMap.vue';
+import { laidOutLocations, openLocationId } from '@/components/attendance/laidOutLocations';
+import { rosterSeats } from '@/components/daymap/dayMap';
+import { PEOPLE_CAP } from '@/utils/personChoice';
+import PinnedTools from '@/components/PinnedTools.vue';
+import SegmentedControl, { type SegmentedOption } from '@/components/SegmentedControl.vue';
+import ToolGroup from '@/components/ToolGroup.vue';
+import ToolRow from '@/components/ToolRow.vue';
 import VendorNameButton from '@/components/VendorNameButton.vue';
 import VendorNotes from '@/components/VendorNotes.vue';
 import ListFreshness from '@/components/ListFreshness.vue';
@@ -62,6 +82,7 @@ import { useOpenMarket } from '@/utils/openMarket';
 import { signedInEmail } from '@/utils/signedIn';
 import { withoutQueryKey } from '@/utils/routeQuery';
 import { useServerRead } from '@/utils/useServerRead';
+import { useUpdatedWords } from '@/utils/useUpdatedWords';
 
 /**
  * Where a vendor stands at the door on a date: a seat and no check-in (`expected`), a check-in made
@@ -74,6 +95,8 @@ interface RosterRow {
   date: string;
   vendorEmail: string;
   vendorName: string;
+  /** The name on their identification, which both searches find as well (T466). */
+  vendorFullName?: string;
   /** The seat held that day; null on a `here_without_seat` row. */
   tableCode: string | null;
   tableChoice: string | null;
@@ -86,7 +109,23 @@ interface RosterRow {
   checkedInBy: string | null;
   /** How a vendor checked themselves in: `door_code`, on their vendor page (ADR 0022). */
   checkedInVia?: string | null;
+  /** When they were checked out, by which organizer (null for the vendor's own) and, for the
+   *  vendor's own, how: `door_code`. A record from before the check-out has none (T496). */
+  checkedOutAt?: string | null;
+  checkedOutBy?: string | null;
+  checkedOutVia?: string | null;
 }
+
+/** The door's four writes, each on a row: a check-in, a check-out, and the undo of either. */
+type DoorWrite = 'check-in' | 'undo-check-in' | 'check-out' | 'undo-check-out';
+
+/** What a write the server refused says when the server gave no sentence of its own. */
+const NOT_WRITTEN: Record<DoorWrite, string> = {
+  'check-in': 'That check-in was not recorded.',
+  'undo-check-in': 'That check-in was not undone.',
+  'check-out': 'That check-out was not recorded.',
+  'undo-check-out': 'That check-out was not undone.',
+};
 
 type Show = 'all' | 'not-yet' | 'here';
 
@@ -125,6 +164,8 @@ const dates = computed(() => rosterRead.data.value?.dates ?? []);
 const roster = computed(() => rosterRead.data.value?.roster ?? []);
 /** When the roster was last read from the server, in milliseconds, or null before the first. */
 const readAt = rosterRead.readAt;
+/** "Updated just now", ageing: over the list, or under the map as its note. */
+const updatedWords = useUpdatedWords(readAt);
 const wasRead = computed(() => rosterRead.data.value !== null);
 /** The open market's failed first read, kept through the clock's quiet re-reads until one lands. */
 const firstFailure = ref<{ key: string; sentence: string } | null>(null);
@@ -146,6 +187,8 @@ const readError = computed(() => {
     : '';
 });
 const isLoading = computed(() => rosterRead.phase.value === 'loading' && !readError.value);
+/** A roster with dates to show, under the pinned tools. */
+const hasRoster = computed(() => !isLoading.value && dates.value.length > 0);
 /** A Refresh, or the clock's re-read, in flight, so Refresh cannot be pressed twice. */
 const refreshing = computed(() => rosterRead.phase.value === 'refreshing');
 /** A re-read that failed: the rows stay, and this says they are old. */
@@ -194,12 +237,23 @@ function chooseDate(date: string) {
   void router.replace({ query: { ...route.query, date } });
 }
 
+/** The locations the map can draw, by the rule the map reads, so the select offers no other. */
+const laidOut = computed(() => laidOutLocations(market.value?.setupObject));
+/** The map's open location: the address's, else the first laid out. */
+const locationId = computed(() =>
+  openLocationId(laidOut.value, String(route.query.location ?? '')),
+);
+
+function chooseLocation(location: string) {
+  void router.replace({ query: { ...route.query, location } });
+}
+
 /**
  * The roster as a list, today's page, or as a map of the open day (T422, D38): the page's own
  * state, in the address as `view=map`, replaced, so a change of day and a reload keep it.
  */
 type View = 'list' | 'map';
-const VIEWS = [
+const VIEWS: readonly SegmentedOption[] = [
   { id: 'list', label: 'List' },
   { id: 'map', label: 'Map' },
 ];
@@ -224,6 +278,12 @@ const names = computed<VendorNames>(() => {
   for (const row of roster.value) if (row.vendorName) out[row.vendorEmail] = row.vendorName;
   return out;
 });
+/** The name on each vendor's identification, which a search finds too, as on Vendors (T466). */
+const fullNames = computed<VendorNames>(() => {
+  const out: Record<string, string> = {};
+  for (const row of roster.value) if (row.vendorFullName) out[row.vendorEmail] = row.vendorFullName;
+  return out;
+});
 
 /** Whoever the table lets check vendors in may, while the market is running; the server is the
  *  authority. */
@@ -240,13 +300,12 @@ function hasSeat(row: RosterRow): boolean {
   return row.state !== 'here_without_seat';
 }
 
-/** A date's seats, and those checked in: a vendor here with no table that day is not counted. */
-function tally(date: string) {
-  const day = roster.value.filter((row) => row.date === date && hasSeat(row));
+/** The chosen date's seats, and those checked in: a vendor here with no table that day is not
+ *  counted. */
+const today = computed(() => {
+  const day = roster.value.filter((row) => row.date === selectedDate.value && hasSeat(row));
   return { expected: day.length, here: day.filter((row) => row.checkedInAt).length };
-}
-
-const today = computed(() => tally(selectedDate.value));
+});
 
 /**
  * Whether the chosen day is over: it has passed, or the market is archived. A vendor who never
@@ -270,24 +329,10 @@ const shownToday = computed(() => {
     if (show.value === 'here' && !row.checkedInAt) return false;
     if (!term) return true;
     if ((row.tableCode ?? '').toLowerCase().includes(term)) return true;
-    return vendorMatches(term, row.vendorEmail, names.value);
+    return vendorMatches(term, row.vendorEmail, names.value, fullNames.value);
   });
 });
 const shown = computed(() => shownToday.value.filter(hasSeat));
-/** The seated vendors the search finds on the chosen date, which the map marks; the Show toggles
- *  are the list's alone. */
-const foundOnMap = computed(() => {
-  const term = search.value.trim().toLowerCase();
-  if (!term) return [];
-  return roster.value
-    .filter((row) => row.date === selectedDate.value && hasSeat(row))
-    .filter(
-      (row) =>
-        (row.tableCode ?? '').toLowerCase().includes(term) ||
-        vendorMatches(term, row.vendorEmail, names.value),
-    )
-    .map((row) => row.vendorEmail);
-});
 /** Checked in on the chosen date with no table that day, under the seats, by the same filters. */
 const shownWithoutSeat = computed(() => shownToday.value.filter((row) => !hasSeat(row)));
 const withoutSeatToday = computed(
@@ -318,22 +363,61 @@ function printedRow(row: RosterRow): PrintedRow {
     here: row.checkedInAt ? status(row) : null,
   };
 }
-const printedDay = computed(() => roster.value.filter((row) => row.date === selectedDate.value));
-const printedSeated = computed(() => printedDay.value.filter(hasSeat).map(printedRow));
+/** The chosen date's every row: seated, and here with no table. */
+const dayRows = computed(() => roster.value.filter((row) => row.date === selectedDate.value));
+const printedSeated = computed(() => dayRows.value.filter(hasSeat).map(printedRow));
 const printedUnseated = computed(() =>
-  printedDay.value.filter((row) => !hasSeat(row)).map(printedRow),
+  dayRows.value.filter((row) => !hasSeat(row)).map(printedRow),
 );
 
 /**
- * Asks for a printed roster in Market Days on each day still to be run: on a day that has passed,
- * or a market archived, paper is too late.
+ * The map's search (T466, release walk F3): every vendor of the chosen date, one row each, named as
+ * their row is and saying where they sit, so two like names are told apart.
  */
-const asksForPaper = computed(
-  () =>
-    market.value?.phase === MarketPhase.MarketDays &&
-    !!selectedDate.value &&
-    selectedDate.value >= calendarToday(),
-);
+const mapSearchGroups = computed<PickerGroup[]>(() => [
+  {
+    options: dayRows.value.map((row) => ({
+      value: row.vendorEmail,
+      label: row.vendorName || row.vendorEmail,
+      address: !row.vendorName,
+      detail: whereTheySit(row),
+    })),
+  },
+]);
+const dayRowByEmail = computed(() => new Map(dayRows.value.map((row) => [row.vendorEmail, row])));
+
+/**
+ * The list search's own terms: the table, the name they go by, the one on their identification and
+ * their address.
+ */
+function findsOnMap(option: PickerOption, words: string): boolean {
+  const term = words.toLowerCase();
+  const tableCode = dayRowByEmail.value.get(option.value)?.tableCode ?? '';
+  return (
+    tableCode.toLowerCase().includes(term) ||
+    vendorMatches(term, option.value, names.value, fullNames.value)
+  );
+}
+
+/**
+ * A vendor picked on the map opens their drawer, as a press on their table does, so the map
+ * outlines their seat. A seat on the other laid-out location moves the map there first, replacing
+ * the address's location before the drawer takes its own step, so Back closes the drawer and leaves
+ * the map where the vendor sits. A vendor with no seat the map draws opens with nothing outlined.
+ */
+async function pickOnMap(email: string): Promise<void> {
+  if (!email) return;
+  const seat = rosterSeats(roster.value, selectedDate.value, laidOut.value).seats.find(
+    (each) => each.key === email,
+  );
+  const location = seat
+    ? laidOut.value.find((each) => each.layout.tables.some((one) => one.id === seat.tableId))?.id
+    : undefined;
+  if (location && location !== locationId.value) {
+    await router.replace({ query: { ...route.query, location } });
+  }
+  drawer.open(email);
+}
 
 function printRoster(): void {
   window.print();
@@ -356,7 +440,21 @@ function arrival(row: RosterRow, at: string): string {
   // The vendor's own, with the door code they scanned or typed at the entrance.
   if (row.checkedInVia === 'door_code') return `Scanned in at ${at}`;
   if (!row.checkedInBy) return at;
-  return `${at} by ${row.checkedInBy.toLowerCase() === signedInAs.value ? 'you' : row.checkedInBy}`;
+  return `${at} by ${byWhom(row.checkedInBy)}`;
+}
+
+/** The organizer who made a check-in or a check-out: "you" to themselves. */
+function byWhom(organizer: string): string {
+  return organizer.toLowerCase() === signedInAs.value ? 'you' : organizer;
+}
+
+/** When a checked-out vendor was checked out and by whom, in a chip of its own after the status. */
+function departure(row: RosterRow): string {
+  if (!row.checkedOutAt) return '';
+  const at = getTimestampTime(row.checkedOutAt);
+  // The vendor's own, with the door code, on their vendor page.
+  if (row.checkedOutVia === 'door_code') return `Scanned out at ${at}`;
+  return row.checkedOutBy ? `Out ${at} by ${byWhom(row.checkedOutBy)}` : `Out ${at}`;
 }
 
 /** Here at the seat they hold reads positive; anything else asks the door's attention. */
@@ -429,8 +527,10 @@ function holdBusy(key: string, busy: boolean): void {
  * came from, and posts there only: no read asked before it lands, so none undoes it, and an answer
  * after the organizer moved to another market says nothing there. A check-in is here at the seat
  * the row holds; an undo leaves a seat expected, and a row with no seat has nothing left to show.
+ * A check-out is the signed-in organizer's at the time the server answered, and its undo clears
+ * it, the row otherwise as it was (T496).
  */
-async function write(row: RosterRow, method: 'post' | 'delete') {
+async function write(row: RosterRow, what: DoorWrite) {
   const forMarket = rosterRead.key.value;
   if (!forMarket) return;
   const busy = busyKey(forMarket, row);
@@ -439,37 +539,45 @@ async function write(row: RosterRow, method: 'post' | 'delete') {
   const key = rowKey(row);
   const body = { vendorEmail: row.vendorEmail, date: row.date };
   const outcome = await rosterRead.holdWhile(async (id) => {
-    const url = `/markets/${encodeURIComponent(id)}/attendance`;
-    let arrived: Pick<
-      RosterRow,
-      'state' | 'checkedInTableCode' | 'checkedInAt' | 'checkedInBy' | 'checkedInVia'
-    >;
-    if (method === 'post') {
-      const { data } = await api.post<{ checkedInAt: string }>(url, body);
-      arrived = {
+    const checkIn = `/markets/${encodeURIComponent(id)}/attendance`;
+    const checkOut = `${checkIn}/check-out`;
+    let answered: Partial<RosterRow>;
+    if (what === 'check-in') {
+      const { data } = await api.post<{ checkedInAt: string }>(checkIn, body);
+      answered = {
         state: 'here',
         checkedInTableCode: row.tableCode,
         checkedInAt: data.checkedInAt,
         checkedInBy: signedInEmail(),
         checkedInVia: null,
       };
-    } else {
-      await api.delete(url, { data: body });
-      arrived = {
+    } else if (what === 'undo-check-in') {
+      await api.delete(checkIn, { data: body });
+      answered = {
         state: 'expected',
         checkedInTableCode: null,
         checkedInAt: null,
         checkedInBy: null,
         checkedInVia: null,
       };
+    } else if (what === 'check-out') {
+      const { data } = await api.post<{ checkedOutAt: string }>(checkOut, body);
+      answered = {
+        checkedOutAt: data.checkedOutAt,
+        checkedOutBy: signedInEmail(),
+        checkedOutVia: null,
+      };
+    } else {
+      await api.delete(checkOut, { data: body });
+      answered = { checkedOutAt: null, checkedOutBy: null, checkedOutVia: null };
     }
     // Taken while the write still holds the market, so the re-read its end asks is the only one.
     rosterRead.adopt(id, (held) => ({
       ...held,
       roster: held.roster.flatMap((one) => {
         if (rowKey(one) !== key) return [one];
-        if (!hasSeat(one) && method === 'delete') return [];
-        return [{ ...one, ...arrived }];
+        if (!hasSeat(one) && what === 'undo-check-in') return [];
+        return [{ ...one, ...answered }];
       }),
     }));
   });
@@ -477,10 +585,7 @@ async function write(row: RosterRow, method: 'post' | 'delete') {
   if (outcome.kind === 'failed') {
     refusal.value = {
       key: forMarket,
-      sentence: getApiErrorMessage(
-        outcome.error,
-        method === 'post' ? 'That check-in was not recorded.' : 'That check-in was not undone.',
-      ),
+      sentence: getApiErrorMessage(outcome.error, NOT_WRITTEN[what]),
     };
   }
 }
@@ -501,78 +606,93 @@ const drawer = useVendorDrawer();
 
 <template>
   <MarketFrame :market="market" @retry="retry">
-    <div class="door">
-      <ReadFailed v-if="readError" name="attendance" :message="readError" @retry="retry" />
-      <p v-if="errorMessage" class="door-error" role="alert">{{ errorMessage }}</p>
-      <p v-if="isLoading" class="door-note">Loading…</p>
-      <!-- Said of a roster that was read: under a failed read there is nothing to say it of. -->
-      <p v-else-if="wasRead && dates.length === 0" class="door-note">
-        This market has no dates yet.
-      </p>
-      <template v-else-if="dates.length">
-        <div class="door-top">
-          <nav class="door-dates" aria-label="Market date">
-            <button
-              v-for="date in dates"
-              :key="date"
-              type="button"
-              class="btn btn--secondary btn--compact door-date"
-              :aria-pressed="date === selectedDate"
-              :data-testid="`attendance-date-${date}`"
-              @click="chooseDate(date)"
+    <!-- Once the roster has dates, its tools pin under the frame at a desk and the roster passes
+         under them; before, the page says why there is no roster, with nothing to pin. -->
+    <PinnedTools v-if="hasRoster" testid="attendance-tools">
+      <template #tools>
+        <ToolRow testid="attendance-toolbar">
+          <label>
+            <span class="visually-hidden">Market date</span>
+            <select
+              class="field field--select field--compact door-select"
+              name="attendance-date-select"
+              data-testid="attendance-date-select"
+              :value="selectedDate"
+              @change="chooseDate(($event.target as HTMLSelectElement).value)"
             >
-              {{ getShortDate(date) }}
-              <span class="door-date-count">{{ tally(date).here }}/{{ tally(date).expected }}</span>
-            </button>
-          </nav>
-          <!-- When the roster was read, then Print roster and the door code: together at the row's
-               end, or the end of a line of their own when the dates fill theirs. -->
-          <div class="door-tools">
-            <FilterToggles
-              class="door-view"
-              :options="VIEWS"
-              label="Show as"
-              testid="attendance-view"
-              :modelValue="view"
-              :rest="view"
-              @update:modelValue="chooseView($event as View)"
-            />
-            <ListFreshness
-              class="door-freshness"
-              testid="attendance"
-              :readAt="readAt"
-              :refreshing="refreshing"
-              :failed="refreshError"
-              @refresh="retry"
-            />
-            <span class="door-papers">
-              <button
-                type="button"
-                class="btn btn--secondary btn--compact"
-                data-testid="attendance-print"
-                @click="printRoster"
+              <option v-for="date in dates" :key="date" :value="date">
+                {{ getShortDate(date) }}
+              </option>
+            </select>
+          </label>
+          <label v-if="view === 'map' && laidOut.length > 1">
+            <span class="visually-hidden">Location</span>
+            <select
+              class="field field--select field--compact door-select"
+              name="attendance-location-select"
+              data-testid="attendance-location-select"
+              :value="locationId"
+              @change="chooseLocation(($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="location in laidOut" :key="location.id" :value="location.id">
+                {{ location.name }}
+              </option>
+            </select>
+          </label>
+          <template #end>
+            <!-- The groups, then a failed refresh's line under them, right-aligned: Refresh is the
+                 last control in the markup, so the last the Tab key reaches. -->
+            <div class="door-end">
+              <ToolGroup>
+                <SegmentedControl
+                  :options="VIEWS"
+                  label="Show as"
+                  testid="attendance-view"
+                  :modelValue="view"
+                  @update:modelValue="chooseView($event as View)"
+                />
+              </ToolGroup>
+              <ToolGroup>
+                <button
+                  type="button"
+                  class="btn btn--secondary btn--compact"
+                  data-testid="attendance-print"
+                  @click="printRoster"
+                >
+                  Print roster
+                </button>
+                <button
+                  v-if="offersTheDoorCode"
+                  type="button"
+                  class="btn btn--secondary btn--compact"
+                  data-testid="attendance-door-code"
+                  @click="showingDoorCode = true"
+                >
+                  Door code
+                </button>
+              </ToolGroup>
+              <ToolGroup>
+                <ListFreshness
+                  testid="attendance"
+                  :readAt="readAt"
+                  :refreshing="refreshing"
+                  failed=""
+                  :showTime="false"
+                  @refresh="retry"
+                />
+              </ToolGroup>
+              <p
+                v-if="refreshError"
+                class="door-refresh-error"
+                role="alert"
+                data-testid="attendance-refresh-error"
               >
-                Print roster
-              </button>
-              <button
-                v-if="offersTheDoorCode"
-                type="button"
-                class="btn btn--secondary btn--compact"
-                data-testid="attendance-door-code"
-                @click="showingDoorCode = true"
-              >
-                Door code
-              </button>
-            </span>
-          </div>
-        </div>
-
-        <p v-if="asksForPaper" class="note" data-testid="attendance-print-note">
-          If the venue's network fails, a printed roster still works. Print this day's roster before
-          the doors open.
-        </p>
-
-        <div class="door-bar">
+                {{ refreshError }}
+              </p>
+            </div>
+          </template>
+        </ToolRow>
+        <ToolRow testid="attendance-bar">
           <h2 class="door-summary" data-testid="attendance-summary">
             {{ today.here }} of {{ today.expected }} checked in
           </h2>
@@ -605,30 +725,53 @@ const drawer = useVendorDrawer();
               Checked in {{ today.here }}
             </button>
           </div>
+          <SearchPicker
+            v-if="view === 'map'"
+            class="door-search"
+            label="Find a vendor"
+            hideLabel
+            placeholder="Name, email or table"
+            testid="attendance-map-search"
+            compact
+            listOver
+            clearsOnChoice
+            :cap="PEOPLE_CAP"
+            :groups="mapSearchGroups"
+            :finds="findsOnMap"
+            modelValue=""
+            @update:modelValue="pickOnMap($event as string)"
+          />
           <input
+            v-else
             v-model="search"
             type="search"
             name="attendance-search"
-            class="field door-search"
+            class="field field--compact door-search"
             aria-label="Find a vendor"
             placeholder="Name, email or table"
             data-testid="attendance-search"
           />
-        </div>
+        </ToolRow>
+      </template>
 
+      <div class="door">
+        <p v-if="errorMessage" class="door-error" role="alert">{{ errorMessage }}</p>
         <AttendanceMap
           v-if="view === 'map'"
           :market="market"
           :rows="roster"
           :date="selectedDate"
-          :found="foundOnMap"
           :openVendor="drawer.email.value"
           :notHere="notHere"
           :hereWithoutSeat="withoutSeatToday"
+          :updated="updatedWords"
           @open="drawer.open($event)"
           @showList="showListFromMap"
         />
         <template v-else>
+          <p v-if="updatedWords" class="door-updated" data-testid="attendance-updated">
+            {{ updatedWords }}
+          </p>
           <p v-if="today.expected === 0 && withoutSeatToday === 0" class="door-note">
             Nobody is assigned on this date.
           </p>
@@ -646,49 +789,87 @@ const drawer = useVendorDrawer();
                 data-testid="attendance-row"
                 :data-vendor="row.vendorEmail"
               >
-                <VendorNameButton
-                  class="door-who"
-                  :email="row.vendorEmail"
-                  :names="names"
-                  testid="attendance-vendor"
-                  @open="drawer.open(row.vendorEmail)"
-                />
+                <!-- The vendor and the action: one line on a phone, the action at its end, and cells
+                     of the row at a desk. -->
+                <span class="door-top">
+                  <span class="door-who">
+                    <VendorNameButton
+                      :email="row.vendorEmail"
+                      :names="names"
+                      testid="attendance-vendor"
+                      @open="drawer.open(row.vendorEmail)"
+                    />
+                  </span>
+                  <span v-if="canCheckIn" class="door-action">
+                    <button
+                      v-if="!row.checkedInAt && checkInOpen"
+                      type="button"
+                      class="btn btn--primary btn--compact"
+                      :disabled="isBusy(row)"
+                      :aria-label="`Check in ${whoFor(row)}`"
+                      data-testid="attendance-check-in"
+                      @click="write(row, 'check-in')"
+                    >
+                      Check in
+                    </button>
+                    <!-- Checked out: one Undo, of the check-out, since the check-in's undo is refused
+                         until then. -->
+                    <button
+                      v-else-if="row.checkedOutAt"
+                      type="button"
+                      class="btn btn--secondary btn--compact"
+                      :disabled="isBusy(row)"
+                      :aria-label="`Undo ${whoFor(row)}'s check-out`"
+                      data-testid="attendance-undo-check-out"
+                      @click="write(row, 'undo-check-out')"
+                    >
+                      Undo
+                    </button>
+                    <template v-else-if="row.checkedInAt">
+                      <button
+                        type="button"
+                        class="btn btn--primary btn--compact"
+                        :disabled="isBusy(row)"
+                        :aria-label="`Check out ${whoFor(row)}`"
+                        data-testid="attendance-check-out"
+                        @click="write(row, 'check-out')"
+                      >
+                        Check out
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn--secondary btn--compact"
+                        :disabled="isBusy(row)"
+                        :aria-label="`Undo ${whoFor(row)}'s check-in`"
+                        data-testid="attendance-undo"
+                        @click="write(row, 'undo-check-in')"
+                      >
+                        Undo
+                      </button>
+                    </template>
+                  </span>
+                </span>
                 <!-- Where they sit and whether they came, one line under the vendor's on a phone, so
                    neither widens the column the action stands in (E38/F15/S04). -->
                 <span class="door-place">
                   <span class="door-table" data-testid="attendance-row-table">{{
                     whereTheySit(row)
                   }}</span>
-                  <span
-                    class="chip door-status"
-                    :class="statusTone(row)"
-                    data-testid="attendance-row-status"
-                    >{{ status(row) }}</span
-                  >
-                </span>
-                <span v-if="canCheckIn" class="door-action">
-                  <button
-                    v-if="!row.checkedInAt && checkInOpen"
-                    type="button"
-                    class="btn btn--primary btn--compact"
-                    :disabled="isBusy(row)"
-                    :aria-label="`Check in ${whoFor(row)}`"
-                    data-testid="attendance-check-in"
-                    @click="write(row, 'post')"
-                  >
-                    Check in
-                  </button>
-                  <button
-                    v-else-if="row.checkedInAt"
-                    type="button"
-                    class="btn btn--secondary btn--compact"
-                    :disabled="isBusy(row)"
-                    :aria-label="`Undo ${whoFor(row)}'s check-in`"
-                    data-testid="attendance-undo"
-                    @click="write(row, 'delete')"
-                  >
-                    Undo
-                  </button>
+                  <!-- Whether they came, then, once checked out, when and by whom (T496). -->
+                  <span class="door-chips">
+                    <span
+                      class="chip door-status"
+                      :class="statusTone(row)"
+                      data-testid="attendance-row-status"
+                      >{{ status(row) }}</span
+                    >
+                    <span
+                      v-if="row.checkedOutAt"
+                      class="chip chip--neutral door-out"
+                      data-testid="attendance-row-out"
+                      >{{ departure(row) }}</span
+                    >
+                  </span>
                 </span>
                 <VendorNotes
                   class="door-notes"
@@ -704,7 +885,15 @@ const drawer = useVendorDrawer();
             </ul>
           </template>
         </template>
-      </template>
+      </div>
+    </PinnedTools>
+    <div v-else class="door">
+      <ReadFailed v-if="readError" name="attendance" :message="readError" @retry="retry" />
+      <p v-if="isLoading" class="door-note">Loading…</p>
+      <!-- Said of a roster that was read: under a failed read there is nothing to say it of. -->
+      <p v-else-if="wasRead && dates.length === 0" class="door-note">
+        This market has no dates yet.
+      </p>
     </div>
     <VendorDrawer
       :market="market"
@@ -742,68 +931,36 @@ const drawer = useVendorDrawer();
   color: var(--mm-black);
 }
 
-.door-top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-2) var(--space-4);
+/* The day and the location, each as wide as its longest option, its figures in columns. */
+.door-select {
+  width: auto;
+  font-variant-numeric: tabular-nums;
 }
 
-/* At the row's end, and at the end of its own line when the dates fill theirs. */
-.door-tools {
+/* The toolbar's end: its groups, a rule between each, and a failed refresh's line under them at
+   their end. The line adds nothing to the end's width (`contain: inline-size`), so it wraps inside
+   the groups' width and never moves Print roster or Door code to a line of their own. */
+.door-end {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-2);
-  margin-inline-start: auto;
+  gap: var(--space-2) var(--space-3);
 }
 
-/* List and Map, a step apart from the time and Refresh after them, as Print roster is. */
-.door-view {
-  margin-inline-end: var(--space-2);
-}
-
-/* The time, Refresh and a failed read's line are the group's own items, so that line goes under
-   the row, whole, rather than between Refresh and the buttons after it, where on a phone it pushed
-   Door code onto a line of its own. */
-.door-freshness {
-  display: contents;
-}
-
-.door-freshness :deep(.freshness-error) {
+.door-refresh-error {
   flex-basis: 100%;
-  order: 1;
+  contain: inline-size;
+  margin: 0;
+  color: var(--mm-red);
+  font-size: var(--text-xs);
   text-align: end;
 }
 
-/* Print roster and Door code, a step apart from Refresh, which belongs to the time before it. They
-   wrap as one: on a phone Door code went to a line alone under Print roster. */
-.door-papers {
-  display: flex;
-  gap: var(--space-2);
-  margin-inline-start: var(--space-2);
-}
-
-.door-dates,
 .door-show {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
-}
-
-.door-date-count {
-  /* Figures in a column need fixed-width digits (E15/F01/S03). The button's own ink, not muted:
-     muted grey is 4.26 on the chosen date's green ground, below AA. */
-  font-variant-numeric: tabular-nums;
-}
-
-.door-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3) var(--space-4);
 }
 
 .door-summary {
@@ -813,9 +970,25 @@ const drawer = useVendorDrawer();
   font-variant-numeric: tabular-nums;
 }
 
+/* The search takes the count row's room. */
 .door-search {
   flex: 1 1 240px;
   min-width: 0;
+}
+
+/* The map search's list lies over the map from the field's start, as wide as a row reads rather
+   than the row's whole room, so a vendor and where they sit stand close; a phone's field is less. */
+.door-search :deep(.search-picker-list) {
+  right: auto;
+  width: min(100%, 32rem);
+}
+
+/* On the list, when it was read, over the list's right edge, 4px over its first row. */
+.door-updated {
+  margin: 0 0 calc(-1 * var(--space-3));
+  color: var(--mm-text-muted);
+  font-size: var(--text-xs);
+  text-align: end;
 }
 
 .door-heading {
@@ -836,7 +1009,7 @@ const drawer = useVendorDrawer();
 
 .door-row {
   display: grid;
-  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto 7rem;
+  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto 11rem;
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-3) var(--space-4);
@@ -844,7 +1017,7 @@ const drawer = useVendorDrawer();
   border-radius: var(--radius-card);
 }
 
-/* Someone offered no check-in has no action column, so their status ends the row: an empty 7rem
+/* Someone offered no check-in has no action column, so their status ends the row: an empty column
    left each chip standing short of the edge with nothing beside it (E38/F15/S04). */
 .door-row--read {
   grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto;
@@ -856,8 +1029,9 @@ const drawer = useVendorDrawer();
   grid-row: 2;
 }
 
-/* At a desk the table and the status are cells of the row, the table first: the vendor comes first
-   in the markup, for a phone, so each cell is placed. */
+/* At a desk the table and the status are cells of the row, the table first: the vendor and the
+   action come first in the markup, for a phone, so each cell is placed. */
+.door-top,
 .door-place {
   display: contents;
 }
@@ -872,21 +1046,33 @@ const drawer = useVendorDrawer();
 .door-who {
   grid-column: 2;
   grid-row: 1;
-  justify-self: start;
+  display: flex;
   min-width: 0;
 }
 
-.door-status {
+/* The status, and under it when they were checked out, each ending at the column's end: side by
+   side, two long chips ("9:44 AM by" an address, twice) took the vendor's column (T496). */
+.door-chips {
   grid-column: 3;
   grid-row: 1;
-  justify-self: start;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+}
+
+.door-status,
+.door-out {
   white-space: nowrap;
 }
 
+/* Check out and Undo side by side, 11rem at a desk (T496). */
 .door-action {
   grid-column: 4;
   grid-row: 1;
   justify-self: end;
+  display: flex;
+  gap: var(--space-2);
 }
 
 .door-note {
@@ -908,51 +1094,59 @@ const drawer = useVendorDrawer();
     padding: var(--space-4);
   }
 
-  /* On a phone the tools never share the dates' line: they start their own lines at the left, as
-     the dates do, List and Map first, rather than at the right with a gap before them. */
-  .door-tools {
+  /* On a phone the end starts its own lines at the start edge, as the toolbar's start does. */
+  .door-end {
     justify-content: flex-start;
-    margin-inline-start: 0;
+    gap: var(--space-2);
   }
 
-  .door-papers {
-    margin-inline-start: 0;
-  }
-
-  .door-freshness :deep(.freshness-error) {
+  .door-refresh-error {
     text-align: start;
   }
 }
 
 /* A row too narrow for the desk's four columns, a phone's or a tablet's: the vendor on top, where
-   they sit and whether they came beneath, and the button within a thumb's reach on the right. Where
+   they sit and whether they came beneath, and the buttons within a thumb's reach on the right. Check
+   out and Undo together leave the vendor half the line, so where a piece of their name or address
+   (an address's half before its "@", say) is wider than that, the buttons go under the vendor, at
+   the line's end, and the address is not broken inside the piece (T496). Where
    they sit and whether they came share a line of their own, the status at its end, or under it when
    both do not fit: in the action's column a wide status ("9:44 AM by ...") squeezed the vendor's
    line and broke the address mid-word. By the list's width, not the window's: at 768px the desk's
    columns left the vendor's a third of the row, and the address broke inside its domain (T318).
-   60rem is the table's 14rem, room for an address's longer half, a check-in's status with its
-   table, the action's 7rem and the gaps. */
-@container door-list (width < 60rem) {
-  .door-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'who action'
-      'place place'
-      'notes notes';
-    gap: var(--space-2) var(--space-3);
-  }
-
-  /* Nothing beside the vendor, so their line is the row's width. */
+   64rem is the table's 14rem, room for an address's longer half, a check-in's status with its
+   table, the action's 11rem and the gaps. */
+@container door-list (width < 64rem) {
+  .door-row,
   .door-row--read {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      'who'
+      'top'
       'place'
       'notes';
+    gap: var(--space-2) var(--space-3);
   }
 
+  .door-top {
+    grid-area: top;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+  }
+
+  /* As narrow as the vendor's widest piece before the buttons leave their line, and the rest of
+     the line's width. */
   .door-who {
-    grid-area: who;
+    flex: 1 1 min-content;
+  }
+
+  /* A break inside a piece is the last resort still, and no longer counts toward how narrow the
+     vendor may be drawn: `anywhere` made that one character. */
+  .door-who :deep(.vendor-identity-name),
+  .door-who :deep(.vendor-identity-email),
+  .door-who :deep(.email-address) {
+    overflow-wrap: break-word;
   }
 
   .door-place {
@@ -967,12 +1161,16 @@ const drawer = useVendorDrawer();
     min-width: 0;
   }
 
-  .door-status {
+  /* At the line's end, side by side, the second under the first when both do not fit. */
+  .door-chips {
+    flex-flow: row wrap;
+    justify-content: flex-end;
+    gap: var(--space-2);
     margin-inline-start: auto;
   }
 
   .door-action {
-    grid-area: action;
+    margin-inline-start: auto;
   }
 
   .door-notes {

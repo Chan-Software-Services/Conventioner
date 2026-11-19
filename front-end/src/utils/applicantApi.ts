@@ -197,6 +197,42 @@ export async function undoOwnCheckIn(
 }
 
 /**
+ * Check the signed-in vendor out for `date` with the market's door code (T496).
+ * POST /public/markets/<slug>/vendor/check-out
+ *
+ * Answers when they checked out. Each refusal carries the sentence the page shows, as a
+ * check-in's does: the switch off, not the day itself, a wrong door code, no check-in that day.
+ */
+export async function checkOutWithDoorCode(
+  marketSlug: string,
+  token: string,
+  date: string,
+  doorCode: string,
+): Promise<{ checkedOutAt: string }> {
+  const { data } = await api.post(
+    `/public/markets/${marketSlug}/vendor/check-out`,
+    { date, doorCode },
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  return { checkedOutAt: String(data.checkedOutAt ?? '') };
+}
+
+/**
+ * Take back the signed-in vendor's own check-out for `date`; no door code needed.
+ * DELETE /public/markets/<slug>/vendor/check-out
+ */
+export async function undoOwnCheckOut(
+  marketSlug: string,
+  token: string,
+  date: string,
+): Promise<void> {
+  await api.delete(`/public/markets/${marketSlug}/vendor/check-out`, {
+    data: { date },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+/**
  * Fetch all applications for a market (organizer only, requires session auth).
  * GET /markets/<id>/applications
  */

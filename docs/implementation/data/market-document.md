@@ -33,7 +33,7 @@ describes:
   - back-end/datatypes.py#TableTypeObject
   - back-end/datatypes.py#FloorplanZone
   - back-end/datatypes.py#PublicMapSettings
-verified: 2026-11-13
+verified: 2026-11-18
 sources:
   - E02
   - E03/F03
@@ -62,6 +62,7 @@ sources:
   - T316
   - T315
   - T422
+  - T496
 ---
 
 # The market document
@@ -112,6 +113,7 @@ The other collections differ: applications and the placement trail are stored sn
 | `publicMap`                                    | the public map's settings; see [the public map's settings are `publicMap`](#the-public-maps-settings-are-publicmap)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `applicationsStopped`                          | whether the organizer has stopped taking applications inside the stage (E38/F04/S02), a fact about the form; absent is false; written by `set_applications_stopped`, and by the phase move into the stage (`taking_applications_update`), which clears it on entering draft or the stage from draft, and sets it on a form market back from Assignment                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `reviewTeam`                                   | the reviewers chosen for the review, `{reviewers: [{userId, email}], turn}`, in the order they are dealt to (by address), and how many applications were dealt since they last changed, and while a deal runs `dealing` (`{by, until}`), the lease by which every deal holds the market, so the turn has one writer at a time ([ADR 0020](../../adr/0020-an-application-is-dealt-to-one-reviewer.md)); absent is none chosen, so no migration; written only by [`back-end/review_team.py`](../../../back-end/review_team.py), null at creation, and never by a market update body ([the review is dealt among chosen reviewers](../../business/rules/the-review-is-dealt-among-chosen-reviewers.md)); the read serves every reader `{reviewers: [{email, able}]}`, never the turn |
+| `vendorSelfCheckIn`                            | the market's [self check-in switch](../modules/attendance-and-door.md#sharp-edges), whether its vendors check themselves in and out on their vendor page (T496); absent is false, which is every market until someone turns it on; server-owned, written only by `set_self_check_in` in `api/door.py`, and read off a stored document through `vendor_self_check_in_from_market_document` (the vendor's four routes and the public vendor-page read) and off the model's `vendor_self_check_in` elsewhere (the door code's read, the switch's write and the market's served shape)                                                                                                                                                                                                |
 | `doorCode`                                     | the market's live [door code](../modules/attendance-and-door.md#sharp-edges), `{code, madeAt, madeBy}`; absent before the first; written only by `api/door.py`, and never served by a market read (`leave_out_what_no_read_serves`, which takes `NEVER_SERVED_FIELDS` off the read and every Markets list entry)                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `creationDate`, `modificationList`, `theme`    | carried on every market; `modificationList` is always empty, and nothing writes or applies `theme`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
@@ -144,8 +146,7 @@ A laid-out location's sections store the count of their layout's tables, derived
 
 **A change of reviewers is unfinished while `reviewTeam.unfinishedChoice` stands** (T270): its team write sets it to `{removed: [address]}`, the reviewers the change removed, and its last write, the turn's, unsets it, so the same choice again finishes a change that stopped between them and hands on those reviewers' follow-ups too, and a different choice over it counts them removed beside those it removes itself, unless it chooses them ([the review is dealt among chosen reviewers](../../business/rules/the-review-is-dealt-among-chosen-reviewers.md)).
 Like `dealing`, it is beside the team on the document and not on the `ReviewTeam` model, and the read never serves it.
-Every write a deal makes to the market under `dealing` names the lease and reads whether it matched, so one whose lease ran out is refused or logged, never written as if it held the market ([ADR 0020](../../adr/0020-an-application-is-dealt-to-one-reviewer.md)).
-A lease nobody let go, from a deal the host ended, runs out on its own, and the applications still marked `arriving` are dealt by the next deal, which a reviewer's next card starts (`deal_waiting`).
+How a deal holds the lease, and what a lapsed one leaves, is [a deal holds the market](application-document.md#a-deal-holds-the-market) in the application document.
 
 <a id="the-discord-connection-is-discord"></a>
 **The Discord connection is `discord`**; absent is not connected.

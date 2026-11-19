@@ -1,6 +1,12 @@
+import type { Page } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL, LoginPage, VendorPage } from './fixtures';
 import { calendarToday, forgetSignInAttempts, signInOnThePage } from './helpers/vendorSignIn';
-import { marketScreenPath, marketSetupPath } from './helpers/marketScreens';
+import {
+  marketPagePath,
+  marketScreenPath,
+  marketSetupPath,
+  vendorPagePath,
+} from './helpers/marketScreens';
 import { TablesPage } from './pages/TablesPage';
 import { namelessControls } from './helpers/accessibleNames';
 import {
@@ -20,6 +26,7 @@ import { seedPhaseMarket } from './helpers/seedPhaseMarket';
 import { savePlan } from './helpers/savePlan';
 import { mongoEval } from './helpers/mongo';
 import { saveApplicationForm } from './helpers/saveApplicationForm';
+import { letVendorsCheckThemselvesIn } from './helpers/selfCheckIn';
 
 /**
  * Every control can be reached and named by assistive technology (bug 44; E26/F10/S03).
@@ -146,7 +153,7 @@ test('every field a vendor meets has a name, from signing in to applying', async
     { setupObject: planSetupObject() },
   );
   const vendor = `vendor-${Date.now()}@example.com`;
-  await page.goto(`/${marketSlug}`);
+  await page.goto(vendorPagePath(marketSlug));
   await expect(page.getByTestId('vendor-sign-in-email-input')).toBeVisible();
   expect(await namelessControls(page), 'email step').toEqual([]);
 
@@ -164,6 +171,53 @@ test('every field a vendor meets has a name, from signing in to applying', async
   await page.getByTestId('vendor-page-apply-btn').click();
   await expect(page.getByTestId('apply-form')).toBeVisible();
   expect(await namelessControls(page), 'the application form').toEqual([]);
+});
+
+/**
+ * The links and buttons on screen that read as nothing: `namelessControls` counts form fields, and
+ * the market page's controls are links. Each one's name is the one its accessibility snapshot
+ * gives, `- link "Apply"`, which is the name a screen reader says.
+ */
+async function namelessLinksAndButtons(page: Page): Promise<string[]> {
+  const nameless: string[] = [];
+  for (const control of await page.getByRole('link').or(page.getByRole('button')).all()) {
+    if (!(await control.isVisible())) continue;
+    const [first] = (await control.ariaSnapshot()).split('\n');
+    if (!/^- (link|button) "[^"]*\S/.test(first)) nameless.push(first);
+  }
+  return nameless;
+}
+
+test('every control of the market page has a name, its call and a notice', async ({
+  page,
+  request,
+}) => {
+  // The market's own address (T469): the call while it takes applications, a notice once not.
+  const { marketId, marketSlug } = await seedApplicantMarket(
+    request,
+    BACKEND_URL,
+    TEST_USER.email,
+    TEST_USER.password,
+    { setupObject: planSetupObject() },
+  );
+  await page.goto(marketPagePath(marketSlug));
+  await expect(page.getByTestId('market-page-apply')).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  expect(await namelessControls(page), 'the market page, its call').toEqual([]);
+  expect(await namelessLinksAndButtons(page), 'the market page, its call').toEqual([]);
+  await expect(page.getByTestId('market-page-apply')).toHaveAccessibleName('Apply');
+  await expect(page.getByTestId('market-page-sign-in')).toHaveAccessibleName('Sign in');
+
+  const stopped = await request.post(`${BACKEND_URL}/markets/${marketId}/applications-stopped`, {
+    data: { stopped: true },
+  });
+  expect(stopped.ok(), await stopped.text()).toBeTruthy();
+  await page.goto(marketPagePath(marketSlug));
+  await expect(page.getByTestId('market-page-vendor-link')).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  expect(await namelessControls(page), 'the market page, a notice').toEqual([]);
+  expect(await namelessLinksAndButtons(page), 'the market page, a notice').toEqual([]);
+  await expect(page.getByTestId('market-page-vendor-link')).toHaveAccessibleName('Vendor sign-in');
 });
 
 test('"More…" is a menu that opens into its items and closes back to its button', async ({
@@ -300,6 +354,8 @@ test("every field of a vendor's check-in has a name", async ({ page, request }) 
     TEST_USER.password,
     { marketDate: calendarToday(), vendors: [vendor] },
   );
+  // The check-in's field stands only where the market lets vendors check themselves in (T496).
+  await letVendorsCheckThemselvesIn(request, seed.marketId);
   const vendorPage = new VendorPage(page);
   await vendorPage.goto(seed.marketSlug);
   await signInOnThePage(vendorPage, seed.marketId, vendor);

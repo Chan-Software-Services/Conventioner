@@ -126,6 +126,11 @@ PAYMENT_REMOVED = "payment_removed"
 # The door
 CHECKED_IN = "checked_in"
 CHECK_IN_UNDONE = "check_in_undone"
+#: A vendor recorded as having left, and that taken back (T496); the check-in stands through both.
+CHECKED_OUT = "checked_out"
+CHECK_OUT_UNDONE = "check_out_undone"
+#: The market's self check-in switch turned on or off: whether vendors check themselves in and out.
+SELF_CHECK_IN_SET = "self_check_in_set"
 #: A new door code, which ends the one before it; the code itself is never recorded.
 DOOR_CODE_MADE = "door_code_made"
 
@@ -569,6 +574,64 @@ def _once_each(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         seen.add(entry.get("id"))
         once.append(entry)
     return once
+
+
+def _vendors_applications(entry: Dict[str, Any], ids: List[Any], vendor: str) -> Optional[set]:
+    """The ids of ``vendor``'s applications among an entry's ``ids``: by the address its detail
+    holds for each one (``addresses``, as a Discord check's does, since its ``vendors`` leaves out
+    an application with no address), else by the place each id and vendor share in their lists.
+    None when neither can say: a list of vendors shorter than its ids does not pair."""
+    detail = entry.get("detail")
+    addresses = detail.get("addresses") if isinstance(detail, dict) else None
+    if isinstance(addresses, dict):
+        return {app_id for app_id in ids if normalized_email(addresses.get(app_id) or "") == vendor}
+    vendors = entry.get("vendors") or []
+    if len(vendors) != len(ids):
+        return None
+    return {app_id for app_id, email in zip(ids, vendors) if email == vendor}
+
+
+def _held_by(value: Any, ids: set, own: set) -> Any:
+    """A part of an entry's detail, kept to the ``own`` applications when it is keyed by or lists
+    the entry's applications (``ids``), else as it is: what names no application, such as a deal's
+    cause or how many a check found in each state, is the entry's own."""
+    if isinstance(value, dict) and value and set(value) <= ids:
+        return {key: part for key, part in value.items() if key in own}
+    if isinstance(value, list) and value and all(
+            isinstance(part, str) and part in ids for part in value):
+        return [part for part in value if part in own]
+    return value
+
+
+def vendors_own_part(entry: Dict[str, Any], vendor: str) -> Dict[str, Any]:
+    """An entry as ``vendor``'s own history reads it: one about several vendors' applications (a
+    selection's verdicts, a deal, a Discord check or a "Give roles" run), named by the
+    ``application_ids`` of its subject, kept to the vendor's own application, its ``vendors`` to
+    the vendor, and each part of its detail keyed by or listing the applications to theirs, with
+    ``application_count``, how many the entry was about, so their line can still say how many
+    others it decided with theirs.
+
+    Any other entry is the vendor's whole: one about them alone, or one whose other vendor is part
+    of their own change, as a swap names whom they traded seats with. So is one whose applications
+    cannot be told apart (``_vendors_applications``), which the vendor's reader narrows itself."""
+    subject = entry.get("subject")
+    ids = subject.get("application_ids") if isinstance(subject, dict) else None
+    if not isinstance(ids, list) or len(ids) < 2:
+        return entry
+    vendor = normalized_email(vendor)
+    own = _vendors_applications(entry, ids, vendor)
+    if own is None:
+        return entry
+    every = set(ids)
+    detail = entry.get("detail")
+    return {
+        **entry,
+        "vendors": [email for email in entry.get("vendors") or [] if email == vendor],
+        "subject": {**subject, "application_ids": [app_id for app_id in ids if app_id in own]},
+        "detail": {key: _held_by(part, every, own) for key, part in detail.items()}
+        if isinstance(detail, dict) else detail,
+        "application_count": len(ids),
+    }
 
 
 def actors(market_id: str) -> List[str]:

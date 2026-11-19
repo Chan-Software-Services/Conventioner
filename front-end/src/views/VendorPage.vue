@@ -1,11 +1,13 @@
 <script setup lang="ts">
 /**
- * A market's vendor page, at its own address `/<slug>` (ADR 0022).
+ * A market's vendor page, at `/<slug>/vendor` (ADR 0022, T469), under the market page at `/<slug>`.
  *
  * The one page a vendor uses at a market: signed out, it names the market and asks for an email
  * address and then the code sent to it; signed in, it shows where they stand and their
- * application, as the market's state allows. This view is a thin frame; each part is a section
- * component reading the one page state in the application store.
+ * application, as the market's state allows. Under the market's name, signed in or out, it lists
+ * the market's dates and, while the public map is open, links to it at the market's own address
+ * (T469). This view is a thin frame; each part is a section component reading the one page state
+ * in the application store.
  *
  * It reads the market before drawing anything, so a slug is never printed back before the server
  * has said there is a page here. A market with no vendor page (a draft, a Google Form market
@@ -21,12 +23,17 @@
  *
  * The door's QR code opens this page on `?door=<code>` (ADR 0022). The code is kept in this tab
  * and taken off the address at once, so it is never left in the history or a shared link; it waits
- * through the sign-in, and the check-in section uses it once, for today.
+ * through the sign-in, and the check-in section uses it once, for today. At a market whose self
+ * check-in switch is off (T496) it is dropped as soon as the page knows, before any sign-in, and
+ * the page says an organizer checks vendors in and out.
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useApplicationStore } from '@/stores/application';
 import { vendorPageAnswered } from '@/utils/currentPlace';
+import { marketPagePath } from '@/utils/market';
+import { getFormattedDate } from '@/utils/utils';
+import { onlyOrganizersCheckIn, SELF_CHECK_IN_OFF } from '@/utils/vendorPage';
 import PageNotFound from '@/components/PageNotFound.vue';
 import VendorSignIn from '@/components/vendorPage/VendorSignIn.vue';
 import VendorStatus from '@/components/vendorPage/VendorStatus.vue';
@@ -54,9 +61,11 @@ onUnmounted(() => vendorPageAnswered(answeredFor, false));
 
 const signedIn = computed(() => store.isAuthenticatedFor(marketSlug.value));
 const vendorName = computed(() => store.application?.vendorName || '');
+const marketPage = computed(() => marketPagePath(marketSlug.value));
 
 async function load() {
   state.value = 'loading';
+  scannedWhileOff.value = false;
   const read = await store.loadPage(marketSlug.value);
   if (read.notFound) {
     state.value = 'not-found';
@@ -66,6 +75,7 @@ async function load() {
     state.value = 'failed';
     return;
   }
+  dropDoorCodeWhileOff();
   if (!signedIn.value) await store.resume(marketSlug.value);
   if (signedIn.value) {
     await loadSignedIn();
@@ -102,11 +112,25 @@ async function signOut() {
   signingOut.value = false;
 }
 
-/** Keep a door code the address carries, and take it off the address. */
+/** A door code met the switch off: said once, where the page's notices stand. */
+const scannedWhileOff = ref(false);
+
+/** Do only organizers check vendors in here, as the page this address answered with says? */
+function doorIsOrganizersOnly(): boolean {
+  return state.value !== 'loading' && !!store.page && onlyOrganizersCheckIn(store.page);
+}
+
+/**
+ * Keep a door code the address carries, and take it off the address. One scanned while the page
+ * is open on a market whose switch is off is never kept.
+ */
 function holdDoorCodeFromAddress() {
   const door = route.query.door;
   if (typeof door !== 'string') return;
-  if (door.trim()) store.holdDoorCode(marketSlug.value, door.trim());
+  if (door.trim()) {
+    if (doorIsOrganizersOnly()) scannedWhileOff.value = true;
+    else store.holdDoorCode(marketSlug.value, door.trim());
+  }
   const rest = Object.fromEntries(Object.entries(route.query).filter(([key]) => key !== 'door'));
   void router.replace({ query: rest, hash: route.hash });
 }
@@ -115,6 +139,16 @@ function holdDoorCodeFromAddress() {
 watch(() => route.query.door, holdDoorCodeFromAddress);
 
 const doorCodeHeld = computed(() => store.heldDoorCode?.marketSlug === marketSlug.value);
+
+/**
+ * Once the market is read: a door code kept for it while its switch is off is dropped at once,
+ * before any sign-in, so nobody signs in to be checked in by it.
+ */
+function dropDoorCodeWhileOff() {
+  if (!store.page || !onlyOrganizersCheckIn(store.page) || !doorCodeHeld.value) return;
+  store.dropDoorCode();
+  scannedWhileOff.value = true;
+}
 
 onMounted(() => {
   store.error = null;
@@ -152,6 +186,24 @@ onMounted(() => {
     <template v-else>
       <header class="vendor-page-header">
         <h1 data-testid="vendor-page-market-name">{{ store.page?.marketName }}</h1>
+        <ul
+          v-if="store.page?.marketDates.length"
+          class="vendor-page-dates"
+          aria-label="Market dates"
+          data-testid="vendor-page-dates"
+        >
+          <li v-for="date in store.page.marketDates" :key="date">
+            {{ getFormattedDate(date) ?? date }}
+          </li>
+        </ul>
+        <RouterLink
+          v-if="store.page?.mapOpen"
+          :to="marketPage"
+          class="link-alone"
+          data-testid="vendor-page-map-link"
+        >
+          See the market map
+        </RouterLink>
         <p v-if="signedIn" class="vendor-page-who" data-testid="vendor-page-signed-in-as">
           Signed in as
           <strong>{{ vendorName || store.applicantEmail }}</strong>
@@ -159,6 +211,15 @@ onMounted(() => {
           <template v-if="vendorName">{{ ` (${store.applicantEmail})` }}</template>
         </p>
       </header>
+
+      <p
+        v-if="scannedWhileOff"
+        class="vendor-page-notice"
+        role="status"
+        data-testid="vendor-self-check-in-off"
+      >
+        {{ SELF_CHECK_IN_OFF }}
+      </p>
 
       <template v-if="!signedIn">
         <p v-if="doorCodeHeld" class="vendor-page-door" data-testid="vendor-page-door-held">
@@ -208,6 +269,10 @@ onMounted(() => {
 }
 
 .vendor-page-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
   text-align: center;
 }
 
@@ -220,8 +285,16 @@ onMounted(() => {
   overflow-wrap: anywhere;
 }
 
+.vendor-page-dates {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+  color: var(--mm-black);
+}
+
 .vendor-page-who {
-  margin: var(--space-2) 0 0;
+  margin: 0;
   font-size: var(--text-sm);
   color: var(--mm-black);
   overflow-wrap: anywhere;
@@ -252,6 +325,18 @@ onMounted(() => {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
+}
+
+/* Worded and drawn as the check-in's own notice, which stands in the same place. */
+.vendor-page-notice {
+  margin: 0;
+  background: var(--mm-chip-informational);
+  border: 1px solid var(--mm-blue);
+  border-radius: var(--radius-control);
+  padding: var(--space-4);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--mm-blue);
 }
 
 /* What a scanned door code waits for, said over the sign-in, centred as its title is. */

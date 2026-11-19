@@ -6,6 +6,7 @@ describes:
   - front-end/src/utils/useInertBehind.ts
   - front-end/src/__tests__/useInertBehind.test.ts
   - front-end/e2e/a-dialog-mounted-open-holds-the-page.spec.ts
+  - front-end/e2e/the-page-behind-a-dialog-holds-still.spec.ts
   - front-end/src/utils/useModalRoot.ts
   - front-end/src/utils/useEscapeToClose.ts
   - front-end/src/utils/useFocusGoesBack.ts
@@ -35,7 +36,7 @@ describes:
   - front-end/src/__tests__/aDialogsWriteBelongsToItsOpening.test.ts
   - front-end/e2e/a-dialog-holds-while-it-writes.spec.ts
   - front-end/src/__tests__/everyWritingDialogUsesTheSubmit.test.ts
-verified: 2026-11-13
+verified: 2026-11-19
 sources:
   - wayfinding/the-order-of-the-work/08
   - wayfinding/the-order-of-the-work/map
@@ -216,6 +217,11 @@ A control that can be focused and fired presents itself as available far more st
 **A dialog may mount already open, and is held all the same**: the change-placement dialog is a `v-if` dialog with `:open="true"`, open from setup, before the template ref that names the dialog's root has bound.
 `useInertBehind` watched the open state alone, so it walked once with no root to walk from and never again, and Tab walked out of the change-placement dialog onto the market bar behind it (T181).
 It watches the dialog's parts with the open state, so the ref binding on mount runs the walk; a re-run releases before it marks, so no element is counted twice, and a branch that a dialog open on top of it holds live stays live (below).
+**The page behind holds still** (T473): `inert` takes no scroll, and the scrim is a fixed box with nothing of its own to scroll, so a wheel or a thumb's drag over it scrolled the page behind, at a desk as on a phone, out of play but moving.
+While any modal on `useInertBehind` is open, `<html>` carries `holds-still` and [`base.css`](../../../front-end/src/assets/base.css) hides the page's overflow, counted like the marks, so a dialog opened from a dialog closing first leaves the page held for the one beneath.
+Hidden overflow keeps the page where it stood, so it is where it was when the last modal closes, and the root's `scrollbar-gutter` is kept under it, so nothing behind moves sideways as the hold comes and goes; what the modal holds still scrolls, in its own `ScrollBox`.
+Every modal on `useInertBehind` holds it, the vendor drawer, a `SidePanel`, the app bar's sheet and the door code's full screen with the dialogs, and the hold is taken only with a part on the page, as the marks are.
+**On a browser that draws classic scroll bars, the page's bar is gone while a modal holds it, by Daniel's choice (T473)**: the gutter the root keeps shows the page's white beside the scrim, undimmed, as the bar beside the scrim was before; a scrim cannot reach into the gutter, and tinting it to each modal's scrim would not fade in with it.
 
 **A dialog opened from a dialog is a sibling of it**, so [`useInertBehind`](../../../front-end/src/utils/useInertBehind.ts) marked it out of play: it rendered, read correctly, was visible and enabled, and could not be clicked.
 A dialog now takes `inert` off its own branch on open and puts the marks back on close; the marks are counted per element, so the dialog beneath still releases correctly, and so is the hold, so a walk of the dialog beneath while the one on top is open leaves the one on top live (T181).
@@ -223,6 +229,7 @@ A dialog now takes `inert` off its own branch on open and puts the marks back on
 [`useEscapeToClose`](../../../front-end/src/utils/useEscapeToClose.ts) keeps the open overlays in the order they opened and hands Escape to the last.
 A component inside a dialog that opens a dialog of its own teleports it to the body, so it is that sibling rather than a window inside a window: Manage market's Permissions and its confirmations do ([setting who may do what](../../business/flows/ending-and-managing-a-market.md#l3a-set-who-may-do-what)), as Manage organization's Default permissions and its confirmations do, each placed first in its `Teleport`, since siblings of one layer paint in their order and its confirmations must lie above it.
 The vendor drawer's Payment tab teleports its three, Record payment, Change owed and the confirmation its entry and line menus open, in one `Teleport`, as the drawer's Discord offer teleports its confirmation: the drawer's panel carries a `transform`, which makes it the box a fixed descendant is laid out in, so inside it they centred on the panel and not the window (T315).
+A dialog opened from inside a sticky block teleports for the same kind of reason: from 1024px [`PinnedTools`](../../../front-end/src/components/PinnedTools.vue)' block is `position: sticky` with a `z-index`, a stacking context, so a dialog left in it paints under the market's frame and the app bar, its scrim leaving both bright; Publish results' confirmation, whose button stands in the review's pinned toolbar, teleports to the body ([`PublishResults.vue`](../../../front-end/src/components/application/PublishResults.vue), T466).
 Asserting this needs a control the page holds: the view container is an ancestor of the dialogs and is never marked, so an assertion on it passes whatever the marks say.
 
 ## The create-market dialog
@@ -250,6 +257,7 @@ With exactly one organization it names it rather than offering a select with one
   `AppDialog` itself is pinned by name, because without that every dialog built on it would leave the rule's sight at once.
   It cannot see a cover painted from outside the component, by a shared stylesheet or a component library, and need not: the app installs no component library ([ADR 0015](../../adr/0015-the-app-owns-its-components.md)), since the floorplan beta's Edit Table Type, Save Template and Load Template dialogs, which were a library's and drew with no window and no scrim, moved onto `AppDialog` (T45), before the beta went (T257).
 - [`useInertBehind.test.ts`](../../../front-end/src/__tests__/useInertBehind.test.ts) holds the walk: the page's other branches marked and the modal not, the marks given back on close and on unmount, an element already `inert` left as it was found, the counted marks of two modals open at once, a dialog on top kept live while the one beneath walks again, and a modal mounted already open with its root bound by template ref; [`a-dialog-mounted-open-holds-the-page.spec.ts`](../../../front-end/e2e/a-dialog-mounted-open-holds-the-page.spec.ts) opens the change-placement dialog on the screens seed's big market at 390 and 1440, and finds the market frame, the rail and the app bar inert, Tab walking only the dialog's controls, and Escape giving the frame and the app bar back, focus returning to the seat's Change; the floorplan beta's choose-path overlay it also opened went with the beta (T257).
+- [`the-page-behind-a-dialog-holds-still.spec.ts`](../../../front-end/e2e/the-page-behind-a-dialog-holds-still.spec.ts) opens Manage market over a Markets page taller than the window, then its Permissions over it, at 390 and 1440, and finds a wheel and a drag each way over each scrim leave the page where it stood, each dialog's body still scrolling, the card behind where it was, and the page where it was and scrolling again once the last has closed; `useInertBehind.test.ts` holds the count: once however often a modal walks, until the last of two closes in either order, given back on unmount and when an open modal walks again and finds no part, and not held by a modal with no part on the page.
 - [`removingSomeoneAsksFirst.test.ts`](../../../front-end/src/__tests__/removingSomeoneAsksFirst.test.ts) and [`removing-someone-asks-first.spec.ts`](../../../front-end/e2e/removing-someone-asks-first.spec.ts) open each Remove's confirmation, find it named by its question and opened on Cancel, close it by Cancel and by Escape (only it, not the dialog beneath) with focus back on the Remove and nothing removed, and confirm it, with focus on the list; at 390 the spec finds the address in each Remove's title, and in Manage market's role change's, broken only before its "@" or a dot, as a phone draws it and in a line narrower than the address ([`addressBreaks.ts`](../../../front-end/e2e/helpers/addressBreaks.ts)).
 - [`changingARoleAsksFirst.test.ts`](../../../front-end/src/__tests__/changingARoleAsksFirst.test.ts) and [`changing-a-role-asks-first.spec.ts`](../../../front-end/e2e/changing-a-role-asks-first.spec.ts) choose a role, find the confirmation named by its question with nothing sent, close it by Cancel, Escape and the backdrop (only it, not the dialog beneath) with the select back on the role held and focused, confirm it with one write and focus on the select, or on the list when the select has gone, and find a refusal said beneath the row, with the list re-read.
 - [`a-refusal-keeps-the-focus-in-the-dialog.spec.ts`](../../../front-end/e2e/a-refusal-keeps-the-focus-in-the-dialog.spec.ts) refuses the vendor drawer's Record payment, pressed with the mouse, by a 400 with a sentence, and finds focus inside the dialog's window, on its first safe control, after the refusal, and the next Tab still inside it.
@@ -268,4 +276,5 @@ With exactly one organization it names it rather than offering a select with one
 - A hand-rolled overlay with its own scrim, or a key handler for Enter.
 - A parent that refreshes on `close`, or a dialog that closes itself as the sign that it saved.
 - A component that paints a full-viewport cover without holding the page inert.
+- A modal that holds the page behind it some way other than `useInertBehind`, which leaves the page to scroll under its scrim, or a rule that lets `html.holds-still` scroll.
 - A dialog that writes with a `busy` and an error of its own and no `submission`: it can be closed while it writes, and the answer lands in its next opening; `everyWritingDialogUsesTheSubmit.test.ts` fails it.

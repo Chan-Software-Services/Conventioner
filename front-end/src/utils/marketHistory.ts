@@ -40,6 +40,9 @@ export interface MarketHistoryEntry {
   vendors: string[];
   subject: Detail;
   detail: Detail | null;
+  /** How many applications the whole entry was about, on one the server narrowed to a vendor's
+   * own part (`?own=`): their application alone is in it. */
+  applicationCount?: number;
 }
 
 /** The group of the table Assignment history is narrowed to, as the server names it. */

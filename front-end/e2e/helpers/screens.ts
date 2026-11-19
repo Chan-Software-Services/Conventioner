@@ -4,10 +4,17 @@ import { EmailVerificationPage } from '../pages/EmailVerificationPage';
 import { LayoutPage } from '../pages/LayoutPage';
 import { MarketsPage } from '../pages/MarketsPage';
 import { OrganizationsPage } from '../pages/OrganizationsPage';
-import { marketScreenPath, marketSetupPath, oneByOnePath } from './marketScreens';
+import {
+  marketPagePath,
+  marketScreenPath,
+  marketSetupPath,
+  oneByOnePath,
+  vendorPagePath,
+} from './marketScreens';
 import { mongoEval } from './mongo';
 import { createApplicantLoginChallenge } from './seedApplicantMarket';
 import { loginViaApi, UPPER_HALL_SECTIONED_TABLES, UPPER_HALL_TABLES } from './seeds';
+import { letVendorsCheckThemselvesIn } from './selfCheckIn';
 import { calendarToday } from './vendorSignIn';
 import { FIRST_IMPORT, LATER_IMPORT, SCREENS_EDITOR, type TheScreensSeed } from './seedTheScreens';
 import { settle } from './settle';
@@ -154,10 +161,12 @@ const marketAddress =
   (market: keyof TheScreensSeed, rest = '') =>
   (seed: TheScreensSeed) =>
     `/markets/${(seed[market] as { marketId: string }).marketId}${rest}`;
-const slug =
-  (market: keyof TheScreensSeed, rest = '') =>
-  (seed: TheScreensSeed) =>
-    `/${(seed[market] as { marketSlug: string }).marketSlug}${rest}`;
+/** `market`'s vendor page, `/<slug>/vendor` (T469). */
+const vendorPage = (market: keyof TheScreensSeed) => (seed: TheScreensSeed) =>
+  vendorPagePath((seed[market] as { marketSlug: string }).marketSlug);
+/** `market`'s own address, `/<slug>`: its market page, for anyone (T469). */
+const marketPage = (market: keyof TheScreensSeed) => (seed: TheScreensSeed) =>
+  marketPagePath((seed[market] as { marketSlug: string }).marketSlug);
 const fixed = (path: string) => () => path;
 
 /**
@@ -482,14 +491,19 @@ function layoutAt(
 }
 
 /**
- * The day map market's public map (T422), its address carrying `query` (a table picked, a half of
- * it) when given, once its floorplan has drawn and `shows` is on screen: the hall, or a part of the
- * card, which shows only once a table is picked (T465).
+ * The day map market's public map (T422) at its market page, `/<slug>` (ADR 0039), its address
+ * carrying `query` (a table picked, a half of it) when given, once its floorplan has drawn and
+ * `shows` is on screen: the hall, or a part of the card, which shows only once a table is picked
+ * (T465).
+ *
+ * The address names the seed's first day: the map opens on the browser's today otherwise, and a
+ * sweep whose `beforeAll` seeded before midnight would open on the seed's second day, where the
+ * shared table seats nobody and no card shows.
  */
 function publicMapAt(query: Record<string, string> = {}, shows = 'public-map-hall') {
   return async (page: Page, seed: TheScreensSeed) => {
-    const search = new URLSearchParams(query).toString();
-    await page.goto(`/${seed.dayMap.slug}/map${search ? `?${search}` : ''}`);
+    const search = new URLSearchParams({ date: seed.dayMap.today, ...query }).toString();
+    await page.goto(`${marketPage('dayMap')(seed)}?${search}`);
     await expect(page.getByTestId('layout-map-image')).toHaveAttribute('href', /^blob:/, {
       timeout: 15000,
     });
@@ -1398,12 +1412,31 @@ export const SCREEN_GROUPS = {
       open: at(screen('dayMap', 'tools'), 'public-map-address'),
     },
     // The door code over the attendance (ADR 0022), on the tablet or laptop at the entrance or the
-    // phone in the organizer's hand: before one is made, full screen, and New code's confirmation.
+    // phone in the organizer's hand: with the self check-in switch off (T496), where the screen
+    // shows no code and says why, then with it on: before a code is made, full screen, and New
+    // code's confirmation.
+    {
+      name: 'the door code, vendors not checking themselves in',
+      who: 'organizer',
+      sizes: FITS_A_PHONE,
+      open: async (page, seed) => {
+        const off = await page.request.put(
+          `${APP_API}/markets/${seed.big.marketId}/self-check-in`,
+          { data: { enabled: false } },
+        );
+        expect(off.ok(), await off.text()).toBeTruthy();
+        await at(screen('big', 'attendance'), 'attendance-row', [
+          'attendance-door-code',
+          'door-code-off',
+        ])(page, seed);
+      },
+    },
     {
       name: 'the door code, none made yet',
       who: 'organizer',
       sizes: FITS_A_PHONE,
       open: async (page, seed) => {
+        await letVendorsCheckThemselvesIn(page.request, seed.big.marketId);
         mongoEval(
           `db.markets.updateOne({ id: '${seed.big.marketId}' }, { $unset: { doorCode: 1 } })`,
         );
@@ -1423,6 +1456,7 @@ export const SCREEN_GROUPS = {
       who: 'organizer',
       sizes: FITS_A_PHONE,
       open: async (page, seed) => {
+        await letVendorsCheckThemselvesIn(page.request, seed.big.marketId);
         const made = await page.request.post(`${APP_API}/markets/${seed.big.marketId}/door-code`);
         expect(made.ok(), await made.text()).toBeTruthy();
         await at(
@@ -1718,10 +1752,12 @@ export const SCREEN_GROUPS = {
       ]),
     })),
     {
+      // Past the applications stage the tab says nothing over the review (T466): ready once the
+      // All view's rows are read.
       name: 'market days, the applications',
       who: 'organizer',
       sizes: FITS_A_PHONE,
-      open: at(setup('big', 'applications'), 'market-setup-applications-condition'),
+      open: at(setup('big', 'applications'), 'applications-all-row'),
     },
     {
       // Hover is a state too: the tab bar's hover once set its label to a 25% near-black on the
@@ -1905,24 +1941,39 @@ export const SCREEN_GROUPS = {
       open: publicMapAt({ table: 'north-table-3', half: 'right' }, 'public-map-card-half'),
     },
     {
+      // A market's own address while it takes applications (T469): its name, dates and the call,
+      // with Apply and "Already applied? Sign in" to the vendor page.
+      name: 'the market page, its application call',
+      who: 'nobody',
+      sizes: PUBLIC,
+      open: at(marketPage('open'), 'market-page-call'),
+    },
+    {
+      // Once its page stops taking applications, a notice says so, with "Vendor sign-in".
+      name: 'the market page, applications closed',
+      who: 'nobody',
+      sizes: PUBLIC,
+      open: at(marketPage('closed'), 'market-page-notice'),
+    },
+    {
       // A market's vendor page, signed out (ADR 0022): its name and the email step.
       name: 'the vendor page, signed out',
       who: 'nobody',
       sizes: PUBLIC,
-      open: at(slug('open'), 'vendor-sign-in-email-input'),
+      open: at(vendorPage('open'), 'vendor-sign-in-email-input'),
     },
     {
       name: 'the vendor page, an organizer signed in',
       who: 'organizer',
       sizes: PUBLIC,
-      open: at(slug('open'), 'vendor-sign-in-email-input'),
+      open: at(vendorPage('open'), 'vendor-sign-in-email-input'),
     },
     {
       name: 'the vendor page, the code step',
       who: 'nobody',
       sizes: PUBLIC,
       open: async (page, seed) => {
-        await at(slug('open'), 'vendor-sign-in-email-input')(page, seed);
+        await at(vendorPage('open'), 'vendor-sign-in-email-input')(page, seed);
         // An address of its own each time: the screen sweeps open this once at each of its sizes,
         // and one address may ask for only so many codes (`sign_in_limits`).
         const address = `e2e-screens-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
@@ -1937,7 +1988,7 @@ export const SCREEN_GROUPS = {
       who: 'nobody',
       sizes: PUBLIC,
       open: async (page, seed) => {
-        await at(slug('open'), 'vendor-sign-in-email-input')(page, seed);
+        await at(vendorPage('open'), 'vendor-sign-in-email-input')(page, seed);
         const address = `e2e-screens-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
         await page.getByTestId('vendor-sign-in-email-input').fill(address);
         await page.getByTestId('vendor-sign-in-request-btn').click();
@@ -1953,7 +2004,7 @@ export const SCREEN_GROUPS = {
       name: 'the vendor page, signed in',
       who: 'applicant',
       sizes: PUBLIC,
-      open: at(slug('open'), 'vendor-page-status'),
+      open: at(vendorPage('open'), 'vendor-page-status'),
     },
     {
       // The form, opened in place on the vendor page by Edit (ADR 0022).
@@ -1961,7 +2012,7 @@ export const SCREEN_GROUPS = {
       who: 'applicant',
       sizes: PUBLIC,
       open: async (page, seed) => {
-        await at(slug('open'), 'vendor-page-edit-btn')(page, seed);
+        await at(vendorPage('open'), 'vendor-page-edit-btn')(page, seed);
         await page.getByTestId('vendor-page-edit-btn').click();
         await visible(page, 'apply-form');
       },
@@ -1985,7 +2036,7 @@ export const SCREEN_GROUPS = {
             });
           },
         );
-        await at(slug('open'), 'vendor-page-edit-btn')(page, seed);
+        await at(vendorPage('open'), 'vendor-page-edit-btn')(page, seed);
         await page.getByTestId('vendor-page-edit-btn').click();
         await visible(page, 'apply-form');
         await page.getByTestId('apply-submit-button').click();
@@ -2018,7 +2069,33 @@ export const SCREEN_GROUPS = {
       open: asAVendorAt(
         'big',
         (today) => [seatOn(today, `${today}T09:41:00+00:00`), seatOn('2099-08-22')],
-        'vendor-check-in-undo-btn',
+        'vendor-check-out-btn',
+      ),
+    },
+    {
+      // Both chips and the one Undo, and a past day that reads both times (T496).
+      name: 'the vendor page, checked out',
+      who: 'nobody',
+      sizes: PUBLIC,
+      open: asAVendorAt(
+        'big',
+        (today) => [
+          seatOn(today, `${today}T09:41:00+00:00`, `${today}T16:05:00+00:00`),
+          seatOn('2099-08-22', '2099-08-22T09:41:00+00:00', '2099-08-22T16:05:00+00:00'),
+        ],
+        'vendor-check-out-undo-btn',
+      ),
+    },
+    {
+      // The switch off: no control, and who checks them out.
+      name: 'the vendor page, checked in at the door',
+      who: 'nobody',
+      sizes: PUBLIC,
+      open: asAVendorAt(
+        'big',
+        (today) => [seatOn(today, `${today}T09:41:00+00:00`), seatOn('2099-08-22')],
+        'vendor-check-in-at-door',
+        false,
       ),
     },
     {
@@ -2039,7 +2116,11 @@ export const SCREEN_GROUPS = {
 export const SCREENS: Screen[] = Object.values(SCREEN_GROUPS).flat();
 
 /** One seat, as the vendor's own read lists it. */
-function seatOn(date: string, checkedInAt: string | null = null) {
+function seatOn(
+  date: string,
+  checkedInAt: string | null = null,
+  checkedOutAt: string | null = null,
+) {
   return {
     date,
     tableCode: 'Indoors 12',
@@ -2047,22 +2128,32 @@ function seatOn(date: string, checkedInAt: string | null = null) {
     section: 'Indoors',
     location: 'Indoors - the old cannery warehouse',
     checkedInAt,
+    checkedOutAt,
   };
 }
 
 /**
- * A vendor signed in at `market`'s page, their own read answered with `seats` (today's date given):
- * the screen sweeps open each state at each of its sizes, and a real sign-in each time would pass
- * the limits a caller and an address may sign in by (`sign_in_limits`). The page's own read is the
- * server's.
+ * A vendor signed in at `market`'s vendor page, their own read answered with `seats` (today's date
+ * given): the screen sweeps open each state at each of its sizes, and a real sign-in each time
+ * would pass the limits a caller and an address may sign in by (`sign_in_limits`). The page's own
+ * read is the server's, so a market in its days has its self check-in switch set first, in the
+ * database since nobody here is signed in to turn it: on unless a state is of the switch off, since
+ * the vendor's own controls are offered only where it is on (T496), and the door code's states
+ * turn it off and on.
  */
 function asAVendorAt(
   market: 'big' | 'archived',
   seats: (today: string) => ReturnType<typeof seatOn>[],
   ready: string,
+  selfCheckIn = true,
 ) {
   return async (page: Page, seed: TheScreensSeed) => {
     const { marketId, marketSlug } = seed[market];
+    if (market === 'big') {
+      mongoEval(
+        `db.markets.updateOne({ id: '${marketId}' }, { $set: { vendorSelfCheckIn: ${selfCheckIn} } })`,
+      );
+    }
     const session = {
       marketId,
       marketSlug,
@@ -2088,7 +2179,7 @@ function asAVendorAt(
     await page.route(`**/public/markets/${marketSlug}/applicant/application`, (route) =>
       route.fulfill({ json: { application } }),
     );
-    await page.goto(`/${marketSlug}`);
+    await page.goto(vendorPagePath(marketSlug));
     await visible(page, ready);
   };
 }

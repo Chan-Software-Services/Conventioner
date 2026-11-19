@@ -39,7 +39,7 @@ Telling the person who just read the code whether they have applied leaks nothin
 
 ## Where it is kept
 
-- **The sign-in is the vendor page's**, at the market's own address `/<slug>`, and the code email links there, calling it "your page for <market>" ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)).
+- **The sign-in is the vendor page's**, at `/<slug>/vendor`, and the code email links there (`_send_code_email`), calling it "your page for <market>" ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)).
 - **Requesting a code** (`request_login_code` in [`back-end/api/applicant_auth.py`](../../../back-end/api/applicant_auth.py)) stores a challenge for every address at a market whose vendor page [the gate](a-gated-market-answers-as-absent.md) serves (`vendor_page_market_by_slug`) and sends it before the response goes out (E32/F03/S02): on serverless hosting a process may be frozen the moment its response is out, and no code sent from a thread afterwards was ever seen to arrive.
   A failed send, a send Resend has not answered within 10 seconds among them, is logged and answered as a sent one.
   The code is six digits, kept hashed in `applicant_login_challenges` keyed by market and address, and lasts ten minutes.
@@ -80,7 +80,7 @@ A refused attempt still counts.
 So at most 10 guesses per address per 15 minutes reach a six-digit code, however many codes are asked for, and each code takes at most five of them.
 A resume is counted per caller only, 300 per 15 minutes (`resume:caller`), before the cookie is read: its secret is 32 random bytes, so the limit bounds the work a caller asks of the database, not a guess.
 Past it the page asks for a code, as it does for no cookie.
-A vendor's check-in with the door code is bounded differently: 10 tries per signed-in address per 15 minutes (`check-in:address`), right code or wrong, and nothing per caller, and the undo counts nothing ([attendance and the door](../../implementation/modules/attendance-and-door.md#sharp-edges)).
+A vendor's check-in or check-out with the door code is bounded differently: 10 tries per signed-in address per 15 minutes (`check-in:address`), right code or wrong, and nothing per caller, and the undo of either counts nothing ([attendance and the door](../../implementation/modules/attendance-and-door.md#sharp-edges)).
 A venue's wifi is one caller for every vendor on it, so a per-caller count of wrong door codes, which this rule had until T318, refused a right code after strangers' wrong ones; with it gone, nothing one vendor types stops another, and a guess at the code is bounded by that vendor's own count, their sign-in for the market and a seat on a day in reach ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)).
 
 - **The counters live in the database, never in a process**: a serverless deployment forgets memory.

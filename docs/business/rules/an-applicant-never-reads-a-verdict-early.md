@@ -18,6 +18,7 @@ sources:
   - E26/F07/S02
   - bug/20
   - T202
+  - T496
 ---
 
 # An applicant never reads a verdict early
@@ -46,7 +47,7 @@ A stranger applying to a closed market stays wrong, so the save refuses otherwis
   It is enforced on the way out of the server, because anything the applicant's browser receives the applicant can read: a label mapped over a payload carrying `reviewer_rejected` still ships the rejection in the response.
   Every applicant-facing payload passes through `_application_response`; the organizer's view never does, and shows the stored status ([the application document](../../implementation/data/application-document.md#the-review-state)).
 - **The outcome** is `outcome_of` and the seats `seats_of` in [`back-end/result_outcome.py`](../../../back-end/result_outcome.py), the same reading the publish confirmation counts by; both are in the response only once the results are out (`results_are_out` in [`market_documents.py`](../../../back-end/market_documents.py)): `resultsPublished` is set, or the market reached its market days, as a Google Form market that went live before it could publish results did ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)).
-  Each seat carries when the vendor checked in to it, or null, and the response the name they go by, so the page reads one answer.
+  Each seat carries when the vendor checked in to it and when they checked out, each or null, and the response the name they go by, so the page reads one answer.
   On a Google Form market it carries no answers (`with_answers`, no `formData`): its page shows no application, since nobody applies on it.
 - The words are [`front-end/src/utils/applicantOutcome.ts`](../../../front-end/src/utils/applicantOutcome.ts), which only words what the server decided.
 - The save's phase refusal is `save_applicant_application`, behind [the gate](a-gated-market-answers-as-absent.md) that serves a form market in every phase but draft.

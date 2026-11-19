@@ -18,8 +18,9 @@ import { putVerdict } from './helpers/putVerdict';
  * vendor, newest first, in the words of Manage market's History section. Two vendors are given a
  * verdict, a note and a table each through the API the screens call, on a fixture market, and each
  * drawer reads its own vendor's entries and never the other's. A verdict given to a selection of
- * three reads in one vendor's drawer as their own line, naming none of the other two, and whole in
- * Manage market's History, which opens to each vendor's verdict by their address. Raised above a
+ * three reads in one vendor's drawer as their own line, naming none of the other two, which the
+ * server's answer to the drawer holds nothing of either, and whole in Manage market's History, which
+ * opens to each vendor's verdict by their address. Raised above a
  * Viewer, the history's row takes the tab from their drawer and the changes from their Permissions
  * dialog.
  */
@@ -151,7 +152,21 @@ test("a verdict on a selection reads in a vendor's History tab as their own line
   const me = TEST_USER.email;
 
   const drawer = new VendorsPage(page);
+  // The drawer asks for the vendor's own part, matched by what it asks so no other read is taken.
+  const own = `/history?own=${encodeURIComponent(VENDOR.email)}`;
+  const answered = page.waitForResponse((response) => response.url().includes(own));
   await page.goto(drawerPath(seed.marketId, VENDOR.email));
+  // The server sends no more than the drawer shows: the selection holds Vera's application alone,
+  // and the names only of the vendors its entries still hold.
+  const sent = await (await answered).text();
+  expect(sent).toContain(VENDOR.email);
+  for (const other of [OTHER, THIRD]) {
+    expect(sent).not.toContain(other.name);
+    expect(sent).not.toContain(other.email);
+  }
+  for (const application of applications.slice(1)) {
+    expect(sent).not.toContain(application.id);
+  }
   await expect(drawer.detailHistorySentences).toHaveText([
     `${me} set the application and 2 others to Approved`,
   ]);

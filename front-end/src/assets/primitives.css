@@ -206,6 +206,14 @@
 }
 
 /*
+ * A field in a toolbar (T466): a select, a text field or a search as tall as the `.btn--compact`
+ * beside it, 28px at a desk and 44px on a phone. Its text stays the field's `--text-sm`.
+ */
+.field--compact {
+  height: var(--control-height-compact);
+}
+
+/*
  * A select is as wide as the place it is put, and no wider. It used to carry `min-width:
  * min-content`, meant to stop a column squeezing a select below its longest option - but only
  * Firefox resolves that to the widest option (Chromium ignores it), so it did nothing where the

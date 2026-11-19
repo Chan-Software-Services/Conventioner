@@ -4,8 +4,8 @@
  *
  * One of the two irreversible actions in the product, and the one that destroys the MOST: an
  * organization's drafts and archived markets go with it, and an archived market is still publicly
- * served and holds the placement record of a market that actually ran. Deleting one takes a live
- * check-in URL off the air, with no undo.
+ * served and holds the placement record of a market that actually ran. Deleting one takes its
+ * market page and its vendor page, where its vendors checked in, off the air, with no undo.
  *
  * That is a decision the product allows deliberately - raised during charting and reaffirmed on
  * 2026-09-22 - which is exactly why this names what each deletion destroys PER MARKET rather than
@@ -23,6 +23,7 @@
 import { computed, ref, watch } from 'vue';
 import AppDialog from '@/components/AppDialog.vue';
 import { api, getApiErrorMessage } from '@/utils/api';
+import { marketPagePath, vendorPagePath } from '@/utils/market';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
 
 interface MarketSummary {
@@ -33,6 +34,11 @@ interface MarketSummary {
   ran: boolean;
   placements: number;
   publicSlug: string | null;
+}
+
+/** The two pages a market that ran serves, both of which its deletion takes off the air (T469). */
+function pagesThatStop(slug: string): string {
+  return `Its market page, ${marketPagePath(slug)}, and vendor page, ${vendorPagePath(slug)}, will stop working for anyone who has the links.`;
 }
 
 const props = defineProps<{ open: boolean; orgId: string; orgName: string }>();
@@ -160,14 +166,14 @@ async function confirm() {
             <li v-for="market in doomed" :key="market.id" data-testid="delete-org-doomed-market">
               <strong>{{ market.name }}</strong>
               <span class="delete-org-detail">{{ consequence(market) }}</span>
-              <!-- The URL that stops resolving, its vendor page, named rather than left to be
-                   discovered by whoever tries to read their record at it. -->
+              <!-- The addresses that stop resolving, its market page and its vendor page, named
+                   rather than left to be discovered by whoever tries to read their record there. -->
               <span
                 v-if="market.publicSlug"
                 class="delete-org-url"
                 data-testid="delete-org-public-url"
               >
-                /{{ market.publicSlug }} will stop working
+                {{ pagesThatStop(market.publicSlug) }}
               </span>
             </li>
           </ul>

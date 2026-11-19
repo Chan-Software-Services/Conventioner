@@ -11,6 +11,9 @@ owed day's first record is an insert (``payments.owed_day_transition``, T335), w
 back, and the owner's read again is what lands it; the staged test below makes every free meet it.
 Every later write of the day holds the record's ``revision``, so the writes that land are one
 sequence, each read off the one before it.
+
+A check-out is fields on the check-in's record (T496), written by an update filtered to a day not
+yet checked out; the last class races it, and its undo, where the filter is the server's to read.
 """
 import threading
 from datetime import date
@@ -222,3 +225,64 @@ class TestOneCheckInPerVendorDay:
         arrivals = list(market_records.history.find({"market_id": MARKET,
                                                      "kind": History.CHECKED_IN}))
         assert len(arrivals) == 1
+
+
+class TestOneCheckOutPerVendorDay:
+    """A check-out is one update filtered to a day not yet checked out (T496), so the server lets
+    one of many at once write: the others answer its time. The filter's null must match a record
+    with no check-out fields at all, which is every record stored before check-outs."""
+
+    def _the_vendor_is_here(self, real_db, market_records):
+        real_db["markets"].insert_one({"id": MARKET, "phase": "market_days"})
+        # As stored before check-outs: no ``checked_out_*`` field.
+        market_records.attendance.insert_one({
+            "market_id": MARKET, "vendor_email": VENDOR, "date": DAY,
+            "table_code": "Main Hall 1", "checked_in_at": "2099-05-08T09:00:00+00:00",
+            "checked_in_by": None, "checked_in_via": "door_code"})
+
+    def _record(self, market_records):
+        [record] = list(market_records.attendance.find(
+            {"market_id": MARKET, "vendor_email": VENDOR, "date": DAY}))
+        return record
+
+    def _entries(self, market_records, kind):
+        return list(market_records.history.find({"market_id": MARKET, "kind": kind}))
+
+    def test_twenty_check_outs_at_once_leave_one_time_and_one_entry(
+            self, boot_indexes, real_db, market_records, race):
+        self._the_vendor_is_here(real_db, market_records)
+        harness.warm(market_records.attendance, 20)
+
+        answered = race(20, lambda i: AttendanceApi.record_check_out(
+            Actions.Asked(Actions.CHECK_IN, MARKET, f"{EDITOR}#{i}", None), VENDOR, DAY))
+
+        assert [status for _body, status in answered] == [200] * 20
+        record = self._record(market_records)
+        assert {body["checkedOutAt"] for body, _status in answered} == {record["checked_out_at"]}
+        [entry] = self._entries(market_records, History.CHECKED_OUT)
+        # The one that wrote is the one recorded.
+        assert entry["actor"] == record["checked_out_by"]
+        assert record["checked_in_at"] == "2099-05-08T09:00:00+00:00"
+
+    def test_a_checked_out_day_keeps_its_check_in_until_the_check_out_is_undone(
+            self, boot_indexes, real_db, market_records, race):
+        self._the_vendor_is_here(real_db, market_records)
+        asked = Actions.Asked(Actions.CHECK_IN, MARKET, EDITOR, None)
+        assert AttendanceApi.record_check_out(asked, VENDOR, DAY)[1] == 200
+
+        refused = AttendanceApi.undo_attendance(asked, VENDOR, DAY)
+
+        assert refused == ({"error": "Undo the check-out first."}, 409)
+        assert self._record(market_records)["checked_out_at"]
+
+        harness.warm(market_records.attendance, 20)
+        undone = race(20, lambda i: AttendanceApi.undo_check_out(
+            Actions.Asked(Actions.CHECK_IN, MARKET, f"{EDITOR}#{i}", None), VENDOR, DAY))
+
+        # One undo landed; the rest found no check-out.
+        assert sorted(status for _body, status in undone) == [200] + [404] * 19
+        assert len(self._entries(market_records, History.CHECK_OUT_UNDONE)) == 1
+        record = self._record(market_records)
+        assert not {"checked_out_at", "checked_out_by", "checked_out_via"} & set(record)
+        assert AttendanceApi.undo_attendance(asked, VENDOR, DAY)[1] == 200
+        assert list(market_records.attendance.find({"market_id": MARKET})) == []

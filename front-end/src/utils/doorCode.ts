@@ -3,17 +3,23 @@
  *
  * One live code per market, served only by its own endpoint to whoever may check vendors in, and
  * never by the market read. It stays the same until someone presses "New code", which ends it and
- * every poster of it. The QR code opens the vendor page with the code, `<app>/<slug>?door=<code>`,
- * the `url` the server answers. The QR code itself is drawn by `qrDrawing.ts`, kept apart so that
- * the vendor page, which reads and types the code, never loads the encoder.
+ * every poster of it. The QR code opens the vendor page with the code,
+ * `<app>/<slug>/vendor?door=<code>`, the `url` the server answers. The QR code itself is drawn by
+ * `qrDrawing.ts`, kept apart so that the vendor page, which reads and types the code, never loads
+ * the encoder.
  */
 import { MarketPhase, type Market } from '@/assets/types/datatypes';
 import { api } from '@/utils/api';
 import { MarketAction, mayTake } from '@/utils/marketActions';
 
-/** A market's door code as the server answers it, or `{ code: null }` before the first. */
-export type DoorCode =
-  { code: null } | { code: string; madeAt: string; madeBy: string; url: string };
+/**
+ * A market's door code as the server answers it, with `code: null` before the first, and beside it
+ * the market's self check-in switch: whether vendors check themselves in and out with the code, on
+ * their vendor page. Off until someone turns it on; the code stays stored while it is off.
+ */
+export type DoorCode = { selfCheckIn: boolean } & (
+  { code: null } | { code: string; madeAt: string; madeBy: string; url: string }
+);
 
 /** How many characters a door code has: the back end's `DOOR_CODE_LENGTH`. */
 export const DOOR_CODE_LENGTH = 6;
@@ -53,5 +59,14 @@ export async function readDoorCode(marketId: string): Promise<DoorCode> {
 /** A new door code, the first or one that ends the old. */
 export async function makeDoorCode(marketId: string): Promise<DoorCode> {
   const { data } = await api.post<DoorCode>(doorCodePath(marketId));
+  return data;
+}
+
+/** Turns the market's self check-in switch on or off; the answer is the door code's own read. */
+export async function setSelfCheckIn(marketId: string, enabled: boolean): Promise<DoorCode> {
+  const { data } = await api.put<DoorCode>(
+    `/markets/${encodeURIComponent(marketId)}/self-check-in`,
+    { enabled },
+  );
   return data;
 }

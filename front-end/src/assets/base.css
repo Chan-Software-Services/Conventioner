@@ -226,6 +226,10 @@
      on a phone): measured by MarketFrame and set on its card, so a screen's own sticky column can
      sit under it. Zero outside a frame. */
   --market-frame-h: 0px;
+  /* What a screen's PinnedTools block pins under the market frame (T466): measured by PinnedTools
+     and set on its root, so a second sticky row inside it stands flush under the block. Zero
+     outside a block. */
+  --pinned-tools-h: 0px;
   /* A screen of cards (E23/F01/S01, `.card-grid` in primitives.css): the gap between cards, and the
      room below which two tracks become one. */
   --card-grid-gap: var(--space-8);
@@ -355,6 +359,16 @@ html {
  */
 html.fills-the-window {
   scrollbar-gutter: auto;
+}
+
+/*
+ * The page holds still behind a modal (T473): `inert` takes no scroll, so a wheel or a drag over a
+ * dialog's scrim moved the page behind it. `useInertBehind` puts this class on `<html>` while any
+ * modal is open. Hidden overflow keeps the page where it was, and the gutter above keeps its width,
+ * so nothing moves as the class comes and goes; what the modal holds still scrolls in its own box.
+ */
+html.holds-still {
+  overflow: hidden;
 }
 
 /* On a phone's browser `100vh` is the window with its bars hidden, taller than the one shown while

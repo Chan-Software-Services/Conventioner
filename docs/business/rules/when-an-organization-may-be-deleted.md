@@ -24,6 +24,7 @@ sources:
   - T277
   - T307
   - T411
+  - T469
 ---
 
 # When an organization may be deleted
@@ -43,7 +44,7 @@ A draft is a plan nobody else has seen, and an archived market is finished, so b
 
 **An archived market that ran is a record, and deleting it destroys one** ([an archived market that ran stays a record](an-archived-market-that-ran-stays-a-record.md)).
 That was weighed and kept: archived markets go with their organization, taking the only record of who sat where and a vendor page that was live.
-So a count of markets does not let an organizer decide: the confirmation names, per market, its name, its phase as its intake path names it (Review on a Google Form market, Applications on one whose vendors apply on its page), whether it ran, how many assignments it holds, and the public address that stops resolving.
+So a count of markets does not let an organizer decide: the confirmation names, per market, its name, its phase as its intake path names it (Review on a Google Form market, Applications on one whose vendors apply on its page), whether it ran, how many assignments it holds, and, for one that ran, the two public addresses that stop resolving, its market page and its vendor page.
 What was deleted, by whom and when is recorded in the deletion trail before anything is destroyed, once however often the deletion is sent.
 **The organization's own history goes with it**, as each market's history goes with the market: who joined it, who renamed it, which markets were created in it ([the organization document](../../implementation/data/organization-document.md#the-organizations-history)).
 The deletion trail is what outlives both.

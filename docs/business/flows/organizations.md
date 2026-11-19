@@ -27,6 +27,7 @@ sources:
   - T315
   - T352
   - T411
+  - T469
 ---
 
 # Organizations
@@ -170,7 +171,7 @@ The rule it obeys is [when an organization may be deleted](../rules/when-an-orga
 ### B5b. It holds only drafts and archived markets
 
 **Status:** Works (walked live with a draft; the archived case read from code).
-Each market is listed with its phase, whether it ran and how many placements it holds; an archived market that ran also names the vendor page that stops working ("/<slug> will stop working"), the record it kept up ([L1](ending-and-managing-a-market.md#l1-archive-after-market-days), bug 9).
+Each market is listed with its phase, whether it ran and how many placements it holds; an archived market that ran also names both of its pages that stop working ("Its market page, /<slug>, and vendor page, /<slug>/vendor, will stop working for anyone who has the links."), the vendor page the record it kept up ([L1](ending-and-managing-a-market.md#l1-archive-after-market-days), bug 9).
 
 ### B5c. It holds a market mid-lifecycle
 

@@ -17,7 +17,7 @@ describes:
   - back-end/tests/conftest.py#FakeSlugMarketsCollection
   - back-end/db_config.py#uri_targets
   - scripts/real-mongo-test.sh
-verified: 2026-11-17
+verified: 2026-11-19
 sources:
   - T244
   - T274
@@ -28,6 +28,7 @@ sources:
   - T335
   - T318
   - T422
+  - T496
 ---
 
 # The real-MongoDB suite
@@ -157,6 +158,7 @@ Each test's name says what it proves.
 
 The writes that hold what they read beyond these races are run the same way, each in its own file named for what it proves: [`test_the_market_write.py`](../../../back-end/tests/real_mongo/test_the_market_write.py) (what `write_market` holds and answers), [`test_a_judged_write_lands_only_on_the_market_it_judged.py`](../../../back-end/tests/real_mongo/test_a_judged_write_lands_only_on_the_market_it_judged.py), [`test_every_held_write_is_refused_on_a_changed_market.py`](../../../back-end/tests/real_mongo/test_every_held_write_is_refused_on_a_changed_market.py), [`test_roles_written_per_person.py`](../../../back-end/tests/real_mongo/test_roles_written_per_person.py), [`test_an_assignment_write_holds_the_market_it_read.py`](../../../back-end/tests/real_mongo/test_an_assignment_write_holds_the_market_it_read.py), [`test_the_form_holds_its_revision.py`](../../../back-end/tests/real_mongo/test_the_form_holds_its_revision.py) and [`test_the_plan_holds_its_revision.py`](../../../back-end/tests/real_mongo/test_the_plan_holds_its_revision.py).
 What each one holds is [the market write](../modules/market-write.md).
+[`test_the_location_name_swap_on_the_server.py`](../../../back-end/tests/real_mongo/test_the_location_name_swap_on_the_server.py) runs the swap of two locations' names as an operator does, a dry run then two runs: the swap lands whole, also on a market that never stored a plan revision, the second run restores the document but for the plan's revision, the history's earlier entries are counted and left, each run records one `plan` entry with no actor, and a refusal writes and records nothing ([how it is run](../../OPERATIONS.md#swapping-the-names-of-two-locations)).
 An organizer's sign-in secrets are run the same way in [`test_the_sign_in_secret_races.py`](../../../back-end/tests/real_mongo/test_the_sign_in_secret_races.py): five code requests at once mail one code, five right codes at once sign in once, five uses of one reset link at once reset once, and five uses of one verification link at once verify once ([the sign-in secrets](../data/users-and-email.md#the-sign-in-secrets)).
 [`real_mongo/test_a_deletion_leaves_a_tombstone.py`](../../../back-end/tests/real_mongo/test_a_deletion_leaves_a_tombstone.py) cuts a market's and an organization's deletion at each step, a step's function or a collection method raising once, and sends the same request again, and lands a deletion, or its tombstone, between an applicant's save, an import or a market's creation and its read, by `interleave` ([market deletion](../modules/market-deletion.md#the-tombstone)).
 
@@ -176,6 +178,7 @@ Each test's name says what it proves.
 | One owed record per vendor's day                 | 20 Admin's amounts and 20 frees through the owner at once on a day with no record, with and without the free's deduction, leave one record: every write lands or raises `OwedDayChanged` (the route's 409), the landed writes are one sequence, each reading the record the one before wrote, and once an Admin's amount landed every state after it keeps one, as set, as the freed line's, or as what a free's $0 replaced              |
 | A free that read no record lands on the one made | staged, with and without the deduction: 20 frees each read the day with no record, 20 Admin's amounts then make it, and only then do the frees write; every free's insert is refused by the index exactly once, and its read again lands it on that record or finds the day kept changing, so without the deduction the Admins' amount stands on the freed line, and with it the $0 standing keeps the Admins' amount as what it replaced |
 | One check-in per vendor's day                    | 20 `record_attendance` calls at once for one seated vendor's day, on a market in `market_days` whose day has begun (`AttendanceApi.today` moved to it), all answer 200 "Checked in", and leave one record and one "checked in" history entry                                                                                                                                                                                              |
+| One check-out per vendor's day                   | 20 `record_check_out` calls at once over a record stored with no check-out fields all answer 200 with one time, the one stored, and leave one "checked out" entry, by the organizer whose write landed; the undo of the check-in is then refused, 409, and of 20 `undo_check_out` calls at once one lands and 19 find no check-out, after which the check-in is undone                                                                    |
 
 MongoDB retries an upsert the unique index refused when its filter is equalities on exactly the index's fields, so a check-in, whose filter is the vendor's day, did not see the refusal: on 8.0, none of 600 check-in upserts, 20 at once a day, reached the client, and the check-in's own retry on `DuplicateKeyError` stays for a server that does not retry.
 An owed day's first record is an insert, whose refusal does come back, and the owner's read again is what lands it; the staged test is what makes every free meet it.
