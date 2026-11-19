@@ -2,9 +2,11 @@
 
 The workflow cannot run off production, so these are its dry run: each test runs the script's
 command line as the workflow does and reads what the workflow reads, its exit code and its lines.
-The fake npx stands where the pinned Vercel CLI's `vercel curl` stands: it records its arguments,
-turns the staged `*.vercel.app` address into the stub's, and runs the real curl the way the CLI
-does, `curl --url <address> --header <bypass> <the flags after -->`.
+The fake npx stands where the pinned Vercel CLI's `vercel curl` stands, and splits its arguments
+as that CLI does (docs/RELEASING.md says how that was read): it takes its token from `--token`
+before the command or from VERCEL_TOKEN, keeps the options `curl` has of its own, and hands every
+other argument to the real curl, `curl --url <address> --header <bypass> <the rest>`. It records
+what it was given, where its token came from and what curl got.
 """
 import json
 import os
@@ -44,22 +46,58 @@ FRONTEND_HEADERS = {
 }
 APP = '<!doctype html><html><body><div id="app"></div></body></html>'
 
+# A value with no word beside it to say what it is, as a secret in the CLI's output may be.
+OPAQUE = "Ab1" * 11
+# A bypass secret given in the environment: short and broken, so only its exact match hides it.
+GIVEN_BYPASS = "given-by.env"
+
 FAKE_NPX = """#!{python}
 import json, os, re, subprocess, sys
-args = sys.argv[1:]
+argv = sys.argv[1:]
+rest = argv[2:]  # after npx's own `--yes <package>`
+token, token_from = os.environ.get("VERCEL_TOKEN", ""), "env"
+while rest and rest[0] != "curl":
+    if rest[0] in ("--token", "-t"):
+        token, token_from = rest[1], "flag"
+        rest = rest[1:]
+    rest = rest[1:]
+rest = rest[1:]
+# The pinned CLI's parseCurlLikeArgs: what `curl` keeps, and what it hands to curl.
+cut = rest.index("--") if "--" in rest else len(rest)
+before, curl_flags, target, i = rest[:cut], [], None, 0
+while i < len(before):
+    arg = before[i]
+    name = arg.split("=")[0]
+    takes_value = "=" not in arg and i + 1 < len(before) and not before[i + 1].startswith("-")
+    if name in ("--deployment", "--protection-bypass", "--scope", "--team") or (name == "--url" and target is None):
+        if name == "--url":
+            target = arg.split("=", 1)[1] if "=" in arg else before[i + 1]
+        i += 1 if takes_value else 0
+    elif name in ("--yes", "--help", "--trace", "--json"):
+        pass
+    elif target is None and not arg.startswith("-"):
+        target = arg
+    else:
+        curl_flags.append(arg)
+    i += 1
+curl_flags += rest[cut + 1:]
 with open(os.environ["FAKE_NPX_LOG"], "a") as log:
-    log.write(json.dumps(args) + "\\n")
+    log.write(json.dumps({{"argv": argv, "token": token, "token_from": token_from, "curl": curl_flags}}) + "\\n")
 # What a CLI may print: its banner, the token it was given, the command it runs.
-print("Vercel CLI 64.5.0", os.environ.get("VERCEL_TOKEN", ""), file=sys.stderr)
-print("Executing: curl --header 'x-vercel-protection-bypass: {bypass}'", " ".join(args), file=sys.stderr)
+print("Vercel CLI 64.5.0", token, file=sys.stderr)
+print("Executing: curl --header 'x-vercel-protection-bypass: {bypass}'", " ".join(argv), file=sys.stderr)
 if os.environ.get("FAKE_NPX_EXIT"):
-    print("Error: could not reach the deployment", " ".join(args))
+    print("\\x1b[31mError:\\x1b[39m could not reach the deployment with", token, "or {opaque}", file=sys.stderr)
+    print("::error::a line that starts as a workflow command", file=sys.stderr)
+    print("given", os.environ.get("VERCEL_AUTOMATION_BYPASS_SECRET", "nothing"), file=sys.stderr)
+    print("told on stdout:", token, "{bypass}", " ".join(argv))
     sys.exit(int(os.environ["FAKE_NPX_EXIT"]))
-url = args[args.index("curl") + 1]
-address = re.sub(r"^https://[a-z0-9-]+[.]vercel[.]app", os.environ["FAKE_STUB_ORIGIN"], url)
-flags = args[args.index("--") + 1:]
+if not token:
+    print("Error: No existing credentials found.", file=sys.stderr)
+    sys.exit(1)
+address = re.sub(r"^https://[a-z0-9-]+[.]vercel[.]app", os.environ["FAKE_STUB_ORIGIN"], target)
 sys.exit(subprocess.call(
-    ["curl", "--url", address, "--header", "x-vercel-protection-bypass: {bypass}", *flags],
+    ["curl", "--url", address, "--header", "x-vercel-protection-bypass: {bypass}", *curl_flags],
     stdin=subprocess.DEVNULL,
 ))
 """
@@ -129,7 +167,7 @@ def env(tmp_path, stub, npx_log):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     npx = bin_dir / "npx"
-    npx.write_text(FAKE_NPX.format(python=sys.executable, bypass=BYPASS))
+    npx.write_text(FAKE_NPX.format(python=sys.executable, bypass=BYPASS, opaque=OPAQUE))
     npx.chmod(0o755)
     return {
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
@@ -160,7 +198,7 @@ def errors(output):
 
 
 def never_leaks(output):
-    for secret in (TOKEN, GITHUB_TOKEN, BYPASS, "npx", "--token", "--max-time"):
+    for secret in (TOKEN, GITHUB_TOKEN, BYPASS, OPAQUE, "npx", "--token", "--max-time"):
         assert secret not in output
 
 
@@ -550,38 +588,44 @@ def test_a_staged_front_end_without_the_deep_link_is_refused(stub, env, answer, 
 # prove --own, through the CLI
 
 
-def test_own_reads_through_vercel_curl_with_every_curl_flag_after_the_separator(stub, env, npx_log):
+def test_own_reads_through_vercel_curl_with_the_token_for_the_cli_and_every_curl_flag_for_curl(stub, env, npx_log):
     stub.serve("/healthz", healthz())
 
     code, output = prove_own(env)
 
-    [args] = [json.loads(line) for line in npx_log.read_text().splitlines()]
-    separator = args.index("--")
-    before, after = args[:separator], args[separator + 1:]
+    [call] = [json.loads(line) for line in npx_log.read_text().splitlines()]
+    argv, curl = call["argv"], call["curl"]
     assert code == 0
-    assert before == ["--yes", "vercel@64.5.0", "curl", f"{STAGED}/healthz", "--yes", "--token", TOKEN]
-    assert after[:3] == ["-sS", "--max-time", "20"]
-    assert "-D" in after and "-o" in after
-    assert not {"-v", "-L", "--verbose", "--location"} & set(args)
+    assert (call["token"], call["token_from"]) == (TOKEN, "env")
+    assert TOKEN not in argv and "--token" not in argv
+    assert TOKEN not in curl and "--token" not in curl and "--yes" not in curl
+    assert argv[:argv.index("--")] == ["--yes", "vercel@64.5.0", "curl", f"{STAGED}/healthz", "--yes"]
+    assert curl[:3] == ["-sS", "--max-time", "20"]
+    assert [curl[3], curl[5]] == ["-D", "-o"] and len(curl) == 7
+    assert not {"-v", "-L", "--verbose", "--location"} & set(argv)
     [(_, _, headers)] = stub.requests
     assert headers["x-vercel-protection-bypass"] == BYPASS
     never_leaks(output)
 
 
-def test_a_failing_cli_is_no_answer_and_shows_nothing_it_was_given(stub, env, npx_log):
+def test_a_failing_cli_is_no_answer_and_says_why_without_what_it_was_given(stub, env, npx_log):
     env["FAKE_NPX_EXIT"] = "3"
+    env["VERCEL_AUTOMATION_BYPASS_SECRET"] = GIVEN_BYPASS
     stub.serve("/healthz", healthz())
 
     code, output = prove_own(env)
 
     assert code == 1
     assert "vercel curl exited 3" in output
+    assert "vercel curl: Error: could not reach the deployment with *** or ***" in output
+    assert "vercel curl: given ***" in output and GIVEN_BYPASS not in output
+    assert "vercel curl: Vercel CLI 64.5.0 ***" in output
     assert errors(output) == [
         f"::error::The staged back end at {STAGED} did not serve within 0.4s; last answer: no answer."
     ]
     assert len(npx_log.read_text().splitlines()) > 1
     never_leaks(output)
-    assert "could not reach" not in output
+    assert "Executing" not in output and "told on stdout" not in output and "\x1b" not in output
 
 
 @pytest.mark.parametrize("missing", ["VERCEL_TOKEN", "VERCEL_CLI"])

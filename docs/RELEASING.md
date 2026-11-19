@@ -15,7 +15,7 @@ describes:
   - .github/workflows/promote.yml
   - scripts/promote_check.py
   - scripts/github_runs.py
-verified: 2026-11-18
+verified: 2026-11-19
 sources:
   - T74
   - T254
@@ -172,6 +172,10 @@ Every check the Deploy workflow makes after it builds lives in [`scripts/deploy_
    The two values prove the [deployed-host refusal](#a-deployed-host-refuses-local-switches) armed: the build has its hatch off, and sees the platform variable that makes its boot refuse one.
    They read the address through the pinned Vercel CLI's `vercel curl`, which sends Vercel's Protection Bypass for Automation for the deployment's project, so the check works whether or not Deployment Protection is on.
    When a project has no automation bypass secret, `vercel curl` creates one on the first run, a setting the workflow adds by itself; it is in the project's Settings, Deployment Protection.
+   The CLI takes its token from `VERCEL_TOKEN` in its environment, never from the command line: `vercel curl` keeps only its own options (`--yes`, `--deployment`, `--protection-bypass`, `--scope`, `--team`, `--trace`, `--json`, `--help` and `--url`) and hands every other argument to curl, before the `--` as well as after it, so a `--token` after `curl` reaches curl, which refuses it.
+   That split was read from the source of `vercel@64.5.0`, the version `VERCEL_CLI` pins in the workflow (`parseCurlLikeArgs` in the package's `dist/commands-bulk.js`, and where its `dist/index.js` reads `--token` and `VERCEL_TOKEN`), and the fake CLI in [`scripts/tests/test_deploy_proof.py`](../scripts/tests/test_deploy_proof.py) splits its arguments the same way.
+   When the pin moves, read both again in the new version, bring the fake in line with it, and run `npx --yes vercel@<version> curl https://example.vercel.app/ --yes -- -sS --max-time 20` with `VERCEL_TOKEN` set to a made-up value of letters and digits: it must not end in curl's "option ... is unknown" and exit 2, which is how a command line that hands curl an option of the CLI's ends.
+   What the CLI does with a token Vercel refuses was read from that source and not run: on a full address it looks the project up, takes a failed lookup as no bypass secret, and runs curl without the header, so the run ends in curl's own exit code.
 4. **"Promote the back end"** gives the staged back end `api.conventioner.io` (`vercel promote`), and **"api.conventioner.io serves this commit"** waits, every 5 seconds for up to 300, until the domain reports the new commit, then checks its `localDev`, `deployed` and headers as on the staged address.
 5. **"Promote the front end"** and **"conventioner.io serves this commit"** do the same for the front end, whose checks are the deep link and the five headers.
 
@@ -191,7 +195,13 @@ The failed step's log says why, in one `::error::` line; the run's summary says 
 - **A staged back end never serves**: it refused to boot or its database did not answer; read the deployment's log in Vercel, as for [a back end that refuses to boot](OPERATIONS.md#when-the-back-end-refuses-to-boot). Nothing was promoted.
 - **A staged back end "runs with ALLOW_INSECURE_LOCAL_DEV on"**: the back-end project's environment sets the hatch, on a host the boot did not see as deployed, or it would have refused. Remove it in Vercel (the back-end project, Settings, Environment Variables), make sure no `back-end/.env` is deployed, and run Deploy again. Nothing was promoted.
 - **A staged back end "does not see that it is deployed"**: none of the platform variables reached its runtime, so its refusal of local switches is not armed. Tick "Enable access to System Environment Variables" in the back-end project's Environment Variables settings on Vercel, then run Deploy again. Nothing was promoted.
-- **A staged address answers 401 or 403**: the Protection Bypass for Automation did not apply; check it in the project's Settings, Deployment Protection, and run again. Nothing was promoted.
+- **"vercel curl exited" in the log of a staged build's check**: the Vercel CLI failed before the address answered.
+  The lines after it, each starting `vercel curl:`, are the last five the CLI wrote to its error output, with the token and any long unbroken value shown as `***`, and without any line that names the bypass, a header or the command the CLI runs.
+  curl's "option ... is unknown" means the command line hands curl an option of the CLI's ([how a deploy proves itself](#how-a-deploy-proves-itself), step 3).
+  Nothing was promoted.
+- **A staged address answers 401 or 403**: the Protection Bypass for Automation did not apply; check it in the project's Settings, Deployment Protection, and run again.
+  An expired `VERCEL_TOKEN` is another cause, by the pinned CLI's source and not by a run: a CLI that cannot look the project up sends no bypass header.
+  Nothing was promoted.
 - **"Promote the back end" or "Promote the front end" fails**: the promotion may or may not have taken. Look with `curl https://api.conventioner.io/healthz` and `curl https://conventioner.io/version.json`, then run Deploy again, or `vercel promote` the staged deployment the run printed by hand.
 - **A domain times out still on the old commit**: run `vercel inspect <domain>` to see which deployment it points at, `vercel promote` the staged deployment the run printed, and look again with `curl` (below).
   When it was `api.conventioner.io`'s wait, the front end was never promoted: once the back end serves the commit, run Deploy again, or `vercel promote` the staged front end and look at `conventioner.io` the same way.
