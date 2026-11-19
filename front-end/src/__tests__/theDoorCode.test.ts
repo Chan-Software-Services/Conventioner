@@ -15,21 +15,28 @@ import { answersRefusing, VIEWER_ANSWERS } from './support/servedAnswers';
 
 const readDoorCode = vi.fn();
 const makeDoorCode = vi.fn();
+const setSelfCheckIn = vi.fn();
 
 vi.mock('@/utils/doorCode', async (original) => ({
   ...(await original<typeof import('@/utils/doorCode')>()),
   readDoorCode: (id: string) => readDoorCode(id),
   makeDoorCode: (id: string) => makeDoorCode(id),
+  setSelfCheckIn: (id: string, enabled: boolean) => setSelfCheckIn(id, enabled),
 }));
 vi.mock('@/utils/signedIn', () => ({ signedInEmail: () => 'door@example.com' }));
 
 const URL_OF = (code: string) => `https://conventioner.io/harbour-night-market/vendor?door=${code}`;
-const CODE = (code: string) => ({
+/** A code as the server answers it, at a market whose vendors check themselves in and out unless
+ *  `selfCheckIn` says not. */
+const CODE = (code: string, selfCheckIn = true) => ({
   code,
   madeAt: '2026-11-21T15:20:00+00:00',
   madeBy: 'door@example.com',
   url: URL_OF(code),
+  selfCheckIn,
 });
+const NO_CODE = (selfCheckIn = true) => ({ code: null, selfCheckIn });
+const OFF = "Vendors' own check-in and check-out are off. Turn them on to show the door code.";
 
 /** The drawn path, back to pixels: each module a square of `scale`, dark where a run covers it. */
 function decoded(text: string, scale = 6): string | null {
@@ -105,6 +112,7 @@ describe('the full-screen door code', () => {
     document.body.innerHTML = '';
     readDoorCode.mockReset();
     makeDoorCode.mockReset();
+    setSelfCheckIn.mockReset();
   });
 
   afterEach(() => {
@@ -134,7 +142,7 @@ describe('the full-screen door code', () => {
     expect(byTestId('door-code-market')?.textContent).toBe('Harbour Night Market');
     expect(byTestId('door-code-value')?.textContent?.trim()).toBe('K7M 4QP');
     expect(byTestId('door-code')?.textContent).toContain(
-      "Scan with your phone's camera to check in",
+      "Scan with your phone's camera to check in or out",
     );
     const qr = byTestId('door-code-qr')!;
     expect(qr.tagName.toLowerCase()).toBe('svg');
@@ -168,7 +176,7 @@ describe('the full-screen door code', () => {
   });
 
   it('offers "Make a door code" with no code yet, and then shows the one made', async () => {
-    readDoorCode.mockResolvedValue({ code: null });
+    readDoorCode.mockResolvedValue(NO_CODE());
     makeDoorCode.mockResolvedValue(CODE('K7M4QP'));
     await opened();
 
@@ -184,7 +192,7 @@ describe('the full-screen door code', () => {
   });
 
   it('says so when no code could be made', async () => {
-    readDoorCode.mockResolvedValue({ code: null });
+    readDoorCode.mockResolvedValue(NO_CODE());
     makeDoorCode.mockRejectedValue(new Error('down'));
     await opened();
 
@@ -337,5 +345,153 @@ describe('the full-screen door code', () => {
     await flushPromises();
 
     expect(byTestId('door-code-value')?.textContent?.trim()).toBe('K7M 4QP');
+  });
+
+  describe('the self check-in switch', () => {
+    const theSwitch = () => byTestId('door-code-self-switch') as HTMLInputElement;
+    const turn = async (on: boolean) => {
+      theSwitch().checked = on;
+      theSwitch().dispatchEvent(new Event('change', { bubbles: true }));
+      await flushPromises();
+    };
+
+    it('is a named switch, on where vendors check themselves in and out', async () => {
+      readDoorCode.mockResolvedValue(CODE('K7M4QP'));
+      await opened();
+
+      expect(theSwitch().getAttribute('role')).toBe('switch');
+      expect(theSwitch().checked).toBe(true);
+      expect(theSwitch().labels?.[0]?.textContent?.trim()).toBe(
+        'Vendors check themselves in and out',
+      );
+      const help = document.getElementById(theSwitch().getAttribute('aria-describedby')!);
+      expect(help?.textContent?.trim()).toBe(
+        'While this is off, only organizers check vendors in and out, on Attendance.',
+      );
+      expect(byTestId('door-code-off')).toBeNull();
+    });
+
+    it.each([
+      ['with a code stored', CODE('K7M4QP', false)],
+      ['with none made', NO_CODE(false)],
+    ])('off %s, says why in the place of the poster and offers no code', async (_, served) => {
+      readDoorCode.mockResolvedValue(served);
+      await opened();
+
+      expect(theSwitch().checked).toBe(false);
+      expect(byTestId('door-code-off')?.textContent?.trim()).toBe(OFF);
+      expect(byTestId('door-code-market')?.textContent).toBe('Harbour Night Market');
+      for (const gone of ['qr', 'value', 'instruction', 'made', 'print', 'new', 'make']) {
+        expect(byTestId(`door-code-${gone}`), gone).toBeNull();
+      }
+    });
+
+    it('shows no switch before the door code is read', async () => {
+      readDoorCode.mockRejectedValue(new Error('down'));
+      await opened();
+
+      expect(byTestId('door-code-self-switch')).toBeNull();
+      expect(byTestId('door-code-off')).toBeNull();
+    });
+
+    it('turned on, writes it and shows the code the server answers', async () => {
+      readDoorCode.mockResolvedValue(CODE('K7M4QP', false));
+      setSelfCheckIn.mockResolvedValue(CODE('K7M4QP'));
+      await opened();
+
+      await turn(true);
+
+      expect(setSelfCheckIn).toHaveBeenCalledWith('m1', true);
+      expect(theSwitch().checked).toBe(true);
+      expect(byTestId('door-code-off')).toBeNull();
+      expect(byTestId('door-code-value')?.textContent?.trim()).toBe('K7M 4QP');
+      expect(byTestId('door-code-print')).not.toBeNull();
+    });
+
+    it('turned on with no code yet, offers to make one', async () => {
+      readDoorCode.mockResolvedValue(NO_CODE(false));
+      setSelfCheckIn.mockResolvedValue(NO_CODE());
+      await opened();
+
+      await turn(true);
+
+      expect(byTestId('door-code-off')).toBeNull();
+      expect(byTestId('door-code-make')).not.toBeNull();
+    });
+
+    it('turned off, writes it and takes the code off the screen', async () => {
+      readDoorCode.mockResolvedValue(CODE('K7M4QP'));
+      setSelfCheckIn.mockResolvedValue(CODE('K7M4QP', false));
+      await opened();
+
+      await turn(false);
+
+      expect(setSelfCheckIn).toHaveBeenCalledWith('m1', false);
+      expect(theSwitch().checked).toBe(false);
+      expect(byTestId('door-code-off')?.textContent?.trim()).toBe(OFF);
+      expect(byTestId('door-code-qr')).toBeNull();
+    });
+
+    it('is held while its write is out, keeps focus, and shows what the server answered', async () => {
+      readDoorCode.mockResolvedValue(CODE('K7M4QP'));
+      const written = Promise.withResolvers<unknown>();
+      setSelfCheckIn.mockReturnValue(written.promise);
+      await opened();
+      theSwitch().focus();
+
+      await turn(false);
+
+      expect(theSwitch().disabled).toBe(true);
+      // Still the stored state: the code stays up until the server says it is off.
+      expect(byTestId('door-code-value')?.textContent?.trim()).toBe('K7M 4QP');
+
+      // The server answers that it is still on, whatever was asked.
+      written.resolve(CODE('K7M4QP'));
+      await flushPromises();
+      expect(theSwitch().disabled).toBe(false);
+      expect(theSwitch().checked).toBe(true);
+      expect(setSelfCheckIn).toHaveBeenCalledTimes(1);
+      expect(document.activeElement).toBe(theSwitch());
+    });
+
+    it("says the server's sentence when the write is refused, and stays as it was", async () => {
+      readDoorCode.mockResolvedValue(CODE('K7M4QP', false));
+      setSelfCheckIn.mockRejectedValue({
+        isAxiosError: true,
+        response: {
+          status: 409,
+          data: { error: "Vendors' own check-in is set once the market is published." },
+        },
+      });
+      await opened();
+
+      await turn(true);
+
+      const error = document.querySelector('.door-code-error');
+      expect(error?.getAttribute('role')).toBe('alert');
+      expect(error?.textContent?.trim()).toBe(
+        "Vendors' own check-in is set once the market is published.",
+      );
+      expect(theSwitch().checked).toBe(false);
+      expect(theSwitch().disabled).toBe(false);
+      expect(byTestId('door-code-off')).not.toBeNull();
+    });
+
+    it('says "That was not saved." when the write fails with no sentence, and clears it on the next', async () => {
+      readDoorCode.mockResolvedValue(CODE('K7M4QP'));
+      setSelfCheckIn.mockRejectedValueOnce(new Error('down'));
+      setSelfCheckIn.mockResolvedValue(CODE('K7M4QP', false));
+      await opened();
+
+      await turn(false);
+      expect(document.querySelector('.door-code-error')?.textContent?.trim()).toBe(
+        'That was not saved.',
+      );
+      expect(theSwitch().checked).toBe(true);
+
+      await turn(false);
+      expect(document.querySelector('.door-code-error')).toBeNull();
+      expect(theSwitch().checked).toBe(false);
+    });
   });
 });
