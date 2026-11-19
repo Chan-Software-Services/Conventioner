@@ -90,8 +90,11 @@ const SENTENCES = [
   'change-verdicts/verdict',
   'change-verdicts/verdicts',
   'check-in/check_in_undone',
+  'check-in/check_out_undone',
   'check-in/checked_in',
+  'check-in/checked_out',
   'check-in/door_code_made',
+  'check-in/self_check_in_set',
   'choose-reviewers/reviewers',
   'connect-discord/discord',
   'connect-discord/discord_checked',
@@ -228,6 +231,99 @@ describe('the history readers', () => {
     expect(Object.keys(NAMED_VALUES).sort()).toEqual(['role', 'source', 'status']);
     expect(Object.keys(WORDED_VALUES).sort()).toEqual(['aisles', 'table_types']);
     expect(fieldValue('source', 'organization')).toBe('The organization’s default');
+  });
+});
+
+/** A vendor checked out, that undone, and the market's self check-in switch (T496). */
+describe('a check-out at the door', () => {
+  const NAMES = { 'ana@ember.test': 'Ana Rivera' };
+
+  function anEntry(kind: string, actor: string | null, detail: unknown, vendors = true) {
+    return {
+      id: 'e1',
+      actor,
+      at: '2026-11-19T17:00:00+00:00',
+      action: 'check-in',
+      kind,
+      vendors: vendors ? ['ana@ember.test'] : [],
+      subject: vendors ? { date: '2026-11-19' } : {},
+      detail,
+    } as MarketHistoryEntry;
+  }
+
+  function said(entry: MarketHistoryEntry, dayLeads = false): string {
+    return entryParts(entry, { names: NAMES, dayLeads })
+      .map((part) => (part.kind === 'text' ? part.text : `[${part.name || part.email}]`))
+      .join('');
+  }
+
+  const out = (via?: string) => ({
+    before: { checked_out: false },
+    after: { checked_out: true },
+    ...(via ? { via } : {}),
+  });
+  const back = (via?: string) => ({
+    before: { checked_out: true },
+    after: { checked_out: false },
+    ...(via ? { via } : {}),
+  });
+
+  it('says which organizer checked the vendor out, and on which day', () => {
+    expect(said(anEntry('checked_out', 'dana@ember.test', out()))).toBe(
+      'dana@ember.test checked [Ana Rivera] out on Nov 19, 2026',
+    );
+  });
+
+  it('says a vendor checked themselves out with the door code', () => {
+    expect(said(anEntry('checked_out', null, out('door_code')))).toBe(
+      '[Ana Rivera] checked out with the door code on Nov 19, 2026',
+    );
+  });
+
+  it('says which organizer undid a check-out', () => {
+    expect(said(anEntry('check_out_undone', 'dana@ember.test', back()))).toBe(
+      'dana@ember.test undid the check-out of [Ana Rivera] on Nov 19, 2026',
+    );
+  });
+
+  it('says a vendor undid their own check-out on their vendor page', () => {
+    expect(said(anEntry('check_out_undone', null, back('vendor_page')))).toBe(
+      '[Ana Rivera] undid their check-out on their vendor page on Nov 19, 2026',
+    );
+  });
+
+  it('leaves the day to the list where the day leads it', () => {
+    expect(said(anEntry('checked_out', 'dana@ember.test', out()), true)).toBe(
+      'dana@ember.test checked [Ana Rivera] out',
+    );
+    expect(said(anEntry('check_out_undone', null, back('vendor_page')), true)).toBe(
+      '[Ana Rivera] undid their check-out on their vendor page',
+    );
+  });
+
+  it('names the vendor as a link to their drawer, as a check-in does', () => {
+    const parts = entryParts(anEntry('checked_out', 'dana@ember.test', out()), { names: NAMES });
+    expect(parts.filter((part) => part.kind === 'vendor')).toEqual([
+      { kind: 'vendor', name: 'Ana Rivera', email: 'ana@ember.test' },
+    ]);
+  });
+
+  it('says who let vendors check themselves in and out, and who stopped them', () => {
+    const set = (enabled: boolean, actor: string | null = 'dana@ember.test') =>
+      said(
+        anEntry(
+          'self_check_in_set',
+          actor,
+          { before: { enabled: !enabled }, after: { enabled } },
+          false,
+        ),
+      );
+
+    expect(set(true)).toBe('dana@ember.test let vendors check themselves in and out');
+    expect(set(false)).toBe('dana@ember.test stopped vendors checking themselves in and out');
+    // An entry with no actor, which no write makes, still reads as a sentence.
+    expect(set(true, null)).toBe('Someone let vendors check themselves in and out');
+    expect(set(false, null)).toBe('Someone stopped vendors checking themselves in and out');
   });
 });
 

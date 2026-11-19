@@ -576,23 +576,34 @@ def _remove_payment(client, world):
 DOOR_CODE = "K7M4QP"
 
 
-def _door(organizer: bool, undo: bool):
+def _door(organizer: bool, undo: bool, out: bool = False):
+    """A check-in or, with ``out``, a check-out, or the undo of it, at the organizer's door or
+    the vendor's own."""
     def send(client, world):
+        # The market lets its vendors check themselves in and out (T496): off unless set.
         world.market(MarketPhase.MARKET_DAYS, assignmentObject=_seated(VENDOR),
-                     doorCode={"code": DOOR_CODE, "madeAt": "x", "madeBy": OWNER})
-        if undo:
-            world.attendance.insert_one(
-                {"market_id": MARKET, "vendor_email": VENDOR, "date": DATE})
+                     doorCode={"code": DOOR_CODE, "madeAt": "x", "madeBy": OWNER},
+                     vendorSelfCheckIn=True)
+        if undo or out:
+            world.attendance.insert_one({
+                "market_id": MARKET, "vendor_email": VENDOR, "date": DATE,
+                **({"checked_out_at": "x"} if undo and out else {})})
         send = client.delete if undo else client.post
         if organizer:
-            return send(f"/markets/{MARKET}/attendance", json={"vendorEmail": VENDOR, "date": DATE})
+            return send(f"/markets/{MARKET}/attendance{'/check-out' if out else ''}",
+                        json={"vendorEmail": VENDOR, "date": DATE})
         # The vendor's own, on their vendor page: signed in, with the door code (ADR 0022).
         world.patch(AttendanceApi, "today", lambda: date.fromisoformat(DATE))
-        return send("/public/markets/test-market/vendor/check-in",
+        return send(f"/public/markets/test-market/vendor/{'check-out' if out else 'check-in'}",
                     json={"date": DATE, "doorCode": DOOR_CODE},
                     headers={"Authorization":
                              f"Bearer {generate_application_token(MARKET, VENDOR)}"})
     return send
+
+
+def _self_check_in(client, world):
+    world.market(MarketPhase.MARKET_DAYS)
+    return client.put(f"/markets/{MARKET}/self-check-in", json={"enabled": True})
 
 
 def _door_code(client, world):
@@ -733,6 +744,7 @@ def _copy_organization_default(client, world):
 M = "/markets/<market_id>"
 APPLICANT = "/public/markets/<market_slug>/applicant/application"
 VENDOR_DOOR = "/public/markets/<market_slug>/vendor/check-in"
+VENDOR_DOOR_OUT = "/public/markets/<market_slug>/vendor/check-out"
 SAM_BY_ID = {"user_id": "user-sam", "email": SAM}
 
 WRITES = [
@@ -843,8 +855,22 @@ WRITES = [
     Write("a vendor's own check-in undone", "DELETE", VENDOR_DOOR, Actions.CHECK_IN,
           History.CHECK_IN_UNDONE, _door(organizer=False, undo=True), actor=None,
           vendors=(VENDOR,), subject={"date": DATE}, detail_keys=("via",)),
+    Write("a check-out at the door", "POST", f"{M}/attendance/check-out", Actions.CHECK_IN,
+          History.CHECKED_OUT, _door(organizer=True, undo=False, out=True), vendors=(VENDOR,),
+          subject={"date": DATE}),
+    Write("a check-out undone at the door", "DELETE", f"{M}/attendance/check-out",
+          Actions.CHECK_IN, History.CHECK_OUT_UNDONE, _door(organizer=True, undo=True, out=True),
+          vendors=(VENDOR,), subject={"date": DATE}),
+    Write("a vendor's own check-out", "POST", VENDOR_DOOR_OUT, Actions.CHECK_IN,
+          History.CHECKED_OUT, _door(organizer=False, undo=False, out=True), actor=None,
+          vendors=(VENDOR,), subject={"date": DATE}, detail_keys=("via",)),
+    Write("a vendor's own check-out undone", "DELETE", VENDOR_DOOR_OUT, Actions.CHECK_IN,
+          History.CHECK_OUT_UNDONE, _door(organizer=False, undo=True, out=True), actor=None,
+          vendors=(VENDOR,), subject={"date": DATE}, detail_keys=("via",)),
     Write("a door code made", "POST", f"{M}/door-code", Actions.CHECK_IN, History.DOOR_CODE_MADE,
           _door_code, before_after=False, detail_keys=("replaced",)),
+    Write("the self check-in switch set", "PUT", f"{M}/self-check-in", Actions.CHECK_IN,
+          History.SELF_CHECK_IN_SET, _self_check_in),
     Write("Discord connected", "POST", f"{M}/discord/connection", Actions.CONNECT_DISCORD,
           History.DISCORD_CONNECTED, _connect_discord),
     Write("a Discord choice", "PUT", f"{M}/discord", Actions.CONNECT_DISCORD,
@@ -1111,7 +1137,8 @@ STARTS_RELEASE = Unasked(
     ("csv_start.confirm",), Actions.CHANGE_SETUP)
 VENDORS_OWN_CHECK_IN = Unasked(
     "a vendor's own check-in", "api.attendance._record_door",
-    ("api.vendor_check_in.check_in", "api.vendor_check_in.undo_check_in"), Actions.CHECK_IN,
+    ("api.vendor_check_in.check_in", "api.vendor_check_in.undo_check_in",
+     "api.vendor_check_in.check_out", "api.vendor_check_in.undo_check_out"), Actions.CHECK_IN,
     "the entry is the door's, with no actor")
 ARRIVALS_DEAL = Unasked(
     "the deal of an arriving application", "review_team._deal_arriving", (), None,
@@ -1212,6 +1239,10 @@ REACHING_THE_UNASKED = [
                  id="a vendor's own check-in"),
     pytest.param(_door(organizer=False, undo=True), VENDORS_OWN_CHECK_IN,
                  id="a vendor's own check-in undone"),
+    pytest.param(_door(organizer=False, undo=False, out=True), VENDORS_OWN_CHECK_IN,
+                 id="a vendor's own check-out"),
+    pytest.param(_door(organizer=False, undo=True, out=True), VENDORS_OWN_CHECK_IN,
+                 id="a vendor's own check-out undone"),
     pytest.param(_the_next_card_after_an_arrival_waited, ARRIVALS_DEAL,
                  id="the next card after an arrival waited"),
 ]

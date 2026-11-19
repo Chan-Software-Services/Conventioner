@@ -55,6 +55,7 @@ EVERY_FIELD = {
     "no_automatic_rejections": True,
     "results_published": True,
     "applications_stopped": True,
+    "vendor_self_check_in": True,
     "import_mapping": {"headers": ["Name"], "targets": {"business_name": ["Name"]}},
     "example_columns": [{"key": "booth_theme", "label": "Booth theme", "type": "text"}],
     "intake_mode": "form",

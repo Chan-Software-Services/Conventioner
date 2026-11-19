@@ -124,7 +124,20 @@ class TestThePagesPublicRead:
             "ended": False,
             "rememberUntil": body["rememberUntil"],
             "mapOpen": False,
+            "selfCheckIn": False,
         }
+
+    @pytest.mark.parametrize("stored, served", [
+        ({}, False), ({"vendorSelfCheckIn": False}, False), ({"vendorSelfCheckIn": True}, True),
+    ], ids=["never set", "off", "on"])
+    def test_it_says_whether_vendors_check_themselves_in_and_out(
+        self, client, markets, stored, served,
+    ):
+        markets(_market("form", phase=MarketPhase.MARKET_DAYS, **stored))
+
+        body = client.get(f"/public/markets/{SLUG}/vendor-page").get_json()
+
+        assert body["selfCheckIn"] is served
 
     def test_a_stopped_form_takes_no_applications(self, client, markets):
         markets(_market("form", applicationsStopped=True))
@@ -287,6 +300,34 @@ class TestTheVendorsOwnRead:
         seats = body["application"]["seats"]
         assert [(s["date"], s["checkedInAt"]) for s in seats] == [
             ("2099-08-01", "2099-08-01T09:00:00+00:00"),
+            ("2099-08-02", None),
+        ]
+        # A record with no check-out, as every one stored before check-outs, reads null (T496).
+        assert [s["checkedOutAt"] for s in seats] == [None, None]
+
+    def test_each_seat_carries_when_they_checked_out(self, markets, applications, market_records):
+        self._apply(applications)
+        second = {**SEAT, "date": "2099-08-02", "tableCode": "B2"}
+        markets(_market(
+            "form", phase=MarketPhase.MARKET_DAYS, resultsPublished=True,
+            assignmentObject={"vendorAssignments": [SEAT, second]},
+        ))
+        market_records.attendance.insert_one({
+            "market_id": "market-123", "vendor_email": VENDOR, "date": "2099-08-01",
+            "checked_in_at": "2099-08-01T09:00:00+00:00",
+            "checked_out_at": "2099-08-01T17:00:00+00:00", "checked_out_by": None,
+            "checked_out_via": "door_code",
+        })
+        market_records.attendance.insert_one({
+            "market_id": "market-123", "vendor_email": "someone-else@example.com",
+            "date": "2099-08-02", "checked_in_at": "2099-08-02T09:00:00+00:00",
+            "checked_out_at": "2099-08-02T17:00:00+00:00",
+        })
+
+        body, _ = ApplicantsApi.get_applicant_application(SLUG, TOKEN)
+
+        assert [(s["date"], s["checkedOutAt"]) for s in body["application"]["seats"]] == [
+            ("2099-08-01", "2099-08-01T17:00:00+00:00"),
             ("2099-08-02", None),
         ]
 
