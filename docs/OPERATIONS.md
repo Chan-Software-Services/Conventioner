@@ -263,7 +263,7 @@ git diff --name-only <production's commit> -- back-end ':!back-end/tests'   # li
 The last line is the check: the working tree differs from production's commit, outside the tests, by operator scripts alone (this one, and `swap_location_names.py` when production's commit does not hold it and the checkout does).
 The script imports nothing of the swap's, so it runs on a release from before the swap as well.
 A checkout of `dev`'s head serves as well exactly when `git diff <production's commit> HEAD -- back-end ':!back-end/tests'` lists nothing but those scripts, which holds from the deploy of a commit until the next merge into `dev` that changes the back end.
-The fingerprint and the write are computed by `assignment/made_from.py`, `market_documents.py`, `market_write.py` and `datatypes.py`: a checkout where one of them differs from production's may compute another fingerprint, which the dry run shows as the allocation's record "left as it is" on a market whose allocation the app shows as current.
+The fingerprint and the write are computed by `assignment/made_from.py`, `market_documents.py`, `market_write.py` and `datatypes.py`, with `tombstone.py` and `assignment/utils.py`, which they import: a checkout where one of them differs from production's may compute another fingerprint, which the dry run shows as the allocation's record "left as it is" on a market whose allocation the app shows as current.
 
 **Run it while no organizer is working on the market**, for the swap's reason: a seat assigned, freed or swapped by hand from a read just before the rename is not refused, and puts every seat back under the old name over the renamed plan.
 Take a `mongodump` first ([backups](#backups-and-restoring)), then:
