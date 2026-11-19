@@ -79,9 +79,9 @@ sources:
   - T282
   - T315
   - T422
+  - T465
   - T411
   - T466
-  - T465
 ---
 
 # A location's layout
@@ -244,7 +244,7 @@ It draws the working copy through [the drawing](#the-drawing) in `edit` mode and
   A knob dragged turns the selection about its middle in 15° steps, by the whole degree with Shift, and Shift pressed or let go under the drag turns it again with no move of the pointer (D11); Alt frees it no more (T422, the QC walk of 2026-11-16).
   While the drag lasts the frame is the one it was when the drag began, turned whole by the angle so far (`turning`), so the knob held stays under the pointer; let go, it stands square again round what the turn left.
   R, and "Turn 90°" on the selection's card, turn it a quarter.
-- **Add table**: a click places a table of the strip's section and type at the point, and the tool stays on.
+- **Add table**: a click places a table of the tool card's section and type at the point, and the tool stays on.
   With the focus on the map, Enter or Space places one at the middle of the view, or, where a table or a no-table zone stands there, at the nearest clear place a duplicate would find (`clearPlace`), and the focus goes to it.
 - **Row of tables** places a row along a path the organizer draws; its model is [`layoutRow.ts`](../../../front-end/src/components/layout/layoutRow.ts) and what it draws over the map is [`LayoutRowPreview.vue`](../../../front-end/src/components/layout/LayoutRowPreview.vue).
   A press and a drag of 4 px or more, with no path begun, draw the row's line by hand: a stroke, shown while the button is down as the row along it with its count at the pointer.
@@ -272,15 +272,15 @@ It draws the working copy through [the drawing](#the-drawing) in `edit` mode and
   A closed shape is still a pending path: its points can be dragged, a press on the floor adds no point, Backspace or Ctrl+Z opens it again ("Opened again. 9 tables."), and it is placed by Enter, Ctrl+Enter, or a click on its first or its last point, so a double-click on the first point closes and places.
   A closed shape's tables are always spread evenly round it; an open path's are where "Spread evenly to the ends" is ticked.
   Rows over 1 places that many rows in the one gesture, each offset toward the tables' side (the right of the way drawn, for rows centred on the line), the Aisle between them; they are numbered the first row whole, then the next, each the way it was drawn.
-  Placed, the tables are ordinary tables of the strip's section and type, numbered on in their section in the order drawn, selected, and one step of undo; where no table fits, nothing is added and the editor says so.
+  Placed, the tables are ordinary tables of the tool card's section and type, numbered on in their section in the order drawn, selected, and one step of undo; where no table fits, nothing is added and the editor says so.
 - **Fill an area** packs an area the organizer draws with rows of tables; its model is [`layoutFill.ts`](../../../front-end/src/components/layout/layoutFill.ts), what it draws over the map is [`LayoutFillPreview.vue`](../../../front-end/src/components/layout/LayoutFillPreview.vue), and what it asks is [`LayoutFillDialog.vue`](../../../front-end/src/components/layout/LayoutFillDialog.vue).
   A press and a drag of 4 px or more, with no corner laid, draw a box, shaded as it is drawn, and the release opens the dialog; a drag along one line encloses no floor and says "No table fits in that area.".
   A click instead lays a corner of a shape with straight sides, each further click another, drawn through the corners and the pointer; a click on the first corner of three or more, ringed while the pointer rests on it, closes the shape, and so do a click on the last corner (so a double-click) and, for a pointer, Enter.
   A shape whose sides cross or touch is drawn in `--mm-text-red-on-tint`, wears no ring and does not close (`polygonIsSimple` in `layoutGeometry.ts`): the status line says "This shape's sides cross. Move a corner, or take one back, so that they do not.", a close asked of fewer than three corners "An area takes three corners or more.", and of more than 50, the server's bound, "An area takes 50 corners at most. Take some back.".
   A corner within 12 px of a press is pressed, and a drag moves it; Backspace, or Ctrl+Z while a shape is pending, takes the last corner back and leaves the layout's own undo alone; Escape, another tool and another location drop the shape, which is never in the layout, its saves or its undo.
   A corner is laid on the floorplan, never past its edge, and does not snap to the tables.
-  The dialog is an [`AppDialog`](../conventions/dialogs.md), narrow: the area in words ("A box 12.0 m by 8.0 m", "A shape of 6 corners", "What is in view"), Section and Table type, which are the strip's own, "How many" ("This many" with a count, 30 at first, or "As many as fit"), Direction ("Rows across" or "Rows down"), Aisle (cm, 120 at first) and the tick "Fill what is in view", which fills the part of the hall the map shows in place of the area drawn; the choices but the section and the type are kept for the next area while the app is open.
-  The strip's "Fill what is in view" opens the dialog with nothing drawn, that tick on and held, which is the tool's way in for someone who draws nothing.
+  The dialog is an [`AppDialog`](../conventions/dialogs.md), narrow: the area in words ("A box 12.0 m by 8.0 m", "A shape of 6 corners", "What is in view"), Section and Table type, which are the tool card's own, "How many" ("This many" with a count, 30 at first, or "As many as fit"), Direction ("Rows across" or "Rows down"), Aisle (cm, 120 at first) and the tick "Fill what is in view", which fills the part of the hall the map shows in place of the area drawn; the choices but the section and the type are kept for the next area while the app is open.
+  The tool card's "Fill what is in view" opens the dialog with nothing drawn, that tick on and held, which is the tool's way in for someone who draws nothing.
   A count that is no whole number from 1 to 500, the most one fill places, is said under its field and disables Fill.
   So is an aisle that is no number of centimetres from 0 to 1,000, the placement's own bound ("Type the aisle's width in centimetres, 0 to 1,000."), never read as no aisle.
   Fill asks the placement (`POST /floorplans/place-tables`, [below](#interface)) for the area with the hall as the room, the no-table zones, every table that stands by its four corners as it is turned, one table type and its count, never more than 500 or than the layout's 1,000 less what it holds, and with "Group tables" on, the grouping (`grouping`, so many to a group and the spacer in millimetres).

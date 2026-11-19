@@ -32,7 +32,7 @@
  * snap to the corners of the tables near them and the lines of their edges, and freely with Alt.
  * A click on the first point of three or more, or C, closes the path into a shape, its tables
  * spread evenly round it; closed, it is placed by Enter or a click on that point again, and
- * opened again by Backspace. The strip's Rows and Aisle place several rows in the one gesture.
+ * opened again by Backspace. The tool card's Rows and Aisle place several rows in the one gesture.
  * Backspace is the path's key alone while the tool is on, never the selection's.
  *
  * Fill an area (`layoutFill.ts`): a drag draws a box; clicks instead lay the corners of a shape,

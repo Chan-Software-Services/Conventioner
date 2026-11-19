@@ -426,7 +426,7 @@ test("every table of a layout's map has a name, and the map its own", async ({
   expect(await namelessControls(page), 'the map').toEqual([]);
 });
 
-test("every control of Fill an area's strip and its dialog has a name", async ({
+test("every control of Fill an area's tool card and its dialog has a name", async ({
   authenticatedPage: page,
   request,
 }) => {
@@ -442,7 +442,7 @@ test("every control of Fill an area's strip and its dialog has a name", async ({
   await layout.toolFill.click();
   await expect(layout.toolFill).toHaveAttribute('aria-pressed', 'true');
   await expect(layout.fillView).toHaveAccessibleName('Fill what is in view');
-  expect(await namelessControls(page), 'the options strip').toEqual([]);
+  expect(await namelessControls(page), "Fill an area's tool card").toEqual([]);
 
   await layout.fillView.click();
   await expect(layout.fillDialog).toBeVisible();
