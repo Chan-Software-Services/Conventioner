@@ -31,10 +31,10 @@ const at = Date.now();
 /** Checked in, out, and the check-out undone in the walk: an address that fits beside a button. */
 const COMES = `out${at % 1000}@example.com`;
 /**
- * Checked in before the walk, and checked out in it: a long address, kept whole beside the row's
- * one button.
+ * Checked in before the walk, and checked out in it: an address whose half before the "@" is wider
+ * than the room Check out leaves on a phone's line, and narrower than the line.
  */
-const LONG = `door-leaves-${at}@example.com`;
+const LONG = `door-leaves-before-the-close-${at}@example.com`;
 /** Checked in, then freed: here with no table, and checked out in the walk. */
 const FREED = `free${at % 1000}@example.com`;
 /** Never comes. */
@@ -227,15 +227,21 @@ for (const size of PHONE_AND_DESK) {
       await expect(door.unseatedHeading).toHaveText('Checked in, with no table on this date (1)');
       await expectTheRowSound(page, door, FREED, 'a vendor with no table checked out');
 
-      // A long address is never broken inside its first half to make room for the button, and Check
-      // out ends the row's line.
+      // A long address is never broken inside its first half to make room for the button: on a
+      // phone it goes under the vendor, at the line's end.
       const long = door.row(LONG);
       await toTheMiddle(long);
       await expect(door.action(LONG, 'check-out')).toBeVisible();
       await expectWholeAddress(door.vendor(LONG), LONG);
       await expectInside(long, 'the long address, checked in');
+      const longWho = (await door.vendor(LONG).boundingBox())!;
       const longCheckOut = (await door.action(LONG, 'check-out').boundingBox())!;
       const rowBox = (await long.boundingBox())!;
+      if (size.phone) {
+        expect(longCheckOut.y, 'the button stands under the vendor').toBeGreaterThanOrEqual(
+          longWho.y + longWho.height,
+        );
+      }
       const padding = await long.evaluate((el) => {
         const style = getComputedStyle(el);
         return parseFloat(style.paddingRight) + parseFloat(style.borderRightWidth);
