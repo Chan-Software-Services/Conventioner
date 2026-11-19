@@ -2415,7 +2415,7 @@ def get_market_attendance(market_id: str) -> Response:
     """Who is expected on each market date and who has come (E29/F01/S01). Asks ``Actions.READ``.
 
     ``{dates, roster}``: every vendor the stored assignment places, per date, with when they
-    checked in and which organizer did it, if one did.
+    checked in and out and which organizer did each, if one did.
     """
     requesting_user = authenticated_email()
 
@@ -2479,8 +2479,9 @@ def organizer_undo_check_out(market_id: str) -> Response:
 @app.route('/markets/<market_id>/door-code', methods=['GET'])
 @login_required
 def get_door_code(market_id: str) -> Response:
-    """The market's door code, ``{code, madeAt, madeBy, url}`` or ``{code: null}`` (ADR 0022).
-    Asks ``Actions.CHECK_IN``: no market read serves it."""
+    """The market's door code, ``{code, madeAt, madeBy, url}`` or ``{code: null}`` (ADR 0022),
+    with ``selfCheckIn``, whether its vendors check themselves in and out (T496).
+    Asks ``Actions.CHECK_IN``: no market read serves the code."""
     return jsonify(DoorApi.door_code(market_id, authenticated_email())), 200
 
 

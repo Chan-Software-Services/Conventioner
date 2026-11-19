@@ -32,7 +32,7 @@ import api.attendance as AttendanceApi
 import api.market_actions as Actions
 import api.markets as MarketsApi
 import history as History
-from datatypes import MarketPhase, vendor_self_check_in_from_market_document
+from datatypes import MarketPhase
 from market_documents import market_doc_key
 from tombstone import live
 from market_write import write_market
