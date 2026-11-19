@@ -52,8 +52,21 @@ const props = withDefaults(
     /** True while the page waits for the open location's image: the map draws the floor alone,
      *  as `LayoutMap` does (T501). False unless given. */
     imagePending?: boolean;
+    /** Whether the floorplan is drawn under the tables, in grey and at half strength: the person's
+     *  choices where the page offers them (Attendance's, T501). Unless given, `LayoutMap`'s own:
+     *  shown, grey and faded. */
+    showImage?: boolean;
+    imageInGrey?: boolean;
+    imageFaded?: boolean;
   }>(),
-  { marked: () => [], note: '', locationSwitch: true },
+  {
+    marked: () => [],
+    note: '',
+    locationSwitch: true,
+    showImage: undefined,
+    imageInGrey: true,
+    imageFaded: true,
+  },
 );
 
 const locationId = defineModel<string>('locationId', { required: true });
@@ -147,6 +160,9 @@ const swatches = computed(() => {
           :tableTypes="tableTypes"
           :imageUrl="open.imageUrl"
           :imagePending="imagePending"
+          :showImage="showImage"
+          :imageInGrey="imageInGrey"
+          :imageFaded="imageFaded"
           :seats="seats"
           :marked="marks"
           mode="read"
