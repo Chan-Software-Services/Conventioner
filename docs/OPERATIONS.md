@@ -211,6 +211,28 @@ It also drops each amount an Admin set on a day the vendor no longer holds, whic
 Until it runs, that release reads each record from the fields the release before wrote, so nothing refuses to boot and nothing a vendor's Payment tab shows changes; until then a hidden amount is dropped, with its entry, only when its day is next seated, which is why it runs right after the deploy.
 A record that changed between the script's read and its write on three tries is listed as skipped, and running it again sets it; a record whose fields do not parse is left alone and listed by id.
 
+### Swapping the names of two locations
+
+A market past Draft whose sections were set up under each other's location name is put right by [`swap_location_names.py`](../back-end/migrations/swap_location_names.py), since the app refuses the rename once [the setup has settled](business/rules/the-setup-settles-on-leaving-draft.md).
+It trades the two locations' names in the plan, in each section's copy of its location and in each stored seat's copy, and keeps every id, so a layout stays on its location under the new name.
+It needs no deploy: it changes one market's document, which the running release reads as it is.
+Run it from `back-end/` in a checkout of the commit production runs, so the plan's fingerprint is computed as that release computes it.
+Take a `mongodump` first ([backups](#backups-and-restoring)), then:
+
+```bash
+MONGODB_URI='<URI>' .venv/bin/python migrations/swap_location_names.py <market-id> '<location>' '<location>' --dry-run   # writes nothing
+MONGODB_URI='<URI>' .venv/bin/python migrations/swap_location_names.py <market-id> '<location>' '<location>'
+MONGODB_URI='<URI>' .venv/bin/python migrations/swap_location_names.py <market-id> '<location>' '<location>' --dry-run   # shows the swap back
+```
+
+Each location is named by its id or its exact name.
+The dry run prints each of the two locations and each section in them with the name it sits under before and after; read it before the run.
+**A second run swaps back**, so run it once: the dry run after it shows the first one's "after" as its "before".
+The write is one update of the market's document, so it lands whole or not at all; a market that changed between the read and the write is refused with nothing written, and running it again reads it afresh.
+It refuses, exiting 1 with nothing written, a draft, a location it does not find, and a plan or a seat whose copy of a name disagrees with the location it belongs to; its docstring lists each refusal.
+The assignment's revision and the published results are left as they are, nothing is sent to anyone, and no history entry is recorded.
+It prints the market's id, the locations' and sections' names and counts, never a vendor's name or address.
+
 ### When the back end refuses to boot
 
 The back end checks the database as it starts and refuses to serve one it cannot trust: the migration markers ([`market_documents.py`](../back-end/market_documents.py)) and these unique indexes, in the order the boot builds them:

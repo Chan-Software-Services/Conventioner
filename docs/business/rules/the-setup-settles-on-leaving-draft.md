@@ -13,6 +13,7 @@ describes:
   - back-end/guards.py#LayoutTablesHaveSectionsGuard
   - back-end/api/floorplans_save.py#save_floorplan_to_market
   - back-end/layout.py#count_refusal
+  - back-end/migrations/swap_location_names.py
 verified: 2026-11-16
 sources:
   - wayfinding/the-order-of-the-work/03
@@ -84,4 +85,7 @@ A Google Form market settles when its first import is written, which is when it 
   `LayoutTablesHaveSectionsGuard` stands beside them (T257): a layout's table in no section is counted by no section, and its section could not be given once the setup settles, so the market stays a draft until each is put in a section or removed.
   Beside them, a price group with a condition the form no longer has is its own line (`PriceGroupsStandGuard`, [a price follows the table](a-price-follows-the-table.md#price-groups)): the prices and the form settle together, so draft is where it is fixed.
 - `back-end/tests/test_the_setup_settles_on_leaving_draft.py` and `test_the_setup_is_complete_before_it_settles.py` pin both halves; `test_a_floorplan_save_keeps_the_market_readable.py` (`TestALayoutAfterDraft`) and `a-layout-after-draft.spec.ts` pin the layout's.
+- Past draft, two locations' names set up the wrong way round are traded only in the database, by an operator, with [`back-end/migrations/swap_location_names.py`](../../../back-end/migrations/swap_location_names.py) ([how it is run](../../OPERATIONS.md#swapping-the-names-of-two-locations)).
+  It rewrites every stored copy of the names, all on the market's document: the plan's locations, each section's copy of its location, each stored seat's `location`, and the allocation's fingerprint of the plan (`madeFrom.plan`), carried over only where it matched the plan as read.
+  It keeps every id, so a layout stays on its location, and it leaves the assignment's `revision`, so published results do not read as changed; `back-end/tests/test_swap_location_names.py` pins it.
 - A spec seeds a complete plan, and the room it wants, before it leaves draft ([E2E patterns](../../implementation/testing/e2e-patterns.md#market-dates-and-plans)).
