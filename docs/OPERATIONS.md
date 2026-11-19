@@ -211,6 +211,38 @@ It also drops each amount an Admin set on a day the vendor no longer holds, whic
 Until it runs, that release reads each record from the fields the release before wrote, so nothing refuses to boot and nothing a vendor's Payment tab shows changes; until then a hidden amount is dropped, with its entry, only when its day is next seated, which is why it runs right after the deploy.
 A record that changed between the script's read and its write on three tries is listed as skipped, and running it again sets it; a record whose fields do not parse is left alone and listed by id.
 
+### Swapping the names of two locations
+
+A market past Draft whose sections were set up under each other's location name is put right by [`swap_location_names.py`](../back-end/migrations/swap_location_names.py), since the app refuses the rename once [the setup has settled](business/rules/the-setup-settles-on-leaving-draft.md).
+It trades the two locations' names in the plan, in each section's copy of its location and in each stored seat's copy, and keeps every id, so a layout stays on its location under the new name.
+It needs no deploy: it changes one market's document and adds one history entry, of a kind the running release already reads.
+Run it from `back-end/` in a checkout that holds the script and whose `back-end/` otherwise equals production's, so the plan's fingerprint is computed as that release computes it: `git diff <production's commit> HEAD -- back-end ':!back-end/tests'` lists the script alone.
+**Run it while no organizer is working on the market**: a seat assigned, freed or swapped by hand from a read just before the swap is not refused, since the assignment's revision is left unmoved, and puts every seat back under the old names over the swapped plan.
+Take a `mongodump` first ([backups](#backups-and-restoring)), then:
+
+```bash
+MONGODB_URI='<URI>' .venv/bin/python migrations/swap_location_names.py <market-id> '<location>' '<location>' --dry-run   # writes nothing
+MONGODB_URI='<URI>' .venv/bin/python migrations/swap_location_names.py <market-id> '<location>' '<location>'
+MONGODB_URI='<URI>' .venv/bin/python migrations/swap_location_names.py <market-id> '<location>' '<location>' --dry-run   # shows the swap back
+```
+
+Each location is named by its id or its exact name.
+The dry run prints each of the two locations and each section in them with the name it sits under before and after; read it before the run.
+**A second run swaps back**, so run it once: the dry run after it shows the first one's "after" as its "before".
+The swap is one update of the market's document, so it lands whole or not at all; a market whose plan, seats or phase changed between the read and the write is refused with nothing written, and running it again reads it afresh.
+It counts the plan's revision, as every write of the plan does, so a plan or layout save that read the market before the swap is refused as a market that changed.
+If the dry run after the run refuses with a stored seat naming a location "which the plan does not put there", a seat was written by hand across the swap: stop, and put the seats' names right in the database by hand, each to its section's location.
+If a dry run says the allocation's record of the plan is "left as it is, since it already differs from the plan as read" on a market whose allocation the app shows as current, stop: the checkout computes the fingerprint differently from the release.
+It refuses, exiting 1 with nothing written, a draft, a location it does not find, and a plan or a seat whose copy of a name disagrees with the location it belongs to; its docstring lists each refusal.
+The assignment's revision and the published results are left as they are, and nothing is sent to anyone.
+A run records itself in the market's history as one change on Market Setup with no actor, which Manage market reads as "Someone changed Market Setup: locations and sections" when either location holds a section; a dry run records none, and a second run records a second entry.
+That entry holds the plan's whole list of locations, and its whole list of sections when either location holds one, before and after, as a plan save's entry does, so every location's name is in it, not the two alone.
+That entry is a second write, after the swap: if it fails, the names stand swapped with no entry, the script's own output holds a warning naming the market by id, and the next dry run's line "run(s) of this script recorded so far" counts one fewer than were run.
+Do not run again to repair it, since that swaps back.
+The market's history keeps the names as they were when each entry was recorded, in three kinds of entry: a layout's save (`floorplan`) and a layout removed with its location (`floorplan_removed`), whose sentence in Manage market names the location, and a change on Market Setup (`plan`), whose detail holds the locations and sections before and after.
+None is rewritten, by Daniel's choice, for a later fix: a layout's save recorded before the swap still names its location by the old name, and the script prints how many of the first two kinds name either location.
+It prints the market's id, the two locations' names, their sections' names and counts, never a vendor's name or address and no other location's name; that is of what it prints, not of the history entry.
+
 ### When the back end refuses to boot
 
 The back end checks the database as it starts and refuses to serve one it cannot trust: the migration markers ([`market_documents.py`](../back-end/market_documents.py)) and these unique indexes, in the order the boot builds them:
