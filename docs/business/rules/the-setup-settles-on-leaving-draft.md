@@ -14,6 +14,7 @@ describes:
   - back-end/api/floorplans_save.py#save_floorplan_to_market
   - back-end/layout.py#count_refusal
   - back-end/migrations/swap_location_names.py
+  - back-end/migrations/rename_location.py
 verified: 2026-11-19
 sources:
   - wayfinding/the-order-of-the-work/03
@@ -90,4 +91,8 @@ A Google Form market settles when its first import is written, which is when it 
   The market's history holds the names too, as they were when each entry was recorded (`floorplan`, `floorplan_removed` and `plan` entries), and is left as written, for a later fix: the script counts the first two kinds naming either location and rewrites none.
   A run records itself there as one `plan` entry with no actor ([the market's history](../../implementation/data/history.md#what-each-write-records)).
   It keeps every id, so a layout stays on its location, and it leaves the assignment's `revision`, so published results do not read as changed, while it counts the plan's; `back-end/tests/test_swap_location_names.py` pins it.
+- Past draft, one location is given a new name only in the database, by an operator, with [`back-end/migrations/rename_location.py`](../../../back-end/migrations/rename_location.py) ([how it is run](../../OPERATIONS.md#giving-a-location-a-new-name)).
+  It rewrites the same copies as the swap, keeps every id, leaves the assignment's `revision`, counts the plan's, and records itself as one `plan` entry with no actor.
+  Market Setup puts no rule on a location's name, not even that two locations differ; the script refuses a name that is empty, that starts or ends with a space, or that another location or a stray copy already holds, since a seat's copy of a name must say which location it means.
+  A second run giving the old name undoes it; `back-end/tests/test_rename_location.py` pins it.
 - A spec seeds a complete plan, and the room it wants, before it leaves draft ([E2E patterns](../../implementation/testing/e2e-patterns.md#market-dates-and-plans)).
