@@ -43,7 +43,7 @@ A refusal is the same 404 whether or not the request carries a tag, so a tag rev
 
 ## Consequences
 
-- A reload, or a new visit, of a page that draws a floorplan downloads no image the browser already holds: each is one round trip answered 304.
+- A reload, or a new visit, of a page that draws a floorplan read through `GET /floorplans/<id>` downloads no image the browser already holds: each is one round trip answered 304.
 - A person who signs out, loses their role on the market, or whose market or image is deleted is never shown the image from the browser's copy: the browser never uses a `no-cache` copy without the server's 304, and their next request is answered 404 or 401.
 - The only copies that outlive a refusal are the object URLs a page already open holds in memory, which go when the page does, as an image already drawn stays on a screen.
 - Every use still costs a round trip, so the access check holds on every one; a page open for the day pays it once per image.

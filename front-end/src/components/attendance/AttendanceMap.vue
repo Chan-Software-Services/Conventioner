@@ -334,14 +334,14 @@ const mayChangeSetup = computed(() => mayTake(props.market, MarketAction.ChangeS
   gap: 0 var(--space-2);
 }
 
-/* The floorplan's ticks, one line under the legend that wraps on a phone, each label a 44px target
-   with its box inside it, as the Layout page's Floorplan card draws them. */
+/* The floorplan's ticks, one line under the legend that wraps on a phone, each label a `--target-min`
+   target (44px on a phone) with its box inside it, as the Layout page's Floorplan card draws them. */
 .door-map__ticks {
   display: flex;
   flex-wrap: wrap;
   gap: 0 var(--space-4);
   /* Up toward the legend, so the ticks read as its own line rather than a row of their own: the
-     label's 44px height already stands its box clear of the legend. */
+     label's `--target-min` height already stands its box clear of the legend. */
   margin-block-start: calc(-1 * var(--space-2));
 }
 

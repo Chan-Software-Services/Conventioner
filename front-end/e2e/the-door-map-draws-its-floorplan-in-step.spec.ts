@@ -290,7 +290,7 @@ test.describe("Attendance's map draws its floorplan in step", () => {
     cdp.on('Network.responseReceivedExtraInfo', (event) =>
       answered.set(event.requestId, event.statusCode),
     );
-    /** Each image request since `from`: its image, the tag it carried and the status answered. */
+    /** Each image request since `urls` was last cleared: its image, the tag it carried and the status answered. */
     const exchanges = () =>
       [...urls]
         .flatMap(([requestId, url]) => {

@@ -909,7 +909,7 @@ describe("each hall's floorplan, drawn in step with its tables (T501)", () => {
     routing.route.params = { marketSlug: 'river-craft-fair' };
     await flushPromises();
     await release('loc-annex');
-    // Each image read, and the one landing after the page left, revoked; none drawn again.
+    // Each image read revoked, and the one landing after the page left dropped, never made into a URL; none drawn again.
     expect(revoked).toEqual(['blob:image-1', 'blob:image-2']);
     expect(made).toHaveLength(2);
     expect(fetchPublicMapImage).toHaveBeenLastCalledWith('river-craft-fair', 'loc-upper');
