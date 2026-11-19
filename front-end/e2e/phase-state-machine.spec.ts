@@ -161,7 +161,10 @@ test.describe('Phase state machine - full walk', () => {
     const publishDialog = page.getByTestId('sweep-confirm-window');
     await expect(publishDialog).toBeVisible({ timeout: 5000 });
     await expect(publishDialog).toContainText('Publish market');
-    await expect(publishDialog).toContainText('checks in on their vendor page with the door code');
+    await expect(publishDialog).toContainText('you check vendors in and out on Attendance');
+    await expect(publishDialog).toContainText(
+      'only once you turn on "Vendors check themselves in and out"',
+    );
     await page.screenshot({
       path: `${SCREENSHOT_DIR}/06b-publish-confirmation.png`,
       fullPage: true,

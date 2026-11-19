@@ -48,7 +48,7 @@ Both read the stored assignment, so a vendor placed, swapped or freed by hand is
 **Task:** "Your assignment is final. Make it live so vendors can find their tables."
 
 1. Rail: "Publish market", the main button in Assignment.
-2. "Publish market?": "Publishing opens the market's days: every vendor you assigned checks in on their vendor page with the door code you show at the entrance, from Attendance. The tables they see are the ones you have now." and "A published market cannot be returned to an earlier phase."; focus starts on Cancel.
+2. "Publish market?": "Publishing opens the market's days: you check vendors in and out on Attendance. Vendors check themselves in and out on their vendor page only once you turn on "Vendors check themselves in and out", on the door code's screen. The tables they see are the ones you have now." and "A published market cannot be returned to an earlier phase."; focus starts on Cancel.
 3. Expect Market Days, landing on Attendance, and "Market page" and "Vendor page", each with its address and "Copy", in the rail; the rail says "Print each day's roster, then check vendors in at the door."
 
 Disabled before the click, with the rail naming the first blocker:
