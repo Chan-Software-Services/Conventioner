@@ -28,13 +28,13 @@ import { ManageMarketPage } from './pages/ManageMarketPage';
  */
 const TODAY = calendarToday();
 const at = Date.now();
-/** Checked in, out, and the check-out undone in the walk: an address that fits beside two buttons. */
+/** Checked in, out, and the check-out undone in the walk: an address that fits beside a button. */
 const COMES = `out${at % 1000}@example.com`;
 /**
  * Checked in before the walk, and checked out in it: an address whose half before the "@" is wider
- * than the room Check out and Undo leave on a phone's line.
+ * than the room Check out leaves on a phone's line, and narrower than the line.
  */
-const LONG = `door-leaves-${at}@example.com`;
+const LONG = `door-leaves-before-the-close-${at}@example.com`;
 /** Checked in, then freed: here with no table, and checked out in the walk. */
 const FREED = `free${at % 1000}@example.com`;
 /** Never comes. */
@@ -135,7 +135,7 @@ for (const size of PHONE_AND_DESK) {
       await expectInside(row, `${vendor}'s row, ${what}`);
       await expectAddressOnOneLine(row, vendor, what);
       if (size.phone) {
-        for (const button of await row.locator('.door-action button').all()) {
+        for (const button of await row.locator('.door-action button, .door-undo').all()) {
           const box = (await button.boundingBox())!;
           const name = await button.getAttribute('aria-label');
           expect(box.height, `${name} is a thumb's height, ${what}`).toBeGreaterThanOrEqual(44);
@@ -162,24 +162,27 @@ for (const size of PHONE_AND_DESK) {
       await expect(door.out(COMES)).toHaveCount(0);
       await expectTheRowSound(page, door, COMES, 'a vendor expected');
 
-      // A check-in: the row offers Check out, then Undo.
+      // A check-in: the row ends in Check out, and its "Undo?" stands just left of the status.
       await press(door.action(COMES, 'check-in'));
       await expect(door.status(COMES)).toHaveText(new RegExp(`^${TIME} by you$`));
       await expect(door.action(COMES, 'check-out')).toHaveText('Check out');
       await expect(door.action(COMES, 'check-out')).toHaveAccessibleName(/^Check out /);
+      await expect(door.action(COMES, 'undo')).toHaveText('Undo?');
       await expect(door.action(COMES, 'undo')).toHaveAccessibleName(/'s check-in$/);
       await expect(door.out(COMES)).toHaveCount(0);
       await expect(door.summary).toHaveText('2 of 3 checked in');
       await expectTheRowSound(page, door, COMES, 'a vendor checked in');
-      // The two stand side by side, Check out first.
-      const checkOut = (await door.action(COMES, 'check-out').boundingBox())!;
+      await expect(door.row(COMES).locator('.btn')).toHaveText(['Check out']);
       const undo = (await door.action(COMES, 'undo').boundingBox())!;
-      expect(checkOut.x + checkOut.width, 'Check out stands before Undo').toBeLessThanOrEqual(
-        undo.x,
-      );
-      expect(Math.abs(checkOut.y - undo.y), 'Check out and Undo share a line').toBeLessThan(1);
+      const arrival = (await door.status(COMES).boundingBox())!;
+      expect(undo.x + undo.width, 'Undo? stands before the status').toBeLessThanOrEqual(arrival.x);
+      expect(
+        Math.abs(undo.y + undo.height / 2 - (arrival.y + arrival.height / 2)),
+        'Undo? and the status share a line',
+      ).toBeLessThanOrEqual(1);
 
-      // A check-out: the row keeps its status, says when and by whom, and offers one Undo.
+      // A check-out: the row keeps its status, says when and by whom, and offers no button and one
+      // "Undo?", just left of when they left.
       const arrived = await door.status(COMES).innerText();
       const checkedOut = doorWrite(page, marketId, 'POST', '/check-out');
       await press(door.action(COMES, 'check-out'));
@@ -188,10 +191,20 @@ for (const size of PHONE_AND_DESK) {
       await expect(door.out(COMES)).toHaveClass(/chip--neutral/);
       await expect(door.status(COMES)).toHaveText(arrived);
       await expect(door.status(COMES)).toHaveClass(/chip--positive/);
-      await expect(door.action(COMES, 'undo-check-out')).toHaveText('Undo');
+      await expect(door.action(COMES, 'undo-check-out')).toHaveText('Undo?');
       await expect(door.action(COMES, 'undo-check-out')).toHaveAccessibleName(/'s check-out$/);
       await expect(door.action(COMES, 'check-out')).toHaveCount(0);
       await expect(door.action(COMES, 'undo')).toHaveCount(0);
+      await expect(door.row(COMES).locator('.btn')).toHaveCount(0);
+      const undoOut = (await door.action(COMES, 'undo-check-out').boundingBox())!;
+      const departure = (await door.out(COMES).boundingBox())!;
+      expect(undoOut.x + undoOut.width, 'Undo? stands before the out chip').toBeLessThanOrEqual(
+        departure.x,
+      );
+      expect(
+        Math.abs(undoOut.y + undoOut.height / 2 - (departure.y + departure.height / 2)),
+        'Undo? and the out chip share a line',
+      ).toBeLessThanOrEqual(1);
       // A vendor checked out still came.
       await expect(door.summary).toHaveText('2 of 3 checked in');
       await expectTheRowSound(page, door, COMES, 'a vendor checked out');
@@ -214,28 +227,18 @@ for (const size of PHONE_AND_DESK) {
       await expect(door.unseatedHeading).toHaveText('Checked in, with no table on this date (1)');
       await expectTheRowSound(page, door, FREED, 'a vendor with no table checked out');
 
-      // Check out and Undo stand at the end of the vendor's line.
-      const who = (await door.vendor(COMES).boundingBox())!;
-      const onTheLine = (await door.action(COMES, 'undo-check-out').boundingBox())!;
-      expect(onTheLine.y, "Undo stands on the vendor's line").toBeLessThan(who.y + who.height);
-      expect(onTheLine.y + onTheLine.height, "Undo stands on the vendor's line").toBeGreaterThan(
-        who.y,
-      );
-      expect(onTheLine.x, 'Undo stands after the vendor').toBeGreaterThanOrEqual(who.x + who.width);
-
-      // A long address is never broken inside its first half to make room for the two buttons: on
-      // a phone they go under the vendor, at the line's end.
+      // A long address is never broken inside its first half to make room for the button: on a
+      // phone it goes under the vendor, at the line's end.
       const long = door.row(LONG);
       await toTheMiddle(long);
       await expect(door.action(LONG, 'check-out')).toBeVisible();
       await expectWholeAddress(door.vendor(LONG), LONG);
       await expectInside(long, 'the long address, checked in');
       const longWho = (await door.vendor(LONG).boundingBox())!;
-      const longUndo = (await door.action(LONG, 'undo').boundingBox())!;
+      const longCheckOut = (await door.action(LONG, 'check-out').boundingBox())!;
       const rowBox = (await long.boundingBox())!;
       if (size.phone) {
-        await expectAddressOnOneLine(long, LONG, 'its buttons under it');
-        expect(longUndo.y, 'the buttons stand under the vendor').toBeGreaterThanOrEqual(
+        expect(longCheckOut.y, 'the button stands under the vendor').toBeGreaterThanOrEqual(
           longWho.y + longWho.height,
         );
       }
@@ -244,8 +247,8 @@ for (const size of PHONE_AND_DESK) {
         return parseFloat(style.paddingRight) + parseFloat(style.borderRightWidth);
       });
       expect(
-        Math.abs(rowBox.x + rowBox.width - padding - (longUndo.x + longUndo.width)),
-        "Undo ends the row's line",
+        Math.abs(rowBox.x + rowBox.width - padding - (longCheckOut.x + longCheckOut.width)),
+        "Check out ends the row's line",
       ).toBeLessThanOrEqual(1);
       await press(door.action(LONG, 'check-out'));
       await expect(door.out(LONG)).toBeVisible();
