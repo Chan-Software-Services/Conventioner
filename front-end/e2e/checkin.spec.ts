@@ -10,6 +10,7 @@ import {
 import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
 import { hideDevToolsPanel } from './helpers/hideDevToolsPanel';
 import { vendorPagePath } from './helpers/marketScreens';
+import { letVendorsCheckThemselvesIn } from './helpers/selfCheckIn';
 
 /**
  * A vendor checks in on their own vendor page, with the market's door code (T202, ADR 0022).
@@ -30,19 +31,24 @@ function vendorsOf(name: string) {
   return [`${name}-a-${at}@example.com`, `${name}-b-${at}@example.com`];
 }
 
-/** A market on its days, on `marketDate` (today unless a test says), with `vendors` seated. */
+/**
+ * A market on its days, on `marketDate` (today unless a test says), with `vendors` seated, that
+ * lets its vendors check themselves in and out: the switch is off until someone turns it on (T496).
+ */
 async function aMarketOnItsDay(
   request: Parameters<typeof seedPublishedMarketWithAssignments>[0],
   vendors: string[],
   marketDate = TODAY,
 ) {
-  return seedPublishedMarketWithAssignments(
+  const seed = await seedPublishedMarketWithAssignments(
     request,
     BACKEND_URL,
     TEST_USER.email,
     TEST_USER.password,
     { marketDate, vendors },
   );
+  await letVendorsCheckThemselvesIn(request, seed.marketId);
+  return seed;
 }
 
 /** Make a door code, the first or a new one, over the organizer's API; its address, as a path. */

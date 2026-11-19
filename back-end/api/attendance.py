@@ -6,6 +6,12 @@ page with the door code (``api/vendor_check_in.py``); both write through ``recor
 the record says which (``checked_in_by``, ``checked_in_via``), and at which table (``table_code``,
 T318).
 
+A check-out is three fields on that same record (``CHECK_OUT_FIELDS``, T496): when the vendor left,
+who recorded it and by which way, written by ``record_check_out`` and cleared by
+``undo_check_out``. One vendor's day stays one record, and a record with no ``checked_out_at`` is a
+vendor not checked out. Only the roster row and the vendor's own read carry it: a checked-out
+vendor still came, so every state, count and "is anyone here" reads as before.
+
 Both doors share one "today" (``day_has_begun``, ``within_the_window``): the server's UTC date, a
 day either side of which is "today" somewhere on Earth, since the server cannot know the market's
 time zone.
@@ -37,6 +43,16 @@ ENDED_REFUSAL = "This market has ended, so check-in is closed."
 NOT_PUBLISHED = "Vendors are checked in once the market is published."
 NOT_BEGUN = "That day has not begun yet, so nobody can be checked in for it."
 MARKET_NOT_FOUND = "Market not found"
+NO_CHECK_IN = "No check-in found for this vendor on this date"
+NO_CHECK_OUT = "No check-out found for this vendor on this date"
+CHECKED_OUT_FIRST = "Undo the check-out first."
+
+#: What a check-out writes on the day's record, beside the check-in's fields: when (ISO 8601 UTC),
+#: the organizer who made it (None for the vendor's own) and the vendor's way (``VIA_DOOR_CODE``,
+#: else None).
+CHECK_OUT_FIELDS = ("checked_out_at", "checked_out_by", "checked_out_via")
+#: The ``$unset`` that takes a check-out off a record.
+_NO_CHECK_OUT = {field: "" for field in CHECK_OUT_FIELDS}
 
 #: How far a date may be from the server's UTC date and still be "today" somewhere on Earth.
 WINDOW_DAYS = 1
@@ -193,6 +209,41 @@ def check_ins_of(market_id: str, vendor_email: str) -> Dict[str, Optional[str]]:
     }
 
 
+def check_outs_of(market_id: str, vendor_email: str) -> Dict[str, str]:
+    """When one vendor checked out at a market, ``{date: checked_out_at}``, for the dates they
+    did."""
+    return {
+        doc["date"]: doc["checked_out_at"]
+        for doc in attendance_collection.find({
+            "market_id": market_id,
+            "vendor_email": normalized_email(vendor_email),
+        })
+        if doc.get("date") and doc.get("checked_out_at")
+    }
+
+
+def _not_a_vendors_day(
+    market_id: Any, vendor_email: Any, date: Any,
+) -> Optional[Tuple[Dict[str, Any], int]]:
+    """The 400 for a door write that does not name a market, a vendor and a date, or None."""
+    if not isinstance(market_id, str) or not market_id.strip():
+        return {"error": "market_id is required"}, 400
+    if not isinstance(vendor_email, str) or not vendor_email.strip():
+        return {"error": "vendorEmail is required"}, 400
+    if not isinstance(date, str) or not date.strip():
+        return {"error": "date is required"}, 400
+    return None
+
+
+def _vendor_day(market_id: str, vendor_email: str, date: str) -> Dict[str, Any]:
+    """The filter of one vendor's day, which is one record (``ensure_attendance_indexes``)."""
+    return {
+        "market_id": market_id,
+        "vendor_email": normalized_email(vendor_email),
+        "date": date.strip(),
+    }
+
+
 def undo_attendance(
     recorder: History.Recorder, vendor_email: str, date: str, via: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], int]:
@@ -208,31 +259,31 @@ def undo_attendance(
     Only in the market's days, on its own read of the phase, and a market archived between that
     read and the delete gets the record back (``_closed_since``): the archived record of who came
     stays whole.
+
+    A checked-out day is refused, 409 ``CHECKED_OUT_FIRST``: the delete would drop the check-out
+    with the record, and a check-out is never dropped without its own entry (T496).
     """
     market_id = recorder.market_id
-    if not isinstance(market_id, str) or not market_id.strip():
-        return {"error": "market_id is required"}, 400
-    if not isinstance(vendor_email, str) or not vendor_email.strip():
-        return {"error": "vendorEmail is required"}, 400
-    if not isinstance(date, str) or not date.strip():
-        return {"error": "date is required"}, 400
+    refused = _not_a_vendors_day(market_id, vendor_email, date)
+    if refused:
+        return refused
 
     closed = _closed_door(markets_collection.find_one(live({"id": market_id}), _PHASE_FIELDS))
     if closed:
         return closed
 
-    removed = attendance_collection.find_one_and_delete({
-        "market_id": market_id,
-        "vendor_email": normalized_email(vendor_email),
-        "date": date.strip(),
-    })
+    vendor_day = _vendor_day(market_id, vendor_email, date)
+    # A null matches a missing field, so a record made before check-outs is deleted as ever.
+    removed = attendance_collection.find_one_and_delete({**vendor_day, "checked_out_at": None})
     if removed is None:
-        return {"error": "No check-in found for this vendor on this date"}, 404
+        if attendance_collection.find_one(vendor_day) is not None:
+            return {"error": CHECKED_OUT_FIRST}, 409
+        return {"error": NO_CHECK_IN}, 404
     closed = _closed_since(market_id)
     if closed:
         _take_back_a_delete(removed)
         return closed
-    _record_door(recorder, vendor_email, date, via, History.CHECK_IN_UNDONE, False)
+    _record_door(recorder, vendor_email, date, via, History.CHECK_IN_UNDONE, "checked_in", False)
     return {"message": "Check-in undone"}, 200
 
 
@@ -257,14 +308,14 @@ def record_attendance(
     Only in the market's days, on its own read of the phase, on a date that has begun somewhere
     (``day_has_begun``); and a market archived between that read and the write gets the write taken
     back, with no entry (``_closed_since``).
+
+    A check-out on the record is left as it is: checking in again is a new time, never a second
+    arrival, and the check-out's undo is what takes it off (T496).
     """
     market_id, checked_in_by = recorder.market_id, recorder.actor
-    if not isinstance(market_id, str) or not market_id.strip():
-        return {"error": "market_id is required"}, 400
-    if not isinstance(vendor_email, str) or not vendor_email.strip():
-        return {"error": "vendorEmail is required"}, 400
-    if not isinstance(date, str) or not date.strip():
-        return {"error": "date is required"}, 400
+    refused = _not_a_vendors_day(market_id, vendor_email, date)
+    if refused:
+        return refused
 
     market_doc = markets_collection.find_one(live({"id": market_id}))
     closed = _closed_door(market_doc)
@@ -302,8 +353,104 @@ def record_attendance(
         return closed
     # Only a vendor not yet here is a change: checking in again is a new time, not a new arrival.
     if replaced is None:
-        _record_door(recorder, vendor_email, target_date, via, History.CHECKED_IN, True)
+        _record_door(recorder, vendor_email, target_date, via, History.CHECKED_IN, "checked_in", True)
     return {"message": "Checked in", "checkedInAt": checked_in_at}, 200
+
+
+def record_check_out(
+    recorder: History.Recorder, vendor_email: str, date: str, via: Optional[str] = None,
+) -> Tuple[Dict[str, Any], int]:
+    """Record that a vendor left on ``recorder``'s market on this date: ``CHECK_OUT_FIELDS`` set on
+    the day's record, recorded through ``recorder`` as a check-in is (``_record_door``), with
+    ``checked_out_by`` its actor and ``checked_out_via`` the vendor's own way.
+
+    It needs only the record: no seat and no day that has begun, so a vendor here with no table
+    that day is checked out too, and the record is the proof they came.
+
+    One update, filtered to a day not yet checked out, so two check-outs at once leave one time
+    and one "checked out" entry: the second matches nothing, answers the stored time, and writes
+    and records nothing. Where the first was undone before the second read that time, the second
+    writes after all, so "Checked out" is never answered with no time. A day with no record is 404
+    ``NO_CHECK_IN``.
+
+    Only in the market's days, on its own read of the phase, and a market archived between that
+    read and the write has the three fields unset again, held to the time this call wrote, with no
+    entry (``_closed_since``).
+    """
+    market_id = recorder.market_id
+    refused = _not_a_vendors_day(market_id, vendor_email, date)
+    if refused:
+        return refused
+
+    closed = _closed_door(markets_collection.find_one(live({"id": market_id}), _PHASE_FIELDS))
+    if closed:
+        return closed
+
+    vendor_day = _vendor_day(market_id, vendor_email, date)
+    checked_out_at = datetime.now(timezone.utc).isoformat()
+    while True:
+        # A null matches a missing field: a record made before check-outs is not checked out.
+        written = attendance_collection.find_one_and_update(
+            {**vendor_day, "checked_out_at": None},
+            {"$set": {
+                "checked_out_at": checked_out_at,
+                "checked_out_by": recorder.actor,
+                "checked_out_via": via,
+            }})
+        if written is not None:
+            break
+        stored = attendance_collection.find_one(vendor_day)
+        if stored is None:
+            return {"error": NO_CHECK_IN}, 404
+        if stored.get("checked_out_at") is not None:
+            return {"message": "Checked out", "checkedOutAt": stored["checked_out_at"]}, 200
+        # The check-out that held the record was undone before this read: the vendor is not
+        # checked out, so this one writes after all.
+
+    closed = _closed_since(market_id)
+    if closed:
+        attendance_collection.update_one(
+            {**vendor_day, "checked_out_at": checked_out_at}, {"$unset": _NO_CHECK_OUT})
+        return closed
+    _record_door(recorder, vendor_email, date, via, History.CHECKED_OUT, "checked_out", True)
+    return {"message": "Checked out", "checkedOutAt": checked_out_at}, 200
+
+
+def undo_check_out(
+    recorder: History.Recorder, vendor_email: str, date: str, via: Optional[str] = None,
+) -> Tuple[Dict[str, Any], int]:
+    """Take a check-out back, on ``recorder``'s market: ``CHECK_OUT_FIELDS`` unset, the check-in
+    left as it is, recorded through ``recorder`` (``_record_door``). A day with no check-out, or
+    with no record, is 404 ``NO_CHECK_OUT``.
+
+    Only in the market's days, on its own read of the phase, and a market archived between that
+    read and the write gets the three fields back, where the day is still not checked out, with no
+    entry (``_closed_since``).
+    """
+    market_id = recorder.market_id
+    refused = _not_a_vendors_day(market_id, vendor_email, date)
+    if refused:
+        return refused
+
+    closed = _closed_door(markets_collection.find_one(live({"id": market_id}), _PHASE_FIELDS))
+    if closed:
+        return closed
+
+    vendor_day = _vendor_day(market_id, vendor_email, date)
+    before = attendance_collection.find_one_and_update(
+        {**vendor_day, "checked_out_at": {"$ne": None}}, {"$unset": _NO_CHECK_OUT},
+        return_document=ReturnDocument.BEFORE)
+    if before is None:
+        return {"error": NO_CHECK_OUT}, 404
+
+    closed = _closed_since(market_id)
+    if closed:
+        attendance_collection.update_one(
+            {**vendor_day, "checked_out_at": None},
+            {"$set": {field: before.get(field) for field in CHECK_OUT_FIELDS}})
+        return closed
+    _record_door(recorder, vendor_email, date, via, History.CHECK_OUT_UNDONE, "checked_out", False)
+    return {"message": "Check-out undone"}, 200
 
 
 def _upsert(vendor_day: Dict[str, Any], check_in: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -340,12 +487,13 @@ def _take_back_a_delete(removed: Dict[str, Any]) -> None:
 
 def _record_door(
     recorder: History.Recorder, vendor_email: str, date: str, via: Optional[str], kind: str,
-    here: bool,
+    fact: str, became: bool,
 ) -> None:
-    """A check-in or its undo, by the organizer who made it, through the "Check vendors in" row
-    their request asked; or the vendor's own, on their vendor page, through the unasked door with
-    no actor beside the vendor it names and ``via`` saying how (``VIA_DOOR_CODE``,
-    ``VIA_VENDOR_PAGE``).
+    """A check-in, a check-out or the undo of either, by the organizer who made it, through the
+    "Check vendors in" row their request asked; or the vendor's own, on their vendor page, through
+    the unasked door with no actor beside the vendor it names and ``via`` saying how
+    (``VIA_DOOR_CODE``, ``VIA_VENDOR_PAGE``). ``fact`` is the detail's key, ``checked_in`` or
+    ``checked_out``, and ``became`` what it became.
 
     An entry written before the vendor page carries ``via: "check_in_page"``: the public check-in
     page it names asked only an address and a date, and proved no one. The history's readers still
@@ -354,7 +502,7 @@ def _record_door(
     vendor = normalized_email(vendor_email)
     recorder.record(
         kind=kind, vendors=[vendor], subject={"date": date.strip()},
-        detail=lambda: {**History.changes({"checked_in": not here}, {"checked_in": here}),
+        detail=lambda: {**History.changes({fact: not became}, {fact: became}),
                         **({"via": via} if via else {})},
     )
 
@@ -373,6 +521,10 @@ def attendance_roster(market_doc: Dict[str, Any]) -> Dict[str, Any]:
     and one seated again elsewhere reads ``here_elsewhere``, never here at a table they never
     reached. A record stored before check-ins kept their table reads as made at the seat held now,
     as it would have been. Seated rows come first on each date, by table; the seatless after them.
+
+    Each row carries the day's check-out beside its check-in (``checked_out_at``,
+    ``checked_out_by``, ``checked_out_via``, T496), null when the vendor is not checked out, and
+    nothing here reads it: a checked-out vendor's ``state`` and place in the order are as before.
 
     Each row names the vendor as every screen does (``vendor_name``, the name they chose, else the
     one on their identification) and carries the one on their identification beside it
@@ -436,6 +588,7 @@ def _roster_row(
         "checked_in_at": check_in.get("checked_in_at"),
         "checked_in_by": check_in.get("checked_in_by"),
         "checked_in_via": check_in.get("checked_in_via"),
+        **{field: check_in.get(field) for field in CHECK_OUT_FIELDS},
     }
 
 

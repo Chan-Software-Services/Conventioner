@@ -14,7 +14,9 @@ import {
   fetchApplicantApplication,
   saveApplicantApplication,
   checkInWithDoorCode,
+  checkOutWithDoorCode,
   undoOwnCheckIn,
+  undoOwnCheckOut,
 } from '@/utils/applicantApi';
 import { getApiErrorMessage, getApiErrorStatus } from '@/utils/api';
 import {
@@ -187,7 +189,7 @@ function keepDraft(draft: ApplicationDraft | null): void {
   }
 }
 
-/** What a check-in or its undo came to: done, or refused with the sentence to show. */
+/** What a check-in, a check-out or an undo came to: done, or refused with the sentence to show. */
 export type CheckInResult = { ok: true } | { ok: false; message: string; signedOut: boolean };
 
 /**
@@ -533,7 +535,16 @@ export const useApplicationStore = defineStore('application', () => {
     app.seats = app.seats.map((seat) => (seat.date === date ? { ...seat, checkedInAt: at } : seat));
   }
 
-  /** A refused check-in or undo, in its sentence; an ended sign-in clears itself. */
+  /** Mark the vendor's seat on `date` as checked out at `at`, or not, as the server now holds it. */
+  function setCheckedOut(date: string, at: string | null): void {
+    const app = application.value;
+    if (!app?.seats) return;
+    app.seats = app.seats.map((seat) =>
+      seat.date === date ? { ...seat, checkedOutAt: at } : seat,
+    );
+  }
+
+  /** A refused check-in, check-out or undo, in its sentence; an ended sign-in clears itself. */
   function checkInRefusal(err: unknown, fallback: string): CheckInResult {
     if (getApiErrorStatus(err) === 401) return signedOutRefusal();
     return { ok: false, message: getApiErrorMessage(err, fallback), signedOut: false };
@@ -581,6 +592,42 @@ export const useApplicationStore = defineStore('application', () => {
     } catch (err: unknown) {
       if (epoch !== asked) return LEFT;
       return checkInRefusal(err, 'Your check-in was not undone. Please try again.');
+    }
+  }
+
+  /**
+   * Check the vendor out for `date` with the market's door code, typed or put in the field by a
+   * scan (T496). Built as `checkIn` is; no code is held through a sign-in that ran out, since a
+   * check-out is never sent unasked.
+   */
+  async function checkOut(date: string, doorCode: string): Promise<CheckInResult> {
+    if (!token.value || !marketSlug.value) return signedOutRefusal();
+    const asked = epoch;
+    try {
+      const { checkedOutAt } = await withRenewal(asked, (slug, current) =>
+        checkOutWithDoorCode(slug, current, date, doorCode),
+      );
+      if (epoch !== asked) return LEFT;
+      setCheckedOut(date, checkedOutAt);
+      return { ok: true };
+    } catch (err: unknown) {
+      if (epoch !== asked) return LEFT;
+      return checkInRefusal(err, 'You were not checked out. Please try again.');
+    }
+  }
+
+  /** Take back the vendor's own check-out for `date`, after a mis-tap. */
+  async function undoCheckOut(date: string): Promise<CheckInResult> {
+    if (!token.value || !marketSlug.value) return signedOutRefusal();
+    const asked = epoch;
+    try {
+      await withRenewal(asked, (slug, current) => undoOwnCheckOut(slug, current, date));
+      if (epoch !== asked) return LEFT;
+      setCheckedOut(date, null);
+      return { ok: true };
+    } catch (err: unknown) {
+      if (epoch !== asked) return LEFT;
+      return checkInRefusal(err, 'Your check-out was not undone. Please try again.');
     }
   }
 
@@ -640,8 +687,11 @@ export const useApplicationStore = defineStore('application', () => {
     clearSession,
     signOut,
     holdDoorCode,
+    dropDoorCode,
     takeDoorCode,
     checkIn,
     undoCheckIn,
+    checkOut,
+    undoCheckOut,
   };
 });

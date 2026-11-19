@@ -7,7 +7,7 @@ describes:
   - back-end/api/market_actions.py#Asked
   - back-end/api/markets.py#_market_change
   - back-end/tests/test_only_an_asking_writes_a_markets_history.py
-verified: 2026-11-16
+verified: 2026-11-19
 sources:
   - T105
   - T352

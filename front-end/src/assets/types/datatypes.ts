@@ -419,6 +419,11 @@ export interface Market {
   /** Whether the organizer has stopped taking applications inside the stage (E38/F04/S02). */
   applicationsStopped?: boolean;
   /**
+   * The market's self check-in switch (T496): whether its vendors check themselves in and out on
+   * their vendor page. Off until someone turns it on, so absent reads as off.
+   */
+  vendorSelfCheckIn?: boolean;
+  /**
    * Why taking applications cannot be stopped or resumed now, or null while it can: served so the
    * rail offers the action exactly when the endpoint would take it (E38/F04/S02).
    */
@@ -747,6 +752,8 @@ export interface ApplicantSeat {
   location: string;
   /** When they checked in to this seat, or null when they have not. */
   checkedInAt?: string | null;
+  /** When they checked out of this seat, or null when they have not (T496). */
+  checkedOutAt?: string | null;
 }
 
 /** A person, or an automatic rejection rule (E33/F03), named as a verdict's giver. */

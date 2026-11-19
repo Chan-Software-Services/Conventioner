@@ -1045,6 +1045,9 @@ def get_market_for_user(user_email: str, market_id: str) -> Optional[Dict[str, A
     # answer, so the rail offers the action exactly when the endpoint would take it.
     market_dict['applicationsStopped'] = market.applications_stopped
     market_dict['applicationsStopReason'] = ApplicantsApi.applications_stop_refusal(market)
+    # Whether vendors check themselves in and out (T496), false when the document has none, as
+    # the model reads it.
+    market_dict['vendorSelfCheckIn'] = market.vendor_self_check_in
     # What would refuse each move open from this phase (E31/F02/S01), judged as the transition
     # endpoint judges it, so the rail can disable a move and name why before anyone clicks it.
     market_dict['transitionBlockers'] = {

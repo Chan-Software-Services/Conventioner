@@ -86,6 +86,17 @@ function optionNote(option: ProposedOption): string | number {
   return option.count;
 }
 
+/**
+ * What "Keep all" says: how many options it keeps, and how many of them name someone, in the words
+ * each such option says it in, since the press publishes each link or handle on the market's form.
+ */
+function keepAllLabel(options: ProposedOption[]): string {
+  const named = options.filter((option) => option.namesSomeone).length;
+  const all = `Keep all ${options.length}`;
+  if (named === 0) return all;
+  return `${all}, ${named} ${named === 1 ? 'names' : 'name'} someone`;
+}
+
 /** Keep every option of the row's reading, one-offs included, in one click (bug 4). */
 function keepAll(row: LedgerRow) {
   const choice = props.draft.rows[first(row)];
@@ -406,7 +417,7 @@ function onSettle(kind: string, value: string, choice: string) {
                     data-testid="proposal-row-keep-all"
                     @click="keepAll(row)"
                   >
-                    Keep all {{ row.field.options.length }}
+                    {{ keepAllLabel(row.field.options) }}
                   </button>
                 </template>
                 <template #rows="{ rows: options }">

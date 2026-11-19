@@ -55,6 +55,7 @@ from datatypes import (
     intake_mode_from_market_document,
     phase_from_market_document,
     phase_label,
+    vendor_self_check_in_from_market_document,
 )
 from tombstone import live
 from utils.application_token import (
@@ -106,13 +107,15 @@ def _application_response(
     app: Application, results_published: bool,
     placements: Iterable[VendorAssignmentResult] = (),
     checked_in: Optional[Dict[str, Optional[str]]] = None,
+    checked_out: Optional[Dict[str, str]] = None,
     with_answers: bool = True,
 ) -> Dict[str, Any]:
     """Serialize an application for the applicant-facing API with the publication gate applied.
 
     After publication it carries the applicant's outcome and their own seats (E36/F05/S02), read
     off the stored placements on every read, so a seat changed by hand shows at once. Each seat
-    says when they checked in to it, from ``checked_in`` (``{date: checked_in_at}``), or null.
+    says when they checked in to it, from ``checked_in`` (``{date: checked_in_at}``), or null, and
+    when they checked out, from ``checked_out`` (``{date: checked_out_at}``), or null.
 
     ``with_answers`` is false on a market that imports its vendors (ADR 0022): its page shows no
     application, and the answers are the organizer's import of their own Google Form, so the read
@@ -124,10 +127,14 @@ def _application_response(
         if results_published else None
     )
     seats = ResultOutcome.seats_of(app.applicant_email, placed) if results_published else []
-    when = checked_in or {}
+    came, left = checked_in or {}, checked_out or {}
     response = {
         "outcome": outcome,
-        "seats": [{**seat, "checkedInAt": when.get(seat["date"])} for seat in seats],
+        "seats": [
+            {**seat, "checkedInAt": came.get(seat["date"]),
+             "checkedOutAt": left.get(seat["date"])}
+            for seat in seats
+        ],
         # The name the vendor goes by, as the organizer reads it, so their page greets them by it.
         "vendorName": EssentialFields.display_name(ApplicationsApi.effective_answers(app)),
         "id": app.id,
@@ -287,7 +294,8 @@ def get_vendor_page(market_slug: str) -> Tuple[Dict[str, Any], int]:
     naming nothing gets. ``ended`` is an archived market that ran, whose page is the record of where
     its vendors sat; ``rememberUntil`` is the date "Remember me" would end, or null once the
     market's last date has passed; ``mapOpen`` is whether the public map is open
-    (``public_map_is_open``), the gate the map's own read is built on.
+    (``public_map_is_open``), the gate the map's own read is built on; ``selfCheckIn`` is whether
+    the market lets its vendors check themselves in and out.
     """
     from db_config import get_database
     db = get_database()
@@ -307,6 +315,7 @@ def get_vendor_page(market_slug: str) -> Tuple[Dict[str, Any], int]:
         "ended": AttendanceApi.ended_after_it_ran(market_doc),
         "rememberUntil": RememberedSignIns.remembered_until_date(dates, RememberedSignIns.now()),
         "mapOpen": public_map_is_open(market_doc),
+        "selfCheckIn": vendor_self_check_in_from_market_document(market_doc),
     }, 200
 
 
@@ -416,6 +425,7 @@ def get_applicant_application(
     return {"application": _application_response(
         app, results_published, _stored_placements(market_doc),
         AttendanceApi.check_ins_of(market_id, app.applicant_email),
+        AttendanceApi.check_outs_of(market_id, app.applicant_email),
         with_answers=market_serves_applicants(market_doc))}, 200
 
 

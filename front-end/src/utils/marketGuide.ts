@@ -388,16 +388,16 @@ const GUIDE: Record<string, (standing: Standing) => GuideRow> = {
           page: 'assignments',
           action: MarketAction.MovePhase,
           statement:
-            'Results are published, so the assignments are settled. Publish the market to open check-in with the door code; that cannot be undone.',
+            'Results are published, so the assignments are settled. Publish the market to open check-in on Attendance; that cannot be undone.',
           onlooker:
-            'Results are published, so the assignments are settled. Check-in with the door code opens when the market is published.',
+            'Results are published, so the assignments are settled. Check-in opens on Attendance when the market is published.',
         }
       : allocation === 'current' || allocation === 'stale'
         ? {
             page: 'assignments',
             action: MarketAction.Assign,
             statement:
-              'Check the assignments, then publish the market: that opens check-in with the door code, and cannot be undone.',
+              'Check the assignments, then publish the market: that opens check-in on Attendance, and cannot be undone.',
             onlooker:
               'Tables are allocated, and the market is not published yet. Read the assignments.',
             helper: 'Check the assignments; the results are published by whoever may publish them.',

@@ -352,7 +352,8 @@ Migrations are never run automatically - rewriting stored documents is a deliber
 
 **A database created by `init_database.py` needs none of them**: it is born in the current shape and records the boot markers.
 Production was started that way on 2026-10-18, so the list below matters only for a database older than its code.
-Every script in `back-end/migrations/` is idempotent; the ones not described here (`migrate_roles`, `migrate_publishing_to_market_days`, `migrate_submitted_at_to_iso`, `migrate_tier_preference_per_date`, `migrate_table_code_separator`, `migrate_table_share_answer`, `migrate_to_uuid`, `add_email_verification`) each say in their own docstring what they repair and when; `cleanup_unverified_users` repairs nothing: it deletes every unverified account, and is a script never to run against production ([OPERATIONS.md](OPERATIONS.md#scripts-never-to-run-against-production)).
+Every migration in `back-end/migrations/` is idempotent; the ones not described here (`migrate_roles`, `migrate_publishing_to_market_days`, `migrate_submitted_at_to_iso`, `migrate_tier_preference_per_date`, `migrate_table_code_separator`, `migrate_table_share_answer`, `migrate_to_uuid`, `add_email_verification`) each say in their own docstring what they repair and when; `cleanup_unverified_users` repairs nothing: it deletes every unverified account, and is a script never to run against production ([OPERATIONS.md](OPERATIONS.md#scripts-never-to-run-against-production)).
+`swap_location_names` is no migration and is not idempotent: it is an operator's fix of one market, and a second run swaps back ([OPERATIONS.md](OPERATIONS.md#swapping-the-names-of-two-locations)).
 
 Before a deploy reaches an older production database, run the pending migrations in `back-end/migrations/` against the production database (each is idempotent, and `--dry-run` previews the changes):
 

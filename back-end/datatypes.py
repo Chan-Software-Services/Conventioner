@@ -85,6 +85,12 @@ LEGACY_STAGE_PHASES = ("applications_open", "applications_closed", "review")
 LEGACY_CLOSED_PHASES = ("applications_closed", "review")
 
 
+def vendor_self_check_in_from_market_document(document: Dict[str, Any]) -> bool:
+    """Whether a stored market lets its vendors check themselves in and out (T496): its self
+    check-in switch. Off when it stores none, which is every market until someone turns it on."""
+    return document.get("vendorSelfCheckIn") is True
+
+
 def _legacy_stage_phase(document: Dict[str, Any]) -> MarketPhase:
     """An old stage phase as the migration would leave it: the stage, or, for a Google Form market
     that imported nothing, draft, since the stage is entered by a first import."""
@@ -801,6 +807,9 @@ class Market(BaseModel):
     # about the applicant form, not a phase (ADR 0005), so reviewing goes on. Server-owned: only
     # ``set_applications_stopped`` writes it. Entering assignment closes the form whatever it says.
     applications_stopped: bool = False
+    # Whether vendors check themselves in and out on their vendor page (T496): the market's self
+    # check-in switch. Server-owned: only ``DoorApi.set_self_check_in`` writes it. Absent is off.
+    vendor_self_check_in: bool = False
     # Server-owned: written only by the CSV import endpoint, never by a market update body.
     import_mapping: Optional["ImportMapping"] = None
     # Server-owned: written only by the start from a Google Form's responses (``csv_start``), so the
@@ -1732,6 +1741,7 @@ class MarketSchemaContract(ContractModel):
     review_team: Optional[ServedReviewTeamContract] = None
     rejection_rules: Optional[List[RejectionRule]] = None
     no_automatic_rejections: Optional[bool] = None
+    vendor_self_check_in: Optional[bool] = None
     roles: Dict[str, str]
     permissions: Optional[Dict[str, MarketPermission]] = None
     setup_object: Optional[SetupObjectContract]

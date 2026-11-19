@@ -8,6 +8,7 @@ import {
   draftFrom,
   toggleOption,
   type Proposal,
+  type ProposalDraft,
   type ProposedColumn,
   type ProposedOption,
 } from '@/utils/csvProposal';
@@ -301,6 +302,46 @@ describe('the proposal ledger', () => {
         const row = rowAt(ledger(proposalOf(answers(30))));
         const tools = row.find('[data-testid="proposal-row-list-tools"]');
         expect(tools.find('[data-testid="proposal-row-keep-all"]').text()).toBe('Keep all 30');
+      });
+
+      /** An answer that names someone, unticked by default as the proposal leaves one. */
+      const named = (value: string): ProposedOption => ({
+        value,
+        count: 4,
+        rare: false,
+        namesSomeone: true,
+        keep: false,
+      });
+
+      it('says how many of the answers it keeps name someone, as the answers say it', () => {
+        const one = rowAt(ledger(proposalOf([...OPTIONS, named('Online at example.org/shop')])));
+        expect(keepAllIn(one).text()).toBe('Keep all 3, 1 names someone');
+
+        const two = rowAt(
+          ledger(proposalOf([...OPTIONS, named('example.org/shop'), named('@example_handle')])),
+        );
+        expect(keepAllIn(two).text()).toBe('Keep all 4, 2 name someone');
+      });
+
+      it('shows for an answer that names someone left the only one unticked, and keeps it', async () => {
+        const link = named('Online at example.org/shop');
+        const wrapper = ledger(proposalOf([OPTIONS[0], link]));
+        expect(keepAllIn(rowAt(wrapper)).text()).toBe('Keep all 2, 1 names someone');
+        await keepAllIn(rowAt(wrapper)).trigger('click');
+        const kept = wrapper.emitted('correct')?.[0]?.[1] as { kept: { select: string[] } };
+        expect(kept.kept.select).toEqual(['Yes', link.value]);
+      });
+
+      it('still counts an answer that names someone once it is ticked, since it keeps it too', async () => {
+        const wrapper = ledger(proposalOf([...OPTIONS, named('Online at example.org/shop')]));
+        await optionsOf(rowAt(wrapper))[2].find('input').setValue(true);
+        // Read on the working copy the box writes to: the box's own `checked` is the one the tick
+        // set, and stays true whether or not the toggle landed.
+        const draft = wrapper.props('draft') as ProposalDraft;
+        expect(draft.rows[0].kept.select, 'the tick reached the working copy').toContain(
+          'Online at example.org/shop',
+        );
+        expect(keepAllIn(rowAt(wrapper)).text()).toBe('Keep all 3, 1 names someone');
       });
 
       it('keeps every answer whatever the words have narrowed the list to', async () => {

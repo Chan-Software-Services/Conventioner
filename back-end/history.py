@@ -126,6 +126,11 @@ PAYMENT_REMOVED = "payment_removed"
 # The door
 CHECKED_IN = "checked_in"
 CHECK_IN_UNDONE = "check_in_undone"
+#: A vendor recorded as having left, and that taken back (T496); the check-in stands through both.
+CHECKED_OUT = "checked_out"
+CHECK_OUT_UNDONE = "check_out_undone"
+#: The market's self check-in switch turned on or off: whether vendors check themselves in and out.
+SELF_CHECK_IN_SET = "self_check_in_set"
 #: A new door code, which ends the one before it; the code itself is never recorded.
 DOOR_CODE_MADE = "door_code_made"
 

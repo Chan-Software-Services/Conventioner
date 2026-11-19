@@ -6,7 +6,12 @@
  * checked in it says when, with "Undo" for a mis-tap. A check-in takes the market's door code: the
  * QR code at the entrance opens this page with it, and the page checks them in for today, after
  * signing them in when it has to; a vendor whose camera will not read it types the code here.
- * Once the market has ended the section is the record: each seat, and when they checked in.
+ * Checked in, they check out the same way, with the door code and an "Undo" of its own (T496); a
+ * code scanned then is put in the check-out field and sends nothing, since a second scan by
+ * accident must never end their day.
+ * All of it stands behind the market's self check-in switch: while it is off the card shows the
+ * day, the table and what the record has, and says an organizer checks them in or out at the door.
+ * Once the market has ended the section is the record: each seat, and when they came and left.
  *
  * "Today" is the vendor's own calendar day, read again whenever the page comes back into view: a
  * phone left open at a door overnight must not keep marking yesterday.
@@ -16,7 +21,14 @@ import { useApplicationStore } from '@/stores/application';
 import { calendarToday } from '@/utils/marketGuide';
 import { seatLine } from '@/utils/applicantOutcome';
 import { getFormattedDate, getTimestampTime } from '@/utils/utils';
-import { checkInSection, scannedCodeRefusal, type CheckInSection } from '@/utils/vendorPage';
+import {
+  atTheDoorLine,
+  cameAndLeft,
+  checkInSection,
+  onlyOrganizersCheckIn,
+  scannedCodeRefusal,
+  type CheckInSection,
+} from '@/utils/vendorPage';
 import { isWholeDoorCode } from '@/utils/doorCode';
 import type { ApplicantSeat } from '@/assets/types/datatypes';
 import { tableInWords } from '@/utils/placementChange';
@@ -36,22 +48,35 @@ const section = computed<CheckInSection>(() =>
     : { mode: 'none', today: null, others: [] },
 );
 
+/** Vendors check themselves in and out here: the market's switch, read with the page. */
+const selfCheckIn = computed(() => Boolean(store.page?.selfCheckIn));
+
+/** What today's card says in place of its controls while the switch is off. */
+const atTheDoor = computed(() =>
+  !selfCheckIn.value && section.value.today ? atTheDoorLine(section.value.today) : null,
+);
+
 const typed = ref('');
-const busy = ref(false);
+/** The door code for a check-out: typed, or put here by a scan and sent only by "Check out". */
+const typedOut = ref('');
+/** The one write that is out, which names its own button while it is. */
+const doing = ref<'in' | 'undo-in' | 'out' | 'undo-out' | null>(null);
+const busy = computed(() => doing.value !== null);
 const error = ref<string | null>(null);
 /** What a scanned code came to when it checked nobody in: said once, above the section. */
 const notice = ref<string | null>(null);
 
 const typedIsWhole = computed(() => isWholeDoorCode(typed.value));
+const typedOutIsWhole = computed(() => isWholeDoorCode(typedOut.value));
 
 async function checkIn(code: string, scanned: boolean) {
   const seat = section.value.today;
   if (!seat) return;
-  busy.value = true;
+  doing.value = 'in';
   error.value = null;
   const vendor = store.applicantEmail;
   const result = await store.checkIn(seat.date, code);
-  busy.value = false;
+  doing.value = null;
   if (result.ok) {
     typed.value = '';
     return;
@@ -68,13 +93,27 @@ async function checkInTyped() {
   await checkIn(typed.value, false);
 }
 
-async function undo() {
+async function checkOut() {
+  readToday();
+  const seat = section.value.today;
+  if (!seat || !typedOutIsWhole.value || busy.value) return;
+  doing.value = 'out';
+  error.value = null;
+  const result = await store.checkOut(seat.date, typedOut.value);
+  doing.value = null;
+  if (result.ok) typedOut.value = '';
+  else error.value = result.message;
+}
+
+async function undo(what: 'undo-in' | 'undo-out') {
   const seat = section.value.today;
   if (!seat) return;
-  busy.value = true;
+  doing.value = what;
   error.value = null;
-  const result = await store.undoCheckIn(seat.date);
-  busy.value = false;
+  const result = await (what === 'undo-in'
+    ? store.undoCheckIn(seat.date)
+    : store.undoCheckOut(seat.date));
+  doing.value = null;
   if (!result.ok) error.value = result.message;
 }
 
@@ -84,9 +123,19 @@ async function useScannedCode() {
   if (!store.isAuthenticatedFor(props.marketSlug)) return;
   const code = store.takeDoorCode(props.marketSlug);
   if (!code || !store.page) return;
+  // The page drops a code scanned while the switch is off, and says so; none is sent from here.
+  if (onlyOrganizersCheckIn(store.page)) return;
   readToday();
   notice.value = scannedCodeRefusal(store.page, store.application, today.value);
-  if (notice.value || section.value.today?.checkedInAt) return;
+  if (notice.value) return;
+  const seat = section.value.today;
+  // Checked out, they are done for the day and the code is dropped; checked in, it waits in the
+  // check-out field for their own tap.
+  if (seat?.checkedOutAt) return;
+  if (seat?.checkedInAt) {
+    typedOut.value = code;
+    return;
+  }
   await checkIn(code, true);
 }
 
@@ -112,6 +161,17 @@ function dayOf(seat: ApplicantSeat): string {
 function tableOf(seat: ApplicantSeat): string {
   return [tableInWords(seat.tableCode, seat.tableChoice), seat.location].filter(Boolean).join(', ');
 }
+
+/** When they came and left that day, as the other days say it in brackets. */
+function whenOf(seat: ApplicantSeat): string | null {
+  return cameAndLeft(seat, getTimestampTime);
+}
+
+/** The same as the record's own line, which opens with a capital. */
+function recordOf(seat: ApplicantSeat): string {
+  const said = whenOf(seat);
+  return said ? said.charAt(0).toUpperCase() + said.slice(1) : 'Not checked in';
+}
 </script>
 
 <template>
@@ -136,32 +196,97 @@ function tableOf(seat: ApplicantSeat): string {
         <span class="chip chip--positive" data-testid="vendor-check-in-done">
           Checked in at {{ getTimestampTime(section.today.checkedInAt) }}
         </span>
-        <button
-          type="button"
-          class="btn btn--secondary"
-          :disabled="busy"
-          data-testid="vendor-check-in-undo-btn"
-          @click="undo"
+        <span
+          v-if="section.today.checkedOutAt"
+          class="chip chip--informational"
+          data-testid="vendor-check-out-done"
         >
-          {{ busy ? 'Undoing…' : 'Undo' }}
-        </button>
+          Checked out at {{ getTimestampTime(section.today.checkedOutAt) }}
+        </span>
+        <!-- One Undo, of the latest thing: a check-out is undone before its check-in may be. -->
+        <template v-if="selfCheckIn">
+          <button
+            v-if="section.today.checkedOutAt"
+            type="button"
+            class="btn btn--secondary"
+            :disabled="busy"
+            data-testid="vendor-check-out-undo-btn"
+            @click="undo('undo-out')"
+          >
+            {{ doing === 'undo-out' ? 'Undoing…' : 'Undo' }}
+          </button>
+          <button
+            v-else
+            type="button"
+            class="btn btn--secondary"
+            :disabled="busy"
+            data-testid="vendor-check-in-undo-btn"
+            @click="undo('undo-in')"
+          >
+            {{ doing === 'undo-in' ? 'Undoing…' : 'Undo' }}
+          </button>
+        </template>
       </div>
 
-      <p v-else-if="busy && !typed" class="seat-busy" data-testid="vendor-check-in-busy">
-        Checking you in…
-      </p>
+      <template v-if="!selfCheckIn">
+        <p v-if="atTheDoor" class="seat-at-door" data-testid="vendor-check-in-at-door">
+          {{ atTheDoor }}
+        </p>
+      </template>
+
+      <template v-else-if="!section.today.checkedInAt">
+        <p v-if="doing === 'in' && !typed" class="seat-busy" data-testid="vendor-check-in-busy">
+          Checking you in…
+        </p>
+
+        <form
+          v-else
+          class="seat-form"
+          data-testid="vendor-check-in-form"
+          @submit.prevent="checkInTyped"
+        >
+          <div class="seat-field">
+            <label class="field-label" for="vendor-check-in-code">Door code</label>
+            <input
+              id="vendor-check-in-code"
+              v-model="typed"
+              class="field"
+              type="text"
+              inputmode="text"
+              autocapitalize="characters"
+              autocomplete="off"
+              spellcheck="false"
+              maxlength="9"
+              placeholder="K7M 4QP"
+              aria-describedby="vendor-check-in-code-help"
+              data-testid="vendor-check-in-code-input"
+            />
+            <p id="vendor-check-in-code-help" class="seat-help">
+              Type the code under the QR code at the door.
+            </p>
+          </div>
+          <button
+            type="submit"
+            class="btn btn--primary"
+            :disabled="busy || !typedIsWhole"
+            data-testid="vendor-check-in-btn"
+          >
+            {{ doing === 'in' ? 'Checking in…' : 'Check in' }}
+          </button>
+        </form>
+      </template>
 
       <form
-        v-else
+        v-else-if="!section.today.checkedOutAt"
         class="seat-form"
-        data-testid="vendor-check-in-form"
-        @submit.prevent="checkInTyped"
+        data-testid="vendor-check-out-form"
+        @submit.prevent="checkOut"
       >
         <div class="seat-field">
-          <label class="field-label" for="vendor-check-in-code">Door code</label>
+          <label class="field-label" for="vendor-check-out-code">Door code</label>
           <input
-            id="vendor-check-in-code"
-            v-model="typed"
+            id="vendor-check-out-code"
+            v-model="typedOut"
             class="field"
             type="text"
             inputmode="text"
@@ -170,20 +295,20 @@ function tableOf(seat: ApplicantSeat): string {
             spellcheck="false"
             maxlength="9"
             placeholder="K7M 4QP"
-            aria-describedby="vendor-check-in-code-help"
-            data-testid="vendor-check-in-code-input"
+            aria-describedby="vendor-check-out-code-help"
+            data-testid="vendor-check-out-code-input"
           />
-          <p id="vendor-check-in-code-help" class="seat-help">
+          <p id="vendor-check-out-code-help" class="seat-help">
             Type the code under the QR code at the door.
           </p>
         </div>
         <button
           type="submit"
           class="btn btn--primary"
-          :disabled="busy || !typedIsWhole"
-          data-testid="vendor-check-in-btn"
+          :disabled="busy || !typedOutIsWhole"
+          data-testid="vendor-check-out-btn"
         >
-          {{ busy ? 'Checking in…' : 'Check in' }}
+          {{ doing === 'out' ? 'Checking out…' : 'Check out' }}
         </button>
       </form>
 
@@ -195,9 +320,7 @@ function tableOf(seat: ApplicantSeat): string {
     <ul v-if="section.others.length" class="seat-list" data-testid="vendor-check-in-other-days">
       <li v-for="seat in section.others" :key="seat.date">
         {{ seatLine(seat) }}
-        <span v-if="seat.checkedInAt" class="seat-when">
-          (checked in at {{ getTimestampTime(seat.checkedInAt) }})
-        </span>
+        <span v-if="whenOf(seat)" class="seat-when">({{ whenOf(seat) }})</span>
       </li>
     </ul>
   </section>
@@ -218,13 +341,7 @@ function tableOf(seat: ApplicantSeat): string {
         data-testid="vendor-check-in-record-seat"
       >
         {{ seatLine(seat) }}
-        <span class="seat-when">
-          {{
-            seat.checkedInAt
-              ? `Checked in at ${getTimestampTime(seat.checkedInAt)}`
-              : 'Not checked in'
-          }}
-        </span>
+        <span class="seat-when">{{ recordOf(seat) }}</span>
       </li>
     </ul>
   </section>
@@ -302,7 +419,8 @@ function tableOf(seat: ApplicantSeat): string {
   color: var(--mm-text-muted);
 }
 
-.seat-busy {
+.seat-busy,
+.seat-at-door {
   font-size: var(--text-sm);
   color: var(--mm-text-muted);
 }

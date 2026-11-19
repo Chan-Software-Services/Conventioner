@@ -1721,6 +1721,19 @@ def vendor_undo_check_in(market_slug: str) -> Response:
     return VendorCheckInApi.undo_check_in(market_slug)
 
 
+@app.route('/public/markets/<market_slug>/vendor/check-out', methods=['POST'])
+def vendor_check_out(market_slug: str) -> Response:
+    """A signed-in vendor checks out for a date with the market's door code (T496). Bearer token
+    and ``{date, doorCode}``; counted against ``check-in:address`` as a check-in is."""
+    return VendorCheckInApi.check_out(market_slug)
+
+
+@app.route('/public/markets/<market_slug>/vendor/check-out', methods=['DELETE'])
+def vendor_undo_check_out(market_slug: str) -> Response:
+    """A signed-in vendor takes back their own check-out for a date, ``{date}``, no door code."""
+    return VendorCheckInApi.undo_check_out(market_slug)
+
+
 # applicant login - public, unauthenticated, attacker-facing
 
 @app.route('/public/markets/<market_slug>/applicant-login/request-code', methods=['POST'])
@@ -2411,7 +2424,7 @@ def get_market_attendance(market_id: str) -> Response:
     """Who is expected on each market date and who has come (E29/F01/S01). Asks ``Actions.READ``.
 
     ``{dates, roster}``: every vendor the stored assignment places, per date, with when they
-    checked in and which organizer did it, if one did.
+    checked in and out and which organizer did each, if one did.
     """
     requesting_user = authenticated_email()
 
@@ -2432,8 +2445,8 @@ def get_market_attendance(market_id: str) -> Response:
 
 
 def _door_write(market_id: str, write) -> Response:
-    """An organizer's check-in or its undo: body ``{vendorEmail, date}``, asking
-    ``Actions.CHECK_IN`` (E29/F01/S02)."""
+    """An organizer's check-in, check-out or the undo of either: body ``{vendorEmail, date}``,
+    asking ``Actions.CHECK_IN`` (E29/F01/S02)."""
     data = json_object(required=False)
     result, status_code = write(
         market_id,
@@ -2458,11 +2471,26 @@ def organizer_undo_check_in(market_id: str) -> Response:
     return _door_write(market_id, DoorApi.undo_check_in)
 
 
+@app.route('/markets/<market_id>/attendance/check-out', methods=['POST'])
+@login_required
+def organizer_check_out(market_id: str) -> Response:
+    """An organizer checks a checked-in vendor out at the door (T496). Asks ``Actions.CHECK_IN``."""
+    return _door_write(market_id, DoorApi.check_out)
+
+
+@app.route('/markets/<market_id>/attendance/check-out', methods=['DELETE'])
+@login_required
+def organizer_undo_check_out(market_id: str) -> Response:
+    """An organizer takes back a check-out. Asks ``Actions.CHECK_IN``."""
+    return _door_write(market_id, DoorApi.undo_check_out)
+
+
 @app.route('/markets/<market_id>/door-code', methods=['GET'])
 @login_required
 def get_door_code(market_id: str) -> Response:
-    """The market's door code, ``{code, madeAt, madeBy, url}`` or ``{code: null}`` (ADR 0022).
-    Asks ``Actions.CHECK_IN``: no market read serves it."""
+    """The market's door code, ``{code, madeAt, madeBy, url}`` or ``{code: null}`` (ADR 0022),
+    with ``selfCheckIn``, whether its vendors check themselves in and out (T496).
+    Asks ``Actions.CHECK_IN``: no market read serves the code."""
     return jsonify(DoorApi.door_code(market_id, authenticated_email())), 200
 
 
@@ -2472,6 +2500,17 @@ def make_door_code(market_id: str) -> Response:
     """A new door code, which ends the old one and every poster of it. Asks
     ``Actions.CHECK_IN``; only in Market Days, and never on an archived market."""
     result, status_code = DoorApi.make_door_code(market_id, authenticated_email())
+    return jsonify(result), status_code
+
+
+@app.route('/markets/<market_id>/self-check-in', methods=['PUT'])
+@login_required
+def set_self_check_in(market_id: str) -> Response:
+    """Turn the market's self check-in switch on or off, ``{enabled}`` (T496): whether its vendors
+    check themselves in and out. Asks ``Actions.CHECK_IN``; only in Market Days. Answers what the
+    door code's read does."""
+    result, status_code = DoorApi.set_self_check_in(
+        market_id, json_object(required=False), authenticated_email())
     return jsonify(result), status_code
 
 

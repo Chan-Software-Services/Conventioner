@@ -12,6 +12,7 @@ sources:
   - T191
   - T318
   - T469
+  - T496
 status: accepted
 ---
 
@@ -51,6 +52,7 @@ Before that its page answers as absent.
 A Google Form market that went live before this change has its page too, since it reached `market_days`, whether or not its results were published, and its vendors read their tables and check in there as if they were: reaching the market days puts the results out (`results_are_out` in `market_documents.py`).
 
 **Check-in proves presence with a door code.**
+Amended 2026-11-19 (T496, [ADR 0040](0040-vendors-check-themselves-in-and-out-only-where-the-market-turned-it-on.md)): the vendor's own check-in, and the check-out beside it, are open only where the market turned its self check-in switch on, and it is off until someone does; the organizer's check-in below is then the only path.
 Attendance shows a QR code and a short typed code, full screen or printed as a poster; the vendor scans it with their phone's own camera, which opens their vendor page and checks them in for today, signing them in first when they are not.
 The code stays the same until the organizer presses "New code".
 The organizer's own check-in at Attendance stays, the second of two valid paths.
@@ -66,6 +68,7 @@ Its rules, each pinned at the HTTP seam (`test_the_door_code.py`, `test_a_vendor
   A venue's wifi is one caller for every vendor on it, so a stale poster after a new code, or many vendors' typos, refused every vendor at the venue, right codes included, for up to 15 minutes.
   What bounds a guess now is the per-address count, behind the vendor's sign-in for this market and a seat on a day within one of the server's: 960 tries a day for one address against 32^6 codes, about one in a million a day.
   Counters it left under `check-in:caller` are never read again and expire by the TTL index, with no migration.
+  Amended 2026-11-19 (T496, [ADR 0040](0040-vendors-check-themselves-in-and-out-only-where-the-market-turned-it-on.md)): a vendor's own check-out counts against the same 10 tries (`check-in:address`), right code or wrong, and its undo counts nothing.
 
 **A sign-in code takes up to five tries within ten minutes.**
 After the fifth wrong try it is cancelled, the page says so, and only "Send a new code" is offered; a wrong try says only that someone asked for a code for that address in the last ten minutes, which anyone can make true by asking, so nothing says whether an address applied.
