@@ -31,7 +31,7 @@ describes:
   - front-end/src/components/layout/calibration.ts
   - front-end/src/components/layout/layoutSave.ts
   - front-end/src/components/layout/shrinkImage.ts
-  - front-end/src/components/layout/useFloorplanImage.ts
+  - front-end/src/components/layout/floorplanImages.ts
   - front-end/src/components/layout/LayoutEditor.vue
   - front-end/src/components/layout/LayoutPanelSelection.vue
   - front-end/src/components/layout/useLayoutEditor.ts
@@ -127,7 +127,8 @@ Following, a table's number is its seat's: a removal leaves the other numbers al
 The Sections card counts each section "<placed> of <count>", and the selection's card, for one table of a section, gains a Number field: a whole number from 1 to the count, one another table holds swapping the two as one step of undo (`setNumber`), anything else saying "Type a number from 1 to <count>." under it.
 A market leaving Draft with the page open drops a change no save stored, as an archived one does, and undo forgets its steps (`forgetUndo`), since taking one back could put back a table removed in Draft.
 The page holds the layout's working copy ([`useLayoutEditor.ts`](../../../front-end/src/components/layout/useLayoutEditor.ts), [below](#the-editor)); each save names the revision of the layout it read ([`layoutSave.ts`](../../../front-end/src/components/layout/layoutSave.ts)), and after each answer the page re-reads the market through [the one store](../conventions/one-market-from-the-server.md).
-The image is fetched with the session as a blob ([`useFloorplanImage.ts`](../../../front-end/src/components/layout/useFloorplanImage.ts)), as the image read requires.
+The images are fetched with the session as blobs, as the image read requires, through the one loader of a map's images ([`floorplanImages.ts`](../../../front-end/src/components/layout/floorplanImages.ts)): the open location's first and the market's other layouts' behind it, so a move to a location opened before is drawn at once, and its tables wait for its image, for at most two seconds, so they never stand over another location's (T501).
+The new image of a replacement has a loader of its own while it is calibrated, and the layout that takes it draws the bytes that loader read.
 
 ## The drawing
 
@@ -417,7 +418,7 @@ A route checks access right after it has read the id it is checked by, before th
 **No route draws or measures a layout**: the beta's `POST /floorplans/export`, which drew the tables on the image with PIL, and `POST /floorplans/calibrate`, which measured a line on it, are gone (T257), since [the PNG](#export-png) is drawn by the browser from the same drawing and a scale is the calibration's own arithmetic; their addresses are now an image id's, so a POST there answers 405.
 **The image read's audience is the people on the market**: `GET /floorplans/<id>` asks the Read row on the image's market, so anyone who reads the market reads its image, as the layout page and its PNG need, and an archived market's image still reads.
 It answers every refusal 404 "Image not found", a signed-in account with no role on the market included, so the answer never tells a stranger that an id names an image.
-Its readers, the layout page's [`useFloorplanImage.ts`](../../../front-end/src/components/layout/useFloorplanImage.ts), [`FloorplanUploader.vue`](../../../front-end/src/components/layout/FloorplanUploader.vue) and [the PNG export](#export-png), fetch it through the API client with the session's cookie, as a blob.
+Its readers, the maps' [`floorplanImages.ts`](../../../front-end/src/components/layout/floorplanImages.ts), [`FloorplanUploader.vue`](../../../front-end/src/components/layout/FloorplanUploader.vue) and [the PNG export](#export-png), fetch it through the API client with the session's cookie, as a blob.
 The settled-setup refusal stays on save alone, and past draft only for a save that changes a seat of a layout started in Draft, since only save writes a layout, and only such a layout's tables are its sections' counts.
 **Every floorplan route needs a sign-in**, and `TestEveryFloorplanRouteNeedsASignIn` in [`back-end/tests/test_floorplan_access.py`](../../../back-end/tests/test_floorplan_access.py) keeps it so: it asks each route the floorplan blueprints register without a session and expects a 401, so a new route, or one whose `@login_required` is missing or above its `@route`, fails it.
 
