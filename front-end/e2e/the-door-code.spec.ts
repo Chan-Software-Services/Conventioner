@@ -5,6 +5,7 @@ import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
 import { LoginPage } from './pages/LoginPage';
 import { vendorPagePath } from './helpers/marketScreens';
+import { letVendorsCheckThemselvesIn } from './helpers/selfCheckIn';
 
 /**
  * The door code on Attendance (ADR 0022): shown full screen on whatever stands at the entrance, or
@@ -13,10 +14,15 @@ import { vendorPagePath } from './helpers/marketScreens';
  * An Editor, who may check vendors in, makes the code, reads it full screen with its QR code, makes
  * a new one behind a confirmation and sees it change; a Viewer is offered no Door code, and the
  * server refuses them the code itself.
+ *
+ * The screen holds the market's self check-in switch (T496), off until someone turns it on: while
+ * it is off the screen shows no code and says why. The market every walk here shares has it on,
+ * and one walk takes a market where nobody ever set it.
  */
 const VIEWER = { email: 'e2e-door-code-viewer@example.com', password: 'e2epassword123' };
 const EDITOR = { email: 'e2e-door-code-editor@example.com', password: 'e2epassword123' };
 const CODE = /^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{3} [23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{3}$/;
+const OFF = "Vendors' own check-in and check-out are off. Turn them on to show the door code.";
 
 const SIZES = [
   {
@@ -48,20 +54,67 @@ async function shownCode(door: AttendanceStatusPage): Promise<string> {
   return (await door.doorCodeValue.innerText()).replace(' ', '');
 }
 
+/** The self check-in switch, and the sentence in the poster's place while it is off. */
+const selfSwitch = (page: Page) => page.getByTestId('door-code-self-switch');
+const offNote = (page: Page) => page.getByTestId('door-code-off');
+
+/**
+ * Nothing scrolls sideways or down, each of `controls` is in the window at a phone's 44px, and the
+ * switch is a phone's target with its label and its help line whole in the window.
+ */
+async function expectTheFrameFits(page: Page, door: AttendanceStatusPage, phone: boolean) {
+  const { innerWidth, innerHeight, scrollWidth, scrollHeight, clientHeight } =
+    await door.doorCodeScroller.evaluate((el) => ({
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      scrollWidth: el.scrollWidth,
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    }));
+  expect(scrollWidth, 'nothing scrolls sideways').toBeLessThanOrEqual(innerWidth);
+  expect(scrollHeight, 'nothing scrolls down').toBeLessThanOrEqual(clientHeight);
+  const label = page.locator('label[for="door-code-self-switch"]');
+  expect((await label.boundingBox())!.height).toBeGreaterThanOrEqual(phone ? 44 : 24);
+  for (const [part, name] of [
+    [label, "the switch's label"],
+    [page.locator('#door-code-self-help'), "the switch's help line"],
+  ] as const) {
+    const box = (await part.boundingBox())!;
+    expect(box.x, name).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, name).toBeLessThanOrEqual(innerWidth);
+    expect(box.y + box.height, name).toBeLessThanOrEqual(innerHeight);
+  }
+  return { innerWidth, innerHeight };
+}
+
+/** Off: the frame fits, with Close alone among the controls and the sentence under the name. */
+async function expectItFitsOff(page: Page, door: AttendanceStatusPage, phone: boolean) {
+  const { innerWidth, innerHeight } = await expectTheFrameFits(page, door, phone);
+  const close = (await door.doorCodeClose.boundingBox())!;
+  expect(close.height).toBeGreaterThanOrEqual(phone ? 44 : 36);
+  const note = (await offNote(page).boundingBox())!;
+  expect(note.x).toBeGreaterThanOrEqual(0);
+  expect(note.x + note.width).toBeLessThanOrEqual(innerWidth);
+  expect(note.y + note.height).toBeLessThanOrEqual(innerHeight);
+  const market = (await door.doorCodeMarket.boundingBox())!;
+  expect(note.y, 'the sentence stands under the name').toBeGreaterThanOrEqual(
+    market.y + market.height,
+  );
+}
+
 /** Nothing scrolls sideways, every control is a phone's 44px, and the QR code is a square in the
  *  window, as large as what is around it allows. */
 async function expectItFits(page: Page, door: AttendanceStatusPage, phone: boolean) {
-  const { innerWidth, innerHeight, scrollWidth } = await door.doorCodeScroller.evaluate((el) => ({
-    innerWidth: window.innerWidth,
-    innerHeight: window.innerHeight,
-    scrollWidth: el.scrollWidth,
-  }));
-  expect(scrollWidth, 'nothing scrolls sideways').toBeLessThanOrEqual(innerWidth);
+  const { innerWidth, innerHeight } = await expectTheFrameFits(page, door, phone);
   for (const control of [door.doorCodeClose, door.doorCodePrint, door.doorCodeNew]) {
     const box = (await control.boundingBox())!;
     expect(box.height).toBeGreaterThanOrEqual(phone ? 44 : 36);
     expect(box.x + box.width).toBeLessThanOrEqual(innerWidth);
   }
+  // The switch stands between the controls and the poster, over neither.
+  const self = (await page.locator('#door-code-self-help').boundingBox())!;
+  const name = (await door.doorCodeMarket.boundingBox())!;
+  expect(name.y, 'the poster starts below the switch').toBeGreaterThanOrEqual(self.y + self.height);
   const qr = (await door.doorCodeQr.boundingBox())!;
   expect(qr.x).toBeGreaterThanOrEqual(0);
   expect(qr.x + qr.width).toBeLessThanOrEqual(innerWidth);
@@ -105,6 +158,66 @@ test.beforeAll(async ({ request }) => {
   }
   const read = await request.get(`${BACKEND_URL}/markets/${marketId}`);
   marketName = (await read.json()).market.name;
+  // Every walk of this market needs a code on screen, which only a market with the switch on shows.
+  await letVendorsCheckThemselvesIn(request, marketId);
+});
+
+test('a market nobody set shows no code until its switch is turned on, and keeps the code while off', async ({
+  page,
+  request,
+}) => {
+  const never = await seedPublishedMarketWithAssignments(
+    request,
+    BACKEND_URL,
+    TEST_USER.email,
+    TEST_USER.password,
+  );
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await signIn(page, TEST_USER, 1280);
+  const door = new AttendanceStatusPage(page);
+  await door.goto(never.marketId);
+  await expect(door.rows.first()).toBeVisible({ timeout: 15000 });
+
+  // Never set: off, with no code shown and none to make, print or replace.
+  await door.doorCodeButton.click();
+  await expect(selfSwitch(page)).toHaveRole('switch');
+  await expect(selfSwitch(page)).toHaveAccessibleName('Vendors check themselves in and out');
+  await expect(selfSwitch(page)).toHaveAccessibleDescription(
+    'While this is off, only organizers check vendors in and out, on Attendance.',
+  );
+  await expect(selfSwitch(page)).not.toBeChecked();
+  await expect(offNote(page)).toHaveText(OFF);
+  for (const gone of [door.doorCodeQr, door.doorCodeMake, door.doorCodePrint, door.doorCodeNew]) {
+    await expect(gone).toHaveCount(0);
+  }
+
+  // Turned on, by the keyboard, which keeps its place: the screen as it was, before a first code.
+  await selfSwitch(page).focus();
+  await page.keyboard.press('Space');
+  await expect(door.doorCodeMake).toBeVisible();
+  await expect(selfSwitch(page)).toBeChecked();
+  await expect(selfSwitch(page)).toBeFocused();
+  await expect(offNote(page)).toHaveCount(0);
+  await door.doorCodeMake.click();
+  const code = await shownCode(door);
+  await expect(door.doorCode).toContainText("Scan with your phone's camera to check in or out");
+
+  // Turned off: the code leaves the screen, and the market keeps it.
+  await selfSwitch(page).uncheck();
+  await expect(offNote(page)).toHaveText(OFF);
+  for (const gone of [door.doorCodeQr, door.doorCodeValue, door.doorCodePrint, door.doorCodeNew]) {
+    await expect(gone).toHaveCount(0);
+  }
+  // Closed and opened again, it is off as the server holds it.
+  await door.doorCodeClose.click();
+  await door.doorCodeButton.click();
+  await expect(selfSwitch(page)).not.toBeChecked();
+  await expect(offNote(page)).toHaveText(OFF);
+
+  // On again: the same code, so every poster of it works again.
+  await selfSwitch(page).check();
+  expect(await shownCode(door)).toBe(code);
+  await expect(door.doorCodePrint).toBeVisible();
 });
 
 test('an Editor makes the door code, reads it full screen and makes a new one', async ({
@@ -130,7 +243,7 @@ test('an Editor makes the door code, reads it full screen and makes a new one', 
     'data-url',
     new RegExp(`^https?://[^/]+${vendorPagePath(marketSlug)}\\?door=${first}$`),
   );
-  await expect(door.doorCode).toContainText("Scan with your phone's camera to check in");
+  await expect(door.doorCode).toContainText("Scan with your phone's camera to check in or out");
   await expect(page.getByTestId('door-code-made')).toContainText('by you');
   // The page behind is out of play, the app's frame and the roster with it.
   expect(
@@ -188,6 +301,8 @@ test('the poster prints on one page, with nothing of the app on it', async ({ pa
     door.doorCodeClose,
     door.doorCodePrint,
     door.doorCodeNew,
+    selfSwitch(page),
+    page.locator('#door-code-self-help'),
     page.getByTestId('attendance-search'),
     page.getByTestId('phase-rail-current'),
   ]) {
@@ -263,7 +378,7 @@ for (const size of SIZES) {
     const width = size.use.viewport.width;
     const phone = width < 640;
 
-    test('the door code fits the window', async ({ page }) => {
+    test('the door code fits the window, with its switch on and off', async ({ page }) => {
       await signIn(page, EDITOR, width);
       const made = await page.request.post(`${APP_API}/markets/${marketId}/door-code`);
       expect(made.ok(), await made.text()).toBeTruthy();
@@ -274,8 +389,17 @@ for (const size of SIZES) {
         expect((await door.doorCodeButton.boundingBox())!.height).toBeGreaterThanOrEqual(44);
       }
       await door.doorCodeButton.click();
-      await shownCode(door);
+      const code = await shownCode(door);
 
+      await expectItFits(page, door, phone);
+
+      await selfSwitch(page).uncheck();
+      await expect(offNote(page)).toHaveText(OFF);
+      await expectItFitsOff(page, door, phone);
+
+      // On again, for the walks that follow, and the screen is as it was.
+      await selfSwitch(page).check();
+      expect(await shownCode(door)).toBe(code);
       await expectItFits(page, door, phone);
     });
 

@@ -52,7 +52,7 @@ describes:
   - back-end/assignment/lifecycle.py#store
   - back-end/assignment/lifecycle.py#publish
   - back-end/migrations/migrate_assignment_state.py
-verified: 2026-11-17
+verified: 2026-11-19
 sources:
   - T244
   - T274
@@ -147,6 +147,7 @@ Elsewhere:
 - Publish results (`publish_results` in [`back-end/api/applicants.py`](../../../back-end/api/applicants.py), writing through `publish` in [`back-end/assignment/lifecycle.py`](../../../back-end/assignment/lifecycle.py)), holding `resultsPublished` and `assignmentObject.revision`, and setting `assignmentObject.publishedRevision` to the revision held ([the assignment's lifecycle](assignment-lifecycle.md)): an allocation stored after Publish judged the one it read current refuses the publish, and Back to review, which moves the phase, never crosses it ([Publish results waits for the allocation](../../business/rules/publish-results-waits-for-the-allocation.md)).
 - Stop or take applications (`set_applications_stopped`), holding `intakeMode`.
 - The door code (`make_door_code` in [`back-end/api/door.py`](../../../back-end/api/door.py)), holding the phase alone, so a market archived since it was loaded gets no code.
+- The self check-in switch (`set_self_check_in` in [`back-end/api/door.py`](../../../back-end/api/door.py)), holding `vendorSelfCheckIn` as read beside the phase, so a switch set meanwhile in another tab refuses it ([attendance and the door](attendance-and-door.md)).
 - The Discord connection ([`back-end/api/discord_connection.py`](../../../back-end/api/discord_connection.py), [the Discord connection](discord.md)): the check and the run hold the server, the role and the username question they read the members against (the check its `checkedAt` too), declining a possible match holds the server, and the card's save and a connection hold each field they change, or `discord` whole on a market never connected.
   The run gives its roles in Discord before it writes, so its refusal, `RolesGivenOnAChangedMarket`, is a `MarketChanged` in its own words: "The Discord card changed while roles were being given. The roles given are in the market's history; check Discord again."
 - The public map's settings ([`back-end/public_map.py`](../../../back-end/public_map.py), [the public map](public-map.md#the-settings)): the card's save holds `publicMap` whole as read, so a change saved meanwhile in another tab, of another setting even, refuses it.
@@ -157,6 +158,7 @@ Elsewhere:
 - Every write of the assignment, a run, a placement, a free and a swap (`store` in [`back-end/assignment/lifecycle.py`](../../../back-end/assignment/lifecycle.py), which [`back-end/api/placements.py`](../../../back-end/api/placements.py) calls), counting `assignmentObject.revision` from the one read; a run also holds `resultsPublished`, so an allocation never lands after Publish results, and no placement lands on a market archived a moment before ([placements](placements.md#the-four-doors)).
   The Tables page reads its grid again on the refusal and says the sentence in the seat's dialog ([placing by hand](../../business/flows/placing-by-hand.md)).
 - The assignment state's migration (`set_one` in [`back-end/migrations/migrate_assignment_state.py`](../../../back-end/migrations/migrate_assignment_state.py)), holding the state, `madeFrom`, `resultsPublished`, `publishedRevision` and the assignment's `revision` as it judged them, the revision held but not counted, since the rows are unchanged; a market changed meanwhile is judged again, up to three tries ([the assignment's lifecycle](assignment-lifecycle.md#the-migration)).
+- The swap of two locations' names (`swap` in [`back-end/migrations/swap_location_names.py`](../../../back-end/migrations/swap_location_names.py)), an operator's script, holding the phase, the assignment's `revision` and `madeFrom` as read, and `planRevision`, which it counts, since it writes the plan; the assignment's `revision` is held and not counted, so published results do not read as changed, and so a seat written by hand from a read before the swap is not refused, which is why it is run while no organizer is working on the market ([the setup settles on leaving draft](../../business/rules/the-setup-settles-on-leaving-draft.md#where-it-is-kept)).
 
 ## The form's revision
 

@@ -61,6 +61,8 @@ def world(monkeypatch, market_records):
             "intakeMode": intake_mode, "phaseHistory": record, "resultsPublished": True,
             "assignmentObject": {"vendorAssignments": SEATS},
             "doorCode": {"code": CODE, "madeAt": "2099-08-01T08:00:00+00:00", "madeBy": "o@x"},
+            # The market lets its vendors check themselves in and out (T496): off unless set.
+            "vendorSelfCheckIn": True,
             **overrides,
         }
         markets.doc = copy.deepcopy(stored_market(phase, **fields))

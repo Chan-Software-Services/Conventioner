@@ -1634,6 +1634,8 @@ const onItsDays = (overrides: Partial<VendorPageInfo> = {}) =>
     takesApplications: false,
     resultsPublished: true,
     marketDates: [TODAY, ANOTHER_DAY].sort(),
+    // The market lets its vendors check themselves in (T496); off is aVendorChecksOut.test.ts's.
+    selfCheckIn: true,
     ...overrides,
   });
 

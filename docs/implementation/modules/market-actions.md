@@ -25,7 +25,7 @@ describes:
   - back-end/api/markets.py#_market_change
   - back-end/tests/test_a_change_records_under_the_row_it_asked.py
   - back-end/tests/test_only_an_asking_writes_a_markets_history.py
-verified: 2026-11-18
+verified: 2026-11-19
 sources:
   - E39
   - E39/F01/S01
@@ -58,6 +58,7 @@ sources:
   - T315
   - T422
   - T352
+  - T496
 ---
 
 # The market's actions
@@ -85,7 +86,7 @@ Both ask the read row the same way, through `read_refused` in [`back-end/api/mar
 Called on an `Asked` that was refused it raises `RecordedARefusal`, an `AssertionError`: a refused write raises before it writes anything, so a record of one is a programming error, answered to no client.
 `_market_change(market_id, user, row)` in [`back-end/api/markets.py`](../../../back-end/api/markets.py) loads a market for a write and asks its row, and returns a `MarketChange` of the market, the organization it read, and the `Asked`; it is not found, refused as an unreadable market, refused in the row's words, then refused as archived whoever may, in that order.
 Every write of the markets module loads through it and records through its `Asked`, but for the role writes and the transfer of ownership, which load the market themselves since an archived market still takes them, and ask their rows with `ask`; a move (`take_move`), which records through the recorder its caller passes; a market's deletion, which asks its row with `refusal` and records in the organization's history; and a market's creation, which records in the organization's history (T352).
-So does every write of the placements, the payments and the organizer's door, each handing its `Asked` to the helpers that record for it: the history's placement writers, payments' `assignment_written`, `keep_freed_line` and `deduct_freed_day`, and attendance's `record_attendance` and `undo_attendance`; a free asked to deduct asks "Change the amount owed" with `ask` too, and records the deduction through that asking.
+So does every write of the placements, the payments and the organizer's door, each handing its `Asked` to the helpers that record for it: the history's placement writers, payments' `assignment_written`, `keep_freed_line` and `deduct_freed_day`, and attendance's `record_attendance`, `undo_attendance`, `record_check_out` and `undo_check_out`; a free asked to deduct asks "Change the amount owed" with `ask` too, and records the deduction through that asking.
 The routes of `app.py` that check a row and leave the write to another module ask it with `ask` and hand that module the `Asked`: every review write the giving row's (`_reviewer_on`, held in its `Reviewer`), a verdict and a selection's the change row's too (`_reviewing`, the applicants module's `Reviewing`, whose entry goes through the one the write took), the import and the start the import row's (`_importing_market_document`, held in its `ImportingMarket`), and publishing results and stopping applications their own; the markets module hands the Choose reviewers asking to `review_team.choose`.
 So does every write of the Discord connection, vendor info, added vendors and the table types; the floorplan routes ask with the floorplans access module's `market_asking` or `image_asking`, which answer the `Asked` their delete records through, and saving a floorplan to a market asks with `ask`.
 A write that asks a second row only to check it, as vendor info and the Discord match's decline ask "Update info the assignment or price reads" of an answer the assignment or a price reads, asks it with `refusal` of the person and organization its change let in, and records its one entry through the first row's asking.
@@ -355,6 +356,8 @@ Default: Editor.
 Asked by:
 
 - `POST` and `DELETE /markets/:id/attendance`
+- `POST` and `DELETE /markets/:id/attendance/check-out`
+- `PUT /markets/:id/self-check-in`
 
 ### Connect Discord and give roles (`connect-discord`)
 

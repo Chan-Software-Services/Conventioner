@@ -10,6 +10,7 @@ import {
 import { seedApprovedVendor } from './helpers/seedApplication';
 import { seedAssignedMarket } from './helpers/seedAssignedMarket';
 import { seedMarketDayMap, type SeededMarketDayMap } from './helpers/seedMarketDayMap';
+import { letVendorsCheckThemselvesIn } from './helpers/selfCheckIn';
 import { MarketPage } from './pages/MarketPage';
 import { PublicMapPage } from './pages/PublicMapPage';
 
@@ -76,6 +77,8 @@ test.beforeAll(async ({ request }) => {
   mapped = await seedMarketDayMap(request, BACKEND_URL, TEST_USER.email, TEST_USER.password, {
     publicMap: true,
   });
+  // Its vendors check themselves in, so a door poster's code is held for the sign-in (T496).
+  await letVendorsCheckThemselvesIn(request, mapped.marketId);
 
   // It ran: on its market days, a vendor checked in, then archived.
   ended = await seedMarketDayMap(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);

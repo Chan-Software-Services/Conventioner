@@ -2,6 +2,7 @@ import type { APIRequestContext } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
 import { seedPublishedMarketWithAssignments } from './helpers/seeds';
 import { calendarToday, forgetSignInAttempts, vendorToken } from './helpers/vendorSignIn';
+import { letVendorsCheckThemselvesIn } from './helpers/selfCheckIn';
 import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
 
 /**
@@ -22,12 +23,16 @@ function vendorsOf(name: string): [string, string] {
   return [`${name}-a-${at}@example.com`, `${name}-b-${at}@example.com`];
 }
 
-/** The vendor checks themselves in on their own phone, with the market's door code. */
+/**
+ * The vendor checks themselves in on their own phone, with the market's door code, at a market
+ * that lets them: the organizer turns the self check-in switch on first (T496).
+ */
 async function scansIn(
   request: APIRequestContext,
   seed: { marketId: string; marketSlug: string },
   vendor: string,
 ): Promise<void> {
+  await letVendorsCheckThemselvesIn(request, seed.marketId);
   const made = await request.post(`${BACKEND_URL}/markets/${seed.marketId}/door-code`);
   expect(made.ok(), await made.text()).toBeTruthy();
   const { code } = (await made.json()) as { code: string };

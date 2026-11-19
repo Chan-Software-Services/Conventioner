@@ -483,3 +483,24 @@ class TestTheRouteIsOneRead:
         body = _map(client).get_json()
 
         assert json.loads(json.dumps(body)) == body
+
+
+class TestTheDoorIsNotOnTheMap:
+    def test_a_check_in_and_a_check_out_change_nothing_it_answers(
+            self, client, world, market_records):
+        """The map shows who sits where, never who came or who left (T496)."""
+        before = _map(client)
+        assert before.status_code == 200
+        ana = {"market_id": MARKET, "vendor_email": "ana@ember.test", "date": DAY_ONE}
+
+        market_records.attendance.insert_one({
+            **ana, "table_code": "Aisle A 1", "checked_in_at": "2099-08-01T09:00:00+00:00",
+            "checked_in_by": None, "checked_in_via": "door_code"})
+        checked_in = _map(client)
+        market_records.attendance.update_one(ana, {"$set": {
+            "checked_out_at": "2099-08-01T17:00:00+00:00", "checked_out_by": None,
+            "checked_out_via": "door_code"}})
+        checked_out = _map(client)
+
+        assert checked_in.get_data() == before.get_data()
+        assert checked_out.get_data() == before.get_data()

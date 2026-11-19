@@ -174,7 +174,7 @@ describe('the next step', () => {
     const told = market(MarketPhase.Assignment, PUBLISHED);
 
     expect(nextStep(told, TODAY).text).toBe(
-      'Results are published, so the assignments are settled. Publish the market to open check-in with the door code; that cannot be undone.',
+      'Results are published, so the assignments are settled. Publish the market to open check-in on Attendance; that cannot be undone.',
     );
   });
 
@@ -260,15 +260,15 @@ describe('the next step', () => {
 describe('the rail reads where the table allocation stands (T316)', () => {
   const PINS_ONLY = 'Set the rules and allocate tables. The tables you assigned by hand are kept.';
   const CHECK =
-    'Check the assignments, then publish the market: that opens check-in with the door code, and cannot be undone.';
+    'Check the assignments, then publish the market: that opens check-in on Attendance, and cannot be undone.';
   const SETTLED =
-    'Results are published, so the assignments are settled. Publish the market to open check-in with the door code; that cannot be undone.';
+    'Results are published, so the assignments are settled. Publish the market to open check-in on Attendance; that cannot be undone.';
   const NOT_ALLOCATED =
     'Tables are not allocated yet. Read the rules they will follow on Settings.';
   const ALLOCATED =
     'Tables are allocated, and the market is not published yet. Read the assignments.';
   const WATCHED_SETTLED =
-    'Results are published, so the assignments are settled. Check-in with the door code opens when the market is published.';
+    'Results are published, so the assignments are settled. Check-in opens on Attendance when the market is published.';
 
   /** What the organizer and a Viewer read in Assignment, and where each is led. */
   const rail: Record<Allocation, { organizer: string; onlooker: string; page: string }> = {
@@ -436,7 +436,7 @@ describe('what the rail tells someone the step is not theirs', () => {
       'assignment, results published',
       viewer(MarketPhase.Assignment, PUBLISHED),
       TODAY,
-      'Results are published, so the assignments are settled. Check-in with the door code opens when the market is published.',
+      'Results are published, so the assignments are settled. Check-in opens on Attendance when the market is published.',
       'assignments',
     ],
     [

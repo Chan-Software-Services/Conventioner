@@ -26,6 +26,7 @@ import { seedPhaseMarket } from './helpers/seedPhaseMarket';
 import { savePlan } from './helpers/savePlan';
 import { mongoEval } from './helpers/mongo';
 import { saveApplicationForm } from './helpers/saveApplicationForm';
+import { letVendorsCheckThemselvesIn } from './helpers/selfCheckIn';
 
 /**
  * Every control can be reached and named by assistive technology (bug 44; E26/F10/S03).
@@ -353,6 +354,8 @@ test("every field of a vendor's check-in has a name", async ({ page, request }) 
     TEST_USER.password,
     { marketDate: calendarToday(), vendors: [vendor] },
   );
+  // The check-in's field stands only where the market lets vendors check themselves in (T496).
+  await letVendorsCheckThemselvesIn(request, seed.marketId);
   const vendorPage = new VendorPage(page);
   await vendorPage.goto(seed.marketSlug);
   await signInOnThePage(vendorPage, seed.marketId, vendor);
