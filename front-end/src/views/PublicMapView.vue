@@ -23,14 +23,20 @@
  * the address (`date`, `location`, `table`, `half`), each changed with `router.replace`, so a link
  * or a QR code opens one table, or one half, on one day; a value the map does not know falls back
  * to the default without an error, and a half the table is not split into that day shows the whole
- * table. The floorplan image
- * is read through the API client as bytes and drawn from an object URL, since the
- * Content-Security-Policy draws images only from the app and from blobs.
+ * table. The floorplan image is read through the API client as bytes and drawn from an object URL,
+ * since the Content-Security-Policy draws images only from the app and from blobs.
+ *
+ * Each hall's image is read by the one loader every map uses (`useFloorplanImages`, T501): the open
+ * hall's first, its tables held back until it is drawn, for at most two seconds, so a hall's tables
+ * and its image appear together; the other halls' after it, one at a time, so a switch to a hall
+ * opened before, or read behind the open one, is instant. It is drawn as the original, in its own
+ * colours and at full strength, with no control over it. A failed or slow image leaves the tables on
+ * the floor and the page says nothing of it: a visitor is told nothing they cannot act on.
  *
  * Nothing a vendor typed is rendered as markup: their three answers, cleaned by the server, are
  * text, and a link is built from them only as an `http`/`https` address or an Instagram handle.
  */
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import DayMap from '@/components/daymap/DayMap.vue';
 import IconSparkle from '@/components/icons/IconSparkle.vue';
@@ -52,6 +58,7 @@ import {
   type DayMapLegendItem,
   type PublicMapAnswer,
 } from '@/components/daymap/dayMap';
+import { useFloorplanImages, type FloorplanImageSource } from '@/components/layout/floorplanImages';
 import type { SeatHalf } from '@/components/layout/layoutDrawing';
 import { vendorPageAnswered } from '@/utils/currentPlace';
 import { calendarToday } from '@/utils/marketGuide';
@@ -161,45 +168,35 @@ function pick(tableId: string, seatKey: string | null) {
   void goTo({ ...place.value, tableId, half: halfOfSeat(seatKey) });
 }
 
-// ── The floorplan images, one object URL per location, read as each location opens ──
-const imageUrls = reactive<Record<string, string>>({});
-const asked = new Set<string>();
-
-watch(
-  () => [map.value, place.value.locationId] as const,
-  async ([answer, locationId]) => {
-    const location = answer?.locations.find((l) => l.id === locationId);
-    if (!location?.layout.hasImage || asked.has(locationId)) return;
-    asked.add(locationId);
-    const slug = marketSlug.value;
-    try {
-      const blob = await fetchPublicMapImage(slug, locationId);
-      if (gone || slug !== marketSlug.value) return;
-      imageUrls[locationId] = URL.createObjectURL(blob);
-    } catch {
-      // Drawn on the floor's colour alone: the tables still say where everyone is.
-      asked.delete(locationId);
-    }
-  },
-  { immediate: true },
+// ── The floorplan images: the open hall's first, the others' behind it, each kept for the page ──
+/** Each hall with an image, keyed by its location id and read as public bytes for this market. */
+const imageSources = computed<FloorplanImageSource[]>(() => {
+  const slug = marketSlug.value;
+  return (map.value?.locations ?? [])
+    .filter((location) => location.layout.hasImage)
+    .map((location) => ({
+      key: location.id,
+      fetch: () => fetchPublicMapImage(slug, location.id),
+    }));
+});
+// A failed or slow image draws the tables on the floor and says nothing: a visitor is told nothing
+// they cannot act on.
+const { open: image } = useFloorplanImages(
+  imageSources,
+  computed(() => place.value.locationId),
 );
-
-/** Forget one market's images, as the page leaves it. */
-function forgetImages() {
-  for (const url of Object.values(imageUrls)) URL.revokeObjectURL(url);
-  for (const id of Object.keys(imageUrls)) delete imageUrls[id];
-  asked.clear();
-}
 
 onUnmounted(() => {
   gone = true;
   vendorPageAnswered(answeredFor, false);
   document.title = titleBefore;
-  forgetImages();
 });
 
+/** The open hall drawn with its own image alone, and no other hall's. */
 const locations = computed(() =>
-  map.value ? publicDayLocations(map.value, (id) => imageUrls[id] ?? '') : [],
+  map.value
+    ? publicDayLocations(map.value, (id) => (id === place.value.locationId ? image.value.url : ''))
+    : [],
 );
 const seats = computed(() => (map.value ? publicSeats(map.value.seats, place.value.date) : []));
 /** The day map draws no legend of its own here: its `legend` slot holds the page's. */
@@ -246,6 +243,15 @@ const hall = ref<HTMLElement | null>(null);
 const cardPart = ref<InstanceType<typeof PublicMapTableCard> | null>(null);
 /** Bumped on each `viewed` of the day map, so the bubble places itself again. */
 const moved = ref(0);
+// The tables are held back while their image loads, so a card opened by the address finds no table
+// to speak from until they are drawn: it places itself again then.
+watch(
+  () => image.value.pending,
+  (now) => {
+    if (!now) moved.value++;
+  },
+  { flush: 'post' },
+);
 
 /** The table, or the half shown alone, the bubble speaks for. */
 const anchor = computed(() =>
@@ -522,6 +528,10 @@ async function openVendor(vendor: ListedVendor) {
               :seats="seats"
               :picked="pickedSeatKey ?? place.tableId"
               :legend="NO_LEGEND"
+              :imagePending="image.pending"
+              :showImage="true"
+              :imageInGrey="false"
+              :imageFaded="false"
               @update:locationId="chooseLocation"
               @pick="pick"
               @viewed="moved++"
