@@ -246,7 +246,44 @@ export class VendorPage {
     await this.checkInButton.click();
   }
 
-  /** Once the market has ended: each seat, and when they checked in. */
+  // ── Check-out, and the market's self check-in switch (T496) ────────────
+
+  /** The door code field of the check-out, under "Checked in at <time>". */
+  get checkOutCodeInput(): Locator {
+    return this.page.getByTestId('vendor-check-out-code-input');
+  }
+
+  get checkOutButton(): Locator {
+    return this.page.getByTestId('vendor-check-out-btn');
+  }
+
+  /** "Checked out at <time>", once they have. */
+  get checkedOut(): Locator {
+    return this.page.getByTestId('vendor-check-out-done');
+  }
+
+  /** The one Undo of a checked-out day, which undoes the check-out. */
+  get undoCheckOutButton(): Locator {
+    return this.page.getByTestId('vendor-check-out-undo-btn');
+  }
+
+  /** Type the door code under the QR code, and check out. */
+  async checkOutWith(code: string) {
+    await this.checkOutCodeInput.fill(code);
+    await this.checkOutButton.click();
+  }
+
+  /** While the switch is off: who checks them in or out, in place of the card's controls. */
+  get atTheDoor(): Locator {
+    return this.page.getByTestId('vendor-check-in-at-door');
+  }
+
+  /** What a door code scanned while the switch is off is answered with. */
+  get selfCheckInOff(): Locator {
+    return this.page.getByTestId('vendor-self-check-in-off');
+  }
+
+  /** Once the market has ended: each seat, and when they checked in and out. */
   get record(): Locator {
     return this.page.getByTestId('vendor-check-in-record');
   }

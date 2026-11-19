@@ -23,7 +23,9 @@
  *
  * The door's QR code opens this page on `?door=<code>` (ADR 0022). The code is kept in this tab
  * and taken off the address at once, so it is never left in the history or a shared link; it waits
- * through the sign-in, and the check-in section uses it once, for today.
+ * through the sign-in, and the check-in section uses it once, for today. At a market whose self
+ * check-in switch is off (T496) it is dropped as soon as the page knows, before any sign-in, and
+ * the page says an organizer checks vendors in and out.
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -31,6 +33,7 @@ import { useApplicationStore } from '@/stores/application';
 import { vendorPageAnswered } from '@/utils/currentPlace';
 import { marketPagePath } from '@/utils/market';
 import { getFormattedDate } from '@/utils/utils';
+import { onlyOrganizersCheckIn, SELF_CHECK_IN_OFF } from '@/utils/vendorPage';
 import PageNotFound from '@/components/PageNotFound.vue';
 import VendorSignIn from '@/components/vendorPage/VendorSignIn.vue';
 import VendorStatus from '@/components/vendorPage/VendorStatus.vue';
@@ -62,6 +65,7 @@ const marketPage = computed(() => marketPagePath(marketSlug.value));
 
 async function load() {
   state.value = 'loading';
+  scannedWhileOff.value = false;
   const read = await store.loadPage(marketSlug.value);
   if (read.notFound) {
     state.value = 'not-found';
@@ -71,6 +75,7 @@ async function load() {
     state.value = 'failed';
     return;
   }
+  dropDoorCodeWhileOff();
   if (!signedIn.value) await store.resume(marketSlug.value);
   if (signedIn.value) {
     await loadSignedIn();
@@ -107,11 +112,25 @@ async function signOut() {
   signingOut.value = false;
 }
 
-/** Keep a door code the address carries, and take it off the address. */
+/** A door code met the switch off: said once, where the page's notices stand. */
+const scannedWhileOff = ref(false);
+
+/** Do only organizers check vendors in here, as the page this address answered with says? */
+function doorIsOrganizersOnly(): boolean {
+  return state.value !== 'loading' && !!store.page && onlyOrganizersCheckIn(store.page);
+}
+
+/**
+ * Keep a door code the address carries, and take it off the address. One scanned while the page
+ * is open on a market whose switch is off is never kept.
+ */
 function holdDoorCodeFromAddress() {
   const door = route.query.door;
   if (typeof door !== 'string') return;
-  if (door.trim()) store.holdDoorCode(marketSlug.value, door.trim());
+  if (door.trim()) {
+    if (doorIsOrganizersOnly()) scannedWhileOff.value = true;
+    else store.holdDoorCode(marketSlug.value, door.trim());
+  }
   const rest = Object.fromEntries(Object.entries(route.query).filter(([key]) => key !== 'door'));
   void router.replace({ query: rest, hash: route.hash });
 }
@@ -120,6 +139,16 @@ function holdDoorCodeFromAddress() {
 watch(() => route.query.door, holdDoorCodeFromAddress);
 
 const doorCodeHeld = computed(() => store.heldDoorCode?.marketSlug === marketSlug.value);
+
+/**
+ * Once the market is read: a door code kept for it while its switch is off is dropped at once,
+ * before any sign-in, so nobody signs in to be checked in by it.
+ */
+function dropDoorCodeWhileOff() {
+  if (!store.page || !onlyOrganizersCheckIn(store.page) || !doorCodeHeld.value) return;
+  store.dropDoorCode();
+  scannedWhileOff.value = true;
+}
 
 onMounted(() => {
   store.error = null;
@@ -182,6 +211,15 @@ onMounted(() => {
           <template v-if="vendorName">{{ ` (${store.applicantEmail})` }}</template>
         </p>
       </header>
+
+      <p
+        v-if="scannedWhileOff"
+        class="vendor-page-notice"
+        role="status"
+        data-testid="vendor-self-check-in-off"
+      >
+        {{ SELF_CHECK_IN_OFF }}
+      </p>
 
       <template v-if="!signedIn">
         <p v-if="doorCodeHeld" class="vendor-page-door" data-testid="vendor-page-door-held">
@@ -287,6 +325,18 @@ onMounted(() => {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
+}
+
+/* Worded and drawn as the check-in's own notice, which stands in the same place. */
+.vendor-page-notice {
+  margin: 0;
+  background: var(--mm-chip-informational);
+  border: 1px solid var(--mm-blue);
+  border-radius: var(--radius-control);
+  padding: var(--space-4);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--mm-blue);
 }
 
 /* What a scanned door code waits for, said over the sign-in, centred as its title is. */
