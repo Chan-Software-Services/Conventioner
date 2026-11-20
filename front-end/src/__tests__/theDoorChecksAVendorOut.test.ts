@@ -6,7 +6,8 @@
  *
  * The door recorded that a vendor came and nothing that they left. A check-out is three fields
  * beside the check-in's on the day's one record, so a vendor checked out still came: their status,
- * the count, the Show buttons, the map and the printed roster read as before.
+ * the count, the Show buttons and the printed roster read as before, and the map is given the same
+ * rows, which it draws checked out (T501, `theDoorAsAMap.test.ts`).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
@@ -588,12 +589,12 @@ describe('nothing else on the page reads a check-out', () => {
       here: await shownUnder('here'),
       found: [await shownUnder('all'), await search('ana'), await search('A2')],
     };
-    // The map is given the roster's rows as the list reads them: what it draws it reads off
-    // `state`, which a check-out never changes.
+    // The map is given the roster's rows as the list reads them, `state` unchanged by a check-out;
+    // it draws a checked-out vendor in the out shade (T501), which `theDoorAsAMap.test.ts` holds.
     route.query = { view: 'map' };
     await flushPromises();
     const map = wrapper.getComponent({ name: 'AttendanceMap' });
-    const mapProps = map.props() as { rows: Row[]; notHere: string; hereWithoutSeat: number };
+    const mapProps = map.props() as { rows: Row[]; hereWithoutSeat: number };
     const drawn = {
       rows: mapProps.rows.map(({ vendorEmail, state, tableCode, checkedInAt }) => ({
         vendorEmail,
@@ -601,7 +602,6 @@ describe('nothing else on the page reads a check-out', () => {
         tableCode,
         checkedInAt,
       })),
-      notHere: mapProps.notHere,
       hereWithoutSeat: mapProps.hereWithoutSeat,
       summary: wrapper.get('[data-testid="attendance-summary"]').text(),
     };
@@ -610,7 +610,7 @@ describe('nothing else on the page reads a check-out', () => {
     return { ...said, map: drawn };
   }
 
-  it('the summary, the Show buttons, the search, the map and the printed roster read the same', async () => {
+  it("the summary, the Show buttons, the search, the map's rows and the printed roster read the same", async () => {
     const before = await read(false);
     const after = await read(true);
 

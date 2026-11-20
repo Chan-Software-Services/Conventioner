@@ -534,7 +534,6 @@ describe("Attendance's map draws its floorplan in step", () => {
         rows: [],
         date: '2099-08-01',
         openVendor: null,
-        notHere: 'Not yet',
         hereWithoutSeat: 0,
       },
       global: { stubs: { RouterLink: true } },

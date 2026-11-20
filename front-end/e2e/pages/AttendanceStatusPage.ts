@@ -77,7 +77,8 @@ export class AttendanceStatusPage {
   readonly map: Locator;
   readonly legend: Locator;
   readonly mapNote: Locator;
-  /** "<n> here with no table" and "<n> vendors are at tables not on a layout.", under the map. */
+  /** "<n> checked in with no table" and "<n> vendors are at tables not on a layout.", under the
+   *  map. */
   readonly mapUnseated: Locator;
   readonly mapOffLayout: Locator;
   /** "No location has a layout yet.", where nothing is laid out. */
@@ -162,10 +163,14 @@ export class AttendanceStatusPage {
   }
 
   /**
-   * How a table, or a half, is drawn: `filled` in its section's colour (here), `outlined` on white
-   * (expected) or `free` on the floor's colour (no vendor), read off its top's paint.
+   * How a table, or a half, is drawn: `filled` in its section's colour (checked in), `checkedOut`
+   * in its section's darker out shade (checked out, T501), `outlined` on white (not checked in) or
+   * `free` on the floor's colour (no vendor), read off its top's paint.
    */
-  async tone(code: string, half?: 'left' | 'right'): Promise<'filled' | 'outlined' | 'free'> {
+  async tone(
+    code: string,
+    half?: 'left' | 'right',
+  ): Promise<'filled' | 'checkedOut' | 'outlined' | 'free'> {
     const target = this.mapTable(code, half);
     const shape = half
       ? target.locator('path').first()
@@ -173,6 +178,7 @@ export class AttendanceStatusPage {
     const fill = (await shape.getAttribute('fill')) ?? '';
     if (fill === 'white') return 'outlined';
     if (fill.includes('layout-floor')) return 'free';
+    if (/-out\)$/.test(fill)) return 'checkedOut';
     return 'filled';
   }
 

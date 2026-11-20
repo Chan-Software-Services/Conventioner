@@ -2,7 +2,7 @@
 /**
  * The day map (T422): `DayMap`, a location's layout drawn on one market day, on the library's
  * fixture halls with their seats dealt from a seeded draw (`marketDay`): Upper Hall and Lower Hall,
- * every tone, a shared table with both halves held, one with a half free, and a seat marked as a
+ * every tone, Attendance's three (checked in, checked out and not checked in) among them, a shared table with both halves held, one with a half free, and a seat marked as a
  * search marks it. Attendance's day, the public map's, and the same at a phone's width; then the
  * map filling a box of its own, as the public map's hall draws it (T465), with a two-item legend in
  * its slot, at a desk and at a phone's width. Every map here is the real component; the lines under
@@ -29,8 +29,9 @@ const day = marketDay(422);
 const taken: MapSeat[] = day.seats.map((seat) => ({ ...seat, tone: 'filled' }));
 
 const AT_THE_DOOR: DayMapLegendItem[] = [
-  { tone: 'filled', label: 'Here' },
-  { tone: 'outlined', label: 'Expected' },
+  { tone: 'filled', label: 'Checked in' },
+  { tone: 'checkedOut', label: 'Checked out' },
+  { tone: 'outlined', label: 'Not checked in' },
   { tone: 'free', label: 'No vendor' },
 ];
 const IN_PUBLIC: DayMapLegendItem[] = [
@@ -42,6 +43,7 @@ const { counts } = day;
 const dealt = [
   `${counts.tables} tables`,
   `${counts.filled} seats filled`,
+  `${counts.checkedOut} in the out shade`,
   `${counts.outlined} outlined`,
   `${counts.free} tables free`,
   `${counts.shared} shared, ${counts.halfFree} of them with a half free`,
@@ -138,7 +140,7 @@ const FILLS_LEGEND = [
   >
     <LibraryPanel
       class="library-wide"
-      label="Attendance's day: here filled, expected outlined, no vendor free; a press read out"
+      label="Attendance's day: checked in filled, checked out darker, not checked in outlined, no vendor free; a press read out"
     >
       <div class="library-demo" data-testid="library-day-map-door">
         <DayMap

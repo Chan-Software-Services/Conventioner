@@ -147,7 +147,8 @@ Covered by:
    The phase guide's "Print each day's roster, then check vendors in at the door." asks for it; the page has no note of its own (T466).
 9. "List" and "Map", first of the toolbar's end, show the day as its rows or as a map of the venue's layouts (T422); the map is kept across a change of day and a reload.
    With two locations or more laid out, the map's location is a select beside the day, offering exactly the locations the map can draw, and kept in the address, so a reload or a shared link opens the same hall; with one, there is no select.
-   Each table is drawn by its vendor: filled once they are here, outlined while they are expected, and a grey dashed outline with nobody at it; the legend says "Here" and "Expected" (or "Did not come"), and "No vendor" only on a day the open location draws a table or half nobody sits at (T466).
+   Each table is drawn by its vendor: filled once they are checked in, in a darker shade of the same colour once they have checked out, outlined while they are not checked in, and a grey dashed outline with nobody at it; each vendor's table is named to a screen reader with their state, "Ana Rivera, checked out" (T501).
+   The legend says "Checked in", "Checked out" and "Not checked in" at every time of day, and "No vendor" only on a day the open location draws a table or half nobody sits at (T466).
    The no-table zones, the stage or the entrance, stay drawn and named on the map, with no legend item.
    A location's tables and its floorplan appear together, never one location's tables over another's floorplan: the other locations' floorplans load in the background once the open one has, so a later switch is instant, and a reload downloads none of them again (T501).
    If the floorplan takes more than two seconds, the tables are drawn on the plain floor with "Loading the floorplan..." under the map until it comes; one that cannot be loaded leaves them there with "The floorplan could not be loaded. The tables are drawn without it.", and is tried again the next time its location opens.
@@ -157,7 +158,7 @@ Covered by:
    A press on a vendor's table opens their drawer, as their name on the list does, and Back closes it on the map; a press on a table with nobody says "Table Aisle A 4: no vendor on Nov 17, 2026." under the map.
    On the map, "Find a vendor" is a search with a dropdown of the day's vendors, found by the name they go by, the full name on their identification, address or table, each row saying where they sit; picking one opens their drawer and outlines their table, switching the map to their location when it is the other one, and closing the drawer clears the outline; typing alone outlines nothing (T466).
    The map changes as the roster reads itself again, and the dropdown keeps its words and stays open through a re-read.
-   Under the map, "<n> here with no table" and "<n> vendors are at tables not on a layout." count the vendors it cannot draw, each with "Show in the list", which opens the list showing all; with no location laid out it says "No location has a layout yet." alone, with "Open the layout" for whoever may change the setup.
+   Under the map, "<n> checked in with no table" and "<n> vendors are at tables not on a layout." count the vendors it cannot draw, each with "Show in the list", which opens the list showing all; with no location laid out it says "No location has a layout yet." alone, with "Open the layout" for whoever may change the setup.
    Check in, Check out and Undo? stay on the list: the map and the drawer check nobody in or out, so a Viewer reads the map as an Editor does.
 
 It lists everyone expected on the day, so it shows who is missing; "Nobody is assigned on this date." on a date with nobody.
@@ -194,7 +195,7 @@ Covered by:
 
 A wrong code says what a check-in's does (K3), and a day with no check-in "You are not checked in on this date."
 The vendor's other days read "(checked in at <time>, checked out at <time>)", and the record of a market that ended "Checked in at <time>, checked out at <time>".
-A check-out changes nothing else: "N of M checked in", "Show", the search, the map, the printed roster, "Did not come", the Stats tab and what a vendor owes read a checked-out vendor as checked in, and freeing or moving them still asks first.
+The map draws a checked-out vendor's table in the darker shade of its section's colour (K5); a check-out changes nothing else: "N of M checked in", "Show", the search, the printed roster, "Did not come", the Stats tab and what a vendor owes read a checked-out vendor as checked in, and freeing or moving them still asks first.
 The market's history says each: "… checked Ana Rivera out on Nov 19, 2026", "… undid the check-out of Ana Rivera …", and for the vendor's own "Ana Rivera checked out with the door code …" ([reading the market's history](reading-the-markets-history.md#l6-read-the-markets-history)).
 Covered by:
 

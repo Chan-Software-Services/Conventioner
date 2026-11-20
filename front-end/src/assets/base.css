@@ -125,25 +125,35 @@
   /* ---- The section palette (T257): the eight colours a layout's sections are drawn in, a table
      filled with its section's tint and edged in its hue, the table's number in --mm-black on the
      tint. Each fill carries --mm-black past 7:1, and each edge stands past 3:1 against the
-     floor and against white, the ground of a section's name pill and of a printed map;
+     floor and against white, the ground of a section's name pill and of a printed map. Each out
+     shade (T501), a checked-out vendor's seat on Attendance's map, is the tint mixed toward its
+     hue until --mm-black reads past 7.5:1 on it, standing 1.5:1 or more from the tint;
      `contrast.test.ts` holds every pair to those floors. A section's style names its colour by
      its number here, so the order is stored data: add a ninth after these, never between. ---- */
   --layout-section-1-fill: #f8e7c2; /* gold; --mm-black on it: 12.73 */
   --layout-section-1-edge: #a97a1b; /* on the floor: 3.42; on white: 3.83 */
+  --layout-section-1-out: #d1b270; /* --mm-black on it: 7.63; from the tint: 1.67 */
   --layout-section-2-fill: #dce9ee; /* blue; --mm-black on it: 12.53 */
   --layout-section-2-edge: #1a6f8b; /* on the floor: 5.09; on white: 5.69 */
+  --layout-section-2-out: #92bbc8; /* --mm-black on it: 7.52; from the tint: 1.67 */
   --layout-section-3-fill: #f3ddd8; /* terracotta; --mm-black on it: 11.95 */
   --layout-section-3-edge: #b0503f; /* on the floor: 4.62; on white: 5.17 */
+  --layout-section-3-out: #daa99f; /* --mm-black on it: 7.52; from the tint: 1.59 */
   --layout-section-4-fill: #dfebe8; /* green; --mm-black on it: 12.72 */
   --layout-section-4-edge: #36826f; /* on the floor: 4.10; on white: 4.59 */
+  --layout-section-4-out: #95bdb3; /* --mm-black on it: 7.56; from the tint: 1.68 */
   --layout-section-5-fill: #e6e0f3; /* violet; --mm-black on it: 12.08 */
   --layout-section-5-edge: #6b54a8; /* on the floor: 5.43; on white: 6.07 */
+  --layout-section-5-out: #baaed8; /* --mm-black on it: 7.50; from the tint: 1.61 */
   --layout-section-6-fill: #cfeeee; /* teal; --mm-black on it: 12.67 */
   --layout-section-6-edge: #0e8a8f; /* on the floor: 3.72; on white: 4.16 */
+  --layout-section-6-out: #78c1c3; /* --mm-black on it: 7.56; from the tint: 1.68 */
   --layout-section-7-fill: #f5dde8; /* rose; --mm-black on it: 12.13 */
   --layout-section-7-edge: #b0457a; /* on the floor: 4.72; on white: 5.28 */
+  --layout-section-7-out: #dba5bf; /* --mm-black on it: 7.51; from the tint: 1.62 */
   --layout-section-8-fill: #e8ebd0; /* olive; --mm-black on it: 12.75 */
   --layout-section-8-edge: #6f7a25; /* on the floor: 4.19; on white: 4.68 */
+  --layout-section-8-out: #b3b985; /* --mm-black on it: 7.55; from the tint: 1.69 */
   /* A table in no section: grey, and no number. */
   --layout-no-section-fill: #e7e5e2; /* --mm-black on it: 12.36 */
   --layout-no-section-edge: #7a7672; /* on the floor: 4.03; on white: 4.50 */

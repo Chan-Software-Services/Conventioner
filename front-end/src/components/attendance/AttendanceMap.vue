@@ -1,17 +1,20 @@
 <script setup lang="ts">
 /**
  * Attendance's map (T422, D38 to D41): the open day drawn as the venue's layouts, each table by
- * whether its vendor is here (filled), expected (outlined) or absent from the plan (free), from the
- * roster the page already reads and re-reads, so the map is as fresh as the list.
+ * whether its vendor is checked in (filled), checked out (filled in the darker out shade, T501),
+ * not checked in (outlined) or absent from the plan (free), from the roster the page already reads
+ * and re-reads, so the map is as fresh as the list. Each seat is named to a screen reader by its
+ * vendor and their state, "Ana Rivera, checked out", so the states reach a reader without colour.
  *
  * A press on a vendor's table, or on their half of a shared one, asks the page to open their drawer,
  * as a press on their row does; the open vendor's seat is the picked one. A press on a table with no
  * vendor says so under the map and opens nothing. A vendor picked in the page's search opens the
  * same way, so their seat is the picked one; typing alone marks nothing (T466). The vendors the map
- * cannot draw are counted under it, with the way back to the list: those here with
- * no table, and those whose table is on no layout. The legend names "No vendor" only on a day the
- * open location draws a table or half nobody sits at (`drawsAFreePart`), and the read time the page
- * gives stands under the map as the day map's note.
+ * cannot draw are counted under it, with the way back to the list: those checked in with
+ * no table, and those whose table is on no layout. The legend names the three states, "Checked in",
+ * "Checked out" and "Not checked in", at every time of day, and "No vendor" only on a day the open
+ * location draws a table or half nobody sits at (`drawsAFreePart`); the read time the page gives
+ * stands under the map as the day map's note.
  *
  * A location's tables and its floorplan appear together (T501): the open location's image is read
  * first and the others' behind it (`useFloorplanImages`), the tables wait for it for at most two
@@ -37,7 +40,7 @@ import {
   type RosterSeatRow,
 } from '@/components/daymap/dayMap';
 import { drawsAFreePart } from '@/components/daymap/freeParts';
-import { tableCode } from '@/components/layout/layoutDrawing';
+import { tableCode, type SeatTone } from '@/components/layout/layoutDrawing';
 import { useFloorplanImages, type FloorplanImageSource } from '@/components/layout/floorplanImages';
 import { rememberedChoice } from '@/components/layout/layoutViewChoices';
 import { api } from '@/utils/api';
@@ -52,9 +55,7 @@ const props = defineProps<{
   date: string;
   /** The vendor whose drawer is open, by email, or null. */
   openVendor: string | null;
-  /** What the list calls a vendor not here: "Not yet", or "Did not come" once the day is over. */
-  notHere: string;
-  /** How many are here on `date` with no table that day. */
+  /** How many are checked in on `date` with no table that day. */
   hereWithoutSeat: number;
   /** When the roster was last read, in words, under the map's bottom right. */
   updated?: string;
@@ -112,7 +113,14 @@ const imageFaded = rememberedChoice('imageFaded', true);
 
 const tableTypes = computed(() => props.market?.setupObject?.tableTypes ?? []);
 
-/** Each seat named as the list names its vendor: their name, else their address. */
+/** What each tone says of a vendor's day, in the legend and in their seat's name (T501). */
+const STATE: Record<SeatTone, string> = {
+  filled: 'Checked in',
+  checkedOut: 'Checked out',
+  outlined: 'Not checked in',
+};
+
+/** Each seat named as the list names its vendor, their name, else their address, and their state. */
 const drawn = computed(() =>
   rosterSeats(
     props.rows.map((row) => ({ ...row, vendorName: row.vendorName || row.vendorEmail })),
@@ -120,7 +128,12 @@ const drawn = computed(() =>
     laidOut.value,
   ),
 );
-const seats = computed(() => drawn.value.seats);
+const seats = computed(() =>
+  drawn.value.seats.map((seat) => ({
+    ...seat,
+    name: `${seat.name}, ${STATE[seat.tone].toLowerCase()}`,
+  })),
+);
 const offLayout = computed(() => drawn.value.notOnALayout.length);
 
 /** The open location as the map draws it, for what its legend names. */
@@ -129,10 +142,11 @@ const openLocation = computed(() => laidOut.value.find((each) => each.id === ope
 /** The floorplan's ticks stand only where the open location has an image to draw. */
 const hasImage = computed(() => Boolean(openLocation.value?.layout.imageGridfsId));
 
-/** "No vendor" only on a day the open map draws a table or half nobody sits at. */
+/** The three states at every time of day, since the legend names the map's states whether or
+ *  not a vendor is in each; "No vendor" only on a day the open map draws a table or half nobody
+ *  sits at. */
 const legend = computed<DayMapLegendItem[]>(() => [
-  { tone: 'filled', label: 'Here' },
-  { tone: 'outlined', label: props.notHere === 'Not yet' ? 'Expected' : props.notHere },
+  ...(['filled', 'checkedOut', 'outlined'] as const).map((tone) => ({ tone, label: STATE[tone] })),
   ...(openLocation.value && drawsAFreePart(openLocation.value, seats.value)
     ? [{ tone: 'free' as const, label: 'No vendor' }]
     : []),
@@ -271,7 +285,7 @@ const mayChangeSetup = computed(() => mayTake(props.market, MarketAction.ChangeS
       </p>
     </template>
     <p v-if="hereWithoutSeat > 0" class="door-map__count" data-testid="attendance-map-unseated">
-      {{ hereWithoutSeat }} here with no table
+      {{ hereWithoutSeat }} checked in with no table
       <button
         type="button"
         class="btn btn--secondary btn--compact"

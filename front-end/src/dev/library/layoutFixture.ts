@@ -304,7 +304,8 @@ const NAME_KIND = [
 export interface FixtureDay {
   locations: DayMapLocation[];
   tableTypes: TableTypeObject[];
-  /** The seats as Attendance draws them: here filled, expected outlined. */
+  /** The seats as Attendance draws them: checked in filled, checked out in the out shade, not
+   *  checked in outlined. */
   seats: MapSeat[];
   counts: {
     tables: number;
@@ -314,6 +315,7 @@ export interface FixtureDay {
     shared: number;
     halfFree: number;
     filled: number;
+    checkedOut: number;
     outlined: number;
   };
 }
@@ -321,16 +323,27 @@ export interface FixtureDay {
 /**
  * Upper Hall and Lower Hall on one market day, every seat dealt from the seeded draw: a table in
  * eight is free; one in six is shared, a third of those with one half free; and of the seats, two
- * in three are here (filled) and the rest expected (outlined). Each seat's key is its vendor's,
+ * in three are checked in, of them three in four still in (filled) and the rest checked out (in
+ * the out shade, T501), and the rest not checked in (outlined). Each seat's key is its vendor's,
  * `vendor-<n>`, and its name is two words of the lists above.
  */
 export function marketDay(seed: number): FixtureDay {
   const draw = seeded(seed);
   const halls = [upperHall(), lowerHall()];
   const seats: MapSeat[] = [];
-  const counts = { tables: 0, free: 0, shared: 0, halfFree: 0, filled: 0, outlined: 0 };
+  const counts = {
+    tables: 0,
+    free: 0,
+    shared: 0,
+    halfFree: 0,
+    filled: 0,
+    checkedOut: 0,
+    outlined: 0,
+  };
   const seat = (tableId: string, half: SeatHalf) => {
-    const tone: SeatTone = draw() < 2 / 3 ? 'filled' : 'outlined';
+    // One draw a seat, as before the out shade, so the deal of tables and names stays as it was.
+    const at = draw();
+    const tone: SeatTone = at < 1 / 2 ? 'filled' : at < 2 / 3 ? 'checkedOut' : 'outlined';
     counts[tone] += 1;
     const n = seats.length + 1;
     seats.push({

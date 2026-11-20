@@ -229,6 +229,44 @@ describe("Attendance's roster rows as seats", () => {
     expect(notOnALayout).toEqual([]);
   });
 
+  it('draws a vendor checked in and out checked out, at their seat or another, and one checked in alone filled (T501)', () => {
+    const { seats } = rosterSeats(
+      [
+        row({
+          vendorEmail: 'a@example.com',
+          vendorName: 'Acme',
+          state: 'here',
+          checkedOutAt: '2099-06-05T22:02:00Z',
+        }),
+        row({
+          vendorEmail: 'b@example.com',
+          vendorName: 'Bee',
+          tableCode: 'Gold row 2',
+          tableChoice: 'Half Table (Left)',
+          state: 'here_elsewhere',
+          checkedOutAt: '2099-06-05T21:00:00Z',
+        }),
+        row({
+          vendorEmail: 'c@example.com',
+          vendorName: 'Cog',
+          tableCode: 'Gold row 2',
+          tableChoice: 'Half Table (Right)',
+          state: 'here',
+          checkedOutAt: null,
+        }),
+        row({ vendorEmail: 'd@example.com', vendorName: 'Dot', tableCode: 'Silver aisle 1' }),
+      ],
+      '2099-06-05',
+      locations,
+    );
+    expect(seats.map((seat) => [seat.name, seat.tone])).toEqual([
+      ['Acme', 'checkedOut'],
+      ['Bee', 'checkedOut'],
+      ['Cog', 'filled'],
+      ['Dot', 'outlined'],
+    ]);
+  });
+
   it('leaves out other days and a check-in with no seat, and counts a table on no layout', () => {
     const away = row({ vendorEmail: 'e@example.com', tableCode: 'Bronze row 9' });
     const { seats, notOnALayout } = rosterSeats(
@@ -255,8 +293,9 @@ afterEach(() => {
 });
 
 const LEGEND = [
-  { tone: 'filled' as const, label: 'Here' },
-  { tone: 'outlined' as const, label: 'Expected' },
+  { tone: 'filled' as const, label: 'Checked in' },
+  { tone: 'checkedOut' as const, label: 'Checked out' },
+  { tone: 'outlined' as const, label: 'Not checked in' },
   { tone: 'free' as const, label: 'No vendor' },
 ];
 
@@ -346,13 +385,20 @@ describe('the day map', () => {
   it('names each tone in its legend, in order, each with its swatch', () => {
     const map = dayMap();
     const items = map.findAll('[data-testid="day-map-legend-item"]');
-    expect(items.map((item) => item.text())).toEqual(['Here', 'Expected', 'No vendor']);
+    expect(items.map((item) => item.text())).toEqual([
+      'Checked in',
+      'Checked out',
+      'Not checked in',
+      'No vendor',
+    ]);
     expect(items.map((item) => item.attributes('data-tone'))).toEqual([
       'filled',
+      'checkedOut',
       'outlined',
       'free',
     ]);
-    const swatch = items[2].get('rect');
+    expect(items[1].get('rect').attributes('fill')).toBe('var(--layout-section-1-out)');
+    const swatch = items[3].get('rect');
     expect(swatch.attributes('fill')).toBe('var(--layout-floor)');
     expect(swatch.attributes('stroke-dasharray')).toBe('4 3');
   });
@@ -478,10 +524,13 @@ describe('the day map without fills, as Attendance draws it', () => {
           <ul data-v-d4ffb88c="" class="day-map__legend" aria-label="Legend" data-testid="day-map-legend">
             <li data-v-d4ffb88c="" class="day-map__legend-item" data-tone="filled" data-testid="day-map-legend-item"><svg data-v-d4ffb88c="" class="day-map__swatch" viewBox="0 0 24 14" aria-hidden="true">
                 <rect data-v-d4ffb88c="" x="0.75" y="0.75" width="22.5" height="12.5" rx="2" fill="var(--layout-section-1-fill)" stroke="var(--layout-section-1-edge)" stroke-width="1.5"></rect>
-              </svg><span data-v-d4ffb88c="">Here</span></li>
+              </svg><span data-v-d4ffb88c="">Checked in</span></li>
+            <li data-v-d4ffb88c="" class="day-map__legend-item" data-tone="checkedOut" data-testid="day-map-legend-item"><svg data-v-d4ffb88c="" class="day-map__swatch" viewBox="0 0 24 14" aria-hidden="true">
+                <rect data-v-d4ffb88c="" x="0.75" y="0.75" width="22.5" height="12.5" rx="2" fill="var(--layout-section-1-out)" stroke="var(--layout-section-1-edge)" stroke-width="1.5"></rect>
+              </svg><span data-v-d4ffb88c="">Checked out</span></li>
             <li data-v-d4ffb88c="" class="day-map__legend-item" data-tone="outlined" data-testid="day-map-legend-item"><svg data-v-d4ffb88c="" class="day-map__swatch" viewBox="0 0 24 14" aria-hidden="true">
                 <rect data-v-d4ffb88c="" x="0.75" y="0.75" width="22.5" height="12.5" rx="2" fill="white" stroke="var(--layout-section-1-edge)" stroke-width="1.5"></rect>
-              </svg><span data-v-d4ffb88c="">Expected</span></li>
+              </svg><span data-v-d4ffb88c="">Not checked in</span></li>
             <li data-v-d4ffb88c="" class="day-map__legend-item" data-tone="free" data-testid="day-map-legend-item"><svg data-v-d4ffb88c="" class="day-map__swatch" viewBox="0 0 24 14" aria-hidden="true">
                 <rect data-v-d4ffb88c="" x="0.75" y="0.75" width="22.5" height="12.5" rx="2" fill="var(--layout-floor)" stroke="var(--layout-no-section-edge)" stroke-width="1.5" stroke-dasharray="4 3"></rect>
               </svg><span data-v-d4ffb88c="">No vendor</span></li>

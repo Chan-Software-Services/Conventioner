@@ -455,6 +455,21 @@ Three of the reds being retired cannot carry white text at all: `#e74c3c` (3.82)
 Each fill carries `--mm-black` past 7:1, since a number on a table drawn small is small type, and each edge stands past 3:1 against the floor (`--layout-floor`) and against white, the ground of a section's name pill; `contrast.test.ts` holds every pair to those floors and the palette to eight colours.
 A section's style stores its colour as the number here, so the order is stored data: a ninth colour goes after these, never between.
 A section with no style takes the next colour unused in its layout, in the plan's order, and once all eight are used the palette starts again, so a ninth section takes the first (`sectionColors` in [`layoutGeometry.ts`](../front-end/src/components/layout/layoutGeometry.ts)).
+**Each colour has an out shade**, `--layout-section-1-out` to `-8-out` (T501): the fill of a vendor's seat on Attendance's map once they have checked out, the colour's tint mixed toward its hue until `--mm-black` reads at least 7.5:1 on it.
+
+| Colour | Hue        | Out shade | `--mm-black` on it | Against the tint |
+| ------ | ---------- | --------- | ------------------ | ---------------- |
+| 1      | gold       | `#d1b270` | 7.63:1             | 1.67:1           |
+| 2      | blue       | `#92bbc8` | 7.52:1             | 1.67:1           |
+| 3      | terracotta | `#daa99f` | 7.52:1             | 1.59:1           |
+| 4      | green      | `#95bdb3` | 7.56:1             | 1.68:1           |
+| 5      | violet     | `#baaed8` | 7.50:1             | 1.61:1           |
+| 6      | teal       | `#78c1c3` | 7.56:1             | 1.68:1           |
+| 7      | rose       | `#dba5bf` | 7.51:1             | 1.62:1           |
+| 8      | olive      | `#b3b985` | 7.55:1             | 1.69:1           |
+
+`contrast.test.ts` holds each to 7:1 under `--mm-black` and to 1.5:1 against its tint, a step in lightness as plain as the tint's from white, so a checked-out table is told from a checked-in one by more than its hue.
+A table in no section holds no seat, so it has no out shade.
 A table in no section is grey, `--layout-no-section-fill` and `-edge` (12.36:1, 4.03 and 4.50), and a no-table zone is hatched in `--layout-zone-fill` and `--layout-zone-hatch` (`--mm-black` 13.30 and 9.05 on them) inside a dashed `--layout-zone-edge` (3.66 and 4.09).
 
 **How a layout is drawn** ([`LayoutMap.vue`](../front-end/src/components/layout/LayoutMap.vue), [the drawing](implementation/modules/floorplan-placement.md#the-drawing)):
@@ -474,18 +489,20 @@ A table in no section is grey, `--layout-no-section-fill` and `-edge` (12.36:1, 
 
 **A day's map draws each table by who holds it** (T422, D40, D41; [`DayMap.vue`](../front-end/src/components/daymap/DayMap.vue)), never by colour alone:
 
-| Tone       | Means                                     | Fill               | Edge                                              | Number       |
-| ---------- | ----------------------------------------- | ------------------ | ------------------------------------------------- | ------------ |
-| `filled`   | here at the door; taken on the public map | the section's tint | the section's hue                                 | `--mm-black` |
-| `outlined` | expected (or did not come) at the door    | white              | the section's hue                                 | `--mm-black` |
-| free       | no vendor at it                           | `--layout-floor`   | `--layout-no-section-edge`, dashed 4px on 3px off | `--mm-black` |
+| Tone         | Means                                           | Fill                    | Edge                                              | Number       |
+| ------------ | ----------------------------------------------- | ----------------------- | ------------------------------------------------- | ------------ |
+| `filled`     | checked in at the door; taken on the public map | the section's tint      | the section's hue                                 | `--mm-black` |
+| `checkedOut` | checked out at the door (T501)                  | the section's out shade | the section's hue                                 | `--mm-black` |
+| `outlined`   | not checked in at the door                      | white                   | the section's hue                                 | `--mm-black` |
+| free         | no vendor at it                                 | `--layout-floor`        | `--layout-no-section-edge`, dashed 4px on 3px off | `--mm-black` |
 
-Every tone's number is `--mm-black`, held to the 7:1 a table's number is held to on each of the three fills (15.54 on white, 13.90 on the floor); a section's hue as the number on white would be as low as 3.83 (gold) and the muted ink on the floor 4.40, so neither is used.
+Attendance tells its three states apart by the steps in lightness, white, the tint and the out shade, and by each seat's name to a screen reader, the vendor's and their state ("Ana Rivera, checked out"), never by the hue alone.
+Every tone's number is `--mm-black`, held to the 7:1 a table's number is held to on each of the four fills (15.54 on white, 13.90 on the floor, 7.50 or more on an out shade); a section's hue as the number on white would be as low as 3.83 (gold) and the muted ink on the floor 4.40, so neither is used.
 A free table's dashed edge is the grey of a table in no section, 4.03 on the floor, where `--mm-border` would be about 1.6; `contrast.test.ts` holds each tone for each of the eight colours.
 
 - a table shared by two vendors is two halves split across its longer side, each its own shape with its outer corners round and the split square, so the two edges meet as the line between them; left is the half on the reader's left as the number reads, a table turned a quarter having its left half at the top; each half is labelled with the number and "L" or "R" ("12L") at the size a number takes for the half's box, left out where it does not fit, and drawn in its own tone, a half with nobody at it free;
 - a seat or table marked, as a search marks it or a press picks it, takes the selection's outline: round the table, or round the half its seat holds;
-- the legend under the map is one line of swatches, each 24 by 14px drawn in its tone in the open location's first section's colours, with the page's word for it at `--text-sm` ("Here", "Expected", "No vendor"); on Attendance, "No vendor" stands only on a day the open location's map draws a free table or half, and a no-table zone has no item; a day map that fills its box draws none, and its caller's legend stands in its slot: the public map's is a pill naming each section of the open hall in its colours and "Free table" on a day the hall has one, each with a 14px swatch at `--text-xs` (T465);
+- the legend under the map is one line of swatches, each 24 by 14px drawn in its tone in the open location's first section's colours, with the page's word for it at `--text-sm`; on Attendance, "Checked in", "Checked out" and "Not checked in" in that order at every time of day, whether or not the day has a vendor in each, and "No vendor" only on a day the open location's map draws a free table or half, and a no-table zone has no item; a day map that fills its box draws none, and its caller's legend stands in its slot: the public map's is a pill naming each section of the open hall in its colours and "Free table" on a day the hall has one, each with a 14px swatch at `--text-xs` (T465);
 - the zoom stands on the map's bottom-right corner, as the editor's does: Zoom out, Zoom in and Fit as compact secondary buttons on a white card with the card's shadow; each press zooms by half again or a third less about the map's middle, Ctrl and the wheel zoom about the pointer at a desk, a mouse drag pans once zoomed, a plain wheel scrolls the page, and a phone pinches and drags; in a box narrower than 30rem the zoom stands under the map at the legend's end instead, with no card, so it covers none of a phone's small map, and the phone keeps the buttons as the one-finger way to zoom a pinch needs beside it (WCAG 2.5.1); a day map that fills its box, the public map's (T465), draws the zoom as a floating white pill with `--shadow-float` and borderless buttons over the map's bottom-right corner, its caller's legend pill over the bottom-left, and in a box narrower than 30rem both pills in one row under the map;
 - two locations or more are switched by a row of filter toggles above the map, the open one pressed, unless its caller draws the choice: the public map's hall select, for a map that fills its box, and Attendance's location select in its toolbar (T466);
 - a location's tables and its floorplan appear together (T501): while the floorplan loads the map draws the floor alone at its own size, so nothing moves when they come, for at most two seconds, then the tables on the floor until the image joins them, and with "Show the floorplan" unticked the tables at once, with nothing said; on Attendance a line under the map says "Loading the floorplan..." then, or "The floorplan could not be loaded. The tables are drawn without it.", at `--text-sm` in `--mm-black`, and the public map says nothing;

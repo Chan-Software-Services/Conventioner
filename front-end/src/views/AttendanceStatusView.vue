@@ -762,7 +762,6 @@ const drawer = useVendorDrawer();
           :rows="roster"
           :date="selectedDate"
           :openVendor="drawer.email.value"
-          :notHere="notHere"
           :hereWithoutSeat="withoutSeatToday"
           :updated="updatedWords"
           @open="drawer.open($event)"

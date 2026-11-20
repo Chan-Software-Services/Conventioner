@@ -126,6 +126,7 @@ interface Row {
   checkedInAt: string | null;
   checkedInBy: string | null;
   checkedInVia: string | null;
+  checkedOutAt?: string | null;
 }
 
 function row(email: string, name: string, tableCode: string | null, extra: Partial<Row> = {}) {
@@ -150,6 +151,9 @@ const here = (at: string | null): Partial<Row> => ({
   checkedInTableCode: at,
   checkedInAt: ARRIVED,
 });
+const LEFT = '2099-08-01T15:02:00Z';
+/** Checked in at `at`, and checked out since (T496). */
+const out = (at: string | null): Partial<Row> => ({ ...here(at), checkedOutAt: LEFT });
 
 /**
  * Ana here at Aisle A 1; Ben expected at 2; 3 shared, Cal here on its left half and Dee expected
@@ -305,8 +309,37 @@ describe("the open day's seats", () => {
     expect(halfFill(wrapper, 't3', 'right')).toBe('white');
     expect(fillOf(wrapper, 't4')).toBe('var(--layout-floor)');
     expect(tableOf(wrapper, 't1').attributes('aria-label')).toBe(
-      'Aisle A 1, Standard 6 ft, Ana Pottery',
+      'Aisle A 1, Standard 6 ft, Ana Pottery, checked in',
     );
+  });
+
+  it("draws a vendor checked out in their section's out shade, a whole table and a half, at their seat or another (T501)", async () => {
+    answer = day({
+      [ANA]: out('Aisle A 1'),
+      [CAL]: { ...out('Aisle A 4'), state: 'here_elsewhere' },
+    });
+    const wrapper = await openOnMap();
+    expect(fillOf(wrapper, 't1')).toBe('var(--layout-section-1-out)');
+    expect(tableOf(wrapper, 't1').get(testid('layout-table-top')).attributes('stroke')).toBe(
+      'var(--layout-section-1-edge)',
+    );
+    expect(halfFill(wrapper, 't3', 'left')).toBe('var(--layout-section-1-out)');
+    expect(fillOf(wrapper, 't2')).toBe('white');
+  });
+
+  it("names each seat by its vendor and their state, a half of a shared table's too (T501)", async () => {
+    answer = day({ [ANA]: out('Aisle A 1') });
+    const wrapper = await openOnMap();
+    const names = wrapper
+      .get(testid('attendance-map'))
+      .findAll('[role="button"][data-seat-key]')
+      .map((button) => button.attributes('aria-label'));
+    expect(names).toEqual([
+      'Aisle A 1, Standard 6 ft, Ana Pottery, checked out',
+      'Aisle A 2, Standard 6 ft, Ben Prints, not checked in',
+      'Aisle A 3, Standard 6 ft, left half, Cal Knits, checked in',
+      'Aisle A 3, Standard 6 ft, right half, Dee Soaps, not checked in',
+    ]);
   });
 
   it('a vendor here at another table is drawn filled at the seat they hold', async () => {
@@ -319,18 +352,54 @@ describe("the open day's seats", () => {
     answer = day({ [BEN]: { vendorName: '' } });
     const wrapper = await openOnMap();
     expect(tableOf(wrapper, 't2').attributes('aria-label')).toBe(
-      `Aisle A 2, Standard 6 ft, ${BEN}`,
+      `Aisle A 2, Standard 6 ft, ${BEN}, not checked in`,
     );
   });
 
-  it('the legend reads Here, Expected and No vendor on a day with a table nobody sits at', async () => {
+  it('the legend reads Checked in, Checked out, Not checked in and No vendor on a day with a table nobody sits at', async () => {
     const wrapper = await openOnMap();
     expect(wrapper.findAll(testid('day-map-legend-item')).map((item) => item.text())).toEqual([
-      'Here',
-      'Expected',
+      'Checked in',
+      'Checked out',
+      'Not checked in',
       'No vendor',
     ]);
+    expect(
+      wrapper.findAll(testid('day-map-legend-item')).map((item) => item.attributes('data-tone')),
+    ).toEqual(['filled', 'checkedOut', 'outlined', 'free']);
   });
+
+  it.each([
+    ['before the day', { dates: ['2099-12-31'] }],
+    ['after the day', { dates: ['2000-01-01'] }],
+    ['on an archived market', { phase: MarketPhase.Archived }],
+  ])(
+    'the legend names the same three states %s, whether or not a vendor is in each (T501)',
+    async (_when, change) => {
+      const date = 'dates' in change ? change.dates[0]! : TODAY;
+      if ('phase' in change) marketNow = market({ phase: change.phase });
+      answer = day();
+      answer.data.dates = [date];
+      answer.data.roster = answer.data.roster.map((one) => ({
+        ...one,
+        date,
+        state: one.state === 'here_without_seat' ? one.state : 'expected',
+        checkedInAt: null,
+      }));
+      route.query = { view: 'map', date };
+      const wrapper = await open();
+      expect(wrapper.findAll(testid('day-map-legend-item')).map((item) => item.text())).toEqual([
+        'Checked in',
+        'Checked out',
+        'Not checked in',
+        'No vendor',
+      ]);
+      const text = wrapper.get(testid('attendance-map')).text();
+      for (const old of ['Here', 'Expected', 'Did not come', 'here with no table']) {
+        expect(text).not.toContain(old);
+      }
+    },
+  );
 
   it('the legend leaves No vendor out on a day every table is held, the zones still drawn', async () => {
     // Fay sits at Aisle A 4 today: every table, and both halves of the shared one, are held.
@@ -342,8 +411,9 @@ describe("the open day's seats", () => {
     );
     const wrapper = await openOnMap();
     expect(wrapper.findAll(testid('day-map-legend-item')).map((item) => item.text())).toEqual([
-      'Here',
-      'Expected',
+      'Checked in',
+      'Checked out',
+      'Not checked in',
     ]);
     expect(wrapper.get(testid('layout-map-zone-label')).text()).toBe('Stage');
   });
@@ -357,8 +427,9 @@ describe("the open day's seats", () => {
     const wrapper = await openOnMap();
     expect(halfFill(wrapper, 't3', 'right')).toBe('var(--layout-floor)');
     expect(wrapper.findAll(testid('day-map-legend-item')).map((item) => item.text())).toEqual([
-      'Here',
-      'Expected',
+      'Checked in',
+      'Checked out',
+      'Not checked in',
       'No vendor',
     ]);
   });
@@ -371,26 +442,17 @@ describe("the open day's seats", () => {
     answer = day({ [FAY]: { tableCode: 'Aisle A 4', section: 'Aisle A', location: NORTH.name } });
     vi.advanceTimersByTime(REREAD_MS);
     await flushPromises();
-    expect(legend()).toEqual(['Here', 'Expected']);
+    expect(legend()).toEqual(['Checked in', 'Checked out', 'Not checked in']);
   });
 
-  it('on an archived market, where the list says "Did not come", so does the legend', async () => {
-    marketNow = market({ phase: MarketPhase.Archived });
-    const wrapper = await openOnMap();
-    expect(wrapper.findAll(testid('day-map-legend-item')).map((item) => item.text())).toEqual([
-      'Here',
-      'Did not come',
-      'No vendor',
-    ]);
-  });
-
-  it('on an archived market with every table held, the legend is Here and Did not come', async () => {
+  it('on an archived market with every table held, the legend is the three states alone', async () => {
     marketNow = market({ phase: MarketPhase.Archived });
     answer = day({ [FAY]: { tableCode: 'Aisle A 4', section: 'Aisle A', location: NORTH.name } });
     const wrapper = await openOnMap();
     expect(wrapper.findAll(testid('day-map-legend-item')).map((item) => item.text())).toEqual([
-      'Here',
-      'Did not come',
+      'Checked in',
+      'Checked out',
+      'Not checked in',
     ]);
   });
 
@@ -402,6 +464,16 @@ describe("the open day's seats", () => {
     vi.advanceTimersByTime(REREAD_MS);
     await flushPromises();
     expect(fillOf(wrapper, 't2')).toBe('var(--layout-section-1-fill)');
+  });
+
+  it('changes when the re-read brings a check-out, with no reload', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+    const wrapper = await openOnMap();
+    expect(fillOf(wrapper, 't1')).toBe('var(--layout-section-1-fill)');
+    answer = day({ [ANA]: out('Aisle A 1') });
+    vi.advanceTimersByTime(REREAD_MS);
+    await flushPromises();
+    expect(fillOf(wrapper, 't1')).toBe('var(--layout-section-1-out)');
   });
 });
 
@@ -678,7 +750,7 @@ describe("the map's search (T466)", () => {
   });
 
   it.each([
-    ['here with no table', 'jams', EVE],
+    ['checked in with no table', 'jams', EVE],
     ['at a table on no layout', 'candles', FAY],
   ])(
     'a pick of a vendor %s opens their drawer and outlines nothing',
@@ -728,9 +800,11 @@ describe("the map's search (T466)", () => {
 });
 
 describe('under the map', () => {
-  it('counts who is here with no table and who sits at a table on no layout, each with Show in the list', async () => {
+  it('counts who is checked in with no table and who sits at a table on no layout, each with Show in the list', async () => {
     const wrapper = await openOnMap();
-    expect(words(wrapper, 'attendance-map-unseated')).toBe('1 here with no table Show in the list');
+    expect(words(wrapper, 'attendance-map-unseated')).toBe(
+      '1 checked in with no table Show in the list',
+    );
     expect(words(wrapper, 'attendance-map-off-layout')).toBe(
       '1 vendor is at a table not on a layout. Show in the list',
     );
@@ -951,7 +1025,6 @@ describe("the map's note", () => {
         rows: day().data.roster,
         date: TODAY,
         openVendor: null,
-        notHere: 'Not yet',
         hereWithoutSeat: 0,
         ...props,
       },
