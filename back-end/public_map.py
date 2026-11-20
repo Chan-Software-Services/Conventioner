@@ -12,7 +12,8 @@ that changes nothing writes and records nothing.
 **The read is public** (``GET /public/markets/<slug>/map``), behind one gate
 (``market_documents.public_map_market_by_slug``, D30): found by its slug as the vendor page finds
 it, not archived, its results out, the switch on, its name question the built-in business name or
-still a short text question of the form, and at least one location laid out (``mapped_locations``). A market that fails it answers
+still a short text question of the form, and at least one location laid out
+(``mapped_locations``). A market that fails it answers
 exactly as a slug naming no market. What it answers is an allowlist (D26), built key by key here and
 never from a dump: the market's name and dates, its table types, each laid-out location's sections
 and layout, and each seat with the vendor's three chosen answers cleaned (``public_answers``, D28),
