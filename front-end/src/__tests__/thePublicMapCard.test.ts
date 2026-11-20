@@ -152,7 +152,7 @@ describe('what the card says', () => {
       expect(element.value).toBe('');
     }
     expect(find(wrapper, 'public-map-name-help').text()).toBe(
-      'The built-in business name, or the question that holds each vendor’s business or artist name.',
+      'The built-in business name, or a form question that holds it.',
     );
     expect(select(wrapper, 'name').getAttribute('aria-describedby')).toContain(
       find(wrapper, 'public-map-name-help').attributes('id'),

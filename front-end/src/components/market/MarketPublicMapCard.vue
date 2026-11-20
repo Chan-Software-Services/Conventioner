@@ -193,8 +193,7 @@ const { copied, copy } = useCopyAddress();
               class="public-map-hint"
               data-testid="public-map-name-help"
             >
-              The built-in business name, or the question that holds each vendor’s business or
-              artist name.
+              The built-in business name, or a form question that holds it.
             </p>
           </div>
           <p
