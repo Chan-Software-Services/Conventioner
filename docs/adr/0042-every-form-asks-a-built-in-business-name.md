@@ -26,7 +26,7 @@ A market that wanted one asked it as a question of its own form, under a key and
 
 **Every application form asks an optional "Business name", a built-in question with no switch.**
 Its key is `essential_business_name` (`BUSINESS_NAME_KEY` in [`back-end/essential_fields.py`](../../back-end/essential_fields.py), mirrored in [`front-end/src/utils/essentialFields.ts`](../../front-end/src/utils/essentialFields.ts)).
-It sits right after the preferred name in `ESSENTIAL_QUESTIONS`, so the form, the import's targets, the review card and the history read it there.
+It sits right after the preferred name in `ESSENTIAL_QUESTIONS`, which the import's targets read, and in the front end's `ESSENTIAL_ORDER`, which the review card and the history read; the form draws it there too.
 
 - **It is asked of every market and required of nobody**: in `asked_essential_keys`' unconditional set beside the two names, out of `plan_derived_asked_keys` as they are, and in neither `REQUIRED_ESSENTIAL_KEYS` nor `UNASKABLE_ESSENTIAL_KEYS`.
 - **The solver never reads it**: it is out of `SOLVER_RELEVANT_KEYS`, so an organizer's update of it asks no assignment row.
@@ -35,7 +35,7 @@ It sits right after the preferred name in `ESSENTIAL_QUESTIONS`, so the form, th
   An applicant's save and an import compare the whole stored `form_data` (`application_status._answers_move`, `csv_import._unchanged`), so a key every save wrote as `""` would make each application written before the question read as changed, and send a person's approval or rejection back to open on an unchanged file.
   The preferred name and the request keep their `""`; this key alone is absent when empty.
 - **One reader states "the business name of these answers"**: `business_name(form_data)`, and `businessName(formData)` in the mirror, the stripped text or `""`, also for a value that is not text.
-  Every reader of the key goes through it, so an absent key and a blank one are one case.
+  The door, the drawer, the export, the public map and the review search read it through it, so an absent key and a blank one are one case there.
 - **An organizer's update of it left blank is `""`**, standing over the vendor's answer, since no key cannot say "the organizer removed it"; `business_name` reads that as none.
   A blank update over a vendor who gave none is their own answer, and takes any update away.
 - **It is never the name a vendor is called by**: `display_name` does not read it.

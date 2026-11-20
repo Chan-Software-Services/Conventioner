@@ -79,11 +79,11 @@ PREFERRED_NAME_KEY = "essential_preferred_name"
 # tags at the door carry (T502, ADR 0042). Asked of everyone with no switch, right after the
 # preferred name, and never required: most vendors trade under their own name.
 #
-# It is never the name a vendor is called by: ``display_name`` does not read it, and the screens
-# that show it show it as a second line under that name.
+# It is never the name a vendor is called by: ``display_name`` does not read it, and the door
+# shows it as a second line under that name.
 #
 # STORED ONLY WHEN GIVEN, and it is the one essential answer that is: see ``_store_business_name``.
-# Read it through ``business_name``, never by the key, so absent and blank are one case.
+# Read its value through ``business_name`` wherever absent and blank must be one case.
 BUSINESS_NAME_KEY = "essential_business_name"
 
 AVAILABLE_DATES_KEY = "essential_available_dates"
@@ -267,8 +267,9 @@ def business_name(form_data: Dict[str, Any]) -> str:
 
     ONE statement of "none", as ``display_name`` is of the name: the key is absent where the vendor
     gave no business name, holds ``""`` where an organizer's update removed one, and may hold
-    anything in a document written by hand. Every reader of the key goes through here, so no screen
-    draws an empty line for one of those and a real line for another.
+    anything in a document written by hand. The door, the export and the public map read the key
+    through here, and the drawer and the review search through the front end's ``businessName``, so
+    none of them draws an empty line for one of those and a real line for another.
     """
     given = form_data.get(BUSINESS_NAME_KEY)
     return given.strip() if isinstance(given, str) else ""

@@ -38,7 +38,7 @@ Names arrived after markets had applications, so a market whose applications car
 
 **The name is one field, a person's.**
 The names organizers already collect arrive whole (a Google Form's "Full Legal Name" question holds a whole name in one answer), so a first-and-last split would guess, and get every "van der Berg" wrong.
-A business name is a question of its own, asked of every applicant and never required ([essential fields](../../implementation/modules/essential-fields.md), [ADR 0042](../../adr/0042-every-form-asks-a-built-in-business-name.md)): it is never the name a vendor is called by, and a screen that shows it shows it as a second line under that name.
+A business name is a question of its own, asked of every applicant and never required ([essential fields](../../implementation/modules/essential-fields.md), [ADR 0042](../../adr/0042-every-form-asks-a-built-in-business-name.md)): it is never the name a vendor is called by, and at the door it shows as a second line under that name.
 The search on the results finds a vendor by it, as it finds a short text answer of the market's own questions.
 
 **The name is essential because identity is, not because the solver reads it.**
