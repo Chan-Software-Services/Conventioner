@@ -428,10 +428,10 @@ describe("a checked-out row's chips", () => {
       checkedInTableCode: 'A7',
     });
     const wrapper = await open();
-    // Where they went is the state the attention tone flags, so it stays in the chip; who made it
-    // is on the plain line.
-    expect(status(wrapper, ANA).text()).toMatch(/^Checked in \d{1,2}:\d{2}\s[AP]M, at table A7$/);
-    expect(statusBy(wrapper, ANA).text()).toBe('by you');
+    // The chip in the attention tone says the state and the time; where they went follows who made
+    // it on the plain line, so the chip fits a narrow phone's row at any time of day (T501).
+    expect(status(wrapper, ANA).text()).toMatch(/^Checked in \d{1,2}:\d{2}\s[AP]M$/);
+    expect(statusBy(wrapper, ANA).text()).toBe('by you, at\u00a0table\u00a0A7');
     expect(status(wrapper, ANA).classes()).toContain('chip--attention');
     expect(outSaid(wrapper, ANA)).toMatch(/^Checked out .+ by you$/);
   });

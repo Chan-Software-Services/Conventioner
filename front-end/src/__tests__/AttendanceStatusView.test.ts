@@ -694,6 +694,13 @@ describe('where each vendor stands (T318)', () => {
       .get('[data-testid="attendance-row-status"]');
   }
 
+  /** The plain line after the status chip: who made it, then where they checked in (T501). */
+  function chipLine(wrapper: VueWrapper, email: string) {
+    return wrapper
+      .get(`[data-testid="attendance-row"][data-vendor="${email}"]`)
+      .get('[data-testid="attendance-row-status-by"]');
+  }
+
   function table(wrapper: VueWrapper, email: string): string {
     return wrapper
       .get(`[data-testid="attendance-row"][data-vendor="${email}"]`)
@@ -701,7 +708,7 @@ describe('where each vendor stands (T318)', () => {
       .text();
   }
 
-  it('a vendor here at another table than the one they hold says where, in attention', async () => {
+  it('a vendor here at another table than the one they hold says where, after an attention chip', async () => {
     serveRoster(() =>
       Promise.resolve({
         data: {
@@ -720,7 +727,10 @@ describe('where each vendor stands (T318)', () => {
     );
     const wrapper = await open();
 
-    expect(chip(wrapper, ANA).text()).toMatch(/^Scanned in at .+, at table\u00a0A7$/);
+    // The chip is the state and the time alone, and the line after it says where, with no "by" for
+    // the vendor's own scan: a chip holding the table left a narrow phone's row (T501).
+    expect(chip(wrapper, ANA).text()).toMatch(/^Scanned in at \d{1,2}:\d{2}\s[AP]M$/);
+    expect(chipLine(wrapper, ANA).text()).toBe('at\u00a0table\u00a0A7');
     expect(chip(wrapper, ANA).classes()).toContain('chip--attention');
     expect(table(wrapper, ANA)).toBe('Table A1, a whole table');
     expect(chip(wrapper, BEN).classes()).toContain('chip--positive');
@@ -737,6 +747,7 @@ describe('where each vendor stands (T318)', () => {
               state: 'here_elsewhere',
               checkedInTableCode: 'Hall B 12',
               checkedInAt: ARRIVED,
+              checkedInBy: 'pat@example.com',
             }),
           ],
         },
@@ -744,11 +755,14 @@ describe('where each vendor stands (T318)', () => {
     );
     const wrapper = await open();
 
-    // "table Hall B 12" is one unbreakable run: a no-break space between each of its words. The
-    // sheet is teleported to the page's body.
-    expect(chip(wrapper, ANA).text()).toMatch(/, at table\u00a0Hall\u00a0B\u00a012$/);
+    // "at table Hall B 12" is one unbreakable run: a no-break space between each of its words, after
+    // who made the check-in on the line after the chip. The sheet is teleported to the page's body.
+    expect(chip(wrapper, ANA).text()).toMatch(/^Checked in \d{1,2}:\d{2}\s[AP]M$/);
+    expect(chipLine(wrapper, ANA).text()).toBe(
+      'by pat@example.com, at\u00a0table\u00a0Hall\u00a0B\u00a012',
+    );
     expect(document.querySelector('[data-testid="attendance-print-here"]')?.textContent).toMatch(
-      /, at table\u00a0Hall\u00a0B\u00a012$/,
+      /, at\u00a0table\u00a0Hall\u00a0B\u00a012$/,
     );
   });
 

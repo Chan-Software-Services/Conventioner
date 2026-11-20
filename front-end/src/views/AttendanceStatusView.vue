@@ -447,6 +447,12 @@ interface ChipWords {
   when: string;
   /** "by" and who, else empty: the vendor's own, or a record with no organizer. */
   by: string;
+  /**
+   * Where a vendor here at a table they no longer hold checked in, "at table Hall B 12", else empty:
+   * on the plain line after who made it, so the pill stays the state and the time, which a narrow
+   * phone's row holds at any time of day (T501).
+   */
+  where?: string;
 }
 
 function chipText(words: ChipWords): string {
@@ -456,13 +462,15 @@ function chipText(words: ChipWords): string {
 /**
  * The status chip's words, "Not checked in", "Checked in 10:02 AM" or "Scanned in at 10:02 AM",
  * and who made it on the plain line after the chip (T501). A vendor here at a table they no longer
- * hold reads which in the chip, "Checked in 10:02 AM, at table Hall B 12", since where they went is
- * what the chip's attention tone flags.
+ * hold reads which on that line, "by you, at table Hall B 12", in an attention chip, since where
+ * they went is what the attention tone flags.
  */
 function statusWords(row: RosterRow): ChipWords {
   if (!row.checkedInAt) return { when: 'Not checked in', by: '' };
-  const words = arrival(row, getTimestampTime(row.checkedInAt), 'Checked in ');
-  return { ...words, when: words.when + elsewhere(row) };
+  return {
+    ...arrival(row, getTimestampTime(row.checkedInAt), 'Checked in '),
+    where: elsewhere(row),
+  };
 }
 
 /**
@@ -471,7 +479,8 @@ function statusWords(row: RosterRow): ChipWords {
  */
 function status(row: RosterRow): string {
   const at = getTimestampTime(row.checkedInAt ?? '');
-  return chipText(arrival(row, at, '')) + elsewhere(row);
+  const where = elsewhere(row);
+  return chipText(arrival(row, at, '')) + (where ? `, ${where}` : '');
 }
 
 function arrival(row: RosterRow, at: string, said: string): ChipWords {
@@ -482,12 +491,12 @@ function arrival(row: RosterRow, at: string, said: string): ChipWords {
 
 /**
  * Here, but at a table they no longer hold: which, so they are sent to their new one. The table is
- * one unbreakable run ("table Hall B 12"), so a narrow chip or the paper's column never leaves its
- * last word on a line alone.
+ * one unbreakable run ("at table Hall B 12"), so a narrow line or the paper's column never leaves
+ * its last word on a line alone.
  */
 function elsewhere(row: RosterRow): string {
   if (row.state !== 'here_elsewhere') return '';
-  return `, at ${`table ${row.checkedInTableCode}`.replaceAll(' ', '\u00a0')}`;
+  return `at table ${row.checkedInTableCode}`.replaceAll(' ', '\u00a0');
 }
 
 /** The organizer who made a check-in or a check-out, "by you" to themselves, else nothing. */
@@ -889,12 +898,20 @@ const drawer = useVendorDrawer();
                           >{{ statusWords(row).when }}</span
                         >
                       </span>
+                      <!-- Who made it, then where a vendor at another table checked in: "by you, at
+                           table Hall B 12", the line breaking before "at" when it is too long and
+                           the address only before its "@" or a dot (T501). -->
                       <span
-                        v-if="statusWords(row).by"
+                        v-if="statusWords(row).by || statusWords(row).where"
                         class="door-chip-by"
                         data-testid="attendance-row-status-by"
-                        ><EmailAddress :words="statusWords(row).by"
-                      /></span>
+                        ><EmailAddress
+                          v-if="statusWords(row).by"
+                          :words="statusWords(row).by + (statusWords(row).where ? ',' : '')"
+                        /><span v-if="statusWords(row).where" class="door-chip-where"
+                          >{{ statusWords(row).by ? ' ' : '' }}{{ statusWords(row).where }}</span
+                        ></span
+                      >
                     </span>
                     <span v-if="row.checkedOutAt" class="door-line">
                       <span class="door-pill-line">
@@ -1131,6 +1148,14 @@ const drawer = useVendorDrawer();
   white-space: normal;
 }
 
+/* Where a vendor at another table checked in, "at table <code>" one run of no-break spaces: the
+   line breaks before it when it is too long for the row, and inside it only when the run alone is
+   wider than the row (T501). */
+.door-chip-where {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
 /* A line of the chips: the "Undo?" of what the chip says, if any, then the chip, then who made it.
    One line at a desk; on a phone who made it goes under (below). */
 .door-line,
@@ -1302,8 +1327,8 @@ const drawer = useVendorDrawer();
     max-width: 100%;
   }
 
-  /* A chip too wide to share its line, a vendor's at another table on a narrow phone, keeps the
-     row's width, and its "Undo?" goes under it, at the line's end, still after the chip it undoes.
+  /* A chip too wide to share its line with its "Undo?" keeps the row's width, and its "Undo?" goes
+     under it, at the line's end, still after the chip it undoes.
      Who made it stands under them, ending at the row's end, risen into the "Undo?"'s 44px line by
      that line's slack, so it stands as close under its chip as it does where no "Undo?" is beside
      it. */

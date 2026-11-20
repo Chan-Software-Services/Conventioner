@@ -205,14 +205,18 @@ export class AttendanceStatusPage {
 
   /**
    * The status chip: "Not checked in" at every time of day, "Checked in 10:02 AM", or "Scanned in at
-   * 10:02 AM" for the vendor's own (T501), and, for a check-in made at another table than the one
-   * they hold now, which (T318). Who made it is `statusBy`.
+   * 10:02 AM" for the vendor's own (T501). Who made it, and where a check-in made at another table
+   * than the one they hold now was made, is `statusBy`.
    */
   status(vendorEmail: string): Locator {
     return this.row(vendorEmail).getByTestId('attendance-row-status');
   }
 
-  /** The plain line after the status chip: who made the check-in, "by you" or "by <address>". */
+  /**
+   * The plain line after the status chip: who made the check-in, "by you" or "by <address>", then,
+   * for a check-in made at another table than the one they hold now, which (T318, T501): "by you, at
+   * table Hall B 12", or "at table Hall B 12" alone for the vendor's own.
+   */
   statusBy(vendorEmail: string): Locator {
     return this.row(vendorEmail).getByTestId('attendance-row-status-by');
   }
