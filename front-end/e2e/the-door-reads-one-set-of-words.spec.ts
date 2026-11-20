@@ -33,9 +33,9 @@ import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
  * on a plain muted line after it, under it on a phone and beside it at a desk, the address breaking
  * only before its "@" or a dot.
  */
-const [YEAR, MONTH, DATE] = calendarToday().split('-').map(Number) as [number, number, number];
-const YESTERDAY = calendarToday(new Date(YEAR, MONTH - 1, DATE - 1));
 const TODAY = calendarToday();
+const [YEAR, MONTH, DATE] = TODAY.split('-').map(Number) as [number, number, number];
+const YESTERDAY = calendarToday(new Date(YEAR, MONTH - 1, DATE - 1));
 const TOMORROW = calendarToday(new Date(YEAR, MONTH - 1, DATE + 1));
 
 /** An organizer of the market whose address is too long to share a phone's line with the time. */
@@ -71,8 +71,20 @@ async function expectNoLayoutFault(page: Page, what: string): Promise<void> {
   ).toEqual([]);
 }
 
-/** Everything the page holds as text, the printed roster's hidden sheet among it. */
-const pageText = (page: Page) => page.locator('body').evaluate((body) => body.textContent ?? '');
+/**
+ * Everything the page holds as text, the printed roster's hidden sheet among it, each text node on a
+ * line of its own: `textContent` runs neighbouring elements together ("Table A 1" then "Not yet" read
+ * "1Not yet"), so a word between two elements would not stand alone for `OLD_WORDS`.
+ */
+const pageText = (page: Page) =>
+  page.locator('body').evaluate((body) => {
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+    const texts: string[] = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      texts.push(node.textContent ?? '');
+    }
+    return texts.join('\n');
+  });
 
 /** The vendors a filter lists, by address: the list's order is the tables', which differ by day. */
 async function listedUnder(
@@ -256,7 +268,9 @@ for (const size of PHONE_AND_DESK) {
           }
         }
 
-        // None of the old words on the list, its filters or the printed roster, nor on the map.
+        // None of the old words on the list, its filters or the printed roster, nor on the map
+        // view. This market lays out no location, so the map view says so and draws no legend: the
+        // legend's words are `the-door-as-a-map.spec.ts`'s on today, and Vitest's on the other days.
         expect(await pageText(page)).not.toMatch(OLD_WORDS);
         await expect(door.printSheet).toContainText('Checked in');
         await expectFits(page, `the door's list, ${day.name}`);

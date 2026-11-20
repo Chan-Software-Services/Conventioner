@@ -68,8 +68,8 @@ function row(email: string, name: string, tableCode: string | null, more: object
   };
 }
 
-/** Today's roster as the server serves it, by table: Ana scanned in, Ben and Cy not yet, Ed here
- *  with no table today, and Dee seated on another day. */
+/** Today's roster as the server serves it, by table: Ana scanned in, Ben and Cy not checked in, Ed
+ *  checked in with no table today, and Dee seated on another day. */
 const ROSTER = {
   dates: [TODAY, '2099-12-31'],
   roster: [

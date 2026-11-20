@@ -49,7 +49,7 @@ async function ok(response: Promise<{ ok(): boolean; text(): Promise<string> }>,
 
 /**
  * A market on its day, today: one vendor checked in, one checked in and then freed with "anyway",
- * as an organizer would, and two not yet come.
+ * as an organizer would, and two not checked in.
  */
 async function seedTheDoor(
   request: APIRequestContext,

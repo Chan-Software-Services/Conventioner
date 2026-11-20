@@ -189,8 +189,13 @@ export class AttendanceStatusPage {
     return this.page.getByTestId(`door-code-scroll-shade-${edge}`);
   }
 
-  async goto(marketId: string): Promise<void> {
-    await this.page.goto(marketScreenPath(marketId, 'attendance'));
+  /**
+   * The door, on the date the page picks, else on `date`: a spec that runs past midnight between its
+   * seed and an open names the day it seeded, or it lands on the next.
+   */
+  async goto(marketId: string, date?: string): Promise<void> {
+    const path = marketScreenPath(marketId, 'attendance');
+    await this.page.goto(date ? `${path}?date=${date}` : path);
   }
 
   /** One vendor's row on the date shown. */

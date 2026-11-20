@@ -819,8 +819,13 @@ describe('under the map', () => {
     'Show in the list (%s) lands on a list that shows whom it counted, whatever Show was',
     async (button, vendor) => {
       const wrapper = await open();
-      // Eve is here and Fay is not: each Show but All hides one of them.
-      for (const toggle of ['attendance-show-not-checked-in', 'attendance-show-checked-in']) {
+      // Eve is checked in and Fay is not, and neither is checked out: each Show but All hides one
+      // of them, or both.
+      for (const toggle of [
+        'attendance-show-not-checked-in',
+        'attendance-show-checked-in',
+        'attendance-show-checked-out',
+      ]) {
         await wrapper.get(testid(toggle)).trigger('click');
         await wrapper.get(testid('attendance-view-map')).trigger('click');
         await flushPromises();

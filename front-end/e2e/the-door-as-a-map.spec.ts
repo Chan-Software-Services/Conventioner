@@ -89,11 +89,14 @@ async function expectAround(mark: Locator, target: Locator): Promise<void> {
 
 async function openTheMap(page: Page, seeded: SeededMarketDayMap): Promise<AttendanceStatusPage> {
   const door = new AttendanceStatusPage(page);
-  await door.goto(seeded.marketId);
+  // On the day it seeded, so a run past midnight does not open on the seeded tomorrow, whose seats
+  // differ; the address keeps the day across a reload.
+  await door.goto(seeded.marketId, seeded.today);
   await expect(door.viewList).toHaveAttribute('aria-pressed', 'true');
   await door.viewMap.click();
   await expect(door.viewMap).toHaveAttribute('aria-pressed', 'true');
   await expect(page).toHaveURL(/[?&]view=map(&|$)/);
+  await expect(page).toHaveURL(new RegExp(`[?&]date=${seeded.today}(&|$)`));
   await expect(door.map).toBeVisible();
   return door;
 }
@@ -220,6 +223,7 @@ for (const size of PHONE_AND_DESK) {
       // The map is kept across a reload, and across the other location.
       await page.reload();
       await expect(door.viewMap).toHaveAttribute('aria-pressed', 'true');
+      await expect(page).toHaveURL(new RegExp(`[?&]date=${seeded.today}(&|$)`));
       // The location is the toolbar's select, beside the day (T466).
       await expect(page.getByTestId('day-map-locations')).toHaveCount(0);
       await door.locationSelect.selectOption({ label: 'South Wing' });

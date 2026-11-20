@@ -253,7 +253,7 @@ function counts(wrapper: VueWrapper) {
   };
 }
 
-/** The printed roster, teleported to the page's body: each row's Here cell. */
+/** The printed roster, teleported to the page's body: each row's text, its Checked in cell among it. */
 function printed(): string[] {
   return [...document.querySelectorAll('[data-testid="attendance-print-row"]')].map(
     (row) => row.textContent?.replace(/\s+/g, ' ').trim() ?? '',
