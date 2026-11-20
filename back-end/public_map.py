@@ -2,7 +2,8 @@
 
 **The settings are the Public map card's** (``PUT /markets/<id>/public-map``): whether the map is on,
 and which of the market's own short text questions hold each vendor's public name, website and
-Instagram handle. Their write asks the table's "Publish the map" row (an Admin's by default, D25),
+Instagram handle; the public name may also be the built-in business name every form asks (T502,
+ADR 0042). Their write asks the table's "Publish the map" row (an Admin's by default, D25),
 loads through ``_market_change`` so an archived market refuses it, writes through the market write
 holding the settings as read, and records what changed in the market's history through the asking
 that let it through, each question by its key and its label, as Discord's question is. A write
@@ -10,8 +11,8 @@ that changes nothing writes and records nothing.
 
 **The read is public** (``GET /public/markets/<slug>/map``), behind one gate
 (``market_documents.public_map_market_by_slug``, D30): found by its slug as the vendor page finds
-it, not archived, its results out, the switch on, its name question still a short text question of
-the form, and at least one location laid out (``mapped_locations``). A market that fails it answers
+it, not archived, its results out, the switch on, its name question the built-in business name or
+still a short text question of the form, and at least one location laid out (``mapped_locations``). A market that fails it answers
 exactly as a slug naming no market. What it answers is an allowlist (D26), built key by key here and
 never from a dump: the market's name and dates, its table types, each laid-out location's sections
 and layout, and each seat with the vendor's three chosen answers cleaned (``public_answers``, D28),
@@ -27,6 +28,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import api.applications as ApplicationsApi
 import api.market_actions as Actions
 import api.markets as MarketsApi
+import essential_fields as EssentialFields
 import history as History
 import public_answers as PublicAnswers
 from assignment.utils import convert_keys_to_camel_case
@@ -46,6 +48,7 @@ QUESTION_FIELDS = {
     "instagramQuestion": "instagram_question",
 }
 SETTINGS_FIELDS = ("enabled", *QUESTION_FIELDS)
+NAME_QUESTION = "name_question"
 
 NOT_A_SWITCH = "enabled must be true or false."
 NOT_A_TEXT_QUESTION = "Choose one of the form's short text questions."
@@ -80,10 +83,23 @@ def text_questions(market: Market) -> Dict[str, str]:
             if field.type == "text"}
 
 
-def chosen_question(market: Market, key: Optional[str]) -> Optional[str]:
-    """``key`` while the form still asks it as a short text question, else None: a question the
-    form lost since it was chosen reads as not chosen."""
-    return key if key and key in text_questions(market) else None
+def name_questions(market: Market) -> Dict[str, str]:
+    """What the public name may be read from, each key by its label: the built-in business name
+    first, which every form asks, then the form's short text questions (T502, ADR 0042)."""
+    return {EssentialFields.BUSINESS_NAME_KEY: EssentialFields.BUSINESS_NAME_LABEL,
+            **text_questions(market)}
+
+
+def offered_questions(market: Market, field: str) -> Dict[str, str]:
+    """The questions a setting may name, each key by its label: the website and the Instagram
+    handle are the form's short text questions only, the name may be the built-in one too."""
+    return name_questions(market) if field == NAME_QUESTION else text_questions(market)
+
+
+def chosen_question(market: Market, field: str, key: Optional[str]) -> Optional[str]:
+    """``key`` while the setting ``field`` may still name it, else None: a question the form lost
+    since it was chosen reads as not chosen."""
+    return key if key and key in offered_questions(market, field) else None
 
 
 def settings_of(market: Market) -> PublicMapSettings:
@@ -108,7 +124,7 @@ def save_settings(market_id: str, body: Dict[str, Any], requesting_user: str) ->
     market = change.market
     before = settings_of(market)
     after = before.model_copy(update=_settings_update(market, body))
-    if after.enabled and chosen_question(market, after.name_question) is None:
+    if after.enabled and chosen_question(market, NAME_QUESTION, after.name_question) is None:
         raise BadRequestError(NO_NAME_QUESTION)
     if after == before:
         return {"publicMap": served(before)}
@@ -139,7 +155,7 @@ def _settings_update(market: Market, body: Dict[str, Any]) -> Dict[str, Any]:
         key = body[sent]
         if key is not None and not isinstance(key, str):
             raise BadRequestError(_not_a_question_value(sent))
-        if key and chosen_question(market, key) is None:
+        if key and chosen_question(market, field, key) is None:
             raise BadRequestError(NOT_A_TEXT_QUESTION)
         update[field] = key or None
     return update
@@ -147,9 +163,11 @@ def _settings_update(market: Market, body: Dict[str, Any]) -> Dict[str, Any]:
 
 def _recorded(market: Market, settings: PublicMapSettings) -> Dict[str, Any]:
     """The settings as the history keeps them: each question by its label as well as its key,
-    since the history reads it by its label and the form may lose the question later."""
-    labels = {field.key: field.label for field in (
-        market.application_form.fields if market.application_form else [])}
+    since the history reads it by its label and the form may lose the question later; the
+    built-in business name by its own label."""
+    labels = {EssentialFields.BUSINESS_NAME_KEY: EssentialFields.BUSINESS_NAME_LABEL,
+              **{field.key: field.label for field in (
+                  market.application_form.fields if market.application_form else [])}}
     recorded: Dict[str, Any] = {"enabled": settings.enabled}
     for field in QUESTION_FIELDS.values():
         key = getattr(settings, field)
@@ -197,10 +215,11 @@ def mapped_locations(plan: Optional[SetupObject]) -> List[MappedLocation]:
 
 def is_open(market: Market) -> bool:
     """The gate's own conditions, past those of the market's phase and results: the switch on, its
-    name question one the form still asks, and a location laid out."""
+    name question the built-in business name or one the form still asks, and a location laid
+    out."""
     settings = settings_of(market)
     return (settings.enabled
-            and chosen_question(market, settings.name_question) is not None
+            and chosen_question(market, NAME_QUESTION, settings.name_question) is not None
             and bool(mapped_locations(market.setup_object)))
 
 
@@ -283,14 +302,21 @@ def _seats(market: Market, mapped: List[MappedLocation], dates: List[str]) -> Li
     rows = [row for row in market.assignment_object.vendor_assignments or []
             if row.date in on_the_map and row.table_code in tables and row.table_choice in HALVES]
     settings = settings_of(market)
-    questions = {field: chosen_question(market, getattr(settings, field))
+    questions = {field: chosen_question(market, field, getattr(settings, field))
                  for field in QUESTION_FIELDS.values()}
     keys = [key for key in questions.values() if key]
     answers = ApplicationsApi.vendor_answers_for_market(market.id, keys) if rows and keys else {}
 
     def answer(row, field):
         key = questions[field]
-        return answers.get(normalized_email(row.email), {}).get(key) if key else None
+        if not key:
+            return None
+        given = answers.get(normalized_email(row.email), {})
+        if key == EssentialFields.BUSINESS_NAME_KEY:
+            # The one reader of the built-in key: absent, an organizer's blank update and a value
+            # that is no text are each no business name.
+            return EssentialFields.business_name(given)
+        return given.get(key)
 
     rows.sort(key=lambda row: (row.date, tables[row.table_code][0],
                                table_code_sort_key(row.table_code),

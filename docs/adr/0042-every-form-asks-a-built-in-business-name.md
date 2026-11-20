@@ -45,7 +45,7 @@ It sits right after the preferred name in `ESSENTIAL_QUESTIONS`, so the form, th
 
 **It narrows ADR 0035.**
 That ADR's rejected alternative, "a fixed 'business name' essential question", is superseded: the form now asks one.
-The public name is still an Admin's choice, and the choice may be the built-in business name.
+The public name is still an Admin's choice, and the choice may be the built-in business name, offered first on the Public map card ([the market's map](../business/flows/the-markets-map.md), [the public map](../implementation/modules/public-map.md)).
 Nothing else of ADR 0035 moves: the website and the Instagram handle are still read from text questions of the market's own form, what is published is still cleaned on the server, and the map still opens with the results and closes with the market.
 
 ## Consequences
