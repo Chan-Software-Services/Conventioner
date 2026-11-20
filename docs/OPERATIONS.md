@@ -317,24 +317,26 @@ MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_business_name.py --marke
 
 `--list` prints each live market's short text question whose key or label holds "business", with the market's id, name, phase and intake mode, the question's key and label, how many applications answered it, how many already hold a built-in business name, and what else names it.
 The run takes the key from that list, never a label: `--market` and `--question` are both required, and without either the script prints its usage and exits 1.
-The dry run prints exactly the lines the run prints; read them before the run.
+The dry run prints the lines the run prints, but for its first line, which says it is a dry run, and its last, which says what a run would do; read them before the run.
 
 The run writes in three steps, each held to what it read and safe to repeat:
 
 1. Each vendor's answer, stripped, is copied to the built-in key, and each organizer's update of it to the built-in's update, its value and the answer it was made over as the built-in stores them.
+   An update whose value is the vendor's own business name is not copied, as Update info would not store it, and step 3 removes it.
    A blank answer, or one that is exactly a none word ("N/A", "none" and the rest of the import's `NONE_WORDS`, in any capitals: Daniel's Q7), is no business name and is not copied; "N/A Studios" is.
    An application that already holds a different built-in business name keeps it; the run prints its id.
 2. One write of the market, holding its form's revision and every part it reads: the question leaves the form and the rest are renumbered, and the public map's name, a review highlight, the saved import mapping and a stored run's record of the applications follow it to the built-in key; its example column is removed.
    It records one form change with no actor in the market's history.
 3. The old answers and updates are cleared.
 
-From step 1 a vendor's business name shows on Attendance at its next read, and the public map shows the same names throughout.
+From step 1 a vendor's business name shows on Attendance at its next read, and the public map shows the same name for each vendor whose answer was copied throughout; a vendor whose answer was a none word, shown on the map as written until step 2, shows no name after it, and one who kept another built-in business name shows that.
 The script touches no status, verdict or `updated_at`, and sends nothing to anyone.
 
 It refuses, exiting 1 with nothing written: a market it does not find or that is being deleted; a key under the `essential_` prefix; a question that is not a short text question; a question the public map's website or Instagram choice, Discord's username question, a priority rule, a price group or a rejection rule names (each named in the refusal: change that first); and a saved mapping that already maps a column to the built-in field.
 Its docstring lists each refusal.
-A market that changed between the read and step 2 (a form save, an import, another run) is left as it was, and the script says it "stopped after step 1": the copied business names stay, and running it again finishes.
-**A run cut anywhere is finished by running it again with the same arguments**: with the question off the form and answers left under it, the script says it is finishing a run and does steps 1 and 3; with none left, it says the market is already migrated, writes nothing and exits 0.
+A market that changed between the read and step 2 (a form save, an import, another run), or was deleted then, is left as it was, and the script says it "stopped after step 1": the copied business names stay, and running it again finishes.
+**A run cut anywhere is finished by running it again with the same arguments**, but for the history entry of a run cut between step 2's write and its entry, which no later run records.
+With the question still on the form, the run is made whole again, finding step 1's copies made; with the question off the form and answers left under it, the script says it is finishing a run and does steps 1 and 3; with none left, it says the market is already migrated, writes nothing and exits 0.
 A key the form never asked also reads as already migrated, so take the key from `--list`.
 If it prints that some applications "changed during the run and were left", a vendor saved meanwhile: run it again.
 
