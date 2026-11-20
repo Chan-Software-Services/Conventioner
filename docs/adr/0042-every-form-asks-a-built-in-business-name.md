@@ -36,7 +36,7 @@ It sits right after the preferred name in `ESSENTIAL_QUESTIONS`, which the impor
   The preferred name and the request keep their `""`; this key alone is absent when empty.
 - **One reader states "the business name of these answers"**: `business_name(form_data)`, and `businessName(formData)` in the mirror, the stripped text or `""`, also for a value that is not text.
   The door, the drawer, the export, the public map and the review search read it through it, so an absent key and a blank one are one case there.
-- **An organizer's update of it left blank is `""`**, standing over the vendor's answer, since no key cannot say "the organizer removed it"; `business_name` reads that as none.
+- **An organizer's update of it left blank, or to a none word, is `""`**, standing over the vendor's answer, since no key cannot say "the organizer removed it"; `business_name` reads that as none.
   A blank update over a vendor who gave none is their own answer, and takes any update away.
 - **It is never the name a vendor is called by**: `display_name` does not read it.
   Attendance shows it as a second, smaller line under the vendor's name.
