@@ -198,11 +198,12 @@ function viewStyles(): string {
   return descriptor.styles.map((style) => style.content).join('\n');
 }
 
+/** A row's status chip and, after it, who made it, as one reads them: "Checked in 5:41 PM by you". */
 function status(wrapper: VueWrapper, email: string): string {
-  return wrapper
-    .get(`[data-testid="attendance-row"][data-vendor="${email}"]`)
-    .get('[data-testid="attendance-row-status"]')
-    .text();
+  const row = wrapper.get(`[data-testid="attendance-row"][data-vendor="${email}"]`);
+  const chip = row.get('[data-testid="attendance-row-status"]').text();
+  const by = row.find('[data-testid="attendance-row-status-by"]');
+  return by.exists() ? `${chip} ${by.text()}` : chip;
 }
 
 function checkIn(wrapper: VueWrapper, email: string) {
@@ -362,12 +363,12 @@ describe('only the newest answer lands', () => {
     api.post.mockResolvedValue({ data: { message: 'Checked in', checkedInAt: ARRIVED } });
     await checkIn(wrapper, ANA).trigger('click');
     await flushPromises();
-    expect(status(wrapper, ANA)).toMatch(/ by you$/);
+    expect(status(wrapper, ANA)).toMatch(/^Checked in .+ by you$/);
 
     // The read asked before the write answers last, with the roster from before it.
     older.settle(roster());
     await flushPromises();
-    expect(status(wrapper, ANA)).toMatch(/ by you$/);
+    expect(status(wrapper, ANA)).toMatch(/^Checked in .+ by you$/);
     // ...and the read the write asked for still lands.
     after.settle(roster({ email: BEN, via: 'door_code' }));
     await flushPromises();
@@ -383,7 +384,7 @@ describe('a check-in', () => {
 
     await checkIn(wrapper, ANA).trigger('click');
     await flushPromises();
-    expect(status(wrapper, ANA)).toMatch(/ by you$/);
+    expect(status(wrapper, ANA)).toMatch(/^Checked in .+ by you$/);
     expect(wrapper.get('[data-testid="attendance-summary"]').text()).toBe('1 of 2 checked in');
     expect(rosterReads()).toBe(2);
 
@@ -419,7 +420,7 @@ describe('a check-in', () => {
 
     forAna.settle({ data: { message: 'Checked in', checkedInAt: ARRIVED } });
     await flushPromises();
-    expect(status(wrapper, ANA)).toMatch(/ by you$/);
+    expect(status(wrapper, ANA)).toMatch(/^Checked in .+ by you$/);
     expect(wrapper.get('[data-testid="attendance-summary"]').text()).toBe('2 of 2 checked in');
   });
 });
@@ -850,7 +851,8 @@ describe('where each vendor stands (T318)', () => {
     await checkIn(wrapper, ANA).trigger('click');
     await flushPromises();
 
-    expect(chip(wrapper, ANA).text()).toMatch(/ by you$/);
+    expect(chip(wrapper, ANA).text()).toMatch(/^Checked in \d{1,2}:\d{2}\s[AP]M$/);
+    expect(status(wrapper, ANA)).toMatch(/ by you$/);
     expect(chip(wrapper, ANA).classes()).toContain('chip--positive');
   });
 

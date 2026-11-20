@@ -179,6 +179,32 @@ describe('the printed roster', () => {
     expect(cy.find('[data-testid="attendance-print-email"]').exists()).toBe(false);
   });
 
+  it('prints an organizer\'s check-in as its time and who made it, under the column\'s own "Checked in"', async () => {
+    api.get.mockResolvedValue({
+      data: {
+        dates: [TODAY],
+        roster: [
+          row(BEN, 'Ben Wood', 'A2', {
+            state: 'here',
+            checkedInTableCode: 'A2',
+            checkedInAt: ARRIVED,
+            checkedInBy: 'org@example.com',
+          }),
+        ],
+      },
+    });
+    const wrapper = await open();
+    // The page's chip says "Checked in <time>"; the paper's header says it once for the column.
+    expect(
+      wrapper
+        .get(
+          `[data-testid="attendance-row"][data-vendor="${BEN}"] [data-testid="attendance-row-status"]`,
+        )
+        .text(),
+    ).toMatch(/^Checked in \d{1,2}:\d{2}\s[AP]M$/);
+    expect(here(wrapper, BEN).text()).toMatch(/^\d{1,2}:\d{2}\s[AP]M by you$/);
+  });
+
   it('prints whole whatever the Show toggle and the search leave on screen', async () => {
     const wrapper = await open();
 

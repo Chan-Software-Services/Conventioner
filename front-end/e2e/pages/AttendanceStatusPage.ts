@@ -199,19 +199,30 @@ export class AttendanceStatusPage {
   }
 
   /**
-   * "Not checked in" at every time of day (T501), or when they checked in and who made it, and,
-   * for a check-in made at another table than the one they hold now, which (T318).
+   * The status chip: "Not checked in" at every time of day, "Checked in 10:02 AM", or "Scanned in at
+   * 10:02 AM" for the vendor's own (T501), and, for a check-in made at another table than the one
+   * they hold now, which (T318). Who made it is `statusBy`.
    */
   status(vendorEmail: string): Locator {
     return this.row(vendorEmail).getByTestId('attendance-row-status');
   }
 
+  /** The plain line after the status chip: who made the check-in, "by you" or "by <address>". */
+  statusBy(vendorEmail: string): Locator {
+    return this.row(vendorEmail).getByTestId('attendance-row-status-by');
+  }
+
   /**
-   * On a checked-out row, after its status: when they were checked out and who made it, "Checked out
-   * 4:05 PM by you" or, for the vendor's own, "Scanned out at 4:05 PM" (T496, T501).
+   * On a checked-out row, after its status: when they were checked out, "Checked out 4:05 PM" or,
+   * for the vendor's own, "Scanned out at 4:05 PM" (T496, T501). Who made it is `outBy`.
    */
   out(vendorEmail: string): Locator {
     return this.row(vendorEmail).getByTestId('attendance-row-out');
+  }
+
+  /** The plain line after the out chip: who made the check-out, "by you" or "by <address>". */
+  outBy(vendorEmail: string): Locator {
+    return this.row(vendorEmail).getByTestId('attendance-row-out-by');
   }
 
   /** A row's Check in, Check out, Undo of the check-in or Undo of the check-out, by its test id. */

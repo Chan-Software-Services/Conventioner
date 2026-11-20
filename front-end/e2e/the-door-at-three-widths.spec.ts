@@ -84,6 +84,9 @@ async function seedTheDoor(
       intakeMode: 'form',
       vendors: [COMES, MOVED, FREED, WAITING],
       namePrefix: 'E2E Door Widths',
+      // A long table code, so the moved vendor's chip, "Checked in <time>, at table" it, is too
+      // wide to share a phone's line with its "Undo?" (T501).
+      sectionName: 'North Gallery Annex',
     },
   );
   const attendance = `${BACKEND_URL}/markets/${marketId}/attendance`;
@@ -157,9 +160,10 @@ for (const size of THREE_WINDOWS) {
       // Where each stands: three seats today, and the vendor freed while here under them.
       await expect(door.status(MOVED)).toHaveText(
         new RegExp(
-          `^\\d{1,2}:\\d{2}\\s[AP]M by you, at table\\s${movedFrom.replaceAll(' ', '\\s')}$`,
+          `^Checked in \\d{1,2}:\\d{2}\\s[AP]M, at table\\s${movedFrom.replaceAll(' ', '\\s')}$`,
         ),
       );
+      await expect(door.statusBy(MOVED)).toHaveText('by you');
       await expect(door.status(MOVED)).toHaveClass(/chip--attention/);
       await expect(door.unseatedHeading).toHaveText('Checked in, with no table on this date (1)');
       await expect(
@@ -207,7 +211,8 @@ for (const size of THREE_WINDOWS) {
       // A check-in and its undo, the row saying each.
       await toTheMiddle(door.row(COMES));
       await press(door.row(COMES).getByTestId('attendance-check-in'));
-      await expect(door.status(COMES)).toHaveText(/^\d{1,2}:\d{2}\s[AP]M by you$/);
+      await expect(door.status(COMES)).toHaveText(/^Checked in \d{1,2}:\d{2}\s[AP]M$/);
+      await expect(door.statusBy(COMES)).toHaveText('by you');
       await expect(door.status(COMES)).toHaveClass(/chip--positive/);
       await expect(door.summary).toHaveText('2 of 3 checked in');
       await expectInside(door.row(COMES), 'the row checked in');
@@ -217,7 +222,8 @@ for (const size of THREE_WINDOWS) {
       // A check-out and its undo: the row checked out has no button, and its one "Undo?", a thumb's
       // 44px on the phone like every target, by when they left.
       await press(door.action(COMES, 'check-out'));
-      await expect(door.out(COMES)).toHaveText(/^Checked out \d{1,2}:\d{2}\s[AP]M by you$/);
+      await expect(door.out(COMES)).toHaveText(/^Checked out \d{1,2}:\d{2}\s[AP]M$/);
+      await expect(door.outBy(COMES)).toHaveText('by you');
       await expect(door.row(COMES).locator('.btn')).toHaveCount(0);
       await expect(door.action(COMES, 'undo')).toHaveCount(0);
       await expectInside(door.row(COMES), 'the row checked out');

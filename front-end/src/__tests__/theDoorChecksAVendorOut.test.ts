@@ -178,7 +178,8 @@ const rowOf = (wrapper: VueWrapper, email: string) =>
 
 /**
  * What a row offers, by test id: the button that ends it, if any, and each line of its chips, in the
- * markup's order, an "Undo?" before the chip it undoes.
+ * markup's order, an "Undo?" before the chip it undoes; the plain "by" line after a chip is not
+ * counted here.
  */
 const offers = (wrapper: VueWrapper, email: string) => ({
   action: rowOf(wrapper, email)
@@ -186,7 +187,11 @@ const offers = (wrapper: VueWrapper, email: string) => ({
     .map((button) => button.attributes('data-testid')),
   lines: rowOf(wrapper, email)
     .findAll('.door-line')
-    .map((line) => [...line.element.children].map((part) => part.getAttribute('data-testid'))),
+    .map((line) =>
+      [...line.element.querySelectorAll('.door-undo, .chip')].map((part) =>
+        part.getAttribute('data-testid'),
+      ),
+    ),
 });
 
 /** A row not checked in: Check in, and its status alone. */
@@ -210,6 +215,23 @@ const status = (wrapper: VueWrapper, email: string) =>
 
 const outChip = (wrapper: VueWrapper, email: string) =>
   rowOf(wrapper, email).find('[data-testid="attendance-row-out"]');
+
+/** The plain line after a chip, "by you" or "by <address>", if the chip has one. */
+const statusBy = (wrapper: VueWrapper, email: string) =>
+  rowOf(wrapper, email).find('[data-testid="attendance-row-status-by"]');
+
+const outBy = (wrapper: VueWrapper, email: string) =>
+  rowOf(wrapper, email).find('[data-testid="attendance-row-out-by"]');
+
+/** A chip and its "by" line, as one reads them: "Checked out 3:02 PM by you". */
+const said = (chip: { text(): string }, by: { exists(): boolean; text(): string }) =>
+  by.exists() ? `${chip.text()} ${by.text()}` : chip.text();
+
+const statusSaid = (wrapper: VueWrapper, email: string) =>
+  said(status(wrapper, email), statusBy(wrapper, email));
+
+const outSaid = (wrapper: VueWrapper, email: string) =>
+  said(outChip(wrapper, email), outBy(wrapper, email));
 
 /** A row's chips, in the markup's order. */
 const chips = (wrapper: VueWrapper, email: string) =>
@@ -313,7 +335,7 @@ describe("each row's buttons", () => {
     await flushPromises();
 
     expect(api.post).toHaveBeenCalledWith(CHECK_OUT_URL, { vendorEmail: CY, date: TODAY });
-    expect(outChip(wrapper, CY).text()).toMatch(/^Checked out .+ by you$/);
+    expect(outSaid(wrapper, CY)).toMatch(/^Checked out .+ by you$/);
     expect(offers(wrapper, CY)).toEqual(OUT_OFFERS);
     // Still listed under the day's seats, counted apart.
     expect(wrapper.get('[data-testid="attendance-unseated-heading"]').text()).toBe(
@@ -359,40 +381,44 @@ describe("a checked-out row's chips", () => {
   ])('says a check-out by %s', async (_name, by, words) => {
     serve(out(ANA, 'A1', by));
     const wrapper = await open();
-    expect(outChip(wrapper, ANA).text()).toMatch(words);
+    expect(outSaid(wrapper, ANA)).toMatch(words);
   });
 
-  it('says when on one line and by whom on the next, the address drawn to break only before its "@" or a dot', async () => {
+  it('holds the state and time in the chip, and "by" whom on a plain line after it, the address drawn to break only before its "@" or a dot', async () => {
     serve({ ...out(ANA, 'A1', OTHER_ORGANIZER), checkedInBy: OTHER_ORGANIZER });
     const wrapper = await open();
-    for (const chip of [outChip(wrapper, ANA), status(wrapper, ANA)]) {
-      const parts = chip.findAll(':scope > span');
-      expect(parts.map((part) => part.classes())).toEqual([['door-chip-when'], ['door-chip-by']]);
-      expect(parts[1]!.text()).toBe(`by ${OTHER_ORGANIZER}`);
-      expect(parts[1]!.findAll('.email-address').map((half) => half.text())).toEqual([
+    expect(outChip(wrapper, ANA).text()).toMatch(/^Checked out \d{1,2}:\d{2}\s[AP]M$/);
+    expect(status(wrapper, ANA).text()).toMatch(/^Checked in \d{1,2}:\d{2}\s[AP]M$/);
+    for (const [chip, by] of [
+      [outChip(wrapper, ANA), outBy(wrapper, ANA)],
+      [status(wrapper, ANA), statusBy(wrapper, ANA)],
+    ] as const) {
+      // A pill of one line: nothing but its words in it.
+      expect(chip.element.children).toHaveLength(0);
+      // The line follows its chip, in the chip's own line of the row.
+      expect(by.element.previousElementSibling?.lastElementChild).toBe(chip.element);
+      expect(by.classes()).toEqual(['door-chip-by']);
+      expect(by.text()).toBe(`by ${OTHER_ORGANIZER}`);
+      expect(by.findAll('.email-address').map((half) => half.text())).toEqual([
         'sam',
         '@example.com',
       ]);
     }
-    expect(outChip(wrapper, ANA).get('.door-chip-when').text()).toMatch(
-      /^Checked out \d{1,2}:\d{2}\s[AP]M$/,
-    );
-    expect(status(wrapper, ANA).get('.door-chip-when').text()).toMatch(/^\d{1,2}:\d{2}\s[AP]M$/);
   });
 
-  it('the check-in chip says as before: "<time> by you", "<time> by <address>", "Scanned in at <time>"', async () => {
+  it('the check-in chip says "Checked in <time>" as the check-out says "Checked out <time>", and "Scanned in at <time>" for the vendor\'s own', async () => {
     serve(
       here(ANA, 'A1'),
       { ...here(BEN, 'A2'), checkedInBy: OTHER_ORGANIZER },
       { ...here(DEE, 'A3'), checkedInBy: null, checkedInVia: 'door_code' },
     );
     const wrapper = await open();
-    expect(status(wrapper, ANA).text()).toMatch(/^\d{1,2}:\d{2}\s[AP]M by you$/);
-    expect(status(wrapper, BEN).text()).toMatch(
-      new RegExp(`^\\d{1,2}:\\d{2}\\s[AP]M by ${OTHER_ORGANIZER}$`),
-    );
+    expect(status(wrapper, ANA).text()).toMatch(/^Checked in \d{1,2}:\d{2}\s[AP]M$/);
+    expect(statusBy(wrapper, ANA).text()).toBe('by you');
+    expect(status(wrapper, BEN).text()).toMatch(/^Checked in \d{1,2}:\d{2}\s[AP]M$/);
+    expect(statusBy(wrapper, BEN).text()).toBe(`by ${OTHER_ORGANIZER}`);
     expect(status(wrapper, DEE).text()).toMatch(/^Scanned in at \d{1,2}:\d{2}\s[AP]M$/);
-    expect(status(wrapper, DEE).find('.door-chip-by').exists()).toBe(false);
+    expect(statusBy(wrapper, DEE).exists()).toBe(false);
   });
 
   it('keeps the attention of a vendor here at another table', async () => {
@@ -402,9 +428,12 @@ describe("a checked-out row's chips", () => {
       checkedInTableCode: 'A7',
     });
     const wrapper = await open();
-    expect(status(wrapper, ANA).text()).toMatch(/, at table A7$/);
+    // Where they went is the state the attention tone flags, so it stays in the chip; who made it
+    // is on the plain line.
+    expect(status(wrapper, ANA).text()).toMatch(/^Checked in \d{1,2}:\d{2}\s[AP]M, at table A7$/);
+    expect(statusBy(wrapper, ANA).text()).toBe('by you');
     expect(status(wrapper, ANA).classes()).toContain('chip--attention');
-    expect(outChip(wrapper, ANA).text()).toMatch(/^Checked out .+ by you$/);
+    expect(outSaid(wrapper, ANA)).toMatch(/^Checked out .+ by you$/);
   });
 
   it('a record from before the check-out, with none of its fields, reads as not checked out', async () => {
@@ -431,8 +460,8 @@ describe('a check-out and its undo', () => {
 
     expect(api.post).toHaveBeenCalledTimes(1);
     expect(api.post).toHaveBeenCalledWith(CHECK_OUT_URL, { vendorEmail: ANA, date: TODAY });
-    expect(outChip(wrapper, ANA).text()).toMatch(/^Checked out \d{1,2}:\d{2}\s[AP]M by you$/);
-    expect(status(wrapper, ANA).text()).toMatch(/ by you$/);
+    expect(outSaid(wrapper, ANA)).toMatch(/^Checked out \d{1,2}:\d{2}\s[AP]M by you$/);
+    expect(statusSaid(wrapper, ANA)).toMatch(/^Checked in .+ by you$/);
     expect(offers(wrapper, ANA)).toEqual(OUT_OFFERS);
     expect(rosterReads()).toBe(2);
 
@@ -446,7 +475,7 @@ describe('a check-out and its undo', () => {
     });
     expect(outChip(wrapper, ANA).exists()).toBe(false);
     // Still checked in: the undo of a check-out is not the undo of the check-in.
-    expect(status(wrapper, ANA).text()).toMatch(/ by you$/);
+    expect(statusSaid(wrapper, ANA)).toMatch(/^Checked in .+ by you$/);
     expect(offers(wrapper, ANA)).toEqual(HERE_OFFERS);
     expect(rosterReads()).toBe(3);
   });
@@ -463,7 +492,7 @@ describe('a check-out and its undo', () => {
     await button(wrapper, ANA, 'attendance-check-out').trigger('click');
     await flushPromises();
 
-    expect(outChip(wrapper, ANA).text()).toMatch(/^Checked out .+ by you$/);
+    expect(outSaid(wrapper, ANA)).toMatch(/^Checked out .+ by you$/);
   });
 
   it('hold both of the row’s buttons busy while the write is out, and no other row’s', async () => {
@@ -574,9 +603,7 @@ describe('someone who may not check vendors in', () => {
     serve(here(ANA, 'A1'), out(BEN, 'A2', OTHER_ORGANIZER));
     const wrapper = await open();
 
-    expect(outChip(wrapper, BEN).text()).toMatch(
-      new RegExp(`^Checked out .+ by ${OTHER_ORGANIZER}$`),
-    );
+    expect(outSaid(wrapper, BEN)).toMatch(new RegExp(`^Checked out .+ by ${OTHER_ORGANIZER}$`));
     for (const email of [ANA, BEN]) {
       expect(rowOf(wrapper, email).find('.door-action').exists()).toBe(false);
       expect(
@@ -752,7 +779,7 @@ describe('a vendor who never checked in reads "Not checked in" at every time of 
       },
     });
     const wrapper = await open();
-    expect(status(wrapper, ANA).text()).toMatch(/ by you$/);
+    expect(statusSaid(wrapper, ANA)).toMatch(/^Checked in .+ by you$/);
     expect(status(wrapper, BEN).text()).toBe('Not checked in');
     expect(wrapper.get('[data-testid="attendance-show-not-checked-in"]').text()).toBe(
       'Not checked in 1',

@@ -426,12 +426,15 @@ export async function seedPublishedMarketWithAssignments(
   // a door long enough to scroll, say.
   // `namePrefix`, the start of the market's name and so of its public addresses: a long one gives
   // the rail long addresses to lay out.
+  // `sectionName`, the one section's name, which begins each table's code: "A" unless a spec needs
+  // a long code, a chip that must hold one, say.
   options: {
     marketDate?: string;
     marketDates?: string[];
     intakeMode?: 'csv' | 'form';
     vendors?: string[];
     namePrefix?: string;
+    sectionName?: string;
   } = {},
 ): Promise<PublishedSeedResult> {
   const marketDates = options.marketDates ?? [options.marketDate ?? SEED_MARKET_DATE];
@@ -478,7 +481,7 @@ export async function seedPublishedMarketWithAssignments(
     locations: [{ name: 'Main Hall' }],
     sections: [
       {
-        name: 'A',
+        name: options.sectionName ?? 'A',
         location: { name: 'Main Hall' },
         tier: { id: 0, name: 'Gold' },
         count: Math.max(3, vendors.length),

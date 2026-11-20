@@ -51,7 +51,7 @@ for (const size of PHONE_AND_DESK) {
       const attendance = new AttendanceStatusPage(page);
       await attendance.goto(seed.marketId);
       await attendance.checkIn(ALICE);
-      await expect(attendance.status(ALICE)).toHaveText(/by you$/);
+      await expect(attendance.statusBy(ALICE)).toHaveText('by you');
       // The table the server seats them at, as the dialog's sentence names it.
       const roster = await request.get(`${BACKEND_URL}/markets/${seed.marketId}/attendance`);
       const rows = (
@@ -100,7 +100,7 @@ for (const size of PHONE_AND_DESK) {
         'Checked in, with no table on this date (1)',
       );
       await expect(attendance.table(ALICE)).toHaveText('No table');
-      await expect(attendance.status(ALICE)).toHaveText(/by you$/);
+      await expect(attendance.statusBy(ALICE)).toHaveText('by you');
     });
   });
 }

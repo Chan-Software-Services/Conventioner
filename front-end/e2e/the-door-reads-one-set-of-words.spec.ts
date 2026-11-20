@@ -1,4 +1,4 @@
-import { request as apiRequest, type Locator, type Page } from '@playwright/test';
+import { request as apiRequest, type Page } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
 import { expectWholeAddress } from './helpers/addressBreaks';
 import { marketScreenPath } from './helpers/marketScreens';
@@ -22,14 +22,16 @@ import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
  * The list said "Not yet" of a vendor who had not come, "Did not come" once the day was over, and
  * "Out" once they left, while the map said "Here" and "Expected": the organizers read five words
  * for three states. Now a row not checked in says "Not checked in" before, on and after the day,
- * a checked-out row says "Checked out <time> by <who>", the filters are All, Not checked in,
+ * a row checked in says "Checked in <time>" and once out "Checked out <time>", each with who made
+ * it on a plain line after it, the filters are All, Not checked in,
  * Checked in and Checked out, each vendor under one of the last three, and the bar still counts
  * everyone who came, checked out or not.
  *
  * Walked on a phone, under a phone's emulation, and at a desk, on a day to come, the day itself
- * and a day over. A vendor checked out by an organizer with a long address reads their chip inside
- * the row: on a phone when on its first line and "by" the address on its second, the address
- * breaking only before its "@" or a dot.
+ * and a day over. A vendor checked in and out by an organizer with a long address reads each chip,
+ * "Checked in <time>" and "Checked out <time>", as a one-line pill inside the row, and who made it
+ * on a plain muted line after it, under it on a phone and beside it at a desk, the address breaking
+ * only before its "@" or a dot.
  */
 const [YEAR, MONTH, DATE] = calendarToday().split('-').map(Number) as [number, number, number];
 const YESTERDAY = calendarToday(new Date(YEAR, MONTH - 1, DATE - 1));
@@ -87,15 +89,6 @@ async function listedUnder(
   );
   return listed.toSorted();
 }
-
-/** Each part of a chip's words, its top and its bottom, where the page drew it. */
-const partsOf = (chip: Locator) =>
-  chip.evaluate((element) =>
-    [...element.querySelectorAll(':scope > span')].map((part) => {
-      const box = part.getBoundingClientRect();
-      return { text: part.textContent ?? '', top: box.top, bottom: box.bottom };
-    }),
-  );
 
 test.beforeAll(async ({ request }) => {
   ensureVerifiedUser(LONG_ORGANIZER.email, LONG_ORGANIZER.password);
@@ -186,49 +179,79 @@ for (const size of PHONE_AND_DESK) {
         await door.show('all');
 
         if (day.date !== TOMORROW) {
-          await expect(door.status(STAYS)).toHaveText(new RegExp(`^${TIME} by you$`));
-          await expect(door.status(LEFT)).toHaveText(
-            new RegExp(`^${TIME} by ${LONG_ORGANIZER.email}$`),
-          );
+          await expect(door.status(STAYS)).toHaveText(new RegExp(`^Checked in ${TIME}$`));
+          await expect(door.statusBy(STAYS)).toHaveText('by you');
+          await expect(door.status(LEFT)).toHaveText(new RegExp(`^Checked in ${TIME}$`));
+          await expect(door.statusBy(LEFT)).toHaveText(`by ${LONG_ORGANIZER.email}`);
           const out = door.out(LEFT);
-          await expect(out).toHaveText(
-            new RegExp(`^Checked out ${TIME} by ${LONG_ORGANIZER.email}$`),
-          );
-          // At the floor of the type scale, in black on beige.
-          const { drawn, tokens } = await out.evaluate((el) => {
+          await expect(out).toHaveText(new RegExp(`^Checked out ${TIME}$`));
+          await expect(door.outBy(LEFT)).toHaveText(`by ${LONG_ORGANIZER.email}`);
+          // The chip at the floor of the type scale, in black on beige; who made it after it, at
+          // the same size, muted.
+          const drawn = (el: Element) => {
             const style = getComputedStyle(el);
+            return [style.fontSize, style.color, style.backgroundColor];
+          };
+          const tokens = await page.evaluate(() => {
             const probe = document.createElement('span');
             probe.style.color = 'var(--mm-black)';
             probe.style.backgroundColor = 'var(--mm-beige)';
-            document.body.append(probe);
-            const token = getComputedStyle(probe);
+            const muted = document.createElement('span');
+            muted.style.color = 'var(--mm-text-muted)';
+            document.body.append(probe, muted);
             const said = {
-              drawn: [style.fontSize, style.color, style.backgroundColor],
-              tokens: ['12px', token.color, token.backgroundColor],
+              chip: [
+                '12px',
+                getComputedStyle(probe).color,
+                getComputedStyle(probe).backgroundColor,
+              ],
+              by: ['12px', getComputedStyle(muted).color, 'rgba(0, 0, 0, 0)'],
             };
             probe.remove();
+            muted.remove();
             return said;
           });
-          expect(drawn).toEqual(tokens);
+          expect(await out.evaluate(drawn)).toEqual(tokens.chip);
+          expect(await door.outBy(LEFT).evaluate(drawn)).toEqual(tokens.by);
           await out.evaluate((el) => el.scrollIntoView({ block: 'center', behavior: 'instant' }));
           await expectInside(door.row(LEFT), "the checked-out vendor's row");
-          for (const chip of [out, door.status(LEFT)]) {
-            const row = (await door.row(LEFT).boundingBox())!;
-            const box = (await chip.boundingBox())!;
-            expect(box.x, 'the chip starts inside the row').toBeGreaterThanOrEqual(row.x);
-            expect(box.x + box.width, 'the chip ends inside the row').toBeLessThanOrEqual(
-              row.x + row.width,
-            );
-            await expectWholeAddress(chip, LONG_ORGANIZER.email);
-            const [when, by] = await partsOf(chip);
-            expect(by!.text).toBe(`by ${LONG_ORGANIZER.email}`);
-            if (size.phone) {
-              // Too narrow for one line: when on the first, "by" the address on the second.
-              expect(by!.top, `"${by!.text}" is on the next line`).toBeGreaterThanOrEqual(
-                when!.bottom - 1,
+          const row = (await door.row(LEFT).boundingBox())!;
+          for (const [chip, by] of [
+            [door.status(LEFT), door.statusBy(LEFT)],
+            [out, door.outBy(LEFT)],
+          ] as const) {
+            const chipBox = (await chip.boundingBox())!;
+            const byBox = (await by.boundingBox())!;
+            for (const [box, what] of [
+              [chipBox, 'the chip'],
+              [byBox, 'who made it'],
+            ] as const) {
+              expect(box.x, `${what} starts inside the row`).toBeGreaterThanOrEqual(row.x);
+              expect(box.x + box.width, `${what} ends inside the row`).toBeLessThanOrEqual(
+                row.x + row.width,
               );
+            }
+            // A pill of one line, never wrapped.
+            expect(chipBox.height, 'the chip is one line').toBeLessThan(30);
+            await expectWholeAddress(by, LONG_ORGANIZER.email);
+            if (size.phone) {
+              // Under the chip, ending where it ends.
+              expect(byBox.y, 'who made it is under the chip').toBeGreaterThanOrEqual(
+                chipBox.y + chipBox.height - 1,
+              );
+              expect(
+                Math.abs(byBox.x + byBox.width - (chipBox.x + chipBox.width)),
+                'who made it ends where the chip ends',
+              ).toBeLessThanOrEqual(1);
             } else {
-              expect(Math.abs(by!.top - when!.top), 'one line at a desk').toBeLessThanOrEqual(1);
+              // Beside the chip, on its line.
+              expect(byBox.x, 'who made it is after the chip').toBeGreaterThan(
+                chipBox.x + chipBox.width,
+              );
+              expect(
+                Math.abs(byBox.y + byBox.height / 2 - (chipBox.y + chipBox.height / 2)),
+                "who made it is on the chip's line",
+              ).toBeLessThanOrEqual(1);
             }
           }
         }

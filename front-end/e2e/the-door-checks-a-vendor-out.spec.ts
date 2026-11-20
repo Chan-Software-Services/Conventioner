@@ -164,7 +164,8 @@ for (const size of PHONE_AND_DESK) {
 
       // A check-in: the row ends in Check out, and its "Undo?" stands just left of the status.
       await press(door.action(COMES, 'check-in'));
-      await expect(door.status(COMES)).toHaveText(new RegExp(`^${TIME} by you$`));
+      await expect(door.status(COMES)).toHaveText(new RegExp(`^Checked in ${TIME}$`));
+      await expect(door.statusBy(COMES)).toHaveText('by you');
       await expect(door.action(COMES, 'check-out')).toHaveText('Check out');
       await expect(door.action(COMES, 'check-out')).toHaveAccessibleName(/^Check out /);
       await expect(door.action(COMES, 'undo')).toHaveText('Undo?');
@@ -187,7 +188,8 @@ for (const size of PHONE_AND_DESK) {
       const checkedOut = doorWrite(page, marketId, 'POST', '/check-out');
       await press(door.action(COMES, 'check-out'));
       expect((await checkedOut).ok()).toBeTruthy();
-      await expect(door.out(COMES)).toHaveText(new RegExp(`^Checked out ${TIME} by you$`));
+      await expect(door.out(COMES)).toHaveText(new RegExp(`^Checked out ${TIME}$`));
+      await expect(door.outBy(COMES)).toHaveText('by you');
       await expect(door.out(COMES)).toHaveClass(/chip--neutral/);
       await expect(door.status(COMES)).toHaveText(arrived);
       await expect(door.status(COMES)).toHaveClass(/chip--positive/);
@@ -211,7 +213,8 @@ for (const size of PHONE_AND_DESK) {
 
       // It is the server's record, not the page's: read again, the row says the same.
       await page.reload();
-      await expect(door.out(COMES)).toHaveText(new RegExp(`^Checked out ${TIME} by you$`));
+      await expect(door.out(COMES)).toHaveText(new RegExp(`^Checked out ${TIME}$`));
+      await expect(door.outBy(COMES)).toHaveText('by you');
       await expect(door.status(COMES)).toHaveText(arrived);
       // Under Checked out, and neither Checked in nor Not checked in (T501).
       await door.show('checked-out');
@@ -226,7 +229,8 @@ for (const size of PHONE_AND_DESK) {
       await expect(door.table(FREED)).toHaveText('No table');
       await toTheMiddle(door.row(FREED));
       await press(door.action(FREED, 'check-out'));
-      await expect(door.out(FREED)).toHaveText(new RegExp(`^Checked out ${TIME} by you$`));
+      await expect(door.out(FREED)).toHaveText(new RegExp(`^Checked out ${TIME}$`));
+      await expect(door.outBy(FREED)).toHaveText('by you');
       await expect(door.unseatedHeading).toHaveText('Checked in, with no table on this date (1)');
       await expectTheRowSound(page, door, FREED, 'a vendor with no table checked out');
 
