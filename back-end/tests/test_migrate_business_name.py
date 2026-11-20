@@ -721,14 +721,15 @@ def test_a_market_deleted_under_the_write_says_step_one_copied(database, capsys,
     assert db.history.documents == []
 
 
-# --- a market whose vendors apply on its page ------------------------------------------------------
+# --- a market whose vendors apply on its page ----------------------------------------------------
 #
 # An applicant's save builds its answers from the form's questions as the market asks them now,
 # holding no form revision, and compares them whole to what is stored, so a key the run has moved
 # under an application reads as changed, and a page opened before the run sends the old question.
-# The run refuses such a market until its applications stage is over, stopped or not, and a run left
-# after step 1 or step 2 is refused again if the market moves back into the stage. These tests take
-# the roads an organizer could still take: a run after the stage, and the market moved back into it.
+# A run that moves the question refuses such a market until its applications stage is over, stopped
+# or not; a finishing run is let through, since it ends the state in which every save reads as
+# changed. These tests take the roads an organizer could still take: a run after the stage, and the
+# market moved back into it.
 
 from test_choosing_reviewers_deals_the_open_applications import (  # noqa: E402
     ADMIN, MARKET as PAGE_MARKET, _client)
@@ -816,12 +817,15 @@ def test_the_listing_still_names_a_market_in_its_applications_stage_and_says_why
     [found] = listed()
 
     assert (found.market_id, found.key, found.answered) == (PAGE_MARKET, KEY, 1)
-    assert "1 answered, 0 hold a built-in business name; also named by: nothing; a run is refused " \
-        "until the applications stage is over" in capsys.readouterr().out
+    assert ("1 answered, 0 hold a built-in business name; also named by: nothing; a run that "
+            "moves it is refused until the applications stage is over") in capsys.readouterr().out
 
 
-def test_a_run_left_after_step_two_is_refused_once_the_market_is_back_in_the_stage(
+def test_a_run_left_after_step_two_is_finished_in_the_stage_and_a_save_then_keeps_the_approval(
         page_market, monkeypatch):
+    """A finishing run only copies what is left and unsets the old key, with the question already
+    off the form, so it is let through in the applications stage: it ends the state in which every
+    save reads as changed."""
     import migrate_business_name as Script
 
     world = page_market
@@ -833,13 +837,14 @@ def test_a_run_left_after_step_two_is_refused_once_the_market_is_back_in_the_sta
     monkeypatch.setattr(Script, "clean_answers", cleaning)
     _in_phase(world, MarketPhase.APPLICATIONS)
 
-    with pytest.raises(Refused, match="Run it once the stage is over"):
-        migrate(PAGE_MARKET, KEY, world.db)
-    assert KEY in _the_vendor(world, app_id)["form_data"]
-
-    _in_phase(world, MarketPhase.ASSIGNMENT)
-    migrate(PAGE_MARKET, KEY, world.db)
+    assert migrate(PAGE_MARKET, KEY, world.db).mode == "finish"
     assert KEY not in _the_vendor(world, app_id)["form_data"]
+
+    assert _vendor_saves(world, {BUILT_IN: "Paper & Pine"}).status_code == 200
+
+    vendor = _the_vendor(world, app_id)
+    assert vendor["form_data"][BUILT_IN] == "Paper & Pine"
+    assert vendor["status"] == ApplicationStatus.REVIEWER_APPROVED.value
 
 
 def test_a_save_on_a_market_back_in_the_stage_before_its_run_was_finished_reopens(

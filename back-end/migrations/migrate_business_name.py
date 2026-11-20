@@ -10,9 +10,9 @@ never a guess.
 **It lists first.** ``--list`` reads every live market and prints, for each short text question
 (``type == "text"``) whose key or label holds "business" in any case: the market's id, name, phase
 and intake mode, the question's key and label, how many applications answered it, how many already
-hold a built-in business name, and what else names the question, and says so where a run is refused
-until the market's applications stage is over. It writes nothing, prints no answer and no address,
-and says so in its last line.
+hold a built-in business name, and what else names the question, and says so where a run that moves
+the question is refused until the market's applications stage is over. It writes nothing, prints no
+answer and no address, and says so in its last line.
 
 **A run writes in three steps, in this order, each safe to repeat:**
 
@@ -54,22 +54,23 @@ whole to what is stored, so from step 1 until step 3 is done either reads a move
 and sends a verdict back to open, and an import of the same file before step 2 also removes the
 copies step 1 made. And a vendor's save holds no form revision, so one from a page opened before the
 run sends the old question's answer, which the form no longer keeps, and a blank built-in field: the
-business name is stored nowhere. So the run waits for the applications stage to be over on a market
-whose vendors apply on its page, and a run left after step 1 or step 2 is finished before any import
-of that market. A market moved back into the applications stage after a run can still lose a
-business name that way, from a page a vendor opened before the run.
+business name is stored nowhere. So a run that moves the question waits for the applications stage
+to be over on a market whose vendors apply on its page, and a run left after step 1 or step 2 is
+finished before any import of that market. A market moved back into the applications stage after a
+run can still lose a business name that way, from a page a vendor opened before the run.
 
 **It refuses**, writing nothing and exiting 1, when: no live market has the id (none, or it is being
 deleted); the market's vendors apply on its page and it is in its applications stage, taking
-applications or stopped (a finishing run too: run it once the stage is over); the key is under the
-``essential_`` prefix; the question is not a short text question; the public map's website or
-Instagram question, Discord's username question, a priority rule, a price group's condition or a
-rejection rule names it (each refusal names which); or the saved import mapping already maps a
-column to the built-in key. When the market changed between the read and step 2's write (an
-organizer's form save, an import, another run), or was deleted then, the market is left as it was
-and nothing is recorded or cleaned; the copies step 1 made stay, the vendors' lines at the door, the
-command says it stopped after step 1 and exits 1, and a second run on a market still there finds
-them already copied.
+applications or stopped (run it once the stage is over; a finishing run is let through, since it
+only copies what is left and clears the old key, which ends the state in which every save reads as
+changed); the key is under the ``essential_`` prefix; the question is not a short text question; the
+public map's website or Instagram question, Discord's username question, a priority rule, a price
+group's condition or a rejection rule names it (each refusal names which); or the saved import
+mapping already maps a column to the built-in key. When the market changed between the read and step
+2's write (an organizer's form save, an import, another run), or was deleted then, the market is
+left as it was and nothing is recorded or cleaned; the copies step 1 made stay, the vendors' lines
+at the door, the command says it stopped after step 1 and exits 1, and a second run on a market
+still there finds them already copied.
 
 **A second run** after a run cut before step 2's write finds the question still on the form and runs
 whole again, finding step 1's copies already made. Once step 2 has written it finds the question
@@ -375,8 +376,6 @@ def judged(document: Mapping[str, Any], key: str, applications: List[Mapping[str
     moved = [judged_application(doc, key) for doc in applications]
     if question is None:
         mode = "finish" if any(each.holds_old for each in moved) else "done"
-        if mode == "finish":
-            _refuse_a_market_in_the_applications_stage(document)
         return Move(mode=mode, label="", applications=moved, setting={}, lines=[], detail=None)
     _refuse_a_market_in_the_applications_stage(document)
 
@@ -473,7 +472,7 @@ def listed(db=None) -> List[Candidate]:
             print(f"  - question {key!r} (\"{field.get('label')}\"): {answered} answered, "
                   f"{built_in} hold a built-in business name; also named by: "
                   + (", ".join(named_by) or "nothing")
-                  + ("; a run is refused until the applications stage is over"
+                  + ("; a run that moves it is refused until the applications stage is over"
                      if _in_the_applications_stage(document) else ""))
             found.append(Candidate(market_id, key, str(field.get("label")), answered, built_in,
                                    named_by))
