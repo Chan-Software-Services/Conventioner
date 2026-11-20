@@ -127,11 +127,11 @@ Covered by:
    A filter or a search that leaves nobody says "Nobody matches.".
    At a desk, 1,024px wide and more, the two rows are pinned under the market's frame from the start, so they never move while the list or the map scrolls under them; on a phone they scroll away with the page, each control a 44px target.
 3. "Find a vendor" ("Name, email or table") narrows the list, by the name a vendor goes by or the full name on their identification, their address or their table.
-4. Each vendor placed that day, by table: their name, a link at rest (link ink, underlined, a 44px target on a phone), which opens the [vendor drawer](vendor-drawer.md) and never checks them in; how and when they checked in ("Scanned in at 9:41 AM" for their own, with the door code, "9:41 AM by you" or by the organizer's address), or "Not checked in", before, on and after the day alike (T501); and their notes under the row when they have some.
-   A vendor checked in and then moved or swapped reads where they checked in, "9:41 AM by you, at table North Wing 2", in an attention chip, so they are sent to their new table.
+4. Each vendor placed that day, by table: their name, a link at rest (link ink, underlined, a 44px target on a phone), which opens the [vendor drawer](vendor-drawer.md) and never checks them in; how and when they checked in ("Scanned in at 9:41 AM" for their own, with the door code, "Checked in 9:41 AM" for an organizer's, then "by you" or "by" the organizer's address), or "Not checked in", before, on and after the day alike (T501); and their notes under the row when they have some.
+   A vendor checked in and then moved or swapped reads where they checked in, "Checked in 9:41 AM, at table North Wing 2", in an attention chip, then "by you", so they are sent to their new table.
    Under the day's seats, "Checked in, with no table on this date (<n>)" lists each vendor checked in and then freed, their table "No table", so a free never hides an arrival; they count toward no day's tally.
-   A vendor checked out keeps that status and gains a second chip after it, "Checked out 4:05 PM by you", or by the organizer's address, or "Scanned out at 4:05 PM" for their own ([K10](#k10-check-a-vendor-out)).
-   On a row too narrow for a chip's one line, a phone's, the chip takes two, when on the first and "by" the organizer's address on the second, the address breaking only before its "@" or a dot (T501).
+   A vendor checked out keeps that status and gains a second chip after it, "Checked out 4:05 PM", then "by you" or "by" the organizer's address, or "Scanned out at 4:05 PM" for their own ([K10](#k10-check-a-vendor-out)).
+   Each chip is a one-line pill of the state and the time, and who made it is a plain muted line after it, beside the chip at a desk and under it on a phone, the address breaking only before its "@" or a dot (T501).
 5. While the market is in Market Days, each row ends in at most one button, for someone who may check vendors in: "Check in" checks a vendor in at the door, and a checked-in row offers "Check out" in its place ([K10](#k10-check-a-vendor-out)).
    Each undo is a quiet "Undo?" just left of the chip it undoes: the check-in's by the status chip, the check-out's by the departure chip.
    "Check in" is offered on today and past days, so a tap missed in the rush is put right after, and never on a day to come, which the server refuses too: "That day has not begun yet, so nobody can be checked in for it."
@@ -186,7 +186,7 @@ Covered by:
 **Task (organizer):** "A vendor is leaving and has handed back what they borrowed. Record that they left."
 
 1. On Attendance's list, in Market Days, a checked-in vendor's row offers "Check out", its one button, for someone who may check vendors in, on any day with a check-in, a vendor here with no table that day included.
-2. Expect the row to keep its status and gain a second chip, "Checked out 4:05 PM by you", with one "Undo?" just left of that chip, which undoes the check-out and brings "Check out" back, with the check-in's "Undo?" left of its status.
+2. Expect the row to keep its status and gain a second chip, "Checked out 4:05 PM", then "by you", with one "Undo?" just left of that chip, which undoes the check-out and brings "Check out" back, with the check-in's "Undo?" left of its status.
 3. A check-in is not undone while the vendor is checked out: the row has no "Undo?" by its status, only the check-out's "Undo?" by the departure chip, and a check-in's undo sent anyway is answered "Undo the check-out first."
 
 **Task (vendor), at a market that lets vendors check themselves in and out:** "You are leaving. Check out."
