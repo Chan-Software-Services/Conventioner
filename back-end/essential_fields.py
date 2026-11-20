@@ -87,7 +87,7 @@ PREFERRED_NAME_KEY = "essential_preferred_name"
 BUSINESS_NAME_KEY = "essential_business_name"
 
 # Answers that mean "none": a per-day grid's cell for "not on this day" (the import's, bug 26, whose
-# applicant form offers "Not available"), and a business name that is no business name (T502, Q7).
+# applicant form offers "Not available"), and a business name that is no business name (T502).
 # Compared lowercased and stripped. The one set: ``csv_import`` reads it from here.
 NONE_WORDS = {"none", "n/a", "na", "not available", "unavailable", "-"}
 

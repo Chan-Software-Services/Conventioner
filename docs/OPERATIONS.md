@@ -308,7 +308,7 @@ The release is safe before the script runs: until then the market reads as befor
 **Run it once the market's applications stage is over** where its vendors apply on its page, and while no import of that market is under way.
 A vendor's save and an import build the answers from the form as the market asks it then and compare them whole to what is stored, so from step 1 until step 3 is done either reads a moved answer as changed and sends a verdict back to open, and an import of the same file before step 2 removes the copies step 1 made.
 A vendor's save holds no form revision either, so one from a page opened before the run sends the old question's answer, which the form no longer keeps, beside a blank built-in field, and the business name is stored nowhere.
-So the script refuses a market whose vendors apply on its page while it is in its applications stage, taking applications or stopped, and a run left after step 1 or step 2 is finished before any import of that market.
+So a run that moves the question is refused on a market whose vendors apply on its page while it is in its applications stage, taking applications or stopped, and a run left after step 1 or step 2 is finished before any import of that market.
 A market moved back into the applications stage after a run can still lose a business name that way, from a page a vendor opened before the run.
 An organizer with the form editor open (a draft only) is refused their next save and reads the form again.
 Take a `mongodump` first ([backups](#backups-and-restoring)), then list, dry-run and run:
@@ -319,7 +319,7 @@ MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_business_name.py --marke
 MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_business_name.py --market <market-id> --question <key>
 ```
 
-`--list` prints each live market's short text question whose key or label holds "business", with the market's id, name, phase and intake mode, the question's key and label, how many applications answered it, how many already hold a built-in business name, and what else names it, and says so where a run is refused until the market's applications stage is over.
+`--list` prints each live market's short text question whose key or label holds "business", with the market's id, name, phase and intake mode, the question's key and label, how many applications answered it, how many already hold a built-in business name, and what else names it, and says so where a run that moves the question is refused until the market's applications stage is over.
 The run takes the key from that list, never a label: `--market` and `--question` are both required, and without either the script prints its usage and exits 1.
 The dry run prints the lines the run prints, but for its first line, which says it is a dry run, and its last, which says what a run would do; read them before the run.
 
@@ -328,15 +328,15 @@ The run writes in three steps, each held to what it read and safe to repeat:
 1. Each vendor's answer, stripped, is copied to the built-in key, and each organizer's update of it to the built-in's update, its value and the answer it was made over as the built-in stores them.
    An update whose value is the vendor's own business name is not copied, as Update info would not store it, and step 3 removes it.
    A blank answer, or one that is exactly a none word ("N/A", "none" and the rest of the import's `NONE_WORDS`, in any capitals), is no business name and is not copied; "N/A Studios" is.
-   An application that already holds a different built-in business name keeps it, and an organizer's update of the question moves beside it all the same, made over the old answer; the run prints its id.
+   An application that already holds a different built-in business name keeps it, and an organizer's update of the question moves beside it all the same, made over the old answer, so every organizer's screen and the public map read the update where one moved; the run prints its id.
 2. One write of the market, holding its form's revision and every part it reads: the question leaves the form and the rest are renumbered, and the public map's name, a review highlight, the saved import mapping and a stored run's record of the applications follow it to the built-in key; its example column is removed.
    It records one form change with no actor in the market's history.
 3. The old answers and updates are cleared.
 
-From step 1 a vendor's business name shows on Attendance at its next read, and the public map shows the same name for each vendor whose answer was copied throughout; a vendor whose answer was a none word, shown on the map as written until step 2, shows no name after it, and one who kept another built-in business name shows that.
+From step 1 a vendor's business name shows on Attendance at its next read, and the public map shows the same name for each vendor whose answer was copied throughout; a vendor whose answer was a none word, shown on the map as written until step 2, shows no name after it, and one who kept another built-in business name shows that, or the organizer's update of the question where one moved beside it.
 The script touches no status, verdict or `updated_at`, and sends nothing to anyone.
 
-It refuses, exiting 1 with nothing written: a market it does not find or that is being deleted; a market whose vendors apply on its page while it is in its applications stage, a finishing run too; a key under the `essential_` prefix; a question that is not a short text question; a question the public map's website or Instagram choice, Discord's username question, a priority rule, a price group or a rejection rule names (each named in the refusal: change that first); and a saved mapping that already maps a column to the built-in field.
+It refuses, exiting 1 with nothing written: a market it does not find or that is being deleted; a run that moves the question on a market whose vendors apply on its page while it is in its applications stage (a finishing run is let through, since it only copies what is left and clears the old key, which ends the state in which every save reads as changed); a key under the `essential_` prefix; a question that is not a short text question; a question the public map's website or Instagram choice, Discord's username question, a priority rule, a price group or a rejection rule names (each named in the refusal: change that first); and a saved mapping that already maps a column to the built-in field.
 Its docstring lists each refusal.
 A market that changed between the read and step 2 (a form save, an import, another run), or was deleted then, is left as it was, and the script says it "stopped after step 1": the copied business names stay, and running it again finishes.
 **A run cut anywhere is finished by running it again with the same arguments**, but for the history entry of a run cut between step 2's write and its entry, which no later run records.
