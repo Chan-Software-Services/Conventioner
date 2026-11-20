@@ -22,10 +22,10 @@ import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
  * The list said "Not yet" of a vendor who had not come, "Did not come" once the day was over, and
  * "Out" once they left, while the map said "Here" and "Expected": the organizers read five words
  * for three states. Now a row not checked in says "Not checked in" before, on and after the day,
- * a row checked in says "Checked in <time>" and once out "Checked out <time>", each with who made
- * it on a plain line after it, the filters are All, Not checked in,
- * Checked in and Checked out, each vendor under one of the last three, and the bar still counts
- * everyone who came, checked out or not.
+ * a row an organizer checked in says "Checked in <time>" and once out "Checked out <time>", each
+ * with who made it on a plain line after it; the filters are All, Not checked in, Checked in and
+ * Checked out, each vendor under one of the last three, and the bar still counts everyone who
+ * came, checked out or not.
  *
  * Walked on a phone, under a phone's emulation, and at a desk, on a day to come, the day itself
  * and a day over. A vendor checked in and out by an organizer with a long address reads each chip,
