@@ -123,7 +123,7 @@ Covered by:
 
 1. Attendance opens on today when it is a market date, else the next one, else the last; the day is a select at the start of the toolbar, each option the day alone ("Nov 17, 2026"), and choosing one keeps the view.
    The toolbar is one row: the day (and, on the map with two locations or more laid out, the location) at its start, then at its end "List" and "Map" as one joined choice, "Print roster" and "Door code", and "Refresh" last, a rule between each group; the Tab key walks it in that order (T466).
-2. Under it, a second row holds "N of M checked in", counting everyone who checked in that day, checked out or not, and on the list "All M", "Not checked in N", "Checked in N" and "Checked out N", each showing only its own vendors, so a vendor is under one of the last three, and the search (T501).
+2. Under it, a second row holds "N of M checked in", counting every seated vendor who checked in that day, checked out or not, and on the list "All M", "Not checked in N", "Checked in N" and "Checked out N", each showing only its own vendors, so a vendor is under one of the last three, and the search (T501).
    A filter or a search that leaves nobody says "Nobody matches.".
    At a desk, 1,024px wide and more, the two rows are pinned under the market's frame from the start, so they never move while the list or the map scrolls under them; on a phone they scroll away with the page, each control a 44px target.
 3. "Find a vendor" ("Name, email or table") narrows the list, by the name a vendor goes by or the full name on their identification, their address or their table.
