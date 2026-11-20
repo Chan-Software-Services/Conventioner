@@ -762,7 +762,8 @@ def _store_preferred_name(incoming: Dict[str, Any], stored: Dict[str, Any]) -> N
 
 def _store_business_name(incoming: Dict[str, Any], stored: Dict[str, Any]) -> None:
     """The name a vendor trades under, optional and never refused: stored stripped when one was
-    given, and NO KEY AT ALL when it is blank or missing.
+    given, and NO KEY AT ALL when it is blank, missing or exactly a none word
+    (``given_business_name``).
 
     Every other optional answer stores its empty value, and this one must not. An applicant's save
     and an import compare the whole stored ``form_data`` (``application_status._answers_move``,
