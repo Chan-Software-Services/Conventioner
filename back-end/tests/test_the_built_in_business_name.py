@@ -340,3 +340,118 @@ class TestASearchOnTheResults:
             "answer_updates": {KEY: {"value": ""}}})
 
         assert terms == {VENDOR: ["Ana Rivera"]}
+
+
+#: The words an answer means "none" by, as the import reads a per-day grid's cell (Daniel's Q7).
+NONE_ANSWERS = ["N/A", "none", "  NA ", "Not available", "unavailable", "-"]
+
+
+class TestAnAnswerThatIsANoneWord:
+    """An answer that is exactly a none word, in any capitals, is no business name wherever one is
+    stored: such a vendor has no line under their name. One that only holds such a word is a name.
+    """
+
+    @pytest.mark.parametrize("given", NONE_ANSWERS)
+    def test_it_stores_no_key_as_a_blank_does(self, given):
+        error, stored = EF.validated_essential_answers({**NAMED, KEY: given}, EMPTY)
+
+        assert error is None, error
+        assert KEY not in stored
+
+    @pytest.mark.parametrize("given", ["N/A Studios", "None Such Ceramics", "-ish Prints"])
+    def test_one_that_only_holds_a_none_word_is_kept(self, given):
+        error, stored = EF.validated_essential_answers({**NAMED, KEY: f" {given} "}, EMPTY)
+
+        assert (error, stored[KEY]) == (None, given)
+
+    @pytest.mark.parametrize("given", NONE_ANSWERS)
+    def test_an_organizers_update_to_one_is_stored_as_a_blank_update_is(self, given):
+        error, stored = EF.validated_essential_update(
+            {**NAMED, KEY: "Paper & Pine"}, {KEY: given}, EMPTY, limit_required=False)
+
+        assert (error, stored) == (None, {KEY: ""})
+
+    @pytest.mark.parametrize("given", ["N/A", "none"])
+    def test_an_applicants_save_stores_no_key(self, world, given):
+        assert _save(world, **{KEY: given}).status_code == 200
+
+        assert KEY not in _doc(world, _id_of(world, VENDOR))["form_data"]
+
+    def test_an_applicants_save_keeps_one_that_only_holds_a_none_word(self, world):
+        assert _save(world, **{KEY: "N/A Studios"}).status_code == 200
+
+        assert _doc(world, _id_of(world, VENDOR))["form_data"][KEY] == "N/A Studios"
+
+    @pytest.mark.parametrize("given", ["N/A", "none"])
+    def test_one_stored_with_no_key_keeps_its_approval_on_a_save_of_one(self, world, given):
+        _submit(world, VENDOR)
+        app_id = _id_of(world, VENDOR)
+        assert KEY not in _doc(world, app_id)["form_data"]
+        _approve(app_id)
+
+        assert _save(world, **{KEY: given}).status_code == 200
+
+        assert _doc(world, app_id)["status"] == ApplicationStatus.REVIEWER_APPROVED.value
+        assert _edits(world, app_id) == []
+
+    def test_an_import_stores_no_key_for_one_and_keeps_one_that_only_holds_it(self, world):
+        world.use(_import_market_doc(phase=MarketPhase.APPLICATIONS))
+        headers = [*HEADERS, "Trading as"]
+        mapping = {**MAPPING, KEY: len(HEADERS)}
+        importing = TestAnImport()
+
+        importing._import(GOOD_ROW + ",N/A", mapping, headers)
+        importing._import(GOOD_ROW.replace("nadia@", "theo@") + ",none", mapping, headers)
+        importing._import(GOOD_ROW.replace("nadia@", "ivy@") + ",N/A Studios", mapping, headers)
+
+        assert KEY not in _doc(world, _id_of(world, "nadia@ember.test"))["form_data"]
+        assert KEY not in _doc(world, _id_of(world, "theo@ember.test"))["form_data"]
+        assert _doc(world, _id_of(world, "ivy@ember.test"))["form_data"][KEY] == "N/A Studios"
+
+    def test_an_import_of_one_over_an_application_stored_with_no_key_changes_nobody(self, world):
+        world.use(_import_market_doc(phase=MarketPhase.APPLICATIONS))
+        headers = [*HEADERS, "Trading as"]
+        mapping = {**MAPPING, KEY: len(HEADERS)}
+        importing = TestAnImport()
+        importing._import(GOOD_ROW + ",", mapping, headers)
+        app_id = _id_of(world, "nadia@ember.test")
+        _approve(app_id)
+        before = dict(_doc(world, app_id))
+
+        body = importing._import(GOOD_ROW + ",N/A", mapping, headers)
+
+        assert (body["unchanged"], body["updated"], body["returnedToReview"]) == (1, 0, 0)
+        assert _doc(world, app_id) == before
+
+    @pytest.mark.parametrize("given", ["N/A", "none"])
+    def test_update_info_with_one_over_a_vendor_who_gave_none_changes_nothing(self, world, given):
+        _submit(world, VENDOR)
+        app_id = _id_of(world, VENDOR)
+        _approve(app_id)
+        before = dict(_doc(world, app_id))
+
+        _update(app_id, given)
+
+        assert _doc(world, app_id) == before
+
+    def test_update_info_with_one_over_a_vendors_name_stands_as_a_blank_update(self, world):
+        _submit(world, VENDOR, **{KEY: "Paper & Pine"})
+        app_id = _id_of(world, VENDOR)
+
+        _update(app_id, "N/A")
+
+        doc = _doc(world, app_id)
+        assert (doc["answer_updates"][KEY]["value"], doc["answer_updates"][KEY]["over"]) == (
+            "", "Paper & Pine")
+        assert EF.business_name(ApplicationsApi.effective_answers(doc)) == ""
+
+    def test_update_info_keeps_one_that_only_holds_a_none_word(self, world):
+        _submit(world, VENDOR)
+        app_id = _id_of(world, VENDOR)
+
+        _update(app_id, "N/A Studios")
+
+        assert _doc(world, app_id)["answer_updates"][KEY]["value"] == "N/A Studios"
+
+    def test_the_none_words_are_the_imports_own_set(self):
+        assert EF.NONE_WORDS is CsvImport.NONE_WORDS
