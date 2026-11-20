@@ -303,7 +303,8 @@ def test_a_run_prints_what_each_step_does(database, capsys):
             "moves to the built-in business name") in out
     assert ("  - step 1, copy: 3 answer(s) and 1 organizer's update(s) to the built-in key; "
             "3 blank or none, left; 1 already holding another business name, kept") in out
-    assert "  - kept, each holding another built-in business name: app-eve" in out
+    assert ("  - kept, each holding another built-in business name, any organizer's update of the "
+            "question moved beside it: app-eve") in out
     assert ("  - step 2, the market: the question leaves the form and 3 other question(s) are "
             "renumbered; formRevision 4 -> 5") in out
     assert "  - the public map's name question: moves to the built-in business name" in out
@@ -381,7 +382,7 @@ def test_an_update_to_a_none_word_is_stored_as_a_blank_update(database):
 def test_an_application_holding_another_business_name_keeps_it_and_its_id_is_printed(
         database, capsys):
     apps = [an_application("app-eve", "eve@example.com", {KEY: "Kiln Works", BUILT_IN: "Kiln & Co"},
-                           {KEY: an_update("Kiln Works Ltd", "Kiln Works")})]
+                           {KEY: an_update("Kiln Works Ltd", " Kiln Works ")})]
     db = database(a_market(), apps=apps)
 
     migrate(MARKET, KEY, db)
@@ -389,10 +390,13 @@ def test_an_application_holding_another_business_name_keeps_it_and_its_id_is_pri
     eve = application(db, "app-eve")
     assert eve["form_data"][BUILT_IN] == "Kiln & Co"
     assert KEY not in eve["form_data"]
-    assert eve.get("answer_updates") == {}
+    # The organizer's correction moves with it, its ``over`` as the built-in stores it, so it reads
+    # "Their answer changed since your update." over the kept name rather than being lost.
+    assert eve["answer_updates"] == {BUILT_IN: an_update("Kiln Works Ltd", "Kiln Works")}
     out = capsys.readouterr().out
     assert "1 already holding another business name, kept" in out
-    assert "kept, each holding another built-in business name: app-eve" in out
+    assert ("kept, each holding another built-in business name, any organizer's update of the "
+            "question moved beside it: app-eve") in out
 
 
 def test_the_form_loses_the_question_and_renumbers_the_rest(database):
@@ -605,6 +609,8 @@ REFUSALS = [
      "The price group 'Makers' names it"),
     ("a rejection rule", {"rejectionRules": [{"key": KEY, "answers": ["x"]}]}, KEY,
      "A rejection rule names it"),
+    ("a market in its applications stage whose vendors apply on its page", {"intakeMode": "form"},
+     KEY, "Run it once the stage is over"),
     ("a mapping already targeting the built-in", {"importMapping": {
         **_mapping(), "targets": {**_mapping()["targets"], BUILT_IN: ["Trading as"]}}}, KEY,
      "The saved import mapping already maps a column to the built-in business name"),
@@ -713,3 +719,167 @@ def test_a_market_deleted_under_the_write_says_step_one_copied(database, capsys,
     # Step 1 copied before the write was refused, which the command says rather than hiding.
     assert application(db, "app-ana")["form_data"][BUILT_IN] == "Paper & Pine"
     assert db.history.documents == []
+
+
+# --- a market whose vendors apply on its page ------------------------------------------------------
+#
+# An applicant's save builds its answers from the form's questions as the market asks them now,
+# holding no form revision, and compares them whole to what is stored, so a key the run has moved
+# under an application reads as changed, and a page opened before the run sends the old question.
+# The run refuses such a market until its applications stage is over, stopped or not, and a run left
+# after step 1 or step 2 is refused again if the market moves back into the stage. These tests take
+# the roads an organizer could still take: a run after the stage, and the market moved back into it.
+
+from test_choosing_reviewers_deals_the_open_applications import (  # noqa: E402
+    ADMIN, MARKET as PAGE_MARKET, _client)
+from test_each_arrival_is_dealt import world  # noqa: E402,F401
+from test_essential_fields import VALID_ANSWERS  # noqa: E402
+
+from conftest import seen_as_stored  # noqa: E402
+from datatypes import ApplicationStatus  # noqa: E402
+
+VENDOR = "vendor@example.com"
+
+
+@pytest.fixture
+def page_market(world, monkeypatch):
+    """The world's market, whose vendors apply on its page and whose form asks ``business_name``,
+    read by the script and the routes through one configured database."""
+    world.db = Database(world.markets, world.applications, world.history)
+    monkeypatch.setattr(test_db_config, "get_database", lambda *_a, **_kw: world.db)
+    return world
+
+
+def _vendor_saves(world, answers):
+    """``VENDOR`` saves their application with exactly ``answers`` beside the plan's answers."""
+    import app as app_module
+
+    world.vendor = VENDOR
+    return app_module.app.test_client().put(
+        "/public/markets/test-market/applicant/application",
+        json={"formData": {**VALID_ANSWERS, **answers}})
+
+
+def _stop_taking_applications(stopped):
+    response = _client(ADMIN).post(f"/markets/{PAGE_MARKET}/applications-stopped",
+                                   json={"stopped": stopped})
+    assert response.status_code == 200, response.get_json()
+
+
+def _an_approved_vendor(world):
+    assert _vendor_saves(world, {KEY: "Paper & Pine"}).status_code == 200
+    app_id = next(d["id"] for d in world.applications.documents
+                  if d["applicant_email"] == VENDOR)
+    response = _client(ADMIN).put(
+        f"/markets/{PAGE_MARKET}/applications/{app_id}/review",
+        json={"status": "reviewer_approved", "seen": seen_as_stored(app_id)})
+    assert response.status_code == 200, response.get_json()
+    return app_id
+
+
+def _in_phase(world, phase):
+    """The market moved, as Begin assignment and the review moving back move it; their guards are
+    their own tests'."""
+    world.markets.doc["phase"] = phase.value
+
+
+def _the_vendor(world, app_id):
+    return next(d for d in world.applications.documents if d["id"] == app_id)
+
+
+@pytest.mark.parametrize("stopped", [False, True], ids=["taking applications", "stopped"])
+def test_a_market_in_its_applications_stage_is_refused_and_a_dry_run_says_so(
+        page_market, capsys, stopped):
+    world = page_market
+    _an_approved_vendor(world)
+    if stopped:
+        _stop_taking_applications(True)
+    before = copy.deepcopy((world.markets.doc, world.applications.documents,
+                            world.history.documents))
+
+    with pytest.raises(Refused, match="Run it once the stage is over"):
+        migrate(PAGE_MARKET, KEY, world.db)
+    with pytest.raises(Refused, match="Run it once the stage is over"):
+        migrate(PAGE_MARKET, KEY, world.db, dry_run=True)
+    assert main(["--market", PAGE_MARKET, "--question", KEY]) == 1
+    assert main(["--market", PAGE_MARKET, "--question", KEY, "--dry-run"]) == 1
+
+    assert capsys.readouterr().err.count("Run it once the stage is over") == 2
+    assert (world.markets.doc, world.applications.documents, world.history.documents) == before
+
+
+def test_the_listing_still_names_a_market_in_its_applications_stage_and_says_why_not(
+        page_market, capsys):
+    world = page_market
+    _an_approved_vendor(world)
+
+    [found] = listed()
+
+    assert (found.market_id, found.key, found.answered) == (PAGE_MARKET, KEY, 1)
+    assert "1 answered, 0 hold a built-in business name; also named by: nothing; a run is refused " \
+        "until the applications stage is over" in capsys.readouterr().out
+
+
+def test_a_run_left_after_step_two_is_refused_once_the_market_is_back_in_the_stage(
+        page_market, monkeypatch):
+    import migrate_business_name as Script
+
+    world = page_market
+    app_id = _an_approved_vendor(world)
+    _in_phase(world, MarketPhase.ASSIGNMENT)
+    cleaning = Script.clean_answers
+    monkeypatch.setattr(Script, "clean_answers", lambda *_a, **_k: ([], []))
+    migrate(PAGE_MARKET, KEY, world.db)
+    monkeypatch.setattr(Script, "clean_answers", cleaning)
+    _in_phase(world, MarketPhase.APPLICATIONS)
+
+    with pytest.raises(Refused, match="Run it once the stage is over"):
+        migrate(PAGE_MARKET, KEY, world.db)
+    assert KEY in _the_vendor(world, app_id)["form_data"]
+
+    _in_phase(world, MarketPhase.ASSIGNMENT)
+    migrate(PAGE_MARKET, KEY, world.db)
+    assert KEY not in _the_vendor(world, app_id)["form_data"]
+
+
+def test_a_save_on_a_market_back_in_the_stage_before_its_run_was_finished_reopens(
+        page_market, monkeypatch):
+    """A road the refusal leaves open: a run cut after step 2, and the market moved back into the
+    applications stage before a second run finished it. The vendor saves what their page now
+    shows, the same business name under the built-in key alone, and reads as changed against the
+    old key still stored, so their approval goes back to open. Pinned as it is today."""
+    import migrate_business_name as Script
+
+    world = page_market
+    app_id = _an_approved_vendor(world)
+    _in_phase(world, MarketPhase.ASSIGNMENT)
+    monkeypatch.setattr(Script, "clean_answers", lambda *_a, **_k: ([], []))
+    migrate(PAGE_MARKET, KEY, world.db)
+    _in_phase(world, MarketPhase.APPLICATIONS)
+
+    assert _vendor_saves(world, {BUILT_IN: "Paper & Pine"}).status_code == 200
+
+    vendor = _the_vendor(world, app_id)
+    assert vendor["form_data"][BUILT_IN] == "Paper & Pine"
+    assert vendor["status"] == ApplicationStatus.OPEN.value
+
+
+def test_a_save_from_a_page_opened_before_a_run_on_a_market_back_in_the_stage_loses_it(
+        page_market):
+    """A road the refusal leaves open: a whole run after the stage, the market moved back into it,
+    and a vendor saving from a page opened before the run, which still asks the old question. The
+    form no longer asks it and the save holds no form revision to be refused by, and the built-in
+    field came blank, so the business name is stored nowhere and the approval goes back to open.
+    Pinned as it is today."""
+    world = page_market
+    app_id = _an_approved_vendor(world)
+    _in_phase(world, MarketPhase.ASSIGNMENT)
+    migrate(PAGE_MARKET, KEY, world.db)
+    assert _the_vendor(world, app_id)["form_data"][BUILT_IN] == "Paper & Pine"
+    _in_phase(world, MarketPhase.APPLICATIONS)
+
+    assert _vendor_saves(world, {KEY: "Paper & Pine"}).status_code == 200
+
+    vendor = _the_vendor(world, app_id)
+    assert (KEY in vendor["form_data"], BUILT_IN in vendor["form_data"]) == (False, False)
+    assert vendor["status"] == ApplicationStatus.OPEN.value

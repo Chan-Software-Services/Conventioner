@@ -10,8 +10,9 @@ never a guess.
 **It lists first.** ``--list`` reads every live market and prints, for each short text question
 (``type == "text"``) whose key or label holds "business" in any case: the market's id, name, phase
 and intake mode, the question's key and label, how many applications answered it, how many already
-hold a built-in business name, and what else names the question. It writes nothing, prints no
-answer and no address, and says so in its last line.
+hold a built-in business name, and what else names the question, and says so where a run is refused
+until the market's applications stage is over. It writes nothing, prints no answer and no address,
+and says so in its last line.
 
 **A run writes in three steps, in this order, each safe to repeat:**
 
@@ -23,11 +24,12 @@ answer and no address, and says so in its last line.
    ``over`` that gives no business name ``None``), so "their answer changed since" reads as it read
    before. An update whose value is the business name the vendor's own answer gives is not copied,
    as Update info would not store it, and step 3 removes it. An answer that is blank, or exactly one
-   of ``essential_fields.NONE_WORDS`` ("N/A", "none" and the rest, in any capitals: Daniel's Q7), is
-   no business name and is not copied; "N/A Studios" is. An application already holding a different
-   built-in business name keeps it, and its update of the question is not copied; the run prints
-   these applications' ids and counts them. Each write is held to the answers it read, so a vendor's
-   save landing first is left for a second run.
+   of ``essential_fields.NONE_WORDS`` ("N/A", "none" and the rest, in any capitals, T502), is no
+   business name and is not copied; "N/A Studios" is. An application already holding a different
+   built-in business name keeps it, and an organizer's update of the question moves beside it all
+   the same, its ``over`` the old answer as the built-in stores it, so it reads as made over another
+   answer; the run prints these applications' ids and counts them. Each write is held to the answers
+   it read, so a vendor's save landing first is left for a second run.
 2. **The market, one write** (``write_market``), holding ``formRevision`` (counted up, as a form
    save counts it), the assignment's ``revision`` and ``madeFrom``, and every other part it reads or
    writes, as read: the question leaves ``applicationForm.fields``, the rest stored as every form
@@ -46,19 +48,28 @@ answer and no address, and says so in its last line.
    step 1 has nothing left to copy, each write held to the answers it read; an application whose
    answer changed since step 1 is left with it, and counted, for a second run.
 
-It touches nothing the review state owns: no status, no verdict, no ``updated_at``. A vendor who
-saves between the steps is not sent back to review: after step 1 their page shows the copy in the
-built-in field and the old question beside it, and after step 2 the old question alone is gone.
+It touches nothing the review state owns: no status, no verdict, no ``updated_at``. A vendor's save
+and an import, though, build the answers from the form as the market asks it then and compare them
+whole to what is stored, so from step 1 until step 3 is done either reads a moved answer as changed
+and sends a verdict back to open, and an import of the same file before step 2 also removes the
+copies step 1 made. And a vendor's save holds no form revision, so one from a page opened before the
+run sends the old question's answer, which the form no longer keeps, and a blank built-in field: the
+business name is stored nowhere. So the run waits for the applications stage to be over on a market
+whose vendors apply on its page, and a run left after step 1 or step 2 is finished before any import
+of that market. A market moved back into the applications stage after a run can still lose a
+business name that way, from a page a vendor opened before the run.
 
-**It refuses**, writing nothing and exiting 1, when: no live market has the id (none, or it is
-being deleted); the key is under the ``essential_`` prefix; the question is not a short text
-question; the public map's website or Instagram question, Discord's username question, a priority
-rule, a price group's condition or a rejection rule names it (each refusal names which); or the
-saved import mapping already maps a column to the built-in key. When the market changed between the
-read and step 2's write (an organizer's form save, an import, another run), or was deleted then,
-the market is left as it was and nothing is recorded or cleaned; the copies step 1 made stay, the
-vendors' lines at the door, the command says it stopped after step 1 and exits 1, and a second
-run on a market still there finds them already copied.
+**It refuses**, writing nothing and exiting 1, when: no live market has the id (none, or it is being
+deleted); the market's vendors apply on its page and it is in its applications stage, taking
+applications or stopped (a finishing run too: run it once the stage is over); the key is under the
+``essential_`` prefix; the question is not a short text question; the public map's website or
+Instagram question, Discord's username question, a priority rule, a price group's condition or a
+rejection rule names it (each refusal names which); or the saved import mapping already maps a
+column to the built-in key. When the market changed between the read and step 2's write (an
+organizer's form save, an import, another run), or was deleted then, the market is left as it was
+and nothing is recorded or cleaned; the copies step 1 made stay, the vendors' lines at the door, the
+command says it stopped after step 1 and exits 1, and a second run on a market still there finds
+them already copied.
 
 **A second run** after a run cut before step 2's write finds the question still on the form and runs
 whole again, finding step 1's copies already made. Once step 2 has written it finds the question
@@ -101,6 +112,8 @@ import rejection_rules as RejectionRules  # noqa: E402
 from assignment.made_from import applications_now  # noqa: E402
 from assignment.utils import convert_keys_to_camel_case  # noqa: E402
 from client_errors import BadRequestError  # noqa: E402
+from datatypes import (  # noqa: E402
+    IntakeMode, MarketPhase, intake_mode_from_market_document, phase_from_market_document)
 from market_documents import MARKETS_COLLECTION, market_doc_key, market_from_document  # noqa: E402
 from market_write import MarketChanged, MarketNotFoundError, write_market  # noqa: E402
 from tombstone import live  # noqa: E402
@@ -202,7 +215,7 @@ def judged_application(doc: Mapping[str, Any], key: str) -> Moved:
     if given and not built_in:
         setting[f"{FORM_DATA}.{BUILT_IN}"] = given
     update = updates.get(key)
-    if isinstance(update, Mapping) and BUILT_IN not in updates and not kept:
+    if isinstance(update, Mapping) and BUILT_IN not in updates:
         value = EF.given_business_name(update.get("value"))
         if value != (built_in or given):
             setting[f"{UPDATES}.{BUILT_IN}"] = {
@@ -330,6 +343,28 @@ def _the_markets_part(document: Mapping[str, Any], key: str) -> Tuple[Dict[str, 
     return setting, lines, {**(detail or {}), **RejectionRules.Judged().counts()}
 
 
+#: Why a market in its applications stage whose vendors apply on its page is refused.
+IN_THE_STAGE = ("The market is in its applications stage and its vendors apply on its page: a "
+                "vendor's save there, from a page opened before the run, would lose the moved "
+                "answer or send their verdict back to open. Run it once the stage is over.")
+
+
+def _in_the_applications_stage(document: Mapping[str, Any]) -> bool:
+    """Whether the market's vendors apply on its page and it is in the stage they may save in,
+    taking applications or stopped. A save builds its answers from the form as the market asks it
+    then, with no form revision to hold, and compares them whole to what is stored: from step 1
+    until step 3 is done it reads a moved answer as changed and sends a verdict back to open, and
+    a page opened before the run sends the old question's answer, which the form no longer keeps.
+    A stop is undone by a click, so only the stage's end is waited for."""
+    return (intake_mode_from_market_document(dict(document)) is IntakeMode.FORM
+            and phase_from_market_document(dict(document)) is MarketPhase.APPLICATIONS)
+
+
+def _refuse_a_market_in_the_applications_stage(document: Mapping[str, Any]) -> None:
+    if _in_the_applications_stage(document):
+        raise Refused(IN_THE_STAGE)
+
+
 def judged(document: Mapping[str, Any], key: str, applications: List[Mapping[str, Any]]) -> Move:
     """The move of the question ``key`` on the market as read, or ``Refused``."""
     if key.startswith(EF.ESSENTIAL_KEY_PREFIX):
@@ -340,7 +375,10 @@ def judged(document: Mapping[str, Any], key: str, applications: List[Mapping[str
     moved = [judged_application(doc, key) for doc in applications]
     if question is None:
         mode = "finish" if any(each.holds_old for each in moved) else "done"
+        if mode == "finish":
+            _refuse_a_market_in_the_applications_stage(document)
         return Move(mode=mode, label="", applications=moved, setting={}, lines=[], detail=None)
+    _refuse_a_market_in_the_applications_stage(document)
 
     if question.get("type") != "text":
         raise Refused(f"The question {key!r} is a {question.get('type')} question, not a short "
@@ -434,7 +472,9 @@ def listed(db=None) -> List[Candidate]:
             named_by = [what for what, _refuses in _referrers(document, key)]
             print(f"  - question {key!r} (\"{field.get('label')}\"): {answered} answered, "
                   f"{built_in} hold a built-in business name; also named by: "
-                  + (", ".join(named_by) or "nothing"))
+                  + (", ".join(named_by) or "nothing")
+                  + ("; a run is refused until the applications stage is over"
+                     if _in_the_applications_stage(document) else ""))
             found.append(Candidate(market_id, key, str(field.get("label")), answered, built_in,
                                    named_by))
     print(f"\nlisted {len(found)} question(s) on {markets} market(s): nothing written, and no "
@@ -478,7 +518,8 @@ def migrate(market_id: str, key: str, db=None, dry_run: bool = False) -> Move:
           f"to the built-in key; {sum(1 for each in move.applications if each.blank)} blank or "
           f"none, left; {len(kept)} already holding another business name, kept")
     if kept:
-        print(f"  - kept, each holding another built-in business name: {', '.join(kept)}")
+        print("  - kept, each holding another built-in business name, any organizer's update of "
+              f"the question moved beside it: {', '.join(kept)}")
     for line in move.lines:
         print(f"  - {line}")
     print(f"  - step 3, clean: {holding} application(s) hold an answer or update under {key!r}, "
