@@ -197,6 +197,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
   - its review setup decided
   - `vendors` seeds others than alice and bob, a table each
   - `namePrefix` starts its name, and so its addresses, with a long one
+  - `marketDates` runs it on several days in place of `marketDate`'s one, each vendor applying for and placed on every day
 
 **`seedApplicantMarket()`** ([file](../../../front-end/e2e/helpers/seedApplicantMarket.ts))
 
@@ -309,6 +310,7 @@ It returns the `marketSlug` of the market's vendor page, where its vendors check
 ## Checking a vendor in
 
 **The door takes no check-in for a day that has not begun anywhere** (T318, [attendance and the door](../modules/attendance-and-door.md#sharp-edges)), and `SEED_MARKET_DATE` is in 2099, so a spec that checks a vendor in at the door seeds its market on `calendarToday()` (`marketDate`) and checks in through the door, where the page offers Check in.
+A spec that also reads what a market on its day offers, such as the rail's More menu, seeds today and tomorrow (`marketDates`): a run that passes midnight between its seed and its read finds the market's one day over, and the rail then offers archiving as its main button with no menu (T501's trial merge).
 A spec of what check-ins count, the Stats tab's, keeps its days to come and stores its check-ins with `recordCheckIns()` ([file](../../../front-end/e2e/helpers/seeds.ts)): one record per vendor's day, written as the door writes it, at the table the vendor holds that day, by the organizer it names, and with no history entry; it throws on a vendor with no seat that day.
 `seedTheScreens()` checks half of its rules market's first day in this way, for the Stats tab's check-in rows.
 

@@ -419,6 +419,8 @@ export async function seedPublishedMarketWithAssignments(
   email: string,
   password: string,
   // The one market date, still to come unless a spec names another.
+  // `marketDates`, every date in order, in place of `marketDate` when the market runs more than
+  // one day: each vendor applies for every one and is placed on each.
   // `intakeMode` as the market is created; absent, it is a CSV market, as it always was here.
   // `vendors`, the approved vendors, each given a table: alice and bob unless a spec needs more,
   // a door long enough to scroll, say.
@@ -426,12 +428,13 @@ export async function seedPublishedMarketWithAssignments(
   // the rail long addresses to lay out.
   options: {
     marketDate?: string;
+    marketDates?: string[];
     intakeMode?: 'csv' | 'form';
     vendors?: string[];
     namePrefix?: string;
   } = {},
 ): Promise<PublishedSeedResult> {
-  const marketDate = options.marketDate ?? SEED_MARKET_DATE;
+  const marketDates = options.marketDates ?? [options.marketDate ?? SEED_MARKET_DATE];
   const vendors = options.vendors ?? ['alice@example.com', 'bob@example.com'];
   const userId = await loginViaApi(request, baseURL, email, password);
   const orgId = await ensureTestOrgAuthenticated(request, baseURL);
@@ -462,7 +465,7 @@ export async function seedPublishedMarketWithAssignments(
   // fabricated CSV, because the solver read a separate source_data collection.
   insertApplications(
     vendors.map((applicant) =>
-      approvedVendorApplication(marketId, applicant, { dates: [marketDate], tiers: ['Gold'] }),
+      approvedVendorApplication(marketId, applicant, { dates: marketDates, tiers: ['Gold'] }),
     ),
   );
 
@@ -470,7 +473,7 @@ export async function seedPublishedMarketWithAssignments(
   // spreadsheet column name only so the solver could look the answer up by heading.
   const setupObject = {
     priority: [],
-    marketDates: [{ date: marketDate }],
+    marketDates: marketDates.map((date) => ({ date })),
     tiers: [{ id: 0, name: 'Gold' }],
     locations: [{ name: 'Main Hall' }],
     sections: [
