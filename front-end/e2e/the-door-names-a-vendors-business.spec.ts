@@ -230,7 +230,6 @@ for (const size of PHONE_AND_DESK) {
       await expect(drawer).toHaveAttribute('aria-hidden', 'false');
       await expect(page.getByTestId('vendors-detail-email')).toHaveText(door.trades);
       await expect(drawerBusiness).toHaveText(PAPER_AND_PINE);
-      await expect(drawerBusiness).toHaveAttribute('title', PAPER_AND_PINE);
       expect(await bottomOf(page.getByTestId('vendors-detail-title'))).toBeLessThanOrEqual(
         (await boxOf(drawerBusiness)).y + 0.5,
       );
@@ -242,15 +241,21 @@ for (const size of PHONE_AND_DESK) {
       await page.getByTestId('vendors-detail-close').click();
       await expect(drawer).toHaveAttribute('aria-hidden', 'true');
 
-      // A long one is cut in the head, its whole text in its title.
+      // A long one, which the row cuts, is whole in the head: it wraps inside it, cut nowhere.
       await toTheMiddle(rowOf(page, door.long));
       await press(rowOf(page, door.long).getByTestId('attendance-vendor'));
       await expect(page.getByTestId('vendors-detail-email')).toHaveText(door.long);
-      await expect(drawerBusiness).toHaveAttribute('title', LONG_BUSINESS);
-      expect(await pastOneLine(drawerBusiness), 'one line').toBe(0);
+      await expect(drawerBusiness).toHaveText(LONG_BUSINESS);
+      expect(
+        await drawerBusiness.evaluate((line) => line.scrollWidth - line.clientWidth),
+        'nothing past its edge',
+      ).toBe(0);
       const head = await boxOf(page.getByTestId('vendors-detail-head'));
-      const cut = await boxOf(drawerBusiness);
-      expect(cut.x + cut.width).toBeLessThanOrEqual(head.x + head.width);
+      const wrapped = await boxOf(drawerBusiness);
+      expect(wrapped.x + wrapped.width).toBeLessThanOrEqual(head.x + head.width);
+      expect(wrapped.y + wrapped.height).toBeLessThanOrEqual(
+        (await boxOf(page.getByTestId('vendors-detail-email'))).y + 0.5,
+      );
       await expectFits(page, 'the drawer, a long business name');
       await page.getByTestId('vendors-detail-close').click();
       await expect(drawer).toHaveAttribute('aria-hidden', 'true');

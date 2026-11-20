@@ -390,7 +390,7 @@ describe("the vendor drawer's head", () => {
     ]);
   });
 
-  it('shows the business name under the title and before the address, its whole text in its title', async () => {
+  it('shows the business name whole, under the title and before the address', async () => {
     await openOn(ANA);
 
     expect(head()).toEqual([
@@ -398,8 +398,8 @@ describe("the vendor drawer's head", () => {
       ['vendors-detail-business', 'Paper & Pine'],
       ['vendors-detail-email', ANA],
     ]);
-    expect(document.querySelector(testid('vendors-detail-business'))?.getAttribute('title')).toBe(
-      'Paper & Pine',
+    expect(document.querySelector(testid('vendors-detail-business'))?.hasAttribute('title')).toBe(
+      false,
     );
   });
 

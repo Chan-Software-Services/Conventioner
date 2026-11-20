@@ -270,13 +270,9 @@ watch(
             {{ vendorHeadline(email, names) }}
           </h2>
           <!-- The name they trade under (T502), as the organizer reads their application: never
-               the title, and no line for a vendor with none. -->
-          <p
-            v-if="business"
-            class="detail-subtitle detail-business"
-            data-testid="vendors-detail-business"
-            :title="business"
-          >
+               the title, and no line for a vendor with none. Whole, wrapping as the address does:
+               the row on Attendance cuts it, so this is where a phone reads it all. -->
+          <p v-if="business" class="detail-subtitle" data-testid="vendors-detail-business">
             {{ business }}
           </p>
           <!-- The address always, beneath the name: it is what ties this panel to a check-in,
@@ -563,14 +559,6 @@ watch(
   font-size: var(--text-xs);
   color: var(--mm-text-muted-on-dark);
   overflow-wrap: anywhere;
-}
-
-/* One line, cut with an ellipsis: its whole text is in its `title`. */
-.detail-business {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  overflow-wrap: normal;
 }
 
 /*
