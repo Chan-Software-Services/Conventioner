@@ -29,6 +29,7 @@ sources:
   - T466
   - T469
   - T496
+  - T501
 ---
 
 # Publishing, and the door on market day
@@ -148,6 +149,10 @@ Covered by:
    With two locations or more laid out, the map's location is a select beside the day, offering exactly the locations the map can draw, and kept in the address, so a reload or a shared link opens the same hall; with one, there is no select.
    Each table is drawn by its vendor: filled once they are here, outlined while they are expected, and a grey dashed outline with nobody at it; the legend says "Here" and "Expected" (or "Did not come"), and "No vendor" only on a day the open location draws a table or half nobody sits at (T466).
    The no-table zones, the stage or the entrance, stay drawn and named on the map, with no legend item.
+   A location's tables and its floorplan appear together, never one location's tables over another's floorplan: the other locations' floorplans load in the background once the open one has, so a later switch is instant, and a reload downloads none of them again (T501).
+   If the floorplan takes more than two seconds, the tables are drawn on the plain floor with "Loading the floorplan..." under the map until it comes; one that cannot be loaded leaves them there with "The floorplan could not be loaded. The tables are drawn without it.", and is tried again the next time its location opens.
+   With "Show the floorplan" unticked the tables are drawn at once and neither line shows.
+   Under the legend, where the location has a floorplan, "Show the floorplan", "Greyscale" and "Faded" change how it is drawn, the same choices as the Layout page's, so one made on either page holds on the other; every organizer and viewer who sees the map has them.
    A shared table is two halves, each its own vendor's.
    A press on a vendor's table opens their drawer, as their name on the list does, and Back closes it on the map; a press on a table with nobody says "Table Aisle A 4: no vendor on Nov 17, 2026." under the map.
    On the map, "Find a vendor" is a search with a dropdown of the day's vendors, found by the name they go by, the full name on their identification, address or table, each row saying where they sit; picking one opens their drawer and outlines their table, switching the map to their location when it is the other one, and closing the drawer clears the outline; typing alone outlines nothing (T466).
@@ -165,6 +170,8 @@ Covered by:
 - `the-door-as-a-map.spec.ts`
 - `the-door-code.spec.ts`
 - `the-door-keeps-its-own-day.spec.ts`
+- `the-door-map-draws-its-floorplan-in-step.spec.ts`
+- `the-door-map-keeps-the-floorplan-choices.spec.ts`
 - `the-door-on-market-day.spec.ts`
 - `the-door-stays-fresh.spec.ts`
 - `the-door-tools-hold-still.spec.ts`

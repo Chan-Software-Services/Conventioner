@@ -82,6 +82,12 @@ export class AttendanceStatusPage {
   readonly mapOffLayout: Locator;
   /** "No location has a layout yet.", where nothing is laid out. */
   readonly mapNone: Locator;
+  /** The open location's floorplan image, drawn under its tables (T501). */
+  readonly mapImage: Locator;
+  /** "Loading the floorplan..." once the tables stand on the floor without it, and the line saying
+   *  it could not be loaded (T501). */
+  readonly mapImageLoading: Locator;
+  readonly mapImageFailed: Locator;
   /**
    * The vendor drawer, the address it is open on, and its close. The panel stays in the page when
    * closed, slid out and `aria-hidden`, so whether it is open is read off that attribute.
@@ -138,6 +144,9 @@ export class AttendanceStatusPage {
     this.mapUnseated = page.getByTestId('attendance-map-unseated');
     this.mapOffLayout = page.getByTestId('attendance-map-off-layout');
     this.mapNone = page.getByTestId('attendance-map-none');
+    this.mapImage = this.map.getByTestId('layout-map-image');
+    this.mapImageLoading = page.getByTestId('attendance-map-image-loading');
+    this.mapImageFailed = page.getByTestId('attendance-map-image-failed');
     this.drawer = page.getByTestId('vendors-detail-panel');
     this.drawerEmail = page.getByTestId('vendors-detail-email');
     this.drawerClose = page.getByTestId('vendors-detail-close');

@@ -13,6 +13,14 @@
  * open location draws a table or half nobody sits at (`drawsAFreePart`), and the read time the page
  * gives stands under the map as the day map's note.
  *
+ * A location's tables and its floorplan appear together (T501): the open location's image is read
+ * first and the others' behind it (`useFloorplanImages`), the tables wait for it for at most two
+ * seconds, then stand on the floor with "Loading the floorplan..." under the map until it lands, and
+ * an image that cannot be loaded leaves them there with a line saying so. Under the legend, where
+ * the open location has an image, the Layout page's three ticks, Show the floorplan, Greyscale and
+ * Faded, are the same choices kept under the same names, so one made on either page holds on the
+ * other, for everyone who sees the map.
+ *
  * Nothing here writes: check-in, Undo and notes stay on the list (D39). The open location is the
  * page's own state, in the address as `location`, chosen in the page's toolbar (T466), so the day
  * map draws no location switch of its own.
@@ -30,7 +38,9 @@ import {
 } from '@/components/daymap/dayMap';
 import { drawsAFreePart } from '@/components/daymap/freeParts';
 import { tableCode } from '@/components/layout/layoutDrawing';
-import { useFloorplanImage } from '@/components/layout/useFloorplanImage';
+import { useFloorplanImages, type FloorplanImageSource } from '@/components/layout/floorplanImages';
+import { rememberedChoice } from '@/components/layout/layoutViewChoices';
+import { api } from '@/utils/api';
 import { layoutPath } from '@/utils/market';
 import { MarketAction, mayTake } from '@/utils/marketActions';
 import { getShortDate } from '@/utils/utils';
@@ -65,17 +75,40 @@ const laidOut = computed(() => laidOutLocations(props.market?.setupObject));
 /** The open location: the address's, else the first laid out. */
 const openId = computed(() => openLocationId(laidOut.value, String(route.query.location ?? '')));
 
-/** Only the open location's image is read, with the session, as the layout page reads it. */
-const { url: imageUrl } = useFloorplanImage(
+/** Each laid-out location's image, read with the session as the layout page reads it: the open
+ *  location's first, then the others in the background, so a later switch costs no wait (T501). */
+const imageSources = computed<FloorplanImageSource[]>(() =>
+  laidOut.value.flatMap(({ layout }) => {
+    const id = layout.imageGridfsId;
+    return id ? [{ key: id, fetch: () => fetchFloorplanImage(id) }] : [];
+  }),
+);
+
+async function fetchFloorplanImage(id: string): Promise<Blob> {
+  const { data } = await api.get<Blob>(`/floorplans/${encodeURIComponent(id)}`, {
+    responseType: 'blob',
+  });
+  return data;
+}
+
+const { open: image } = useFloorplanImages(
+  imageSources,
   computed(() => laidOut.value.find((each) => each.id === openId.value)?.layout.imageGridfsId),
 );
 
+/** The open location drawn with its own image alone, and no other location's. */
 const locations = computed<DayMapLocation[]>(() =>
   laidOut.value.map((each) => ({
     ...each,
-    imageUrl: each.id === openId.value ? imageUrl.value : '',
+    imageUrl: each.id === openId.value ? image.value.url : '',
   })),
 );
+
+/** How the floorplan is drawn under the tables: the Layout page's own choices, by its own names and
+ *  defaults, so either page's is the other's (T501). */
+const showImage = rememberedChoice('showImage', true);
+const imageInGrey = rememberedChoice('imageInGrey', true);
+const imageFaded = rememberedChoice('imageFaded', true);
 
 const tableTypes = computed(() => props.market?.setupObject?.tableTypes ?? []);
 
@@ -92,6 +125,9 @@ const offLayout = computed(() => drawn.value.notOnALayout.length);
 
 /** The open location as the map draws it, for what its legend names. */
 const openLocation = computed(() => laidOut.value.find((each) => each.id === openId.value));
+
+/** The floorplan's ticks stand only where the open location has an image to draw. */
+const hasImage = computed(() => Boolean(openLocation.value?.layout.imageGridfsId));
 
 /** "No vendor" only on a day the open map draws a table or half nobody sits at. */
 const legend = computed<DayMapLegendItem[]>(() => [
@@ -173,8 +209,58 @@ const mayChangeSetup = computed(() => mayTake(props.market, MarketAction.ChangeS
         :legend="legend"
         :note="updated"
         :locationSwitch="false"
+        :imagePending="image.pending && showImage"
+        :showImage="showImage"
+        :imageInGrey="imageInGrey"
+        :imageFaded="imageFaded"
         @pick="pick"
       />
+      <div
+        v-if="hasImage"
+        class="door-map__ticks"
+        role="group"
+        aria-label="Floorplan"
+        data-testid="attendance-map-floorplan"
+      >
+        <label class="door-map__tick">
+          <input v-model="showImage" type="checkbox" data-testid="attendance-map-show-image" />
+          <span>Show the floorplan</span>
+        </label>
+        <label class="door-map__tick">
+          <input
+            v-model="imageInGrey"
+            type="checkbox"
+            :disabled="!showImage"
+            data-testid="attendance-map-image-grey"
+          />
+          <span>Greyscale</span>
+        </label>
+        <label class="door-map__tick">
+          <input
+            v-model="imageFaded"
+            type="checkbox"
+            :disabled="!showImage"
+            data-testid="attendance-map-image-faded"
+          />
+          <span>Faded</span>
+        </label>
+      </div>
+      <p
+        v-if="showImage && image.slow"
+        class="door-map__note"
+        aria-live="polite"
+        data-testid="attendance-map-image-loading"
+      >
+        Loading the floorplan...
+      </p>
+      <p
+        v-else-if="showImage && image.failed"
+        class="door-map__note"
+        aria-live="polite"
+        data-testid="attendance-map-image-failed"
+      >
+        The floorplan could not be loaded. The tables are drawn without it.
+      </p>
       <p
         v-if="freeNote"
         class="door-map__note"
@@ -246,6 +332,26 @@ const mayChangeSetup = computed(() => mayTake(props.market, MarketAction.ChangeS
   flex-wrap: wrap;
   align-items: center;
   gap: 0 var(--space-2);
+}
+
+/* The floorplan's ticks, one line under the legend that wraps on a phone, each label a `--target-min`
+   target (44px on a phone) with its box inside it, as the Layout page's Floorplan card draws them. */
+.door-map__ticks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-4);
+  /* Up toward the legend, so the ticks read as its own line rather than a row of their own: the
+     label's `--target-min` height already stands its box clear of the legend. */
+  margin-block-start: calc(-1 * var(--space-2));
+}
+
+.door-map__tick {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target-min);
+  font-size: var(--text-sm);
+  color: var(--mm-black);
 }
 
 .door-map__link {

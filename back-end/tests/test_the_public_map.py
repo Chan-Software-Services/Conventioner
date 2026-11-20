@@ -446,6 +446,8 @@ class TestTheImage:
         assert response.get_data() == _png()
         assert response.headers["Content-Type"] == "image/png"
         assert response.headers["Cache-Control"] == "public, max-age=300"
+        # Its tag would be the image's id, which this route never shows (T501).
+        assert "ETag" not in response.headers
 
     @pytest.mark.parametrize("location", [SOUTH["id"], ANNEX["id"], "loc-nowhere", "fp-north"])
     def test_a_location_the_map_does_not_draw_or_with_no_image_is_absent(

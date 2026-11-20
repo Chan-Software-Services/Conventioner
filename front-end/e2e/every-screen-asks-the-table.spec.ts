@@ -75,13 +75,17 @@ test.beforeAll(async ({ request }) => {
     { intakeMode: 'form' },
   ));
 
-  // On its day, today: the door offers no check-in for a day that has not begun (T318).
+  // On its day, today: the door offers no check-in for a day that has not begun (T318). And
+  // tomorrow too, so its last day is still to come when the walk reaches the door after midnight:
+  // a market whose last day has passed offers archiving as the rail's one move, with no menu.
+  const now = new Date();
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
   ({ marketId: markets.marketDays } = await seedPublishedMarketWithAssignments(
     request,
     BACKEND_URL,
     TEST_USER.email,
     TEST_USER.password,
-    { marketDate: calendarToday() },
+    { marketDates: [calendarToday(now), calendarToday(tomorrow)] },
   ));
 
   // The seeds sign the request in as the owner, who gives each person their role on each market.

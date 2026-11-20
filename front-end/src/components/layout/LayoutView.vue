@@ -96,7 +96,7 @@ import {
   tablesOfEachType,
 } from './layoutTypes';
 import { heldBackSaid, useLayoutEditor } from './useLayoutEditor';
-import { useFloorplanImage } from './useFloorplanImage';
+import { useFloorplanImages, type FloorplanImageSource } from './floorplanImages';
 
 const route = useRoute();
 const router = useRouter();
@@ -237,9 +237,47 @@ useUnsavedWork({
   sentence: "This layout's last changes are not saved. Leaving drops them.",
 });
 
-const { url: imageUrl, failed: imageFailed } = useFloorplanImage(
+// ── The floorplans' images ───────────────────────────────────────────────────
+
+/** A floorplan image's bytes, read with the session, since the image is read on its market by
+ *  anyone with a role on it (T272). */
+async function fetchFloorplanImage(id: string): Promise<Blob> {
+  const { data } = await api.get<Blob>(`/floorplans/${encodeURIComponent(id)}`, {
+    responseType: 'blob',
+  });
+  return data;
+}
+
+/** The bytes of the replacement's image, once its own loader read them, so the layout that takes
+ *  that image draws them as they came rather than asking for them again. */
+let replacementBytes: { id: string; blob: Blob } | null = null;
+
+/** Every image the page may draw: each layout's as the market holds it, and the open layout's as
+ *  the page holds it, which differs from the market's from a write until its re-read (a first
+ *  image, or a replacement). An image leaves once neither names it, and its URL is let go. */
+const imageSources = computed<FloorplanImageSource[]>(() => {
+  const ids = (market.value?.setupObject?.floorplans ?? []).map((each) => each.imageGridfsId);
+  const open = floorplan.value?.imageGridfsId;
+  if (open && !ids.includes(open)) ids.push(open);
+  return [...new Set(ids.filter((id): id is string => Boolean(id)))].map((id) => ({
+    key: id,
+    fetch: () => {
+      const taken = replacementBytes;
+      if (taken?.id !== id) return fetchFloorplanImage(id);
+      replacementBytes = null;
+      return Promise.resolve(taken.blob);
+    },
+  }));
+});
+
+/** The open location's image: its tables wait for it (`imagePending`), for at most two seconds,
+ *  and never stand over another location's (T501). */
+const { open: image } = useFloorplanImages(
+  imageSources,
   computed(() => floorplan.value?.imageGridfsId),
 );
+const imageUrl = computed(() => image.value.url);
+const imageFailed = computed(() => image.value.failed);
 
 const scaleText = computed(() => metresAcross(floorplan.value) ?? 'Not calibrated');
 const calibrated = computed(() => Boolean(floorplan.value?.scalePxPerUnit));
@@ -254,6 +292,9 @@ const imageInGrey = rememberedChoice('imageInGrey', true);
 /** Whether it is drawn at half strength, as it is by default, so the tables stand out over a busy
  *  plan; unticked, at full strength. A choice of the person viewing, kept in their browser. */
 const imageFaded = rememberedChoice('imageFaded', true);
+/** Whether the tables wait for the open image: only while it is shown, since unticked the hall is
+ *  drawn on its floor and an image still loading holds nothing back. */
+const imagePending = computed(() => image.value.pending && showImage.value);
 /** Whether the Layout settings dialog is open. */
 const settingsOpen = ref(false);
 
@@ -268,9 +309,27 @@ const settingsOpen = ref(false);
  */
 const replacing = ref(false);
 const replacement = ref<UploadedFloorplan | null>(null);
-const { url: replacementUrl, failed: replacementFailed } = useFloorplanImage(
+/** The replacement's image, under its calibration: a loader of its own, so neither it nor the
+ *  layout's lets the other's image go. */
+const { open: replacementImage } = useFloorplanImages(
+  computed<FloorplanImageSource[]>(() => {
+    const id = replacement.value?.gridfs_id;
+    if (!id) return [];
+    return [
+      {
+        key: id,
+        fetch: async () => {
+          const blob = await fetchFloorplanImage(id);
+          if (replacement.value?.gridfs_id === id) replacementBytes = { id, blob };
+          return blob;
+        },
+      },
+    ];
+  }),
   computed(() => replacement.value?.gridfs_id),
 );
+const replacementUrl = computed(() => replacementImage.value.url);
+const replacementFailed = computed(() => replacementImage.value.failed);
 
 /** The old line, on the new image's pixels. */
 const carriedLine = computed(() => {
@@ -297,6 +356,7 @@ function startReplacing() {
 function dropReplacement() {
   const unused = replacement.value?.gridfs_id;
   replacement.value = null;
+  replacementBytes = null;
   replaceError.value = '';
   if (unused) void api.delete(`/floorplans/${encodeURIComponent(unused)}`).catch(() => {});
 }
@@ -893,6 +953,7 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
               :sections="market.setupObject?.sections ?? []"
               :tableTypes="tableTypes"
               :imageUrl="imageUrl"
+              :imagePending="imagePending"
               v-model:showImage="showImage"
               v-model:imageInGrey="imageInGrey"
               v-model:imageFaded="imageFaded"
@@ -919,6 +980,7 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
                 :sections="market.setupObject?.sections ?? []"
                 :tableTypes="tableTypes"
                 :imageUrl="imageUrl"
+                :imagePending="imagePending"
                 :showImage="showImage"
                 :imageInGrey="imageInGrey"
                 :imageFaded="imageFaded"
