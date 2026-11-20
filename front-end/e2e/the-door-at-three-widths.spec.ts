@@ -284,6 +284,9 @@ const STATUS_WINDOWS = [
       deviceScaleFactor: 3,
     },
   },
+  // A narrow desk: the row takes the desk's four columns, and a long line after the chip once took
+  // the vendor's column until their name broke inside a word (T501).
+  { width: 1200, phone: false, use: { viewport: { width: 1200, height: 900 } } },
   { width: 1440, phone: false, use: { viewport: { width: 1440, height: 900 } } },
 ] as const;
 
@@ -383,6 +386,23 @@ for (const size of STATUS_WINDOWS) {
           expect(boxes.parts.pill.height, `${what}, the pill is one line`).toBeLessThan(30);
           expect(boxes.tableLines, `${what}, "at table <code>" is on one line`).toBe(1);
           await expectWholeAddress(door.vendor(MOVED), MOVED);
+          if (!size.phone) {
+            // At a desk the vendor's name and address are one line each, as in the rows beside it:
+            // the line after the chip breaks before "at table <code>" before the vendor does.
+            const lines = await door.row(MOVED).evaluate((row) =>
+              ['name', 'email'].map((part) => {
+                const range = document.createRange();
+                range.selectNodeContents(
+                  row.querySelector(`[data-testid="vendor-identity-${part}"]`)!,
+                );
+                return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)))
+                  .size;
+              }),
+            );
+            expect(lines, `${what}, the vendor's name and address are one line each`).toEqual([
+              1, 1,
+            ]);
+          }
           if (by === LONG_ORGANIZER) {
             await expectWholeAddress(door.statusBy(MOVED), LONG_ORGANIZER);
           }

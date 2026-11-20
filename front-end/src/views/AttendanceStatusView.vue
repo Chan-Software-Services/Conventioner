@@ -1092,9 +1092,13 @@ const drawer = useVendorDrawer();
   list-style: none;
 }
 
+/* At a desk the table keeps its 14rem and the vendor at least 16rem, room for a name and an address
+   of about 35 characters on one line: the chips' column is as wide as its widest line where the row
+   has room, and where it has not, at a narrow desk, the line after a chip breaks before "at table
+   <code>" rather than taking the vendor's column until their name broke inside a word (T501). */
 .door-row {
   display: grid;
-  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto auto;
+  grid-template-columns: 14rem minmax(16rem, 1fr) auto auto;
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-3) var(--space-4);
@@ -1105,7 +1109,7 @@ const drawer = useVendorDrawer();
 /* Someone offered no check-in has no action column, so their status ends the row: an empty column
    left each chip standing short of the edge with nothing beside it (E38/F15/S04). */
 .door-row--read {
-  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto;
+  grid-template-columns: 14rem minmax(16rem, 1fr) auto;
 }
 
 /* Under the row, the width of it: notes are read standing at the door, not squeezed into a cell. */
@@ -1148,13 +1152,15 @@ const drawer = useVendorDrawer();
 
 /* Who made a check-in or a check-out, "by you" or "by" an address: a plain line after the chip,
    muted at the type scale's floor, so the chip stays a one-line pill of the state and the time
-   (T501). Beside the chip at a desk, under it on a phone (below). */
+   (T501). Beside the chip at a desk, under it on a phone (below); a line that breaks, at a narrow
+   desk or on a phone, ends each of its lines at the row's end, as every chip does. */
 .door-chip-by {
   min-width: 0;
   max-width: 100%;
   color: var(--mm-text-muted);
   font-size: var(--text-xs);
   line-height: 1.5;
+  text-align: end;
   white-space: nowrap;
 }
 
@@ -1355,10 +1361,6 @@ const drawer = useVendorDrawer();
     flex-direction: column;
     align-items: flex-end;
     gap: var(--space-hairline);
-  }
-
-  .door-chip-by {
-    text-align: end;
   }
 
   /* Risen into the "Undo?"'s line and drawn after it, the plain line would take a tap meant for the
