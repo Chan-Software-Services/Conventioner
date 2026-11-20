@@ -62,6 +62,12 @@ async function shortOfTheRowsEnd(row: Locator, inside: Locator): Promise<number>
   return Math.round(rowBox!.x + rowBox!.width - padding - (box!.x + box!.width));
 }
 
+/** What ends a row's status line: who made the check-in, after its chip, else the chip (T501). */
+async function statusEnd(door: AttendanceStatusPage, vendor: string): Promise<Locator> {
+  const by = door.statusBy(vendor);
+  return (await by.count()) ? by : door.status(vendor);
+}
+
 /**
  * A vendor's address on their row is whole, on one line. On a phone the status shared a column with
  * the action, so a wide one ("9:44 AM by e2e@example.com") squeezed the vendor's line and broke the
@@ -189,7 +195,7 @@ for (const size of SIZES) {
       for (const vendor of [HERE, NOT_YET]) {
         await expectAddressWhole(door.row(vendor), vendor);
         expect(
-          await shortOfTheRowsEnd(door.row(vendor), door.status(vendor)),
+          await shortOfTheRowsEnd(door.row(vendor), await statusEnd(door, vendor)),
           `${vendor}'s status ends the row`,
         ).toBeLessThanOrEqual(1);
       }
@@ -278,8 +284,7 @@ for (const size of SIZES) {
       // it after the chip.
       const chipEnds = await Promise.all(
         [NOT_YET, HERE, OUT].map(async (vendor) => {
-          const by = door.statusBy(vendor);
-          const box = (await ((await by.count()) ? by : door.status(vendor)).boundingBox())!;
+          const box = (await (await statusEnd(door, vendor)).boundingBox())!;
           return Math.round(box.x + box.width);
         }),
       );
