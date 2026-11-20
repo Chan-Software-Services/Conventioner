@@ -15,7 +15,7 @@
  * alone: a room before anyone applies reads its tables.
  *
  * What the caller puts in the default slot stands after the words, on their line: Check-in's
- * "6 not yet", a link to the day at Attendance. A reader hears it after a comma.
+ * "6 not checked in", a link to the day at Attendance. A reader hears it after a comma.
  */
 import { computed } from 'vue';
 

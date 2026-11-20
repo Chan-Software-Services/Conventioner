@@ -82,7 +82,7 @@ export class StatsPage {
 
   /**
    * A tile of the strip: `applied`, `open`, `asked`, `used`, `unassigned`, `stillOwed`,
-   * `checkedIn`, `notYet`, `came` or `paid`.
+   * `checkedIn`, `notCheckedIn`, `came` or `paid`.
    */
   headline(id: string): Locator {
     return this.page.getByTestId(`stats-headline-${id}`);

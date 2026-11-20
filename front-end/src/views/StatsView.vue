@@ -23,7 +23,7 @@
  * page has someone to count: owed, paid and still owed, that page's figures, and one bar of paid
  * against owed (`MeterBar`, `utils/moneyCard.ts`). Then, from Market Days on, who has come: a row
  * per market day of its vendors checked in of those expected, as the door counts its day, and
- * beside it how many are not yet in, a link to Attendance on that day (`MeterBar`,
+ * beside it how many are not checked in, a link to Attendance on that day (`MeterBar`,
  * `utils/checkInRows.ts`). Then what they answered: a card per choice question of the form
  * (`utils/answerCounts.ts`), its answers most chosen first and folded past `ANSWERS_SHOWN` (T201),
  * narrowed by a switch, kept in the address as `among`, to the approved or the assigned
@@ -98,9 +98,7 @@ const moneyFigures = computed(() =>
 );
 /** Who has come each day; none before Market Days. */
 const checkIn = computed(() =>
-  figures.value && market.value
-    ? checkInRows(figures.value.checkIn, marketId.value, market.value.phase ?? '')
-    : null,
+  figures.value ? checkInRows(figures.value.checkIn, marketId.value) : null,
 );
 const answers = computed(() => figures.value?.answers ?? null);
 /** The strip's tiles, chosen by the phase; none in draft or before the market is read. */
