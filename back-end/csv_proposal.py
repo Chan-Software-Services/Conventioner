@@ -296,6 +296,14 @@ class _Column:
         """Most answers are a handful of repeated values: a choice, not a name."""
         return bool(self.filled) and sum(n for _, n in self.shared) / self.filled >= 0.5
 
+    def is_choice_like_past_none_words(self) -> bool:
+        """As is_choice_like, over the answers that are not a none word: a business name column
+        most of whose applicants wrote "N/A" is still a column of names."""
+        real = sum(1 for value in self.values
+                   if value.strip() and value.strip().lower() not in NONE_WORDS)
+        shared = sum(n for value, n in self.shared if value.lower() not in NONE_WORDS)
+        return bool(real) and shared / real >= 0.5
+
     def is_multi(self) -> bool:
         """Joined answers contain options that are also answered on their own."""
         standalone = {value for value, _ in self.shared}
@@ -555,9 +563,10 @@ def _classify(columns: List[_Column]) -> List[Dict[str, Any]]:
             continue
         # Before the two names: a column of two-word business names is not the full name. The
         # first column headed so only, since the form asks one business name, and never one whose
-        # answers are a choice: "Is your business name registered?" asks something else.
+        # answers are a choice: "Is your business name registered?" asks something else. A none
+        # word ("N/A") is no choice's option, so many of them leave it a column of names.
         if (BUSINESS_NAME_QUESTION.search(lowered[index])
-                and not (grid or column.is_choice_like())
+                and not (grid or column.is_choice_like_past_none_words())
                 and EssentialFields.BUSINESS_NAME_KEY not in have):
             decided.append(essential(EssentialFields.BUSINESS_NAME_KEY,
                                      "Its heading asks for a business name"))

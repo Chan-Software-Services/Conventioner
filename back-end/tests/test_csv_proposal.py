@@ -502,6 +502,14 @@ class TestWhatAColumnCarries:
         column = CsvProposal.proposal(headers, rows)["columns"][2]
         assert (column["fate"], column["essential"]) == ("custom", None)
 
+    def test_a_business_name_most_answered_none_is_still_the_business_name(self):
+        headers = ["Timestamp", "Email Address", "Business name"]
+        given = ["Paper & Pine", "Juniper Thread Co.", "Shop 3", "Shop 4"]
+        rows = [["1/1/2026 9:00:00", f"p{i}@mail.test", given[i] if i < 4 else "N/A"]
+                for i in range(9)]
+        column = CsvProposal.proposal(headers, rows)["columns"][2]
+        assert (column["fate"], column["essential"]) == ("essential", BUSINESS)
+
     def test_a_file_with_no_such_column_says_no_column_answers_it(self):
         proposal = CsvProposal.proposal(["Timestamp", "Email Address"],
                                         [["1/1/2026 9:00:00", "p@mail.test"]])
