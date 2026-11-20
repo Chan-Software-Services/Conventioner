@@ -139,6 +139,7 @@ One block per action, in the order of [the actions table](../modules/market-acti
 
 - `form`: the form builder
   - Detail: the changed questions by key, null on the side where a question is absent, and `order` and `unasked_essentials` when they changed; and `rejected`, `returned`: what the rules decided as the form landed
+  - With no actor: a market's own business name question taken off its form once its answers are under the built-in key, by an operator's script ([`migrate_business_name.py`](../../../back-end/migrations/migrate_business_name.py)), with the same detail, `rejected` and `returned` 0, since no rule may name the question it moves
 - `review_highlights`: the [review highlights](../../business/rules/review-highlights.md)
   - Detail: `review_highlights`, and `nothing_leads_the_card` when it changed (T206); read "decided nothing leads the card" when it turned true
 - `rejection_rules`: the [automatic rejections](../../business/rules/automatic-rejections.md)

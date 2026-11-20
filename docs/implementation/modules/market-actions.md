@@ -25,7 +25,7 @@ describes:
   - back-end/api/markets.py#_market_change
   - back-end/tests/test_a_change_records_under_the_row_it_asked.py
   - back-end/tests/test_only_an_asking_writes_a_markets_history.py
-verified: 2026-11-19
+verified: 2026-11-20
 sources:
   - E39
   - E39/F01/S01

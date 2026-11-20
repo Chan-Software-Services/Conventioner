@@ -86,6 +86,11 @@ PREFERRED_NAME_KEY = "essential_preferred_name"
 # Read its value through ``business_name`` wherever absent and blank must be one case.
 BUSINESS_NAME_KEY = "essential_business_name"
 
+# Answers that mean "none": a per-day grid's cell for "not on this day" (the import's, bug 26, whose
+# applicant form offers "Not available"), and a business name that is no business name (T502).
+# Compared lowercased and stripped. The one set: ``csv_import`` reads it from here.
+NONE_WORDS = {"none", "n/a", "na", "not available", "unavailable", "-"}
+
 AVAILABLE_DATES_KEY = "essential_available_dates"
 MAX_DATES_KEY = "essential_max_dates"
 TIER_PREFERENCE_KEY = "essential_tier_preference"
@@ -757,7 +762,8 @@ def _store_preferred_name(incoming: Dict[str, Any], stored: Dict[str, Any]) -> N
 
 def _store_business_name(incoming: Dict[str, Any], stored: Dict[str, Any]) -> None:
     """The name a vendor trades under, optional and never refused: stored stripped when one was
-    given, and NO KEY AT ALL when it is blank or missing.
+    given, and NO KEY AT ALL when it is blank, missing or exactly a none word
+    (``given_business_name``).
 
     Every other optional answer stores its empty value, and this one must not. An applicant's save
     and an import compare the whole stored ``form_data`` (``application_status._answers_move``,
@@ -766,9 +772,22 @@ def _store_business_name(incoming: Dict[str, Any], stored: Dict[str, Any]) -> No
     or rejection back to open on an unchanged file. Absent when empty, an application that never
     gave one is stored exactly as it was before (ADR 0042).
     """
-    given = business_name(incoming)
+    given = given_business_name(incoming.get(BUSINESS_NAME_KEY))
     if given:
         stored[BUSINESS_NAME_KEY] = given
+
+
+def given_business_name(answer: Any) -> str:
+    """The business name an answer gives, as it is stored: stripped, or ``""`` for none.
+
+    None is a blank, a value that is not text, and an answer that is exactly one of the
+    ``NONE_WORDS`` in any capitals (T502): an applicant who wrote "N/A" trades under
+    no business name and has no line under their name. One that only holds such a word, "N/A
+    Studios", is a name. The form, the import, an organizer's update and the business name
+    migration (``migrations/migrate_business_name.py``) all store through here.
+    """
+    given = business_name({BUSINESS_NAME_KEY: answer})
+    return "" if given.lower() in NONE_WORDS else given
 
 
 def _validate_tiers_per_date(

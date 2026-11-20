@@ -46,6 +46,7 @@ DOORS: Dict[str, str] = {
     "migrations.migrate_owed_day_state.record_dropped": "MIGRATION_DROPS_UNASKED",
     "migrations.swap_location_names.record_swapped": "SWAP_RECORDS_UNASKED",
     "migrations.rename_location.record_renamed": "RENAME_RECORDS_UNASKED",
+    "migrations.migrate_business_name.record_moved": "MOVE_RECORDS_UNASKED",
 }
 
 

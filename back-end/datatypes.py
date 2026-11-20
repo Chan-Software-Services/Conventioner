@@ -810,10 +810,12 @@ class Market(BaseModel):
     # Whether vendors check themselves in and out on their vendor page (T496): the market's self
     # check-in switch. Server-owned: only ``DoorApi.set_self_check_in`` writes it. Absent is off.
     vendor_self_check_in: bool = False
-    # Server-owned: written only by the CSV import endpoint, never by a market update body.
+    # Server-owned: written only by the CSV import endpoint, never by a market update body, and by
+    # ``migrations/migrate_business_name.py``, which moves a question's target to the built-in key.
     import_mapping: Optional["ImportMapping"] = None
     # Server-owned: written only by the start from a Google Form's responses (``csv_start``), so the
     # Questions tab can offer what the example file said without the file. Absent on any other.
+    # ``migrations/migrate_business_name.py`` removes the column of a question it moves.
     example_columns: Optional[List[ExampleColumn]] = None
     # Organizer-settable while the market is a draft, through the plan write; fixed once it is not.
     intake_mode: IntakeMode = IntakeMode.CSV
@@ -1098,7 +1100,8 @@ class PublicMapSettings(BaseModel):
     shown: the vendor's public name, their website and their Instagram handle are read from those
     answers alone, and the name question may also be the built-in business name
     (``essential_business_name``, ADR 0042). A key the setting may no longer name reads as not
-    chosen (``public_map.chosen_question``). Written only by ``public_map.save_settings``.
+    chosen (``public_map.chosen_question``). Written only by ``public_map.save_settings``, and by
+    ``migrations/migrate_business_name.py``, which moves a name question to the built-in key.
     """
 
     enabled: bool = False
