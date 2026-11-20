@@ -76,7 +76,7 @@ A market that fails answers 404 with the vendor page's own not-found body, byte 
 - `seats`, one for each stored placement on a market date at a listed table, matched by `table_code_for(section name, number)`, each `{date, tableId, half, name, website, instagram}`: `half` `whole`, `left` or `right` from "Full Table", "Half Table (Left)" and "Half Table (Right)", ordered by date, the locations' order, the table's code as a person counts and left before right.
 
 A seat's three answers are its vendor's, read as the organizer reads them (`vendor_answers_for_market`, which reads `effective_answers` off a projection of the chosen keys alone) at the chosen questions, each cleaned by `public_answers`; a question not chosen, or one the form no longer asks as text, gives null.
-Where the name question is the built-in business name, the name is read through `essential_fields.business_name` of those answers, so an organizer's blank update of it, which stands over the vendor's answer, is no name, and the seat is a taken table with no details.
+Where the name question is the built-in business name, the name is read through `essential_fields.business_name` of those answers, so an organizer's blank update of it, which stands over the vendor's answer, is no name, and the seat has no name.
 A vendor's address joins a seat to its answers here and is never in the answer.
 
 **The cleaning is `public_answers.py`, pure, with a table of inputs for each value**:
