@@ -70,7 +70,7 @@ test.describe('on a phone', () => {
     await expect(page.getByTestId('vendors-detail-email')).toHaveText(LAST);
     await page.goBack();
     await expectThePageAsItWas(page, attendancePath, attendance.search, atTheDoor);
-    await expect(attendance.status(LAST)).toHaveText('Not yet');
+    await expect(attendance.status(LAST)).toHaveText('Not checked in');
 
     await page.goBack();
     await expect(page).toHaveURL(/\/markets$/);

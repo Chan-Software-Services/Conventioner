@@ -198,6 +198,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
   - `vendors` seeds others than alice and bob, a table each
   - `namePrefix` starts its name, and so its addresses, with a long one
   - `marketDates` runs it on several days in place of `marketDate`'s one, each vendor applying for and placed on every day
+  - `sectionName` names its one section, and so begins every table's code, in place of "A": a long one gives a chip a long table code to hold
 
 **`seedApplicantMarket()`** ([file](../../../front-end/e2e/helpers/seedApplicantMarket.ts))
 

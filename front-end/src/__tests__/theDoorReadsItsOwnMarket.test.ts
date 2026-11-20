@@ -181,7 +181,7 @@ describe("market A's roster and writes never stand on market B's page", () => {
     post.settle({ data: { message: 'Checked in', checkedInAt: '2099-08-01T09:41:00Z' } });
     await flushPromises();
     expect(rows(w)).toEqual([ANA]);
-    expect(w.get('[data-testid="attendance-row-status"]').text()).toBe('Not yet');
+    expect(w.get('[data-testid="attendance-row-status"]').text()).toBe('Not checked in');
     expect(w.find('.door-error').exists()).toBe(false);
   });
 

@@ -51,6 +51,7 @@ import {
   seatPaint,
   tableName,
   textWidthPx,
+  type LayoutSection,
   type MapSeat,
   type SeatHalf,
 } from './layoutDrawing';
@@ -492,9 +493,10 @@ const seatsByTable = computed(() => {
 const tables = computed<DrawnTable[]>(() => {
   const draw = (
     table: FloorplanObject['tables'][number],
-    section: SectionObject | null,
-    paint: { fill: string; edge: string },
+    placed: Pick<LayoutSection, 'section' | 'paint'> | null,
   ): DrawnTable => {
+    const section = placed?.section ?? null;
+    const paint = placed?.paint ?? NO_SECTION_PAINT;
     const type = typeById.value.get(table.tableTypeId);
     const size = type ?? STANDARD_TABLE;
     const number = props.numbers && section && table.number !== null ? String(table.number) : '';
@@ -507,7 +509,8 @@ const tables = computed<DrawnTable[]>(() => {
       rotation: table.rotation,
       widthMm: size.widthMm,
       depthMm: size.depthMm,
-      ...paint,
+      fill: paint.fill,
+      edge: paint.edge,
       ink: '--mm-black',
       number,
       numberSizeMm: number ? numberSizePx(size, number.length, scale.value) * mmPerPx.value : 0,
@@ -517,13 +520,13 @@ const tables = computed<DrawnTable[]>(() => {
     };
     // A day's seats are drawn on the tables with a code, the only tables a seat can name.
     const seats = seatsByTable.value;
-    if (!seats || !section || table.number === null) return drawn;
+    if (!seats || !placed || table.number === null) return drawn;
     const held = seats.get(table.id) ?? {};
     if (held.whole || !(held.left || held.right)) {
       const seat = held.whole ?? null;
       return {
         ...drawn,
-        ...seatPaint(seat ? seat.tone : 'free', paint),
+        ...seatPaint(seat ? seat.tone : 'free', placed.paint),
         name: `${named}, ${seat ? seat.name : 'no vendor'}`,
         seatKey: seat?.key ?? null,
       };
@@ -538,7 +541,7 @@ const tables = computed<DrawnTable[]>(() => {
         name: seat ? `${named}, ${side} half, ${seat.name}` : '',
         d: shape.d,
         focusD: halfTable(size, side, table.rotation, -0.25 * mmPerPx.value).d,
-        ...seatPaint(seat ? seat.tone : 'free', paint),
+        ...seatPaint(seat ? seat.tone : 'free', placed.paint),
         label,
         labelSizeMm: label
           ? numberSizePx(shape.size, label.length, scale.value) * mmPerPx.value
@@ -548,13 +551,13 @@ const tables = computed<DrawnTable[]>(() => {
     });
     return { ...drawn, halves };
   };
-  const inSections = drawnSections.value.flatMap(({ section, paint, tables: own }) =>
-    own.map((table) => draw(table, section, paint)),
+  const inSections = drawnSections.value.flatMap((placed) =>
+    placed.tables.map((table) => draw(table, placed)),
   );
   const placed = new Set(inSections.map((table) => table.id));
   const inNone = props.layout.tables
     .filter((table) => !placed.has(table.id))
-    .map((table) => draw(table, null, NO_SECTION_PAINT));
+    .map((table) => draw(table, null));
   return [...inSections, ...inNone];
 });
 

@@ -222,7 +222,11 @@ const STATS_SECTIONS = [
 ];
 
 /** The market on its day, as its strip tells it. */
-const AT_THE_DOOR_TILES = ['1 of 2 checked in, May 1, 2099', '1 not yet in', '$35.00 still owed'];
+const AT_THE_DOOR_TILES = [
+  '1 of 2 checked in, May 1, 2099',
+  '1 not checked in',
+  '$35.00 still owed',
+];
 
 /**
  * The owed market's form asks a choice question too, answered by both vendors, so Stats has a
@@ -813,7 +817,7 @@ for (const size of PHONE_AND_DESK) {
       }
       await expectTargets(strip.getByRole('link'), "a tile's link");
 
-      // Every section reads inside the window, and still owed and who is not yet in are targets.
+      // Every section reads inside the window; still owed and who is not checked in are targets.
       for (const section of STATS_SECTIONS) {
         await expectAcross(page.getByTestId(section), section);
       }
@@ -829,7 +833,7 @@ for (const size of PHONE_AND_DESK) {
         );
       }
       await expectTargets(stats.money.getByRole('link'), 'still owed');
-      await expectTargets(stats.checkIn.getByRole('link'), 'who is not yet in');
+      await expectTargets(stats.checkIn.getByRole('link'), 'who is not checked in');
 
       // The answer groups' switch is a row of targets, and the charts read inside the window: the
       // column a day, the review's split bar, whose legend lines are each a target, and the ledgers.

@@ -14,6 +14,7 @@ import {
   type DrawnTone,
   type MapSeat,
   type SeatHalf,
+  type SeatTone,
 } from '@/components/layout/layoutDrawing';
 import { HALF_TABLE_LEFT, HALF_TABLE_RIGHT } from '@/utils/placementChange';
 
@@ -168,6 +169,9 @@ export interface RosterSeatRow {
   /** "Full Table", "Half Table (Left)" or "Half Table (Right)". */
   tableChoice: string | null;
   state: 'expected' | 'here' | 'here_elsewhere' | 'here_without_seat';
+  /** When they were checked out that day, or none (T496); a record from before the check-out has
+   *  no such key. */
+  checkedOutAt?: string | null;
 }
 
 /** The half a roster row's seat holds, from the assignment's own spelling. */
@@ -177,9 +181,16 @@ function halfOf(tableChoice: string | null): SeatHalf {
   return 'whole';
 }
 
+/** A roster row's seat tone (D40, T501): checked in and out `checkedOut`, checked in alone, at
+ *  their seat or another, `filled`, not checked in `outlined`. */
+export function rosterTone(row: Pick<RosterSeatRow, 'state' | 'checkedOutAt'>): SeatTone {
+  if (row.state === 'expected') return 'outlined';
+  return row.checkedOutAt ? 'checkedOut' : 'filled';
+}
+
 /**
- * The roster's seats of one date as the map draws them (D40): here, at their seat or another,
- * filled; expected outlined; each keyed by the vendor's email, named by their name. A row is
+ * The roster's seats of one date as the map draws them, each in its `rosterTone`, keyed by the
+ * vendor's email, named by their name. A row is
  * matched to a table by the table's code, its section's name and its number, as the server names
  * it (`table_code_for`); a row whose table is on no layout is returned in `notOnALayout`, and a
  * check-in with no seat that day is neither.
@@ -210,7 +221,7 @@ export function rosterSeats<Row extends RosterSeatRow>(
       key: row.vendorEmail,
       tableId,
       half: halfOf(row.tableChoice),
-      tone: row.state === 'expected' ? 'outlined' : 'filled',
+      tone: rosterTone(row),
       name: row.vendorName,
     });
   }

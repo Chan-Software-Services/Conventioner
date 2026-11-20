@@ -80,7 +80,8 @@ async function expectAddressWhole(row: Locator, vendor: string): Promise<void> {
 
 /**
  * An "Undo?" stands just left of the chip it undoes, on the chip's line, and its tap area is at
- * least as tall as the chip.
+ * least as tall as the chip. Who made it is on a plain line after the chip, so the chip is short
+ * enough to share its line with the "Undo?" even beside a long address (T501).
  */
 async function expectLeftOf(undo: Locator, chip: Locator, what: string): Promise<void> {
   const undoBox = (await undo.boundingBox())!;
@@ -166,7 +167,7 @@ for (const size of SIZES) {
       await door.goto(marketId);
       await expect(door.row(NOT_YET)).toBeVisible({ timeout: 15000 });
       await expect(door.row(HERE)).toBeVisible();
-      await expect(door.status(HERE)).not.toHaveText('Not yet');
+      await expect(door.status(HERE)).not.toHaveText('Not checked in');
 
       await expect(door.readOnly).toHaveCount(1);
       await expect(door.readOnly).toBeVisible();
@@ -184,29 +185,35 @@ for (const size of SIZES) {
         'Follow who has checked in at the door.',
       );
 
-      // Each status ends its row, with no empty column beside it, and each address is whole.
-      for (const vendor of [HERE, NOT_YET]) {
+      // Each status ends its row, with no empty column beside it, and each address is whole: who
+      // made the check-in, on its line after the chip, or the chip of a vendor not checked in.
+      await expect(door.statusBy(HERE)).toHaveText(`by ${TEST_USER.email}`);
+      await expect(door.statusBy(NOT_YET)).toHaveCount(0);
+      for (const [vendor, end] of [
+        [HERE, door.statusBy(HERE)],
+        [NOT_YET, door.status(NOT_YET)],
+      ] as const) {
         await expectAddressWhole(door.row(vendor), vendor);
         expect(
-          await shortOfTheRowsEnd(door.row(vendor), door.status(vendor)),
+          await shortOfTheRowsEnd(door.row(vendor), end),
           `${vendor}'s status ends the row`,
         ).toBeLessThanOrEqual(1);
       }
 
-      // A vendor checked out: their status as it was, then when they were checked out and by whom,
-      // which ends the row; at a desk the two stand one over the other, each at the row's end.
-      await expect(door.status(OUT)).toHaveText(new RegExp(`by ${TEST_USER.email}$`));
-      await expect(door.out(OUT)).toHaveText(
-        new RegExp(`^Out \\d{1,2}:\\d{2}\\s[AP]M by ${TEST_USER.email}$`),
-      );
+      // A vendor checked out: their status as it was, then when they were checked out, each chip
+      // followed by who made it, which ends the row; at a desk the two lines stand one over the
+      // other, each at the row's end.
+      await expect(door.statusBy(OUT)).toHaveText(`by ${TEST_USER.email}`);
+      await expect(door.out(OUT)).toHaveText(/^Checked out \d{1,2}:\d{2}\s[AP]M$/);
+      await expect(door.outBy(OUT)).toHaveText(`by ${TEST_USER.email}`);
       await expectAddressWhole(door.row(OUT), OUT);
       expect(
-        await shortOfTheRowsEnd(door.row(OUT), door.out(OUT)),
+        await shortOfTheRowsEnd(door.row(OUT), door.outBy(OUT)),
         'the check-out ends the row',
       ).toBeLessThanOrEqual(1);
       if (width > 640) {
         expect(
-          await shortOfTheRowsEnd(door.row(OUT), door.status(OUT)),
+          await shortOfTheRowsEnd(door.row(OUT), door.statusBy(OUT)),
           'the status ends the row too',
         ).toBeLessThanOrEqual(1);
       }
@@ -273,10 +280,14 @@ for (const size of SIZES) {
         else expect(status!.y).toBeGreaterThan(button!.y);
       }
       await expectAddressWhole(door.row(OUT), OUT);
-      // Every row's chips end at one edge, a row with no button among them.
+      // Every row's chips end at one edge, a row with no button among them: a chip, or who made
+      // it after the chip.
+      await expect(door.statusBy(NOT_YET)).toHaveCount(0);
+      await expect(door.statusBy(HERE)).toHaveText(`by ${TEST_USER.email}`);
+      await expect(door.statusBy(OUT)).toHaveText(`by ${TEST_USER.email}`);
       const chipEnds = await Promise.all(
-        [NOT_YET, HERE, OUT].map(async (vendor) => {
-          const box = (await door.status(vendor).boundingBox())!;
+        [door.status(NOT_YET), door.statusBy(HERE), door.statusBy(OUT)].map(async (end) => {
+          const box = (await end.boundingBox())!;
           return Math.round(box.x + box.width);
         }),
       );
@@ -289,15 +300,24 @@ for (const size of SIZES) {
       await signIn(page, TEST_USER, width);
       const door = new AttendanceStatusPage(page);
       await door.goto(marketId);
-      await expect(door.out(OUT_BY_EDITOR)).toHaveText(new RegExp(`by ${EDITOR.email}$`));
-      await expect(door.status(IN_BY_EDITOR)).toHaveText(new RegExp(`by ${EDITOR.email}$`));
+      await expect(door.outBy(OUT_BY_EDITOR)).toHaveText(`by ${EDITOR.email}`);
+      await expect(door.statusBy(IN_BY_EDITOR)).toHaveText(`by ${EDITOR.email}`);
       for (const [vendor, parts] of [
-        [IN_BY_EDITOR, [door.status(IN_BY_EDITOR), door.action(IN_BY_EDITOR, 'undo')]],
+        [
+          IN_BY_EDITOR,
+          [
+            door.status(IN_BY_EDITOR),
+            door.statusBy(IN_BY_EDITOR),
+            door.action(IN_BY_EDITOR, 'undo'),
+          ],
+        ],
         [
           OUT_BY_EDITOR,
           [
             door.status(OUT_BY_EDITOR),
+            door.statusBy(OUT_BY_EDITOR),
             door.out(OUT_BY_EDITOR),
+            door.outBy(OUT_BY_EDITOR),
             door.action(OUT_BY_EDITOR, 'undo-check-out'),
           ],
         ],
@@ -320,6 +340,15 @@ for (const size of SIZES) {
             content.right + 0.5,
           );
         }
+        // The "Undo?" takes a tap down to its foot: on a phone who made it rises into the "Undo?"'s
+        // line under the chip, and must not take the tap over the target's last pixels (T501).
+        const undo = parts.at(-1)!;
+        const box = (await undo.boundingBox())!;
+        const atTheFoot = await undo.evaluate(
+          (el, point) => el.contains(document.elementFromPoint(point.x, point.y)),
+          { x: box.x + box.width / 2, y: box.y + box.height - 2 },
+        );
+        expect(atTheFoot, `${vendor}'s "Undo?" takes a tap at its foot`).toBe(true);
       }
     });
   });

@@ -61,7 +61,7 @@ test('a vendor who scans themselves in shows on the open roster with no tap or r
   await page.clock.install();
   const attendance = new AttendanceStatusPage(page);
   await attendance.goto(seed.marketId);
-  await expect(attendance.status(vendor)).toHaveText('Not yet');
+  await expect(attendance.status(vendor)).toHaveText('Not checked in');
   await expect(attendance.updated).toHaveText('Updated just now');
 
   await scansIn(request, seed, vendor);
@@ -75,7 +75,8 @@ test('a vendor who scans themselves in shows on the open roster with no tap or r
   });
   expect(atTheOtherDoor.ok(), await atTheOtherDoor.text()).toBeTruthy();
   await attendance.refresh.click();
-  await expect(attendance.status(other)).toContainText(' by ');
+  await expect(attendance.status(other)).toHaveText(/^Checked in /);
+  await expect(attendance.statusBy(other)).toHaveText(/^by /);
   await expect(attendance.summary).toHaveText('2 of 2 checked in');
 });
 
@@ -106,7 +107,7 @@ test('a re-read that fails keeps the roster and says so, until one lands', async
     'Could not update. The roster is as it was last read.',
   );
   await expect(attendance.rows).toHaveCount(2);
-  await expect(attendance.status(vendor)).toHaveText('Not yet');
+  await expect(attendance.status(vendor)).toHaveText('Not checked in');
 
   // The network is back: the next read lands, shows what happened meanwhile, and clears the line.
   await scansIn(request, seed, vendor);

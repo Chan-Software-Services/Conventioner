@@ -1,5 +1,12 @@
 import type { Locator, Page } from '@playwright/test';
 import { test, expect, BACKEND_URL, TEST_USER } from './fixtures';
+import {
+  detectLayout,
+  gates,
+  minTargetAt,
+  SPACE_SCALE,
+  TYPE_SCALE,
+} from './helpers/layoutDetectors';
 import { inTheWindow, PHONE_AND_DESK } from './helpers/phoneWindow';
 import { seedMarketDayMap, type SeededMarketDayMap } from './helpers/seedMarketDayMap';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
@@ -12,11 +19,12 @@ import { LoginPage } from './pages/LoginPage';
  * Kiln & Co's (expected), 3 is shared by Loom House (left) and Paper Moth Press (right), and 4 is
  * free; South Wing's Aisle B holds three more.
  *
- * The map shows each table by whether its vendor is here, a press on a vendor's table opens their
- * drawer as their row does, each half of the shared table its own, and the map follows a check-in
- * made on the list, and one made elsewhere, which the roster's re-read brings with no reload. The
- * legend names "No vendor" on North Wing, where Aisle A 4 is free, and not on South Wing, whose
- * tables are all held. The drawer holds no check-in (D39): a check-in is the list's.
+ * The map shows each table by whether its vendor is checked in, checked out or not checked in, a
+ * press on a vendor's table opens their drawer as their row does, each half of the shared table its
+ * own, and the map follows a check-in and a check-out made on the list, and a check-in made
+ * elsewhere, which the roster's re-read brings with no reload: a vendor checked out is drawn in
+ * their section's darker out shade (T501). The legend names the three states, and "No vendor" on
+ * North Wing, where Aisle A 4 is free, and not on South Wing, whose tables are all held. The drawer holds no check-in (D39): a check-in is the list's.
  *
  * The map's search finds one vendor of the day in a dropdown, each row saying where they sit, and
  * picking one opens their drawer and outlines their table, on South Wing when they sit there; typing
@@ -27,6 +35,39 @@ const VIEWER = { email: 'e2e-door-map-viewer@example.com', password: 'e2epasswor
 
 /** The roster reads itself again every 15 seconds; a check-in made elsewhere shows within that. */
 const REREAD = 20_000;
+
+/** The legend's three states, in its order, at every time of day (T501). */
+const STATES = ['Checked in', 'Checked out', 'Not checked in'];
+
+/** The words the map said of a vendor's day before T501, none of them on it now. */
+const OLD_WORDS = ['Here', 'Expected', 'Did not come', 'here with no table'];
+
+/** The layout sweep's gating findings on the page as it stands: none. */
+async function expectNoLayoutFault(page: Page, what: string): Promise<void> {
+  const width = page.viewportSize()!.width;
+  const findings = await page.evaluate(detectLayout, {
+    spaceScale: SPACE_SCALE,
+    textScale: TYPE_SCALE,
+    minTarget: minTargetAt(width),
+  });
+  expect(
+    findings.filter((finding) => gates(finding, width)),
+    what,
+  ).toEqual([]);
+}
+
+/** A shape's painted fill, and the colour of the token its `fill` names, as the browser computes
+ *  each: the two are one colour when the shape is painted in its token. */
+const paintAndToken = (shape: Locator) =>
+  shape.evaluate((element) => {
+    const token = /^var\((--[\w-]+)\)$/.exec(element.getAttribute('fill') ?? '')?.[1] ?? '';
+    const probe = document.createElement('span');
+    probe.style.color = `var(${token})`;
+    document.body.append(probe);
+    const colour = getComputedStyle(probe).color;
+    probe.remove();
+    return { token, fill: getComputedStyle(element).fill, colour };
+  });
 
 /** The vendors of Aisle A today, in the order `DAY_MAP_VENDORS` seats them. */
 function aisleA(seeded: SeededMarketDayMap) {
@@ -48,11 +89,14 @@ async function expectAround(mark: Locator, target: Locator): Promise<void> {
 
 async function openTheMap(page: Page, seeded: SeededMarketDayMap): Promise<AttendanceStatusPage> {
   const door = new AttendanceStatusPage(page);
-  await door.goto(seeded.marketId);
+  // On the day it seeded, so a run past midnight does not open on the seeded tomorrow, whose seats
+  // differ; the address keeps the day across a reload.
+  await door.goto(seeded.marketId, seeded.today);
   await expect(door.viewList).toHaveAttribute('aria-pressed', 'true');
   await door.viewMap.click();
   await expect(door.viewMap).toHaveAttribute('aria-pressed', 'true');
   await expect(page).toHaveURL(/[?&]view=map(&|$)/);
+  await expect(page).toHaveURL(new RegExp(`[?&]date=${seeded.today}(&|$)`));
   await expect(door.map).toBeVisible();
   return door;
 }
@@ -81,7 +125,8 @@ for (const size of PHONE_AND_DESK) {
       // The list's own controls stay the list's: the Show toggles are not on the map.
       await expect(page.getByTestId('attendance-show-all')).toHaveCount(0);
       await expect(door.rows).toHaveCount(0);
-      await expect(door.legend).toHaveText(['Here', 'Expected', 'No vendor']);
+      await expect(door.legend).toHaveText([...STATES, 'No vendor']);
+      for (const old of OLD_WORDS) await expect(door.dayMap).not.toContainText(old);
       if (!size.phone) {
         // At a desk the whole map, its zoom and its legend stand in the window as the page opens,
         // as the layout page's does (T422 ticket 11).
@@ -139,12 +184,32 @@ for (const size of PHONE_AND_DESK) {
       await expect(door.mapNote).toHaveText(/^Table Aisle A 4: no vendor on \w{3} \d+, \d{4}\.$/);
       await expect(door.drawer).toHaveAttribute('aria-hidden', 'true');
 
-      // Kiln & Co checked in on the list: their table is filled on the map.
+      // Kiln & Co checked in on the list, and Ember Ceramics checked out there: on the map Kiln's
+      // table is filled, and Ember's drawn in Aisle A's out shade, edged in its colour, each named
+      // by their state to a screen reader (T501).
       await door.viewList.click();
       await door.checkIn(vendors.kiln);
-      await expect(door.status(vendors.kiln)).not.toHaveText('Not yet');
+      await expect(door.status(vendors.kiln)).not.toHaveText('Not checked in');
+      await door.action(vendors.ember, 'check-out').click();
+      await expect(door.out(vendors.ember)).toBeVisible();
       await door.viewMap.click();
       await expect.poll(() => door.tone('Aisle A 2')).toBe('filled');
+      expect(await door.tone('Aisle A 1')).toBe('checkedOut');
+      const top = door.mapTable('Aisle A 1').getByTestId('layout-table-top').first();
+      const painted = await paintAndToken(top);
+      expect(painted.token).toMatch(/^--layout-section-\d-out$/);
+      expect(painted.fill).toBe(painted.colour);
+      await expect(top).toHaveAttribute(
+        'stroke',
+        `var(${painted.token.replace(/-out$/, '-edge')})`,
+      );
+      await expect(door.mapTable('Aisle A 1')).toHaveAccessibleName(/, checked out$/);
+      await expect(door.mapTable('Aisle A 2')).toHaveAccessibleName(/, checked in$/);
+      await expect(door.mapTable('Aisle A 3', 'left')).toHaveAccessibleName(/, not checked in$/);
+      await expect(door.legend).toHaveText([...STATES, 'No vendor']);
+      for (const old of OLD_WORDS) await expect(door.dayMap).not.toContainText(old);
+      await expectFits(page, 'The door as a map, a vendor checked out');
+      await expectNoLayoutFault(page, 'The door as a map, a vendor checked out');
 
       // Paper Moth Press checks in elsewhere, at a second organizer's door: the re-read brings it.
       const elsewhere = await request.post(`${BACKEND_URL}/markets/${seeded.marketId}/attendance`, {
@@ -153,17 +218,19 @@ for (const size of PHONE_AND_DESK) {
       expect(elsewhere.ok(), await elsewhere.text()).toBeTruthy();
       await expect.poll(() => door.tone('Aisle A 3', 'right'), { timeout: REREAD }).toBe('filled');
       expect(await door.tone('Aisle A 3', 'left')).toBe('outlined');
+      expect(await door.tone('Aisle A 1')).toBe('checkedOut');
 
       // The map is kept across a reload, and across the other location.
       await page.reload();
       await expect(door.viewMap).toHaveAttribute('aria-pressed', 'true');
+      await expect(page).toHaveURL(new RegExp(`[?&]date=${seeded.today}(&|$)`));
       // The location is the toolbar's select, beside the day (T466).
       await expect(page.getByTestId('day-map-locations')).toHaveCount(0);
       await door.locationSelect.selectOption({ label: 'South Wing' });
       await expect(page).toHaveURL(/[?&]location=loc-south-wing(&|$)/);
       await expect(door.mapTable('Aisle B 1')).toBeVisible();
       // Every table of South Wing's Aisle B is held today: its legend names no free table.
-      await expect(door.legend).toHaveText(['Here', 'Expected']);
+      await expect(door.legend).toHaveText(STATES);
       await expectFits(page, 'The door as a map, South Wing');
     });
 

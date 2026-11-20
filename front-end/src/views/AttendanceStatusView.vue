@@ -27,12 +27,13 @@ export const REREAD_MS = 15_000;
  *
  * Each row says where its vendor stands (T318), as the server serves it: expected, here, here at
  * another table than the one they hold now, or here with no table that day, listed under the
- * day's seats so a free never hides an arrival. The tally and the toggles count seats only, as the
+ * day's seats so a free never hides an arrival. The tally and the filters count seats only, as the
  * Stats tab does. Check in is offered on today and past days, never on a day to come.
  *
  * A vendor checked in is checked out on the same row, and that undone (T496): the row keeps its
- * status and says beside it when they were checked out and by whom. Nothing else on the page reads
- * a check-out, so a vendor who left still came.
+ * status and says after it when they were checked out and by whom. The map draws a checked-out
+ * vendor's table in its section's out shade, and the filters list them under Checked out, not
+ * Checked in (T501); every count still counts them as come, so a vendor who left still came.
  *
  * A paper roster is the door's fallback when the venue's network or the back end fails (T318):
  * "Print roster" prints every vendor of the chosen date by table, whatever the filters on screen
@@ -73,6 +74,7 @@ import ListFreshness from '@/components/ListFreshness.vue';
 import ReadFailed from '@/components/ReadFailed.vue';
 import DoorCodeScreen from '@/components/DoorCodeScreen.vue';
 import DoorRosterPrint, { type PrintedRow } from '@/components/DoorRosterPrint.vue';
+import EmailAddress from '@/components/EmailAddress.vue';
 import { offersDoorCode } from '@/utils/doorCode';
 import { useVendorDetails } from '@/utils/vendorDetails';
 import { useVendorDrawer } from '@/utils/vendorDrawer';
@@ -130,7 +132,9 @@ const NOT_WRITTEN: Record<DoorWrite, string> = {
   'undo-check-out': 'That check-out was not undone.',
 };
 
-type Show = 'all' | 'not-yet' | 'here';
+/** The list's filters: everyone, then three that part them, so each vendor is under one of the
+ *  last three (T501): checked in means checked in and not out. */
+type Show = 'all' | 'not-checked-in' | 'checked-in' | 'checked-out';
 
 interface Roster {
   dates: string[];
@@ -268,7 +272,7 @@ function chooseView(next: View) {
 }
 
 /** The map's "Show in the list": the list with every vendor the map counted under it shown, so
- *  the Show toggle, hidden on Map, hides none of them. */
+ *  the filters, hidden on Map, hide none of them. */
 function showListFromMap() {
   show.value = 'all';
   chooseView('list');
@@ -312,23 +316,35 @@ function hasSeat(row: RosterRow): boolean {
   return row.state !== 'here_without_seat';
 }
 
-/** The chosen date's seats, and those checked in: a vendor here with no table that day is not
- *  counted. */
-const today = computed(() => {
-  const day = roster.value.filter((row) => row.date === selectedDate.value && hasSeat(row));
-  return { expected: day.length, here: day.filter((row) => row.checkedInAt).length };
-});
+/** Which of the last three filters a row is under: a check-out leaves the vendor come. */
+function showsUnder(row: RosterRow): Exclude<Show, 'all'> {
+  if (!row.checkedInAt) return 'not-checked-in';
+  return row.checkedOutAt ? 'checked-out' : 'checked-in';
+}
 
 /**
- * Whether the chosen day is over: it has passed, or the market is archived. A vendor who never
- * checked in then did not come, and "Not yet" said otherwise of every one of them (E30/F01/S02).
+ * The chosen date's seats, those who came, checked out or not, as the Stats tab counts the day, and
+ * each filter's: a vendor here with no table that day is not counted.
  */
-const dayIsOver = computed(
-  () =>
-    market.value?.phase === MarketPhase.Archived ||
-    (!!selectedDate.value && selectedDate.value < calendarToday()),
-);
-const notHere = computed(() => (dayIsOver.value ? 'Did not come' : 'Not yet'));
+const today = computed(() => {
+  const day = roster.value.filter((row) => row.date === selectedDate.value && hasSeat(row));
+  const under = (which: Show) => day.filter((row) => showsUnder(row) === which).length;
+  return {
+    expected: day.length,
+    here: day.filter((row) => row.checkedInAt).length,
+    notCheckedIn: under('not-checked-in'),
+    checkedIn: under('checked-in'),
+    checkedOut: under('checked-out'),
+  };
+});
+
+/** The filters under the bar, each with its count. */
+const filters = computed<{ id: Show; label: string; count: number }[]>(() => [
+  { id: 'all', label: 'All', count: today.value.expected },
+  { id: 'not-checked-in', label: 'Not checked in', count: today.value.notCheckedIn },
+  { id: 'checked-in', label: 'Checked in', count: today.value.checkedIn },
+  { id: 'checked-out', label: 'Checked out', count: today.value.checkedOut },
+]);
 
 /** Check in is offered on today and past days: a mis-tapped day to come is not an arrival. */
 const checkInOpen = computed(() => !!selectedDate.value && selectedDate.value <= calendarToday());
@@ -337,8 +353,7 @@ const shownToday = computed(() => {
   const term = search.value.trim().toLowerCase();
   return roster.value.filter((row) => {
     if (row.date !== selectedDate.value) return false;
-    if (show.value === 'not-yet' && row.checkedInAt) return false;
-    if (show.value === 'here' && !row.checkedInAt) return false;
+    if (show.value !== 'all' && showsUnder(row) !== show.value) return false;
     if (!term) return true;
     if ((row.tableCode ?? '').toLowerCase().includes(term)) return true;
     return vendorMatches(term, row.vendorEmail, names.value, fullNames.value, businessNames.value);
@@ -363,7 +378,7 @@ const lists = computed(() =>
 );
 
 /**
- * The chosen date's every row for the printed roster, whatever the Show toggle and the search say:
+ * The chosen date's every row for the printed roster, whatever the filters and the search say:
  * paper with a filter on would leave the door without the vendors it hid.
  */
 function printedRow(row: RosterRow): PrintedRow {
@@ -437,38 +452,79 @@ function printRoster(): void {
   window.print();
 }
 
+/**
+ * What a chip says, in two parts: the state and when, in the pill, and who made it, "by <who>", on a
+ * plain muted line after the pill, beside it at a desk and under it on a phone, where an address
+ * breaks only before its "@" or a dot, as `EmailAddress` draws it (T501).
+ */
+interface ChipWords {
+  when: string;
+  /** "by" and who, else empty: the vendor's own, or a record with no organizer. */
+  by: string;
+  /**
+   * Where a vendor here at a table they no longer hold checked in, "at table Hall B 12", else empty:
+   * on the plain line after who made it, so the pill stays the state and the time, which a narrow
+   * phone's row holds at any time of day (T501).
+   */
+  where?: string;
+}
+
+function chipText(words: ChipWords): string {
+  return words.by ? `${words.when} ${words.by}` : words.when;
+}
+
+/**
+ * The status chip's words, "Not checked in", "Checked in 10:02 AM" or "Scanned in at 10:02 AM",
+ * and who made it on the plain line after the chip (T501). A vendor here at a table they no longer
+ * hold reads which on that line, "by you, at table Hall B 12", in an attention chip, since where
+ * they went is what the attention tone flags.
+ */
+function statusWords(row: RosterRow): ChipWords {
+  if (!row.checkedInAt) return { when: 'Not checked in', by: '' };
+  return {
+    ...arrival(row, getTimestampTime(row.checkedInAt), 'Checked in '),
+    where: elsewhere(row),
+  };
+}
+
+/**
+ * The status, as one line, for the paper's column under its "Checked in" header, so the time alone
+ * and who made it: "10:02 AM by you", "10:02 AM by you, at table Hall B 12".
+ */
 function status(row: RosterRow): string {
-  if (!row.checkedInAt) return notHere.value;
-  const at = getTimestampTime(row.checkedInAt);
-  const arrived = arrival(row, at);
-  // Here, but at a table they no longer hold: say which, so they are sent to their new one. The
-  // table is one unbreakable run ("table Hall B 12"), so a narrow chip or the paper's column never
-  // leaves its last word on a line alone.
-  if (row.state === 'here_elsewhere') {
-    return `${arrived}, at ${`table ${row.checkedInTableCode}`.replaceAll(' ', '\u00a0')}`;
-  }
-  return arrived;
+  const at = getTimestampTime(row.checkedInAt ?? '');
+  const where = elsewhere(row);
+  return chipText(arrival(row, at, '')) + (where ? `, ${where}` : '');
 }
 
-function arrival(row: RosterRow, at: string): string {
+function arrival(row: RosterRow, at: string, said: string): ChipWords {
   // The vendor's own, with the door code they scanned or typed at the entrance.
-  if (row.checkedInVia === 'door_code') return `Scanned in at ${at}`;
-  if (!row.checkedInBy) return at;
-  return `${at} by ${byWhom(row.checkedInBy)}`;
+  if (row.checkedInVia === 'door_code') return { when: `Scanned in at ${at}`, by: '' };
+  return { when: `${said}${at}`, by: byWhom(row.checkedInBy) };
 }
 
-/** The organizer who made a check-in or a check-out: "you" to themselves. */
-function byWhom(organizer: string): string {
-  return organizer.toLowerCase() === signedInAs.value ? 'you' : organizer;
+/**
+ * Here, but at a table they no longer hold: which, so they are sent to their new one. The table is
+ * one unbreakable run ("at table Hall B 12"), so a narrow line or the paper's column never leaves
+ * its last word on a line alone.
+ */
+function elsewhere(row: RosterRow): string {
+  if (row.state !== 'here_elsewhere') return '';
+  return `at table ${row.checkedInTableCode}`.replaceAll(' ', '\u00a0');
+}
+
+/** The organizer who made a check-in or a check-out, "by you" to themselves, else nothing. */
+function byWhom(organizer: string | null | undefined): string {
+  if (!organizer) return '';
+  return `by ${organizer.toLowerCase() === signedInAs.value ? 'you' : organizer}`;
 }
 
 /** When a checked-out vendor was checked out and by whom, in a chip of its own after the status. */
-function departure(row: RosterRow): string {
-  if (!row.checkedOutAt) return '';
-  const at = getTimestampTime(row.checkedOutAt);
+function departure(row: RosterRow): ChipWords {
+  const at = getTimestampTime(row.checkedOutAt ?? '');
   // The vendor's own, with the door code, on their vendor page.
-  if (row.checkedOutVia === 'door_code') return `Scanned out at ${at}`;
-  return row.checkedOutBy ? `Out ${at} by ${byWhom(row.checkedOutBy)}` : `Out ${at}`;
+  if (row.checkedOutVia === 'door_code') return { when: `Scanned out at ${at}`, by: '' };
+  return { when: `Checked out ${at}`, by: byWhom(row.checkedOutBy) };
 }
 
 /** Here at the seat they hold reads positive; anything else asks the door's attention. */
@@ -712,31 +768,15 @@ const drawer = useVendorDrawer();
           </h2>
           <div v-if="view === 'list'" class="door-show" role="group" aria-label="Show">
             <button
+              v-for="filter in filters"
+              :key="filter.id"
               type="button"
               class="btn btn--secondary btn--compact"
-              :aria-pressed="show === 'all'"
-              data-testid="attendance-show-all"
-              @click="show = 'all'"
+              :aria-pressed="show === filter.id"
+              :data-testid="`attendance-show-${filter.id}`"
+              @click="show = filter.id"
             >
-              All {{ today.expected }}
-            </button>
-            <button
-              type="button"
-              class="btn btn--secondary btn--compact"
-              :aria-pressed="show === 'not-yet'"
-              data-testid="attendance-show-not-yet"
-              @click="show = 'not-yet'"
-            >
-              {{ notHere }} {{ today.expected - today.here }}
-            </button>
-            <button
-              type="button"
-              class="btn btn--secondary btn--compact"
-              :aria-pressed="show === 'here'"
-              data-testid="attendance-show-here"
-              @click="show = 'here'"
-            >
-              Checked in {{ today.here }}
+              {{ filter.label }} {{ filter.count }}
             </button>
           </div>
           <SearchPicker
@@ -776,7 +816,6 @@ const drawer = useVendorDrawer();
           :rows="roster"
           :date="selectedDate"
           :openVendor="drawer.email.value"
-          :notHere="notHere"
           :hereWithoutSeat="withoutSeatToday"
           :updated="updatedWords"
           @open="drawer.open($event)"
@@ -789,7 +828,7 @@ const drawer = useVendorDrawer();
           <p v-if="today.expected === 0 && withoutSeatToday === 0" class="door-note">
             Nobody is assigned on this date.
           </p>
-          <p v-else-if="lists.length === 0" class="door-note">Nobody here matches.</p>
+          <p v-else-if="lists.length === 0" class="door-note">Nobody matches.</p>
           <template v-for="list in lists" :key="list.key">
             <h3 v-if="list.heading" class="door-heading" data-testid="attendance-unseated-heading">
               {{ list.heading }}
@@ -850,42 +889,70 @@ const drawer = useVendorDrawer();
                   }}</span>
                   <!-- Whether they came, then, once checked out, when and by whom (T496). -->
                   <span class="door-chips">
+                    <!-- Each line: the "Undo?" of what its chip says, if any, and the chip, then who
+                         made it on a plain line (T501). -->
                     <span class="door-line">
-                      <!-- Checked out, the check-in's undo is refused until the check-out's is made,
-                           so a row checked out has its one Undo beside its departure. -->
-                      <button
-                        v-if="canCheckIn && row.checkedInAt && !row.checkedOutAt"
-                        type="button"
-                        class="door-undo"
-                        :disabled="isBusy(row)"
-                        :aria-label="`Undo ${whoFor(row)}'s check-in`"
-                        data-testid="attendance-undo"
-                        @click="write(row, 'undo-check-in')"
-                      >
-                        Undo?
-                      </button>
+                      <span class="door-pill-line">
+                        <!-- Checked out, the check-in's undo is refused until the check-out's is
+                             made, so a row checked out has its one Undo beside its departure. -->
+                        <button
+                          v-if="canCheckIn && row.checkedInAt && !row.checkedOutAt"
+                          type="button"
+                          class="door-undo"
+                          :disabled="isBusy(row)"
+                          :aria-label="`Undo ${whoFor(row)}'s check-in`"
+                          data-testid="attendance-undo"
+                          @click="write(row, 'undo-check-in')"
+                        >
+                          Undo?
+                        </button>
+                        <span
+                          class="chip door-status"
+                          :class="statusTone(row)"
+                          data-testid="attendance-row-status"
+                          >{{ statusWords(row).when }}</span
+                        >
+                      </span>
+                      <!-- Who made it, then where a vendor at another table checked in: "by you, at
+                           table Hall B 12", the line breaking before "at" when it is too long and
+                           the address only before its "@" or a dot (T501). -->
                       <span
-                        class="chip door-status"
-                        :class="statusTone(row)"
-                        data-testid="attendance-row-status"
-                        >{{ status(row) }}</span
+                        v-if="statusWords(row).by || statusWords(row).where"
+                        class="door-chip-by"
+                        data-testid="attendance-row-status-by"
+                        ><EmailAddress
+                          v-if="statusWords(row).by"
+                          :words="statusWords(row).by + (statusWords(row).where ? ',' : '')"
+                        /><span v-if="statusWords(row).where" class="door-chip-where"
+                          >{{ statusWords(row).by ? ' ' : '' }}{{ statusWords(row).where }}</span
+                        ></span
                       >
                     </span>
                     <span v-if="row.checkedOutAt" class="door-line">
-                      <button
-                        v-if="canCheckIn"
-                        type="button"
-                        class="door-undo"
-                        :disabled="isBusy(row)"
-                        :aria-label="`Undo ${whoFor(row)}'s check-out`"
-                        data-testid="attendance-undo-check-out"
-                        @click="write(row, 'undo-check-out')"
-                      >
-                        Undo?
-                      </button>
-                      <span class="chip chip--neutral door-out" data-testid="attendance-row-out">{{
-                        departure(row)
-                      }}</span>
+                      <span class="door-pill-line">
+                        <button
+                          v-if="canCheckIn"
+                          type="button"
+                          class="door-undo"
+                          :disabled="isBusy(row)"
+                          :aria-label="`Undo ${whoFor(row)}'s check-out`"
+                          data-testid="attendance-undo-check-out"
+                          @click="write(row, 'undo-check-out')"
+                        >
+                          Undo?
+                        </button>
+                        <span
+                          class="chip chip--neutral door-out"
+                          data-testid="attendance-row-out"
+                          >{{ departure(row).when }}</span
+                        >
+                      </span>
+                      <span
+                        v-if="departure(row).by"
+                        class="door-chip-by"
+                        data-testid="attendance-row-out-by"
+                        ><EmailAddress :words="departure(row).by"
+                      /></span>
                     </span>
                   </span>
                 </span>
@@ -1025,9 +1092,13 @@ const drawer = useVendorDrawer();
   list-style: none;
 }
 
+/* At a desk the table keeps its 14rem and the vendor at least 16rem, room for a name and an address
+   of about 35 characters on one line: the chips' column is as wide as its widest line where the row
+   has room, and where it has not, at a narrow desk, the line after a chip breaks before "at table
+   <code>" rather than taking the vendor's column until their name broke inside a word (T501). */
 .door-row {
   display: grid;
-  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto auto;
+  grid-template-columns: 14rem minmax(16rem, 1fr) auto auto;
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-3) var(--space-4);
@@ -1038,7 +1109,7 @@ const drawer = useVendorDrawer();
 /* Someone offered no check-in has no action column, so their status ends the row: an empty column
    left each chip standing short of the edge with nothing beside it (E38/F15/S04). */
 .door-row--read {
-  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto;
+  grid-template-columns: 14rem minmax(16rem, 1fr) auto;
 }
 
 /* Under the row, the width of it: notes are read standing at the door, not squeezed into a cell. */
@@ -1079,13 +1150,37 @@ const drawer = useVendorDrawer();
   gap: var(--space-1);
 }
 
-.door-status,
-.door-out {
+/* Who made a check-in or a check-out, "by you" or "by" an address: a plain line after the chip,
+   muted at the type scale's floor, so the chip stays a one-line pill of the state and the time
+   (T501). Beside the chip at a desk, under it on a phone (below); a line that breaks, at a narrow
+   desk or on a phone, ends each of its lines at the row's end, as every chip does. */
+.door-chip-by {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--mm-text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  text-align: end;
   white-space: nowrap;
 }
 
-/* A line of the chips: the "Undo?" of what the chip says, if any, then the chip. */
-.door-line {
+/* "by" stays with the address, which breaks only where `EmailAddress` lets it. */
+.door-chip-by :deep(.email-address) {
+  white-space: normal;
+}
+
+/* Where a vendor at another table checked in, "at table <code>" one run of no-break spaces: the
+   line breaks before it when it is too long for the row, and inside it only when the run alone is
+   wider than the row (T501). */
+.door-chip-where {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+/* A line of the chips: the "Undo?" of what the chip says, if any, then the chip, then who made it.
+   One line at a desk; on a phone who made it goes under (below). */
+.door-line,
+.door-pill-line {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1191,13 +1286,15 @@ const drawer = useVendorDrawer();
    table, the action's 11rem, when it held Check out and Undo, and the gaps: its one button now
    leaves the desk's columns room to spare at the break. */
 @container door-list (width < 64rem) {
+  /* Notes, where a row has them, take a third line of their own: a named notes area kept an empty
+     track, and its gap, under every row without them, so the row's space under its last line was
+     twice its space above the vendor (T501). */
   .door-row,
   .door-row--read {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       'top'
-      'place'
-      'notes';
+      'place';
     gap: var(--space-2) var(--space-3);
   }
 
@@ -1251,10 +1348,27 @@ const drawer = useVendorDrawer();
     max-width: 100%;
   }
 
-  /* A chip too wide to share its line, "by" another organizer's address, keeps the row's width,
-     and its "Undo?" goes under it, at the line's end, still after the chip it undoes. */
-  .door-line {
+  /* A chip too wide to share its line with its "Undo?" keeps the row's width, and its "Undo?" goes
+     under it, at the line's end, still after the chip it undoes.
+     Who made it stands under them, ending at the row's end, risen into the "Undo?"'s 44px line by
+     that line's slack, so it stands as close under its chip as it does where no "Undo?" is beside
+     it. */
+  .door-pill-line {
     flex-wrap: wrap-reverse;
+  }
+
+  .door-line {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-hairline);
+  }
+
+  /* Risen into the "Undo?"'s line and drawn after it, the plain line would take a tap meant for the
+     target's foot; it holds no control, so taps pass through it to the "Undo?". */
+  .door-pill-line:has(.door-undo) + .door-chip-by {
+    pointer-events: none;
+    /* stylelint-disable-next-line declaration-property-value-allowed-list -- the "Undo?" target's slack around the chip's one line: a length from --target-min and the chip's height, not a spacing step */
+    margin-top: calc((var(--text-xs) * 1.5 + 2 * var(--space-hairline) - var(--target-min)) / 2);
   }
 
   .door-action {
@@ -1267,7 +1381,9 @@ const drawer = useVendorDrawer();
   }
 
   .door-notes {
-    grid-area: notes;
+    grid-area: auto;
+    grid-column: 1;
+    grid-row: 3;
   }
 }
 </style>

@@ -10,6 +10,8 @@ export class AttendanceStatusPage {
   readonly page: Page;
   readonly summary: Locator;
   readonly rows: Locator;
+  /** The list's four filters, in their order (T501). */
+  readonly filters: Locator;
   /** The list's search, which filters its rows. */
   readonly search: Locator;
   /**
@@ -77,7 +79,8 @@ export class AttendanceStatusPage {
   readonly map: Locator;
   readonly legend: Locator;
   readonly mapNote: Locator;
-  /** "<n> here with no table" and "<n> vendors are at tables not on a layout.", under the map. */
+  /** "<n> checked in with no table" and "<n> vendors are at tables not on a layout.", under the
+   *  map. */
   readonly mapUnseated: Locator;
   readonly mapOffLayout: Locator;
   /** "No location has a layout yet.", where nothing is laid out. */
@@ -100,6 +103,7 @@ export class AttendanceStatusPage {
     this.page = page;
     this.summary = page.getByTestId('attendance-summary');
     this.rows = page.getByTestId('attendance-row');
+    this.filters = page.getByTestId('attendance-bar').locator('[data-testid^="attendance-show-"]');
     this.search = page.getByTestId('attendance-search');
     this.mapSearch = new PersonChooser(page, 'attendance-map-search');
     this.tools = page.getByTestId('attendance-tools');
@@ -162,10 +166,14 @@ export class AttendanceStatusPage {
   }
 
   /**
-   * How a table, or a half, is drawn: `filled` in its section's colour (here), `outlined` on white
-   * (expected) or `free` on the floor's colour (no vendor), read off its top's paint.
+   * How a table, or a half, is drawn: `filled` in its section's colour (checked in), `checkedOut`
+   * in its section's darker out shade (checked out, T501), `outlined` on white (not checked in) or
+   * `free` on the floor's colour (no vendor), read off its top's paint.
    */
-  async tone(code: string, half?: 'left' | 'right'): Promise<'filled' | 'outlined' | 'free'> {
+  async tone(
+    code: string,
+    half?: 'left' | 'right',
+  ): Promise<'filled' | 'checkedOut' | 'outlined' | 'free'> {
     const target = this.mapTable(code, half);
     const shape = half
       ? target.locator('path').first()
@@ -173,6 +181,7 @@ export class AttendanceStatusPage {
     const fill = (await shape.getAttribute('fill')) ?? '';
     if (fill === 'white') return 'outlined';
     if (fill.includes('layout-floor')) return 'free';
+    if (/-out\)$/.test(fill)) return 'checkedOut';
     return 'filled';
   }
 
@@ -180,8 +189,13 @@ export class AttendanceStatusPage {
     return this.page.getByTestId(`door-code-scroll-shade-${edge}`);
   }
 
-  async goto(marketId: string): Promise<void> {
-    await this.page.goto(marketScreenPath(marketId, 'attendance'));
+  /**
+   * The door, on the date the page picks, else on `date`: a spec that runs past midnight between its
+   * seed and an open names the day it seeded, or it lands on the next.
+   */
+  async goto(marketId: string, date?: string): Promise<void> {
+    const path = marketScreenPath(marketId, 'attendance');
+    await this.page.goto(date ? `${path}?date=${date}` : path);
   }
 
   /** One vendor's row on the date shown. */
@@ -190,19 +204,34 @@ export class AttendanceStatusPage {
   }
 
   /**
-   * "Not yet" ("Did not come" once the day is over), or when they checked in and who made it, and,
-   * for a check-in made at another table than the one they hold now, which (T318).
+   * The status chip: "Not checked in" at every time of day, "Checked in 10:02 AM", or "Scanned in at
+   * 10:02 AM" for the vendor's own (T501). Who made it, and where a check-in made at another table
+   * than the one they hold now was made, is `statusBy`.
    */
   status(vendorEmail: string): Locator {
     return this.row(vendorEmail).getByTestId('attendance-row-status');
   }
 
   /**
-   * On a checked-out row, after its status: when they were checked out and who made it, "Out 4:05 PM
-   * by you" or, for the vendor's own, "Scanned out at 4:05 PM" (T496).
+   * The plain line after the status chip: who made the check-in, "by you" or "by <address>", then,
+   * for a check-in made at another table than the one they hold now, which (T318, T501): "by you, at
+   * table Hall B 12", or "at table Hall B 12" alone for the vendor's own.
+   */
+  statusBy(vendorEmail: string): Locator {
+    return this.row(vendorEmail).getByTestId('attendance-row-status-by');
+  }
+
+  /**
+   * On a checked-out row, after its status: when they were checked out, "Checked out 4:05 PM" or,
+   * for the vendor's own, "Scanned out at 4:05 PM" (T496, T501). Who made it is `outBy`.
    */
   out(vendorEmail: string): Locator {
     return this.row(vendorEmail).getByTestId('attendance-row-out');
+  }
+
+  /** The plain line after the out chip: who made the check-out, "by you" or "by <address>". */
+  outBy(vendorEmail: string): Locator {
+    return this.row(vendorEmail).getByTestId('attendance-row-out-by');
   }
 
   /** A row's Check in, Check out, Undo of the check-in or Undo of the check-out, by its test id. */
@@ -223,7 +252,8 @@ export class AttendanceStatusPage {
     return this.row(vendorEmail).getByTestId('attendance-vendor');
   }
 
-  async show(which: 'all' | 'not-yet' | 'here'): Promise<void> {
+  /** The list's filters under the bar: All, Not checked in, Checked in, Checked out (T501). */
+  async show(which: 'all' | 'not-checked-in' | 'checked-in' | 'checked-out'): Promise<void> {
     await this.page.getByTestId(`attendance-show-${which}`).click();
   }
 

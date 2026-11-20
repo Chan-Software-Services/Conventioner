@@ -270,7 +270,7 @@ See [Attendance and the door](docs/implementation/modules/attendance-and-door.md
 
 **Check-out**:
 The three fields on a **check-in**'s record that say the vendor left: when, and who made it (an organizer at Attendance, or the vendor on their vendor page with the **door code**).
-Undoing it clears them and leaves the check-in. Nothing else reads it: a checked-out vendor still came, in every count and every **roster state**.
+Undoing it clears them and leaves the check-in. Attendance's map and its filters read it: the map draws a checked-out vendor's table in a darker shade, and the list shows them under "Checked out", not "Checked in"; a checked-out vendor still came, in every count and every **roster state**.
 _Avoid_: departure, sign-out
 
 **Door code**:
@@ -288,8 +288,7 @@ _Avoid_: Guest list, attendance list (that was only who came)
 
 **Roster state**:
 Where one vendor stands at the door on one date: **expected** (a seat and no check-in), **here** (a check-in made at the seat they hold), **here at another table** (a check-in made at a table they no longer hold, after a move or a swap), or **here with no table** (a check-in and no seat that day, after a free).
-"Did not come" is how the page words expected once the day is over on the viewer's calendar, or the market is archived.
-_Avoid_: "Checked in" alone for here at another table, which hides where they went
+_Avoid_: a row that reads "Checked in <time>" for here at another table with no "at table <code>" on the line after the chip, which hides where they went
 
 **Day map**:
 The drawing of a location's **layout** on one **market date**, each table drawn by who holds it that day.

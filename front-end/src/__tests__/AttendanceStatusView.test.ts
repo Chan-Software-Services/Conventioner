@@ -198,11 +198,12 @@ function viewStyles(): string {
   return descriptor.styles.map((style) => style.content).join('\n');
 }
 
+/** A row's status chip and, after it, who made it, as one reads them: "Checked in 5:41 PM by you". */
 function status(wrapper: VueWrapper, email: string): string {
-  return wrapper
-    .get(`[data-testid="attendance-row"][data-vendor="${email}"]`)
-    .get('[data-testid="attendance-row-status"]')
-    .text();
+  const row = wrapper.get(`[data-testid="attendance-row"][data-vendor="${email}"]`);
+  const chip = row.get('[data-testid="attendance-row-status"]').text();
+  const by = row.find('[data-testid="attendance-row-status-by"]');
+  return by.exists() ? `${chip} ${by.text()}` : chip;
 }
 
 function checkIn(wrapper: VueWrapper, email: string) {
@@ -245,7 +246,7 @@ describe('the roster reads itself again', () => {
     expect(REREAD_MS).toBe(15_000);
     const wrapper = await open();
     expect(rosterReads()).toBe(1);
-    expect(status(wrapper, ANA)).toBe('Not yet');
+    expect(status(wrapper, ANA)).toBe('Not checked in');
 
     // The vendor scans themselves in; the open page shows it with no tap.
     serveRoster(() => Promise.resolve(roster({ email: ANA, via: 'door_code' })));
@@ -309,7 +310,7 @@ describe('the roster reads itself again', () => {
     slow.settle(roster());
     await flushPromises();
     expect(failed().exists()).toBe(false);
-    expect(status(wrapper, ANA)).toBe('Not yet');
+    expect(status(wrapper, ANA)).toBe('Not checked in');
   });
 
   it('stops when the page is left', async () => {
@@ -362,12 +363,12 @@ describe('only the newest answer lands', () => {
     api.post.mockResolvedValue({ data: { message: 'Checked in', checkedInAt: ARRIVED } });
     await checkIn(wrapper, ANA).trigger('click');
     await flushPromises();
-    expect(status(wrapper, ANA)).toMatch(/ by you$/);
+    expect(status(wrapper, ANA)).toMatch(/^Checked in .+ by you$/);
 
     // The read asked before the write answers last, with the roster from before it.
     older.settle(roster());
     await flushPromises();
-    expect(status(wrapper, ANA)).toMatch(/ by you$/);
+    expect(status(wrapper, ANA)).toMatch(/^Checked in .+ by you$/);
     // ...and the read the write asked for still lands.
     after.settle(roster({ email: BEN, via: 'door_code' }));
     await flushPromises();
@@ -383,7 +384,7 @@ describe('a check-in', () => {
 
     await checkIn(wrapper, ANA).trigger('click');
     await flushPromises();
-    expect(status(wrapper, ANA)).toMatch(/ by you$/);
+    expect(status(wrapper, ANA)).toMatch(/^Checked in .+ by you$/);
     expect(wrapper.get('[data-testid="attendance-summary"]').text()).toBe('1 of 2 checked in');
     expect(rosterReads()).toBe(2);
 
@@ -393,7 +394,7 @@ describe('a check-in', () => {
       .get(`[data-testid="attendance-row"][data-vendor="${ANA}"] [data-testid="attendance-undo"]`)
       .trigger('click');
     await flushPromises();
-    expect(status(wrapper, ANA)).toBe('Not yet');
+    expect(status(wrapper, ANA)).toBe('Not checked in');
   });
 
   it('on two rows at once: each held busy only while its own write is out', async () => {
@@ -419,7 +420,7 @@ describe('a check-in', () => {
 
     forAna.settle({ data: { message: 'Checked in', checkedInAt: ARRIVED } });
     await flushPromises();
-    expect(status(wrapper, ANA)).toMatch(/ by you$/);
+    expect(status(wrapper, ANA)).toMatch(/^Checked in .+ by you$/);
     expect(wrapper.get('[data-testid="attendance-summary"]').text()).toBe('2 of 2 checked in');
   });
 });
@@ -619,8 +620,9 @@ describe('the toolbar (T466)', () => {
     // Then the count row's: the list's filters and the search.
     expect(focusable('attendance-bar')).toEqual([
       'attendance-show-all',
-      'attendance-show-not-yet',
-      'attendance-show-here',
+      'attendance-show-not-checked-in',
+      'attendance-show-checked-in',
+      'attendance-show-checked-out',
       'attendance-search',
     ]);
     expect(focusable('attendance-tools')).toEqual([
@@ -658,7 +660,7 @@ describe('the toolbar (T466)', () => {
     expect(search.classes()).toEqual(expect.arrayContaining(['field', 'field--compact']));
     expect(search.attributes('aria-label')).toBe('Find a vendor');
     expect(search.attributes('placeholder')).toBe('Name, email or table');
-    for (const id of ['all', 'not-yet', 'here']) {
+    for (const id of ['all', 'not-checked-in', 'checked-in', 'checked-out']) {
       expect(bar.get(`[data-testid="attendance-show-${id}"]`).classes()).toContain('btn--compact');
     }
   });
@@ -692,6 +694,13 @@ describe('where each vendor stands (T318)', () => {
       .get('[data-testid="attendance-row-status"]');
   }
 
+  /** The plain line after the status chip: who made it, then where they checked in (T501). */
+  function chipLine(wrapper: VueWrapper, email: string) {
+    return wrapper
+      .get(`[data-testid="attendance-row"][data-vendor="${email}"]`)
+      .get('[data-testid="attendance-row-status-by"]');
+  }
+
   function table(wrapper: VueWrapper, email: string): string {
     return wrapper
       .get(`[data-testid="attendance-row"][data-vendor="${email}"]`)
@@ -699,7 +708,7 @@ describe('where each vendor stands (T318)', () => {
       .text();
   }
 
-  it('a vendor here at another table than the one they hold says where, in attention', async () => {
+  it('a vendor here at another table than the one they hold says where, after an attention chip', async () => {
     serveRoster(() =>
       Promise.resolve({
         data: {
@@ -718,7 +727,10 @@ describe('where each vendor stands (T318)', () => {
     );
     const wrapper = await open();
 
-    expect(chip(wrapper, ANA).text()).toMatch(/^Scanned in at .+, at table\u00a0A7$/);
+    // The chip is the state and the time alone, and the line after it says where, with no "by" for
+    // the vendor's own scan: a chip holding the table left a narrow phone's row (T501).
+    expect(chip(wrapper, ANA).text()).toMatch(/^Scanned in at \d{1,2}:\d{2}\s[AP]M$/);
+    expect(chipLine(wrapper, ANA).text()).toBe('at\u00a0table\u00a0A7');
     expect(chip(wrapper, ANA).classes()).toContain('chip--attention');
     expect(table(wrapper, ANA)).toBe('Table A1, a whole table');
     expect(chip(wrapper, BEN).classes()).toContain('chip--positive');
@@ -735,6 +747,7 @@ describe('where each vendor stands (T318)', () => {
               state: 'here_elsewhere',
               checkedInTableCode: 'Hall B 12',
               checkedInAt: ARRIVED,
+              checkedInBy: 'pat@example.com',
             }),
           ],
         },
@@ -742,11 +755,14 @@ describe('where each vendor stands (T318)', () => {
     );
     const wrapper = await open();
 
-    // "table Hall B 12" is one unbreakable run: a no-break space between each of its words. The
-    // sheet is teleported to the page's body.
-    expect(chip(wrapper, ANA).text()).toMatch(/, at table\u00a0Hall\u00a0B\u00a012$/);
+    // "at table Hall B 12" is one unbreakable run: a no-break space between each of its words, after
+    // who made the check-in on the line after the chip. The sheet is teleported to the page's body.
+    expect(chip(wrapper, ANA).text()).toMatch(/^Checked in \d{1,2}:\d{2}\s[AP]M$/);
+    expect(chipLine(wrapper, ANA).text()).toBe(
+      'by pat@example.com, at\u00a0table\u00a0Hall\u00a0B\u00a012',
+    );
     expect(document.querySelector('[data-testid="attendance-print-here"]')?.textContent).toMatch(
-      /, at table\u00a0Hall\u00a0B\u00a012$/,
+      /, at\u00a0table\u00a0Hall\u00a0B\u00a012$/,
     );
   });
 
@@ -775,16 +791,19 @@ describe('where each vendor stands (T318)', () => {
     // The tally and the toggles count the day's seats only.
     expect(wrapper.get('[data-testid="attendance-summary"]').text()).toBe('0 of 2 checked in');
     expect(wrapper.get('[data-testid="attendance-show-all"]').text()).toBe('All 2');
-    expect(wrapper.get('[data-testid="attendance-show-not-yet"]').text()).toBe('Not yet 2');
-    expect(wrapper.get('[data-testid="attendance-show-here"]').text()).toBe('Checked in 0');
+    expect(wrapper.get('[data-testid="attendance-show-not-checked-in"]').text()).toBe(
+      'Not checked in 2',
+    );
+    expect(wrapper.get('[data-testid="attendance-show-checked-in"]').text()).toBe('Checked in 0');
+    expect(wrapper.get('[data-testid="attendance-show-checked-out"]').text()).toBe('Checked out 0');
 
-    await wrapper.get('[data-testid="attendance-show-not-yet"]').trigger('click');
+    await wrapper.get('[data-testid="attendance-show-not-checked-in"]').trigger('click');
     expect(wrapper.find(`[data-testid="attendance-row"][data-vendor="${CY}"]`).exists()).toBe(
       false,
     );
     expect(wrapper.find('[data-testid="attendance-unseated-heading"]').exists()).toBe(false);
 
-    await wrapper.get('[data-testid="attendance-show-here"]').trigger('click');
+    await wrapper.get('[data-testid="attendance-show-checked-in"]').trigger('click');
     expect(wrapper.find(`[data-testid="attendance-row"][data-vendor="${CY}"]`).exists()).toBe(true);
     expect(wrapper.find(`[data-testid="attendance-row"][data-vendor="${ANA}"]`).exists()).toBe(
       false,
@@ -842,11 +861,12 @@ describe('where each vendor stands (T318)', () => {
       .get(`[data-testid="attendance-row"][data-vendor="${ANA}"] [data-testid="attendance-undo"]`)
       .trigger('click');
     await flushPromises();
-    expect(chip(wrapper, ANA).text()).toBe('Not yet');
+    expect(chip(wrapper, ANA).text()).toBe('Not checked in');
     await checkIn(wrapper, ANA).trigger('click');
     await flushPromises();
 
-    expect(chip(wrapper, ANA).text()).toMatch(/ by you$/);
+    expect(chip(wrapper, ANA).text()).toMatch(/^Checked in \d{1,2}:\d{2}\s[AP]M$/);
+    expect(status(wrapper, ANA)).toMatch(/ by you$/);
     expect(chip(wrapper, ANA).classes()).toContain('chip--positive');
   });
 

@@ -171,7 +171,7 @@ for (const size of PHONE_AND_DESK) {
         'no tap highlight',
       ).toBe('rgba(0, 0, 0, 0)');
       await press(checkIn);
-      await expect(attendance.status(VENDOR)).not.toHaveText('Not yet');
+      await expect(attendance.status(VENDOR)).not.toHaveText('Not checked in');
 
       // Their drawer, inside the window, each tab read.
       await press(attendance.vendor(VENDOR));
