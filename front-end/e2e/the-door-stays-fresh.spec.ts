@@ -75,7 +75,8 @@ test('a vendor who scans themselves in shows on the open roster with no tap or r
   });
   expect(atTheOtherDoor.ok(), await atTheOtherDoor.text()).toBeTruthy();
   await attendance.refresh.click();
-  await expect(attendance.status(other)).toContainText(' by ');
+  await expect(attendance.status(other)).toHaveText(/^Checked in /);
+  await expect(attendance.statusBy(other)).toHaveText(/^by /);
   await expect(attendance.summary).toHaveText('2 of 2 checked in');
 });
 

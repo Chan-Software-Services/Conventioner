@@ -103,7 +103,7 @@ test.describe('The door on market day', () => {
     await attendance.checkIn('bob@example.com');
     await expect(attendance.summary).toHaveText('1 of 2 checked in');
     // An organizer's check-in says who made it, so a vendor who never came cannot look present.
-    await expect(attendance.status('bob@example.com')).toContainText('by you');
+    await expect(attendance.statusBy('bob@example.com')).toHaveText('by you');
 
     // The vendor's own page agrees: the record is one record.
     forgetSignInAttempts();
