@@ -392,7 +392,8 @@ eachWindow('the export-vendors entry', (size) => {
       ['Still owed', 'stillOwed'],
       ['Discord state', 'discordState'],
       ['Discord username', 'discordUsername'],
-      ['Business Name', 'answer:business_name'],
+      // The built-in business name's column, a vendor's, which the file's column maps to (T502).
+      ['Business name', 'businessName'],
     ] as const) {
       await dialog.columnsFind.fill(words);
       await press(dialog.column(id));
@@ -540,10 +541,12 @@ eachWindow('the export-vendors entry', (size) => {
     const several = page.getByTestId('library-order-several');
     await press(page.getByTestId('library-order-several-list-down-name'));
     await expect(several.getByTestId('read-out')).toHaveText(
-      'In order: Preferred name, Name, Email, Status',
+      'In order: Preferred name, Name, Business name, Email',
     );
 
-    await expect(page.getByTestId('library-order-slot-list-row').first()).toContainText('1. Email');
+    await expect(page.getByTestId('library-order-slot-list-row').first()).toContainText(
+      '1. Business name',
+    );
     await expect(page.getByTestId('library-order-slot-list-row').first()).toContainText('Vendor');
     await expectLaidOut(page, size, 'the ordered list');
     await expectAccessible('the ordered list');

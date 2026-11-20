@@ -97,9 +97,11 @@ const cardManaged = ref<string | null>(null);
 // EmailAddress: an address alone, the longest, and one in a sentence as the history writes it.
 const sentence = `${owner.email} changed ${people[1]!.email}'s role to ${getRoleDisplayName(people[1]!.role)}.`;
 
-// VendorNameButton: a named vendor, and one whose application stored no name.
+// VendorNameButton: a named vendor, one whose application stored no name, and their business name
+// under the name, a long one in a column too narrow for it.
 const opened = ref<string | null>(null);
 const unnamed: VendorNames = {};
+const longBusiness = `${first.business} Stationery, Letterpress and Hand-bound Notebooks`;
 
 // RowMenu: the two menus the Payments tab gives a line and an entry, and the app bar's account menu.
 const LINE_ITEMS = [
@@ -318,7 +320,7 @@ const shrinking = computed(() => applications.slice(0, shrinkingCount.value));
 
   <LibrarySection
     title="VendorNameButton"
-    about="Used on: the Assignments page's seats, Attendance (the door); it opens the vendor's drawer"
+    about="Used on: the Assignments page's seats, Attendance (the door), which gives it the business name; it opens the vendor's drawer"
   >
     <LibraryPanel label="A named vendor">
       <VendorNameButton
@@ -335,6 +337,26 @@ const shrinking = computed(() => applications.slice(0, shrinkingCount.value));
         testid="library-vendor-unnamed"
         @open="opened = second.email"
       />
+    </LibraryPanel>
+    <LibraryPanel label="With a business name">
+      <VendorNameButton
+        :email="first.email"
+        :names="names"
+        :business="first.business"
+        testid="library-vendor-business"
+        @open="opened = vendorHeadline(first.email, names)"
+      />
+    </LibraryPanel>
+    <LibraryPanel label="A long business name: cut where its column ends">
+      <div class="library-column">
+        <VendorNameButton
+          :email="first.email"
+          :names="names"
+          :business="longBusiness"
+          testid="library-vendor-long-business"
+          @open="opened = vendorHeadline(first.email, names)"
+        />
+      </div>
     </LibraryPanel>
     <LibraryPanel label="Pressed">
       <ReadOut label="Opened the drawer of" :value="opened" />
@@ -759,6 +781,12 @@ const shrinking = computed(() => applications.slice(0, shrinkingCount.value));
 /* Narrower than the fixture's longest address, so the address must break. */
 .library-narrow {
   width: 8rem;
+}
+
+/* A column of a row, as wide as a phone leaves a vendor beside the row's button. */
+.library-column {
+  display: flex;
+  width: 14rem;
 }
 
 .library-stack {

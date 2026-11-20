@@ -120,7 +120,7 @@ test.describe('The test markets', () => {
     await login.tierCheckbox(firstDate, 'Gold').check();
     await login.maxDatesInput.fill('1');
     await login.tableChoiceRadio('full').check();
-    await login.fillField('business_name', 'Test Stall');
+    await login.businessNameInput.fill('Test Stall');
     await login.fillField('product_type', 'Test goods');
     await login.submit();
 

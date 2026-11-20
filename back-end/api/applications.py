@@ -191,6 +191,15 @@ def vendor_full_names_for_market(market_id: str) -> Dict[str, str]:
     )
 
 
+def vendor_business_names_for_market(market_id: str) -> Dict[str, str]:
+    """Every applicant's business name, keyed as ``vendor_names_for_market`` is, and only for those
+    who have one (``business_name``): the door shows it under the vendor's name and finds them by it
+    (T502). Read as the organizer reads answers, so an organizer's correction stands over the
+    vendor's answer, and one an organizer removed has no entry."""
+    return _names_by_address(
+        market_id, EssentialFields.business_name, [EssentialFields.BUSINESS_NAME_KEY])
+
+
 #: The questions whose answers identify a vendor rather than describe them: a business name, a
 #: business email, a handle. A choice, a number or a date is shared by many and finds nobody.
 SEARCHED_ANSWER_TYPES = ("text", "email")
@@ -205,8 +214,9 @@ def vendor_search_terms_for_market(
     market_id: str, fields: List[FormField], placed: Iterable[str],
 ) -> Dict[str, List[str]]:
     """What a search on the results finds a vendor by (E35/F02/S01), keyed as
-    ``vendor_names_for_market`` is: the name they chose, the one on their identification, then
-    their short answers to the form's text and email questions, in the form's order.
+    ``vendor_names_for_market`` is: the name they chose, the one on their identification, their
+    business name, then their short answers to the form's text and email questions, in the form's
+    order.
 
     Only the vendors in ``placed`` are read: the ones at a table, whom the search finds tables by,
     and the ones the placement dialog's pickers offer (E38/F08/S03). Blank and long answers are left
@@ -214,7 +224,8 @@ def vendor_search_terms_for_market(
     is the market's own form: which questions are text is its to say.
     """
     asked = [field.key for field in fields if field.type in SEARCHED_ANSWER_TYPES]
-    keys = [EssentialFields.PREFERRED_NAME_KEY, EssentialFields.FULL_NAME_KEY, *asked]
+    keys = [EssentialFields.PREFERRED_NAME_KEY, EssentialFields.FULL_NAME_KEY,
+            EssentialFields.BUSINESS_NAME_KEY, *asked]
     at_a_table = {str(email).strip().lower() for email in placed}
     terms: Dict[str, List[str]] = {}
     for email, answers in _answers_by_address(market_id, keys).items():
@@ -245,10 +256,16 @@ def list_applications_with_answers(
     return list(applications_collection.find(market_filter(market_id), projection))
 
 
-def _names_by_address(market_id: str, name_of) -> Dict[str, str]:
+#: The two answers a vendor's name is read from.
+_NAME_KEYS = (EssentialFields.FULL_NAME_KEY, EssentialFields.PREFERRED_NAME_KEY)
+
+
+def _names_by_address(
+    market_id: str, name_of, keys: Iterable[str] = _NAME_KEYS,
+) -> Dict[str, str]:
     """``{lowercased address: name}`` for the applications that stored one, read off a projection
-    of the two name keys alone."""
-    keys = [EssentialFields.FULL_NAME_KEY, EssentialFields.PREFERRED_NAME_KEY]
+    of ``keys`` alone: the two name keys, unless the name asked for is read from another."""
+    keys = list(keys)
     names = {
         email: name_of(answers) for email, answers in _answers_by_address(market_id, keys).items()
     }

@@ -1096,8 +1096,9 @@ class PublicMapSettings(BaseModel):
 
     Each question is the key of a short text question of the market's own form, or None for not
     shown: the vendor's public name, their website and their Instagram handle are read from those
-    answers alone. A key the form no longer holds as a text question reads as not chosen
-    (``public_map.chosen_question``). Written only by ``public_map.save_settings``.
+    answers alone, and the name question may also be the built-in business name
+    (``essential_business_name``, ADR 0042). A key the setting may no longer name reads as not
+    chosen (``public_map.chosen_question``). Written only by ``public_map.save_settings``.
     """
 
     enabled: bool = False

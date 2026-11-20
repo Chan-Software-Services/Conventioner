@@ -30,6 +30,14 @@ describe('which answers a reviewer reads first', () => {
     );
   });
 
+  it('offers the built-in business name, which every market asks (T502)', () => {
+    const offered = mountControl([]).get(
+      '[data-testid="review-highlight-essential_business_name"]',
+    );
+
+    expect(offered.text()).toContain('Business name');
+  });
+
   it('marks in the order they were clicked, because that order is what the card reads down', async () => {
     const control = mountControl(['instagram']);
 
@@ -69,6 +77,7 @@ describe('which answers a reviewer reads first', () => {
           unasked: [
             'essential_full_name',
             'essential_preferred_name',
+            'essential_business_name',
             'essential_table_share_email',
             'essential_request',
           ],

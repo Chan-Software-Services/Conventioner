@@ -27,6 +27,7 @@ FULL, PREF = EssentialFields.FULL_NAME_KEY, EssentialFields.PREFERRED_NAME_KEY
 DATES, TIERS = EssentialFields.AVAILABLE_DATES_KEY, EssentialFields.TIER_PREFERENCE_KEY
 MAXD, CHOICE = EssentialFields.MAX_DATES_KEY, EssentialFields.TABLE_CHOICE_KEY
 SHARE = EssentialFields.TABLE_SHARE_EMAIL_KEY
+BUSINESS = EssentialFields.BUSINESS_NAME_KEY
 
 
 def c(type_, options=None):
@@ -57,7 +58,7 @@ ANSWER_KEY = {
         6: ("Are you an Example College student", c("select", AFFILIATION)),
         7: ("Please provide your Example College email", c("email")),
         8: ("If you do not have an Example College email", upload()),
-        9: ("Discord username", c("text")), 10: ("Business Name", c("text")),
+        9: ("Discord username", c("text")), 10: ("Business Name", BUSINESS),
         11: ("Link to your shop", c("text")),
         12: ("Have you tabled at a market before", c("text")),
         13: ("What do you plan to sell", c("multi_select", MAKES)),
@@ -75,7 +76,7 @@ ANSWER_KEY = {
     "four-day-grid": {
         0: ("Ck", ORG), 1: ("Timestamp", TS), 2: ("Full Name", FULL), 3: ("Preferred Name", PREF),
         4: ("Email Address", EMAIL), 5: ("Discord Username", c("text")),
-        6: ("Business Name", c("text")), 7: ("Business Instagram", c("text")),
+        6: ("Business Name", BUSINESS), 7: ("Business Instagram", c("text")),
         8: ("Business Twitter", c("text")), 9: ("Business Website", c("text")),
         10: ("Other Business Socials", c("text")),
         11: ("Tell us about any markets", c("text")),
@@ -98,7 +99,7 @@ ANSWER_KEY = {
         5: ("Are you an Example College student or alum?", c("select", AFFILIATION)),
         6: ("Please provide your Example College email", c("email")),
         7: ("If you do not have an Example College email", upload()),
-        8: ("Discord Username", c("text")), 9: ("Business Name", c("text")),
+        8: ("Discord Username", c("text")), 9: ("Business Name", BUSINESS),
         10: ("Where can we find your business online", c("text")),
         11: ("Have you had a table at a market", c("text")),
         12: ("What are you planning to sell", c("multi_select", MAKES)),
@@ -132,7 +133,7 @@ ANSWER_KEY = {
         6: ("Are you an Example College student, alum", c("select", AFFILIATION + [DECLINED])),
         7: ("Please give your Example College email", c("email")),
         8: ("If you have no Example College email", upload()),
-        9: ("Discord username", c("text")), 10: ("Business Name", c("text")),
+        9: ("Discord username", c("text")), 10: ("Business Name", BUSINESS),
         11: ("Link to your business", c("text")),
         12: ("Have you sold your work at a market", c("text")),
         13: ("What will you be selling at the fair", c("multi_select", MAKES)),
@@ -370,12 +371,12 @@ class TestWhatAColumnCarries:
 
     def test_the_organizers_questions_take_their_keys_first(self):
         # A column the team keeps before the form's first one, headed like a question.
-        headers = ["Business name", "Timestamp", "Email Address", "Business name"]
+        headers = ["Stall sign", "Timestamp", "Email Address", "Stall sign"]
         rows = [[f"x{i}", f"1/{i + 1}/2026 9:00:00", f"p{i}@mail.test", f"shop {i}"]
                 for i in range(5)]
         columns = CsvProposal.proposal(headers, rows)["columns"]
         assert columns[0]["fate"] == "left_out"
-        assert columns[3]["fate"] == "custom" and columns[3]["field"]["key"] == "business_name"
+        assert columns[3]["fate"] == "custom" and columns[3]["field"]["key"] == "stall_sign"
 
     def test_a_header_with_a_line_break_splits_into_label_and_help_text(self):
         headers = ["Timestamp", "Email Address", "Business name\nAs it should appear on your sign"]
@@ -454,6 +455,66 @@ class TestWhatAColumnCarries:
         why = {e["key"]: e["why"] for e in CsvProposal.proposal(headers, rows)["notAsked"]}
         assert "up to your ceiling" in why["essential_max_dates"]
         assert "Online applicants are still asked" in why["essential_max_dates"]
+
+    @pytest.mark.parametrize("header", [
+        "Business name", "Business Name", "What is your business name?",
+        "Business name\nAs it should appear on your sign",
+    ])
+    def test_a_column_headed_business_name_is_the_built_in_one(self, header):
+        """Read off its heading, as the day-count question is (T502): the form asks a business
+        name of its own, so the column needs no question of the organizer's."""
+        headers = ["Timestamp", "Email Address", header]
+        rows = [["1/1/2026 9:00:00", f"p{i}@mail.test", f"shop {i}"] for i in range(5)]
+        proposal = CsvProposal.proposal(headers, rows)
+        column = proposal["columns"][2]
+        assert (column["fate"], column["essential"], column["why"]) == (
+            "essential", BUSINESS, "Its heading asks for a business name")
+        assert BUSINESS not in [entry["key"] for entry in proposal["notAsked"]]
+
+    def test_two_word_business_names_before_the_legal_name_are_not_read_as_the_full_name(self):
+        headers = ["Timestamp", "Email Address", "Business name", "Full Legal Name"]
+        shops = ["Paper Pine", "Ember Ash", "Thistle Thread", "Marrow Moss", "Tin Tallow"]
+        people = ["Ana Rivera", "Ben Okafor", "Cy Tan", "Dee Park", "Eve Moss"]
+        rows = [["1/1/2026 9:00:00", f"p{i}@mail.test", shops[i], people[i]] for i in range(5)]
+        columns = CsvProposal.proposal(headers, rows)["columns"]
+        assert [column["essential"] for column in columns[2:]] == [BUSINESS, FULL]
+
+    def test_only_the_first_column_headed_so_is_the_built_in_one(self):
+        headers = ["Timestamp", "Email Address", "Business name", "Business name (if changed)"]
+        rows = [["1/1/2026 9:00:00", f"p{i}@mail.test", f"shop {i}", f"other shop {i}"]
+                for i in range(5)]
+        columns = CsvProposal.proposal(headers, rows)["columns"]
+        assert columns[2]["essential"] == BUSINESS
+        assert (columns[3]["fate"], columns[3]["essential"]) == ("custom", None)
+
+    @pytest.mark.parametrize("header", ["Business Instagram", "Name of your business"])
+    def test_another_question_about_the_business_stays_the_organizers(self, header):
+        headers = ["Timestamp", "Email Address", header]
+        rows = [["1/1/2026 9:00:00", f"p{i}@mail.test", f"shop {i}"] for i in range(5)]
+        assert CsvProposal.proposal(headers, rows)["columns"][2]["fate"] == "custom"
+
+    @pytest.mark.parametrize("header", ["Is your business name registered?",
+                                        "Do you want your business name on the map?"])
+    def test_a_choice_asked_about_the_business_name_stays_the_organizers(self, header):
+        headers = ["Timestamp", "Email Address", header]
+        rows = [["1/1/2026 9:00:00", f"p{i}@mail.test", "Yes" if i % 3 else "No"]
+                for i in range(9)]
+        column = CsvProposal.proposal(headers, rows)["columns"][2]
+        assert (column["fate"], column["essential"]) == ("custom", None)
+
+    def test_a_business_name_most_answered_none_is_still_the_business_name(self):
+        headers = ["Timestamp", "Email Address", "Business name"]
+        given = ["Paper & Pine", "Juniper Thread Co.", "Shop 3", "Shop 4"]
+        rows = [["1/1/2026 9:00:00", f"p{i}@mail.test", given[i] if i < 4 else "N/A"]
+                for i in range(9)]
+        column = CsvProposal.proposal(headers, rows)["columns"][2]
+        assert (column["fate"], column["essential"]) == ("essential", BUSINESS)
+
+    def test_a_file_with_no_such_column_says_no_column_answers_it(self):
+        proposal = CsvProposal.proposal(["Timestamp", "Email Address"],
+                                        [["1/1/2026 9:00:00", "p@mail.test"]])
+        assert {"key": BUSINESS, "label": "Business name",
+                "why": "No column in your file answers it"} in proposal["notAsked"]
 
     def test_a_how_many_days_question_answered_with_numbers_is_the_limit(self):
         headers = ["Email Address", "How many days would you like to table?"]

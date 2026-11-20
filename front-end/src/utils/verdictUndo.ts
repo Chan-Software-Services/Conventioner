@@ -24,8 +24,8 @@ import { useMarketStore } from '@/stores/market';
 
 /**
  * The applicant as the review names them: the name their answers give, then their address; the
- * address alone when they gave no name. The app keeps no business name of its own: a business is
- * whatever question a market's form asks, so it is not part of the name.
+ * address alone when they gave no name. The business name the form asks (`businessName`) is not
+ * part of it: a verdict is given on a person, and the line names who it was given on.
  */
 export function nameAndEmail(app: Pick<Application, 'formData' | 'applicantEmail'>): string {
   const name = applicantName(app.formData as Record<string, unknown> | undefined);
