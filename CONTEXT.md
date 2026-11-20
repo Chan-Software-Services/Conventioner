@@ -288,7 +288,7 @@ _Avoid_: Guest list, attendance list (that was only who came)
 
 **Roster state**:
 Where one vendor stands at the door on one date: **expected** (a seat and no check-in), **here** (a check-in made at the seat they hold), **here at another table** (a check-in made at a table they no longer hold, after a move or a swap), or **here with no table** (a check-in and no seat that day, after a free).
-_Avoid_: a row that reads "Checked in" with no "at table <code>" on the line after the chip for here at another table, which hides where they went
+_Avoid_: a row that reads "Checked in <time>" for here at another table with no "at table <code>" on the line after the chip, which hides where they went
 
 **Day map**:
 The drawing of a location's **layout** on one **market date**, each table drawn by who holds it that day.
