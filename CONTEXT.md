@@ -91,7 +91,7 @@ _Avoid_: Source, intake (the market's way of taking vendors, not one application
 See [the application document](docs/implementation/data/application-document.md#the-states-and-how-they-are-stored).
 
 **Essential question**:
-A question the product owns, that every application form asks. Purpose-built and non-removable. Most are read directly by the assignment solver, which is why they cannot be deleted - it would then have nothing to read. The vendor's name is the exception: it is essential because identity is, not because the solver needs it. Distinct from the custom fields an organizer adds freely.
+A question the product owns, that every application form asks. Purpose-built and non-removable. Most are read directly by the assignment solver, which is why they cannot be deleted - it would then have nothing to read. The vendor's names, their business name and their request are the exceptions, which the solver does not read: the name is essential because identity is, not because the solver needs it. Distinct from the custom fields an organizer adds freely.
 _Avoid_: Required field (custom fields can be required too)
 See [Essential question](docs/business/concepts/essential-question.md).
 
@@ -103,6 +103,11 @@ The set of choices an essential question presents, derived from the market's own
 
 **Preferred name**:
 The name a vendor chooses to be called. Asked of every vendor beside their full name and never required; where given, it is the name every screen leads with.
+
+**Business name**:
+The name a vendor trades under, asked of every applicant by a built-in optional question and shown under their name at the door; never the name a vendor is called by.
+_Avoid_: Trading name, stall name, shop name (a market's own question may be worded so; the built-in one is the business name)
+See [ADR 0042](docs/adr/0042-every-form-asks-a-built-in-business-name.md).
 
 **Required answer**:
 An answer the applicant cannot submit the form without. A property of the question, enforced at the applicant's keyboard. Says nothing about whether anyone reads it afterwards.

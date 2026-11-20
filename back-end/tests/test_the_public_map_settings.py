@@ -19,6 +19,7 @@ import api.markets as MarketsApi  # noqa: E402
 import history as History  # noqa: E402
 import market_write as MarketWrite  # noqa: E402
 from datatypes import MarketPhase, MarketRole  # noqa: E402
+from essential_fields import BUSINESS_NAME_KEY  # noqa: E402
 from test_discord_connection import ADMIN, MARKET, client, world  # noqa: E402,F401 - fixtures
 
 CHANGED = {"error": MarketWrite.MARKET_CHANGED, "code": "market_changed"}
@@ -31,6 +32,8 @@ FORM = {"applicationForm": {"fields": [NAME, WEBSITE, INSTAGRAM, DAYS, STORY]}}
 OFF = {"enabled": False, "nameQuestion": None, "websiteQuestion": None, "instagramQuestion": None}
 ON = {"enabled": True, "nameQuestion": "business_name", "websiteQuestion": "website",
       "instagramQuestion": "instagram"}
+#: A form that asks no short text question of its own.
+NO_TEXT_FORM = {"applicationForm": {"fields": [DAYS, STORY]}}
 
 
 def _save(client, body):
@@ -94,6 +97,62 @@ class TestTheWrite:
         _save(client, ON)
 
         assert client.get(f"/markets/{MARKET}").get_json()["market"]["publicMap"] == ON
+
+
+class TestTheBuiltInBusinessName:
+    """The public name may be the built-in business name every form asks (T502, ADR 0042)."""
+
+    def test_it_is_the_public_name_on_a_form_with_no_short_text_question(self, client, world):
+        world.market(MarketPhase.MARKET_DAYS, **NO_TEXT_FORM)
+
+        response = _save(client, {"enabled": True, "nameQuestion": BUSINESS_NAME_KEY})
+
+        assert response.status_code == 200, response.get_json()
+        assert world.markets.doc["publicMap"] == {
+            **OFF, "enabled": True, "nameQuestion": "essential_business_name"}
+
+    def test_a_map_already_naming_it_is_turned_on(self, client, world):
+        world.market(MarketPhase.MARKET_DAYS,
+                     publicMap={**OFF, "nameQuestion": BUSINESS_NAME_KEY}, **NO_TEXT_FORM)
+
+        assert _save(client, {"enabled": True}).status_code == 200
+        assert world.markets.doc["publicMap"]["enabled"] is True
+
+    @pytest.mark.parametrize("field", ["websiteQuestion", "instagramQuestion"])
+    def test_it_is_no_website_and_no_instagram_question(self, client, world, field):
+        world.market(MarketPhase.MARKET_DAYS, **FORM)
+
+        response = _save(client, {field: BUSINESS_NAME_KEY})
+
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "Choose one of the form's short text questions."
+        assert "publicMap" not in world.markets.doc
+
+    def test_the_history_names_the_choice_business_name(self, client, world):
+        world.market(MarketPhase.MARKET_DAYS, **NO_TEXT_FORM)
+
+        _save(client, {"nameQuestion": BUSINESS_NAME_KEY})
+
+        [entry] = _entries(world)
+        assert entry["detail"] == {
+            "before": {"name_question": None, "name_question_label": None},
+            "after": {"name_question": "essential_business_name",
+                      "name_question_label": "Business name"},
+        }
+
+    def test_changing_from_it_to_a_form_question_records_both_labels(self, client, world):
+        shop = {"key": "shop", "label": "Shop name", "type": "text"}
+        world.market(MarketPhase.MARKET_DAYS, applicationForm={"fields": [shop]},
+                     publicMap={**OFF, "nameQuestion": BUSINESS_NAME_KEY})
+
+        _save(client, {"nameQuestion": "shop"})
+
+        [entry] = _entries(world)
+        assert entry["detail"] == {
+            "before": {"name_question": "essential_business_name",
+                       "name_question_label": "Business name"},
+            "after": {"name_question": "shop", "name_question_label": "Shop name"},
+        }
 
 
 class TestItsRefusals:

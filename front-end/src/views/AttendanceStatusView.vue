@@ -99,6 +99,9 @@ interface RosterRow {
   vendorName: string;
   /** The name on their identification, which both searches find as well (T466). */
   vendorFullName?: string;
+  /** The name they trade under, shown under their name and found by both searches; a vendor with
+   *  none, and a row an older server served, has none (T502). */
+  vendorBusinessName?: string;
   /** The seat held that day; null on a `here_without_seat` row. */
   tableCode: string | null;
   tableChoice: string | null;
@@ -288,6 +291,15 @@ const fullNames = computed<VendorNames>(() => {
   for (const row of roster.value) if (row.vendorFullName) out[row.vendorEmail] = row.vendorFullName;
   return out;
 });
+/** Each vendor's business name, for those who have one: under their name, and found by a search. */
+const businessNames = computed<VendorNames>(() => {
+  const out: Record<string, string> = {};
+  for (const row of roster.value) {
+    const business = (row.vendorBusinessName ?? '').trim();
+    if (business) out[row.vendorEmail] = business;
+  }
+  return out;
+});
 
 /** Whoever the table lets check vendors in may, while the market is running; the server is the
  *  authority. */
@@ -344,7 +356,7 @@ const shownToday = computed(() => {
     if (show.value !== 'all' && showsUnder(row) !== show.value) return false;
     if (!term) return true;
     if ((row.tableCode ?? '').toLowerCase().includes(term)) return true;
-    return vendorMatches(term, row.vendorEmail, names.value, fullNames.value);
+    return vendorMatches(term, row.vendorEmail, names.value, fullNames.value, businessNames.value);
   });
 });
 const shown = computed(() => shownToday.value.filter(hasSeat));
@@ -374,6 +386,7 @@ function printedRow(row: RosterRow): PrintedRow {
     key: rowKey(row),
     email: row.vendorEmail,
     name: row.vendorName,
+    business: businessNames.value[row.vendorEmail],
     table: whereTheySit(row),
     here: row.checkedInAt ? status(row) : null,
   };
@@ -387,7 +400,8 @@ const printedUnseated = computed(() =>
 
 /**
  * The map's search (T466, release walk F3): every vendor of the chosen date, one row each, named as
- * their row is and saying where they sit, so two like names are told apart.
+ * their row is and saying where they sit, so two like names are told apart; their business name
+ * before it, so a vendor found by it says why (T502).
  */
 const mapSearchGroups = computed<PickerGroup[]>(() => [
   {
@@ -395,22 +409,22 @@ const mapSearchGroups = computed<PickerGroup[]>(() => [
       value: row.vendorEmail,
       label: row.vendorName || row.vendorEmail,
       address: !row.vendorName,
-      detail: whereTheySit(row),
+      detail: [businessNames.value[row.vendorEmail], whereTheySit(row)].filter(Boolean).join(', '),
     })),
   },
 ]);
 const dayRowByEmail = computed(() => new Map(dayRows.value.map((row) => [row.vendorEmail, row])));
 
 /**
- * The list search's own terms: the table, the name they go by, the one on their identification and
- * their address.
+ * The list search's own terms: the table, the name they go by, the one on their identification,
+ * their business name and their address.
  */
 function findsOnMap(option: PickerOption, words: string): boolean {
   const term = words.toLowerCase();
   const tableCode = dayRowByEmail.value.get(option.value)?.tableCode ?? '';
   return (
     tableCode.toLowerCase().includes(term) ||
-    vendorMatches(term, option.value, names.value, fullNames.value)
+    vendorMatches(term, option.value, names.value, fullNames.value, businessNames.value)
   );
 }
 
@@ -835,6 +849,7 @@ const drawer = useVendorDrawer();
                     <VendorNameButton
                       :email="row.vendorEmail"
                       :names="names"
+                      :business="businessNames[row.vendorEmail]"
                       testid="attendance-vendor"
                       @open="drawer.open(row.vendorEmail)"
                     />

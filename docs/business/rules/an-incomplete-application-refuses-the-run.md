@@ -24,7 +24,7 @@ It refuses the run and nothing else: Assignments, its summary and grid, a vendor
 **Requiredness is defined by what the market asked**, not by a fixed list.
 A question the plan offers nothing for is not asked: no dates, no date questions; no tiers, no tier question; fewer than two sections or table types, no ranking; a ranking the organizer switched off, not asked either.
 In every market the table-type ranking is unasked, since table type is stubbed to one type, so an empty ranking there is a complete answer; a fixed list would reject every application in the product.
-Of the questions asked, every one is required except the preferred name, the table-share partner and the vendor's request; and an import may leave the number of dates unanswered ([what an import may leave unasked](what-an-import-may-leave-unasked.md)).
+Of the questions asked, every one is required except the preferred name, the business name, the table-share partner and the vendor's request; and an import may leave the number of dates unanswered ([what an import may leave unasked](what-an-import-may-leave-unasked.md)).
 
 **An answer the market no longer offers is not missing.**
 A tier or a date the market's offering no longer holds is dropped from the answer, so the vendor may be unplaceable and reported unassigned; the applicant did nothing wrong, and stopping the market over the organizer's own change would be out of proportion.

@@ -2,7 +2,8 @@
  * The Public map card on the Tools tab (T422, D25, D26, D30).
  *
  * An Admin chooses which of the form's short text questions hold each vendor's public name, website
- * and Instagram handle, and turns the map on; each change saves at once and the market is read
+ * and Instagram handle, and turns the map on; the public name may also be the built-in business
+ * name every form asks (T502, ADR 0042), offered first. Each change saves at once and the market is read
  * again. The card says what the map shows and never shows, what is still missing before it opens,
  * and once on its address to copy and open. Anyone the "Publish the map" row refuses reads the card
  * with every control disabled, and why.
@@ -139,9 +140,11 @@ describe('what the card says', () => {
     ]) {
       const element = select(wrapper, which);
       expect(wrapper.find(`label[for="${element.id}"]`).text()).toBe(label);
-      // "Not shown" first, then the form's short text questions alone, in the form's order.
+      // "Not shown" first, the built-in business name next for the name alone, then the form's
+      // short text questions alone, in the form's order.
       expect([...element.options].map((option) => option.text.trim())).toEqual([
         'Not shown',
+        ...(which === 'name' ? ['Business name (built in)'] : []),
         'Shop name',
         'Your website',
         'Instagram handle',
@@ -149,7 +152,7 @@ describe('what the card says', () => {
       expect(element.value).toBe('');
     }
     expect(find(wrapper, 'public-map-name-help').text()).toBe(
-      'The question that holds each vendor’s business or artist name.',
+      'The built-in business name, or a form question that holds it.',
     );
     expect(select(wrapper, 'name').getAttribute('aria-describedby')).toContain(
       find(wrapper, 'public-map-name-help').attributes('id'),
@@ -397,15 +400,84 @@ describe('what is still missing', () => {
   });
 });
 
+describe('the built-in business name', () => {
+  it('is saved as the public name by its key', async () => {
+    wrapper = card(market());
+    await choose(wrapper, 'name', 'essential_business_name');
+
+    expect(api.put).toHaveBeenCalledWith('/markets/market-123/public-map', {
+      nameQuestion: 'essential_business_name',
+    });
+    expect(wrapper.emitted('changed')).toHaveLength(1);
+  });
+
+  it('shows as chosen once stored, and lets the map be turned on', async () => {
+    wrapper = card(market({ publicMap: { ...OFF, nameQuestion: 'essential_business_name' } }));
+
+    expect(select(wrapper, 'name').value).toBe('essential_business_name');
+    expect(theSwitch(wrapper).disabled).toBe(false);
+    expect(find(wrapper, 'public-map-switch-reason').exists()).toBe(false);
+
+    await flip(wrapper);
+    expect(api.put).toHaveBeenCalledWith('/markets/market-123/public-map', { enabled: true });
+  });
+
+  it.each(['website', 'instagram'])('is never the %s, even if stored there', (which) => {
+    wrapper = card(
+      market({
+        publicMap: {
+          ...OFF,
+          websiteQuestion: 'essential_business_name',
+          instagramQuestion: 'essential_business_name',
+        },
+      }),
+    );
+
+    expect(select(wrapper, which).value).toBe('');
+  });
+});
+
 describe('a form with no short text question', () => {
-  it('offers only "Not shown", and says what to add', () => {
-    wrapper = card(market({ applicationForm: { fields: [FIELDS[3]] } }));
+  const NO_TEXT = { applicationForm: { fields: [FIELDS[3]] } };
+
+  it('still offers the built-in business name as the public name', () => {
+    wrapper = card(market(NO_TEXT));
 
     expect([...select(wrapper, 'name').options].map((option) => option.text.trim())).toEqual([
       'Not shown',
+      'Business name (built in)',
     ]);
+    for (const which of ['website', 'instagram']) {
+      expect([...select(wrapper, which).options].map((option) => option.text.trim())).toEqual([
+        'Not shown',
+      ]);
+    }
+  });
+
+  it('says what to add for a website or an Instagram handle, never for the name', () => {
+    wrapper = card(market(NO_TEXT));
+
     expect(find(wrapper, 'public-map-no-questions').text()).toBe(
-      'The form asks no short text question yet. Add one that asks for each vendor’s business name.',
+      'The form asks no short text question yet. Add one to show each vendor’s website or ' +
+        'Instagram handle.',
     );
+  });
+
+  it('has the name chosen and the map turned on all the same', async () => {
+    wrapper = card(market(NO_TEXT));
+    await choose(wrapper, 'name', 'essential_business_name');
+    expect(api.put).toHaveBeenLastCalledWith('/markets/market-123/public-map', {
+      nameQuestion: 'essential_business_name',
+    });
+
+    await wrapper.setProps({
+      market: market({
+        ...NO_TEXT,
+        publicMap: { ...OFF, nameQuestion: 'essential_business_name' },
+      }),
+    });
+    expect(theSwitch(wrapper).disabled).toBe(false);
+    await flip(wrapper);
+    expect(api.put).toHaveBeenLastCalledWith('/markets/market-123/public-map', { enabled: true });
   });
 });

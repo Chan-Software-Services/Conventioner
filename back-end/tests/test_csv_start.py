@@ -449,10 +449,13 @@ def test_what_they_sell_keeps_every_answer_of_both_readings(name):
 
 # The one export of the five with neither column does not ask who they are in a column of its own.
 @pytest.mark.parametrize("name", [name for name in YEARS if name != "days-as-one-question"])
-@pytest.mark.parametrize("key", ["discord_username", "business_name"])
-def test_a_column_of_who_they_are_keeps_no_answers(name, key):
-    """Whole columns of Discord usernames and shop names stay off the market (ADR 0018)."""
-    assert "answers" not in _kept_of(name)[key]
+def test_a_column_of_who_they_are_keeps_no_answers(name):
+    """Whole columns of Discord usernames and shop names stay off the market (ADR 0018). The
+    "Business Name" column is the built-in business name's (T502), an essential question's, so the
+    start keeps nothing of it at all: not its answers, and no question of the organizer's own."""
+    kept = _kept_of(name)
+    assert "answers" not in kept["discord_username"]
+    assert "business_name" not in kept
 
 
 # Each export's free-text columns, by how their labels start: from 75% different up, on all five.

@@ -122,8 +122,11 @@ def test_the_export_offers_the_products_columns_in_its_groups():
     columns = export["columns"]
     assert len(columns) == 43
     assert collections.Counter(c["group"] for c in columns) == {
-        "vendor": 4, "answers": 15, "assignment": 17, "payment": 4, "discord": 3}
-    assert [c["id"] for c in columns[:4]] == ["name", "preferredName", "email", "status"]
+        "vendor": 5, "answers": 14, "assignment": 17, "payment": 4, "discord": 3}
+    # The file's "Business Name" column is the built-in business name's (T502), a vendor column,
+    # where it was a question of the market's own among the answers.
+    assert [c["id"] for c in columns[:5]] == [
+        "name", "preferredName", "businessName", "email", "status"]
 
 
 def test_the_export_filters_by_the_markets_choice_questions_every_answer_kept():

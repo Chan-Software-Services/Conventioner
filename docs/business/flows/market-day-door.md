@@ -127,7 +127,9 @@ Covered by:
    A filter or a search that leaves nobody says "Nobody matches.".
    At a desk, 1,024px wide and more, the two rows are pinned under the market's frame from the start, so they never move while the list or the map scrolls under them; on a phone they scroll away with the page, each control a 44px target.
 3. "Find a vendor" ("Name, email or table") narrows the list, by the name a vendor goes by or the full name on their identification, their address or their table.
+   It finds a vendor by a part of their business name too, in any case (T502).
 4. Each vendor placed that day, by table: their name, a link at rest (link ink, underlined, a 44px target on a phone), which opens the [vendor drawer](vendor-drawer.md) and never checks them in; how and when they checked in ("Scanned in at 9:41 AM" for their own, with the door code, "Checked in 9:41 AM" for an organizer's, then "by you" or "by" the organizer's address), or "Not checked in", before, on and after the day alike (T501); and their notes under the row when they have some.
+   A vendor who gave a business name on their application has it under their name and over their address, smaller and muted, on one line cut with "…" where the row has no more room, its whole text shown on hover; it never reads as the link, since only the name line is underlined in link ink, and it is never the name they are called by, and a vendor who gave none has no such line (T502).
    A vendor checked in and then moved or swapped reads "Checked in 9:41 AM" in an attention chip, then where they checked in after who made it, "by you, at table North Wing 2", so they are sent to their new table.
    Under the day's seats, "Checked in, with no table on this date (<n>)" lists each vendor checked in and then freed, their table "No table", so a free never hides an arrival; they count toward no day's tally.
    A vendor checked out keeps that status and gains a second chip after it, "Checked out 4:05 PM", then "by you" or "by" the organizer's address, or "Scanned out at 4:05 PM" for their own ([K10](#k10-check-a-vendor-out)).
@@ -146,6 +148,7 @@ Covered by:
    Taps on several rows' Check in go through at once, each row showing its check-in as soon as the server answers.
    Moved to another market, the page reads "Loading…" until that market's roster arrives, never the last market's, and a check-in tapped on the last market posts there and says nothing on this one, even when it was refused.
 8. "Print roster", in the toolbar for anyone who reads Attendance, prints the chosen date's roster on paper, the door's fallback when the venue's network or the app fails: the market's name, the date in words, "<N> vendors", "Printed <date> at <time>", then every vendor of the date by table, their name with their address under it, and under "Checked in" when they came or an empty box to tick, whatever "Show" and "Find a vendor" leave on screen; vendors checked in with no table that day print under their own heading.
+   A vendor's business name prints under their name, whole (T502).
    The phase guide's "Print each day's roster, then check vendors in at the door." asks for it; the page has no note of its own (T466).
 9. "List" and "Map", first of the toolbar's end, show the day as its rows or as a map of the venue's layouts (T422); the map is kept across a change of day and a reload.
    With two locations or more laid out, the map's location is a select beside the day, offering exactly the locations the map can draw, and kept in the address, so a reload or a shared link opens the same hall; with one, there is no select.
@@ -159,6 +162,7 @@ Covered by:
    A shared table is two halves, each its own vendor's.
    A press on a vendor's table opens their drawer, as their name on the list does, and Back closes it on the map; a press on a table with nobody says "Table Aisle A 4: no vendor on Nov 17, 2026." under the map.
    On the map, "Find a vendor" is a search with a dropdown of the day's vendors, found by the name they go by, the full name on their identification, address or table, each row saying where they sit; picking one opens their drawer and outlines their table, switching the map to their location when it is the other one, and closing the drawer clears the outline; typing alone outlines nothing (T466).
+   It finds a vendor by their business name too, and such a vendor's row says it before where they sit ("Paper & Pine, Table A 1, a whole table"); the map's tables still name the person (T502).
    The map changes as the roster reads itself again, and the dropdown keeps its words and stays open through a re-read.
    Under the map, "<n> checked in with no table" and "<n> vendors are at tables not on a layout." count the vendors it cannot draw, each with "Show in the list", which opens the list showing all; with no location laid out it says "No location has a layout yet." alone, with "Open the layout" for whoever may change the setup.
    Check in, Check out and Undo? stay on the list: the map and the drawer check nobody in or out, so a Viewer reads the map as an Editor does.
@@ -175,6 +179,7 @@ Covered by:
 - `the-door-keeps-its-own-day.spec.ts`
 - `the-door-map-draws-its-floorplan-in-step.spec.ts`
 - `the-door-map-keeps-the-floorplan-choices.spec.ts`
+- `the-door-names-a-vendors-business.spec.ts`
 - `the-door-on-market-day.spec.ts`
 - `the-door-stays-fresh.spec.ts`
 - `the-door-tools-hold-still.spec.ts`

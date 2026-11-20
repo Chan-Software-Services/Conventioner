@@ -307,6 +307,10 @@ test.describe('Essential form fields', () => {
     // organizer deciding about a PERSON sees both (E19/F02/S01).
     await apply.preferredNameInput.fill('Jan');
 
+    // The name they trade under, the form's own built-in question (T502), asked right after it.
+    await expect(apply.businessNameInput).toHaveAttribute('autocomplete', 'organization');
+    await apply.businessNameInput.fill('  Paper & Pine ');
+
     await page.screenshot({
       path: testInfo.outputPath('04-applicant-essential-fields.png'),
       fullPage: true,
@@ -333,6 +337,9 @@ test.describe('Essential form fields', () => {
     await expect(answers.getByTestId('vendor-page-answer-essential_preferred_name')).toContainText(
       'Jan',
     );
+    await expect(
+      answers.getByTestId('vendor-page-answer-essential_business_name').locator('dd'),
+    ).toHaveText('Paper & Pine');
     // Read back whole: a formatted date carries two commas of its own, so the entries are
     // separated by a middot and each prints its year once (E14/F01/S01).
     await expect(
@@ -372,6 +379,8 @@ test.describe('Essential form fields', () => {
       essential_full_name: 'Jan van der Berg',
       // Stored beside the full name, never instead of it: the card shows both, labelled.
       essential_preferred_name: 'Jan',
+      // Stored stripped, and only because one was given: a vendor who gives none stores no key.
+      essential_business_name: 'Paper & Pine',
       essential_available_dates: ['2099-08-01', '2099-08-08'],
       essential_max_dates: 2,
       // Only Gold was ticked: an accepted SET, so Silver's absence is the answer, not an omission.
@@ -429,6 +438,12 @@ test.describe('Essential form fields', () => {
       },
     );
     expect(saveRes.status()).toBe(200);
+    // This vendor gave no business name, so their answers hold no such key (T502): an empty one
+    // stored on every save would make each application written before the question read as
+    // changed. The preferred name beside it is stored empty, which shows the answers are here.
+    const saved = JSON.stringify(await saveRes.json());
+    expect(saved).toContain('"essential_preferred_name":""');
+    expect(saved).not.toContain('essential_business_name');
 
     // The organizer now wants a fourth date - the plan accepts it...
     const marketRes = await request.get(`${BACKEND_URL}/markets/${market.marketId}`);

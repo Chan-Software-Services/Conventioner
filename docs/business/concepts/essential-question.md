@@ -6,7 +6,7 @@ verified: 2026-10-22
 
 # Essential question
 
-**Essential question** is defined in [the glossary](../../../CONTEXT.md#applying), under Applying, beside Full name, Offering, Required answer and Solver-relevant answer; this node gathers what the graph says about it.
+**Essential question** is defined in [the glossary](../../../CONTEXT.md#applying), under Applying, beside Full name, Preferred name, Business name, Offering, Required answer and Solver-relevant answer; this node gathers what the graph says about it.
 
 ## Rules
 
@@ -27,6 +27,7 @@ verified: 2026-10-22
 
 - [Essential fields](../../implementation/modules/essential-fields.md): asked, required, the offering and its freeze, the reserved prefix.
 - [ADR 0001: Essential fields are exactly what the solver reads](../../adr/0001-essential-fields-are-the-solver-contract.md).
+- [ADR 0042: Every form asks a built-in business name](../../adr/0042-every-form-asks-a-built-in-business-name.md): the one essential answer stored only when given.
 - [The market document](../../implementation/data/market-document.md#the-fields-that-matter): the frozen `essentialOptions` and `unaskedEssentials` on the form.
 - [The application document](../../implementation/data/application-document.md): the answers under their reserved `essential_*` keys.
 - [The CSV proposal and start](../../implementation/modules/csv-proposal-and-start.md): a column proposed as an essential question.

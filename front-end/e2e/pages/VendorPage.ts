@@ -357,6 +357,15 @@ export class VendorPage {
   }
 
   /**
+   * The name the vendor trades under, asked of every form right after the preferred name (T502).
+   *
+   * Optional: left blank, the application stores no business name at all.
+   */
+  get businessNameInput(): Locator {
+    return this.page.getByTestId('apply-essential-business-name-input');
+  }
+
+  /**
    * The row for one offered market date.
    *
    * Availability is no longer its own question (E19/F01/S02): an organizer's own form has always

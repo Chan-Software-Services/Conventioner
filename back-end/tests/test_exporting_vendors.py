@@ -201,6 +201,27 @@ class TestTheFile:
 
         assert _rows(content)[0] == ["Name", "Preferred name", "Email", "Status", "Business name"]
 
+    def test_the_built_in_business_name_is_a_column_to_choose(self, market, applications):
+        """Not among the default columns, and read as the organizer reads it (T502): given, none,
+        and an organizer's update standing over what the vendor wrote."""
+        market()
+        ana, ben = applications.documents[0], applications.documents[1]
+        ana["form_data"][EF.BUSINESS_NAME_KEY] = "Paper & Pine"
+        ben["form_data"][EF.BUSINESS_NAME_KEY] = "Ben's Buns"
+        ben["answer_updates"] = {EF.BUSINESS_NAME_KEY: {
+            "value": "Ben's Bakes", "by": ADDED_BY, "at": "2099-08-01T09:00:00Z",
+            "over": "Ben's Buns"}}
+
+        content, _filename = _file(columns=["email", "businessName"])
+
+        assert _rows(content)[:4] == [
+            ["Email", "Business name"],
+            ["ana@example.com", "Paper & Pine"],
+            ["ben@example.com", "Ben's Bakes"],
+            ["cy@example.com", ""],
+        ]
+        assert "businessName" not in _preview()["offered"]["defaultColumns"]
+
     def test_columns_come_in_the_order_chosen(self, market):
         market()
 
@@ -554,6 +575,7 @@ class TestThePreview:
         assert offered["columns"] == [
             {"id": "name", "label": "Name", "group": "vendor"},
             {"id": "preferredName", "label": "Preferred name", "group": "vendor"},
+            {"id": "businessName", "label": "Business name", "group": "vendor"},
             {"id": "email", "label": "Email", "group": "vendor"},
             {"id": "status", "label": "Status", "group": "vendor"},
             {"id": "answer:business_name", "label": "Business name", "group": "answers"},
