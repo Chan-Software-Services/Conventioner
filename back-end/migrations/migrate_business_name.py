@@ -15,31 +15,33 @@ answer and no address, and says so in its last line.
 
 **A run writes in three steps, in this order, each safe to repeat:**
 
-1. **Copy, per application**: where its own answer under the question gives a business name and
-   it holds none under the built-in key, ``form_data.essential_business_name`` is set to it,
-   stripped; where it holds an organizer's update of the question and none of the built-in, that
-   update is set as ``answer_updates.essential_business_name``, its ``by`` and ``at`` as they
-   were, its ``value`` and ``over`` as the built-in stores them (stripped, an empty or none-word
-   value ``""``, an ``over`` that gives no business name ``None``), so "their answer changed
-   since" reads as it read before. An answer that is blank, or exactly one of
-   ``essential_fields.NONE_WORDS`` ("N/A", "none" and the rest, in any capitals: Daniel's Q7), is
-   no business name and is not copied; "N/A Studios" is. An application already holding a
-   different built-in business name keeps it, and its update of the question is not copied; the
-   run prints these applications' ids and counts them. Each write is held to the answers it read,
-   so a vendor's save landing first is left for a second run.
+1. **Copy, per application**: where its own answer under the question gives a business name and it
+   holds none under the built-in key, ``form_data.essential_business_name`` is set to it, stripped;
+   where it holds an organizer's update of the question and none of the built-in, that update is set
+   as ``answer_updates.essential_business_name``, its ``by`` and ``at`` as they were, its ``value``
+   and ``over`` as the built-in stores them (stripped, an empty or none-word value ``""``, an
+   ``over`` that gives no business name ``None``), so "their answer changed since" reads as it read
+   before. An update whose value is the business name the vendor's own answer gives is not copied,
+   as Update info would not store it, and step 3 removes it. An answer that is blank, or exactly one
+   of ``essential_fields.NONE_WORDS`` ("N/A", "none" and the rest, in any capitals: Daniel's Q7), is
+   no business name and is not copied; "N/A Studios" is. An application already holding a different
+   built-in business name keeps it, and its update of the question is not copied; the run prints
+   these applications' ids and counts them. Each write is held to the answers it read, so a vendor's
+   save landing first is left for a second run.
 2. **The market, one write** (``write_market``), holding ``formRevision`` (counted up, as a form
-   save counts it), the assignment's ``revision`` and ``madeFrom``, and every other part it reads
-   or writes, as read: the question leaves ``applicationForm.fields``, the rest stored as every
-   form writer stores them (``_normalized_application_form``), each ``order`` its position; ``publicMap.nameQuestion`` naming it names ``essential_business_name``; its key
-   in ``reviewHighlights`` is replaced in place (dropped where the built-in is listed already); its
+   save counts it), the assignment's ``revision`` and ``madeFrom``, and every other part it reads or
+   writes, as read: the question leaves ``applicationForm.fields``, the rest stored as every form
+   writer stores them (``_normalized_application_form``), each ``order`` its position;
+   ``publicMap.nameQuestion`` naming it names ``essential_business_name``; its key in
+   ``reviewHighlights`` is replaced in place (dropped where the built-in is listed already); its
    entry in ``importMapping.targets`` and in ``importMapping.resolutions`` moves to the built-in
    key, so the next import maps that column to it; its ``exampleColumns`` entry is removed, so the
    form builder does not offer the column again; and ``assignmentObject.madeFrom.applications`` is
    carried over to the fingerprint of the applications without the moved answer only where it
    matched them as read (``assignment.made_from.applications_now``), so an allocation that read as
-   current does again once step 3 is done, and one that did not is left. It records one entry in
-   the market's history right after: a form change with no actor (``form``, under Change the form),
-   the detail a form save records.
+   current does again once step 3 is done, and one that did not is left. It records one entry in the
+   market's history right after: a form change with no actor (``form``, under Change the form), the
+   detail a form save records.
 3. **Clean, per application**: ``form_data.<key>`` and ``answer_updates.<key>`` are unset where
    step 1 has nothing left to copy, each write held to the answers it read; an application whose
    answer changed since step 1 is left with it, and counted, for a second run.
@@ -53,15 +55,19 @@ being deleted); the key is under the ``essential_`` prefix; the question is not 
 question; the public map's website or Instagram question, Discord's username question, a priority
 rule, a price group's condition or a rejection rule names it (each refusal names which); or the
 saved import mapping already maps a column to the built-in key. When the market changed between the
-read and step 2's write (an organizer's form save, an import, another run), the market is left as
-it was and nothing is recorded or cleaned; the copies step 1 made stay, the vendors' lines at the
-door, and a second run finds them already copied.
+read and step 2's write (an organizer's form save, an import, another run), or was deleted then,
+the market is left as it was and nothing is recorded or cleaned; the copies step 1 made stay, the
+vendors' lines at the door, the command says it stopped after step 1 and exits 1, and a second
+run on a market still there finds them already copied.
 
-**A second run** finds the question gone from the form: with no application holding an answer or
-an update under the key it says the market is already migrated, writes nothing and exits 0; with
-some still holding one (a run cut after step 1 or step 2, or a vendor's save during it) it says it
-is finishing a run, and does steps 1 and 3 alone. So a run cut anywhere is finished by running it
-again with the same arguments. A key never asked reads as already migrated: ``--list`` first.
+**A second run** after a run cut before step 2's write finds the question still on the form and runs
+whole again, finding step 1's copies already made. Once step 2 has written it finds the question
+gone from the form: with no application holding an answer or an update under the key it says the
+market is already migrated, writes nothing and exits 0; with some still holding one (a run cut
+after step 2, or a vendor's save during it) it says it is finishing a run, and does steps 1 and 3
+alone. So a run cut anywhere is finished by running it again with the same arguments, but for the
+history entry of a run cut between step 2's write and its entry, which no later run records. A
+key never asked reads as already migrated: ``--list`` first.
 
 **It is forward-only.** An older build ignores the built-in key, so a rollback of the code after a
 run leaves the business names stored and unshown until a build with the field is promoted again.
@@ -130,13 +136,13 @@ USAGE = ("usage: migrate_business_name.py --list\n"
 
 
 class Refused(Exception):
-    """Why the move is not made. Nothing was written."""
+    """Why the move is not made. Nothing was written, but for ``LeftAfterStepOne``'s copies."""
 
 
 class LeftAfterStepOne(Refused):
-    """Why the move stopped after step 1: the market changed under its write. Nothing of the
-    market was written and nothing was cleaned; the copies step 1 made stay, as a run cut after
-    step 1 leaves them, for a second run to find."""
+    """Why the move stopped after step 1: the market changed under its write, or was deleted.
+    Nothing of the market was written and nothing was cleaned; the copies step 1 made stay, as a
+    run cut after step 1 leaves them, for a second run to find."""
 
 
 class Candidate(NamedTuple):
@@ -442,7 +448,8 @@ def migrate(market_id: str, key: str, db=None, dry_run: bool = False) -> Move:
 
     Raises:
         Refused: why not; nothing was written.
-        LeftAfterStepOne: the market changed under step 2's write, after step 1 copied.
+        LeftAfterStepOne: the market changed, or was deleted, under step 2's write, after step 1
+            copied.
     """
     db = _database(db)
     applications = db[ApplicationsApi.APPLICATIONS_COLLECTION]
@@ -486,7 +493,10 @@ def migrate(market_id: str, key: str, db=None, dry_run: bool = False) -> Move:
             write_market(document, {"$set": move.setting}, holds=HOLDS,
                          revisions={FORM_REVISION: document.get(FORM_REVISION)})
         except MarketNotFoundError as error:
-            raise Refused("The market is gone, or being deleted.") from error
+            raise LeftAfterStepOne(
+                "The market is gone, or being deleted, since it was read, so nothing of it was "
+                "written and no answer was cleaned; the business names step 1 copied stay."
+            ) from error
         except MarketChanged as error:
             raise LeftAfterStepOne(
                 "The market changed between the read and the write, so nothing of it was written "

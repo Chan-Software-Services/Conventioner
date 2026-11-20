@@ -693,3 +693,23 @@ def test_the_command_says_a_run_stopped_after_step_one_and_exits_one(
 
     assert "stopped after step 1: The market changed" in capsys.readouterr().err
     assert KEY in [field["key"] for field in stored(db)["applicationForm"]["fields"]]
+
+
+def test_a_market_deleted_under_the_write_says_step_one_copied(database, capsys, monkeypatch):
+    import migrate_business_name as Script
+
+    db = database(a_market())
+
+    def the_market_is_deleted_meanwhile(*args, **kwargs):
+        raise MarketWrite.MarketNotFoundError("Market not found")
+
+    monkeypatch.setattr(Script, "write_market", the_market_is_deleted_meanwhile)
+
+    assert main(["--market", MARKET, "--question", KEY]) == 1
+
+    err = capsys.readouterr().err
+    assert "stopped after step 1: The market is gone, or being deleted" in err
+    assert "nothing written" not in err
+    # Step 1 copied before the write was refused, which the command says rather than hiding.
+    assert application(db, "app-ana")["form_data"][BUILT_IN] == "Paper & Pine"
+    assert db.history.documents == []
