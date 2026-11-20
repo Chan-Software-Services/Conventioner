@@ -266,6 +266,24 @@ class TestAnOrganizerUpdatingIt:
 
         assert KEY not in (_doc(world, app_id).get("answer_updates") or {})
 
+    def test_a_blank_restated_after_the_vendor_removed_theirs_takes_the_update_away(self, world):
+        """An organizer blanked "Paper & Pine", the vendor then removed their own, and the
+        organizer saves the blank again: what they wrote now is the update itself, so the update
+        is taken away, as the dialog's "Their answer now matches your update." says."""
+        app_id = self._approved(world, **{KEY: "Paper & Pine"})
+        _update(app_id, "")
+        _submit(world, VENDOR)
+        assert KEY not in _doc(world, app_id)["form_data"]
+
+        _update(app_id, "")
+
+        doc = _doc(world, app_id)
+        assert KEY not in (doc.get("answer_updates") or {})
+        assert KEY not in doc["form_data"]
+        entry = world.history.documents[-1]
+        assert entry["detail"]["matched"] == {KEY: ""}
+        assert "kept" not in entry["detail"]
+
     def test_a_blank_one_for_a_vendor_who_gave_none_changes_nothing(self, world):
         app_id = self._approved(world)
         before = dict(_doc(world, app_id))
