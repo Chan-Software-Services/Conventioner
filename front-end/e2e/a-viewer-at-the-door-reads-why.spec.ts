@@ -62,12 +62,6 @@ async function shortOfTheRowsEnd(row: Locator, inside: Locator): Promise<number>
   return Math.round(rowBox!.x + rowBox!.width - padding - (box!.x + box!.width));
 }
 
-/** What ends a row's status line: who made the check-in, after its chip, else the chip (T501). */
-async function statusEnd(door: AttendanceStatusPage, vendor: string): Promise<Locator> {
-  const by = door.statusBy(vendor);
-  return (await by.count()) ? by : door.status(vendor);
-}
-
 /**
  * A vendor's address on their row is whole, on one line. On a phone the status shared a column with
  * the action, so a wide one ("9:44 AM by e2e@example.com") squeezed the vendor's line and broke the
@@ -191,11 +185,17 @@ for (const size of SIZES) {
         'Follow who has checked in at the door.',
       );
 
-      // Each status ends its row, with no empty column beside it, and each address is whole.
-      for (const vendor of [HERE, NOT_YET]) {
+      // Each status ends its row, with no empty column beside it, and each address is whole: who
+      // made the check-in, on its line after the chip, or the chip of a vendor not checked in.
+      await expect(door.statusBy(HERE)).toHaveText(`by ${TEST_USER.email}`);
+      await expect(door.statusBy(NOT_YET)).toHaveCount(0);
+      for (const [vendor, end] of [
+        [HERE, door.statusBy(HERE)],
+        [NOT_YET, door.status(NOT_YET)],
+      ] as const) {
         await expectAddressWhole(door.row(vendor), vendor);
         expect(
-          await shortOfTheRowsEnd(door.row(vendor), await statusEnd(door, vendor)),
+          await shortOfTheRowsEnd(door.row(vendor), end),
           `${vendor}'s status ends the row`,
         ).toBeLessThanOrEqual(1);
       }
@@ -282,9 +282,12 @@ for (const size of SIZES) {
       await expectAddressWhole(door.row(OUT), OUT);
       // Every row's chips end at one edge, a row with no button among them: a chip, or who made
       // it after the chip.
+      await expect(door.statusBy(NOT_YET)).toHaveCount(0);
+      await expect(door.statusBy(HERE)).toHaveText(`by ${TEST_USER.email}`);
+      await expect(door.statusBy(OUT)).toHaveText(`by ${TEST_USER.email}`);
       const chipEnds = await Promise.all(
-        [NOT_YET, HERE, OUT].map(async (vendor) => {
-          const box = (await (await statusEnd(door, vendor)).boundingBox())!;
+        [door.status(NOT_YET), door.statusBy(HERE), door.statusBy(OUT)].map(async (end) => {
+          const box = (await end.boundingBox())!;
           return Math.round(box.x + box.width);
         }),
       );
@@ -337,6 +340,15 @@ for (const size of SIZES) {
             content.right + 0.5,
           );
         }
+        // The "Undo?" takes a tap down to its foot: on a phone who made it rises into the "Undo?"'s
+        // line under the chip, and must not take the tap over the target's last pixels (T501).
+        const undo = parts.at(-1)!;
+        const box = (await undo.boundingBox())!;
+        const atTheFoot = await undo.evaluate(
+          (el, point) => el.contains(document.elementFromPoint(point.x, point.y)),
+          { x: box.x + box.width / 2, y: box.y + box.height - 2 },
+        );
+        expect(atTheFoot, `${vendor}'s "Undo?" takes a tap at its foot`).toBe(true);
       }
     });
   });

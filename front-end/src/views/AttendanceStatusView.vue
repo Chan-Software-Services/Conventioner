@@ -27,12 +27,13 @@ export const REREAD_MS = 15_000;
  *
  * Each row says where its vendor stands (T318), as the server serves it: expected, here, here at
  * another table than the one they hold now, or here with no table that day, listed under the
- * day's seats so a free never hides an arrival. The tally and the toggles count seats only, as the
+ * day's seats so a free never hides an arrival. The tally and the filters count seats only, as the
  * Stats tab does. Check in is offered on today and past days, never on a day to come.
  *
  * A vendor checked in is checked out on the same row, and that undone (T496): the row keeps its
- * status and says beside it when they were checked out and by whom. Nothing else on the page reads
- * a check-out, so a vendor who left still came.
+ * status and says after it when they were checked out and by whom. The map draws a checked-out
+ * vendor's table in its section's out shade, and the filters list them under Checked out, not
+ * Checked in (T501); every count still counts them as come, so a vendor who left still came.
  *
  * A paper roster is the door's fallback when the venue's network or the back end fails (T318):
  * "Print roster" prints every vendor of the chosen date by table, whatever the filters on screen
@@ -1320,7 +1321,10 @@ const drawer = useVendorDrawer();
     text-align: end;
   }
 
+  /* Risen into the "Undo?"'s line and drawn after it, the plain line would take a tap meant for the
+     target's foot; it holds no control, so taps pass through it to the "Undo?". */
   .door-pill-line:has(.door-undo) + .door-chip-by {
+    pointer-events: none;
     /* stylelint-disable-next-line declaration-property-value-allowed-list -- the "Undo?" target's slack around the chip's one line: a length from --target-min and the chip's height, not a spacing step */
     margin-top: calc((var(--text-xs) * 1.5 + 2 * var(--space-hairline) - var(--target-min)) / 2);
   }
