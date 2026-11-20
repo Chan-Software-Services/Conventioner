@@ -18,7 +18,7 @@ whether or not a verdict changed: the run was made before the review it now stan
 """
 import hashlib
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import Any, Dict, List, Optional
 
 from assignment.vendor_input import SolverVendor, approved_solver_vendors
@@ -172,6 +172,27 @@ def changed_since_run(market: Market) -> List[str]:
         market.id, effective_essential_options_for_market(market)
     )
     now = fingerprint(market.setup_object, vendors, market.phase_history)
-    if incomplete:
-        now["applications"] = _digest([now["applications"], sorted(map(str, incomplete))])
+    now["applications"] = _applications_digest(vendors, incomplete)
     return [group for group in GROUPS if group in recorded and recorded[group] != now[group]]
+
+
+def _applications_digest(vendors: List[SolverVendor], incomplete: List[Any]) -> str:
+    """The ``applications`` group as ``changed_since_run`` compares it: the vendors, and the
+    applications the run would refuse as incomplete beside them."""
+    digest = _digest(_applications(vendors))
+    return _digest([digest, sorted(map(str, incomplete))]) if incomplete else digest
+
+
+def applications_now(market: Market, without: Optional[str] = None) -> str:
+    """The market's approved applications' fingerprint as they stand, as ``changed_since_run``
+    compares a stored run's to it; ``without`` the custom answer it names, read as though no
+    application held it, for an operator's script that moves that answer to a built-in key
+    (``migrations/migrate_business_name.py``)."""
+    vendors, incomplete = approved_solver_vendors(
+        market.id, effective_essential_options_for_market(market)
+    )
+    if without is not None:
+        vendors = [replace(vendor, custom_answers={
+            key: answer for key, answer in vendor.custom_answers.items() if key != without})
+            for vendor in vendors]
+    return _applications_digest(vendors, incomplete)

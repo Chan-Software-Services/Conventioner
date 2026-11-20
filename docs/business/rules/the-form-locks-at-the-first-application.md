@@ -23,6 +23,7 @@ sources:
 # The form locks at the first application
 
 A market's application form may be edited only while the market is a draft and nobody has applied to it; once one application exists, by an applicant or by import, the form is fixed for good (the decision called D9).
+The one exception is an operator's, never an organizer's: the [business name migration](../../OPERATIONS.md#moving-a-markets-business-name-question-to-the-built-in-field) takes a market's own business name question off its form once its answers are under the built-in key, and waits for the applications stage to be over where vendors apply on the market's page, since a page opened before it would send the old question.
 
 **Serves:** [Vendors come in from the organizer's own Google Form](../intents/vendors-come-in-from-the-organizers-own-google-form.md) and [Vendors apply on the market's own page](../intents/vendors-apply-on-the-markets-own-page.md).
 

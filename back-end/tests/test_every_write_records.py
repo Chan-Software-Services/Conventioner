@@ -1155,12 +1155,16 @@ SWAPS_PLAN_CHANGE = Unasked(
 RENAMES_PLAN_CHANGE = Unasked(
     "the location rename's plan change", "migrations.rename_location.record_renamed",
     (), Actions.CHANGE_SETUP, NO_ROUTE)
+BUSINESS_NAMES_FORM_CHANGE = Unasked(
+    "the business name migration's form change", "migrations.migrate_business_name.record_moved",
+    (), Actions.CHANGE_FORM, NO_ROUTE)
 
 #: The records no request asks, each kept as it is, and why.
 UNASKED = (FIRST_IMPORTS_MOVE, STARTS_RELEASE, VENDORS_OWN_CHECK_IN, ARRIVALS_DEAL, SEEDERS_MOVES,
-           MIGRATIONS_DROPS, SWAPS_PLAN_CHANGE, RENAMES_PLAN_CHANGE)
+           MIGRATIONS_DROPS, SWAPS_PLAN_CHANGE, RENAMES_PLAN_CHANGE, BUSINESS_NAMES_FORM_CHANGE)
 #: The records here no route reaches, which only an operator's script makes.
-NO_ROUTE_REACHES = (SEEDERS_MOVES, MIGRATIONS_DROPS, SWAPS_PLAN_CHANGE, RENAMES_PLAN_CHANGE)
+NO_ROUTE_REACHES = (SEEDERS_MOVES, MIGRATIONS_DROPS, SWAPS_PLAN_CHANGE, RENAMES_PLAN_CHANGE,
+                    BUSINESS_NAMES_FORM_CHANGE)
 
 
 def _named(qualified: str) -> Callable:

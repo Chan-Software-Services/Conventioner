@@ -382,11 +382,17 @@ python migrations/migrate_organization_people.py      # AFTER the deploy, whenev
 python migrations/migrate_organization_people.py --reconcile  # ONLY after a roll forward over a rollback past the map's release, `--dry-run` first: rebuilds each map from its lists
 python migrations/migrate_assignment_state.py         # AFTER the deploy, `--dry-run` first, and again after any roll forward past a rollback: stores each market's assignment state and its published revision
 python migrations/migrate_owed_day_state.py           # Right AFTER the deploy, `--dry-run` first, and again after any roll forward past a rollback: stores each owed table-day's state, and drops an Admin's amount on a day not held, recording it
+python migrations/migrate_business_name.py --list    # AFTER the deploy, once per market whose form asks a business name question, past its applications stage where vendors apply on its page, `--list` and `--dry-run` first: moves that question to the built-in field (`--market <id> --question <key>`)
 ```
 
 `migrate_placement_history.py` runs **after** its deploy, not before (E40/F01/S01): it moves every `placement_history` entry into `history` with its fields unchanged and drops the old collection, and a run before the deploy leaves behind whatever the old build writes meanwhile.
 Nothing waits on it: the release reads `placement_history` beside `history`, so the older placements still show in the Assignment history and a vendor's History tab from the deploy on, and the release can be rolled back until the script has run ([the market's history](implementation/data/history.md#the-move-from-placement_history)).
 It is idempotent, so an early run does no harm, but only a run after moves everything; a later release removes the fallback once every database is moved.
+
+`migrate_business_name.py` runs **after** the deploy that ships the built-in business name ([ADR 0042](adr/0042-every-form-asks-a-built-in-business-name.md)), never before it.
+It runs once per market whose form asks a business name question of its own, past that market's applications stage where its vendors apply on its page, and with no import of that market under way; `--list` and `--dry-run` come first.
+Its procedure and refusals are in [moving a market's business name question to the built-in field](OPERATIONS.md#moving-a-markets-business-name-question-to-the-built-in-field).
+It is forward-only: after it runs, a rollback leaves the business names stored and unshown until the release is promoted again.
 
 `migrate_to_one_stage.py` runs **after** the deploy that ships the one stage ([ADR 0016](adr/0016-one-stage-for-applications-and-review.md)), whenever the operator likes, never before it: the build before reads `applications` as an unknown phase, which degrades to archived.
 That build reads the three old names as this script would leave them (`LEGACY_STAGE_PHASES` in `back-end/datatypes.py`), writing nothing back, so nothing waits on the script and the deploy can be rolled back until it has run; a later release drops those aliases once it has run on every database.

@@ -31,12 +31,12 @@ It sits right after the preferred name in `ESSENTIAL_QUESTIONS`, which the impor
 - **It is asked of every market and required of nobody**: in `asked_essential_keys`' unconditional set beside the two names, out of `plan_derived_asked_keys` as they are, and in neither `REQUIRED_ESSENTIAL_KEYS` nor `UNASKABLE_ESSENTIAL_KEYS`.
 - **The solver never reads it**: it is out of `SOLVER_RELEVANT_KEYS`, so an organizer's update of it asks no assignment row.
 - **It is stored only when given.**
-  `_store_business_name` stores the answer stripped under the key when it is not blank, and no key at all when it is blank or missing.
+  `_store_business_name` stores the answer stripped under the key when it gives a business name, and no key at all when it is blank, missing or exactly a none word (`NONE_WORDS`, "N/A" and the rest, in any capitals: `given_business_name`).
   An applicant's save and an import compare the whole stored `form_data` (`application_status._answers_move`, `csv_import._unchanged`), so a key every save wrote as `""` would make each application written before the question read as changed, and send a person's approval or rejection back to open on an unchanged file.
   The preferred name and the request keep their `""`; this key alone is absent when empty.
 - **One reader states "the business name of these answers"**: `business_name(form_data)`, and `businessName(formData)` in the mirror, the stripped text or `""`, also for a value that is not text.
   The door, the drawer, the export, the public map and the review search read it through it, so an absent key and a blank one are one case there.
-- **An organizer's update of it left blank is `""`**, standing over the vendor's answer, since no key cannot say "the organizer removed it"; `business_name` reads that as none.
+- **An organizer's update of it left blank, or to a none word, is `""`**, standing over the vendor's answer, since no key cannot say "the organizer removed it"; `business_name` reads that as none.
   A blank update over a vendor who gave none is their own answer, and takes any update away.
 - **It is never the name a vendor is called by**: `display_name` does not read it.
   Attendance shows it as a second, smaller line under the vendor's name.

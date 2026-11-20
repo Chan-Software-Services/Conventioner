@@ -689,8 +689,9 @@ DATE_TEXT = re.compile(
     r"(?:,?\s+(?P<year>\d{4}))?$",
     re.IGNORECASE)
 # Answers that mean "not on this day" in a per-day grid. The applicant form itself offers "Not
-# available", so reading only "None" left every such cell as a tier nobody offered (bug 26).
-NONE_WORDS = {"none", "n/a", "na", "not available", "unavailable", "-"}
+# available", so reading only "None" left every such cell as a tier nobody offered (bug 26). The
+# set is the contract's, which a business name is read against too.
+NONE_WORDS = EssentialFields.NONE_WORDS
 
 
 def parse_date(text: str) -> Optional[Tuple[int, int, Optional[int]]]:

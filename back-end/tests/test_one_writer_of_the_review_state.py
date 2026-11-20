@@ -63,6 +63,8 @@ EXCEPTIONS: Dict[Tuple[str, str], str] = {
     ("migrations.migrate_submitted_at_to_iso", "migrate"): _A_MIGRATION,
     ("migrations.migrate_table_share_answer", "migrate"): _A_MIGRATION,
     ("migrations.migrate_tier_preference_per_date", "migrate"): _A_MIGRATION,
+    ("migrations.migrate_business_name", "copy_answers"): _A_MIGRATION,
+    ("migrations.migrate_business_name", "clean_answers"): _A_MIGRATION,
 }
 
 
