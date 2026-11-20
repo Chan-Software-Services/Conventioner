@@ -265,7 +265,7 @@ See [Attendance and the door](docs/implementation/modules/attendance-and-door.md
 
 **Check-out**:
 The three fields on a **check-in**'s record that say the vendor left: when, and who made it (an organizer at Attendance, or the vendor on their vendor page with the **door code**).
-Undoing it clears them and leaves the check-in. Attendance's map reads it, drawing a checked-out vendor's table in a darker shade; a checked-out vendor still came, in every count and every **roster state**.
+Undoing it clears them and leaves the check-in. Attendance's map and its filters read it: the map draws a checked-out vendor's table in a darker shade, and the list shows them under "Checked out", not "Checked in"; a checked-out vendor still came, in every count and every **roster state**.
 _Avoid_: departure, sign-out
 
 **Door code**:

@@ -123,13 +123,15 @@ Covered by:
 
 1. Attendance opens on today when it is a market date, else the next one, else the last; the day is a select at the start of the toolbar, each option the day alone ("Nov 17, 2026"), and choosing one keeps the view.
    The toolbar is one row: the day (and, on the map with two locations or more laid out, the location) at its start, then at its end "List" and "Map" as one joined choice, "Print roster" and "Door code", and "Refresh" last, a rule between each group; the Tab key walks it in that order (T466).
-2. Under it, a second row holds "N of M checked in", and on the list "All M", "Not yet N" (or "Did not come N" once the day is over or the market archived) and "Checked in N" to show one or the other, and the search.
+2. Under it, a second row holds "N of M checked in", counting everyone who checked in that day, checked out or not, and on the list "All M", "Not checked in N", "Checked in N" and "Checked out N", each showing only its own vendors, so a vendor is under one of the last three, and the search (T501).
+   A filter or a search that leaves nobody says "Nobody matches.".
    At a desk, 1,024px wide and more, the two rows are pinned under the market's frame from the start, so they never move while the list or the map scrolls under them; on a phone they scroll away with the page, each control a 44px target.
 3. "Find a vendor" ("Name, email or table") narrows the list, by the name a vendor goes by or the full name on their identification, their address or their table.
-4. Each vendor placed that day, by table: their name, a link at rest (link ink, underlined, a 44px target on a phone), which opens the [vendor drawer](vendor-drawer.md) and never checks them in; how and when they checked in ("Scanned in at 9:41 AM" for their own, with the door code, "9:41 AM by you" or by the organizer's address), or "Not yet"; and their notes under the row when they have some.
+4. Each vendor placed that day, by table: their name, a link at rest (link ink, underlined, a 44px target on a phone), which opens the [vendor drawer](vendor-drawer.md) and never checks them in; how and when they checked in ("Scanned in at 9:41 AM" for their own, with the door code, "9:41 AM by you" or by the organizer's address), or "Not checked in", before, on and after the day alike (T501); and their notes under the row when they have some.
    A vendor checked in and then moved or swapped reads where they checked in, "9:41 AM by you, at table North Wing 2", in an attention chip, so they are sent to their new table.
    Under the day's seats, "Checked in, with no table on this date (<n>)" lists each vendor checked in and then freed, their table "No table", so a free never hides an arrival; they count toward no day's tally.
-   A vendor checked out keeps that status and gains a second chip after it, "Out 4:05 PM by you", or by the organizer's address, or "Scanned out at 4:05 PM" for their own ([K10](#k10-check-a-vendor-out)).
+   A vendor checked out keeps that status and gains a second chip after it, "Checked out 4:05 PM by you", or by the organizer's address, or "Scanned out at 4:05 PM" for their own ([K10](#k10-check-a-vendor-out)).
+   On a row too narrow for a chip's one line, a phone's, the chip takes two, when on the first and "by" the organizer's address on the second, the address breaking only before its "@" or a dot (T501).
 5. While the market is in Market Days, each row ends in at most one button, for someone who may check vendors in: "Check in" checks a vendor in at the door, and a checked-in row offers "Check out" in its place ([K10](#k10-check-a-vendor-out)).
    Each undo is a quiet "Undo?" just left of the chip it undoes: the check-in's by the status chip, the check-out's by the departure chip.
    "Check in" is offered on today and past days, so a tap missed in the rush is put right after, and never on a day to come, which the server refuses too: "That day has not begun yet, so nobody can be checked in for it."
@@ -143,7 +145,7 @@ Covered by:
    "Updated just now" or "Updated N minutes ago" stands over the list's right edge, or under the map's bottom right, and "Refresh" ends the toolbar; a read that fails keeps the rows and says "Could not update. The roster is as it was last read." in red under the toolbar's end.
    Taps on several rows' Check in go through at once, each row showing its check-in as soon as the server answers.
    Moved to another market, the page reads "Loading…" until that market's roster arrives, never the last market's, and a check-in tapped on the last market posts there and says nothing on this one, even when it was refused.
-8. "Print roster", in the toolbar for anyone who reads Attendance, prints the chosen date's roster on paper, the door's fallback when the venue's network or the app fails: the market's name, the date in words, "<N> vendors", "Printed <date> at <time>", then every vendor of the date by table, their name with their address under it, and when they came or an empty box to tick, whatever "Show" and "Find a vendor" leave on screen; vendors checked in with no table that day print under their own heading.
+8. "Print roster", in the toolbar for anyone who reads Attendance, prints the chosen date's roster on paper, the door's fallback when the venue's network or the app fails: the market's name, the date in words, "<N> vendors", "Printed <date> at <time>", then every vendor of the date by table, their name with their address under it, and under "Checked in" when they came or an empty box to tick, whatever "Show" and "Find a vendor" leave on screen; vendors checked in with no table that day print under their own heading.
    The phase guide's "Print each day's roster, then check vendors in at the door." asks for it; the page has no note of its own (T466).
 9. "List" and "Map", first of the toolbar's end, show the day as its rows or as a map of the venue's layouts (T422); the map is kept across a change of day and a reload.
    With two locations or more laid out, the map's location is a select beside the day, offering exactly the locations the map can draw, and kept in the address, so a reload or a shared link opens the same hall; with one, there is no select.
@@ -184,7 +186,7 @@ Covered by:
 **Task (organizer):** "A vendor is leaving and has handed back what they borrowed. Record that they left."
 
 1. On Attendance's list, in Market Days, a checked-in vendor's row offers "Check out", its one button, for someone who may check vendors in, on any day with a check-in, a vendor here with no table that day included.
-2. Expect the row to keep its status and gain a second chip, "Out 4:05 PM by you", with one "Undo?" just left of that chip, which undoes the check-out and brings "Check out" back, with the check-in's "Undo?" left of its status.
+2. Expect the row to keep its status and gain a second chip, "Checked out 4:05 PM by you", with one "Undo?" just left of that chip, which undoes the check-out and brings "Check out" back, with the check-in's "Undo?" left of its status.
 3. A check-in is not undone while the vendor is checked out: the row has no "Undo?" by its status, only the check-out's "Undo?" by the departure chip, and a check-in's undo sent anyway is answered "Undo the check-out first."
 
 **Task (vendor), at a market that lets vendors check themselves in and out:** "You are leaving. Check out."
@@ -195,13 +197,14 @@ Covered by:
 
 A wrong code says what a check-in's does (K3), and a day with no check-in "You are not checked in on this date."
 The vendor's other days read "(checked in at <time>, checked out at <time>)", and the record of a market that ended "Checked in at <time>, checked out at <time>".
-The map draws a checked-out vendor's table in the darker shade of its section's colour (K5); a check-out changes nothing else: "N of M checked in", "Show", the search, the printed roster, "Did not come", the Stats tab and what a vendor owes read a checked-out vendor as checked in, and freeing or moving them still asks first.
+The map draws a checked-out vendor's table in the darker shade of its section's colour, and the list's filters show them under "Checked out", not "Checked in" (K5, T501); every count still counts them as come: "N of M checked in", the search, the printed roster, the Stats tab and what a vendor owes read a checked-out vendor as checked in, and freeing or moving them still asks first.
 The market's history says each: "… checked Ana Rivera out on Nov 19, 2026", "… undid the check-out of Ana Rivera …", and for the vendor's own "Ana Rivera checked out with the door code …" ([reading the market's history](reading-the-markets-history.md#l6-read-the-markets-history)).
 Covered by:
 
 - `a-vendor-checks-out.spec.ts`
 - `a-viewer-at-the-door-reads-why.spec.ts`: a Viewer reads the out chip and is offered no button
 - `the-door-checks-a-vendor-out.spec.ts`
+- `the-door-reads-one-set-of-words.spec.ts`: the words and the filters on a day to come, the day itself and a day over, and a long address's chip on a phone
 
 ## K11. Let vendors check themselves in and out
 

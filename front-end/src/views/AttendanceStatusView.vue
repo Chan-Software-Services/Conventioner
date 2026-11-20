@@ -268,7 +268,7 @@ function chooseView(next: View) {
 }
 
 /** The map's "Show in the list": the list with every vendor the map counted under it shown, so
- *  the Show toggle, hidden on Map, hides none of them. */
+ *  the filters, hidden on Map, hide none of them. */
 function showListFromMap() {
   show.value = 'all';
   chooseView('list');
@@ -365,7 +365,7 @@ const lists = computed(() =>
 );
 
 /**
- * The chosen date's every row for the printed roster, whatever the Show toggle and the search say:
+ * The chosen date's every row for the printed roster, whatever the filters and the search say:
  * paper with a filter on would leave the door without the vendors it hid.
  */
 function printedRow(row: RosterRow): PrintedRow {

@@ -51,6 +51,7 @@ sources:
   - T411
   - T421
   - T469
+  - T501
 ---
 
 # Ending and managing a market
@@ -85,7 +86,7 @@ Covered by:
 
 1. Once every market date has passed, "Archive market" is the rail's main button and the rail says "The market has run. Archive it to keep it as the record of what happened."; until then it is under More….
 2. "Archive this market?": "Archiving is permanent. Once archived, a market cannot be returned to an active phase. This action cannot be undone." and "Its vendor page stays up as a record: vendors can still read where they sat and when they came, but nobody can check in."; focus on Cancel; "Archive".
-3. Expect the rail frozen with "This market is archived. It was published and ran its market days." (bug 8), landing on Assignments; every page is read only (bug 30), and Attendance keeps the record, every vendor who never checked in reading "Did not come".
+3. Expect the rail frozen with "This market is archived. It was published and ran its market days." (bug 8), landing on Assignments; every page is read only (bug 30), and Attendance keeps the record, every vendor who never checked in reading "Not checked in", as on every day (T501).
 4. The vendor page stays up as a record: each vendor, signed in, reads "Where you sat", "This market has ended.", each date "Checked in at <time>" or "Not checked in", and no check-in (bug 9).
 
 Covered by:
