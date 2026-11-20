@@ -55,6 +55,7 @@ sources:
   - T318
   - T422
   - T469
+  - T501
 ---
 
 # E2E patterns
@@ -68,6 +69,7 @@ How to run the suite is [TESTING.md](../../TESTING.md#end-to-end-e2e-tests); the
 Adding a `data-testid` changes no behaviour; a view gains them as specs need them.
 **The one exception is a location's layout** (T257): its map's tables are found by their accessible names ("Gold row 5, Standard 6 ft"), and its toolbar's tools, its menus' items, its location links and its sections' swatches by role and name ([`LayoutPage.ts`](../../../front-end/e2e/pages/LayoutPage.ts)), since what its specs prove is what a screen reader hears: a table's code and type are read back from its name, as the spec of the layout asks.
 A layout's day map (T422) is found the same way, on the public map ([`PublicMapPage.ts`](../../../front-end/e2e/pages/PublicMapPage.ts)) and on Attendance's map ([`AttendanceStatusPage.ts`](../../../front-end/e2e/pages/AttendanceStatusPage.ts)): a table, or a half of a shared one, by the start of its name ("Aisle A 3, Standard 6 ft, left half"); Attendance chooses its location with its toolbar's select (`locationSelect`), by the option's label (T466).
+Attendance's `tone(code, half)` reads how a table or half is drawn off its fill: `filled`, `checkedOut` (a section's `-out` token, T501), `outlined` or `free`.
 The map's box, its border round the drawing, is `mapFrame` (`day-map-frame`), so a spec measures where the map stands without its class.
 Everything else on the page is found by its `data-testid`.
 
