@@ -329,7 +329,7 @@ def test_each_vendor_who_answered_holds_the_answer_under_the_built_in_key_alone(
     assert holds == {
         "app-ana": ("Paper & Pine", False),
         "app-ben": (None, False), "app-cy": (None, False),
-        # Daniel's Q7: an answer that is exactly a none word is no business name.
+        # An answer that is exactly a none word is no business name.
         "app-dee": (None, False),
         "app-eve": ("Kiln & Co", False),
         "app-fay": ("Pine Works", False),

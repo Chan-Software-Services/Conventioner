@@ -781,7 +781,7 @@ def given_business_name(answer: Any) -> str:
     """The business name an answer gives, as it is stored: stripped, or ``""`` for none.
 
     None is a blank, a value that is not text, and an answer that is exactly one of the
-    ``NONE_WORDS`` in any capitals (Daniel's Q7, T502): an applicant who wrote "N/A" trades under
+    ``NONE_WORDS`` in any capitals (T502): an applicant who wrote "N/A" trades under
     no business name and has no line under their name. One that only holds such a word, "N/A
     Studios", is a name. The form, the import, an organizer's update and the business name
     migration (``migrations/migrate_business_name.py``) all store through here.

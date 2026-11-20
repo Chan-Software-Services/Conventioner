@@ -342,7 +342,7 @@ class TestASearchOnTheResults:
         assert terms == {VENDOR: ["Ana Rivera"]}
 
 
-#: The words an answer means "none" by, as the import reads a per-day grid's cell (Daniel's Q7).
+#: The words an answer means "none" by, as the import reads a per-day grid's cell (T502).
 NONE_ANSWERS = ["N/A", "none", "  NA ", "Not available", "unavailable", "-"]
 
 
