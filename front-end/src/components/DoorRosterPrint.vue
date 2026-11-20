@@ -5,8 +5,9 @@
  * place of the app.
  *
  * The market, the date in words, how many are expected and when it was printed, so the door knows
- * which copy is current; then every vendor of the date by table, their name with their address
- * under it, and when they came or an empty box to tick. It lists every row whatever the page's
+ * which copy is current; then every vendor of the date by table, their name with their business
+ * name (T502), if they have one, and their address under it, and when they came or an empty box to
+ * tick. It lists every row whatever the page's
  * Show toggle and search leave on screen, since a sheet printed with a filter on would leave the
  * door without the vendors it hid. Notes are not printed.
  *
@@ -22,6 +23,8 @@ export interface PrintedRow {
   key: string;
   email: string;
   name: string;
+  /** Their business name, printed under the name, whole: paper cuts nothing. None prints none. */
+  business?: string;
   table: string;
   here: string | null;
 }
@@ -100,6 +103,12 @@ const lists = computed(() =>
                 <span class="print-name" data-testid="attendance-print-name"
                   ><EmailAddress :words="row.name || row.email"
                 /></span>
+                <span
+                  v-if="row.business"
+                  class="print-business"
+                  data-testid="attendance-print-business"
+                  >{{ row.business }}</span
+                >
                 <span v-if="row.name" class="print-email" data-testid="attendance-print-email"
                   ><EmailAddress :words="row.email"
                 /></span>
@@ -214,6 +223,7 @@ const lists = computed(() =>
     display: block;
   }
 
+  .print-business,
   .print-email {
     display: block;
     color: var(--mm-text-muted);

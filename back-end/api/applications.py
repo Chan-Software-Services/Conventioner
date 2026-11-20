@@ -191,6 +191,15 @@ def vendor_full_names_for_market(market_id: str) -> Dict[str, str]:
     )
 
 
+def vendor_business_names_for_market(market_id: str) -> Dict[str, str]:
+    """Every applicant's business name, keyed as ``vendor_names_for_market`` is, and only for those
+    who have one (``business_name``): the door shows it under the vendor's name and finds them by it
+    (T502). Read as the organizer reads answers, so an organizer's correction stands over the
+    vendor's answer, and one an organizer removed has no entry."""
+    return _names_by_address(
+        market_id, EssentialFields.business_name, [EssentialFields.BUSINESS_NAME_KEY])
+
+
 #: The questions whose answers identify a vendor rather than describe them: a business name, a
 #: business email, a handle. A choice, a number or a date is shared by many and finds nobody.
 SEARCHED_ANSWER_TYPES = ("text", "email")
@@ -247,10 +256,16 @@ def list_applications_with_answers(
     return list(applications_collection.find(market_filter(market_id), projection))
 
 
-def _names_by_address(market_id: str, name_of) -> Dict[str, str]:
+#: The two answers a vendor's name is read from.
+_NAME_KEYS = (EssentialFields.FULL_NAME_KEY, EssentialFields.PREFERRED_NAME_KEY)
+
+
+def _names_by_address(
+    market_id: str, name_of, keys: Iterable[str] = _NAME_KEYS,
+) -> Dict[str, str]:
     """``{lowercased address: name}`` for the applications that stored one, read off a projection
-    of the two name keys alone."""
-    keys = [EssentialFields.FULL_NAME_KEY, EssentialFields.PREFERRED_NAME_KEY]
+    of ``keys`` alone: the two name keys, unless the name asked for is read from another."""
+    keys = list(keys)
     names = {
         email: name_of(answers) for email, answers in _answers_by_address(market_id, keys).items()
     }
