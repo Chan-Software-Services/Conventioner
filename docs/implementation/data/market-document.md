@@ -199,7 +199,7 @@ Each list here is in the order `PublicMapSettings` (`datatypes.py`) declares its
 
 - whether the map is open, `enabled`
 - the short text questions whose answers it shows, each a question's key or null:
-  - `nameQuestion`
+  - `nameQuestion`, which may also be the built-in business name, `essential_business_name` ([ADR 0042](../../adr/0042-every-form-asks-a-built-in-business-name.md))
   - `websiteQuestion`
   - `instagramQuestion`
 
