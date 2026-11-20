@@ -11,6 +11,7 @@ sources:
   - T465
   - T466
   - T469
+  - T502
 ---
 
 # The market's map: published, found and directed by
@@ -22,7 +23,7 @@ sources:
 A location's layout ([E6](planning.md#e6-a-locations-layout)) is each market day's map in two places: a public page anyone opens, and Attendance's map beside its list.
 Both draw each table by who holds it that day, a shared table as two halves, each its own vendor's.
 A layout can be made after Draft too, following the plan's settled seats, so a market planned without one can still have a map ([ADR 0034](../../adr/0034-a-layout-started-after-draft-follows-the-plan.md)).
-The public map shows a vendor's public name, website and Instagram, read from the questions the Admin chose and cleaned on the server, and nothing else of them: never an email address or a full name ([ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md)).
+The public map shows a vendor's public name, website and Instagram, read from the answers the Admin chose and cleaned on the server, and nothing else of them: never an email address or a full name ([ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md)).
 How it is built is [the public map](../../implementation/modules/public-map.md), [the public map page](../../implementation/modules/public-map-page.md) and [attendance and the door](../../implementation/modules/attendance-and-door.md).
 
 ## K7. An Admin opens the public map
@@ -31,7 +32,8 @@ How it is built is [the public map](../../implementation/modules/public-map.md),
 **Task:** "Let visitors find each vendor's table on the day."
 
 1. Tools tab, the "Public map" card ([`MarketPublicMapCard.vue`](../../../front-end/src/components/market/MarketPublicMapCard.vue)), after Discord's: "A page anyone can open, with no sign-in, that shows each market day's tables and who is at them. It shows only the answers you choose here, never an email address or a full name.", with the switch "Show the public map" off.
-2. "Public name": choose the form's short text question that holds each vendor's business or artist name; "Website" and "Instagram" are chosen the same way, or left at "Not shown".
+2. "Public name": choose "Business name (built in)", the business name every form asks ([ADR 0042](../../adr/0042-every-form-asks-a-built-in-business-name.md)), or the form's short text question that holds each vendor's business or artist name; "Website" and "Instagram" are each one of the form's short text questions, or left at "Not shown".
+   A form with no short text question can still open its map under the built-in name; the card then says "The form asks no short text question yet. Add one to show each vendor's website or Instagram handle.".
    Each choice saves at once; until a public name is chosen the switch is disabled, with "Choose the public name's question first." under it.
 3. Turn on "Show the public map".
    Expect the address, the market page's `/<market-slug>` under the app's origin, with "Copy link" and "Open the map", which opens it in a new tab.
