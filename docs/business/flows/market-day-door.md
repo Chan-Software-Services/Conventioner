@@ -167,7 +167,7 @@ Covered by:
    Under the map, "<n> checked in with no table" and "<n> vendors are at tables not on a layout." count the vendors it cannot draw, each with "Show in the list", which opens the list showing all; with no location laid out it says "No location has a layout yet." alone, with "Open the layout" for whoever may change the setup.
    Check in, Check out and Undo? stay on the list: the map and the drawer check nobody in or out, so a Viewer reads the map as an Editor does.
 
-It lists everyone expected on the day, so it shows who is missing; "Nobody is assigned on this date." on a date with nobody.
+It lists everyone assigned on the day, so it shows who is not checked in; "Nobody is assigned on this date." on a date with nobody.
 It works at a phone's width, as only the other organizer screens that fit a phone do ([attendance and the door](../../implementation/modules/attendance-and-door.md#sharp-edges)), and there its rows keep a gutter at both sides rather than running to the card's edges (T15).
 Covered by:
 
