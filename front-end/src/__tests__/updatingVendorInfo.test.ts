@@ -462,9 +462,12 @@ describe('the answers the assignment reads, in the Update info dialog', () => {
     expect(
       wrapper.get(testid('update-info-essential-table-choice-half')).attributes('disabled'),
     ).toBeDefined();
-    // The names and the request are no answer the assignment reads.
+    // The names, the business name and the request are no answer the assignment reads.
     const name = wrapper.get(testid('update-info-essential-full-name-input'));
     expect(name.attributes('disabled')).toBeUndefined();
+    expect(
+      wrapper.get(testid('update-info-essential-business-name-input')).attributes('disabled'),
+    ).toBeUndefined();
     await name.setValue('Nadia Okonkwo-Reyes');
     await wrapper.get('form').trigger('submit');
     await flushPromises();

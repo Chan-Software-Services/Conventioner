@@ -75,6 +75,17 @@ FULL_NAME_KEY = "essential_full_name"
 # because identity does not depend on the plan.
 PREFERRED_NAME_KEY = "essential_preferred_name"
 
+# The name a vendor TRADES under (`Paper & Pine` rather than `Ana Rivera`), which is what some name
+# tags at the door carry (T502, ADR 0042). Asked of everyone with no switch, right after the
+# preferred name, and never required: most vendors trade under their own name.
+#
+# It is never the name a vendor is called by: ``display_name`` does not read it, and the screens
+# that show it show it as a second line under that name.
+#
+# STORED ONLY WHEN GIVEN, and it is the one essential answer that is: see ``_store_business_name``.
+# Read it through ``business_name``, never by the key, so absent and blank are one case.
+BUSINESS_NAME_KEY = "essential_business_name"
+
 AVAILABLE_DATES_KEY = "essential_available_dates"
 MAX_DATES_KEY = "essential_max_dates"
 TIER_PREFERENCE_KEY = "essential_tier_preference"
@@ -102,6 +113,7 @@ REQUEST_KEY = "essential_request"
 # question exactly as the form asked it.
 FULL_NAME_LABEL = "Full name"
 PREFERRED_NAME_LABEL = "Preferred name"
+BUSINESS_NAME_LABEL = "Business name"
 EMAIL_LABEL = "Email address"
 AVAILABLE_DATES_LABEL = "Available dates"
 MAX_DATES_LABEL = "Number of dates you want"
@@ -166,9 +178,11 @@ STUB_TABLE_TYPE = "Standard"
 # and the solver would place someone against constraints nobody accepted. Kept here, beside the
 # contract itself, so there is one list rather than one per caller.
 #
-# Custom answers are deliberately absent: a corrected business name or Instagram handle changes
-# nothing the solver reads. That stops being true when priority rules can name a custom field
-# (E02), at which point a market's priority targets join this set.
+# The names, the business name and the request are deliberately absent, and so is every custom
+# answer: a corrected spelling or Instagram handle changes nothing the solver reads, so updating
+# one asks no assignment row and sends nobody back to review. That stops being true of a custom
+# answer when priority rules can name a custom field (E02), at which point a market's priority
+# targets join this set.
 SOLVER_RELEVANT_KEYS = (
     AVAILABLE_DATES_KEY,
     MAX_DATES_KEY,
@@ -190,6 +204,7 @@ ESSENTIAL_QUESTIONS = (
     (FULL_NAME_KEY, FULL_NAME_LABEL),
     # The column beside it in that same export, which had nowhere to go until E19/F02/S01.
     (PREFERRED_NAME_KEY, PREFERRED_NAME_LABEL),
+    (BUSINESS_NAME_KEY, BUSINESS_NAME_LABEL),
     (AVAILABLE_DATES_KEY, AVAILABLE_DATES_LABEL),
     (MAX_DATES_KEY, MAX_DATES_LABEL),
     (TABLE_CHOICE_KEY, TABLE_CHOICE_LABEL),
@@ -245,6 +260,18 @@ def display_name(form_data: Dict[str, Any]) -> str:
     """
     preferred = str(form_data.get(PREFERRED_NAME_KEY) or "").strip()
     return preferred or str(form_data.get(FULL_NAME_KEY) or "").strip()
+
+
+def business_name(form_data: Dict[str, Any]) -> str:
+    """The business name these answers give, or ``""`` when they give none (T502).
+
+    ONE statement of "none", as ``display_name`` is of the name: the key is absent where the vendor
+    gave no business name, holds ``""`` where an organizer's update removed one, and may hold
+    anything in a document written by hand. Every reader of the key goes through here, so no screen
+    draws an empty line for one of those and a real line for another.
+    """
+    given = form_data.get(BUSINESS_NAME_KEY)
+    return given.strip() if isinstance(given, str) else ""
 
 
 def reconciled_dates_and_tiers(tier_answer: Any, available_dates: Any) -> Tuple[Any, Any]:
@@ -325,7 +352,7 @@ def asked_essential_keys(options: EssentialFormOptions) -> frozenset:
     # oversight: every other essential question is gated on the plan offering something to answer
     # about, and identity does not depend on the plan. A market with no dates, no tiers and no
     # sections still needs to know who is applying.
-    asked = {FULL_NAME_KEY, PREFERRED_NAME_KEY, REQUEST_KEY}
+    asked = {FULL_NAME_KEY, PREFERRED_NAME_KEY, BUSINESS_NAME_KEY, REQUEST_KEY}
     if options.dates:
         asked.update({
             AVAILABLE_DATES_KEY,
@@ -349,7 +376,7 @@ def asked_essential_keys(options: EssentialFormOptions) -> frozenset:
 def plan_derived_asked_keys(options: EssentialFormOptions) -> frozenset:
     """The asked questions that depend on the market plan offering something.
 
-    Identity does not, which is why the name is excluded here and only here.
+    Identity does not, which is why the names and the business name are excluded here and only here.
 
     Two readers, and they must stay the same two: ``FormHasFieldsGuard``, which blocks a market
     from opening applications when its form asks nothing, and ``application_write._asks_nothing``,
@@ -358,7 +385,8 @@ def plan_derived_asked_keys(options: EssentialFormOptions) -> frozenset:
     count is never zero, so reading ``asked_essential_keys`` here would make both of them unable
     to say no - silently, with their docstrings still claiming otherwise.
     """
-    return asked_essential_keys(options) - {FULL_NAME_KEY, PREFERRED_NAME_KEY, REQUEST_KEY}
+    return asked_essential_keys(options) - {
+        FULL_NAME_KEY, PREFERRED_NAME_KEY, BUSINESS_NAME_KEY, REQUEST_KEY}
 
 
 def offering_for_key(key: str, options: EssentialFormOptions) -> List[str]:
@@ -631,7 +659,10 @@ def validated_essential_update(
     set back to none where a number was put over it.
 
     Returns ``(error_message, stored)``, ``stored`` holding the stored answers the updated
-    questions write, as the form stores them.
+    questions write, as the form stores them. The business name is the one exception: the form
+    stores no key for a blank one, and an update of it left blank is ``""``, standing over the
+    vendor's answer, since no key cannot say "the organizer removed it" (``business_name`` reads
+    both as none).
     """
     merged = {**current, **incoming}
     touched = set(incoming)
@@ -640,6 +671,7 @@ def validated_essential_update(
         error = step()
         if error and touched & _JUDGED_TOGETHER.get(key, {key}):
             return error, {}
+    stored.setdefault(BUSINESS_NAME_KEY, "")
     written = {key for question in incoming for key in UPDATABLE_ESSENTIAL_QUESTIONS[question]}
     return None, {key: value for key, value in stored.items() if key in written}
 
@@ -661,7 +693,7 @@ def _essential_steps(
 
     def request() -> Optional[str]:
         # Optional free text, stored stripped, and empty when unasked or unanswered: one shape for
-        # every reader, as the preferred name has.
+        # every reader, as the preferred name has (the business name alone is absent when empty).
         given = incoming.get(REQUEST_KEY) if REQUEST_KEY in asked else None
         stored[REQUEST_KEY] = str(given).strip() if given is not None else ""
         return None
@@ -669,6 +701,7 @@ def _essential_steps(
     return [
         (FULL_NAME_KEY, lambda: _validate_full_name(incoming, stored)),
         (PREFERRED_NAME_KEY, lambda: _store_preferred_name(incoming, stored)),
+        (BUSINESS_NAME_KEY, lambda: _store_business_name(incoming, stored)),
         (AVAILABLE_DATES_KEY, lambda: _validate_accepted_subset(
             incoming, AVAILABLE_DATES_KEY, AVAILABLE_DATES_LABEL, "date", options.dates, stored,
         )),
@@ -719,6 +752,22 @@ def _store_preferred_name(incoming: Dict[str, Any], stored: Dict[str, Any]) -> N
     """
     preferred = incoming.get(PREFERRED_NAME_KEY)
     stored[PREFERRED_NAME_KEY] = str(preferred).strip() if preferred is not None else ""
+
+
+def _store_business_name(incoming: Dict[str, Any], stored: Dict[str, Any]) -> None:
+    """The name a vendor trades under, optional and never refused: stored stripped when one was
+    given, and NO KEY AT ALL when it is blank or missing.
+
+    Every other optional answer stores its empty value, and this one must not. An applicant's save
+    and an import compare the whole stored ``form_data`` (``application_status._answers_move``,
+    ``csv_import._unchanged``), so a key written as ``""`` on every save would make every
+    application stored before the question existed read as changed, and send each person's approval
+    or rejection back to open on an unchanged file. Absent when empty, an application that never
+    gave one is stored exactly as it was before (ADR 0042).
+    """
+    given = business_name(incoming)
+    if given:
+        stored[BUSINESS_NAME_KEY] = given
 
 
 def _validate_tiers_per_date(

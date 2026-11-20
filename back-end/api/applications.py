@@ -205,8 +205,9 @@ def vendor_search_terms_for_market(
     market_id: str, fields: List[FormField], placed: Iterable[str],
 ) -> Dict[str, List[str]]:
     """What a search on the results finds a vendor by (E35/F02/S01), keyed as
-    ``vendor_names_for_market`` is: the name they chose, the one on their identification, then
-    their short answers to the form's text and email questions, in the form's order.
+    ``vendor_names_for_market`` is: the name they chose, the one on their identification, their
+    business name, then their short answers to the form's text and email questions, in the form's
+    order.
 
     Only the vendors in ``placed`` are read: the ones at a table, whom the search finds tables by,
     and the ones the placement dialog's pickers offer (E38/F08/S03). Blank and long answers are left
@@ -214,7 +215,8 @@ def vendor_search_terms_for_market(
     is the market's own form: which questions are text is its to say.
     """
     asked = [field.key for field in fields if field.type in SEARCHED_ANSWER_TYPES]
-    keys = [EssentialFields.PREFERRED_NAME_KEY, EssentialFields.FULL_NAME_KEY, *asked]
+    keys = [EssentialFields.PREFERRED_NAME_KEY, EssentialFields.FULL_NAME_KEY,
+            EssentialFields.BUSINESS_NAME_KEY, *asked]
     at_a_table = {str(email).strip().lower() for email in placed}
     terms: Dict[str, List[str]] = {}
     for email, answers in _answers_by_address(market_id, keys).items():

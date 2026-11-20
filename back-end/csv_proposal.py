@@ -136,6 +136,10 @@ CHECKBOX_LEAD = re.compile(r"^(i certify|i understand|i agree|i confirm|i acknow
 DECISIONS = {"accepted", "rejected", "approved", "declined", "waitlist", "waitlisted", "pending",
              "true", "false", "y", "n", "accept", "reject"}
 YES_NO = {"yes", "no", "available", "x"}
+# A heading that asks for the name a vendor trades under: the built-in business name's column
+# (T502). Read off the heading because its answers say nothing: a business name is one word or
+# five, capitalised or not, and a column of two-word ones reads as the full name by its answers.
+BUSINESS_NAME_QUESTION = re.compile(r"\bbusiness name\b")
 # A question asking how many days, whose answers are then bare numbers ("3") rather than "3 days".
 DAY_COUNT_QUESTION = re.compile(r"\b(how many|number of|max(imum)?)\b.*\bdays?\b")
 
@@ -548,6 +552,13 @@ def _classify(columns: List[_Column]) -> List[Dict[str, Any]]:
             email_found = True
             decided.append({"fate": FATE_APPLICANT_EMAIL,
                             "why": "Everyone answered it with their own email"})
+            continue
+        # Before the two names: a column of two-word business names is not the full name. The
+        # first column headed so only, since the form asks one business name.
+        if (BUSINESS_NAME_QUESTION.search(lowered[index])
+                and EssentialFields.BUSINESS_NAME_KEY not in have):
+            decided.append(essential(EssentialFields.BUSINESS_NAME_KEY,
+                                     "Its heading asks for a business name"))
             continue
         name_like = (column.capitalised >= 0.85 and column.numeric == 0
                      and not (grid or column.is_choice_like()))

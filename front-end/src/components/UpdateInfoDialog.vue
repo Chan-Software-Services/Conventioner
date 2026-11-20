@@ -9,8 +9,8 @@
  *
  * The essential questions are asked as the form asks them (E41/F01/S02). The answers the assignment
  * reads are the row "Update info the assignment or price reads", Admin by default, and show
- * read-only to whoever it refuses; the names and the request are any other answer's. So are the
- * answers a price group reads, among the market's own questions (E43/F01/S03).
+ * read-only to whoever it refuses; the names, the business name and the request are any other
+ * answer's. So are the answers a price group reads, among the market's own questions (E43/F01/S03).
  *
  * Its write belongs to its opening, the vendor's application it was opened on (T411): nothing closes
  * it while it saves, and an answer that lands after it was closed (the drawer moved to another
@@ -46,6 +46,7 @@ import {
 } from '@/utils/answerUpdates';
 import {
   AVAILABLE_DATES_KEY,
+  BUSINESS_NAME_KEY,
   ESSENTIAL_KEY_PREFIX,
   FULL_NAME_KEY,
   MAX_DATES_KEY,
@@ -84,6 +85,7 @@ const emit = defineEmits<{
 const ESSENTIAL_QUESTIONS = [
   FULL_NAME_KEY,
   PREFERRED_NAME_KEY,
+  BUSINESS_NAME_KEY,
   MAX_DATES_KEY,
   TIER_PREFERENCE_KEY,
   TABLE_CHOICE_KEY,

@@ -21,6 +21,8 @@ import { computed, watch } from 'vue';
 import type { EssentialFormOptions } from '@/assets/types/datatypes';
 import {
   AVAILABLE_DATES_LABEL,
+  BUSINESS_NAME_KEY,
+  BUSINESS_NAME_LABEL,
   PREFERRED_NAME_KEY,
   REQUEST_KEY,
   REQUEST_LABEL,
@@ -245,6 +247,17 @@ function onPreferredNameInput(event: Event) {
   setAnswer(PREFERRED_NAME_KEY, (event.target as HTMLInputElement).value);
 }
 
+/** As the answers hold it, an organizer's blank update included: no `businessName` trim here, or
+ *  a space typed between two words would be eaten as it is typed. */
+const businessNameAnswer = computed(() => {
+  const given = props.modelValue[BUSINESS_NAME_KEY];
+  return typeof given === 'string' ? given : '';
+});
+
+function onBusinessNameInput(event: Event) {
+  setAnswer(BUSINESS_NAME_KEY, (event.target as HTMLInputElement).value);
+}
+
 function onFullNameInput(event: Event) {
   setAnswer(FULL_NAME_KEY, (event.target as HTMLInputElement).value);
 }
@@ -328,6 +341,28 @@ function errorFor(key: string): string {
         @input="onPreferredNameInput"
       />
       <slot name="after" :question="PREFERRED_NAME_KEY" />
+    </div>
+
+    <!-- Business name. Optional, and asked of every form with no switch (T502): the name on some
+         vendors' name tags, shown under their name at the door and never in its place. -->
+    <div class="essential-field" :data-testid="`${prefix}-essential-business-name`">
+      <label class="essential-label" :for="`${prefix}-essential-business-name-input`">
+        {{ BUSINESS_NAME_LABEL }}
+      </label>
+      <p class="essential-help">
+        The name of your business or stall, if you trade under one. Leave it empty if you do not.
+      </p>
+      <input
+        :id="`${prefix}-essential-business-name-input`"
+        class="field essential-text-input"
+        type="text"
+        autocomplete="organization"
+        :value="businessNameAnswer"
+        :disabled="isLocked(BUSINESS_NAME_KEY)"
+        :data-testid="`${prefix}-essential-business-name-input`"
+        @input="onBusinessNameInput"
+      />
+      <slot name="after" :question="BUSINESS_NAME_KEY" />
     </div>
 
     <!-- Max dates -->

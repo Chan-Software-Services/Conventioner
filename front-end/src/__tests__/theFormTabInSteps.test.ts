@@ -243,6 +243,18 @@ describe("a Google Form market's essential questions (E33/F01/S02)", () => {
     expect(csv.text()).not.toContain('application form asks');
     expect(csv.get('[data-testid="essential-dates-empty"]').text()).toContain('import');
   });
+
+  it('list the built-in business name on either market, with nothing to switch off (T502)', async () => {
+    const { default: EssentialFieldsPanel } =
+      await import('@/components/application/EssentialFieldsPanel.vue');
+    for (const forApplicants of [true, false]) {
+      const panel = mount(EssentialFieldsPanel, { props: { options: EMPTY, forApplicants } });
+      const item = panel.get('[data-testid="essential-item-business-name"]');
+
+      expect(item.text()).toContain('Business name');
+      expect(item.find('input[type="checkbox"]').exists()).toBe(false);
+    }
+  });
 });
 
 describe('a question the market does not ask', () => {
