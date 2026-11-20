@@ -73,6 +73,7 @@ import ListFreshness from '@/components/ListFreshness.vue';
 import ReadFailed from '@/components/ReadFailed.vue';
 import DoorCodeScreen from '@/components/DoorCodeScreen.vue';
 import DoorRosterPrint, { type PrintedRow } from '@/components/DoorRosterPrint.vue';
+import EmailAddress from '@/components/EmailAddress.vue';
 import { offersDoorCode } from '@/utils/doorCode';
 import { useVendorDetails } from '@/utils/vendorDetails';
 import { useVendorDrawer } from '@/utils/vendorDrawer';
@@ -127,7 +128,9 @@ const NOT_WRITTEN: Record<DoorWrite, string> = {
   'undo-check-out': 'That check-out was not undone.',
 };
 
-type Show = 'all' | 'not-yet' | 'here';
+/** The list's filters: everyone, then three that part them, so each vendor is under one of the
+ *  last three (T501): checked in means checked in and not out. */
+type Show = 'all' | 'not-checked-in' | 'checked-in' | 'checked-out';
 
 interface Roster {
   dates: string[];
@@ -300,23 +303,35 @@ function hasSeat(row: RosterRow): boolean {
   return row.state !== 'here_without_seat';
 }
 
-/** The chosen date's seats, and those checked in: a vendor here with no table that day is not
- *  counted. */
-const today = computed(() => {
-  const day = roster.value.filter((row) => row.date === selectedDate.value && hasSeat(row));
-  return { expected: day.length, here: day.filter((row) => row.checkedInAt).length };
-});
+/** Which of the last three filters a row is under: a check-out leaves the vendor come. */
+function showsUnder(row: RosterRow): Exclude<Show, 'all'> {
+  if (!row.checkedInAt) return 'not-checked-in';
+  return row.checkedOutAt ? 'checked-out' : 'checked-in';
+}
 
 /**
- * Whether the chosen day is over: it has passed, or the market is archived. A vendor who never
- * checked in then did not come, and "Not yet" said otherwise of every one of them (E30/F01/S02).
+ * The chosen date's seats, those who came, checked out or not, as the Stats tab counts the day, and
+ * each filter's: a vendor here with no table that day is not counted.
  */
-const dayIsOver = computed(
-  () =>
-    market.value?.phase === MarketPhase.Archived ||
-    (!!selectedDate.value && selectedDate.value < calendarToday()),
-);
-const notHere = computed(() => (dayIsOver.value ? 'Did not come' : 'Not yet'));
+const today = computed(() => {
+  const day = roster.value.filter((row) => row.date === selectedDate.value && hasSeat(row));
+  const under = (which: Show) => day.filter((row) => showsUnder(row) === which).length;
+  return {
+    expected: day.length,
+    here: day.filter((row) => row.checkedInAt).length,
+    notCheckedIn: under('not-checked-in'),
+    checkedIn: under('checked-in'),
+    checkedOut: under('checked-out'),
+  };
+});
+
+/** The filters under the bar, each with its count. */
+const filters = computed<{ id: Show; label: string; count: number }[]>(() => [
+  { id: 'all', label: 'All', count: today.value.expected },
+  { id: 'not-checked-in', label: 'Not checked in', count: today.value.notCheckedIn },
+  { id: 'checked-in', label: 'Checked in', count: today.value.checkedIn },
+  { id: 'checked-out', label: 'Checked out', count: today.value.checkedOut },
+]);
 
 /** Check in is offered on today and past days: a mis-tapped day to come is not an arrival. */
 const checkInOpen = computed(() => !!selectedDate.value && selectedDate.value <= calendarToday());
@@ -325,8 +340,7 @@ const shownToday = computed(() => {
   const term = search.value.trim().toLowerCase();
   return roster.value.filter((row) => {
     if (row.date !== selectedDate.value) return false;
-    if (show.value === 'not-yet' && row.checkedInAt) return false;
-    if (show.value === 'here' && !row.checkedInAt) return false;
+    if (show.value !== 'all' && showsUnder(row) !== show.value) return false;
     if (!term) return true;
     if ((row.tableCode ?? '').toLowerCase().includes(term)) return true;
     return vendorMatches(term, row.vendorEmail, names.value, fullNames.value);
@@ -423,38 +437,56 @@ function printRoster(): void {
   window.print();
 }
 
-function status(row: RosterRow): string {
-  if (!row.checkedInAt) return notHere.value;
-  const at = getTimestampTime(row.checkedInAt);
-  const arrived = arrival(row, at);
+/**
+ * What a chip says, in two parts: when, and who made it, "by <who>". A row too narrow for one line
+ * breaks the chip between the two and nowhere else but in an address, which `EmailAddress` breaks
+ * only before its "@" or a dot (T501, Q7).
+ */
+interface ChipWords {
+  when: string;
+  /** "by" and who, else empty: the vendor's own, or a record with no organizer. */
+  by: string;
+}
+
+function chipText(words: ChipWords): string {
+  return words.by ? `${words.when} ${words.by}` : words.when;
+}
+
+/** The status chip's words: "Not checked in", or when and how they checked in. */
+function statusWords(row: RosterRow): ChipWords {
+  if (!row.checkedInAt) return { when: 'Not checked in', by: '' };
+  const words = arrival(row, getTimestampTime(row.checkedInAt));
   // Here, but at a table they no longer hold: say which, so they are sent to their new one. The
   // table is one unbreakable run ("table Hall B 12"), so a narrow chip or the paper's column never
   // leaves its last word on a line alone.
-  if (row.state === 'here_elsewhere') {
-    return `${arrived}, at ${`table ${row.checkedInTableCode}`.replaceAll(' ', '\u00a0')}`;
-  }
-  return arrived;
+  if (row.state !== 'here_elsewhere') return words;
+  const where = `, at ${`table ${row.checkedInTableCode}`.replaceAll(' ', '\u00a0')}`;
+  return words.by ? { ...words, by: words.by + where } : { ...words, when: words.when + where };
 }
 
-function arrival(row: RosterRow, at: string): string {
+/** The status, as one line: the paper's column. */
+function status(row: RosterRow): string {
+  return chipText(statusWords(row));
+}
+
+function arrival(row: RosterRow, at: string): ChipWords {
   // The vendor's own, with the door code they scanned or typed at the entrance.
-  if (row.checkedInVia === 'door_code') return `Scanned in at ${at}`;
-  if (!row.checkedInBy) return at;
-  return `${at} by ${byWhom(row.checkedInBy)}`;
+  if (row.checkedInVia === 'door_code') return { when: `Scanned in at ${at}`, by: '' };
+  return { when: at, by: byWhom(row.checkedInBy) };
 }
 
-/** The organizer who made a check-in or a check-out: "you" to themselves. */
-function byWhom(organizer: string): string {
-  return organizer.toLowerCase() === signedInAs.value ? 'you' : organizer;
+/** The organizer who made a check-in or a check-out, "by you" to themselves, else nothing. */
+function byWhom(organizer: string | null | undefined): string {
+  if (!organizer) return '';
+  return `by ${organizer.toLowerCase() === signedInAs.value ? 'you' : organizer}`;
 }
 
 /** When a checked-out vendor was checked out and by whom, in a chip of its own after the status. */
-function departure(row: RosterRow): string {
-  if (!row.checkedOutAt) return '';
-  const at = getTimestampTime(row.checkedOutAt);
+function departure(row: RosterRow): ChipWords {
+  const at = getTimestampTime(row.checkedOutAt ?? '');
   // The vendor's own, with the door code, on their vendor page.
-  if (row.checkedOutVia === 'door_code') return `Scanned out at ${at}`;
-  return row.checkedOutBy ? `Out ${at} by ${byWhom(row.checkedOutBy)}` : `Out ${at}`;
+  if (row.checkedOutVia === 'door_code') return { when: `Scanned out at ${at}`, by: '' };
+  return { when: `Checked out ${at}`, by: byWhom(row.checkedOutBy) };
 }
 
 /** Here at the seat they hold reads positive; anything else asks the door's attention. */
@@ -698,31 +730,15 @@ const drawer = useVendorDrawer();
           </h2>
           <div v-if="view === 'list'" class="door-show" role="group" aria-label="Show">
             <button
+              v-for="filter in filters"
+              :key="filter.id"
               type="button"
               class="btn btn--secondary btn--compact"
-              :aria-pressed="show === 'all'"
-              data-testid="attendance-show-all"
-              @click="show = 'all'"
+              :aria-pressed="show === filter.id"
+              :data-testid="`attendance-show-${filter.id}`"
+              @click="show = filter.id"
             >
-              All {{ today.expected }}
-            </button>
-            <button
-              type="button"
-              class="btn btn--secondary btn--compact"
-              :aria-pressed="show === 'not-yet'"
-              data-testid="attendance-show-not-yet"
-              @click="show = 'not-yet'"
-            >
-              {{ notHere }} {{ today.expected - today.here }}
-            </button>
-            <button
-              type="button"
-              class="btn btn--secondary btn--compact"
-              :aria-pressed="show === 'here'"
-              data-testid="attendance-show-here"
-              @click="show = 'here'"
-            >
-              Checked in {{ today.here }}
+              {{ filter.label }} {{ filter.count }}
             </button>
           </div>
           <SearchPicker
@@ -774,7 +790,7 @@ const drawer = useVendorDrawer();
           <p v-if="today.expected === 0 && withoutSeatToday === 0" class="door-note">
             Nobody is assigned on this date.
           </p>
-          <p v-else-if="lists.length === 0" class="door-note">Nobody here matches.</p>
+          <p v-else-if="lists.length === 0" class="door-note">Nobody matches.</p>
           <template v-for="list in lists" :key="list.key">
             <h3 v-if="list.heading" class="door-heading" data-testid="attendance-unseated-heading">
               {{ list.heading }}
@@ -852,8 +868,12 @@ const drawer = useVendorDrawer();
                         class="chip door-status"
                         :class="statusTone(row)"
                         data-testid="attendance-row-status"
-                        >{{ status(row) }}</span
-                      >
+                        ><span class="door-chip-when">{{ statusWords(row).when }}</span
+                        ><template v-if="statusWords(row).by"
+                          >{{ ' '
+                          }}<span class="door-chip-by"
+                            ><EmailAddress :words="statusWords(row).by" /></span></template
+                      ></span>
                     </span>
                     <span v-if="row.checkedOutAt" class="door-line">
                       <button
@@ -867,9 +887,13 @@ const drawer = useVendorDrawer();
                       >
                         Undo?
                       </button>
-                      <span class="chip chip--neutral door-out" data-testid="attendance-row-out">{{
-                        departure(row)
-                      }}</span>
+                      <span class="chip chip--neutral door-out" data-testid="attendance-row-out"
+                        ><span class="door-chip-when">{{ departure(row).when }}</span
+                        ><template v-if="departure(row).by"
+                          >{{ ' '
+                          }}<span class="door-chip-by"
+                            ><EmailAddress :words="departure(row).by" /></span></template
+                      ></span>
                     </span>
                   </span>
                 </span>
@@ -1063,9 +1087,30 @@ const drawer = useVendorDrawer();
   gap: var(--space-1);
 }
 
+/* One line where the row has room, as at a desk; where it has not, when on the first and by whom on
+   the second, the chip the row's width, and an address breaking only before its "@" or a dot
+   (T501, Q7). The chip's gap stands for the space between the two, which a flex container does
+   not draw, and the two lines take no gap between them. */
 .door-status,
 .door-out {
+  flex-wrap: wrap;
+  row-gap: 0;
+  max-width: 100%;
+  white-space: normal;
+}
+
+.door-chip-when {
   white-space: nowrap;
+}
+
+.door-chip-by {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+/* "by" stays with the address, which breaks only where `EmailAddress` lets it. */
+.door-chip-by :deep(.email-address) {
+  white-space: normal;
 }
 
 /* A line of the chips: the "Undo?" of what the chip says, if any, then the chip. */

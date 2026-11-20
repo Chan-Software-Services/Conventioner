@@ -6,8 +6,9 @@
  *
  * The door recorded that a vendor came and nothing that they left. A check-out is three fields
  * beside the check-in's on the day's one record, so a vendor checked out still came: their status,
- * the count, the Show buttons and the printed roster read as before, and the map is given the same
- * rows, which it draws checked out (T501, `theDoorAsAMap.test.ts`).
+ * the count and the printed roster read as before, the filters list them under Checked out, never
+ * under Checked in, and the map is given the same rows, which it draws checked out (T501,
+ * `theDoorAsAMap.test.ts`).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableAutoUnmount, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
@@ -43,6 +44,7 @@ const OTHER_ORGANIZER = 'sam@example.com';
 const ANA = 'ana@example.com';
 const BEN = 'ben@example.com';
 const CY = 'cy@example.com';
+const DEE = 'dee@example.com';
 const ARRIVED = '2099-08-01T09:41:00Z';
 const LEFT = '2099-08-01T16:05:00Z';
 const ROSTER_URL = '/markets/market-a/attendance';
@@ -187,8 +189,11 @@ const offers = (wrapper: VueWrapper, email: string) => ({
     .map((line) => [...line.element.children].map((part) => part.getAttribute('data-testid'))),
 });
 
-/** A row not yet here: Check in, and its status alone. */
-const NOT_YET_OFFERS = { action: ['attendance-check-in'], lines: [['attendance-row-status']] };
+/** A row not checked in: Check in, and its status alone. */
+const NOT_CHECKED_IN_OFFERS = {
+  action: ['attendance-check-in'],
+  lines: [['attendance-row-status']],
+};
 /** A row checked in: Check out, and the check-in's Undo left of its status. */
 const HERE_OFFERS = {
   action: ['attendance-check-out'],
@@ -215,13 +220,14 @@ const chips = (wrapper: VueWrapper, email: string) =>
 const button = (wrapper: VueWrapper, email: string, testid: string) =>
   rowOf(wrapper, email).get(`[data-testid="${testid}"]`);
 
-/** What the page reads the same whatever a check-out says: the count and the Show buttons. */
+/** The bar's count and each filter's. */
 function counts(wrapper: VueWrapper) {
   return {
     summary: wrapper.get('[data-testid="attendance-summary"]').text(),
     all: wrapper.get('[data-testid="attendance-show-all"]').text(),
-    notYet: wrapper.get('[data-testid="attendance-show-not-yet"]').text(),
-    here: wrapper.get('[data-testid="attendance-show-here"]').text(),
+    notCheckedIn: wrapper.get('[data-testid="attendance-show-not-checked-in"]').text(),
+    checkedIn: wrapper.get('[data-testid="attendance-show-checked-in"]').text(),
+    checkedOut: wrapper.get('[data-testid="attendance-show-checked-out"]').text(),
   };
 }
 
@@ -247,7 +253,7 @@ describe("each row's buttons", () => {
   it('an expected row offers Check in, as before', async () => {
     serve(expected(ANA, 'A1'));
     const wrapper = await open();
-    expect(offers(wrapper, ANA)).toEqual(NOT_YET_OFFERS);
+    expect(offers(wrapper, ANA)).toEqual(NOT_CHECKED_IN_OFFERS);
     expect(outChip(wrapper, ANA).exists()).toBe(false);
   });
 
@@ -307,7 +313,7 @@ describe("each row's buttons", () => {
     await flushPromises();
 
     expect(api.post).toHaveBeenCalledWith(CHECK_OUT_URL, { vendorEmail: CY, date: TODAY });
-    expect(outChip(wrapper, CY).text()).toMatch(/^Out .+ by you$/);
+    expect(outChip(wrapper, CY).text()).toMatch(/^Checked out .+ by you$/);
     expect(offers(wrapper, CY)).toEqual(OUT_OFFERS);
     // Still listed under the day's seats, counted apart.
     expect(wrapper.get('[data-testid="attendance-unseated-heading"]').text()).toBe(
@@ -342,18 +348,51 @@ describe("a checked-out row's chips", () => {
   });
 
   it.each([
-    ['the organizer looking', ORGANIZER, /^Out \d{1,2}:\d{2}\s[AP]M by you$/],
-    ['the organizer looking, in another case', 'Org@Example.com', /^Out .+ by you$/],
+    ['the organizer looking', ORGANIZER, /^Checked out \d{1,2}:\d{2}\s[AP]M by you$/],
+    ['the organizer looking, in another case', 'Org@Example.com', /^Checked out .+ by you$/],
     [
       'another organizer',
       OTHER_ORGANIZER,
-      new RegExp(`^Out \\d{1,2}:\\d{2}\\s[AP]M by ${OTHER_ORGANIZER}$`),
+      new RegExp(`^Checked out \\d{1,2}:\\d{2}\\s[AP]M by ${OTHER_ORGANIZER}$`),
     ],
     ["the vendor's own scan", null, /^Scanned out at \d{1,2}:\d{2}\s[AP]M$/],
   ])('says a check-out by %s', async (_name, by, words) => {
     serve(out(ANA, 'A1', by));
     const wrapper = await open();
     expect(outChip(wrapper, ANA).text()).toMatch(words);
+  });
+
+  it('says when on one line and by whom on the next, the address drawn to break only before its "@" or a dot', async () => {
+    serve({ ...out(ANA, 'A1', OTHER_ORGANIZER), checkedInBy: OTHER_ORGANIZER });
+    const wrapper = await open();
+    for (const chip of [outChip(wrapper, ANA), status(wrapper, ANA)]) {
+      const parts = chip.findAll(':scope > span');
+      expect(parts.map((part) => part.classes())).toEqual([['door-chip-when'], ['door-chip-by']]);
+      expect(parts[1]!.text()).toBe(`by ${OTHER_ORGANIZER}`);
+      expect(parts[1]!.findAll('.email-address').map((half) => half.text())).toEqual([
+        'sam',
+        '@example.com',
+      ]);
+    }
+    expect(outChip(wrapper, ANA).get('.door-chip-when').text()).toMatch(
+      /^Checked out \d{1,2}:\d{2}\s[AP]M$/,
+    );
+    expect(status(wrapper, ANA).get('.door-chip-when').text()).toMatch(/^\d{1,2}:\d{2}\s[AP]M$/);
+  });
+
+  it('the check-in chip says as before: "<time> by you", "<time> by <address>", "Scanned in at <time>"', async () => {
+    serve(
+      here(ANA, 'A1'),
+      { ...here(BEN, 'A2'), checkedInBy: OTHER_ORGANIZER },
+      { ...here(DEE, 'A3'), checkedInBy: null, checkedInVia: 'door_code' },
+    );
+    const wrapper = await open();
+    expect(status(wrapper, ANA).text()).toMatch(/^\d{1,2}:\d{2}\s[AP]M by you$/);
+    expect(status(wrapper, BEN).text()).toMatch(
+      new RegExp(`^\\d{1,2}:\\d{2}\\s[AP]M by ${OTHER_ORGANIZER}$`),
+    );
+    expect(status(wrapper, DEE).text()).toMatch(/^Scanned in at \d{1,2}:\d{2}\s[AP]M$/);
+    expect(status(wrapper, DEE).find('.door-chip-by').exists()).toBe(false);
   });
 
   it('keeps the attention of a vendor here at another table', async () => {
@@ -365,7 +404,7 @@ describe("a checked-out row's chips", () => {
     const wrapper = await open();
     expect(status(wrapper, ANA).text()).toMatch(/, at table A7$/);
     expect(status(wrapper, ANA).classes()).toContain('chip--attention');
-    expect(outChip(wrapper, ANA).text()).toMatch(/^Out .+ by you$/);
+    expect(outChip(wrapper, ANA).text()).toMatch(/^Checked out .+ by you$/);
   });
 
   it('a record from before the check-out, with none of its fields, reads as not checked out', async () => {
@@ -392,7 +431,7 @@ describe('a check-out and its undo', () => {
 
     expect(api.post).toHaveBeenCalledTimes(1);
     expect(api.post).toHaveBeenCalledWith(CHECK_OUT_URL, { vendorEmail: ANA, date: TODAY });
-    expect(outChip(wrapper, ANA).text()).toMatch(/^Out \d{1,2}:\d{2}\s[AP]M by you$/);
+    expect(outChip(wrapper, ANA).text()).toMatch(/^Checked out \d{1,2}:\d{2}\s[AP]M by you$/);
     expect(status(wrapper, ANA).text()).toMatch(/ by you$/);
     expect(offers(wrapper, ANA)).toEqual(OUT_OFFERS);
     expect(rosterReads()).toBe(2);
@@ -424,7 +463,7 @@ describe('a check-out and its undo', () => {
     await button(wrapper, ANA, 'attendance-check-out').trigger('click');
     await flushPromises();
 
-    expect(outChip(wrapper, ANA).text()).toMatch(/^Out .+ by you$/);
+    expect(outChip(wrapper, ANA).text()).toMatch(/^Checked out .+ by you$/);
   });
 
   it('hold both of the row’s buttons busy while the write is out, and no other row’s', async () => {
@@ -458,8 +497,8 @@ describe('a check-out and its undo', () => {
     expect(api.delete).toHaveBeenCalledWith(ROSTER_URL, {
       data: { vendorEmail: ANA, date: TODAY },
     });
-    expect(status(wrapper, ANA).text()).toBe('Not yet');
-    expect(offers(wrapper, ANA)).toEqual(NOT_YET_OFFERS);
+    expect(status(wrapper, ANA).text()).toBe('Not checked in');
+    expect(offers(wrapper, ANA)).toEqual(NOT_CHECKED_IN_OFFERS);
   });
 });
 
@@ -535,7 +574,9 @@ describe('someone who may not check vendors in', () => {
     serve(here(ANA, 'A1'), out(BEN, 'A2', OTHER_ORGANIZER));
     const wrapper = await open();
 
-    expect(outChip(wrapper, BEN).text()).toMatch(new RegExp(`^Out .+ by ${OTHER_ORGANIZER}$`));
+    expect(outChip(wrapper, BEN).text()).toMatch(
+      new RegExp(`^Checked out .+ by ${OTHER_ORGANIZER}$`),
+    );
     for (const email of [ANA, BEN]) {
       expect(rowOf(wrapper, email).find('.door-action').exists()).toBe(false);
       expect(
@@ -549,15 +590,16 @@ describe('someone who may not check vendors in', () => {
   });
 });
 
-describe('nothing else on the page reads a check-out', () => {
+describe('the filters read a check-out, and every count still counts the vendor as come', () => {
   /** The day with nobody checked out, and the same day with Ana and the seatless Cy checked out. */
   const day = (checkedOut: boolean) => [
     checkedOut ? out(ANA, 'A1', ORGANIZER) : here(ANA, 'A1'),
     expected(BEN, 'A2'),
+    here(DEE, 'A3'),
     checkedOut ? { ...seatless(CY), checkedOutAt: LEFT, checkedOutBy: ORGANIZER } : seatless(CY),
   ];
 
-  /** What the page says apart from the row's out chip and its buttons. */
+  /** What the page says, and which rows each filter and search shows. */
   async function read(checkedOut: boolean) {
     serve(...day(checkedOut));
     const wrapper = await open();
@@ -577,16 +619,17 @@ describe('nothing else on the page reads a check-out', () => {
     };
     const said = {
       counts: counts(wrapper),
-      statuses: [ANA, BEN, CY].map((email) => status(wrapper, email).text()),
-      tones: [ANA, BEN, CY].map((email) =>
+      statuses: [ANA, BEN, CY, DEE].map((email) => status(wrapper, email).text()),
+      tones: [ANA, BEN, CY, DEE].map((email) =>
         status(wrapper, email)
           .classes()
           .filter((name) => name.startsWith('chip--')),
       ),
       printed: printed(),
       all: await shownUnder('all'),
-      notYet: await shownUnder('not-yet'),
-      here: await shownUnder('here'),
+      notCheckedIn: await shownUnder('not-checked-in'),
+      checkedIn: await shownUnder('checked-in'),
+      checkedOut: await shownUnder('checked-out'),
       found: [await shownUnder('all'), await search('ana'), await search('A2')],
     };
     // The map is given the roster's rows as the list reads them, `state` unchanged by a check-out;
@@ -610,40 +653,112 @@ describe('nothing else on the page reads a check-out', () => {
     return { ...said, map: drawn };
   }
 
-  it("the summary, the Show buttons, the search, the map's rows and the printed roster read the same", async () => {
+  it('the filters are All, Not checked in, Checked in and Checked out, each vendor under one of the last three', async () => {
     const before = await read(false);
     const after = await read(true);
 
-    expect(after).toEqual(before);
-    // And what they say is a vendor who came: counted, under Checked in, never under Not yet.
-    expect(after.counts).toEqual({
-      summary: '1 of 2 checked in',
-      all: 'All 2',
-      notYet: 'Not yet 1',
-      here: 'Checked in 1',
+    expect(before.counts).toEqual({
+      summary: '2 of 3 checked in',
+      all: 'All 3',
+      notCheckedIn: 'Not checked in 1',
+      checkedIn: 'Checked in 2',
+      checkedOut: 'Checked out 0',
     });
-    expect(after.here).toEqual([ANA, CY]);
-    expect(after.notYet).toEqual([BEN]);
-    expect(after.printed).toHaveLength(3);
-    expect(after.printed.join(' ')).not.toMatch(/\bOut\b|Scanned out/);
+    expect(after.counts).toEqual({
+      summary: '2 of 3 checked in',
+      all: 'All 3',
+      notCheckedIn: 'Not checked in 1',
+      checkedIn: 'Checked in 1',
+      checkedOut: 'Checked out 1',
+    });
+    // The seatless Cy is listed under All, and under Checked in or Checked out by their own
+    // check-out, never counted.
+    expect(before.all).toEqual([ANA, BEN, DEE, CY]);
+    expect(before.notCheckedIn).toEqual([BEN]);
+    expect(before.checkedIn).toEqual([ANA, DEE, CY]);
+    expect(before.checkedOut).toEqual([]);
+    expect(after.all).toEqual([ANA, BEN, DEE, CY]);
+    expect(after.notCheckedIn).toEqual([BEN]);
+    expect(after.checkedIn).toEqual([DEE]);
+    expect(after.checkedOut).toEqual([ANA, CY]);
+    // The last three are exclusive, and together every row.
+    const underOne = [...after.notCheckedIn, ...after.checkedIn, ...after.checkedOut];
+    expect([...underOne].sort()).toEqual([...after.all].sort());
+    expect(new Set(underOne).size).toBe(underOne.length);
   });
 
-  it('"Did not come" is said of a vendor who never checked in, never of one checked out', async () => {
-    const [year, month, date] = TODAY.split('-').map(Number) as [number, number, number];
-    const yesterday = calendarToday(new Date(year, month - 1, date - 1));
-    route.query = { date: yesterday };
+  it("the summary, the statuses, the search, the map's rows and the printed roster read the same", async () => {
+    const before = await read(false);
+    const after = await read(true);
+
+    const same = (said: Awaited<ReturnType<typeof read>>) => ({
+      summary: said.counts.summary,
+      all: said.counts.all,
+      notCheckedIn: said.counts.notCheckedIn,
+      statuses: said.statuses,
+      tones: said.tones,
+      printed: said.printed,
+      shownUnderAll: said.all,
+      shownUnderNotCheckedIn: said.notCheckedIn,
+      found: said.found,
+      map: said.map,
+    });
+    expect(same(after)).toEqual(same(before));
+    expect(after.printed).toHaveLength(4);
+    expect(after.printed.join(' ')).not.toMatch(/\bOut\b|Checked out|Scanned out/);
+  });
+
+  it('the bar counts every check-in of the day, checked out or not', async () => {
+    serve(out(ANA, 'A1', ORGANIZER), out(BEN, 'A2', null), expected(DEE, 'A3'));
+    const wrapper = await open();
+    expect(counts(wrapper)).toEqual({
+      summary: '2 of 3 checked in',
+      all: 'All 3',
+      notCheckedIn: 'Not checked in 1',
+      checkedIn: 'Checked in 0',
+      checkedOut: 'Checked out 2',
+    });
+  });
+
+  it('a filter that leaves no row says "Nobody matches."', async () => {
+    serve(here(ANA, 'A1'));
+    const wrapper = await open();
+    await wrapper.get('[data-testid="attendance-show-checked-out"]').trigger('click');
+    expect(wrapper.findAll('[data-testid="attendance-row"]')).toHaveLength(0);
+    expect(wrapper.get('.door-note').text()).toBe('Nobody matches.');
+  });
+});
+
+describe('a vendor who never checked in reads "Not checked in" at every time of day', () => {
+  const [year, month, date] = TODAY.split('-').map(Number) as [number, number, number];
+  const yesterday = calendarToday(new Date(year, month - 1, date - 1));
+  const tomorrow = calendarToday(new Date(year, month - 1, date + 1));
+
+  it.each([
+    ['a day to come', tomorrow, MarketPhase.MarketDays],
+    ['the day itself', TODAY, MarketPhase.MarketDays],
+    ['a day over', yesterday, MarketPhase.MarketDays],
+    ['an archived market', yesterday, MarketPhase.Archived],
+  ])('on %s', async (_name, shown, phase) => {
+    marketRef.value = { ...marketOf('market-a'), phase } as Market;
+    route.query = { date: shown };
     api.get.mockResolvedValue({
       data: {
-        dates: [yesterday, TODAY],
+        dates: [yesterday, TODAY, tomorrow],
         roster: [
-          { ...out(ANA, 'A1', ORGANIZER), date: yesterday },
-          { ...expected(BEN, 'A2'), date: yesterday },
+          { ...out(ANA, 'A1', ORGANIZER), date: shown },
+          { ...expected(BEN, 'A2'), date: shown },
         ],
       },
     });
     const wrapper = await open();
     expect(status(wrapper, ANA).text()).toMatch(/ by you$/);
-    expect(status(wrapper, BEN).text()).toBe('Did not come');
-    expect(wrapper.get('[data-testid="attendance-show-not-yet"]').text()).toBe('Did not come 1');
+    expect(status(wrapper, BEN).text()).toBe('Not checked in');
+    expect(wrapper.get('[data-testid="attendance-show-not-checked-in"]').text()).toBe(
+      'Not checked in 1',
+    );
+    for (const old of ['Here', 'Expected', 'Not yet', 'Did not come']) {
+      expect(wrapper.text()).not.toContain(old);
+    }
   });
 });

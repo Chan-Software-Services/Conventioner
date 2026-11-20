@@ -820,7 +820,7 @@ describe('under the map', () => {
     async (button, vendor) => {
       const wrapper = await open();
       // Eve is here and Fay is not: each Show but All hides one of them.
-      for (const toggle of ['attendance-show-not-yet', 'attendance-show-here']) {
+      for (const toggle of ['attendance-show-not-checked-in', 'attendance-show-checked-in']) {
         await wrapper.get(testid(toggle)).trigger('click');
         await wrapper.get(testid('attendance-view-map')).trigger('click');
         await flushPromises();

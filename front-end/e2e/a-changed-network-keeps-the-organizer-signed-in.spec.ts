@@ -55,7 +55,7 @@ test('an organizer whose phone moves to mobile data stays signed in through a ch
 
   const attendance = new AttendanceStatusPage(page);
   await attendance.goto(seed.marketId);
-  await expect(attendance.status(vendor)).toHaveText('Not yet');
+  await expect(attendance.status(vendor)).toHaveText('Not checked in');
 
   // The phone leaves the venue's wifi.
   network.at = MOBILE_DATA;

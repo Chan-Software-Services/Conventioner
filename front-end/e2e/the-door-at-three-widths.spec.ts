@@ -217,7 +217,7 @@ for (const size of THREE_WINDOWS) {
       // A check-out and its undo: the row checked out has no button, and its one "Undo?", a thumb's
       // 44px on the phone like every target, by when they left.
       await press(door.action(COMES, 'check-out'));
-      await expect(door.out(COMES)).toHaveText(/^Out \d{1,2}:\d{2}\s[AP]M by you$/);
+      await expect(door.out(COMES)).toHaveText(/^Checked out \d{1,2}:\d{2}\s[AP]M by you$/);
       await expect(door.row(COMES).locator('.btn')).toHaveCount(0);
       await expect(door.action(COMES, 'undo')).toHaveCount(0);
       await expectInside(door.row(COMES), 'the row checked out');
@@ -228,7 +228,7 @@ for (const size of THREE_WINDOWS) {
       await expect(door.action(COMES, 'check-out')).toBeEnabled();
 
       await press(door.row(COMES).getByTestId('attendance-undo'));
-      await expect(door.status(COMES)).toHaveText('Not yet');
+      await expect(door.status(COMES)).toHaveText('Not checked in');
       await expect(door.row(COMES).getByTestId('attendance-check-in')).toBeEnabled();
       await expect(door.summary).toHaveText('1 of 3 checked in');
       await expectInside(door.row(COMES), 'the row undone');

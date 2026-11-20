@@ -1,0 +1,248 @@
+import { request as apiRequest, type Locator, type Page } from '@playwright/test';
+import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
+import { expectWholeAddress } from './helpers/addressBreaks';
+import { marketScreenPath } from './helpers/marketScreens';
+import {
+  detectLayout,
+  gates,
+  minTargetAt,
+  SPACE_SCALE,
+  TYPE_SCALE,
+} from './helpers/layoutDetectors';
+import { inTheWindow, PHONE_AND_DESK } from './helpers/phoneWindow';
+import { loginViaApi, seedPublishedMarketWithAssignments } from './helpers/seeds';
+import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { calendarToday } from './helpers/vendorSignIn';
+import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
+
+/**
+ * The door says one set of words of a vendor's day (T501): "Not checked in", "Checked in" and
+ * "Checked out", on its list, its filters, its map and its printed roster, at every time of day.
+ *
+ * The list said "Not yet" of a vendor who had not come, "Did not come" once the day was over, and
+ * "Out" once they left, while the map said "Here" and "Expected": the organizers read five words
+ * for three states. Now a row not checked in says "Not checked in" before, on and after the day,
+ * a checked-out row says "Checked out <time> by <who>", the filters are All, Not checked in,
+ * Checked in and Checked out, each vendor under one of the last three, and the bar still counts
+ * everyone who came, checked out or not.
+ *
+ * Walked on a phone, under a phone's emulation, and at a desk, on a day to come, the day itself
+ * and a day over. A vendor checked out by an organizer with a long address reads their chip inside
+ * the row: on a phone when on its first line and "by" the address on its second, the address
+ * breaking only before its "@" or a dot.
+ */
+const [YEAR, MONTH, DATE] = calendarToday().split('-').map(Number) as [number, number, number];
+const YESTERDAY = calendarToday(new Date(YEAR, MONTH - 1, DATE - 1));
+const TODAY = calendarToday();
+const TOMORROW = calendarToday(new Date(YEAR, MONTH - 1, DATE + 1));
+
+/** An organizer of the market whose address is too long to share a phone's line with the time. */
+const LONG_ORGANIZER = {
+  email: 'e2e-the-door-organizer-of-long@example.com',
+  password: 'e2epassword123',
+};
+/** Checked in and out by the long-addressed organizer, on each day begun. */
+const LEFT = 'door-words-left@example.com';
+/** Checked in by the market's owner, who reads "by you", and not out. */
+const STAYS = 'door-words-stays@example.com';
+/** Never comes. */
+const NEVER = 'door-words-never@example.com';
+
+const TIME = '\\d{1,2}:\\d{2}\\s[AP]M';
+
+/** The words the door said of a vendor's day before T501, none of them on its page now. */
+const OLD_WORDS = /\b(Here|Expected|Not yet|Did not come)\b/;
+
+let marketId: string;
+
+/** The layout sweep's gating findings on the page as it stands: none, the phone's 44px included. */
+async function expectNoLayoutFault(page: Page, what: string): Promise<void> {
+  const width = page.viewportSize()!.width;
+  const findings = await page.evaluate(detectLayout, {
+    spaceScale: SPACE_SCALE,
+    textScale: TYPE_SCALE,
+    minTarget: minTargetAt(width),
+  });
+  expect(
+    findings.filter((finding) => gates(finding, width)),
+    what,
+  ).toEqual([]);
+}
+
+/** Everything the page holds as text, the printed roster's hidden sheet among it. */
+const pageText = (page: Page) => page.locator('body').evaluate((body) => body.textContent ?? '');
+
+/** The vendors a filter lists, by address: the list's order is the tables', which differ by day. */
+async function listedUnder(
+  door: AttendanceStatusPage,
+  which: 'all' | 'not-checked-in' | 'checked-in' | 'checked-out',
+): Promise<string[]> {
+  await door.show(which);
+  await expect(door.page.getByTestId(`attendance-show-${which}`)).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  const listed = await door.rows.evaluateAll((rows) =>
+    rows.map((row) => row.getAttribute('data-vendor') ?? ''),
+  );
+  return listed.toSorted();
+}
+
+/** Each part of a chip's words, its top and its bottom, where the page drew it. */
+const partsOf = (chip: Locator) =>
+  chip.evaluate((element) =>
+    [...element.querySelectorAll(':scope > span')].map((part) => {
+      const box = part.getBoundingClientRect();
+      return { text: part.textContent ?? '', top: box.top, bottom: box.bottom };
+    }),
+  );
+
+test.beforeAll(async ({ request }) => {
+  ensureVerifiedUser(LONG_ORGANIZER.email, LONG_ORGANIZER.password);
+  // A day over, today and a day to come: the market stays on its days past midnight.
+  ({ marketId } = await seedPublishedMarketWithAssignments(
+    request,
+    BACKEND_URL,
+    TEST_USER.email,
+    TEST_USER.password,
+    {
+      marketDates: [YESTERDAY, TODAY, TOMORROW],
+      vendors: [LEFT, STAYS, NEVER],
+      namePrefix: 'E2E Door Words',
+    },
+  ));
+  const roles = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
+    data: { user_email: LONG_ORGANIZER.email, role: 'editor' },
+  });
+  expect(roles.ok(), await roles.text()).toBeTruthy();
+  const organizer = await apiRequest.newContext({ ignoreHTTPSErrors: true });
+  await loginViaApi(organizer, BACKEND_URL, LONG_ORGANIZER.email, LONG_ORGANIZER.password);
+  for (const date of [YESTERDAY, TODAY]) {
+    const owner = await request.post(`${BACKEND_URL}/markets/${marketId}/attendance`, {
+      data: { vendorEmail: STAYS, date },
+    });
+    expect(owner.ok(), await owner.text()).toBeTruthy();
+    for (const path of ['attendance', 'attendance/check-out']) {
+      const res = await organizer.post(`${BACKEND_URL}/markets/${marketId}/${path}`, {
+        data: { vendorEmail: LEFT, date },
+      });
+      expect(res.ok(), await res.text()).toBeTruthy();
+    }
+  }
+  await organizer.dispose();
+});
+
+const DAYS = [
+  {
+    name: 'a day to come',
+    date: TOMORROW,
+    summary: '0 of 3 checked in',
+    filters: ['All 3', 'Not checked in 3', 'Checked in 0', 'Checked out 0'],
+    under: { notCheckedIn: [LEFT, STAYS, NEVER], checkedIn: [], checkedOut: [] },
+  },
+  {
+    name: 'the day itself',
+    date: TODAY,
+    summary: '2 of 3 checked in',
+    filters: ['All 3', 'Not checked in 1', 'Checked in 1', 'Checked out 1'],
+    under: { notCheckedIn: [NEVER], checkedIn: [STAYS], checkedOut: [LEFT] },
+  },
+  {
+    name: 'a day over',
+    date: YESTERDAY,
+    summary: '2 of 3 checked in',
+    filters: ['All 3', 'Not checked in 1', 'Checked in 1', 'Checked out 1'],
+    under: { notCheckedIn: [NEVER], checkedIn: [STAYS], checkedOut: [LEFT] },
+  },
+];
+
+for (const size of PHONE_AND_DESK) {
+  test.describe(`the door's words ${size.name}`, () => {
+    test.use(size.use);
+    const { expectFits, expectInside } = inTheWindow(size);
+
+    for (const day of DAYS) {
+      test(`on ${day.name} the door says Not checked in, Checked in and Checked out, and no other word`, async ({
+        authenticatedPage: page,
+      }) => {
+        const door = new AttendanceStatusPage(page);
+        await page.goto(`${marketScreenPath(marketId, 'attendance')}?date=${day.date}`);
+        await expect(door.rows).toHaveCount(3);
+        await expect(door.summary).toHaveText(day.summary);
+        await expect(door.filters).toHaveText(day.filters);
+        await expect(door.status(NEVER)).toHaveText('Not checked in');
+
+        // Each vendor is under one of the last three filters, and All lists them all.
+        expect(await listedUnder(door, 'all')).toEqual([LEFT, NEVER, STAYS].toSorted());
+        for (const [which, vendors] of [
+          ['not-checked-in', day.under.notCheckedIn],
+          ['checked-in', day.under.checkedIn],
+        ] as const) {
+          expect(await listedUnder(door, which), which).toEqual(vendors.toSorted());
+        }
+        const checkedOut = await listedUnder(door, 'checked-out');
+        expect(checkedOut).toEqual(day.under.checkedOut.toSorted());
+        if (checkedOut.length === 0) await expect(page.getByText('Nobody matches.')).toBeVisible();
+        await door.show('all');
+
+        if (day.date !== TOMORROW) {
+          await expect(door.status(STAYS)).toHaveText(new RegExp(`^${TIME} by you$`));
+          await expect(door.status(LEFT)).toHaveText(
+            new RegExp(`^${TIME} by ${LONG_ORGANIZER.email}$`),
+          );
+          const out = door.out(LEFT);
+          await expect(out).toHaveText(
+            new RegExp(`^Checked out ${TIME} by ${LONG_ORGANIZER.email}$`),
+          );
+          // At the floor of the type scale, in black on beige.
+          const { drawn, tokens } = await out.evaluate((el) => {
+            const style = getComputedStyle(el);
+            const probe = document.createElement('span');
+            probe.style.color = 'var(--mm-black)';
+            probe.style.backgroundColor = 'var(--mm-beige)';
+            document.body.append(probe);
+            const token = getComputedStyle(probe);
+            const said = {
+              drawn: [style.fontSize, style.color, style.backgroundColor],
+              tokens: ['12px', token.color, token.backgroundColor],
+            };
+            probe.remove();
+            return said;
+          });
+          expect(drawn).toEqual(tokens);
+          await out.evaluate((el) => el.scrollIntoView({ block: 'center', behavior: 'instant' }));
+          await expectInside(door.row(LEFT), "the checked-out vendor's row");
+          for (const chip of [out, door.status(LEFT)]) {
+            const row = (await door.row(LEFT).boundingBox())!;
+            const box = (await chip.boundingBox())!;
+            expect(box.x, 'the chip starts inside the row').toBeGreaterThanOrEqual(row.x);
+            expect(box.x + box.width, 'the chip ends inside the row').toBeLessThanOrEqual(
+              row.x + row.width,
+            );
+            await expectWholeAddress(chip, LONG_ORGANIZER.email);
+            const [when, by] = await partsOf(chip);
+            expect(by!.text).toBe(`by ${LONG_ORGANIZER.email}`);
+            if (size.phone) {
+              // Too narrow for one line: when on the first, "by" the address on the second.
+              expect(by!.top, `"${by!.text}" is on the next line`).toBeGreaterThanOrEqual(
+                when!.bottom - 1,
+              );
+            } else {
+              expect(Math.abs(by!.top - when!.top), 'one line at a desk').toBeLessThanOrEqual(1);
+            }
+          }
+        }
+
+        // None of the old words on the list, its filters or the printed roster, nor on the map.
+        expect(await pageText(page)).not.toMatch(OLD_WORDS);
+        await expect(door.printSheet).toContainText('Checked in');
+        await expectFits(page, `the door's list, ${day.name}`);
+        await expectNoLayoutFault(page, `the door's list, ${day.name}`);
+        await door.viewMap.click();
+        await expect(door.viewMap).toHaveAttribute('aria-pressed', 'true');
+        await expect(door.filters).toHaveCount(0);
+        expect(await pageText(page)).not.toMatch(OLD_WORDS);
+      });
+    }
+  });
+}

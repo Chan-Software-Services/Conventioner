@@ -166,7 +166,7 @@ for (const size of SIZES) {
       await door.goto(marketId);
       await expect(door.row(NOT_YET)).toBeVisible({ timeout: 15000 });
       await expect(door.row(HERE)).toBeVisible();
-      await expect(door.status(HERE)).not.toHaveText('Not yet');
+      await expect(door.status(HERE)).not.toHaveText('Not checked in');
 
       await expect(door.readOnly).toHaveCount(1);
       await expect(door.readOnly).toBeVisible();
@@ -197,7 +197,7 @@ for (const size of SIZES) {
       // which ends the row; at a desk the two stand one over the other, each at the row's end.
       await expect(door.status(OUT)).toHaveText(new RegExp(`by ${TEST_USER.email}$`));
       await expect(door.out(OUT)).toHaveText(
-        new RegExp(`^Out \\d{1,2}:\\d{2}\\s[AP]M by ${TEST_USER.email}$`),
+        new RegExp(`^Checked out \\d{1,2}:\\d{2}\\s[AP]M by ${TEST_USER.email}$`),
       );
       await expectAddressWhole(door.row(OUT), OUT);
       expect(

@@ -10,6 +10,8 @@ export class AttendanceStatusPage {
   readonly page: Page;
   readonly summary: Locator;
   readonly rows: Locator;
+  /** The list's four filters, in their order (T501). */
+  readonly filters: Locator;
   /** The list's search, which filters its rows. */
   readonly search: Locator;
   /**
@@ -101,6 +103,7 @@ export class AttendanceStatusPage {
     this.page = page;
     this.summary = page.getByTestId('attendance-summary');
     this.rows = page.getByTestId('attendance-row');
+    this.filters = page.getByTestId('attendance-bar').locator('[data-testid^="attendance-show-"]');
     this.search = page.getByTestId('attendance-search');
     this.mapSearch = new PersonChooser(page, 'attendance-map-search');
     this.tools = page.getByTestId('attendance-tools');
@@ -196,7 +199,7 @@ export class AttendanceStatusPage {
   }
 
   /**
-   * "Not yet" ("Did not come" once the day is over), or when they checked in and who made it, and,
+   * "Not checked in" at every time of day (T501), or when they checked in and who made it, and,
    * for a check-in made at another table than the one they hold now, which (T318).
    */
   status(vendorEmail: string): Locator {
@@ -204,8 +207,8 @@ export class AttendanceStatusPage {
   }
 
   /**
-   * On a checked-out row, after its status: when they were checked out and who made it, "Out 4:05 PM
-   * by you" or, for the vendor's own, "Scanned out at 4:05 PM" (T496).
+   * On a checked-out row, after its status: when they were checked out and who made it, "Checked out
+   * 4:05 PM by you" or, for the vendor's own, "Scanned out at 4:05 PM" (T496, T501).
    */
   out(vendorEmail: string): Locator {
     return this.row(vendorEmail).getByTestId('attendance-row-out');
@@ -229,7 +232,8 @@ export class AttendanceStatusPage {
     return this.row(vendorEmail).getByTestId('attendance-vendor');
   }
 
-  async show(which: 'all' | 'not-yet' | 'here'): Promise<void> {
+  /** The list's filters under the bar: All, Not checked in, Checked in, Checked out (T501). */
+  async show(which: 'all' | 'not-checked-in' | 'checked-in' | 'checked-out'): Promise<void> {
     await this.page.getByTestId(`attendance-show-${which}`).click();
   }
 

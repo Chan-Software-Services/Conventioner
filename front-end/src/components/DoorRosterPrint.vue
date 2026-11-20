@@ -84,7 +84,7 @@ const lists = computed(() =>
             <tr>
               <th scope="col" class="print-col-table">Table</th>
               <th scope="col">Vendor</th>
-              <th scope="col" class="print-col-here">Here</th>
+              <th scope="col" class="print-col-here">Checked in</th>
             </tr>
           </thead>
           <tbody>

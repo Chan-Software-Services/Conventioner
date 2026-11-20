@@ -3,7 +3,7 @@
  *
  * Paper is the door's only fallback when the venue's network or the back end fails, so the sheet
  * Print roster prints lists every vendor of the chosen date, by table, whatever the Show toggle and
- * the search on screen leave out: a sheet printed with "Not yet" chosen, or a name typed in the
+ * the search on screen leave out: a sheet printed with "Not checked in" chosen, or a name typed in the
  * search, would leave the door without the vendors it hid.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -159,6 +159,10 @@ describe('the printed roster', () => {
     const wrapper = await open();
 
     expect(printed(wrapper)).toEqual([ANA, BEN, CY, ED]);
+    // The column says what its time or its box is: the check-in, as the page says it (T501).
+    for (const table of sheet(wrapper).findAll('table')) {
+      expect(table.findAll('th').map((th) => th.text())).toEqual(['Table', 'Vendor', 'Checked in']);
+    }
     const ana = sheet(wrapper).get(`[data-testid="attendance-print-row"][data-vendor="${ANA}"]`);
     expect(ana.get('[data-testid="attendance-print-table"]').text()).toBe(
       'Table A1, a whole table',
@@ -178,7 +182,7 @@ describe('the printed roster', () => {
   it('prints whole whatever the Show toggle and the search leave on screen', async () => {
     const wrapper = await open();
 
-    await wrapper.get('[data-testid="attendance-show-not-yet"]').trigger('click');
+    await wrapper.get('[data-testid="attendance-show-not-checked-in"]').trigger('click');
     await wrapper.get('[data-testid="attendance-search"]').setValue('ben');
     expect(
       wrapper

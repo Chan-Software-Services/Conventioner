@@ -46,7 +46,7 @@ test('the printed roster is every vendor of the day, alone on the paper and its 
   await expect(door.printSheet).toBeHidden();
 
   // A filter and a search on: the screen shows one vendor, the paper all three.
-  await door.show('not-yet');
+  await door.show('not-checked-in');
   await door.search.fill(vendors[1]!);
   await expect(door.rows).toHaveCount(1);
 

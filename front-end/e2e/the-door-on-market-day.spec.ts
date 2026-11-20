@@ -36,13 +36,13 @@ test.describe('The door on market day', () => {
 
     await expect(attendance.dateSelect).toHaveValue(ON_THE_DAY);
     await expect(attendance.summary).toHaveText('1 of 2 checked in');
-    await expect(attendance.status('alice@example.com')).not.toHaveText('Not yet');
-    await expect(attendance.status('bob@example.com')).toHaveText('Not yet');
+    await expect(attendance.status('alice@example.com')).not.toHaveText('Not checked in');
+    await expect(attendance.status('bob@example.com')).toHaveText('Not checked in');
     // A vendor is said where they sit, not as a stored seat label.
     await expect(attendance.row('bob@example.com')).toContainText(/Table [A-Za-z ]+\d/);
 
     // Who has not arrived, on their own.
-    await attendance.show('not-yet');
+    await attendance.show('not-checked-in');
     await expect(attendance.rows).toHaveCount(1);
     await expect(attendance.row('bob@example.com')).toBeVisible();
 
@@ -55,12 +55,13 @@ test.describe('The door on market day', () => {
     await expect(attendance.row('alice@example.com')).toBeVisible();
   });
 
-  test('once the day is over, a vendor who never came did not come', async ({
+  test('once the day is over, a vendor who never came is still not checked in', async ({
     authenticatedPage: page,
     request,
   }) => {
-    // E30/F01/S02: an archived market's roster still said "Not yet" of everyone who never came.
-    // The browser's clock is set past the market's day, so the day is over while it still runs.
+    // E30/F01/S02: an archived market's roster said "Not yet" of everyone who never came, and then
+    // "Did not come"; it says "Not checked in" at every time of day (T501). The browser's clock is
+    // set past the market's day, so the day is over while it still runs.
     const seed = await seedPublishedMarketWithAssignments(
       request,
       BACKEND_URL,
@@ -76,9 +77,11 @@ test.describe('The door on market day', () => {
         await transitionMarket(request, BACKEND_URL, TEST_USER.email, seed.marketId, 'archived');
       }
       await attendance.goto(seed.marketId);
-      await expect(attendance.status('bob@example.com')).toHaveText('Did not come');
-      await expect(page.getByTestId('attendance-show-not-yet')).toHaveText('Did not come 2');
-      await expect(page.getByText('Not yet')).toHaveCount(0);
+      await expect(attendance.status('bob@example.com')).toHaveText('Not checked in');
+      await expect(page.getByTestId('attendance-show-not-checked-in')).toHaveText(
+        'Not checked in 2',
+      );
+      await expect(page.getByText(/Not yet|Did not come/)).toHaveCount(0);
     }
   });
 
@@ -120,7 +123,7 @@ test.describe('The door on market day', () => {
 
     await attendance.undo('bob@example.com');
     await expect(attendance.summary).toHaveText('0 of 2 checked in');
-    await expect(attendance.status('bob@example.com')).toHaveText('Not yet');
+    await expect(attendance.status('bob@example.com')).toHaveText('Not checked in');
   });
 
   test('the door works on a phone', async ({ authenticatedPage: page, request }) => {

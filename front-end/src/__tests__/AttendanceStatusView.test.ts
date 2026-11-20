@@ -245,7 +245,7 @@ describe('the roster reads itself again', () => {
     expect(REREAD_MS).toBe(15_000);
     const wrapper = await open();
     expect(rosterReads()).toBe(1);
-    expect(status(wrapper, ANA)).toBe('Not yet');
+    expect(status(wrapper, ANA)).toBe('Not checked in');
 
     // The vendor scans themselves in; the open page shows it with no tap.
     serveRoster(() => Promise.resolve(roster({ email: ANA, via: 'door_code' })));
@@ -309,7 +309,7 @@ describe('the roster reads itself again', () => {
     slow.settle(roster());
     await flushPromises();
     expect(failed().exists()).toBe(false);
-    expect(status(wrapper, ANA)).toBe('Not yet');
+    expect(status(wrapper, ANA)).toBe('Not checked in');
   });
 
   it('stops when the page is left', async () => {
@@ -393,7 +393,7 @@ describe('a check-in', () => {
       .get(`[data-testid="attendance-row"][data-vendor="${ANA}"] [data-testid="attendance-undo"]`)
       .trigger('click');
     await flushPromises();
-    expect(status(wrapper, ANA)).toBe('Not yet');
+    expect(status(wrapper, ANA)).toBe('Not checked in');
   });
 
   it('on two rows at once: each held busy only while its own write is out', async () => {
@@ -619,8 +619,9 @@ describe('the toolbar (T466)', () => {
     // Then the count row's: the list's filters and the search.
     expect(focusable('attendance-bar')).toEqual([
       'attendance-show-all',
-      'attendance-show-not-yet',
-      'attendance-show-here',
+      'attendance-show-not-checked-in',
+      'attendance-show-checked-in',
+      'attendance-show-checked-out',
       'attendance-search',
     ]);
     expect(focusable('attendance-tools')).toEqual([
@@ -658,7 +659,7 @@ describe('the toolbar (T466)', () => {
     expect(search.classes()).toEqual(expect.arrayContaining(['field', 'field--compact']));
     expect(search.attributes('aria-label')).toBe('Find a vendor');
     expect(search.attributes('placeholder')).toBe('Name, email or table');
-    for (const id of ['all', 'not-yet', 'here']) {
+    for (const id of ['all', 'not-checked-in', 'checked-in', 'checked-out']) {
       expect(bar.get(`[data-testid="attendance-show-${id}"]`).classes()).toContain('btn--compact');
     }
   });
@@ -775,16 +776,19 @@ describe('where each vendor stands (T318)', () => {
     // The tally and the toggles count the day's seats only.
     expect(wrapper.get('[data-testid="attendance-summary"]').text()).toBe('0 of 2 checked in');
     expect(wrapper.get('[data-testid="attendance-show-all"]').text()).toBe('All 2');
-    expect(wrapper.get('[data-testid="attendance-show-not-yet"]').text()).toBe('Not yet 2');
-    expect(wrapper.get('[data-testid="attendance-show-here"]').text()).toBe('Checked in 0');
+    expect(wrapper.get('[data-testid="attendance-show-not-checked-in"]').text()).toBe(
+      'Not checked in 2',
+    );
+    expect(wrapper.get('[data-testid="attendance-show-checked-in"]').text()).toBe('Checked in 0');
+    expect(wrapper.get('[data-testid="attendance-show-checked-out"]').text()).toBe('Checked out 0');
 
-    await wrapper.get('[data-testid="attendance-show-not-yet"]').trigger('click');
+    await wrapper.get('[data-testid="attendance-show-not-checked-in"]').trigger('click');
     expect(wrapper.find(`[data-testid="attendance-row"][data-vendor="${CY}"]`).exists()).toBe(
       false,
     );
     expect(wrapper.find('[data-testid="attendance-unseated-heading"]').exists()).toBe(false);
 
-    await wrapper.get('[data-testid="attendance-show-here"]').trigger('click');
+    await wrapper.get('[data-testid="attendance-show-checked-in"]').trigger('click');
     expect(wrapper.find(`[data-testid="attendance-row"][data-vendor="${CY}"]`).exists()).toBe(true);
     expect(wrapper.find(`[data-testid="attendance-row"][data-vendor="${ANA}"]`).exists()).toBe(
       false,
@@ -842,7 +846,7 @@ describe('where each vendor stands (T318)', () => {
       .get(`[data-testid="attendance-row"][data-vendor="${ANA}"] [data-testid="attendance-undo"]`)
       .trigger('click');
     await flushPromises();
-    expect(chip(wrapper, ANA).text()).toBe('Not yet');
+    expect(chip(wrapper, ANA).text()).toBe('Not checked in');
     await checkIn(wrapper, ANA).trigger('click');
     await flushPromises();
 

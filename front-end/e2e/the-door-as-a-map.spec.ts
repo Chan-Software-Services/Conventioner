@@ -186,7 +186,7 @@ for (const size of PHONE_AND_DESK) {
       // by their state to a screen reader (T501).
       await door.viewList.click();
       await door.checkIn(vendors.kiln);
-      await expect(door.status(vendors.kiln)).not.toHaveText('Not yet');
+      await expect(door.status(vendors.kiln)).not.toHaveText('Not checked in');
       await door.action(vendors.ember, 'check-out').click();
       await expect(door.out(vendors.ember)).toBeVisible();
       await door.viewMap.click();
