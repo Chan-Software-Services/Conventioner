@@ -23,6 +23,7 @@ sources:
   - T263
   - T201
   - T421
+  - T501
 ---
 
 # The market's statistics
@@ -48,12 +49,12 @@ The page fits a phone, so how the day stands is read at the market (T180): its s
    - Draft: none, so no strip.
    - Applications (Review on a Google Form market): "36 applied", every application, opening the Applications tab's All view; "12 open to review", its Open filter on every reviewer's share, as the review's split bar counts it; and "84 of 60 table-days asked", every market day's tables asked and its tables summed, bringing the Room section below into view and reading on from its heading.
    - Assignment: "84 of 120 table-days used", the Assignments page's strip, opening Assignments; "3 unassigned", the Assignments strip's "N unassigned", opening [Vendors](vendors.md) on "Unassigned only" (`?show=unassigned`); and "$1,450.00 still owed", the [Payments](payments.md) page's Still owed, opening Payments on "Owes" (`?show=owes`).
-   - Market Days: "18 of 24 checked in, Nov 14, 2026" and "6 not yet in", the door's count of the day ([N6](#n6-see-who-has-come)), each opening Attendance on that day (`?date=`); and what is still owed.
+   - Market Days: "18 of 24 checked in, Nov 14, 2026" and "6 not checked in", the door's count of the day ([N6](#n6-see-who-has-come)), each opening Attendance on that day (`?date=`); and what is still owed.
    - Archived: "31 vendors came", each vendor checked in on any day counted once, opening Attendance; the table-days used; and "$1,450.00 paid", the Payments page's Paid, opening Payments.
-2. In Market Days the day counted is today when today is a market date, else the next market date ahead, else the last, in the reader's calendar, and the tile names it in a market date's short form; once that day is over, its missing "did not come", in the door's words.
+2. In Market Days the day counted is today when today is a market date, else the next market date ahead, else the last, in the reader's calendar, and the tile names it in a market date's short form; its missing are "not checked in" before that day, on it and once it is over, in the door's words (T501).
 3. Each figure is counted on the server by the page it links to, and a tile whose figure is absent is left out: the placements before an assignment is stored, from the one count of the stored assignment the Assignments page's strip reads ([placements](../../implementation/modules/placements.md#what-a-read-shows)); the money where the market sets no prices or the Payments page has nobody to count; who came in an archived market that never reached Market Days; the room in a plan of no date.
    With no tile to tell, there is no strip.
-4. A zero whose link would list nothing, "0 applied", "0 open to review", "0 unassigned", "$0.00 still owed" or "0 not yet in", is told but not linked, as the Assignments page's counts cannot be chosen at zero; so is the day's check-in on a day nobody is assigned to.
+4. A zero whose link would list nothing, "0 applied", "0 open to review", "0 unassigned", "$0.00 still owed" or "0 not checked in", is told but not linked, as the Assignments page's counts cannot be chosen at zero; so is the day's check-in on a day nobody is assigned to.
 5. At a desk the tiles stand in one row, each an equal share of it; on a phone two to a row, an amount and a tile it would leave alone on its row each taking a row of their own ([the design language](../../design-system.md#layout)).
 
 Covered by:
@@ -141,7 +142,7 @@ Covered by:
 Covered by:
 
 - `test_the_stats_headlines.py` (the money is the Payments page's figures, and absent without prices)
-- `the-stats-headlines.spec.ts` ("the money reads the Payments page's figures, a bar of paid against owed, and still owed opens Owes", "check-in reads each day's vendors in of those expected from Market Days, and who is not yet in opens that day": no money on an unpriced market)
+- `the-stats-headlines.spec.ts` ("the money reads the Payments page's figures, a bar of paid against owed, and still owed opens Owes", "check-in reads each day's vendors in of those expected from Market Days, and who is not checked in opens that day": no money on an unpriced market)
 
 ## N6. See who has come
 
@@ -150,15 +151,15 @@ Covered by:
 1. "Check-in" shows from Market Days on, in Market Days and in the archive of a market that ran ([the phase record](../../implementation/modules/phase-record.md)'s `ran`); an archived market that never reached its days has none.
 2. "Checked in each day" is a row per market date: the date, "18 of 24 checked in", and a bar of those checked in, every day on the scale of the day with the most expected; a day expected short of it has a black line at its own expected, where its whole ends inside the track.
    Expected and checked in are the door's own count of the day, [Attendance](../../implementation/modules/attendance-and-door.md)'s "18 of 24 checked in": a row each for every seat the stored assignment holds that day, here when its vendor has checked in, by an organizer at the door or by the vendor on their vendor page.
-3. Beside the figures, how many are missing: "6 not yet" while the day may still come, "6 did not come" once it is over, past or the market archived, as the door words a row; either opens Attendance on that day (`?date=`).
+3. Beside the figures, how many are missing, "6 not checked in", as the door words a row, before the day, on it, once it is over and in the archive alike (T501); it opens Attendance on that day (`?date=`).
    A day with nobody missing says "Everyone is in" and links nowhere; a day nobody is assigned to says "Nobody is assigned" with no bar.
-4. Every row is drawn on one scale, the card's largest expected, so the days compare; the bar is hidden from a screen reader, which hears the row as "Friday, May 8, 2099: 1 of 2 checked in, 1 not yet".
+4. Every row is drawn on one scale, the card's largest expected, so the days compare; the bar is hidden from a screen reader, which hears the row as "Friday, May 8, 2099: 1 of 2 checked in, 1 not checked in".
 
 The server counts it (`count_check_in` in [`back-end/market_stats.py`](../../../back-end/market_stats.py), the answer's `checkIn`, `null` until the market has reached Market Days) by `check_in_counts` beside the Attendance roster, which also counts `came`, the vendors checked in on any date, each once; [`checkInRows.ts`](../../../front-end/src/utils/checkInRows.ts) makes the rows and their links.
 Covered by:
 
 - `test_the_stats_check_in.py`
-- `the-stats-headlines.spec.ts` ("check-in reads each day's vendors in of those expected from Market Days, and who is not yet in opens that day")
+- `the-stats-headlines.spec.ts` ("check-in reads each day's vendors in of those expected from Market Days, and who is not checked in opens that day")
 
 ## N7. See what they answered
 

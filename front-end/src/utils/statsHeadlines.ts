@@ -8,10 +8,10 @@
  *   asked of the room (the Room section on this page).
  * - Assignment, and results sent: the table-days used (Assignments), who is unassigned (Vendors on
  *   "Unassigned only") and what is still owed (Payments on "Owes").
- * - Market Days: those checked in and those not yet in on the day counted (Attendance on that day),
- *   and what is still owed. The day counted is today when it is a market date, else the next ahead,
- *   else the last, in the reader's calendar, and the tile names it; once it is over its missing
- *   "did not come", in the door's words.
+ * - Market Days: those checked in and those not checked in on the day counted (Attendance on that
+ *   day), and what is still owed. The day counted is today when it is a market date, else the next
+ *   ahead, else the last, in the reader's calendar, and the tile names it; its missing are "not
+ *   checked in" before it, on it and once it is over, in the door's words (T501).
  * - Archived: the vendors who came (Attendance), the table-days used, and what was paid (Payments).
  *
  * Each figure is the server's (`back-end/market_stats.py`), counted by the page it links to, and a
@@ -62,7 +62,7 @@ export interface Tile {
     | 'unassigned'
     | 'stillOwed'
     | 'checkedIn'
-    | 'notYet'
+    | 'notCheckedIn'
     | 'came'
     | 'paid';
   /** The figure, drawn large. */
@@ -188,9 +188,9 @@ export function statsHeadlines(
           link: unlessZero(day.expected, there),
         },
         {
-          id: 'notYet',
+          id: 'notCheckedIn',
           figure: String(left),
-          words: day.date < today ? 'did not come' : 'not yet in',
+          words: 'not checked in',
           link: unlessZero(left, there),
         },
         ...stillOwed(),

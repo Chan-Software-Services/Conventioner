@@ -8,14 +8,12 @@
  * checked in, every row on one scale, the card's largest expected, so the days compare; a day
  * expected short of that is marked at its own expected, where its whole ends inside the track.
  * Beside each row, how many are missing, linking to Attendance on that day (`?date=`), in the
- * door's words: "not yet" while the day may still come, "did not come" once it is over, past or
- * archived. A day with nobody missing says so and links nowhere, and a day nobody is assigned to
- * draws no bar.
+ * door's words, "not checked in", at every time of day: before the day, on it, once it is over and
+ * in the archive (T501). A day with nobody missing says so and links nowhere, and a day nobody is
+ * assigned to draws no bar.
  */
 import type { RouteLocationRaw } from 'vue-router';
-import { MarketPhase } from '@/assets/types/datatypes';
 import { marketPath } from '@/utils/market';
-import { calendarToday } from '@/utils/marketGuide';
 import { getFormattedDate } from '@/utils/utils';
 
 export interface CheckInDay {
@@ -57,12 +55,7 @@ export interface CheckInCard {
 }
 
 /** The check-in card; `null` before Market Days or for a plan of no date. */
-export function checkInRows(
-  checkIn: CheckInCounts | null,
-  marketId: string,
-  phase: string,
-  today: string = calendarToday(),
-): CheckInCard | null {
+export function checkInRows(checkIn: CheckInCounts | null, marketId: string): CheckInCard | null {
   if (!checkIn?.dates.length) return null;
   const attendance = marketPath(marketId, 'attendance');
   const scale = Math.max(0, ...checkIn.dates.map((day) => day.expected));
@@ -81,7 +74,6 @@ export function checkInRows(
         };
       }
       const left = expected - checkedIn;
-      const over = phase === MarketPhase.Archived || date < today;
       return {
         key: date,
         label,
@@ -91,7 +83,7 @@ export function checkInRows(
         mark: expected < scale ? expected : undefined,
         missing: left
           ? {
-              words: `${left} ${over ? 'did not come' : 'not yet'}`,
+              words: `${left} not checked in`,
               to: { path: attendance, query: { date } },
             }
           : { words: 'Everyone is in', to: null },

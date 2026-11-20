@@ -73,11 +73,11 @@ describe('MeterBar', () => {
   it('reads what the caller puts beside the words after them, parted for a reader', () => {
     const meter = mountMeter(
       { value: 18, mark: 24, scale: 24, words: '18 of 24 checked in' },
-      { default: '<a href="/attendance">6 not yet</a>' },
+      { default: '<a href="/attendance">6 not checked in</a>' },
     );
 
-    expect(meter.find('[data-testid="meter-after"]').text()).toBe(', 6 not yet');
-    expect(meter.text()).toBe('Saturday: 18 of 24 checked in, 6 not yet');
+    expect(meter.find('[data-testid="meter-after"]').text()).toBe(', 6 not checked in');
+    expect(meter.text()).toBe('Saturday: 18 of 24 checked in, 6 not checked in');
   });
 
   it('puts nothing beside the words when the caller gives nothing', () => {
