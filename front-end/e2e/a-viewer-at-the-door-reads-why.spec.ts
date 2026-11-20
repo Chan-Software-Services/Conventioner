@@ -80,11 +80,29 @@ async function expectAddressWhole(row: Locator, vendor: string): Promise<void> {
 
 /**
  * An "Undo?" stands just left of the chip it undoes, on the chip's line, and its tap area is at
- * least as tall as the chip.
+ * least as tall as the chip. Where `orUnder`, a chip too wide to share its line with it keeps the
+ * line, and the "Undo?" stands under it, ending where it ends (T496's rule): on a phone, "Checked
+ * out 10:49 AM by" another organizer's address leaves no room beside it (T501).
  */
-async function expectLeftOf(undo: Locator, chip: Locator, what: string): Promise<void> {
+async function expectLeftOf(
+  undo: Locator,
+  chip: Locator,
+  what: string,
+  { orUnder = false } = {},
+): Promise<void> {
   const undoBox = (await undo.boundingBox())!;
   const chipBox = (await chip.boundingBox())!;
+  if (orUnder && undoBox.y >= chipBox.y + chipBox.height - 1) {
+    expect(
+      Math.abs(undoBox.x + undoBox.width - (chipBox.x + chipBox.width)),
+      `${what} ends where the chip ends`,
+    ).toBeLessThanOrEqual(1);
+    expect(
+      undoBox.width + 4 + chipBox.width,
+      `${what} went under a chip it could have stood beside`,
+    ).toBeGreaterThan((await chip.evaluate((el) => el.parentElement!.clientWidth)) - 1);
+    return;
+  }
   const gap = chipBox.x - (undoBox.x + undoBox.width);
   expect(gap, `${what} ends just before the chip`).toBeGreaterThanOrEqual(0);
   expect(gap, `${what} ends just before the chip`).toBeLessThanOrEqual(8);
@@ -253,7 +271,9 @@ for (const size of SIZES) {
       await expect(undo).toHaveText('Undo?');
       await expect(undoCheckOut).toHaveText('Undo?');
       await expectLeftOf(undo, door.status(HERE), "the check-in's Undo?");
-      await expectLeftOf(undoCheckOut, door.out(OUT), "the check-out's Undo?");
+      await expectLeftOf(undoCheckOut, door.out(OUT), "the check-out's Undo?", {
+        orUnder: width < 640,
+      });
 
       // At a desk the button has its column at the row's end, the status left of it; on a phone the
       // button is on the vendor's line and the status under it, at the end of each.
