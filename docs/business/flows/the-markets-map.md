@@ -87,7 +87,7 @@ Covered by:
 
 1. Attendance, the open day, "Map" beside "List" ([`AttendanceMap.vue`](../../../front-end/src/components/attendance/AttendanceMap.vue)) ([K5](market-day-door.md#k5-watch-attendance), step 9).
 2. "Find a vendor" ("Name, email or table"): type part of their name (the one they go by or the full one), address or table, and pick them from the dropdown, each row saying where they sit ("Table Aisle A 3, left half", or "No table"), with the mouse or with the arrow keys and Enter.
-   Expect their [drawer](vendor-drawer.md) open on its Application tab, as a press on their table or their name on the list opens it, and their table outlined on the map, drawn filled once they are here and outlined while they are expected; a vendor sitting in the other location switches the map to it, and Back closes the drawer there.
+   Expect their [drawer](vendor-drawer.md) open on its Application tab, as a press on their table or their name on the list opens it, and their table outlined on the map, drawn filled once they are checked in and outlined while they are not checked in; a vendor sitting in the other location switches the map to it, and Back closes the drawer there.
    Typing alone outlines nothing, and closing the drawer clears the outline (T466).
    The location's tables and its floorplan appear together, and a switch to the other location never shows its tables over this one's floorplan; under the legend, "Show the floorplan", "Greyscale" and "Faded" draw the floorplan as on the Layout page, the same choices on both pages (T501).
 3. Point them to it; or press their table, or their half of a shared one, to open their drawer, as their name on the list does.
