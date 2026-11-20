@@ -298,6 +298,50 @@ So the two may be run in either order, and the swaps recorded are N less the ren
 The market's earlier history keeps the name as it was when each entry was recorded, as after a swap, and none is rewritten: the script prints how many layout saves and layout removals name the location.
 It prints the market's id, the location's id and names, its sections' names and counts, never a vendor's name or address and no other location's name; that is of what it prints, not of the history entry.
 
+### Moving a market's business name question to the built-in field
+
+Every form asks a built-in, optional "Business name" ([ADR 0042](adr/0042-every-form-asks-a-built-in-business-name.md)), which Attendance shows under each vendor's name.
+A market whose form asked one as a short text question of its own keeps its vendors' answers under that question's key, where Attendance does not read them, until [`migrate_business_name.py`](../back-end/migrations/migrate_business_name.py) moves them, for one market and one question key at a time.
+
+**Run it after the deploy of a release that holds it**, from `back-end/` in a checkout of the commit production serves: it reads the built-in field's own rules (`essential_fields.given_business_name`) and the stored run's fingerprint (`assignment/made_from.py`) as that release has them.
+Phase 1 of the release is safe alone: until the script runs, the market reads as before, its answers under its own question.
+Run it while no import of that market is under way.
+An organizer with the form editor open (a draft only) is refused their next save and reads the form again.
+Take a `mongodump` first ([backups](#backups-and-restoring)), then list, dry-run and run:
+
+```bash
+MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_business_name.py --list   # writes nothing
+MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_business_name.py --market <market-id> --question <key> --dry-run   # writes nothing
+MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_business_name.py --market <market-id> --question <key>
+```
+
+`--list` prints each live market's short text question whose key or label holds "business", with the market's id, name, phase and intake mode, the question's key and label, how many applications answered it, how many already hold a built-in business name, and what else names it.
+The run takes the key from that list, never a label: `--market` and `--question` are both required, and without either the script prints its usage and exits 1.
+The dry run prints exactly the lines the run prints; read them before the run.
+
+The run writes in three steps, each held to what it read and safe to repeat:
+
+1. Each vendor's answer, stripped, is copied to the built-in key, and each organizer's update of it to the built-in's update, its value and the answer it was made over as the built-in stores them.
+   A blank answer, or one that is exactly a none word ("N/A", "none" and the rest of the import's `NONE_WORDS`, in any capitals: Daniel's Q7), is no business name and is not copied; "N/A Studios" is.
+   An application that already holds a different built-in business name keeps it; the run prints its id.
+2. One write of the market, holding its form's revision and every part it reads: the question leaves the form and the rest are renumbered, and the public map's name, a review highlight, the saved import mapping and a stored run's record of the applications follow it to the built-in key; its example column is removed.
+   It records one form change with no actor in the market's history.
+3. The old answers and updates are cleared.
+
+From step 1 a vendor's business name shows on Attendance at its next read, and the public map shows the same names throughout.
+The script touches no status, verdict or `updated_at`, and sends nothing to anyone.
+
+It refuses, exiting 1 with nothing written: a market it does not find or that is being deleted; a key under the `essential_` prefix; a question that is not a short text question; a question the public map's website or Instagram choice, Discord's username question, a priority rule, a price group or a rejection rule names (each named in the refusal: change that first); and a saved mapping that already maps a column to the built-in field.
+Its docstring lists each refusal.
+A market that changed between the read and step 2 (a form save, an import, another run) is left as it was, and the script says it "stopped after step 1": the copied business names stay, and running it again finishes.
+**A run cut anywhere is finished by running it again with the same arguments**: with the question off the form and answers left under it, the script says it is finishing a run and does steps 1 and 3; with none left, it says the market is already migrated, writes nothing and exits 0.
+A key the form never asked also reads as already migrated, so take the key from `--list`.
+If it prints that some applications "changed during the run and were left", a vendor saved meanwhile: run it again.
+
+**It is forward-only.**
+A rollback of the code after a run leaves the business names stored and unshown, since an older build ignores the built-in key, until a release with the field is promoted again; the moved question does not come back.
+It prints ids, keys, labels and counts, never a vendor's answer, name or address.
+
 ### When the back end refuses to boot
 
 The back end checks the database as it starts and refuses to serve one it cannot trust: the migration markers ([`market_documents.py`](../back-end/market_documents.py)) and these unique indexes, in the order the boot builds them:

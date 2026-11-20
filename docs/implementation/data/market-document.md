@@ -203,10 +203,14 @@ Each list here is in the order `PublicMapSettings` (`datatypes.py`) declares its
   - `websiteQuestion`
   - `instagramQuestion`
 
-It is server-owned: written only by [the Public map card's write](../modules/public-map.md#the-settings), null at creation and never set by a create body, and the read serves it as stored.
+It is server-owned: written only by [the Public map card's write](../modules/public-map.md#the-settings), and by the operator's [business name migration](../../OPERATIONS.md#moving-a-markets-business-name-question-to-the-built-in-field), which names the built-in key in `nameQuestion` where it named the question it moved; null at creation and never set by a create body, and the read serves it as stored.
+
+**A business name is no question of the form.**
+Every form asks the built-in one, an essential question whose answer is stored on each application, absent when none was given ([the application document](application-document.md)).
+A market whose form asks one as a short text question of its own keeps its answers under that question's key until the operator's [business name migration](../../OPERATIONS.md#moving-a-markets-business-name-question-to-the-built-in-field) moves them, takes the question off `applicationForm.fields`, and moves what named it with it: `publicMap.nameQuestion`, its place in `reviewHighlights`, its target and resolutions in `importMapping`, its entry in `exampleColumns`, and `assignmentObject.madeFrom.applications`.
 
 **The application form is stored as one validator returns it.**
-Every writer of `applicationForm` passes it through `_normalized_application_form` (`api/markets.py`), so a stored form never differs from the form that was checked; the writes on an existing market go through `prepared_application_form`, which asks [the form lock](../../business/rules/the-form-locks-at-the-first-application.md) first:
+Every writer of `applicationForm` passes it through `_normalized_application_form` (`api/markets.py`), so a stored form never differs from the form that was checked; the writes on an existing market go through `prepared_application_form`, which asks [the form lock](../../business/rules/the-form-locks-at-the-first-application.md) first, but for the operator's [business name migration](../../OPERATIONS.md#moving-a-markets-business-name-question-to-the-built-in-field) (`migrations/migrate_business_name.py`), which takes a market's own business name question off its form past the lock once its answers are under the built-in key, counting `formRevision` as a form save does:
 
 - A field's `key` is non-blank, unique in the form, matches `^[a-z0-9_]+$` (it becomes a key inside an application's answers) and does not start with the reserved `essential_` or name one of the import's own targets (`applicant_email`, `submitted_at`, `sheet_note`, which would hold the wrong column).
 - Its `label` is non-blank, and its `type` is one of `text`, `number`, `select`, `multi_select`, `checkbox`, `date` and `email`.
