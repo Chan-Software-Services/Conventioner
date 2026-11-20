@@ -45,6 +45,8 @@ The map is shown at the market's own address, `/<market>`, on the market page, w
 
 How the map is read, its gate, its answer and its image: [the public map](../implementation/modules/public-map.md).
 
+[ADR 0042](0042-every-form-asks-a-built-in-business-name.md) narrows it: every form now asks a built-in business name, which the public name may be, and the rejected alternative below, a fixed "business name" essential question, is superseded.
+
 ## Consequences
 
 - An organizer decides what is public, question by question; a form with no short text question for a business name has no public map until one is asked.

@@ -27,6 +27,7 @@ sources:
   - bug/40
   - T263
   - T274
+  - T502
 ---
 
 # The CSV proposal and start
@@ -121,7 +122,10 @@ A heading's first line is the label and everything after its first line break is
 The key is the label's slug, cut to 40 characters on a word boundary, with `_2` and on for a repeat (`key_for`); the import's own targets (`RESERVED_TARGETS`: who applied, when, the sheet's note) count as taken, so a column called "Applicant email" is `applicant_email_2`.
 Renaming a question in the form builder keeps its key, and the key of a question of a column is read-only there ([the Questions tab](../../business/flows/form-tab.md#f2-custom-questions)), so the mapping survives; a hand-added question's edited key or a deleted question leaves a saved target the import's restore skips, and that column asks for a mapping like a new one, because a whole-form save cannot tell a rename from a delete and an add.
 
-**The rules read values, never header words**, except the words Google itself writes (`Timestamp`) and the review columns organizers add beside a form ("Status", "Notes"): header wording is what the next organizer changes, and value rules survived that where keyword rules did not.
+**The rules read values, never header words**, except the words Google itself writes (`Timestamp`), the review columns organizers add beside a form ("Status", "Notes") and the two headings below: header wording is what the next organizer changes, and value rules survived that where keyword rules did not.
+A column of bare numbers is the number of dates wanted only when its heading asks how many days (`DAY_COUNT_QUESTION`).
+**A column whose heading holds the words "business name" is the built-in business name** (`BUSINESS_NAME_QUESTION`, [ADR 0042](../../adr/0042-every-form-asks-a-built-in-business-name.md)), with the reason "Its heading asks for a business name": its answers have no shape of their own, one word or five, capitalised or not.
+It is decided before the two name rules, so a column of two-word business names is not read as the full name, and only the first such column is: a second is a question of the organizer's own.
 A column is read through the privacy view, answers at least 3 applicants gave (`SHARED_BY`, counted by applicant address and, for a multi-select, per option) that hold no address, link, handle or phone number (`_identifying`), and otherwise a shape; every option of a choice question, with its count, comes from the whole file, which never leaves the server.
 **The rules read through the filter the answer key was measured with, and what is kept or sent through the wider one**: `_identifying` builds the privacy view the classification reads, and `_names_someone` guards what the start keeps and, beside it, which headings may be sent; the answer key was measured on the narrow one, and a wider view changes what the rules propose (an earlier draft of the wider one took "500-1000" out of a question answered with ranges, which then read as Text).
 Hosted TypeSafe settles the two judgements the rules leave, when a key is set ([ADR 0007](../../adr/0007-what-may-be-sent-to-hosted-typesafe.md)).

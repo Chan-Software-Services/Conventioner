@@ -34,6 +34,7 @@ sources:
   - T123
   - T181
   - T263
+  - T502
 ---
 
 # Essential fields
@@ -45,12 +46,12 @@ Why the set is exactly what it is: [essential fields are exactly what the solver
 
 ## The questions
 
-`ESSENTIAL_QUESTIONS` lists the ten in the order the form asks them: full name, preferred name, available dates, number of dates wanted, table choice, table-share partner, tier preference, section preference, table-type preference, and the vendor's request.
+`ESSENTIAL_QUESTIONS` lists the eleven in the order the form asks them: full name, preferred name, business name, available dates, number of dates wanted, table choice, table-share partner, tier preference, section preference, table-type preference, and the vendor's request.
 The import lists its targets in that order and the CSV proposal its unanswered questions, so neither drifts from the form.
 
-- **Asked** is `asked_essential_keys(options)`, the one statement of which questions an offering asks: the name, preferred name and request always; the dates, the number wanted, the table choice and the partner when the plan has dates; the tiers when it has tiers; a ranking only over two or more options (`asks_ranking`), since a list of one has one order.
+- **Asked** is `asked_essential_keys(options)`, the one statement of which questions an offering asks: the name, preferred name, business name and request always; the dates, the number wanted, the table choice and the partner when the plan has dates; the tiers when it has tiers; a ranking only over two or more options (`asks_ranking`), since a list of one has one order.
   The applicant validator, the solver's input translation ([the assignment solver](assignment-solver.md)), the import and the automatic rejections all read it, so the solver can never reject answers the form has just accepted.
-- **Required** is `REQUIRED_ESSENTIAL_KEYS`, every essential question but the preferred name, the partner and the request, and only when asked ([an incomplete application refuses the run](../../business/rules/an-incomplete-application-refuses-the-run.md)); an import may leave the number of dates unanswered ([what an import may leave unasked](../../business/rules/what-an-import-may-leave-unasked.md)).
+- **Required** is `REQUIRED_ESSENTIAL_KEYS`, every essential question but the preferred name, the business name, the partner and the request, and only when asked ([an incomplete application refuses the run](../../business/rules/an-incomplete-application-refuses-the-run.md)); an import may leave the number of dates unanswered ([what an import may leave unasked](../../business/rules/what-an-import-may-leave-unasked.md)).
 - **Solver-relevant** is `SOLVER_RELEVANT_KEYS`, the answers the solver reads; what any changed answer does to a verdict is the review state's, whichever answer it is ([the transition table](../data/application-document.md#the-transition-table)), and a reformatted answer is no change.
 - **Updated by an organizer** ([an update of a vendor's answer](../../business/rules/an-update-is-kept-beside-the-vendors-answer.md)) through `validated_essential_update`, which runs the form's own steps over the update and the answers it leaves, judges only the steps the update touches, and returns the stored answers each updated question writes (`UPDATABLE_ESSENTIAL_QUESTIONS`: the table-share words write the addresses read out of them too).
   A question whose stored answers meet `SOLVER_RELEVANT_KEYS` also asks the row "Update info the assignment or price reads", an Admin's by default; the solver and the other readers read the update through `effective_answers`.
@@ -75,6 +76,15 @@ The Vendors page and its drawer read it too, so a refused placement read still n
 The preferred name is asked of everyone, after the full name, and is never required, never solver-relevant and never switched off.
 What every screen does with the name is [a vendor is called by their chosen name](../../business/rules/a-vendor-is-called-by-their-chosen-name.md).
 
+**The business name is the name a vendor trades under**, asked of everyone right after the preferred name, and never required, never solver-relevant and never switched off ([ADR 0042](../../adr/0042-every-form-asks-a-built-in-business-name.md)).
+It is never the name a vendor is called by: `display_name` does not read it.
+**It is stored only when given, the one essential answer that is**: its step (`_store_business_name`) stores the answer stripped when it is not blank, and no key at all when it is blank or missing, where the preferred name and the request store `""`.
+An applicant's save and an import compare the whole stored `form_data` ([the transition table](../data/application-document.md#the-transition-table)), so a key every save wrote empty would make each application stored before the question read as changed, and send a person's verdict back to open on an unchanged file.
+`business_name(form_data)`, and `businessName(formData)` in the mirror, is the one reader of it: the stripped text, or `""` for an absent key, a blank one or a value that is not text; every reader of the key goes through it.
+An organizer's update of it left blank is the exception to "as the form stores them": `validated_essential_update` returns `""`, the update standing over the vendor's answer, since no key cannot say the organizer removed it, and `update_vendor_info` reads a blank one over a vendor who gave none as their own answer, which takes any update away.
+The search on the results finds a vendor by it (`vendor_search_terms_for_market`), the review's find field too (`findsApplication`), and the vendors' export offers it as a column ([exporting vendors](../../business/flows/vendors.md)).
+`back-end/tests/test_the_built_in_business_name.py` and `front-end/src/__tests__/theBuiltInBusinessName.test.ts` pin it.
+
 ## The offering, and the freeze
 
 **The offering is the market plan, never a list of its own**: dates from `setupObject.marketDates`, sections from `setupObject.sections`, tiers from `setupObject.tiers`, and table types from the stub (`essential_options_from_setup`, mirrored by `essentialOptionsFromSetup`).
@@ -91,7 +101,7 @@ The plan itself settles earlier still, on leaving draft.
 **Either half alone is a form.**
 Every layer that asks "does this market have a form?" counts the essential questions as well as the custom fields: `FormHasFieldsGuard` in [`back-end/guards.py`](../../../back-end/guards.py), which keeps a market from leaving draft on either intake path, and `_asks_nothing` in [`back-end/application_write.py`](../../../back-end/application_write.py), which refuses an application to a market that asks nothing.
 When `_asks_nothing` counted custom fields alone, a market could open applications and then refuse every application it received, by import and by applicant alike.
-Both read `plan_derived_asked_keys`, the asked questions less the name, preferred name and request: those are asked unconditionally, so counting them would leave both unable to say no, and a market whose plan offers nothing to apply for is still refused.
+Both read `plan_derived_asked_keys`, the asked questions less the name, preferred name, business name and request: those are asked unconditionally, so counting them would leave both unable to say no, and a market whose plan offers nothing to apply for is still refused.
 The applicant's form reads its front-end mirror, `planDerivedAskedKeys`, so a market asking the essential questions alone offers its form and its Save; it once told vendors it had no form.
 `_normalized_application_form` stores a form with no custom fields ([the market document](../data/market-document.md#the-fields-that-matter)).
 
@@ -108,6 +118,7 @@ The same check refuses the import's own targets as keys (`applicant_email`, `sub
 ## Why
 
 - [Essential fields are exactly what the solver reads](../../adr/0001-essential-fields-are-the-solver-contract.md).
+- [Every form asks a built-in business name](../../adr/0042-every-form-asks-a-built-in-business-name.md): why it is stored only when given.
 - [An incomplete application refuses the run](../../business/rules/an-incomplete-application-refuses-the-run.md): requiredness is what the market asked.
 - [What an import may leave unasked](../../business/rules/what-an-import-may-leave-unasked.md).
 - [Table-share pairing](../../business/rules/table-share-pairing.md): how the partner's address is read out of the answer.
