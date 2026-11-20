@@ -21,7 +21,7 @@ import { LoginPage } from './pages/LoginPage';
  *
  * The map shows each table by whether its vendor is checked in, checked out or not checked in, a
  * press on a vendor's table opens their drawer as their row does, each half of the shared table its
- * own, and the map follows a check-in made on the list, and a check-in and a check-out made
+ * own, and the map follows a check-in and a check-out made on the list, and a check-in made
  * elsewhere, which the roster's re-read brings with no reload: a vendor checked out is drawn in
  * their section's darker out shade (T501). The legend names the three states, and "No vendor" on
  * North Wing, where Aisle A 4 is free, and not on South Wing, whose tables are all held. The drawer holds no check-in (D39): a check-in is the list's.
