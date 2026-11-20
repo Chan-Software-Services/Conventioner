@@ -554,8 +554,10 @@ def _classify(columns: List[_Column]) -> List[Dict[str, Any]]:
                             "why": "Everyone answered it with their own email"})
             continue
         # Before the two names: a column of two-word business names is not the full name. The
-        # first column headed so only, since the form asks one business name.
+        # first column headed so only, since the form asks one business name, and never one whose
+        # answers are a choice: "Is your business name registered?" asks something else.
         if (BUSINESS_NAME_QUESTION.search(lowered[index])
+                and not (grid or column.is_choice_like())
                 and EssentialFields.BUSINESS_NAME_KEY not in have):
             decided.append(essential(EssentialFields.BUSINESS_NAME_KEY,
                                      "Its heading asks for a business name"))

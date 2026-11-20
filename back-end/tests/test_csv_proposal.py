@@ -493,6 +493,15 @@ class TestWhatAColumnCarries:
         rows = [["1/1/2026 9:00:00", f"p{i}@mail.test", f"shop {i}"] for i in range(5)]
         assert CsvProposal.proposal(headers, rows)["columns"][2]["fate"] == "custom"
 
+    @pytest.mark.parametrize("header", ["Is your business name registered?",
+                                        "Do you want your business name on the map?"])
+    def test_a_choice_asked_about_the_business_name_stays_the_organizers(self, header):
+        headers = ["Timestamp", "Email Address", header]
+        rows = [["1/1/2026 9:00:00", f"p{i}@mail.test", "Yes" if i % 3 else "No"]
+                for i in range(9)]
+        column = CsvProposal.proposal(headers, rows)["columns"][2]
+        assert (column["fate"], column["essential"]) == ("custom", None)
+
     def test_a_file_with_no_such_column_says_no_column_answers_it(self):
         proposal = CsvProposal.proposal(["Timestamp", "Email Address"],
                                         [["1/1/2026 9:00:00", "p@mail.test"]])
