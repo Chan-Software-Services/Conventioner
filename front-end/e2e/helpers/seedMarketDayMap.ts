@@ -8,6 +8,7 @@ import {
   loginViaApi,
   marketNameToSlug,
   publishResults,
+  SECOND_FLOORPLAN_PATH,
   startLayout,
 } from './seeds';
 import { uniqueMarketName } from './uniqueName';
@@ -154,9 +155,9 @@ async function ok(response: Awaited<ReturnType<APIRequestContext['get']>>, what:
  *
  * A `form` market in Market Days, today its first date and tomorrow its second, with two locations
  * each laid out in Draft: North Wing, its Aisle A of four tables in a row and a stage turned 30
- * degrees, and South Wing, its Aisle B of three. Seven vendors hold today's seats, two of them
- * sharing Aisle A 3 as its left and right halves, and one checked in at the door; tomorrow two
- * vendors are seated. The form's three short text questions, a business name, a website and an
+ * degrees, and South Wing, its Aisle B of three, on another floorplan image than North Wing's.
+ * Seven vendors hold today's seats, two of them sharing Aisle A 3 as its left and right halves, and
+ * one checked in at the door; tomorrow two vendors are seated. The form's three short text questions, a business name, a website and an
  * Instagram handle, are answered by most vendors, one answering none and one giving an email
  * address as their business name, which the map withholds. Each vendor's full name, preferred name
  * and the organizer's note on one are the personal markers a spec of the public map looks for and
@@ -237,6 +238,8 @@ export async function seedMarketDayMap(
       metresAcross: 30,
       tables: row(AISLE_B.id, 3, 9000),
       tablePrefix: 'south-table',
+      // Another image than North Wing's, so a map's two floorplans are told apart (T501).
+      image: SECOND_FLOORPLAN_PATH,
     });
   }
 

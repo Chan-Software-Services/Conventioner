@@ -197,6 +197,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
   - its review setup decided
   - `vendors` seeds others than alice and bob, a table each
   - `namePrefix` starts its name, and so its addresses, with a long one
+  - `marketDates` runs it on several days in place of `marketDate`'s one, each vendor applying for and placed on every day
 
 **`seedApplicantMarket()`** ([file](../../../front-end/e2e/helpers/seedApplicantMarket.ts))
 
@@ -269,11 +270,12 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
 
 - Leaves: a location's layout started on a market in Draft as the page starts it, calibrated to `metresAcross` when given, with `tables` (each naming its section by id) and `zones` (each turned by its `rotation`, none unless given) on it; `seedLayout()` and `seedAssignedMarket({ laidOut })` call it
 - Notes: its tables' ids are `table-1` on, or `tablePrefix` and their place, which a market of two layouts sets for each, since a seat names its table by id alone
+- With `image`, the floorplan uploaded is that PNG in place of `fixtures/test-floorplan.png` (`LAYOUT_FLOORPLAN_PATH`); `fixtures/test-floorplan-second.png` (`SECOND_FLOORPLAN_PATH`) is a second fixture hall of the same 4:3 shape at 960 by 720 pixels, of other bytes, so a map's two images are told apart (T501)
 
 **`seedMarketDayMap()`** ([file](../../../front-end/e2e/helpers/seedMarketDayMap.ts))
 
 - Leaves: a `form` market in `market_days`, today its first date and tomorrow its second, for every spec of the day map, the public map and Attendance's map (T422):
-  - North Wing laid out in Draft with Aisle A's four tables in a row and a stage turned 30 degrees, and South Wing with Aisle B's three, each layout's tables with ids of its own
+  - North Wing laid out in Draft with Aisle A's four tables in a row and a stage turned 30 degrees, and South Wing with Aisle B's three, each layout's tables with ids of its own, North Wing on `fixtures/test-floorplan.png` and South Wing on `fixtures/test-floorplan-second.png`, each hall 30 m by 22.5 m
   - seven vendors seated by hand today on an allocation (`allocateThenFreeEverySeat()`), two of them sharing Aisle A 3 as its left and right halves, and two seated tomorrow
   - the first vendor checked in today at the door, and an organizer's note on the second
   - the form's three short text questions, a business name, a website and an Instagram handle, answered by most vendors in the shapes the map cleans, one answering none and one giving an email address as their business name
@@ -308,6 +310,7 @@ It returns the `marketSlug` of the market's vendor page, where its vendors check
 ## Checking a vendor in
 
 **The door takes no check-in for a day that has not begun anywhere** (T318, [attendance and the door](../modules/attendance-and-door.md#sharp-edges)), and `SEED_MARKET_DATE` is in 2099, so a spec that checks a vendor in at the door seeds its market on `calendarToday()` (`marketDate`) and checks in through the door, where the page offers Check in.
+A spec that also reads what a market on its day offers, such as the rail's More menu, seeds today and tomorrow (`marketDates`): a run that passes midnight between its seed and its read finds the market's one day over, and the rail then offers archiving as its main button with no menu (T501's trial merge).
 A spec of what check-ins count, the Stats tab's, keeps its days to come and stores its check-ins with `recordCheckIns()` ([file](../../../front-end/e2e/helpers/seeds.ts)): one record per vendor's day, written as the door writes it, at the table the vendor holds that day, by the organizer it names, and with no history entry; it throws on a vendor with no seat that day.
 `seedTheScreens()` checks half of its rules market's first day in this way, for the Stats tab's check-in rows.
 

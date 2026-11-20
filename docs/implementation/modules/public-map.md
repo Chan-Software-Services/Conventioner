@@ -21,6 +21,7 @@ sources:
   - T469
   - T496
   - T502
+  - T501
 ---
 
 # The public map
@@ -86,7 +87,7 @@ A vendor's address joins a seat to its answers here and is never in the answer.
 
 ## The image
 
-**`GET /public/markets/<slug>/map/image/<location_id>` answers the floorplan image of a location the map draws** (`public_map_image`), with its content type as the image route detects it (`detect_mimetype` in `api/floorplans.py`) and `Cache-Control: public, max-age=300`.
+**`GET /public/markets/<slug>/map/image/<location_id>` answers the floorplan image of a location the map draws** (`public_map_image`), with its content type as the image route detects it (`detect_mimetype` in `api/floorplans.py`) and `Cache-Control: public, max-age=300`, and no `ETag`: its tag would be the image's id, which this route never shows, unlike the signed-in image's ([ADR 0041](../../adr/0041-a-signed-in-floorplan-image-is-cached-by-the-browser-alone.md)).
 It is behind the same gate, and answers the same 404 for a location the map does not draw, a layout with no image, an image stored for another market or gone from the store.
 It reads the image by the layout it found, never by an id the request names.
 
