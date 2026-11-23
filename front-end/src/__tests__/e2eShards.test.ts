@@ -13,6 +13,7 @@ import {
   BLEND_WEIGHT,
   blendTimings,
   checkShards,
+  dealtBy,
   chooseTimings,
   chooseTimingsArtifacts,
   dealShards,
@@ -391,6 +392,8 @@ describe('trustedRun', () => {
   });
 });
 
+const COMMITTED_FILE = 'the committed scripts/e2e-shard-timings.json';
+
 describe('checkShards', () => {
   const files = ['a.spec.ts', 'b.spec.ts', 'c.spec.ts', 'd.spec.ts'];
   const timings: Record<string, number> = {
@@ -400,10 +403,10 @@ describe('checkShards', () => {
     'd.spec.ts': 1,
   };
   const SOURCE = "run 5's e2e-shard-timings";
-  function shards(total = 2, source = SOURCE) {
-    return dealShards(files, timings, total).map((hand, n) => ({
+  function shards(total = 2, source = SOURCE, dealtBy: Record<string, number> = timings) {
+    return dealShards(files, dealtBy, total).map((hand, n) => ({
       shard: n + 1,
-      deal: { shard: n + 1, total, source, timings, files, hand } satisfies DealRecord,
+      deal: { shard: n + 1, total, source, timings: dealtBy, files, hand } satisfies DealRecord,
       report: report(Object.fromEntries(hand.map((file) => [file, [[timings[file]! * 1000]]]))),
     }));
   }
@@ -428,10 +431,24 @@ describe('checkShards', () => {
 
   it('names shards that dealt by different timings', () => {
     const [one] = shards();
-    const [, two] = shards(2, 'the committed scripts/e2e-shard-timings.json');
+    const [, two] = shards(2, 'the committed scripts/e2e-shard-timings.json', {
+      ...timings,
+      'd.spec.ts': 9,
+    });
     expect(checkShards([one!, two!]).problems[0]).toMatch(
       /^the shards dealt by different timings: shard 1 by run 5's e2e-shard-timings; shard 2 by the committed/,
     );
+  });
+
+  it('passes shards that fell back to the committed file for different reasons', () => {
+    // One shard's lookup failed while the others found no artifact: the same timings, so the same
+    // hands, though the words of their source differ.
+    const [one] = shards(
+      2,
+      `${COMMITTED_FILE} (no trusted e2e-shard-timings artifact made before 2026-11-20T11:50:00Z)`,
+    );
+    const [, two] = shards(2, `${COMMITTED_FILE} (GitHub's API failed: GitHub answered 502 to /x)`);
+    expect(checkShards([one!, two!]).problems).toEqual([]);
   });
 
   it('names a spec file run twice or by no shard, and a report that holds other files than its hand', () => {
@@ -446,6 +463,31 @@ describe('checkShards', () => {
 
   it('refuses with no deal record at all', () => {
     expect(checkShards([]).problems).toEqual(['no shard uploaded a deal record']);
+  });
+});
+
+describe('dealtBy', () => {
+  const deal = (shard: number, source: string): DealRecord => ({
+    shard,
+    total: 3,
+    source,
+    timings: {},
+    files: [],
+    hand: [],
+  });
+
+  it('names the one source every shard dealt by', () => {
+    expect(dealtBy([deal(1, 'A'), deal(2, 'A'), deal(3, 'A')])).toBe('A');
+  });
+
+  it('names each source and its shards when they differ', () => {
+    expect(dealtBy([deal(3, 'A'), deal(1, 'A'), deal(2, 'B')])).toBe(
+      'A (shards 1, 3); B (shard 2)',
+    );
+  });
+
+  it('says when no shard recorded one', () => {
+    expect(dealtBy([])).toBe('no timings any shard recorded');
   });
 });
 
@@ -572,6 +614,44 @@ describe('chooseTimings', () => {
     });
     expect((await chooseTimings(gh, REPOSITORY, '100')).source).toMatch(/\(artifact 901, /);
     expect(gh.asked.filter((path) => path.includes('artifacts?name'))).toHaveLength(2);
+  });
+
+  // GitHub lists artifacts by id, newest first, and ids are not quite in the order the artifacts
+  // were made: one made 15 minutes later may list below the other.
+  const madeAfterTheRun = (count: number, firstId: number) =>
+    Array.from({ length: count }, (_, n) => artifact(firstId - n, 52, '2026-11-20T12:05:00Z'));
+
+  it('takes the newest made before the margin when ids list an older one above it', async () => {
+    const gh = github({
+      runs: { 51: devRun(51) },
+      artifacts: [
+        ...madeAfterTheRun(99, 5000),
+        artifact(1000, 51, '2026-11-20T11:00:00Z'),
+        artifact(999, 51, '2026-11-20T11:30:00Z'),
+        artifact(998, 51, '2026-11-20T08:00:00Z'),
+      ],
+      texts: { 999: '{"a.spec.ts": 1}', 1000: '{"a.spec.ts": 2}' },
+    });
+    expect((await chooseTimings(gh, REPOSITORY, '100')).source).toMatch(/\(artifact 999, /);
+  });
+
+  it('takes the same artifact whichever page boundary falls between them', async () => {
+    const choose = async (newer: number) => {
+      const gh = github({
+        runs: { 51: devRun(51) },
+        artifacts: [
+          ...madeAfterTheRun(newer, 5000),
+          artifact(1000, 51, '2026-11-20T11:00:00Z'),
+          artifact(999, 51, '2026-11-20T11:30:00Z'),
+          artifact(998, 51, '2026-11-20T08:00:00Z'),
+        ],
+        texts: { 999: '{"a.spec.ts": 1}', 1000: '{"a.spec.ts": 2}' },
+      });
+      return (await chooseTimings(gh, REPOSITORY, '100')).source;
+    };
+    const chosen = await Promise.all([98, 99, 100, 101].map(choose));
+    expect(new Set(chosen).size).toBe(1);
+    expect(chosen[0]).toMatch(/\(artifact 999, /);
   });
 
   it('passes over an artifact whose run is not a push to dev or a trial commit', async () => {

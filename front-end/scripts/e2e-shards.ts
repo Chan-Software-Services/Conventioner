@@ -354,8 +354,8 @@ export interface ShardResult {
 
 /**
  * The check that the shards dealt alike and ran every spec file once: every shard of the total its
- * deal records name uploaded a deal record and a report, every deal record names the same timings'
- * source and the same files, each report holds exactly its shard's hand, and every listed file is in
+ * deal records name uploaded a deal record and a report, every deal record holds the same timings
+ * and the same files, each report holds exactly its shard's hand, and every listed file is in
  * exactly one report. Also each shard's seconds of tests, by its report, 0 for none.
  */
 export function checkShards(shards: readonly ShardResult[]): {
@@ -368,7 +368,9 @@ export function checkShards(shards: readonly ShardResult[]): {
   if (deals.length === 0) return { problems: ['no shard uploaded a deal record'], seconds: [] };
   const problems: string[] = [];
   const total = Math.max(...deals.map((deal) => deal.total));
-  const key = (deal: DealRecord) => JSON.stringify([deal.source, deal.total, deal.files]);
+  // What decides the hands, not the words of the source: shards that fell back to the committed file
+  // for different reasons dealt alike.
+  const key = (deal: DealRecord) => JSON.stringify([deal.timings, deal.total, deal.files]);
   if (new Set(deals.map(key)).size > 1) {
     problems.push(
       'the shards dealt by different timings: ' +
@@ -403,6 +405,21 @@ export function checkShards(shards: readonly ShardResult[]): {
   if (twice.length > 0) problems.push(`${twice.join(', ')} ran on more than one shard`);
   if (never.length > 0) problems.push(`${never.join(', ')} ran on no shard`);
   return { problems, seconds };
+}
+
+/** The timings' source every shard dealt by, or each source with its shards when they differ. */
+export function dealtBy(deals: readonly DealRecord[]): string {
+  if (deals.length === 0) return 'no timings any shard recorded';
+  const bySource = new Map<string, number[]>();
+  for (const deal of [...deals].sort((a, b) => a.shard - b.shard)) {
+    bySource.set(deal.source, [...(bySource.get(deal.source) ?? []), deal.shard]);
+  }
+  if (bySource.size === 1) return deals[0]!.source;
+  return [...bySource]
+    .map(
+      ([source, shards]) => `${source} (shard${shards.length > 1 ? 's' : ''} ${shards.join(', ')})`,
+    )
+    .join('; ');
 }
 
 /** The timings a run publishes once `checkShards` passed: the ones it dealt by, blended with the
@@ -522,28 +539,39 @@ const githubReads: GitHubReads = {
  * every run on `dev` and the merge queue since having published one. */
 const ARTIFACT_PAGES = 20;
 
+/** How far before the best candidate so far an artifact listed must have been made for the lookup
+ * to stop: GitHub lists artifacts by id, which only roughly follows the order they were made (ids
+ * were seen out of order by up to 15 minutes), so a newer candidate may list below an older one. */
+const LISTING_DISORDER_MS = 60 * 60_000;
+
 /**
- * The artifacts `chooseTimingsArtifacts` names for `run`, reading GitHub's list, which it gives
- * newest first, page after page, until a page holds one or the list ends, so an artifact many newer ones have buried
- * since is still found.
+ * The artifacts `chooseTimingsArtifacts` names for `run`, best first, over every artifact read:
+ * GitHub's list, page after page, until the list ends or a page holds an artifact made an hour
+ * before the best candidate so far, past which no newer candidate is listed. So the choice is the
+ * same wherever the pages' boundaries fall, and an artifact many newer ones have buried since is
+ * still found.
  */
 async function listCandidates(
   gh: GitHubReads,
   repository: string,
   run: WorkflowRun,
 ): Promise<Artifact[]> {
+  const read: Artifact[] = [];
   for (let page = 1; page <= ARTIFACT_PAGES; page++) {
     const listed = (await gh.json(
       `/repos/${repository}/actions/artifacts?name=${TIMINGS_ARTIFACT}&per_page=100&page=${page}`,
     )) as { artifacts: Artifact[] };
-    const candidates = chooseTimingsArtifacts(
-      listed.artifacts,
-      run.repository.id,
-      new Date(run.created_at!),
-    );
-    if (candidates.length > 0 || listed.artifacts.length < 100) return candidates;
+    read.push(...listed.artifacts);
+    const best = chooseTimingsArtifacts(read, run.repository.id, new Date(run.created_at!))[0];
+    const pastIt =
+      best !== undefined &&
+      listed.artifacts.some(
+        (artifact) =>
+          Date.parse(artifact.created_at) < Date.parse(best.created_at) - LISTING_DISORDER_MS,
+      );
+    if (pastIt || listed.artifacts.length < 100) break;
   }
-  return [];
+  return chooseTimingsArtifacts(read, run.repository.id, new Date(run.created_at!));
 }
 
 /**
@@ -697,8 +725,7 @@ function shardResults(dir: string): ShardResult[] {
 function checkCommand(dir: string, publish: string | undefined): number {
   const shards = shardResults(dir);
   const { problems, seconds } = checkShards(shards);
-  const source =
-    shards.find((shard) => shard.deal)?.deal?.source ?? 'no timings any shard recorded';
+  const source = dealtBy(shards.flatMap((shard) => (shard.deal ? [shard.deal] : [])));
   const summary = shardSummary(source, seconds, problems);
   console.log(summary);
   const summaryFile = process.env.GITHUB_STEP_SUMMARY;
