@@ -446,7 +446,7 @@ Connecting through the card skips Discord's approval screen under it, and connec
 
 ## CI Pipeline
 
-Pushes and PRs to `main` or `dev`, a merge queue's trial commit for `dev`, and a nightly or hand-started run on `dev`'s tip run `.github/workflows/test.yml` and CodeQL's `.github/workflows/codeql.yml`, which also runs weekly on `dev`.
+Pushes and PRs to `main` or `dev` and a merge queue's trial commit for `dev` run `.github/workflows/test.yml` and CodeQL's `.github/workflows/codeql.yml`, which also runs weekly on `dev`; `test.yml` also runs nightly on `dev`'s tip, or when started by hand, to make [the test map](implementation/testing/the-test-map.md).
 [CI and the gate](implementation/testing/ci-and-the-gate.md) says what each job runs, which checks
 the rules require (eleven on `dev`, CodeQL's three `Analyze (<language>)` among them, and six on `main`, `real-data-and-workflows` on both), why a flaky test fails the build, and what the no-mistakes gate
 runs through `scripts/nm-test.sh` (the real-data checks alone, since CI runs every suite before a merge).
