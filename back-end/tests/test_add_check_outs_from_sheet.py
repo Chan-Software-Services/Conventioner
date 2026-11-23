@@ -332,18 +332,6 @@ def test_missing_or_extra_arguments_print_the_usage_and_exit_one(database, capsy
     assert everything(db) == before
 
 
-def test_the_run_is_not_built_yet(database, sheet, capsys):
-    db = database(a_market())
-    before = everything(db)
-
-    assert dry_run(sheet(), dry=False) == 1
-
-    captured = capsys.readouterr()
-    assert "the run is not built yet" in captured.err
-    assert captured.out == ""
-    assert everything(db) == before
-
-
 # --- the refusals --------------------------------------------------------------------------------
 
 def refused(capsys, db, before, answer):
@@ -860,3 +848,225 @@ def test_each_match_reads_its_line_against_the_vendors_record(
     assert out[-2] == (f"would add {added}, left {left}, reported {reported}, unmatched 0, "
                        "changed since the read 0")
     assert out[-1] == f"would add {1 if line == 'add a check-out' else 0} check-out(s)."
+
+
+# --- the run -------------------------------------------------------------------------------------
+
+#: ``AT`` in UTC, as the door stores a check-out's time.
+AT_IN_UTC = "2026-08-02T00:00:00+00:00"
+#: The vendors the fixture day's dry run says a run adds a check-out to, in table code order.
+ADDED = ["oli@example.com", "ana@example.com", "ben@example.com", "fay@example.com",
+         "gus@example.com"]
+
+
+def run(sheet_path, **given):
+    return dry_run(sheet_path, dry=False, **given)
+
+
+def record_of(db, email, date=DAY, market_id=MARKET):
+    [record] = [record for record in db["attendance"].documents
+                if (record["vendor_email"], record["date"], record["market_id"])
+                == (email, date, market_id)]
+    return record
+
+
+def entries(db):
+    """The history's entries, each but for its id and time, which no two writes share."""
+    return [{key: value for key, value in entry.items() if key not in ("_id", "id", "at")}
+            for entry in db["history"].documents]
+
+
+def the_entry(email):
+    """The entry an organizer's check-out at Attendance records, as ``ORGANIZER``."""
+    return {"market_id": MARKET, "actor": ORGANIZER, "action": "check-in", "kind": "checked_out",
+            "vendors": [email], "subject": {"date": DAY},
+            "detail": {"before": {"checked_out": False}, "after": {"checked_out": True}}}
+
+
+def test_the_run_prints_the_dry_runs_lines(database, sheet, capsys):
+    database(a_market())
+    assert dry_run(sheet()) == 0
+    dry = lines_of(capsys.readouterr().out)
+
+    assert run(sheet()) == 0
+
+    ran = lines_of(capsys.readouterr().out)
+    assert ran == [dry[0].replace(" (dry run: nothing is written)", ""), *dry[1:-2],
+                   dry[-2].replace("would add ", "added ", 1),
+                   dry[-1].replace("would add ", "added ", 1)]
+    assert ran[0] == f'market market-123 "Spring Fair", {DAY}, each check-out at {AT}'
+    assert ran[-2:] == ["added 5, left 6, reported 4, unmatched 4, changed since the read 0",
+                        "added 5 check-out(s)."]
+
+
+@pytest.mark.parametrize("phase", [MarketPhase.MARKET_DAYS, MarketPhase.ARCHIVED])
+def test_the_run_sets_the_three_check_out_fields_on_exactly_the_vendors_to_add(
+        database, sheet, capsys, phase):
+    db = database(a_market(phase))
+    markets, applications, attendance, _history = everything(db)
+
+    assert run(sheet(), by="  Owner@Example.COM ") == 0
+
+    assert everything(db)[:2] == [markets, applications]
+    after = db["attendance"].documents
+    assert len(after) == len(attendance)
+    for before, now in zip(attendance, after):
+        if (before["vendor_email"], before["date"], before["market_id"]) in {
+                (email, DAY, MARKET) for email in ADDED}:
+            assert now == {**before, "checked_out_at": AT_IN_UTC, "checked_out_by": ORGANIZER,
+                           "checked_out_via": None}
+        else:
+            assert now == before
+
+
+def test_each_check_out_records_the_entry_a_check_out_at_attendance_records(
+        database, sheet, capsys, monkeypatch):
+    db = database(a_market())
+
+    assert run(sheet()) == 0
+
+    recorded = entries(db)
+    assert recorded == [the_entry(email) for email in ADDED]
+
+    # The same organizer checking the same vendors out at Attendance records the same entries.
+    import api.market_actions as Actions
+    from market_documents import market_from_document
+    db = database(a_market())
+    db["history"].documents.clear()
+    monkeypatch.setattr(AttendanceApi, "markets_collection", db["markets"])
+    market = market_from_document(dict(db["markets"].docs[0]))
+    asked = Actions.ask(Actions.CHECK_IN, ORGANIZER, market,
+                        MarketsApi._load_organization(market.organization_id))
+    for email in ADDED:
+        assert AttendanceApi.record_check_out(asked, email, DAY)[1] == 200
+    assert entries(db) == recorded
+
+
+def test_a_dry_run_records_no_entry(database, sheet, capsys):
+    db = database(a_market())
+
+    assert dry_run(sheet()) == 0
+
+    assert db["history"].documents == []
+
+
+@pytest.mark.parametrize("again", [
+    {}, {"at": "2026-08-01T18:30:00-07:00"}, {"by": DOOR_ORGANIZER}])
+def test_a_second_run_writes_and_records_nothing(database, sheet, capsys, monkeypatch, again):
+    db = database(a_market())
+    monkeypatch.setattr(PermissionsApi, "user_has_permission",
+                        lambda email, *_a, **_k: normalized_email(email) in (
+                            ORGANIZER, DOOR_ORGANIZER))
+    assert run(sheet()) == 0
+    capsys.readouterr()
+    before = everything(db)
+
+    assert run(sheet(), **again) == 0
+
+    assert everything(db) == before
+    out = lines_of(capsys.readouterr().out)
+    for line in ('  Lower Hall 1, left half: leave: already checked out at '
+                 f'{AT_IN_UTC} (by name)',
+                 '  Upper Hall 1, whole table: leave: already checked out at '
+                 f'{AT_IN_UTC} (the table\'s one seat: sheet "Paper & Pine", Conventioner '
+                 '"Paper & Pine")',
+                 f'  Upper Hall 2, left half: leave: already checked out at {AT_IN_UTC} (by name)'):
+        assert line in out
+    assert out[-2:] == ["added 0, left 11, reported 4, unmatched 4, changed since the read 0",
+                        "added 0 check-out(s)."]
+
+
+def test_a_check_out_made_at_the_door_before_the_run_is_kept(database, sheet, capsys):
+    db = database(a_market())
+    door = copy.deepcopy(record_of(db, "dee@example.com"))
+
+    assert run(sheet()) == 0
+
+    assert record_of(db, "dee@example.com") == door
+    assert door["checked_out_by"] == DOOR_ORGANIZER
+    assert (f"  Upper Hall 3, left half: leave: already checked out at {DOOR_CHECK_OUT} "
+            "(by name)") in lines_of(capsys.readouterr().out)
+    assert all(entry["vendors"] != ["dee@example.com"] for entry in entries(db))
+
+
+BEN_DAY = ("ben@example.com", DAY, MARKET)
+
+
+def bens_day(db):
+    return [record for record in db["attendance"].documents
+            if (record["vendor_email"], record["date"], record["market_id"]) == BEN_DAY]
+
+
+def checked_out_at_the_door(db):
+    db["attendance"].update_one(
+        {"vendor_email": "ben@example.com", "date": DAY, "market_id": MARKET},
+        {"$set": {"checked_out_at": DOOR_CHECK_OUT, "checked_out_by": DOOR_ORGANIZER,
+                  "checked_out_via": None}})
+
+
+def undone_at_the_door(db):
+    db["attendance"].delete_one({"vendor_email": "ben@example.com", "date": DAY,
+                                 "market_id": MARKET})
+
+
+@pytest.mark.parametrize("meanwhile, line, left", [
+    (checked_out_at_the_door, "checked out since the read, left",
+     [a_check_in("ben@example.com", "Upper Hall 2", out_at=DOOR_CHECK_OUT, out_by=DOOR_ORGANIZER)]),
+    (undone_at_the_door, "the record is gone since the read, left", []),
+])
+def test_a_write_that_loses_a_race_is_left_with_no_entry(
+        database, sheet, capsys, monkeypatch, meanwhile, line, left):
+    db = database(a_market())
+    attendance = db["attendance"]
+    write = attendance.update_one
+    raced = []
+
+    def racing(query, update, *args, **kwargs):
+        # Between the run's read and its write of Ben's check-out, the door changes the record.
+        if query.get("vendor_email") == "ben@example.com" and not raced:
+            raced.append(query)
+            meanwhile(db)
+        return write(query, update, *args, **kwargs)
+
+    monkeypatch.setattr(attendance, "update_one", racing)
+
+    assert run(sheet()) == 0
+
+    assert bens_day(db) == left
+    assert entries(db) == [the_entry(email) for email in ADDED if email != "ben@example.com"]
+    for email in ADDED:
+        if email != "ben@example.com":
+            assert record_of(db, email)["checked_out_at"] == AT_IN_UTC
+    out = lines_of(capsys.readouterr().out)
+    assert f"  Upper Hall 2, left half: {line} (by name)" in out
+    assert out[-2:] == ["added 4, left 6, reported 4, unmatched 4, changed since the read 1",
+                        "added 4 check-out(s)."]
+
+
+def test_a_run_cut_after_some_writes_is_finished_by_a_second(
+        database, sheet, capsys, monkeypatch):
+    db = database(a_market())
+    attendance = db["attendance"]
+    write = attendance.update_one
+    writes = []
+
+    def cut(query, update, *args, **kwargs):
+        writes.append(query)
+        if len(writes) == 3:
+            raise ConnectionError("the connection dropped")
+        return write(query, update, *args, **kwargs)
+
+    monkeypatch.setattr(attendance, "update_one", cut)
+    with pytest.raises(ConnectionError):
+        run(sheet())
+    assert [entry["vendors"] for entry in entries(db)] == [[email] for email in ADDED[:2]]
+    monkeypatch.setattr(attendance, "update_one", write)
+
+    assert run(sheet()) == 0
+
+    assert sorted(entries(db), key=lambda entry: entry["vendors"]) == sorted(
+        (the_entry(email) for email in ADDED), key=lambda entry: entry["vendors"])
+    for email in ADDED:
+        record = record_of(db, email)
+        assert (record["checked_out_at"], record["checked_out_by"]) == (AT_IN_UTC, ORGANIZER)
+    assert lines_of(capsys.readouterr().out)[-1] == "added 3 check-out(s)."

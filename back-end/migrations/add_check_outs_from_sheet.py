@@ -40,8 +40,14 @@ or ticked nothing and never checked in, is left; every other disagreement (a che
 the sheet ticks that Conventioner does not hold, or one Conventioner holds the sheet does not tick)
 is reported and not written. A seat on no row, and a check-in with no seat that day, are left.
 
-**The run**, the same arguments without ``--dry-run``, is not built yet: it says so on stderr and
-exits 1, writing nothing.
+**The run**, the same arguments without ``--dry-run``, prints the dry run's lines and, one vendor
+at a time in their order, adds each check-out it said it would: ``checked_out_at`` the time in UTC
+as the door stores it, ``checked_out_by`` the organizer address, ``checked_out_via`` none, held to
+the day's record not being checked out, so a check-out made at the door is never overwritten. Each
+records one "checked out" entry through the organizer's asking of Check vendors in, the entry their
+own check-out at Attendance records. A write that finds the record checked out or gone since the
+read is left with no entry, its line says so, and the count line counts it as changed since the
+read. A second run reads each as already checked out and writes nothing, so it finishes a cut run.
 
 **It refuses**, writing nothing and exiting 1 with "refused, nothing written:" and why, when: no
 live market has the id (none, or it is being deleted), or it does not parse; the market is neither
@@ -62,6 +68,9 @@ Usage (the production database address passed inline, never from back-end/.env):
     MONGODB_URI='<URI>' python migrations/add_check_outs_from_sheet.py \\
         --market <market-id> --day <YYYY-MM-DD> --sheet <path to the CSV> \\
         --checked-out-at <ISO 8601 time with its offset> --by <organizer address> --dry-run
+    MONGODB_URI='<URI>' python migrations/add_check_outs_from_sheet.py \\
+        --market <market-id> --day <YYYY-MM-DD> --sheet <path to the CSV> \\
+        --checked-out-at <ISO 8601 time with its offset> --by <organizer address>
 """
 import argparse
 import csv
@@ -69,7 +78,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, NamedTuple, Optional, Set, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -124,6 +133,8 @@ IN_NOT_HELD = "report: the sheet ticks a check-in Conventioner does not hold, no
 IN_UNTICKED = "report: checked in at Conventioner, the sheet ticks no check-in, left"
 OUT_WITHOUT_IN = "report: the sheet ticks a check-out with no check-in, not written"
 NOT_ON_THE_SHEET = "not on the sheet, left"
+CHECKED_OUT_SINCE = "checked out since the read, left"
+GONE_SINCE = "the record is gone since the read, left"
 
 BY_REFUSED = "the address given to --by may not check vendors in on this market"
 
@@ -175,9 +186,12 @@ class Line:
     """One line of the output, and how it counts."""
     table_code: str
     text: str
-    #: ``add``, ``left``, ``reported`` or ``unmatched``.
+    #: ``add``, ``left``, ``reported``, ``unmatched``, or, on a run, ``changed`` since the read.
     counts: str
     many: int = 1
+    #: A match's seat, whose vendor an ``add`` writes, and how it matched, as the line shows it.
+    seat: Optional[Seat] = None
+    how: str = ""
 
 
 @dataclass
@@ -393,7 +407,8 @@ def judged(document: Mapping[str, Any], day: str, rows: List[SheetRow],
             text, counts = _what(vendor, by_vendor.get(seat.email))
             shown = how if how == BY_NAME else (
                 f"{how}: sheet {_quoted([vendor.name])}, Conventioner {_quoted([names.of(seat)])}")
-            out.lines.append(Line(code, _seat_line(seat, f"{text} ({shown})"), counts))
+            out.lines.append(Line(code, _seat_line(seat, f"{text} ({shown})"), counts,
+                                  seat=seat, how=shown))
         for why, sheet_names, many in unmatched:
             shown = f" (sheet {_quoted(sheet_names)})" if sheet_names else ""
             out.lines.append(Line(code, f"  {code}: unmatched, {why}{shown}", "unmatched", many))
@@ -506,32 +521,62 @@ def _asked(by: str, market) -> Actions.Asked:
     return asked
 
 
+def check_out(market_id: str, day: str, seat: Seat, at: str, asked: Actions.Asked) -> Optional[str]:
+    """Add one vendor's check-out as an organizer's at Attendance is stored, held to the day's
+    record not being checked out, and record it through ``asked`` as the door does; or, the write
+    matching nothing, say what changed since the read, writing and recording nothing."""
+    attendance = AttendanceApi.attendance_collection
+    vendor_day = {"market_id": market_id, "vendor_email": seat.email, "date": day}
+    while True:
+        # A null matches a missing field: a record made before check-outs is not checked out.
+        written = attendance.update_one(
+            {**vendor_day, "checked_out_at": None},
+            {"$set": {"checked_out_at": at, "checked_out_by": asked.actor,
+                      "checked_out_via": None}})
+        if written.matched_count:
+            AttendanceApi._record_door(asked, seat.email, day, None, History.CHECKED_OUT,
+                                       "checked_out", True)
+            return None
+        stored = attendance.find_one(vendor_day)
+        if stored is None:
+            return GONE_SINCE
+        if stored.get("checked_out_at") is not None:
+            return CHECKED_OUT_SINCE
+        # A check-out made and undone at the door between the two: not checked out, so try again.
+
+
 def migrate(market_id: str, day: str, sheet: str, checked_out_at: str, by: str,
-            db=None) -> Judged:
-    """Say what a run would add, leave or report on the market's day (a dry run), or
-    ``Refused``: every refusal is judged before the sheet is matched."""
+            db=None, dry_run: bool = False) -> Judged:
+    """Say what a run adds, leaves or reports on the market's day and, but on a dry run, add each
+    check-out it says it adds; or ``Refused``: every refusal is judged before the sheet is matched
+    and before any write."""
     db = _database(db)
     document, market = _the_market(db, market_id, day)
-    _checked_out_at(checked_out_at, day)
-    _asked(by, market)
+    at = _checked_out_at(checked_out_at, day).astimezone(timezone.utc).isoformat()
+    asked = _asked(by, market)
     rows = read_sheet(sheet)
     records = list(db[AttendanceApi.ATTENDANCE_COLLECTION].find(
         {"market_id": market_id, "date": day}))
     plan = judged(document, day, rows, records)
 
     print(f'market {market_id} "{document.get("name")}", {day}, each check-out at '
-          f"{checked_out_at} (dry run: nothing is written)")
+          f"{checked_out_at}" + (" (dry run: nothing is written)" if dry_run else ""))
     for line in plan.lines:
+        if line.counts == "add" and not dry_run:
+            changed = check_out(market_id, day, line.seat, at, asked)
+            if changed:
+                line.text, line.counts = _seat_line(line.seat, f"{changed} ({line.how})"), "changed"
         print(line.text)
     if plan.not_on_the_sheet:
         print("not on the sheet:")
         for line in plan.not_on_the_sheet:
             print(line.text)
     adding = plan.counted("add")
-    print(f"\nwould add {adding}, left {plan.counted('left')}, reported "
+    verb = "would add" if dry_run else "added"
+    print(f"\n{verb} {adding}, left {plan.counted('left')}, reported "
           f"{plan.counted('reported')}, unmatched {plan.counted('unmatched')}, changed since the "
-          "read 0")
-    print(f"would add {adding} check-out(s).")
+          f"read {plan.counted('changed')}")
+    print(f"{verb} {adding} check-out(s).")
     return plan
 
 
@@ -557,11 +602,8 @@ def main(argv: List[str]) -> int:
     if given.list or any(value is None for value in values):
         print(f"usage: {USAGE}", file=sys.stderr)
         return 1
-    if not given.dry_run:
-        print("the run is not built yet: pass --dry-run", file=sys.stderr)
-        return 1
     try:
-        migrate(*values)
+        migrate(*values, dry_run=given.dry_run)
     except Refused as refusal:
         print(f"refused, nothing written: {refusal}", file=sys.stderr)
         return 1
