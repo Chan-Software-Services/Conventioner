@@ -132,7 +132,9 @@ test.describe('Tier 2 - Market role management', () => {
 
     await manageMarket.addUser(SECOND_USER.email, 'editor');
 
-    await expect(page.locator('.user-card').filter({ hasText: SECOND_USER.email })).toBeVisible();
+    await expect(page.locator('.user-card').filter({ hasText: SECOND_USER.email })).toBeVisible({
+      timeout: 5000,
+    });
 
     // A role the caller may change is the SELECT itself now, not a badge wrapping a transparent
     // one behind a hand-drawn chevron (E20/F01/S03). Its value is the role, which is a more honest

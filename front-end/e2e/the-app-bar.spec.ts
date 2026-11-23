@@ -1155,7 +1155,7 @@ for (const size of SIZES) {
     });
 
     // The probe follows the route, not the window, so the phone would repeat the desk.
-    if (!size.phone)
+    if (!size.phone) {
       test('the shell makes no session probe on a public page, signed in or out', async ({
         page,
       }) => {
@@ -1188,6 +1188,7 @@ for (const size of SIZES) {
         await page.goto('/markets');
         await expect.poll(() => probes).toBe(1);
       });
+    }
   });
 }
 
