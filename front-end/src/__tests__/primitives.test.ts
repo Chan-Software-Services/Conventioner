@@ -416,6 +416,33 @@ describe('the primitives exist and own what tokens cannot', () => {
     MAIN.walkAtRules('import', (atRule) => {
       imports.push(atRule.params);
     });
-    expect(imports).toContain("'./primitives.css'");
+    expect(imports).toContain("'./primitives.css' layer(global)");
+  });
+
+  it("holds every global rule in the global layer, so a component's own rule outranks it", () => {
+    // A production build links a shared chunk's CSS before the entry's, and the dev server injects
+    // them the other way round, so a component rule that tied a global one on specificity won on the
+    // dev server and lost in production: every ScrollBox drew the outer halo its frame cut off.
+    // Unlayered rules outrank every layered one, whatever their order or specificity.
+    const outside: string[] = [];
+    for (const node of MAIN.nodes) {
+      if (node.type === 'comment') continue;
+      if (
+        node.type === 'atrule' &&
+        node.name === 'import' &&
+        /\slayer\(global\)$/.test(node.params)
+      )
+        continue;
+      if (node.type === 'atrule' && node.name === 'layer' && node.params === 'global') continue;
+      outside.push(node.toString().split('\n')[0] ?? '');
+    }
+    expect(outside).toEqual([]);
+    for (const sheet of [BASE, PRIMITIVES]) {
+      const layers: string[] = [];
+      sheet.walkAtRules('layer', (atRule) => {
+        layers.push(atRule.params);
+      });
+      expect(layers, 'a global sheet names no layer of its own').toEqual([]);
+    }
   });
 });
