@@ -306,9 +306,11 @@ describe('blendTimings', () => {
 
 describe('chooseTimingsArtifacts', () => {
   const REPO = 7;
-  const created = new Date('2026-11-20T12:00:00Z');
+  // The run's creation as data, 2026-11-20T12:00:00Z, so each artifact's time is written from it.
+  const CREATED_MS = Date.UTC(2026, 10, 20, 12);
+  const created = new Date(CREATED_MS);
   const before = (minutes: number) =>
-    new Date(created.getTime() - minutes * 60_000).toISOString().replace('.000', '');
+    new Date(CREATED_MS - minutes * 60_000).toISOString().replace('.000', '');
   function artifact(
     id: number,
     createdAt: string,
