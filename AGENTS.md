@@ -24,7 +24,7 @@ Conventioner runs a vendor market from applications to the door, in production a
 
 - All commits MUST follow Conventional Commits: release-please derives every version from them (`feat:` → minor, `fix:` → patch, breaking → major).
 - Never edit `CHANGELOG.md` by hand: release-please writes it.
-- Never reintroduce `release-as` in `release-please-config.json`: it overrides the version calculation on *every* run until cleared.
+- Never reintroduce `release-as` in `release-please-config.json`: it overrides the version calculation on _every_ run until cleared.
 - [Full release docs](docs/RELEASING.md).
 
 ## Irreversible-safety rules
