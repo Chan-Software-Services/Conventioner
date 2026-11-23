@@ -365,14 +365,14 @@ MONGODB_URI='<URI>' .venv/bin/python migrations/add_check_outs_from_sheet.py --m
 `--list` prints each live market in its market days or archived, with its id, name and phase, and for each of its dates the seats that day, the check-ins and the check-outs.
 `--checked-out-at` is every check-out's time, given with its UTC offset (as `-07:00`) and on the day in that offset; it is stored in UTC, as the door stores a check-out's.
 `--by` is the organizer address every check-out is recorded as made by, and it must be one that may check vendors in on the market.
-So each check-out reads on Attendance as that organizer's at the time given, and in Manage market's history as theirs on the day, and is never told apart from one made at the door.
+So each check-out reads on Attendance as that organizer's at the time given, and in Manage market's history as theirs for that day, recorded at the time of the run.
 
 The sheet is five header lines, skipped unread, then one row per table of 14 cells: the table code, its location, then two halves of six, each a business name, the name the vendor goes by, and four ticks (checked in, lanyard taken, checked out, lanyard returned), each `TRUE`, `FALSE` or blank.
-A row is matched to the day's seats by table code, and within a shared table each half to a vendor by business name, then by the name they go by, ignoring case, spaces and punctuation.
+A row is matched to the day's seats by table code, and within a shared table each half to a vendor by business name or the name they go by, ignoring case, spaces and punctuation.
 The dry run prints, by table code, each seat's line: what the run adds, leaves or reports, and how it matched.
 A line that adds a check-out is a vendor the sheet ticks in and out whom Conventioner holds checked in and not out; a "leave" line is a vendor whose record already says what the sheet says, and a check-out Conventioner already holds is left as it is, whoever made it.
 A "report" line is a disagreement the run does not write: a check-in or check-out the sheet ticks that Conventioner does not hold, or one Conventioner holds that the sheet does not tick.
-An "unmatched" line is a row, or a half, the script could not give a vendor, with the sheet's business names, so you can find it on the sheet; "not on the sheet" lists the day's seats on no row and the check-ins with no seat that day.
+An "unmatched" line is a row, or a half, the script could not give a vendor, with the sheet's names for it where it has any, so you can find it on the sheet; "not on the sheet" lists the day's seats on no row and the check-ins with no seat that day.
 The count line says how many it would add, left, reported, could not match, and found changed since the read.
 Read the dry run before the run: the run prints the same lines, but for the first line, which says it is a dry run, and its count and last lines, which say what it added.
 
@@ -384,7 +384,7 @@ A run cut between a check-out's write and its history entry loses that one entry
 It refuses, exiting 1 with nothing written and its reason on stderr: a market it does not find or that is being deleted, or that does not parse; a market neither in its market days nor archived; a day that is not one of the market's dates or has not begun; a time that is not ISO 8601, has no offset or is on another date; an address that may not check vendors in, which the refusal never names; and a sheet that is not UTF-8 CSV, has fewer than five lines, holds a row not of 14 cells or a tick that is not `TRUE`, `FALSE` or blank, or two rows sharing a table code, each naming its line, never a cell's text.
 Its docstring lists each refusal.
 
-It prints market ids and names, table codes and counts, and the sheet's and Conventioner's business names on a line matched other than by name and on an unmatched one, never an address, a vendor's or yours.
+It prints market ids and names, table codes and counts, the sheet's and Conventioner's names for a vendor on a line matched other than by name, and the sheet's names on an unmatched one, never an address, a vendor's or yours.
 So keep its output on your terminal: it names vendors.
 
 ### When the back end refuses to boot
