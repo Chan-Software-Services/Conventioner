@@ -56,12 +56,31 @@ sources:
   - T422
   - T469
   - T501
+  - T519
 ---
 
 # E2E patterns
 
 How a Playwright spec under `front-end/e2e/` is written.
 How to run the suite is [TESTING.md](../../TESTING.md#end-to-end-e2e-tests); the helpers that put a market in a given state are [the E2E seeds](e2e-seeds.md); which spec to extend is [the market journey spec](the-market-journey-spec.md).
+
+## Every E2E test says why it is one
+
+An E2E test costs CI about a second before it tests anything, on every full run, and the suite runs on every pull request, every queued merge and every push to `dev` and `main`.
+So a test is E2E only when a cheaper test cannot prove it: a Vitest test in `front-end/src/__tests__/` (happy-dom, `@vue/test-utils`, a real `vue-router` where routing matters), or a pytest in `back-end/tests/`.
+
+A test must be E2E when what it proves needs one of these:
+
+- **layout**: a real box, width, scroll, overflow, clip, paint or contrast (happy-dom lays nothing out);
+- **a browser behaviour happy-dom does not model**: real focus and Tab order, `:focus-visible`, a pointer or touch gesture, a native control's keys, `beforeunload`, the clipboard, a download, print, an `IntersectionObserver` in a real scroller, the History API across reloads;
+- **the session**: a real cookie, sign-in, sign-out or session end;
+- **the stack together**: what the server stores or refuses, reached through the page, where the unit tests mock one side.
+
+A rule the page computes (which words, which items, which order, which keys do what) is a unit test, and the E2E test, when one is needed at all, proves only the wiring, once.
+
+Every spec file a change adds starts its header comment with a line `Why E2E: <the reasons above it needs, in a few words>`.
+Every test a change adds, to a new file or an existing one, is listed in the pull request's body under **New E2E tests**, one line each, `<file>:<line> <title> - <the reason it needs>`; a test that runs once per window size says what it measures at each size, or runs at one size.
+A test a change adds that a unit or component test could prove is written as that test instead.
 
 ## Selectors and page objects
 
