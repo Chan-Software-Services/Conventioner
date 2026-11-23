@@ -510,7 +510,7 @@ def escape(text: str) -> str:
 def describe_source(source: Optional[dict]) -> str:
     if source is None:
         return (
-            "affected-specs: no test map (no `gh`, offline, or no push to dev has made one yet): "
+            "affected-specs: no test map (no `gh`, offline, or no run on dev has made one yet): "
             "choosing only the changed specs and those importing a changed file, as Playwright's "
             "--only-changed would"
         )

@@ -78,7 +78,7 @@ Code that runs before the app dispatches a request, such as the session's loadin
 ## How old it can be
 
 The newest map is the newest run on `dev` that made one, which is the last night's on `dev`'s tip of then, so at most a day behind a merge, unless that run was cancelled, a shard recorded nothing, or the back end's suite failed under coverage; then it is an older night's.
-A map made by hand on another branch is never read, since its run's branch is not `dev`; a map a push to `dev` made before T510 is read until a nightly run makes a newer one.
+A map made by hand on another branch is never read, since its run's branch is not `dev`; a map a push to `dev` made, before the map was made nightly, is read until a nightly run makes a newer one.
 A branch is ahead of it by its own commits and by what `dev` took since its run, and an artifact goes after 90 days.
 So a spec, a module or a function that is newer than the map is not in it, and a reader of the map takes a branch's own diff from its merge-base for what the map cannot know.
 

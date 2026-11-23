@@ -763,7 +763,7 @@ class TestTheAudit:
         assert "no-such-commit" in summary.read_text()
 
     def test_with_no_map_a_spec_outside_rule_one_is_missed_but_not_annotated(self, repo, tmp_path):
-        # Before any push to dev has made a map, the selection is rule 1 alone, so a spec outside
+        # Before any run on dev has made a map, the selection is rule 1 alone, so a spec outside
         # it is listed, but is no sign of a drifted map or of a rule that cannot see a dependency.
         env = TestWhereTheMapComesFrom().fake_gh(tmp_path, "import sys\nsys.exit(1)\n")
         write(repo, {"front-end/e2e/c.spec.ts": "// edit\n", "front-end/src/views/Door.vue": "<p />\n"})
