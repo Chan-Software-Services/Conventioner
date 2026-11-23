@@ -101,6 +101,14 @@ case "$1" in
       done
       exit 0
     fi
+    if [[ " $* " == *" --download-only "* ]]; then
+      # Fresh files from the mirrors, into apt's archive directory, which install.
+      reach_mirrors
+      shift 4  # install -y --no-install-recommends --download-only
+      for package in "$@"; do echo "deb of $package" >"$FAKE/archives/${package}_$(version)_all.deb"; done
+      rm -f "$FAKE/stale"
+      exit 0
+    fi
     if [[ " $* " == *" --no-download "* ]]; then
       # Only what apt's archive directory holds, at the versions the lists name.
       [[ ! -f "$FAKE/stale" ]] || { echo "E: Unable to fetch some archives" >&2; exit 100; }
@@ -278,14 +286,22 @@ class TestInstallFromTheCache:
         result, outputs = install(fake, debs)
 
         assert result.returncode == 0, result.stderr
+        fonts = " ".join(sorted(FONTS))
         assert mirror_calls(fake) == [
             "apt-get update",
-            "apt-get install -y --no-install-recommends " + " ".join(sorted(FONTS)),
+            f"apt-get install -y --no-install-recommends --download-only {fonts}",
         ]
+        # Only the calls that reach the mirrors are cut: dpkg's part of the install is never.
         assert limited(fake) == [
             "120 sudo apt-get update",
-            "120 sudo apt-get install -y --no-install-recommends " + " ".join(sorted(FONTS)),
+            f"120 sudo apt-get install -y --no-install-recommends --download-only {fonts}",
         ]
+        # The cached files' install, then the downloaded files', neither of them cut.
+        offline = f"sudo apt-get install -y --no-install-recommends --no-download {fonts}"
+        assert [call for call in calls(fake) if "--no-download" in call] == [
+            offline,
+            offline.removeprefix("sudo "),
+        ] * 2
         assert outputs["cacheable"] == "false"
 
     def test_the_install_from_the_mirrors_is_retried_as_a_whole(self, fake, debs):
@@ -297,7 +313,7 @@ class TestInstallFromTheCache:
 
         assert result.returncode == 0, result.stderr
         assert mirror_calls(fake) == ["apt-get update"] * 3 + [
-            "apt-get install -y --no-install-recommends " + " ".join(sorted(FONTS)),
+            "apt-get install -y --no-install-recommends --download-only " + " ".join(sorted(FONTS)),
         ]
         assert [call for call in calls(fake) if call.startswith("sleep")] == ["sleep 60"] * 2
 

@@ -152,8 +152,12 @@ install_from() {
     sudo apt-get install -y --no-install-recommends --no-download "$@"
 }
 
+# Downloads the packages from the mirrors into apt's archive directory, each call cut as any call to
+# them is, then installs them offline, never cut: a cut in dpkg's part could leave it interrupted.
 from_mirrors() {
-  mirrors sudo apt-get update && mirrors sudo apt-get install -y --no-install-recommends "$@"
+  mirrors sudo apt-get update &&
+    mirrors sudo apt-get install -y --no-install-recommends --download-only "$@" &&
+    sudo apt-get install -y --no-install-recommends --no-download "$@"
 }
 
 install() {
