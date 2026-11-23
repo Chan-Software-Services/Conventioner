@@ -194,7 +194,10 @@ jobs:
         run: python scripts/real_data_check.py tree
       # A pull request's commits since its base, or a push's own range (before..after): the commits
       # the push added, never the history before it, which holds fixture values gitleaks takes for
-      # keys. A push that creates the branch has no before, which dev and main never do.
+      # keys. A push whose before is not a commit in the clone fails the step rather than scanning
+      # nothing, since gitleaks passes an unreadable range: one that created the branch (before is
+      # all zeros), an empty before, or a forced push, whose before no ref still reaches. The rules
+      # of dev and main allow none of them.
       - name: No secret in the new commits (gitleaks)
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         env:
@@ -206,6 +209,9 @@ jobs:
             range="origin/$BASE_REF..$HEAD_SHA"
           elif [ "$PUSH_BEFORE" = 0000000000000000000000000000000000000000 ]; then
             echo "::error::This push created the branch, so it has no range to scan for secrets"
+            exit 1
+          elif ! [[ "$PUSH_BEFORE" =~ ^[0-9a-f]{40}$ ]] || ! git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
+            echo "::error::The push's before, '$PUSH_BEFORE', is not a commit in this clone (a forced push?), so its range cannot be scanned for secrets"
             exit 1
           else
             range="$PUSH_BEFORE..$PUSH_AFTER"
