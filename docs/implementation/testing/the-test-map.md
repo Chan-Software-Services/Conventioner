@@ -57,7 +57,8 @@ Its first job, `suite` ([`scripts/ci_suite.py`](../../../scripts/ci_suite.py)), 
    On the nightly run, or one started by hand, each `e2e-shard` job sets `TEST_MAP_OUT`, and [`front-end/e2e/helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts), which `fixtures.ts` wraps Playwright's `test` in, appends one JSON line per test to it: its spec file, its start and end on the wall clock, every request its browser contexts made under `/src/` and `/api/`, and the V8 block coverage of its pages' modules (a DevTools session of each page's own, Chromium) as the stretches of each module that ran.
    A retry is a line of its own; a context a `beforeAll` opens records nothing, since no test is running then.
    The recording makes each test slower (on `3c1d7e14`, the push run that recorded spent 127 minutes in tests across its ten shards, the queue's run that did not 99, +28%), and only the nightly run records, so a test near its timeout can pass on every pull request and the queue and fail only while recording.
-   Then the nightly run fails, which no rule reads and which never holds back a merge, and the map is not made that night: the next night tries again, since that commit still has no map, and the map's readers keep the older one meanwhile.
+   Then the nightly run fails, which no rule reads and which never holds back a merge; its shard still recorded, so the map is still made.
+   When a nightly run makes no map (it was cancelled, a shard recorded nothing, or the back end's suite failed under coverage), the next night tries again, since that commit still has none, and the map's readers keep the older one meanwhile.
    It takes no script's source: Playwright's `page.coverage` fetched the source of every module Vite serves, and a run recorded through it took some 40% longer in CI than one that recorded nothing.
    The build reads the requests and the window; the stretches are in the shard's records for a reader who wants more than the map holds, as T349's pruning did.
 2. **The shards keep the back end's log.**
@@ -76,7 +77,7 @@ Code that runs before the app dispatches a request, such as the session's loadin
 
 ## How old it can be
 
-The newest map is the newest run on `dev` that made one, which is the last night's on `dev`'s tip of then, so at most a day behind a merge, unless that run failed, a shard recorded nothing, or the back end's suite failed under coverage; then it is an older night's.
+The newest map is the newest run on `dev` that made one, which is the last night's on `dev`'s tip of then, so at most a day behind a merge, unless that run was cancelled, a shard recorded nothing, or the back end's suite failed under coverage; then it is an older night's.
 A map made by hand on another branch is never read, since its run's branch is not `dev`; a map a push to `dev` made before T510 is read until a nightly run makes a newer one.
 A branch is ahead of it by its own commits and by what `dev` took since its run, and an artifact goes after 90 days.
 So a spec, a module or a function that is newer than the map is not in it, and a reader of the map takes a branch's own diff from its merge-base for what the map cannot know.

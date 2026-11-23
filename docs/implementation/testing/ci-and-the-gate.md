@@ -164,7 +164,7 @@ A required check whose job its `if:` skipped reports success, so a warm push's s
 `schedule` runs it at 19:17 UTC (`17 19 * * *`, off the hour GitHub's scheduler is busiest at), and `workflow_dispatch` the same on demand, `gh workflow run test.yml --ref dev`.
 Its `suite` asks GitHub for the `test-map` artifacts (`/actions/artifacts?name=test-map`): an unexpired one whose run is at the commit, whichever run made it, is `none`, so a night with no merge costs nothing; none such is `map`, and so is GitHub unread, since a map made twice costs only runner minutes.
 On `map` the run runs the ten shards, each recording (`RECORD_TEST_MAP`), and then `test-map`, about 170 runner minutes; no other job, so it posts no required check on `dev`'s tip.
-Recording is the nightly run's alone, so its slowdown is on no pull request's or queue's path: a test that fails only while recording fails the nightly run, which no rule reads, never a merge, and the map waits for a night on which it passes.
+Recording is the nightly run's alone, so its slowdown is on no pull request's or queue's path: a test that fails only while recording fails the nightly run, which no rule reads, never a merge, and its shard's records still make the map.
 A nightly run's ref is `refs/heads/dev` and its commit `dev`'s tip, so its concurrency group is the push run's of that commit, behind which it waits while that run is going.
 Its shard 1 saves the caches, in `dev`'s scope, as a whole-suite push's does.
 
