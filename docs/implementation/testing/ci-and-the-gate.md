@@ -21,7 +21,7 @@ describes:
   - .github/actions/e2e-stack/action.yml
   - .github/actions/front-end-deps/action.yml
   - front-end/scripts/e2e-repeat.ts
-verified: 2026-11-17
+verified: 2026-11-24
 sources:
   - T47
   - T53
@@ -208,7 +208,7 @@ The four caches are about 680 MB together (the images' archive about 340, the br
 
 ### Chromium's system packages
 
-**A shard installs Chromium's system packages without Ubuntu's apt mirrors whenever the cache has them**, so an outage of the mirrors, of minutes or of hours, fails no shard.
+**A shard installs Chromium's system packages without Ubuntu's apt mirrors whenever the cache has them and they install**, so an outage of the mirrors, of minutes or of hours, fails no such shard.
 GitHub's Ubuntu runner has most of the packages Playwright's Chromium needs; on `ubuntu-26.04` it lacks only nine, fonts and their tools, about 22 MB.
 [`scripts/chromium-packages.sh`](../../../scripts/chromium-packages.sh) `missing` asks Playwright which are missing (`npx playwright install-deps --dry-run chromium`, which simulates the install with `apt-get` against the runner's own package lists, offline), and its `install` puts their `.deb` files from the cache in apt's own archive directory and installs them with `apt-get install --no-download`, which checks each against the package lists and fails before it changes anything if a file it needs is not there, then asks Playwright again and fails the job if any is still missing.
 The key is the runner's release and each package it lacks with the version its package lists would install, read by a second simulation, and only on a new key, such as a runner image whose lists move a font to a new version, are the files downloaded: at those versions, or, when the mirrors no longer have them, at those of lists refreshed from the mirrors (`apt-get update`), which are then not saved, since they are not the key's.

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # The Ubuntu packages Playwright's Chromium needs that a CI runner lacks, installed from .deb files
-# that GitHub's cache keeps, so a shard reaches Ubuntu's apt mirrors only when the cache has none.
+# that GitHub's cache keeps, so a shard whose cached files install reaches Ubuntu's apt mirrors for
+# none of them.
 # CI's e2e action (.github/actions/e2e-stack/action.yml) runs it in front-end/; never run it on a
 # machine of your own: it calls sudo.
 #
