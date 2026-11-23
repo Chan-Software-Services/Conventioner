@@ -1295,9 +1295,9 @@ async function exportPng(choice: { withImage: boolean; withNumbers: boolean }) {
   box-shadow: var(--shadow-card);
 }
 
-/* Its own shadow outranks the global halo, so it says its focus too. */
+/* Its own shadow outranks the global halo, so it says its focus too, the halo over the shadow. */
 .layout-location--here:focus-visible {
-  box-shadow: var(--focus-halo);
+  box-shadow: var(--focus-halo), var(--shadow-card);
 }
 
 .layout-status {
