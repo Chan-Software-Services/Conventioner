@@ -12,7 +12,6 @@ import {
 import { inTheWindow, PHONE_AND_DESK } from './helpers/phoneWindow';
 import { loginViaApi, seedPublishedMarketWithAssignments } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
-import { calendarToday } from './helpers/vendorSignIn';
 import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
 
 /**
@@ -33,10 +32,27 @@ import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
  * on a plain muted line after it, under it on a phone and beside it at a desk, the address breaking
  * only before its "@" or a dot.
  */
-const TODAY = calendarToday();
-const [YEAR, MONTH, DATE] = TODAY.split('-').map(Number) as [number, number, number];
-const YESTERDAY = calendarToday(new Date(YEAR, MONTH - 1, DATE - 1));
-const TOMORROW = calendarToday(new Date(YEAR, MONTH - 1, DATE + 1));
+
+/**
+ * The three days are reckoned, and the door is read, at UTC+14, the first clock to reach a day.
+ *
+ * A market date has passed only once it has passed everywhere, at UTC-12 (`SetupHasDatesGuard`),
+ * and the seed walks the market out of draft with its day over among its dates: reckoned on the
+ * runner's clock, that day had passed everywhere from noon UTC, and the seed was refused every
+ * afternoon. A day before today at UTC+14 is still today at UTC-12, at any hour, and the
+ * organizer's door takes it and today, which have both begun by the server's UTC date.
+ */
+const ZONE = 'Pacific/Kiritimati';
+const DAY = 24 * 60 * 60 * 1000;
+/** The calendar day at UTC+14 of an instant, as a market date; the zone keeps no summer time. */
+const dayAt = (instant: number) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: ZONE }).format(new Date(instant));
+const NOW = Date.now();
+const TODAY = dayAt(NOW);
+const YESTERDAY = dayAt(NOW - DAY);
+const TOMORROW = dayAt(NOW + DAY);
+
+test.use({ timezoneId: ZONE });
 
 /** An organizer of the market whose address is too long to share a phone's line with the time. */
 const LONG_ORGANIZER = {
