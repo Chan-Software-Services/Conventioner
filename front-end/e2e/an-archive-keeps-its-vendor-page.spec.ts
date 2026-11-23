@@ -19,21 +19,25 @@ test('an archived market that ran keeps its vendor page as the record, and takes
   authenticatedPage: page,
   request,
 }) => {
-  const at = Date.now();
-  const came = `archive-came-${at}@example.com`;
-  const stayedAway = `archive-away-${at}@example.com`;
+  // The market's one day is today, since the door takes no check-in for a day that has not begun
+  // (T318), and it is reckoned from one instant, at which the page's clock is held: a run that
+  // passes midnight would find the day over, and the rail then offers no More menu.
+  const seededAt = new Date();
+  const onTheDay = calendarToday(seededAt);
+  const came = `archive-came-${seededAt.getTime()}@example.com`;
+  const stayedAway = `archive-away-${seededAt.getTime()}@example.com`;
   const { marketId, marketSlug } = await seedPublishedMarketWithAssignments(
     request,
     BACKEND_URL,
     TEST_USER.email,
     TEST_USER.password,
-    // Today: the door takes no check-in for a day that has not begun (T318).
-    { vendors: [came, stayedAway], marketDate: calendarToday() },
+    { vendors: [came, stayedAway], marketDate: onTheDay },
   );
   const checkedIn = await request.post(`${BACKEND_URL}/markets/${marketId}/attendance`, {
-    data: { vendorEmail: came, date: calendarToday() },
+    data: { vendorEmail: came, date: onTheDay },
   });
   expect(checkedIn.ok(), await checkedIn.text()).toBeTruthy();
+  await page.clock.setFixedTime(seededAt);
 
   // The dialog says what archiving does to the page, before it does it.
   await page.goto(marketSetupPath(marketId, 'setup'));
