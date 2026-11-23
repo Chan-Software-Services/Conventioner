@@ -19,6 +19,8 @@ Publication gate (captain ruling 2026-07-13):
     the same class of bug as the login oracle closed in 5d.
 """
 
+import hashlib
+import json
 import logging
 from datetime import datetime
 from typing import Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple
@@ -347,6 +349,30 @@ def get_public_application_form(
         return {"error": MARKET_NOT_FOUND}, 404
 
     phase = phase_from_market_document(market_doc)
+    drawn = _drawn_form(market_doc)
+
+    return {
+        "application_form": drawn.application_form,
+        "essential_options": drawn.essential_options,
+        "formVersion": _version_of(drawn),
+        "market_name": market_doc.get("name", ""),
+        "phase": phase.value,
+        "is_open": takes_applications(market_doc),
+        "phase_label": applicant_phase_label(market_doc),
+    }, 200
+
+
+class _DrawnForm(NamedTuple):
+    """The form as the vendor's page draws it: the market's own questions, None for a market with
+    no form, and what the essential questions offer, each as the public form read serves it."""
+
+    application_form: Optional[Dict[str, Any]]
+    essential_options: Dict[str, Any]
+
+
+def _drawn_form(market_doc: Dict[str, Any]) -> _DrawnForm:
+    """What ``get_public_application_form`` serves of the form, over the raw stored market document
+    (its projection holding ``applicationForm`` and ``setupObject``)."""
     application_form = market_doc_field(market_doc, "application_form")
 
     form_payload = None
@@ -365,15 +391,29 @@ def get_public_application_form(
         form_payload = {"fields": fields}
 
     essential_options = EssentialFields.effective_essential_options(market_doc)
+    return _DrawnForm(form_payload, EssentialFields.essential_options_payload(essential_options))
 
-    return {
-        "application_form": form_payload,
-        "essential_options": EssentialFields.essential_options_payload(essential_options),
-        "market_name": market_doc.get("name", ""),
-        "phase": phase.value,
-        "is_open": takes_applications(market_doc),
-        "phase_label": applicant_phase_label(market_doc),
-    }, 200
+
+def _version_of(drawn: _DrawnForm) -> str:
+    canonical = json.dumps(drawn._asdict(), sort_keys=True, separators=(",", ":"),
+                           ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def applicant_form_version(market_doc: Dict[str, Any]) -> str:
+    """The form version: a fingerprint of the form as the vendor's page draws it (T507).
+
+    The SHA-256 hex digest of the canonical JSON of what the public form read serves of the form,
+    the market's own questions and the essential options, so it moves with anything the vendor
+    sees (a question's label, help text, options, order or required flag, a question added or
+    removed, the plan's dates, sections, tiers or table types before the first application froze
+    them, an unasked essential) and never with what they cannot (a layout saved, a form saved
+    unchanged, a phase move). Neither revision counter stands in for it: ``formRevision`` misses
+    the plan's options, and ``planRevision`` moves on every layout save. The read serves it as
+    ``formVersion``, and ``save_applicant_application`` refuses a save carrying another
+    (docs/business/rules/a-vendors-save-is-held-to-the-form-they-saw.md). Never stored.
+    """
+    return _version_of(_drawn_form(market_doc))
 
 
 # ── Applicant (JWT-authenticated) endpoints ────────────────────────────────
@@ -445,9 +485,19 @@ def _gone_under_the_save(
 #: verdict, most likely, which they never read of, so the sentence names none.
 CHANGED_WHILE_SAVED = "Your application changed while it was saved. Save again."
 
+#: The vendor's page was drawn from another form than the market asks now
+#: (``applicant_form_version``).
+FORM_CHANGED = "This form changed since you opened it. Reload to continue."
+FORM_CHANGED_CODE = "form_changed"
+
+#: Stands for a save whose body named no form version, which is taken as before T507 while every
+#: caller is moved to send one.
+NO_FORM_VERSION: Any = object()
+
 
 def save_applicant_application(
     market_slug: str, token_payload: Dict[str, Any], form_data: Dict[str, Any],
+    form_version: Any = NO_FORM_VERSION,
 ) -> Tuple[Dict[str, Any], int]:
     """Save or update the authenticated applicant's application for this market.
 
@@ -459,6 +509,11 @@ def save_applicant_application(
     it, so it never lands under a verdict given since: it reads it again and saves on what is
     stored then, ``ANSWER_TRIES`` times, then answers 409 ``CHANGED_WHILE_SAVED``.
 
+    The save is held to the form the vendor's page drew: a ``form_version`` that is not the form's
+    version now (``applicant_form_version``), ``None`` and a value that is not a string included,
+    is answered 409 ``FORM_CHANGED`` once the market is known to take applications and before any
+    answer is judged or anything written, so no answer lands against a form the vendor never saw.
+
     The first successful save freezes the essential offering onto the market's stored form
     (``freeze_and_effective_essential_options``), atomically and before the answers are
     persisted, so later market-plan edits can never move a question an applicant has already
@@ -468,6 +523,8 @@ def save_applicant_application(
         market_slug: The URL-safe slug of the market.
         token_payload: Decoded JWT payload from ``verify_application_token``.
         form_data: The form answers keyed by field keys.
+        form_version: The form version the vendor's page read with the form, or
+            ``NO_FORM_VERSION`` for a body that named none.
 
     Returns:
         Tuple of (response_body, status_code).
@@ -499,6 +556,11 @@ def save_applicant_application(
             "error": f"Applications are no longer open for this market. "
                      f"The market is in the {applicant_phase_label(market_doc)} phase.",
         }, 403
+
+    # Judged on the one read the answers are judged on, so a form change landing after it is a
+    # change after this save, as it would be had the save come a moment sooner.
+    if form_version is not NO_FORM_VERSION and form_version != applicant_form_version(market_doc):
+        return {"error": FORM_CHANGED, "code": FORM_CHANGED_CODE}, 409
 
     email = token_payload.get("email", "")
     existing = ApplicationsApi.find_application_by_email(market_id, email)

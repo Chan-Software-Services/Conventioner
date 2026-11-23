@@ -1839,7 +1839,12 @@ def public_get_applicant_application(market_slug: str) -> Response:
 
 @app.route('/public/markets/<market_slug>/applicant/application', methods=['PUT'])
 def public_save_applicant_application(market_slug: str) -> Response:
-    """Save or update the authenticated applicant's application. Bearer token required."""
+    """Save or update the authenticated applicant's application. Bearer token required.
+
+    Body: ``formData``, the answers, and ``formVersion``, the form version the page read with the
+    form (``applicant_form_version``); a save carrying another is refused with the 409
+    ``form_changed``.
+    """
     token_payload = ApplicantsApi.authenticate_request(
         request.headers.get('Authorization')
     )
@@ -1851,6 +1856,7 @@ def public_save_applicant_application(market_slug: str) -> Response:
     form_data = data.get('formData') or data.get('form_data') or {}
     result, status_code = ApplicantsApi.save_applicant_application(
         market_slug, token_payload, form_data,
+        data.get('formVersion', ApplicantsApi.NO_FORM_VERSION),
     )
     return jsonify(result), status_code
 

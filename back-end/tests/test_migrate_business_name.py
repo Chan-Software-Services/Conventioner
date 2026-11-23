@@ -751,14 +751,24 @@ def page_market(world, monkeypatch):
     return world
 
 
-def _vendor_saves(world, answers):
-    """``VENDOR`` saves their application with exactly ``answers`` beside the plan's answers."""
+def _vendor_saves(world, answers, **form_version):
+    """``VENDOR`` saves their application with exactly ``answers`` beside the plan's answers,
+    carrying ``formVersion`` when given as the page read it."""
     import app as app_module
 
     world.vendor = VENDOR
     return app_module.app.test_client().put(
         "/public/markets/test-market/applicant/application",
-        json={"formData": {**VALID_ANSWERS, **answers}})
+        json={"formData": {**VALID_ANSWERS, **answers}, **form_version})
+
+
+def _vendor_opens_the_form():
+    """The form version the vendor's page reads with the form as it opens."""
+    import app as app_module
+
+    response = app_module.app.test_client().get("/public/markets/test-market/application-form")
+    assert response.status_code == 200, response.get_json()
+    return response.get_json()["formVersion"]
 
 
 def _stop_taking_applications(stopped):
@@ -869,22 +879,25 @@ def test_a_save_on_a_market_back_in_the_stage_before_its_run_was_finished_reopen
     assert vendor["status"] == ApplicationStatus.OPEN.value
 
 
-def test_a_save_from_a_page_opened_before_a_run_on_a_market_back_in_the_stage_loses_it(
+def test_a_save_from_a_page_opened_before_a_run_on_a_market_back_in_the_stage_is_refused(
         page_market):
     """A road the refusal leaves open: a whole run after the stage, the market moved back into it,
-    and a vendor saving from a page opened before the run, which still asks the old question. The
-    form no longer asks it and the save holds no form revision to be refused by, and the built-in
-    field came blank, so the business name is stored nowhere and the approval goes back to open.
-    Pinned as it is today."""
+    and a vendor saving from a page opened before the run, which still asks the old question and
+    leaves the built-in field blank. The save carries the form version that page read, which the
+    run moved, so it is refused (T507), and the application keeps the business name the run copied
+    to the built-in field, and its approval."""
     world = page_market
     app_id = _an_approved_vendor(world)
+    opened_before_the_run = _vendor_opens_the_form()
     _in_phase(world, MarketPhase.ASSIGNMENT)
     migrate(PAGE_MARKET, KEY, world.db)
     assert _the_vendor(world, app_id)["form_data"][BUILT_IN] == "Paper & Pine"
     _in_phase(world, MarketPhase.APPLICATIONS)
 
-    assert _vendor_saves(world, {KEY: "Paper & Pine"}).status_code == 200
+    response = _vendor_saves(world, {KEY: "Paper & Pine"}, formVersion=opened_before_the_run)
 
+    assert response.status_code == 409, response.get_json()
+    assert response.get_json()["code"] == "form_changed"
     vendor = _the_vendor(world, app_id)
-    assert (KEY in vendor["form_data"], BUILT_IN in vendor["form_data"]) == (False, False)
-    assert vendor["status"] == ApplicationStatus.OPEN.value
+    assert (KEY in vendor["form_data"], vendor["form_data"][BUILT_IN]) == (False, "Paper & Pine")
+    assert vendor["status"] == ApplicationStatus.REVIEWER_APPROVED.value

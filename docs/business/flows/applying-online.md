@@ -131,6 +131,7 @@ Covered by:
 - [Intake mode decides how vendors arrive](../rules/intake-mode-decides-how-vendors-arrive.md).
 - [A gated market answers as absent](../rules/a-gated-market-answers-as-absent.md).
 - [A vendor signs in before they have applied](../rules/a-vendor-signs-in-before-applying.md).
+- [A vendor's save is held to the form they saw](../rules/a-vendors-save-is-held-to-the-form-they-saw.md).
 - [An applicant never reads a verdict early](../rules/an-applicant-never-reads-a-verdict-early.md).
 - [The form locks at the first application](../rules/the-form-locks-at-the-first-application.md).
 

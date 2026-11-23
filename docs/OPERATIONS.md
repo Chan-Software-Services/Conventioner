@@ -307,9 +307,8 @@ A market whose form asked one as a short text question of its own keeps its vend
 The release is safe before the script runs: until then the market reads as before, its answers under its own question.
 **Run it once the market's applications stage is over** where its vendors apply on its page, and while no import of that market is under way.
 A vendor's save and an import build the answers from the form as the market asks it then and compare them whole to what is stored, so from step 1 until step 3 is done either reads a moved answer as changed and sends a verdict back to open, and an import of the same file before step 2 removes the copies step 1 made.
-A vendor's save holds no form revision either, so one from a page opened before the run sends the old question's answer, which the form no longer keeps, beside a blank built-in field, and the business name is stored nowhere.
 So a run that moves the question is refused on a market whose vendors apply on its page while it is in its applications stage, taking applications or stopped, and a run left after step 1 or step 2 is finished before any import of that market.
-A market moved back into the applications stage after a run can still lose a business name that way, from a page a vendor opened before the run.
+A vendor's save from a page opened before the run sends the old question's answer beside a blank built-in field, and is refused, since it carries the form version its page read, which the question's move changed ([a vendor's save is held to the form they saw](business/rules/a-vendors-save-is-held-to-the-form-they-saw.md)): on a market moved back into the applications stage after a run, the business name the run copied stays, and the vendor reloads onto the form as it now asks.
 An organizer with the form editor open (a draft only) is refused their next save and reads the form again.
 Take a `mongodump` first ([backups](#backups-and-restoring)), then list, dry-run and run:
 
