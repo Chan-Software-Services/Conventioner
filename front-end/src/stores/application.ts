@@ -242,10 +242,18 @@ export const useApplicationStore = defineStore('application', () => {
    */
   const formVersion = ref<string | null>(null);
   /**
-   * The last save was refused because the form changed since the page read it (`isFormChanged`):
-   * the form offers Reload beside the sentence. False as each save starts.
+   * The sentence of the last save's refusal because the form changed since the page read it
+   * (`isFormChanged`), or null. Cleared as each save starts.
    */
-  const formChanged = ref(false);
+  const formChangedError = ref<string | null>(null);
+  /**
+   * The sentence on show is that refusal's: the form offers Reload beside it. Read against `error`,
+   * so whatever clears or replaces the sentence (Cancel, opening the form, a later read) takes
+   * Reload with it.
+   */
+  const formChanged = computed(
+    () => formChangedError.value !== null && formChangedError.value === error.value,
+  );
   const heldDoorCode = ref<HeldDoorCode | null>(storedDoorCode());
   /** The vendor's unsaved answers, kept in this tab; read through `draftFor`. */
   const draft = ref<ApplicationDraft | null>(storedDraft());
@@ -494,7 +502,7 @@ export const useApplicationStore = defineStore('application', () => {
     const email = applicantEmail.value;
     const asked = epoch;
     error.value = null;
-    formChanged.value = false;
+    formChangedError.value = null;
     try {
       const app = await withRenewal(asked, (slug, current) =>
         saveApplicantApplication(slug, current, formData, version),
@@ -523,7 +531,7 @@ export const useApplicationStore = defineStore('application', () => {
           : 'Your session has expired. Please sign in again.';
       } else {
         error.value = saveErrorFrom(err);
-        formChanged.value = isFormChanged(err);
+        if (isFormChanged(err)) formChangedError.value = error.value;
       }
       return null;
     }
@@ -668,7 +676,7 @@ export const useApplicationStore = defineStore('application', () => {
     formFields.value = [];
     essentialOptions.value = EMPTY_ESSENTIAL_OPTIONS;
     formVersion.value = null;
-    formChanged.value = false;
+    formChangedError.value = null;
     error.value = null;
     keepSession(null);
   }

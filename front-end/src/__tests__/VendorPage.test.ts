@@ -1566,6 +1566,19 @@ describe('a save from a form that changed since the page read it (T507)', () => 
     expect(has(wrapper, 'apply-reload-button')).toBe(false);
   });
 
+  it('takes Reload away with the sentence, whatever else replaces it', async () => {
+    const wrapper = await saveRefused(refusal(409, FORM_CHANGED, 'form_changed'));
+    expect(has(wrapper, 'apply-reload-button')).toBe(true);
+
+    // A read of the vendor's application that fails says so in the same box, without Reload.
+    fetchApplicantApplication.mockRejectedValue(new Error('Network Error'));
+    await useApplicationStore().fetchApplication();
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="apply-error"]').text()).not.toContain(FORM_CHANGED);
+    expect(has(wrapper, 'apply-reload-button')).toBe(false);
+  });
+
   it('sends the save after a sign-in with the version its answers were first sent with', async () => {
     fetchVendorPage.mockResolvedValue(pageOf());
     fetchApplicantApplication.mockResolvedValue(null);
