@@ -227,7 +227,7 @@ The timings are each spec file's seconds, the summed duration of every attempt o
 - **Read.**
   Each shard's log names the timings it dealt by and the minutes they give its hand; the `e2e` job's summary names the source, or each source and its shards when they differ, each shard's seconds of tests and the spread between the fastest and the slowest.
 
-The committed file is the fallback, and `scripts/affected-specs.py` and `e2e-repeat.ts` read it.
+The committed file is the fallback, and `scripts/affected-specs.py` reads it.
 It was refreshed last from twelve whole runs on `dev` and the merge queue, 44525439048 to 44721661345, blended oldest first as CI publishes them; to refresh it again, download each run's reports into a folder of its own and give the folders oldest first, the newest a whole run:
 
 ```sh
