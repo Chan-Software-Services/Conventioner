@@ -1154,137 +1154,138 @@ for (const size of SIZES) {
       await page.waitForURL(/\/markets$/);
     });
 
-    test('the shell makes no session probe on a public page, signed in or out', async ({
-      page,
-    }) => {
-      let probes = 0;
-      page.on('request', (request) => {
-        if (request.url().endsWith('/check-session')) probes += 1;
-      });
-      const visit = async (paths: string[]) => {
-        for (const path of paths) {
-          await page.goto(path);
-          await page.waitForLoadState('networkidle');
-          expect(probes, path).toBe(0);
-        }
-      };
-
-      await visit([
-        '/login',
-        '/reset-password-request',
-        marketPagePath(marketSlug),
-        '/no/such/page',
-      ]);
-
-      const login = new LoginPage(page);
-      await login.login(TEST_USER.email, TEST_USER.password);
-      await login.waitForMarkets();
-      probes = 0;
-      await visit(['/reset-password-request', marketPagePath(marketSlug), '/no/such/page']);
-
-      // That the count can move at all: an organizer's page does probe.
-      await page.goto('/markets');
-      await expect.poll(() => probes).toBe(1);
-    });
-  });
-}
-
-for (const size of SIZES) {
-  test.describe(`where signing in lands, ${size.name}`, () => {
-    test.use(size.use);
-
-    const expectAtMarkets = async (page: Page) => {
-      await expect(page).toHaveURL((url) => url.pathname === '/markets' && url.search === '');
-      await expect(page.getByTestId('markets-result-count')).toBeVisible();
-    };
-
-    test('by password, on Markets', async ({ page }) => {
-      const login = new LoginPage(page);
-      await login.goto();
-      await login.signIn(TEST_USER.email, TEST_USER.password);
-
-      await expectAtMarkets(page);
-    });
-
-    test('by a code, on Markets', async ({ page }) => {
-      const login = new LoginPage(page);
-      await login.goto();
-      // No email leaves the stack: the code is asked for as usual, and set where the server keeps it.
-      await page.route('**/request-otp', (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ msg: 'A sign-in code has been sent to your email.' }),
-        }),
-      );
-      await login.switchToOtp();
-      await login.otpEmailInput.fill(TEST_USER.email);
-      await login.otpSubmitButton.click();
-      await expect(login.otpCodeInput).toBeVisible();
-      plantSignInCode(TEST_USER.email, '246810');
-      await login.otpCodeInput.fill('246810');
-      await login.otpSubmitButton.click();
-
-      await expectAtMarkets(page);
-    });
-
-    test('with a next, back on that page', async ({ page }) => {
-      await page.goto('/organizations');
-      await page.waitForURL(/\/login\?next=/);
-
-      await new LoginPage(page).signIn(TEST_USER.email, TEST_USER.password);
-
-      await page.waitForURL((url) => url.pathname === '/organizations');
-    });
-
-    test('with a next of another site, on Markets', async ({ page }) => {
-      await page.goto('/login?next=%2F%2Fevil.example%2Fmarkets');
-
-      await new LoginPage(page).signIn(TEST_USER.email, TEST_USER.password);
-
-      await expectAtMarkets(page);
-      expect(new URL(page.url()).host).not.toBe('evil.example');
-    });
-
-    for (const address of ['/', '/dashboard']) {
-      test(`${address} forwards a signed-in organizer to Markets`, async ({
-        authenticatedPage: page,
+    // The probe follows the route, not the window, so the phone would repeat the desk.
+    if (!size.phone) {
+      test('the shell makes no session probe on a public page, signed in or out', async ({
+        page,
       }) => {
-        await page.goto(address);
+        let probes = 0;
+        page.on('request', (request) => {
+          if (request.url().endsWith('/check-session')) probes += 1;
+        });
+        const visit = async (paths: string[]) => {
+          for (const path of paths) {
+            await page.goto(path);
+            await page.waitForLoadState('networkidle');
+            expect(probes, path).toBe(0);
+          }
+        };
 
-        await expectAtMarkets(page);
-      });
+        await visit([
+          '/login',
+          '/reset-password-request',
+          marketPagePath(marketSlug),
+          '/no/such/page',
+        ]);
 
-      test(`${address} signed out leads through sign-in to Markets`, async ({ page }) => {
-        await page.goto(address);
-        await page.waitForURL(/\/login\?next=/);
-        expect(new URL(page.url()).searchParams.get('next')).toBe('/markets');
+        const login = new LoginPage(page);
+        await login.login(TEST_USER.email, TEST_USER.password);
+        await login.waitForMarkets();
+        probes = 0;
+        await visit(['/reset-password-request', marketPagePath(marketSlug), '/no/such/page']);
 
-        await new LoginPage(page).signIn(TEST_USER.email, TEST_USER.password);
-
-        await expectAtMarkets(page);
+        // That the count can move at all: an organizer's page does probe.
+        await page.goto('/markets');
+        await expect.poll(() => probes).toBe(1);
       });
     }
+  });
+}
 
-    test('a signed-in visit to sign-in forwards to Markets', async ({
+// Where signing in lands follows the address alone, never the window, so it runs at the desk; a
+// phone's sign-in is walked by every phone test that signs in through the page.
+test.describe('where signing in lands', () => {
+  test.use({ viewport: DESK });
+
+  const expectAtMarkets = async (page: Page) => {
+    await expect(page).toHaveURL((url) => url.pathname === '/markets' && url.search === '');
+    await expect(page.getByTestId('markets-result-count')).toBeVisible();
+  };
+
+  test('by password, on Markets', async ({ page }) => {
+    const login = new LoginPage(page);
+    await login.goto();
+    await login.signIn(TEST_USER.email, TEST_USER.password);
+
+    await expectAtMarkets(page);
+  });
+
+  test('by a code, on Markets', async ({ page }) => {
+    const login = new LoginPage(page);
+    await login.goto();
+    // No email leaves the stack: the code is asked for as usual, and set where the server keeps it.
+    await page.route('**/request-otp', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ msg: 'A sign-in code has been sent to your email.' }),
+      }),
+    );
+    await login.switchToOtp();
+    await login.otpEmailInput.fill(TEST_USER.email);
+    await login.otpSubmitButton.click();
+    await expect(login.otpCodeInput).toBeVisible();
+    plantSignInCode(TEST_USER.email, '246810');
+    await login.otpCodeInput.fill('246810');
+    await login.otpSubmitButton.click();
+
+    await expectAtMarkets(page);
+  });
+
+  test('with a next, back on that page', async ({ page }) => {
+    await page.goto('/organizations');
+    await page.waitForURL(/\/login\?next=/);
+
+    await new LoginPage(page).signIn(TEST_USER.email, TEST_USER.password);
+
+    await page.waitForURL((url) => url.pathname === '/organizations');
+  });
+
+  test('with a next of another site, on Markets', async ({ page }) => {
+    await page.goto('/login?next=%2F%2Fevil.example%2Fmarkets');
+
+    await new LoginPage(page).signIn(TEST_USER.email, TEST_USER.password);
+
+    await expectAtMarkets(page);
+    expect(new URL(page.url()).host).not.toBe('evil.example');
+  });
+
+  for (const address of ['/', '/dashboard']) {
+    test(`${address} forwards a signed-in organizer to Markets`, async ({
       authenticatedPage: page,
     }) => {
-      await page.goto('/login');
+      await page.goto(address);
 
       await expectAtMarkets(page);
     });
 
-    test('a bookmark of the old page, carried through sign-in, lands on Markets', async ({
-      page,
-    }) => {
-      await page.goto('/login?next=%2Fdashboard');
+    test(`${address} signed out leads through sign-in to Markets`, async ({ page }) => {
+      await page.goto(address);
+      await page.waitForURL(/\/login\?next=/);
+      expect(new URL(page.url()).searchParams.get('next')).toBe('/markets');
 
       await new LoginPage(page).signIn(TEST_USER.email, TEST_USER.password);
 
       await expectAtMarkets(page);
     });
+  }
+
+  test('a signed-in visit to sign-in forwards to Markets', async ({ authenticatedPage: page }) => {
+    await page.goto('/login');
+
+    await expectAtMarkets(page);
   });
-}
+
+  test('a bookmark of the old page, carried through sign-in, lands on Markets', async ({
+    page,
+  }) => {
+    await page.goto('/login?next=%2Fdashboard');
+
+    await new LoginPage(page).signIn(TEST_USER.email, TEST_USER.password);
+
+    await expectAtMarkets(page);
+  });
+});
 
 for (const size of SIZES) {
   test.describe(`Change password, ${size.name}`, () => {

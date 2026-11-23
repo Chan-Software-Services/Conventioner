@@ -48,12 +48,15 @@ export async function openManage(page: Page): Promise<ManageMarketPage> {
   return manage;
 }
 
+/** How long the wait for quiet waits before it fails, unless told otherwise. */
+const QUIET_WITHIN_MS = 15_000;
+
 /**
  * Until no request has been in flight for a moment, so a request made late is still counted. `out`
  * holds each API request still out with the time it was sent, so a wait that times out names each
  * one and how long it has been out, the stall's cause (T263).
  */
-async function quiet(out: Map<Request, number>): Promise<void> {
+async function quiet(out: Map<Request, number>, within: number): Promise<void> {
   let stillSince = Date.now();
   await expect
     .poll(
@@ -68,19 +71,21 @@ async function quiet(out: Map<Request, number>): Promise<void> {
         });
         return `still open: ${named.join('; ')}`;
       },
-      { message: 'the API went quiet', intervals: [100], timeout: 15_000 },
+      { message: 'the API went quiet', intervals: [100], timeout: within },
     )
     .toBe('quiet');
 }
 
 /**
  * The API requests the browser makes while `open` runs, each as its method and path, the ids
- * named in `ids` read as their names, so two markets' openings compare.
+ * named in `ids` read as their names, so two markets' openings compare. The wait for quiet after
+ * `open` fails after `within` milliseconds, 15 seconds unless told: a stall's self-test waits less.
  */
 export async function requestsWhile(
   page: Page,
   ids: Record<string, string>,
   open: () => Promise<void>,
+  { within = QUIET_WITHIN_MS }: { within?: number } = {},
 ): Promise<string[]> {
   const made: string[] = [];
   const out = new Map<Request, number>();
@@ -109,7 +114,7 @@ export async function requestsWhile(
   page.on('response', arrived);
   try {
     await open();
-    await quiet(out);
+    await quiet(out, within);
   } finally {
     page.off('request', sent);
     page.off('requestfinished', done);
