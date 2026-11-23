@@ -23,7 +23,6 @@ import AppDialog from '@/components/AppDialog.vue';
 import { api, isMarketChanged } from '@/utils/api';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
 import {
-  ESSENTIAL_KEY_PREFIX,
   SECTION_RANKING_KEY,
   SECTION_RANKING_LABEL,
   TABLE_TYPE_RANKING_KEY,
@@ -32,6 +31,7 @@ import {
   REQUEST_LABEL,
   UNASKABLE_ESSENTIAL_KEYS,
   askedEssentialAnswers,
+  planDerivedAskedKeys,
 } from '@/utils/essentialFields';
 import { fieldKeyError } from '@/utils/applicationForm';
 import type { ApplicationForm, EssentialFormOptions, FormField } from '@/assets/types/datatypes';
@@ -173,17 +173,17 @@ const proposed = computed<ApplicationForm>(() => {
  * A form is its custom fields PLUS the essential questions the plan asks, so turning every
  * essential question off while adding no field leaves a market that could not enter Review: the
  * move refuses a form that asks nothing (`FormHasFieldsGuard`).
+ *
+ * It counts what the server counts, the questions the plan offers something for: the names and the
+ * business name are asked on every form and the request applies for nothing, so counting them
+ * would make this never true - and what it holds is the last thing stopping a market collecting
+ * applications it cannot place.
  */
-const wouldAskNothing = computed(() => {
-  const essentialsLeft = askedEssentialAnswers({
-    ...props.essentialOptions,
-    unasked: [...unasked.value],
-  }).filter((answer) => answer.key.startsWith(ESSENTIAL_KEY_PREFIX));
-  // The name is asked unconditionally, so counting it would make this never true - and what it
-  // holds is the last thing stopping a market collecting applications it cannot place.
-  const planDerived = essentialsLeft.filter((answer) => askedNow.value.includes(answer.key));
-  return proposed.value.fields.length === 0 && planDerived.length === 0;
-});
+const wouldAskNothing = computed(
+  () =>
+    proposed.value.fields.length === 0 &&
+    planDerivedAskedKeys({ ...props.essentialOptions, unasked: [...unasked.value] }).length === 0,
+);
 
 const changesNothing = computed(
   () =>
