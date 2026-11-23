@@ -104,7 +104,7 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 - passes only when every shard did and [the shards ran every spec file exactly once](#the-timings-refresh-themselves), whose check writes the timings' source, each shard's seconds and their spread to the job summary
 - on a push to `dev`, a scheduled run on `dev` or a trial commit, whose shards all passed, it publishes the next timings (`e2e-shard-timings`, kept 90 days); a run whose shards did not all pass, or ran none, publishes nothing
-- on a pull request it first runs [the selection audit](the-test-map.md#where-a-miss-shows), which lists each spec the shards failed in the job's summary as ran, left to CI or missed by `affected-specs.py` for the pull request's diff, each miss also a warning annotation once a test map exists, its steps continuing on error so they never decide the job
+- on a pull request it then runs [the selection audit](the-test-map.md#where-a-miss-shows), which lists each spec the shards failed in the job's summary as ran, left to CI or missed by `affected-specs.py` for the pull request's diff, each miss also a warning annotation once a test map exists, its steps continuing on error so they never decide the job
 
 **`test-map`**
 

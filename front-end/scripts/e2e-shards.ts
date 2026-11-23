@@ -575,8 +575,9 @@ async function listCandidates(
 }
 
 /**
- * The timings this CI run deals by: the best artifact `chooseTimingsArtifacts` names whose run is
- * trusted, or the committed file when there is none, it is corrupt, or GitHub's API fails.
+ * The timings this CI run deals by: the best of the first ten artifacts `chooseTimingsArtifacts`
+ * names whose run is trusted, or the committed file when none of them is, the one chosen is
+ * corrupt, or GitHub's API fails.
  */
 export async function chooseTimings(
   gh: GitHubReads,
