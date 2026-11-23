@@ -317,7 +317,7 @@ jobs:
   # never across runners. `front-end/scripts/e2e-shards.ts` deals the spec files to the shards by
   # their measured seconds, not Playwright's `--shard`, which cuts the alphabetical list by test
   # count and once left one shard at 24 minutes and another at 6. The seconds are the newest
-  # `e2e-shard-timings` artifact a run on dev or a merge queue trial commit published, made at
+  # `e2e-shard-timings` artifact a push to dev or a merge queue trial commit published, made at
   # least ten minutes before this run was created, so every shard and every re-run picks the same
   # one; with none, or one it cannot read, the committed `e2e-shard-timings.json`.
   # `total` is the length of `shard`'s list: the two move together.
@@ -533,9 +533,9 @@ jobs:
       contents: read
       actions: read
     env:
-      # A push to dev, a scheduled run on dev and a merge queue trial commit publish the next
-      # timings; no other run does, and a run whose shards did not all pass publishes nothing.
-      PUBLISHES_TIMINGS: ${{ github.event_name == 'merge_group' || ((github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/dev') }}
+      # A push to dev and a merge queue trial commit publish the next timings; no other run does,
+      # and a run whose shards did not all pass publishes nothing.
+      PUBLISHES_TIMINGS: ${{ github.event_name == 'merge_group' || (github.event_name == 'push' && github.ref == 'refs/heads/dev') }}
     steps:
       # The checkout and the shards' artifacts serve the deal's check below and, on a pull request,
       # the selection audit. The checkout takes two commits for the audit's diff.

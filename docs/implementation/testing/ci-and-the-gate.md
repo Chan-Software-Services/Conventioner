@@ -109,7 +109,7 @@ Each job is one block, what it runs one item a line ([two features never share a
 **`e2e`**
 
 - passes only when every shard did and [the shards ran every spec file exactly once](#the-timings-refresh-themselves), whose check writes the timings' source, each shard's seconds and their spread to the job summary
-- on a push to `dev`, a scheduled run on `dev` or a trial commit, whose shards all passed, it publishes the next timings (`e2e-shard-timings`, kept 90 days); a run whose shards did not all pass, or ran none, publishes nothing
+- on a push to `dev` or a trial commit, whose shards all passed, it publishes the next timings (`e2e-shard-timings`, kept 90 days); a run whose shards did not all pass, or ran none, publishes nothing
 - on a pull request it then runs [the selection audit](the-test-map.md#where-a-miss-shows), which lists each spec the shards failed in the job's summary as ran, left to CI or missed by `affected-specs.py` for the pull request's diff, each miss also a warning annotation once a test map exists, its steps continuing on error so they never decide the job
 
 **`test-map`**
@@ -208,12 +208,13 @@ A spec file with no timing yet weighs the median of those measured.
 The timings are each spec file's seconds, the summed duration of every attempt of every test in it, from CI's own reports; no one refreshes them by hand.
 
 - **Published.**
-  On a push to `dev`, a scheduled run on `dev` or a trial commit, whose ten shards all passed, the `e2e` job blends the timings the run dealt by with the seconds it measured, 0.3 of this run to 0.7 of the earlier timings (`BLEND_WEIGHT`), a file new to the timings taking its measure alone, and uploads them as the `e2e-shard-timings` artifact.
+  On a push to `dev` or a trial commit, whose ten shards all passed, the `e2e` job blends the timings the run dealt by with the seconds it measured, 0.3 of this run to 0.7 of the earlier timings (`BLEND_WEIGHT`), a file new to the timings taking its measure alone, and uploads them as the `e2e-shard-timings` artifact.
   Over twelve runs that weight left the next run's shards about 130 seconds apart where one run's timings alone left them about 200, since a file's time moves by about a fifth from run to run.
 - **Taken.**
-  Each shard first runs `node scripts/e2e-shards.ts timings <file>`, which takes the newest `e2e-shard-timings` artifact made at least 10 minutes (`TIMINGS_MARGIN_MS`) before its own run was created, by the Test workflow on a push to `dev`, a scheduled run on `dev` or a trial commit in this repository: never a pull request's, whose code no one has merged.
+  Each shard first runs `node scripts/e2e-shards.ts timings <file>`, which takes the newest `e2e-shard-timings` artifact made at least 10 minutes (`TIMINGS_MARGIN_MS`) before its own run was created, by the Test workflow on a push to `dev` or a trial commit in this repository: never a pull request's, whose code no one has merged.
   It reads the run behind each of the ten newest such artifacts at most, and deals by the committed file when none of those ten is trusted.
-  The Test workflow has no schedule yet; a nightly run on `dev`'s tip, once it has one, publishes and is trusted as a push is, so the timings stay fresh even if a push to `dev` runs no shards.
+  [The nightly run](#the-nightly-test-map) neither publishes nor is trusted: its shards record the test map, which slows them, and its `e2e` job is skipped.
+  A warm push to `dev` runs no shards, so it publishes nothing either, and the merge queue's runs and the whole-suite pushes to `dev` keep the timings fresh.
 - **The same on every shard and every re-run.**
   A run's creation time stays the same on every re-run attempt, and an artifact never changes once made, so the newest made before that time is the same artifact however late a shard looks, and the lookup reads GitHub's list of them page after page (up to 20 pages of 100, far more than are published in the 30 days within which GitHub allows a re-run) until it lists one made an hour before the best found so far, then takes the newest of all it read: GitHub lists artifacts by id, which only roughly follows the order they were made (seen out of order by up to 15 minutes), so the choice never hangs on where a page ends; the margin is far longer than an upload takes, so no shard can see an artifact another shard could not.
 - **Never a failed shard.**
