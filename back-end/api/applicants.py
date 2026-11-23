@@ -490,14 +490,10 @@ CHANGED_WHILE_SAVED = "Your application changed while it was saved. Save again."
 FORM_CHANGED = "This form changed since you opened it. Reload to continue."
 FORM_CHANGED_CODE = "form_changed"
 
-#: Stands for a save whose body named no form version, which is taken as before T507 while every
-#: caller is moved to send one.
-NO_FORM_VERSION: Any = object()
-
 
 def save_applicant_application(
     market_slug: str, token_payload: Dict[str, Any], form_data: Dict[str, Any],
-    form_version: Any = NO_FORM_VERSION,
+    form_version: Any,
 ) -> Tuple[Dict[str, Any], int]:
     """Save or update the authenticated applicant's application for this market.
 
@@ -510,9 +506,10 @@ def save_applicant_application(
     stored then, ``ANSWER_TRIES`` times, then answers 409 ``CHANGED_WHILE_SAVED``.
 
     The save is held to the form the vendor's page drew: a ``form_version`` that is not the form's
-    version now (``applicant_form_version``), ``None`` and a value that is not a string included,
-    is answered 409 ``FORM_CHANGED`` once the market is known to take applications and before any
-    answer is judged or anything written, so no answer lands against a form the vendor never saw.
+    version now (``applicant_form_version``), ``None`` (a body that named none, as a tab opened
+    before the version existed sends) and a value that is not a string included, is answered
+    409 ``FORM_CHANGED`` once the market is known to take applications and before any answer is
+    judged or anything written, so no answer lands against a form the vendor never saw.
 
     The first successful save freezes the essential offering onto the market's stored form
     (``freeze_and_effective_essential_options``), atomically and before the answers are
@@ -523,8 +520,8 @@ def save_applicant_application(
         market_slug: The URL-safe slug of the market.
         token_payload: Decoded JWT payload from ``verify_application_token``.
         form_data: The form answers keyed by field keys.
-        form_version: The form version the vendor's page read with the form, or
-            ``NO_FORM_VERSION`` for a body that named none.
+        form_version: The form version the vendor's page read with the form, ``None`` for a body
+            that named none.
 
     Returns:
         Tuple of (response_body, status_code).
@@ -559,7 +556,7 @@ def save_applicant_application(
 
     # Judged on the one read the answers are judged on, so a form change landing after it is a
     # change after this save, as it would be had the save come a moment sooner.
-    if form_version is not NO_FORM_VERSION and form_version != applicant_form_version(market_doc):
+    if form_version != applicant_form_version(market_doc):
         return {"error": FORM_CHANGED, "code": FORM_CHANGED_CODE}, 409
 
     email = token_payload.get("email", "")

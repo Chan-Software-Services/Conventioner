@@ -138,6 +138,19 @@ async function applicantToken(
   return token;
 }
 
+/**
+ * The market's form as a vendor's page reads it: what its essential questions offer, and the form
+ * version every save carries (T507), so an API-level save is judged on its answers.
+ */
+async function readPublicForm(
+  request: APIRequestContext,
+  marketSlug: string,
+): Promise<{ essential_options: { dates: string[] }; formVersion: string }> {
+  const read = await request.get(`${BACKEND_URL}/public/markets/${marketSlug}/application-form`);
+  expect(read.ok(), await read.text()).toBe(true);
+  return read.json();
+}
+
 test.describe('Essential form fields', () => {
   test.beforeAll(async ({ request }) => {
     await ensureTestOrg(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
@@ -417,6 +430,7 @@ test.describe('Essential form fields', () => {
     const token = await applicantToken(request, market.marketId, market.marketSlug);
 
     // The applicant records answers against the three offered dates.
+    const opened = await readPublicForm(request, market.marketSlug);
     const saveRes = await request.put(
       `${BACKEND_URL}/public/markets/${market.marketSlug}/applicant/application`,
       {
@@ -434,6 +448,7 @@ test.describe('Essential form fields', () => {
             essential_table_choice: 'half',
             essential_section_ranking: ['Main Hall', 'Garden'],
           },
+          formVersion: opened.formVersion,
         },
       },
     );
@@ -456,9 +471,7 @@ test.describe('Essential form fields', () => {
     changeASettledPlan(market.marketId, marketDoc.setupObject);
 
     // ...but the form's offering is frozen: the public form still offers the original three.
-    const publicForm = await (
-      await request.get(`${BACKEND_URL}/public/markets/${market.marketSlug}/application-form`)
-    ).json();
+    const publicForm = await readPublicForm(request, market.marketSlug);
     expect(publicForm.essential_options.dates).toEqual(PLAN_DATES);
 
     // An answer naming the new date is refused - it was never offered.
@@ -478,6 +491,7 @@ test.describe('Essential form fields', () => {
             essential_table_choice: 'half',
             essential_section_ranking: ['Main Hall', 'Garden'],
           },
+          formVersion: publicForm.formVersion,
         },
       },
     );

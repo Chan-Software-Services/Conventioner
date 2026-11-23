@@ -51,14 +51,16 @@ The save ([`save_applicant_application`](../../../back-end/api/applicants.py)) r
 2. no such market (404);
 3. a sign-in for another market (403);
 4. a market not taking applications (403), so a closed market says it is closed, never that the form changed;
-5. a version that is not the form's version now, `null` and a value that is not a string included: 409 `{"error": "This form changed since you opened it. Reload to continue.", "code": "form_changed"}`;
+5. a version that is not the form's version now, a body naming none, `null` and a value that is not a string included: 409 `{"error": "This form changed since you opened it. Reload to continue.", "code": "form_changed"}`;
 6. then everything else it refuses, judged against the form the vendor saw.
 
 The version is judged on the one read of the market the answers are judged on, and before anything is written: no application is made for a vendor who had none, the essential offering is not frozen, nothing is recorded in the market's history, and an existing application keeps its answers, status and verdict.
 A save sent again without reloading is refused the same way.
 The code `form_changed` is the vendor's own, never `market_changed`, which re-reads an organizer's open market.
 
-A body naming no version, from a tab opened before the version existed, is still taken and judged against the form as it is now (`NO_FORM_VERSION`).
+A body naming no version, from a tab opened before the version existed, is refused the same way.
+That page drew its form before anything could say which form it was, so the server cannot tell whether the vendor saw the form it asks now, and taking the save would judge their answers against a form they may never have seen, the loss this rule exists to prevent.
+The old page shows the server's sentence in its error box, as it shows any refusal, with no Reload of its own, and keeps the typed answers in the tab, so the vendor's own reload loses nothing.
 
 ## On the page
 

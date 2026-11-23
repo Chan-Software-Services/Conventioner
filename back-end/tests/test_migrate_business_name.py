@@ -736,7 +736,7 @@ from test_choosing_reviewers_deals_the_open_applications import (  # noqa: E402
 from test_each_arrival_is_dealt import world  # noqa: E402,F401
 from test_essential_fields import VALID_ANSWERS  # noqa: E402
 
-from conftest import seen_as_stored  # noqa: E402
+from conftest import applicant_form_version_now, seen_as_stored  # noqa: E402
 from datatypes import ApplicationStatus  # noqa: E402
 
 VENDOR = "vendor@example.com"
@@ -751,24 +751,17 @@ def page_market(world, monkeypatch):
     return world
 
 
-def _vendor_saves(world, answers, **form_version):
+def _vendor_saves(world, answers, form_version=None):
     """``VENDOR`` saves their application with exactly ``answers`` beside the plan's answers,
-    carrying ``formVersion`` when given as the page read it."""
+    carrying the form version their page read: ``form_version``, or, when not given, the form's
+    as it is now, from a page opened just before."""
     import app as app_module
 
     world.vendor = VENDOR
     return app_module.app.test_client().put(
         "/public/markets/test-market/applicant/application",
-        json={"formData": {**VALID_ANSWERS, **answers}, **form_version})
-
-
-def _vendor_opens_the_form():
-    """The form version the vendor's page reads with the form as it opens."""
-    import app as app_module
-
-    response = app_module.app.test_client().get("/public/markets/test-market/application-form")
-    assert response.status_code == 200, response.get_json()
-    return response.get_json()["formVersion"]
+        json={"formData": {**VALID_ANSWERS, **answers},
+              "formVersion": form_version or applicant_form_version_now("test-market")})
 
 
 def _stop_taking_applications(stopped):
@@ -888,13 +881,13 @@ def test_a_save_from_a_page_opened_before_a_run_on_a_market_back_in_the_stage_is
     to the built-in field, and its approval."""
     world = page_market
     app_id = _an_approved_vendor(world)
-    opened_before_the_run = _vendor_opens_the_form()
+    opened_before_the_run = applicant_form_version_now("test-market")
     _in_phase(world, MarketPhase.ASSIGNMENT)
     migrate(PAGE_MARKET, KEY, world.db)
     assert _the_vendor(world, app_id)["form_data"][BUILT_IN] == "Paper & Pine"
     _in_phase(world, MarketPhase.APPLICATIONS)
 
-    response = _vendor_saves(world, {KEY: "Paper & Pine"}, formVersion=opened_before_the_run)
+    response = _vendor_saves(world, {KEY: "Paper & Pine"}, opened_before_the_run)
 
     assert response.status_code == 409, response.get_json()
     assert response.get_json()["code"] == "form_changed"

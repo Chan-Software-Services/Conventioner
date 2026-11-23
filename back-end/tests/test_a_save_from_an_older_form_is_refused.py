@@ -16,7 +16,7 @@ import copy
 
 import pytest
 
-from conftest import seen_as_stored
+from conftest import applicant_form_version_now, seen_as_stored
 from test_choosing_reviewers_deals_the_open_applications import ADMIN, MARKET, _client
 from test_each_arrival_is_dealt import BUSINESS, STUDENT, world  # noqa: F401
 from test_essential_fields import VALID_ANSWERS
@@ -34,18 +34,25 @@ WEBSITE = {"key": "website", "label": "Website", "type": "text", "required": Fal
 
 def _read_version():
     """The form version the vendor's page reads with the form."""
-    response = app_module.app.test_client().get(f"/public/markets/{SLUG}/application-form")
-    assert response.status_code == 200, response.get_json()
-    return response.get_json()["formVersion"]
+    return applicant_form_version_now(SLUG)
 
 
 def _save(world, form_version, **answers):
     """``VENDOR`` saves, as their page sends it, carrying ``form_version``."""
+    return _send(world, {"formVersion": form_version}, answers)
+
+
+def _save_from_an_old_tab(world, **answers):
+    """``VENDOR`` saves from a tab opened before the form version existed, which names none."""
+    return _send(world, {}, answers)
+
+
+def _send(world, version_part, answers):
     world.vendor = VENDOR
     return app_module.app.test_client().put(
         f"/public/markets/{SLUG}/applicant/application",
         json={"formData": {**VALID_ANSWERS, "business_name": "Paper & Pine", **answers},
-              "formVersion": form_version})
+              **version_part})
 
 
 def _theirs(world):
@@ -143,6 +150,29 @@ class TestASaveFromAnOlderForm:
         _refused(_save(world, sent))
 
         assert _theirs(world) == []
+
+    def test_naming_no_version_is_refused_and_leaves_nothing_for_a_vendor_who_had_not_applied(
+            self, world):
+        history = copy.deepcopy(world.history.documents)
+
+        _refused(_save_from_an_old_tab(world, student="No"))
+
+        assert _theirs(world) == []
+        assert _form(world).get("essentialOptions") is None
+        assert world.history.documents == history
+
+    def test_naming_no_version_is_refused_and_leaves_an_approved_application_as_it_was(
+            self, world):
+        app_id = _approved(world)
+        before = copy.deepcopy(_theirs(world))
+        history = copy.deepcopy(world.history.documents)
+
+        _refused(_save_from_an_old_tab(world, student="Yes", business_name="Other Wares"))
+
+        assert _theirs(world) == before
+        assert before[0]["id"] == app_id
+        assert before[0]["status"] == ApplicationStatus.REVIEWER_APPROVED.value
+        assert world.history.documents == history
 
     def test_to_a_market_no_longer_taking_applications_says_so(self, world):
         version = _read_version()
