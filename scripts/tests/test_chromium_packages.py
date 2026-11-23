@@ -1,5 +1,5 @@
-"""chromium-packages.sh run for real, with fakes of npx, sudo, apt-get, apt-config, dpkg-deb and
-sleep on its PATH.
+"""chromium-packages.sh run for real, with fakes of npx, sudo, apt-get, apt-config, dpkg-deb, timeout
+and sleep on its PATH.
 
 The fake npx answers `playwright install-deps --dry-run chromium` as Playwright does: the packages
 still missing, or that none is. The fake apt-get installs, downloads and refreshes its lists, and
@@ -52,6 +52,15 @@ echo "archives='$FAKE/archives/'"
 name="$(basename "$3")"
 version="${name#*_}"
 echo "${name%%_*} ${version%_*}"
+""",
+    "timeout": r"""#!/usr/bin/env bash
+echo "timeout $*" >>"$FAKE/calls"
+# While $FAKE/hang holds a count above 0, each call hangs and is cut, as timeout(1) cuts one past
+# its limit, and spends one.
+hang="$(cat "$FAKE/hang" 2>/dev/null || echo 0)"
+if (( hang > 0 )); then echo $(( hang - 1 )) >"$FAKE/hang"; exit 124; fi
+shift
+exec "$@"
 """,
     "sleep": r"""#!/usr/bin/env bash
 echo "sleep $*" >>"$FAKE/calls"
@@ -158,6 +167,11 @@ def mirror_calls(fake):
     ]
 
 
+def limited(fake):
+    """The commands run under timeout(1), each with its limit."""
+    return [call.removeprefix("timeout ") for call in calls(fake) if call.startswith("timeout ")]
+
+
 def install(fake, debs):
     return run(fake, "install", str(debs), *sorted(FONTS))
 
@@ -228,7 +242,7 @@ class TestMissing:
 
         assert result.returncode == 0, result.stderr
         assert outputs["packages"] == " ".join(sorted(FONTS))
-        assert "sudo apt-get update" in calls(fake)
+        assert limited(fake) == ["120 sudo apt-get update"]
 
     def test_an_answer_it_cannot_read_fails(self, fake, tmp_path):
         (tmp_path / "bin" / "npx").write_text('#!/usr/bin/env bash\necho "something else"\nexit 1\n')
@@ -247,6 +261,7 @@ class TestInstallFromTheCache:
 
         assert result.returncode == 0, result.stderr
         assert mirror_calls(fake) == []
+        assert limited(fake) == []
         [installing] = [call for call in calls(fake) if call.startswith("sudo apt-get install")]
         assert installing == (
             "sudo apt-get install -y --no-install-recommends --no-download " + " ".join(sorted(FONTS))
@@ -266,6 +281,10 @@ class TestInstallFromTheCache:
         assert mirror_calls(fake) == [
             "apt-get update",
             "apt-get install -y --no-install-recommends " + " ".join(sorted(FONTS)),
+        ]
+        assert limited(fake) == [
+            "120 sudo apt-get update",
+            "120 sudo apt-get install -y --no-install-recommends " + " ".join(sorted(FONTS)),
         ]
         assert outputs["cacheable"] == "false"
 
@@ -331,6 +350,25 @@ class TestInstallOnAMiss:
         download = "apt-get download " + " ".join(sorted(FONTS))
         assert mirror_calls(fake) == [download, "apt-get update"] * 2 + [download, "apt-get update", download]
         assert [call for call in calls(fake) if call.startswith("sleep")] == ["sleep 60"] * 2
+        assert outputs["cacheable"] == "true"
+
+    def test_each_call_to_the_mirrors_is_cut_at_two_minutes(self, fake, debs):
+        fake.joinpath("gone").touch()
+
+        install(fake, debs)
+
+        download = "apt-get download " + " ".join(sorted(FONTS))
+        assert limited(fake) == [f"120 {download}", "120 sudo apt-get update", f"120 {download}"]
+
+    def test_a_call_cut_at_its_limit_is_tried_again(self, fake, debs):
+        # The first try's download and refresh hang; the second's download hangs, then its
+        # refresh and download answer.
+        fake.joinpath("hang").write_text("3")
+
+        result, outputs = install(fake, debs)
+
+        assert result.returncode == 0, result.stderr
+        assert [call for call in calls(fake) if call.startswith("sleep")] == ["sleep 60"]
         assert outputs["cacheable"] == "true"
 
     def test_it_tries_six_times_a_minute_apart_then_fails(self, fake, debs):

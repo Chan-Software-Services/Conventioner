@@ -44,8 +44,8 @@ runs:
         key: ${{ steps.browsers.outputs.cache-primary-key }}
 
     # The runner has most of the system packages Chromium needs. The cache keeps the .deb files of
-    # those it lacks, keyed on the release and each package's version, so a shard installs them
-    # offline and an outage of Ubuntu's apt mirrors fails none (scripts/chromium-packages.sh).
+    # those it lacks, keyed on the release and each package's version, so a shard whose cached
+    # files install reaches Ubuntu's apt mirrors for none of them (scripts/chromium-packages.sh).
     - name: The system packages Chromium lacks
       id: packages
       shell: bash

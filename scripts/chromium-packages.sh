@@ -22,13 +22,23 @@
 #       the mirrors. Writes cacheable=true to $GITHUB_OUTPUT when <directory>'s files installed and
 #       are the versions the key names, else false.
 #
-# Each step that reaches the mirrors is tried 6 times, a minute apart, so an outage of a few minutes
-# fails no shard; a cache hit whose files install makes none, so neither does an outage of hours.
+# Each step that reaches the mirrors is tried 6 times, a minute apart, and each of its calls to them
+# is cut at 2 minutes: the download, which makes at most 3 such calls a try, waits out an outage of
+# at least 5 minutes (its pauses) and gives up within 41 (6 tries of at most 6 minutes, and the 5
+# pauses). A cache hit whose files install makes no such call, so no outage, however long, fails it.
 
 set -euo pipefail
 
 ATTEMPTS=6
 PAUSE=60
+# The seconds a call to the mirrors may take before it is cut and counts as failed: apt's own
+# timeouts apply to each connection, of which a call may make many.
+CALL_LIMIT=120
+
+# Runs "$@", a command that reaches the mirrors, cut at $CALL_LIMIT seconds.
+mirrors() {
+  timeout "$CALL_LIMIT" "$@"
+}
 
 # Runs "$@", again after a pause each time it fails, up to $ATTEMPTS times.
 retry() {
@@ -94,7 +104,7 @@ missing() {
     echo "chromium-packages: Playwright could not say which packages are missing:" >&2
     printf '%s\n' "$DRY_RUN" >&2
     echo "chromium-packages: refreshing the package lists and asking again" >&2
-    retry sudo apt-get update
+    retry mirrors sudo apt-get update
     if ! missing_packages; then
       printf '%s\n' "$DRY_RUN" >&2
       echo "chromium-packages: Playwright still could not say which packages are missing" >&2
@@ -118,8 +128,8 @@ missing() {
 download() {
   local directory="$1"
   shift
-  (cd "$directory" && apt-get download "$@") && return 0
-  sudo apt-get update && (cd "$directory" && apt-get download "$@")
+  (cd "$directory" && mirrors apt-get download "$@") && return 0
+  mirrors sudo apt-get update && (cd "$directory" && mirrors apt-get download "$@")
 }
 
 # "<name> <version>" of each .deb file in the directory $1, a line, sorted.
@@ -143,7 +153,7 @@ install_from() {
 }
 
 from_mirrors() {
-  sudo apt-get update && sudo apt-get install -y --no-install-recommends "$@"
+  mirrors sudo apt-get update && mirrors sudo apt-get install -y --no-install-recommends "$@"
 }
 
 install() {
