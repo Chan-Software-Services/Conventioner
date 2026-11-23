@@ -115,6 +115,13 @@ const LAYOUT_PAIRS: Array<[string, string]> = [
   ['--layout-zone-fill', '--layout-zone-edge'],
 ];
 
+/** Each section colour's out shade (T501): the fill of a vendor's seat once they checked out, a
+ *  darker step of the section's tint, beside the tint it is told from. */
+const LAYOUT_OUTS: Array<[string, string]> = Array.from({ length: 8 }, (_, i) => [
+  `--layout-section-${i + 1}-out`,
+  `--layout-section-${i + 1}-fill`,
+]);
+
 /**
  * Each button fill at rest, then the fills it steps to under the pointer and, where it has one,
  * pressed, and the inks set on it. The `.btn` intents have both steps; the fills only a component's
@@ -353,6 +360,7 @@ describe('the palette carries a contrast contract', () => {
       '--edge-shade-on-dark',
       // The section palette's fills and edges, held by their own contract below.
       ...LAYOUT_PAIRS.flat(),
+      ...LAYOUT_OUTS.map(([out]) => out),
       '--layout-zone-hatch',
       // The paper under the public map's backdrop (T465), which carries no text.
       '--mm-paper',
@@ -373,15 +381,34 @@ describe('the section palette carries its own contract', () => {
   const INK_ON_A_TABLE = 7;
   const A_BOUNDARY = 3;
 
-  it('has eight colours, a fill and an edge each', () => {
+  it('has eight colours, a fill, an edge and an out shade each', () => {
     const numbers = Object.keys(tokens)
-      .map((name) => name.match(/^--layout-section-(\d+)-(fill|edge)$/))
+      .map((name) => name.match(/^--layout-section-(\d+)-(fill|edge|out)$/))
       .filter((match): match is RegExpMatchArray => match !== null)
       .map((match) => `${match[1]}-${match[2]}`);
     expect(numbers.sort()).toEqual(
-      Array.from({ length: 8 }, (_, i) => [`${i + 1}-edge`, `${i + 1}-fill`]).flat(),
+      Array.from({ length: 8 }, (_, i) => [
+        `${i + 1}-edge`,
+        `${i + 1}-fill`,
+        `${i + 1}-out`,
+      ]).flat(),
     );
   });
+
+  /**
+   * A checked-out vendor's seat (T501) is filled in its section's out shade: its number reads at
+   * 7:1 on it, and the shade stands at 1.5:1 from the tint of a vendor still checked in, a step
+   * in lightness as plain as the one from the tint to the white of a vendor not checked in yet, so
+   * the two are told apart by more than their hue.
+   */
+  const A_LIGHTNESS_STEP = 1.5;
+  for (const [out, tint] of LAYOUT_OUTS) {
+    it(`--mm-black reads at 7:1 on ${out}, which stands at 1.5:1 from ${tint}`, () => {
+      expect(alphaOf(tokens[out])).toBe(1);
+      expect(contrast(resolve('--mm-black'), resolve(out))).toBeGreaterThanOrEqual(INK_ON_A_TABLE);
+      expect(contrast(resolve(out), resolve(tint))).toBeGreaterThanOrEqual(A_LIGHTNESS_STEP);
+    });
+  }
 
   for (const [fill, edge] of LAYOUT_PAIRS) {
     it(`--mm-black reads at 7:1 on ${fill}`, () => {

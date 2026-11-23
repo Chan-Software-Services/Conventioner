@@ -58,11 +58,11 @@ TEST_MARKETS = (
     TestMarket("Conventioner Test - Google Form", IntakeMode.CSV),
 )
 
+#: The test markets' own question. No business name among them: every form asks the built-in one
+#: (``EssentialFields.BUSINESS_NAME_KEY``), and a second would ask each test vendor twice.
 TEST_FORM_FIELDS: List[Dict[str, Any]] = [
-    {"key": "business_name", "label": "Business Name", "type": "text", "required": True,
-     "options": [], "order": 0},
     {"key": "product_type", "label": "What do you sell?", "type": "text", "required": True,
-     "options": [], "order": 1},
+     "options": [], "order": 0},
 ]
 
 _SATURDAY = 5

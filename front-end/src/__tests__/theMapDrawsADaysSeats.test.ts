@@ -151,6 +151,28 @@ describe('a table by who holds it', () => {
     );
   });
 
+  it("draws a checked-out seat in its section's out shade, edged in its colour, a whole table and a half (T501)", () => {
+    const map = draw({
+      seats: [
+        { key: 'acme', tableId: 'g1', half: 'whole', tone: 'checkedOut', name: 'Acme' },
+        { key: 'elm', tableId: 's1', half: 'left', tone: 'checkedOut', name: 'Elm' },
+      ],
+    });
+    expect(paintOf(topOf(map, 'g1'))).toEqual([
+      'var(--layout-section-1-out)',
+      'var(--layout-section-1-edge)',
+      undefined,
+    ]);
+    expect(tableById(map, 'g1').get('[data-testid="layout-table-number"]').attributes('fill')).toBe(
+      'var(--mm-black)',
+    );
+    expect(paintOf(halfOf(map, 's1', 'left').get('path'))).toEqual([
+      'var(--layout-section-2-out)',
+      'var(--layout-section-2-edge)',
+      undefined,
+    ]);
+  });
+
   it('draws a table with no seat free, on the floor with a dashed grey edge, a button named so', () => {
     const map = draw();
     const free = tableById(map, 'g4');

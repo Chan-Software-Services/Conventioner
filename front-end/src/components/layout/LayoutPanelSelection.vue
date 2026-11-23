@@ -80,7 +80,7 @@ const rowAsked = computed(() => {
 });
 
 /** Why "Add row" is off while Row of tables' gap, which the row takes, is no length: the Gap
- *  field and its own sentence stand only in that tool's strip, off the screen here. */
+ *  field and its own sentence stand only in the tool card, off the screen here. */
 const gapRefusal = computed(() =>
   rowFieldErrors().gap
     ? `Row of tables' gap is no length. Type it in centimetres, 0 to ${MAX_LENGTH_CM.toLocaleString('en')}, with Row of tables on.`

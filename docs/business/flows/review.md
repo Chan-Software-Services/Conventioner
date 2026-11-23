@@ -4,13 +4,13 @@ kind: flow
 describes:
   - front-end/src/components/application/ApplicationMonitor.vue
   - front-end/src/components/application/ApplicationsAll.vue
+  - front-end/src/components/application/reviewViewTools.ts
   - front-end/src/components/market/MarketApplicationsTab.vue
   - front-end/src/components/ListFreshness.vue
   - front-end/src/components/market/ReviewersPanel.vue
   - front-end/src/components/market/ReviewerName.vue
   - front-end/src/components/application/VerdictUndoLine.vue
   - front-end/src/utils/verdictUndo.ts
-  - front-end/src/components/application/reviewViewTools.ts
 verified: 2026-11-17
 sources:
   - wayfinding/v0-1-0/map
@@ -62,8 +62,8 @@ sources:
   - T270
   - T411
   - T421
-  - T452
   - T466
+  - T452
 ---
 
 # Reviewing applications
@@ -169,7 +169,7 @@ Both views offer it through one composable, [`front-end/src/utils/verdictUndo.ts
 5. The market's history records the undo as its own entry, after the verdict's: "<email> undid their verdict on <vendor>: Rejected back to Open" ([reading the market's history](reading-the-markets-history.md)).
 
 The screens offer no undo after the window, and none of someone else's verdict: [I2](#i2-change-a-decision) is the way, for whoever the change row lets change one.
-The story asked the line and the reviewed list to name the applicant's business too; the app keeps no business name, a business being whatever question a market's form asks, so they name the applicant and their email, as the All view and the import preview do (E38/F03/S01).
+The story asked the line and the reviewed list to name the applicant's business too; they name the applicant and their email, as the All view and the import preview do (E38/F03/S01), and not the business name every form now asks: a verdict is given on a person.
 
 ## I2. Change a decision
 
@@ -205,7 +205,7 @@ Covered by:
 1. "All" lists every application by name and email, its highlighted answers on one line, its status, who gave the verdict, with reviewers chosen whose share it is ("Reviewer: <email>", "Reviewer: you", or "Reviewer: not dealt yet" for one in nobody's share), "Followed up by <email>" and who has it open.
    The highlighted answers and the status lines share the row's room; with no highlighted answer in any listed row, the rows hold no column for them, so the status lines take that room rather than wrap beside an empty band (`theAllViewsRowsUseTheirRoom.test.ts`).
    The search, the statuses, Mine and "Assigned to" stand on one compact line with a rule under it, pinned flush under the toolbar from 1024px, so neither moves as the rows scroll; on a phone it scrolls with the page and the statuses wrap a small step apart (T466).
-   Past 12 applications the search stands first on that line, its placeholder "Find by name or address", the same words as its label, which only a screen reader hears, finding by the legal name, the preferred name or the address, capitals aside, within what the filters leave; its words are [in the address](../../implementation/conventions/every-market-page-has-an-address.md) as `?search=`, so a refresh and a link keep them and Back leaves the page rather than stepping through them.
+   Past 12 applications the search stands first on that line, its placeholder "Find by name or address", the same words as its label, which only a screen reader hears, finding by the legal name, the preferred name, the business name or the address, capitals aside, within what the filters leave; its words are [in the address](../../implementation/conventions/every-market-page-has-an-address.md) as `?search=`, so a refresh and a link keep them and Back leaves the page rather than stepping through them.
    The list is a [list frame](../../design-system.md): 50 rows, then "Show 50 more", which hands the focus to the first new row, and a line saying how much is shown, "Showing 50 of 110 (359 in all)", or "110 of 359 applications" with every row drawn, small and 4px over the first row, reading as the list's; with no line of the open review's and no Select all over it, it stands 12px under the line's rule.
    A filter or new words fold it back to 50; a verdict, the half-minute re-read and Refresh hold the place.
 2. The statuses, one joined control named "Filter" for a screen reader: "Any status", "Open" (every application not decided yet, `?status=undecided` in the address), "Needs follow-up", "Approved", "Rejected"; then "Mine: the follow-ups I own"; what Open and Needs follow-up mean is the statuses' description, read by a screen reader, not shown.

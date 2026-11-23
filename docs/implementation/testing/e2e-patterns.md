@@ -22,7 +22,7 @@ describes:
   - front-end/e2e/helpers/signInWindow.ts
   - front-end/e2e/helpers/mongoSession.ts
   - front-end/e2e/helpers/mongoScript.ts
-verified: 2026-11-19
+verified: 2026-11-20
 sources:
   - E21/F02/S02
   - E22/F04/S02
@@ -55,6 +55,7 @@ sources:
   - T318
   - T422
   - T469
+  - T501
 ---
 
 # E2E patterns
@@ -68,6 +69,7 @@ How to run the suite is [TESTING.md](../../TESTING.md#end-to-end-e2e-tests); the
 Adding a `data-testid` changes no behaviour; a view gains them as specs need them.
 **The one exception is a location's layout** (T257): its map's tables are found by their accessible names ("Gold row 5, Standard 6 ft"), and its toolbar's tools, its menus' items, its location links and its sections' swatches by role and name ([`LayoutPage.ts`](../../../front-end/e2e/pages/LayoutPage.ts)), since what its specs prove is what a screen reader hears: a table's code and type are read back from its name, as the spec of the layout asks.
 A layout's day map (T422) is found the same way, on the public map ([`PublicMapPage.ts`](../../../front-end/e2e/pages/PublicMapPage.ts)) and on Attendance's map ([`AttendanceStatusPage.ts`](../../../front-end/e2e/pages/AttendanceStatusPage.ts)): a table, or a half of a shared one, by the start of its name ("Aisle A 3, Standard 6 ft, left half"); Attendance chooses its location with its toolbar's select (`locationSelect`), by the option's label (T466).
+Attendance's `tone(code, half)` reads how a table or half is drawn off its fill: `filled`, `checkedOut` (a section's `-out` token, T501), `outlined` or `free`.
 The map's box, its border round the drawing, is `mapFrame` (`day-map-frame`), so a spec measures where the map stands without its class.
 Everything else on the page is found by its `data-testid`.
 
@@ -124,6 +126,8 @@ The container name comes from `helpers/containerNames.ts` (`E2E_MONGO_CONTAINER`
 **A market that opens applications needs a complete plan with dates still to come** (E31/F01/S01), since [the setup settles on leaving draft](../../business/rules/the-setup-settles-on-leaving-draft.md) and leaving draft needs it.
 [`helpers/seeds.ts`](../../../front-end/e2e/helpers/seeds.ts) exports `completePlan()` (a date, a location, a Gold tier with five tables in one section) and `SEED_MARKET_DATE`, a date in 2099 every seeded vendor can attend; a plan whose date differs from the vendors' silently assigns nobody.
 The door takes no check-in on a day that has not begun, so a spec that checks a vendor in at the door seeds on `calendarToday()` ([checking a vendor in](e2e-seeds.md#checking-a-vendor-in)).
+A spec that seeds a day already over among a market's dates reckons its days, and opens its pages, at UTC+14 (`Pacific/Kiritimati`, as [`the-door-reads-one-set-of-words.spec.ts`](../../../front-end/e2e/the-door-reads-one-set-of-words.spec.ts) does).
+Leaving draft refuses a date once it has passed even at UTC-12, so a yesterday reckoned on the runner's clock is refused from noon UTC, while a yesterday at UTC+14 has not yet passed at UTC-12 at any hour.
 A spec that picks dates on the calendar uses `upcomingSaturday()` ([`helpers/upcoming.ts`](../../../front-end/e2e/helpers/upcoming.ts)), dates a couple of months ahead of whenever it runs, since the calendar steps a month at a time.
 
 **A plan cannot change after draft, so a spec seeds the room it wants**: `seedAssignedMarket({ tables })` for a smaller one.

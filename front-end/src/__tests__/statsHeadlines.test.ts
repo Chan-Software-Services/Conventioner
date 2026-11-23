@@ -157,9 +157,9 @@ describe('statsHeadlines', () => {
         link: { route: { path: ATTENDANCE, query: { date: '2099-05-01' } } },
       },
       {
-        id: 'notYet',
+        id: 'notCheckedIn',
         figure: '6',
-        words: 'not yet in',
+        words: 'not checked in',
         link: { route: { path: ATTENDANCE, query: { date: '2099-05-01' } } },
       },
       {
@@ -176,16 +176,16 @@ describe('statsHeadlines', () => {
       read('market_days', { checkIn: CHECK_IN }, today).map((tile) => tile.words);
     expect(counted('2099-05-08')).toEqual([
       'of 20 checked in, May\u00a08,\u00a02099',
-      'not yet in',
+      'not checked in',
     ]);
     expect(counted('2099-05-02')).toEqual([
       'of 20 checked in, May\u00a08,\u00a02099',
-      'not yet in',
+      'not checked in',
     ]);
-    // Every day is over: the last, whose missing did not come.
+    // Every day is over: the last, whose missing are still not checked in, as the door says.
     expect(counted('2099-06-01')).toEqual([
       'of 20 checked in, May\u00a08,\u00a02099',
-      'did not come',
+      'not checked in',
     ]);
   });
 
@@ -195,14 +195,14 @@ describe('statsHeadlines', () => {
     });
     expect(everyone.map(({ id, figure, link }) => ({ id, figure, linked: !!link }))).toEqual([
       { id: 'checkedIn', figure: '2', linked: true },
-      { id: 'notYet', figure: '0', linked: false },
+      { id: 'notCheckedIn', figure: '0', linked: false },
     ]);
     const nobody = read('market_days', {
       checkIn: { dates: [{ date: '2099-05-01', expected: 0, checkedIn: 0 }], came: 0 },
     });
     expect(nobody.map(({ id, link }) => ({ id, linked: !!link }))).toEqual([
       { id: 'checkedIn', linked: false },
-      { id: 'notYet', linked: false },
+      { id: 'notCheckedIn', linked: false },
     ]);
   });
 

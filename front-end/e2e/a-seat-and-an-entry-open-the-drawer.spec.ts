@@ -100,7 +100,7 @@ test.describe('at the door, on a phone', () => {
 
     await name.tap();
     await expect(page.getByTestId('vendors-detail-email')).toHaveText('bob@example.com');
-    await expect(attendance.status('bob@example.com')).toHaveText('Not yet');
+    await expect(attendance.status('bob@example.com')).toHaveText('Not checked in');
 
     // No note yet, so the row shows none; one written in the drawer shows under the row.
     await expect(bob.getByTestId('attendance-notes-bob@example.com')).toHaveCount(0);
@@ -114,7 +114,7 @@ test.describe('at the door, on a phone', () => {
     await expect(bob.getByTestId('attendance-notes-bob@example.com-note-input')).toHaveValue(
       'Brings their own tent',
     );
-    await expect(attendance.status('bob@example.com')).toHaveText('Not yet');
+    await expect(attendance.status('bob@example.com')).toHaveText('Not checked in');
   });
 });
 

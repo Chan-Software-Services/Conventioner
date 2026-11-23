@@ -9,7 +9,7 @@ describes:
   - back-end/tests/fixtures/component_library_fixture.py
   - back-end/tests/test_component_library_fixture.py
   - front-end/e2e/helpers/componentLibrary.ts
-verified: 2026-11-18
+verified: 2026-11-20
 sources:
   - T200
   - T191
@@ -101,7 +101,7 @@ It holds 359 applications (every applicant of the four-day grid with a full name
 Each application's `export` holds what those columns and filters read of a vendor, which the `export-vendors` entry reads: there [`exportVendors.ts`](../../../front-end/src/dev/library/exportVendors.ts) answers as the product's server would, so [`ExportVendorsForm.vue`](../../../front-end/src/components/ExportVendorsForm.vue), the dialog that ships, mounted there on the fixture, follows its filters with no endpoint, and its Download only reads out what it would export.
 The `summaries` entry reads only each approved vendor's Discord state from it, as the outcome of L9's role run.
 The `layout-map` entry reads none of it: its halls are made in [`layoutFixture.ts`](../../../front-end/src/dev/library/layoutFixture.ts), a hall of four sections and 49 tables as the layout's prototype drew it, one of nine sections, and one of 400 tables dealt from a seeded draw, each over a floorplan drawn there as an SVG, and [`LayoutMap`](floorplan-placement.md#the-drawing) draws them in each of its modes, at four zooms and panned, the frames of the pan read out (T257).
-The `day-map` entry reads none of it either: `marketDay` in the same file gives a market day of Upper Hall and a Lower Hall of two sections and a stage turned 30 degrees, its seats dealt from seed 422 (63 tables; 8 free; 13 shared, 5 of them with a half free; 45 seats filled and 18 outlined, each vendor named from two word lists, never a person's name), which [`DayMap`](floorplan-placement.md#the-day-map) draws as Attendance would, with a search's mark, as the public map would, and in a box a phone's width, each press read out (T422).
+The `day-map` entry reads none of it either: `marketDay` in the same file gives a market day of Upper Hall and a Lower Hall of two sections and a stage turned 30 degrees, its seats dealt from seed 422 (63 tables; 8 free; 13 shared, 5 of them with a half free; 33 seats filled, 12 in the out shade and 18 outlined, Attendance's checked in, checked out and not checked in (T501), each vendor named from two word lists, never a person's name), which [`DayMap`](floorplan-placement.md#the-day-map) draws as Attendance would, with a search's mark, as the public map would, and in a box a phone's width, each press read out (T422).
 Its last section, "Filling its box, as the public map draws it", draws it with `fills` in a desk's box and in one a phone's width, its legend slot holding a two-item legend, so the legend and the zoom are seen over the map's bottom corners and in a row under it (T465).
 
 **Never edit it by hand**: change the deriver and run `python tests/fixtures/component_library_fixture.py` from `back-end/`.

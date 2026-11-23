@@ -32,7 +32,7 @@
  * snap to the corners of the tables near them and the lines of their edges, and freely with Alt.
  * A click on the first point of three or more, or C, closes the path into a shape, its tables
  * spread evenly round it; closed, it is placed by Enter or a click on that point again, and
- * opened again by Backspace. The strip's Rows and Aisle place several rows in the one gesture.
+ * opened again by Backspace. The tool card's Rows and Aisle place several rows in the one gesture.
  * Backspace is the path's key alone while the tool is on, never the selection's.
  *
  * Fill an area (`layoutFill.ts`): a drag draws a box; clicks instead lay the corners of a shape,
@@ -191,6 +191,9 @@ const props = withDefaults(
     sections: readonly SectionObject[];
     tableTypes: readonly TableTypeObject[];
     imageUrl?: string;
+    /** Whether the floorplan's image is still on its way, for at most two seconds: the map draws
+     *  the hall's floor alone, so its tables never stand over another location's image (T501). */
+    imagePending?: boolean;
     /** Whether the venue's floorplan is drawn under the tables. */
     showImage?: boolean;
     /** Whether that floorplan is drawn in greyscale, as it is unless told, rather than in its own
@@ -206,6 +209,7 @@ const props = withDefaults(
   }>(),
   {
     imageUrl: '',
+    imagePending: false,
     showImage: true,
     imageInGrey: true,
     imageFaded: true,
@@ -2525,6 +2529,7 @@ defineExpose({
           :sections="sections"
           :tableTypes="tableTypes"
           :imageUrl="imageUrl"
+          :imagePending="imagePending"
           :showImage="showImage"
           :imageInGrey="imageInGrey"
           :imageFaded="imageFaded"

@@ -79,7 +79,7 @@ test('a walk-in is added on market day, seated, and checked in at the door', asy
   await page.goto(marketScreenPath(marketId, 'attendance'));
   const row = page.getByTestId('attendance-row').filter({ hasText: 'Walk-in Wares' });
   await row.getByTestId('attendance-check-in').click();
-  await expect(row.getByTestId('attendance-row-status')).not.toHaveText('Not yet');
+  await expect(row.getByTestId('attendance-row-status')).not.toHaveText('Not checked in');
 
   // On a market vendors apply on, they sign in and read their table like anyone.
   const vendorPage = await page.context().newPage();

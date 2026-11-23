@@ -6,6 +6,7 @@ import {
 } from '@/assets/types/datatypes';
 import {
   applicationAnswerRows,
+  businessName,
   FULL_NAME_KEY,
   PREFERRED_NAME_KEY,
   type AnswerRow,
@@ -217,8 +218,9 @@ export function allViewApplications(
 }
 
 /**
- * Whether the All view's find field finds this application (T223): by its address, or by either of
- * its names, the legal one as well as the one its row calls them, capitals aside.
+ * Whether the All view's find field finds this application (T223): by its address, by either of
+ * its names, the legal one as well as the one its row calls them, or by its business name (T502),
+ * capitals aside.
  */
 export function findsApplication(
   application: Pick<Application, 'applicantEmail' | 'formData'>,
@@ -226,11 +228,15 @@ export function findsApplication(
 ): boolean {
   const needle = words.toLowerCase();
   const answers = (application.formData ?? {}) as Record<string, unknown>;
-  return [application.applicantEmail, answers[FULL_NAME_KEY], answers[PREFERRED_NAME_KEY]].some(
-    (text) =>
-      String(text ?? '')
-        .toLowerCase()
-        .includes(needle),
+  return [
+    application.applicantEmail,
+    answers[FULL_NAME_KEY],
+    answers[PREFERRED_NAME_KEY],
+    businessName(answers),
+  ].some((text) =>
+    String(text ?? '')
+      .toLowerCase()
+      .includes(needle),
   );
 }
 

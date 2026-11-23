@@ -47,6 +47,7 @@ describe("a layout's sections", () => {
     expect(sections[0].paint).toEqual({
       fill: '--layout-section-1-fill',
       edge: '--layout-section-1-edge',
+      out: '--layout-section-1-out',
     });
     expect(sections[0].tables.map(({ id }) => id)).toEqual(['g1', 'g2']);
     expect(sections[1].tables.map(({ id }) => id)).toEqual(['s1']);

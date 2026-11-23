@@ -445,9 +445,11 @@ def fixture_bytes() -> bytes:
 
 
 def main() -> None:
+    # Made before the file is opened: a deriver that fails must leave the committed JSON as it is.
+    made = fixture_bytes()
     os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
     with open(OUTPUT, "wb") as handle:
-        handle.write(fixture_bytes())
+        handle.write(made)
     print(f"wrote {os.path.relpath(OUTPUT, os.path.dirname(BACK_END))}")
 
 

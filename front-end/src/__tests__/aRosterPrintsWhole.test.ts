@@ -3,7 +3,7 @@
  *
  * Paper is the door's only fallback when the venue's network or the back end fails, so the sheet
  * Print roster prints lists every vendor of the chosen date, by table, whatever the Show toggle and
- * the search on screen leave out: a sheet printed with "Not yet" chosen, or a name typed in the
+ * the search on screen leave out: a sheet printed with "Not checked in" chosen, or a name typed in the
  * search, would leave the door without the vendors it hid.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -68,8 +68,8 @@ function row(email: string, name: string, tableCode: string | null, more: object
   };
 }
 
-/** Today's roster as the server serves it, by table: Ana scanned in, Ben and Cy not yet, Ed here
- *  with no table today, and Dee seated on another day. */
+/** Today's roster as the server serves it, by table: Ana scanned in, Ben and Cy not checked in, Ed
+ *  checked in with no table today, and Dee seated on another day. */
 const ROSTER = {
   dates: [TODAY, '2099-12-31'],
   roster: [
@@ -159,6 +159,10 @@ describe('the printed roster', () => {
     const wrapper = await open();
 
     expect(printed(wrapper)).toEqual([ANA, BEN, CY, ED]);
+    // The column says what its time or its box is: the check-in, as the page says it (T501).
+    for (const table of sheet(wrapper).findAll('table')) {
+      expect(table.findAll('th').map((th) => th.text())).toEqual(['Table', 'Vendor', 'Checked in']);
+    }
     const ana = sheet(wrapper).get(`[data-testid="attendance-print-row"][data-vendor="${ANA}"]`);
     expect(ana.get('[data-testid="attendance-print-table"]').text()).toBe(
       'Table A1, a whole table',
@@ -175,10 +179,36 @@ describe('the printed roster', () => {
     expect(cy.find('[data-testid="attendance-print-email"]').exists()).toBe(false);
   });
 
+  it('prints an organizer\'s check-in as its time and who made it, under the column\'s own "Checked in"', async () => {
+    api.get.mockResolvedValue({
+      data: {
+        dates: [TODAY],
+        roster: [
+          row(BEN, 'Ben Wood', 'A2', {
+            state: 'here',
+            checkedInTableCode: 'A2',
+            checkedInAt: ARRIVED,
+            checkedInBy: 'org@example.com',
+          }),
+        ],
+      },
+    });
+    const wrapper = await open();
+    // The page's chip says "Checked in <time>"; the paper's header says it once for the column.
+    expect(
+      wrapper
+        .get(
+          `[data-testid="attendance-row"][data-vendor="${BEN}"] [data-testid="attendance-row-status"]`,
+        )
+        .text(),
+    ).toMatch(/^Checked in \d{1,2}:\d{2}\s[AP]M$/);
+    expect(here(wrapper, BEN).text()).toMatch(/^\d{1,2}:\d{2}\s[AP]M by you$/);
+  });
+
   it('prints whole whatever the Show toggle and the search leave on screen', async () => {
     const wrapper = await open();
 
-    await wrapper.get('[data-testid="attendance-show-not-yet"]').trigger('click');
+    await wrapper.get('[data-testid="attendance-show-not-checked-in"]').trigger('click');
     await wrapper.get('[data-testid="attendance-search"]').setValue('ben');
     expect(
       wrapper

@@ -238,7 +238,8 @@ export function legendEntries(
   const entries: LegendEntry[] = drawn
     .filter(({ tables }) => tables.length)
     .map(({ section, paint }) => ({
-      swatch: paint,
+      // A section's tint and hue: a printed layout draws no day's seats, so no out shade.
+      swatch: { fill: paint.fill, edge: paint.edge },
       name: section.name,
       tier: section.tier?.name ?? '',
     }));

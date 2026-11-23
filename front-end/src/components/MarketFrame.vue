@@ -235,6 +235,12 @@ onBeforeUnmount(() => observer?.disconnect());
   .market-fits-a-phone .market-reread-failed {
     margin: var(--space-4) var(--space-4) 0;
   }
+
+  /* The tab's note too: at the desk's 24px it stood 8px right of the rail and the failed re-read
+     line above it. */
+  .market-fits-a-phone .market-tab-note {
+    padding-inline: var(--space-4);
+  }
 }
 
 /* Red, as a refusal reads; Try again after the sentence where it fits, under it where it does not. */

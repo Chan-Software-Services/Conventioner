@@ -419,19 +419,25 @@ export async function seedPublishedMarketWithAssignments(
   email: string,
   password: string,
   // The one market date, still to come unless a spec names another.
+  // `marketDates`, every date in order, in place of `marketDate` when the market runs more than
+  // one day: each vendor applies for every one and is placed on each.
   // `intakeMode` as the market is created; absent, it is a CSV market, as it always was here.
   // `vendors`, the approved vendors, each given a table: alice and bob unless a spec needs more,
   // a door long enough to scroll, say.
   // `namePrefix`, the start of the market's name and so of its public addresses: a long one gives
   // the rail long addresses to lay out.
+  // `sectionName`, the one section's name, which begins each table's code: "A" unless a spec needs
+  // a long code, a chip that must hold one, say.
   options: {
     marketDate?: string;
+    marketDates?: string[];
     intakeMode?: 'csv' | 'form';
     vendors?: string[];
     namePrefix?: string;
+    sectionName?: string;
   } = {},
 ): Promise<PublishedSeedResult> {
-  const marketDate = options.marketDate ?? SEED_MARKET_DATE;
+  const marketDates = options.marketDates ?? [options.marketDate ?? SEED_MARKET_DATE];
   const vendors = options.vendors ?? ['alice@example.com', 'bob@example.com'];
   const userId = await loginViaApi(request, baseURL, email, password);
   const orgId = await ensureTestOrgAuthenticated(request, baseURL);
@@ -462,7 +468,7 @@ export async function seedPublishedMarketWithAssignments(
   // fabricated CSV, because the solver read a separate source_data collection.
   insertApplications(
     vendors.map((applicant) =>
-      approvedVendorApplication(marketId, applicant, { dates: [marketDate], tiers: ['Gold'] }),
+      approvedVendorApplication(marketId, applicant, { dates: marketDates, tiers: ['Gold'] }),
     ),
   );
 
@@ -470,12 +476,12 @@ export async function seedPublishedMarketWithAssignments(
   // spreadsheet column name only so the solver could look the answer up by heading.
   const setupObject = {
     priority: [],
-    marketDates: [{ date: marketDate }],
+    marketDates: marketDates.map((date) => ({ date })),
     tiers: [{ id: 0, name: 'Gold' }],
     locations: [{ name: 'Main Hall' }],
     sections: [
       {
-        name: 'A',
+        name: options.sectionName ?? 'A',
         location: { name: 'Main Hall' },
         tier: { id: 0, name: 'Gold' },
         count: Math.max(3, vendors.length),
@@ -530,6 +536,12 @@ export async function seedPublishedMarketWithAssignments(
 /** The floor plan the layout specs upload: an 800 x 600 px hall, fixture data. */
 export const LAYOUT_FLOORPLAN_PATH = fileURLToPath(
   new URL('../fixtures/test-floorplan.png', import.meta.url),
+);
+
+/** A second floor plan, of other bytes and pixels (960 x 720 px, the first's 4:3 hall), for a
+ *  market whose two locations' images must be told apart (T501); fixture data. */
+export const SECOND_FLOORPLAN_PATH = fileURLToPath(
+  new URL('../fixtures/test-floorplan-second.png', import.meta.url),
 );
 
 /** The two halls `seedLayout` gives its market, and their sections. */
@@ -718,12 +730,12 @@ export async function seedSettledLayout(
 }
 
 /**
- * Start a location's layout on a market in Draft, as the layout page does (T257): its floorplan
- * `fixtures/test-floorplan.png` uploaded and saved, and calibrated to `metresAcross` when given. On
- * a calibrated layout `tables` and `zones` are placed by a second save, each table of the market's
- * first table type, the "Standard 6 ft" the layout's start gave a market with none, its section
- * named by id and numbered 1 to N in each section in the order given. The layout as stored: its id
- * and its revision.
+ * Start a location's layout on a market in Draft, as the layout page does (T257): its floorplan,
+ * the PNG at `image` (`fixtures/test-floorplan.png` unless given), uploaded and saved, and
+ * calibrated to `metresAcross` when given. On a calibrated layout `tables` and `zones` are placed
+ * by a second save, each table of the market's first table type, the "Standard 6 ft" the layout's
+ * start gave a market with none, its section named by id and numbered 1 to N in each section in the
+ * order given. The layout as stored: its id and its revision.
  */
 export async function startLayout(
   request: APIRequestContext,
@@ -738,6 +750,8 @@ export async function startLayout(
     /** What each table's id starts with, `table` unless given: a market of two layouts gives each
      *  its own, since a seat names its table by id alone. */
     tablePrefix?: string;
+    /** The floorplan's PNG, by path: `LAYOUT_FLOORPLAN_PATH` unless given. */
+    image?: string;
   },
 ): Promise<{ id: string; revision: number }> {
   if ((options.tables?.length || options.zones?.length) && !options.metresAcross)
@@ -748,7 +762,7 @@ export async function startLayout(
       file: {
         name: 'hall.png',
         mimeType: 'image/png',
-        buffer: readFileSync(LAYOUT_FLOORPLAN_PATH),
+        buffer: readFileSync(options.image ?? LAYOUT_FLOORPLAN_PATH),
       },
     },
   });

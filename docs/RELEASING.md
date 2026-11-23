@@ -15,7 +15,7 @@ describes:
   - .github/workflows/promote.yml
   - scripts/promote_check.py
   - scripts/github_runs.py
-verified: 2026-11-18
+verified: 2026-11-19
 sources:
   - T74
   - T254
@@ -172,6 +172,10 @@ Every check the Deploy workflow makes after it builds lives in [`scripts/deploy_
    The two values prove the [deployed-host refusal](#a-deployed-host-refuses-local-switches) armed: the build has its hatch off, and sees the platform variable that makes its boot refuse one.
    They read the address through the pinned Vercel CLI's `vercel curl`, which sends Vercel's Protection Bypass for Automation for the deployment's project, so the check works whether or not Deployment Protection is on.
    When a project has no automation bypass secret, `vercel curl` creates one on the first run, a setting the workflow adds by itself; it is in the project's Settings, Deployment Protection.
+   The CLI takes its token from `VERCEL_TOKEN` in its environment, never from the command line: `vercel curl` keeps only its own options (`--yes`, `--deployment`, `--protection-bypass`, `--scope`, `--team`, `--trace`, `--json`, `--help` and `--url`) and hands every other argument to curl, before the `--` as well as after it, so a `--token` after `curl` reaches curl, which refuses it.
+   That split was read from the source of `vercel@64.5.0`, the version `VERCEL_CLI` pins in the workflow (`parseCurlLikeArgs` in the package's `dist/commands-bulk.js`, and where its `dist/index.js` reads `--token` and `VERCEL_TOKEN`), and the fake CLI in [`scripts/tests/test_deploy_proof.py`](../scripts/tests/test_deploy_proof.py) splits its arguments the same way.
+   When the pin moves, read both again in the new version, bring the fake in line with it, and run `npx --yes vercel@<version> curl https://example.vercel.app/ --yes -- -sS --max-time 20` with `VERCEL_TOKEN` set to a made-up value of letters and digits: it must not end in curl's "option ... is unknown" and exit 2, which is how a command line that hands curl an option of the CLI's ends.
+   What the CLI does with a token Vercel refuses was read from that source and not run: on a full address it looks the project up, takes a failed lookup as no bypass secret, and runs curl without the header, so the run ends in curl's own exit code.
 4. **"Promote the back end"** gives the staged back end `api.conventioner.io` (`vercel promote`), and **"api.conventioner.io serves this commit"** waits, every 5 seconds for up to 300, until the domain reports the new commit, then checks its `localDev`, `deployed` and headers as on the staged address.
 5. **"Promote the front end"** and **"conventioner.io serves this commit"** do the same for the front end, whose checks are the deep link and the five headers.
 
@@ -191,7 +195,13 @@ The failed step's log says why, in one `::error::` line; the run's summary says 
 - **A staged back end never serves**: it refused to boot or its database did not answer; read the deployment's log in Vercel, as for [a back end that refuses to boot](OPERATIONS.md#when-the-back-end-refuses-to-boot). Nothing was promoted.
 - **A staged back end "runs with ALLOW_INSECURE_LOCAL_DEV on"**: the back-end project's environment sets the hatch, on a host the boot did not see as deployed, or it would have refused. Remove it in Vercel (the back-end project, Settings, Environment Variables), make sure no `back-end/.env` is deployed, and run Deploy again. Nothing was promoted.
 - **A staged back end "does not see that it is deployed"**: none of the platform variables reached its runtime, so its refusal of local switches is not armed. Tick "Enable access to System Environment Variables" in the back-end project's Environment Variables settings on Vercel, then run Deploy again. Nothing was promoted.
-- **A staged address answers 401 or 403**: the Protection Bypass for Automation did not apply; check it in the project's Settings, Deployment Protection, and run again. Nothing was promoted.
+- **"vercel curl exited" in the log of a staged build's check**: the Vercel CLI failed before the address answered.
+  The lines after it, each starting `vercel curl:`, are the last five the CLI wrote to its error output, with the token and any long unbroken value shown as `***`, and without any line that names the bypass, a header or the command the CLI runs.
+  curl's "option ... is unknown" means the command line hands curl an option of the CLI's ([how a deploy proves itself](#how-a-deploy-proves-itself), step 3).
+  Nothing was promoted.
+- **A staged address answers 401 or 403**: the Protection Bypass for Automation did not apply; check it in the project's Settings, Deployment Protection, and run again.
+  An expired `VERCEL_TOKEN` is another cause, by the pinned CLI's source and not by a run: a CLI that cannot look the project up sends no bypass header.
+  Nothing was promoted.
 - **"Promote the back end" or "Promote the front end" fails**: the promotion may or may not have taken. Look with `curl https://api.conventioner.io/healthz` and `curl https://conventioner.io/version.json`, then run Deploy again, or `vercel promote` the staged deployment the run printed by hand.
 - **A domain times out still on the old commit**: run `vercel inspect <domain>` to see which deployment it points at, `vercel promote` the staged deployment the run printed, and look again with `curl` (below).
   When it was `api.conventioner.io`'s wait, the front end was never promoted: once the back end serves the commit, run Deploy again, or `vercel promote` the staged front end and look at `conventioner.io` the same way.
@@ -354,6 +364,7 @@ Migrations are never run automatically - rewriting stored documents is a deliber
 Production was started that way on 2026-10-18, so the list below matters only for a database older than its code.
 Every migration in `back-end/migrations/` is idempotent; the ones not described here (`migrate_roles`, `migrate_publishing_to_market_days`, `migrate_submitted_at_to_iso`, `migrate_tier_preference_per_date`, `migrate_table_code_separator`, `migrate_table_share_answer`, `migrate_to_uuid`, `add_email_verification`) each say in their own docstring what they repair and when; `cleanup_unverified_users` repairs nothing: it deletes every unverified account, and is a script never to run against production ([OPERATIONS.md](OPERATIONS.md#scripts-never-to-run-against-production)).
 `swap_location_names` is no migration and is not idempotent: it is an operator's fix of one market, and a second run swaps back ([OPERATIONS.md](OPERATIONS.md#swapping-the-names-of-two-locations)).
+`rename_location` is none either: it gives one location of one market a new name, and a second run with the same name is refused ([OPERATIONS.md](OPERATIONS.md#giving-a-location-a-new-name)).
 
 Before a deploy reaches an older production database, run the pending migrations in `back-end/migrations/` against the production database (each is idempotent, and `--dry-run` previews the changes):
 
@@ -372,11 +383,17 @@ python migrations/migrate_organization_people.py --reconcile  # ONLY after a rol
 python migrations/migrate_assignment_state.py         # AFTER the deploy, `--dry-run` first, and again after any roll forward past a rollback: stores each market's assignment state and its published revision
 python migrations/migrate_owed_day_state.py           # Right AFTER the deploy, `--dry-run` first, and again after any roll forward past a rollback: stores each owed table-day's state, and drops an Admin's amount on a day not held, recording it
 python migrations/migrate_application_status.py       # Right AFTER the deploy, before any organizer uses Begin assignment, `--dry-run` first, and again after any roll forward past a rollback: stores each application's status and origin the review reads, and marks those waiting for the deal
+python migrations/migrate_business_name.py --list    # AFTER the deploy, once per market whose form asks a business name question, past its applications stage where vendors apply on its page, `--list` and `--dry-run` first: moves that question to the built-in field (`--market <id> --question <key>`)
 ```
 
 `migrate_placement_history.py` runs **after** its deploy, not before (E40/F01/S01): it moves every `placement_history` entry into `history` with its fields unchanged and drops the old collection, and a run before the deploy leaves behind whatever the old build writes meanwhile.
 Nothing waits on it: the release reads `placement_history` beside `history`, so the older placements still show in the Assignment history and a vendor's History tab from the deploy on, and the release can be rolled back until the script has run ([the market's history](implementation/data/history.md#the-move-from-placement_history)).
 It is idempotent, so an early run does no harm, but only a run after moves everything; a later release removes the fallback once every database is moved.
+
+`migrate_business_name.py` runs **after** the deploy that ships the built-in business name ([ADR 0042](adr/0042-every-form-asks-a-built-in-business-name.md)), never before it.
+It runs once per market whose form asks a business name question of its own, past that market's applications stage where its vendors apply on its page, and with no import of that market under way; `--list` and `--dry-run` come first.
+Its procedure and refusals are in [moving a market's business name question to the built-in field](OPERATIONS.md#moving-a-markets-business-name-question-to-the-built-in-field).
+It is forward-only: after it runs, a rollback leaves the business names stored and unshown until the release is promoted again.
 
 `migrate_to_one_stage.py` runs **after** the deploy that ships the one stage ([ADR 0016](adr/0016-one-stage-for-applications-and-review.md)), whenever the operator likes, never before it: the build before reads `applications` as an unknown phase, which degrades to archived.
 That build reads the three old names as this script would leave them (`LEGACY_STAGE_PHASES` in `back-end/datatypes.py`), writing nothing back, so nothing waits on the script and the deploy can be rolled back until it has run; a later release drops those aliases once it has run on every database.

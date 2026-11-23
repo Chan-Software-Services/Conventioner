@@ -6,7 +6,9 @@
  * (T469): once the map is open it is what the market page shows. It draws each market
  * day's tables and who is at them. It publishes three answers of each vendor and nothing else of
  * them (ADR 0035): the form's short text questions an Admin points at here for the public name,
- * the website and the Instagram handle. The switch turns it on, and only once a name is chosen.
+ * the website and the Instagram handle. The public name may also be the built-in business name
+ * every form asks (T502, ADR 0042), offered first, so a form with no short text question can still
+ * open its map. The switch turns it on, and only once a name is chosen.
  *
  * Each choice saves as it is made through `PUT /markets/<id>/public-map`, and the page reads the
  * market again (`changed`), never patching it; a refusal is said on the card's error line and the
@@ -23,6 +25,7 @@ import ChoiceField from '@/components/ChoiceField.vue';
 import ElementSettingContainer from '@/components/elements/ElementSettingContainer.vue';
 import { api, getApiErrorMessage } from '@/utils/api';
 import { formTextQuestions } from '@/utils/discordQuestion';
+import { BUSINESS_NAME_KEY, BUSINESS_NAME_LABEL } from '@/utils/essentialFields';
 import { layoutPath, marketPagePath } from '@/utils/market';
 import { MarketAction, actionRefusal } from '@/utils/marketActions';
 import { useCopyAddress } from '@/utils/useCopyAddress';
@@ -48,24 +51,34 @@ const archived = computed(() => props.market.phase === MarketPhase.Archived);
 const refusal = computed(() => actionRefusal(props.market, MarketAction.PublishMap));
 const editable = computed(() => refusal.value === null);
 
-const textQuestions = computed(() => formTextQuestions(props.market));
-const questionGroups = computed<PickerGroup[]>(() => [
-  { options: textQuestions.value.map((field) => ({ value: field.key, label: field.label })) },
-]);
-
 /** The card's three questions, each by the setting it is stored as. */
 type Question = 'nameQuestion' | 'websiteQuestion' | 'instagramQuestion';
+
+const textQuestions = computed(() => formTextQuestions(props.market));
+const textOptions = computed(() =>
+  textQuestions.value.map((field) => ({ value: field.key, label: field.label })),
+);
+/** What the public name may be read from: the built-in business name first, then the form's short
+ * text questions, the server's `name_questions`. The website and the Instagram handle are the
+ * form's questions only. */
+const nameOptions = computed(() => [
+  { value: BUSINESS_NAME_KEY, label: `${BUSINESS_NAME_LABEL} (built in)` },
+  ...textOptions.value,
+]);
+const offered = (setting: Question) =>
+  setting === 'nameQuestion' ? nameOptions.value : textOptions.value;
+const groups = (setting: Question): PickerGroup[] => [{ options: offered(setting) }];
 const QUESTIONS: Array<{ setting: Question; id: string; label: string }> = [
   { setting: 'nameQuestion', id: 'name', label: 'Public name' },
   { setting: 'websiteQuestion', id: 'website', label: 'Website' },
   { setting: 'instagramQuestion', id: 'instagram', label: 'Instagram' },
 ];
 
-/** A stored question while the form still asks it as short text; one it lost reads as none, as
+/** A stored question while the setting may still name it; one the form lost reads as none, as
  * the server reads it (`chosen_question`). */
 function held(setting: Question): string {
   const key = settings.value[setting];
-  return key && textQuestions.value.some((field) => field.key === key) ? key : '';
+  return key && offered(setting).some((option) => option.value === key) ? key : '';
 }
 
 const nameChosen = computed(() => held('nameQuestion') !== '');
@@ -163,7 +176,7 @@ const { copied, copy } = useCopyAddress();
                 (field) => (fields[question.setting] = field as InstanceType<typeof ChoiceField>)
               "
               :model-value="held(question.setting)"
-              :groups="questionGroups"
+              :groups="groups(question.setting)"
               :label="question.label"
               :placeholder="NOT_SHOWN"
               :none-row="NOT_SHOWN"
@@ -180,7 +193,7 @@ const { copied, copy } = useCopyAddress();
               class="public-map-hint"
               data-testid="public-map-name-help"
             >
-              The question that holds each vendor’s business or artist name.
+              The built-in business name, or a form question that holds it.
             </p>
           </div>
           <p
@@ -188,8 +201,8 @@ const { copied, copy } = useCopyAddress();
             class="public-map-hint public-map-wide"
             data-testid="public-map-no-questions"
           >
-            The form asks no short text question yet. Add one that asks for each vendor’s business
-            name.
+            The form asks no short text question yet. Add one to show each vendor’s website or
+            Instagram handle.
           </p>
         </div>
 

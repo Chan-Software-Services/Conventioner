@@ -19,9 +19,19 @@ export interface Paint {
   edge: string;
 }
 
+/** A section colour's paint, with the darker step of its tint a checked-out seat is filled in
+ *  (T501). */
+export interface SectionPaint extends Paint {
+  out: string;
+}
+
 /** The paint of the section palette's colour `index`, 1 to 8. */
-export function sectionPaint(index: number): Paint {
-  return { fill: `--layout-section-${index}-fill`, edge: `--layout-section-${index}-edge` };
+export function sectionPaint(index: number): SectionPaint {
+  return {
+    fill: `--layout-section-${index}-fill`,
+    edge: `--layout-section-${index}-edge`,
+    out: `--layout-section-${index}-out`,
+  };
 }
 
 /** The paint of a table in no section. */
@@ -41,14 +51,16 @@ export function paintValue(colour: string): string {
 /** Which part of a table a seat holds: the whole, or the left or right half (D41). */
 export type SeatHalf = 'whole' | 'left' | 'right';
 
-/** How a held seat is drawn (D40): `filled` in its section's tint, `outlined` white in its
- *  section's hue. Attendance draws here filled and expected outlined; the public map, taken filled. */
-export type SeatTone = 'filled' | 'outlined';
+/** How a held seat is drawn (D40): `filled` in its section's tint, `checkedOut` in the tint's
+ *  darker out shade (T501), `outlined` white; each edged in its section's hue. Attendance draws
+ *  checked in filled, checked out in the out shade and not checked in outlined; the public map,
+ *  taken filled. */
+export type SeatTone = 'filled' | 'checkedOut' | 'outlined';
 
 /** How a table or a half is drawn on a day's map: by its seat's tone, or `free` with no seat. */
 export type DrawnTone = SeatTone | 'free';
 
-export const SEAT_TONES: readonly DrawnTone[] = ['filled', 'outlined', 'free'];
+export const SEAT_TONES: readonly DrawnTone[] = ['filled', 'checkedOut', 'outlined', 'free'];
 
 /** One seat of a day, as the map draws it: its `key` is the caller's own (a vendor, a seat of
  *  the public answer), told back when the seat is pressed. */
@@ -72,13 +84,15 @@ export const FREE_DASHES = '4 3';
 
 /**
  * How a table or a half is painted in a tone, from its section's paint. Every tone numbers in
- * `--mm-black`, the one ink that reads at the 7:1 a table's number is held to on each of the three
+ * `--mm-black`, the one ink that reads at the 7:1 a table's number is held to on each of the four
  * fills (`contrast.test.ts`): a section's hue on white is as low as 3.83, the muted ink on the
- * floor 4.40. A free table's edge is the grey of a table in no section, which stands at 3:1 on the
- * floor where the faint border token would not.
+ * floor 4.40. A checked-out seat's out shade stands 1.5:1 from the tint, so it is told from a
+ * checked-in one by its lightness as well as by its name. A free table's edge is the grey of a
+ * table in no section, which stands at 3:1 on the floor where the faint border token would not.
  */
-export function seatPaint(tone: DrawnTone, section: Paint): SeatPaint {
-  if (tone === 'filled') return { ...section, ink: '--mm-black' };
+export function seatPaint(tone: DrawnTone, section: SectionPaint): SeatPaint {
+  if (tone === 'filled') return { fill: section.fill, edge: section.edge, ink: '--mm-black' };
+  if (tone === 'checkedOut') return { fill: section.out, edge: section.edge, ink: '--mm-black' };
   if (tone === 'outlined') return { fill: 'white', edge: section.edge, ink: '--mm-black' };
   return {
     fill: '--layout-floor',
@@ -92,7 +106,7 @@ export interface LayoutSection {
   section: SectionObject & { id: string };
   /** Its place in the section palette, 1 to 8. */
   color: number;
-  paint: Paint;
+  paint: SectionPaint;
   /** Its tables, in number order. */
   tables: FloorplanTable[];
 }

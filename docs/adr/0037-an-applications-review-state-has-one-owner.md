@@ -11,7 +11,7 @@ describes:
   - back-end/migrations/migrate_application_status.py
   - front-end/src/__tests__/noScreenSpellsAReviewStateOut.test.ts
   - front-end/src/__tests__/support/servedReview.ts
-verified: 2026-11-18
+verified: 2026-11-20
 sources:
   - T277
   - T429

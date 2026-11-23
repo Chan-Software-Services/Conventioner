@@ -55,13 +55,13 @@ test('an organizer whose phone moves to mobile data stays signed in through a ch
 
   const attendance = new AttendanceStatusPage(page);
   await attendance.goto(seed.marketId);
-  await expect(attendance.status(vendor)).toHaveText('Not yet');
+  await expect(attendance.status(vendor)).toHaveText('Not checked in');
 
   // The phone leaves the venue's wifi.
   network.at = MOBILE_DATA;
   await attendance.checkIn(vendor);
 
-  await expect(attendance.status(vendor)).toHaveText(/ by you$/);
+  await expect(attendance.statusBy(vendor)).toHaveText('by you');
   await attendance.refresh.click();
   await expect(attendance.updated).toHaveText('Updated just now');
   await expect(attendance.refreshError).toHaveCount(0);
@@ -70,6 +70,6 @@ test('an organizer whose phone moves to mobile data stays signed in through a ch
   // And back on the wifi, a reload still opens the market signed in.
   network.at = VENUE_WIFI;
   await page.reload();
-  await expect(attendance.status(vendor)).toHaveText(/ by you$/);
+  await expect(attendance.statusBy(vendor)).toHaveText('by you');
   expect(new URL(page.url()).pathname).toBe(marketScreenPath(seed.marketId, 'attendance'));
 });

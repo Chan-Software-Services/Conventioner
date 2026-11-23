@@ -39,12 +39,15 @@ export function vendorHeadline(email: string | null | undefined, names: VendorNa
  * Does this vendor answer to what was typed in a search box? Name and address, both. Vendors and
  * Payments give `legalNames`, as `useVendorDetails` reads them, so someone going by another name is
  * also found by the name on their identification, as the export's search finds them (T223).
+ * Attendance gives `businessNames` too, since a name tag at the door may carry the name a vendor
+ * trades under (T502).
  */
 export function vendorMatches(
   query: string,
   email: string | null | undefined,
   names: VendorNames,
   legalNames: VendorNames = {},
+  businessNames: VendorNames = {},
 ): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
@@ -52,6 +55,7 @@ export function vendorMatches(
   return (
     found(normalized(email)) ||
     found(vendorName(email, names)) ||
-    found(vendorName(email, legalNames))
+    found(vendorName(email, legalNames)) ||
+    found(vendorName(email, businessNames))
   );
 }

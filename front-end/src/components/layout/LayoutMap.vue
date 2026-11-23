@@ -36,6 +36,8 @@
  * each with a seat a button of its own, and a table with no seat drawn free (D40, `seatPaint`). A
  * press on a seat emits `activateSeat` with its key before `activate` with the table's id. In
  * `read`, the `selection` and what is `marked` (seat keys or table ids) are outlined over the map.
+ * While the page waits for the floorplan image (`imagePending`, T501), the map draws the hall's floor
+ * alone, at its own size, so a location's tables and its image appear together.
  * The map owns no editing state: its only state is which table or half has the focus and, in
  * `read`, the part of the hall it shows.
  */
@@ -49,6 +51,7 @@ import {
   seatPaint,
   tableName,
   textWidthPx,
+  type LayoutSection,
   type MapSeat,
   type SeatHalf,
 } from './layoutDrawing';
@@ -107,6 +110,10 @@ const props = withDefaults(
     mode: 'read' | 'edit' | 'print';
     /** The floorplan image, as the page fetched it; none draws the floor alone. */
     imageUrl?: string;
+    /** True while the page waits for the image (T501): the map draws the hall's floor alone, no
+     *  image, table, zone or section name, at the size it keeps, so the tables and their image
+     *  appear together and nothing moves when they come. False unless given. */
+    imagePending?: boolean;
     /** Whether the image is drawn under the tables: unless told, it is in `read` and `edit`, and
      *  is left out of `print`. */
     showImage?: boolean;
@@ -486,9 +493,10 @@ const seatsByTable = computed(() => {
 const tables = computed<DrawnTable[]>(() => {
   const draw = (
     table: FloorplanObject['tables'][number],
-    section: SectionObject | null,
-    paint: { fill: string; edge: string },
+    placed: Pick<LayoutSection, 'section' | 'paint'> | null,
   ): DrawnTable => {
+    const section = placed?.section ?? null;
+    const paint = placed?.paint ?? NO_SECTION_PAINT;
     const type = typeById.value.get(table.tableTypeId);
     const size = type ?? STANDARD_TABLE;
     const number = props.numbers && section && table.number !== null ? String(table.number) : '';
@@ -501,7 +509,8 @@ const tables = computed<DrawnTable[]>(() => {
       rotation: table.rotation,
       widthMm: size.widthMm,
       depthMm: size.depthMm,
-      ...paint,
+      fill: paint.fill,
+      edge: paint.edge,
       ink: '--mm-black',
       number,
       numberSizeMm: number ? numberSizePx(size, number.length, scale.value) * mmPerPx.value : 0,
@@ -511,13 +520,13 @@ const tables = computed<DrawnTable[]>(() => {
     };
     // A day's seats are drawn on the tables with a code, the only tables a seat can name.
     const seats = seatsByTable.value;
-    if (!seats || !section || table.number === null) return drawn;
+    if (!seats || !placed || table.number === null) return drawn;
     const held = seats.get(table.id) ?? {};
     if (held.whole || !(held.left || held.right)) {
       const seat = held.whole ?? null;
       return {
         ...drawn,
-        ...seatPaint(seat ? seat.tone : 'free', paint),
+        ...seatPaint(seat ? seat.tone : 'free', placed.paint),
         name: `${named}, ${seat ? seat.name : 'no vendor'}`,
         seatKey: seat?.key ?? null,
       };
@@ -532,7 +541,7 @@ const tables = computed<DrawnTable[]>(() => {
         name: seat ? `${named}, ${side} half, ${seat.name}` : '',
         d: shape.d,
         focusD: halfTable(size, side, table.rotation, -0.25 * mmPerPx.value).d,
-        ...seatPaint(seat ? seat.tone : 'free', paint),
+        ...seatPaint(seat ? seat.tone : 'free', placed.paint),
         label,
         labelSizeMm: label
           ? numberSizePx(shape.size, label.length, scale.value) * mmPerPx.value
@@ -542,13 +551,13 @@ const tables = computed<DrawnTable[]>(() => {
     });
     return { ...drawn, halves };
   };
-  const inSections = drawnSections.value.flatMap(({ section, paint, tables: own }) =>
-    own.map((table) => draw(table, section, paint)),
+  const inSections = drawnSections.value.flatMap((placed) =>
+    placed.tables.map((table) => draw(table, placed)),
   );
   const placed = new Set(inSections.map((table) => table.id));
   const inNone = props.layout.tables
     .filter((table) => !placed.has(table.id))
-    .map((table) => draw(table, null, NO_SECTION_PAINT));
+    .map((table) => draw(table, null));
   return [...inSections, ...inNone];
 });
 
@@ -868,7 +877,7 @@ function onKeydown(event: KeyboardEvent) {
       fill="var(--layout-floor)"
     />
     <image
-      v-if="hall && imageUrl && imageShown"
+      v-if="hall && imageUrl && imageShown && !imagePending"
       class="layout-map__image"
       :class="{ 'layout-map__image--colour': !imageInGrey }"
       :href="imageUrl"
@@ -882,159 +891,162 @@ function onKeydown(event: KeyboardEvent) {
       data-testid="layout-map-image"
     />
 
-    <g
-      v-for="zone in zones"
-      :key="zone.id"
-      class="layout-map__zone"
-      :transform="zone.transform"
-      :role="interactive ? 'img' : undefined"
-      :aria-label="interactive ? zone.name : undefined"
-      data-testid="layout-map-zone"
-    >
-      <rect
-        data-testid="layout-map-zone-box"
-        :x="zone.xMm"
-        :y="zone.yMm"
-        :width="zone.widthMm"
-        :height="zone.depthMm"
-        :rx="4 * mmPerPx"
-        :fill="`url(#${hatchId})`"
-        stroke="var(--layout-zone-edge)"
-        stroke-width="1.5"
-        stroke-dasharray="6 4"
-        vector-effect="non-scaling-stroke"
-      />
-      <text
-        v-if="zone.textSizeMm > 0"
-        data-testid="layout-map-zone-label"
-        :transform="zone.upright"
-        :x="zone.xMm + zone.widthMm / 2"
-        :y="zone.yMm + zone.depthMm / 2"
-        :font-size="zone.textSizeMm"
-        font-family="Outfit, sans-serif"
-        font-weight="600"
-        text-anchor="middle"
-        dy="0.36em"
-        fill="var(--mm-black)"
-        aria-hidden="true"
+    <!-- Everything over the floor waits with the image, while it is pending. -->
+    <template v-if="!imagePending">
+      <g
+        v-for="zone in zones"
+        :key="zone.id"
+        class="layout-map__zone"
+        :transform="zone.transform"
+        :role="interactive ? 'img' : undefined"
+        :aria-label="interactive ? zone.name : undefined"
+        data-testid="layout-map-zone"
       >
-        {{ zone.label }}
-      </text>
-    </g>
+        <rect
+          data-testid="layout-map-zone-box"
+          :x="zone.xMm"
+          :y="zone.yMm"
+          :width="zone.widthMm"
+          :height="zone.depthMm"
+          :rx="4 * mmPerPx"
+          :fill="`url(#${hatchId})`"
+          stroke="var(--layout-zone-edge)"
+          stroke-width="1.5"
+          stroke-dasharray="6 4"
+          vector-effect="non-scaling-stroke"
+        />
+        <text
+          v-if="zone.textSizeMm > 0"
+          data-testid="layout-map-zone-label"
+          :transform="zone.upright"
+          :x="zone.xMm + zone.widthMm / 2"
+          :y="zone.yMm + zone.depthMm / 2"
+          :font-size="zone.textSizeMm"
+          font-family="Outfit, sans-serif"
+          font-weight="600"
+          text-anchor="middle"
+          dy="0.36em"
+          fill="var(--mm-black)"
+          aria-hidden="true"
+        >
+          {{ zone.label }}
+        </text>
+      </g>
 
-    <template v-if="mode === 'edit'">
-      <line
-        v-for="(guide, index) in guides"
-        :key="index"
-        class="layout-map__guide"
-        :x1="guide.x1Mm"
-        :y1="guide.y1Mm"
-        :x2="guide.x2Mm"
-        :y2="guide.y2Mm"
-        stroke="var(--mm-blue)"
-        stroke-width="1"
-        stroke-dasharray="4 4"
-        vector-effect="non-scaling-stroke"
-        aria-hidden="true"
-        data-testid="layout-map-guide"
+      <template v-if="mode === 'edit'">
+        <line
+          v-for="(guide, index) in guides"
+          :key="index"
+          class="layout-map__guide"
+          :x1="guide.x1Mm"
+          :y1="guide.y1Mm"
+          :x2="guide.x2Mm"
+          :y2="guide.y2Mm"
+          stroke="var(--mm-blue)"
+          stroke-width="1"
+          stroke-dasharray="4 4"
+          vector-effect="non-scaling-stroke"
+          aria-hidden="true"
+          data-testid="layout-map-guide"
+        />
+      </template>
+
+      <LayoutMapTable
+        v-for="table in tables"
+        :id="table.id"
+        :key="table.id"
+        :name="table.name"
+        :xMm="table.xMm"
+        :yMm="table.yMm"
+        :rotation="table.rotation"
+        :widthMm="table.widthMm"
+        :depthMm="table.depthMm"
+        :fill="table.fill"
+        :edge="table.edge"
+        :dashes="table.dashes"
+        :ink="table.ink"
+        :seatKey="table.seatKey"
+        :halves="
+          table.halves?.map((half) => ({
+            ...half,
+            tabStop: `${table.id}#${half.side}` === tabStopId,
+          })) ?? null
+        "
+        :number="table.number"
+        :numberSizeMm="table.numberSizeMm"
+        :selected="selected.has(table.id)"
+        :carried="carriedIds.has(table.id)"
+        :pressed="mode === 'edit' ? selected.has(table.id) : undefined"
+        :interactive="interactive"
+        :tabStop="table.id === tabStopId"
+        :mmPerPx="mmPerPx"
+        @focused="onFocused"
       />
+
+      <g
+        v-for="mark in readMarks"
+        :key="mark.id"
+        class="layout-map__read"
+        :transform="mark.transform"
+        aria-hidden="true"
+        data-testid="layout-map-read"
+      >
+        <rect
+          v-if="mark.rect"
+          v-bind="mark.rect"
+          fill="none"
+          stroke="var(--mm-black)"
+          :stroke-width="OUTLINE_WIDTH_PX"
+          vector-effect="non-scaling-stroke"
+        />
+        <path
+          v-else
+          :d="mark.d!"
+          fill="none"
+          stroke="var(--mm-black)"
+          :stroke-width="OUTLINE_WIDTH_PX"
+          vector-effect="non-scaling-stroke"
+        />
+      </g>
+
+      <g
+        v-for="label in labels"
+        :key="label.id"
+        class="layout-map__label"
+        :data-section-label="label.id"
+        aria-hidden="true"
+        data-testid="layout-map-label"
+      >
+        <rect
+          data-testid="layout-map-label-pill"
+          :x="label.x"
+          :y="label.y"
+          :width="label.width"
+          :height="label.height"
+          :rx="label.height / 2"
+          fill="white"
+          :stroke="`var(${label.edge})`"
+          stroke-width="1.5"
+          vector-effect="non-scaling-stroke"
+        />
+        <text
+          :x="label.x + label.width / 2"
+          :y="label.y + label.height / 2"
+          :font-size="LABEL_TEXT_PX * mmPerPx"
+          font-family="Outfit, sans-serif"
+          font-weight="600"
+          text-anchor="middle"
+          dy="0.36em"
+          fill="var(--mm-black)"
+        >
+          {{ label.text }}
+        </text>
+      </g>
+
+      <!-- What the editor draws over the map, in the map's millimetres: the selection's frame and
+           its corners' turn knobs. -->
+      <slot :mmPerPx="mmPerPx" />
     </template>
-
-    <LayoutMapTable
-      v-for="table in tables"
-      :id="table.id"
-      :key="table.id"
-      :name="table.name"
-      :xMm="table.xMm"
-      :yMm="table.yMm"
-      :rotation="table.rotation"
-      :widthMm="table.widthMm"
-      :depthMm="table.depthMm"
-      :fill="table.fill"
-      :edge="table.edge"
-      :dashes="table.dashes"
-      :ink="table.ink"
-      :seatKey="table.seatKey"
-      :halves="
-        table.halves?.map((half) => ({
-          ...half,
-          tabStop: `${table.id}#${half.side}` === tabStopId,
-        })) ?? null
-      "
-      :number="table.number"
-      :numberSizeMm="table.numberSizeMm"
-      :selected="selected.has(table.id)"
-      :carried="carriedIds.has(table.id)"
-      :pressed="mode === 'edit' ? selected.has(table.id) : undefined"
-      :interactive="interactive"
-      :tabStop="table.id === tabStopId"
-      :mmPerPx="mmPerPx"
-      @focused="onFocused"
-    />
-
-    <g
-      v-for="mark in readMarks"
-      :key="mark.id"
-      class="layout-map__read"
-      :transform="mark.transform"
-      aria-hidden="true"
-      data-testid="layout-map-read"
-    >
-      <rect
-        v-if="mark.rect"
-        v-bind="mark.rect"
-        fill="none"
-        stroke="var(--mm-black)"
-        :stroke-width="OUTLINE_WIDTH_PX"
-        vector-effect="non-scaling-stroke"
-      />
-      <path
-        v-else
-        :d="mark.d!"
-        fill="none"
-        stroke="var(--mm-black)"
-        :stroke-width="OUTLINE_WIDTH_PX"
-        vector-effect="non-scaling-stroke"
-      />
-    </g>
-
-    <g
-      v-for="label in labels"
-      :key="label.id"
-      class="layout-map__label"
-      :data-section-label="label.id"
-      aria-hidden="true"
-      data-testid="layout-map-label"
-    >
-      <rect
-        data-testid="layout-map-label-pill"
-        :x="label.x"
-        :y="label.y"
-        :width="label.width"
-        :height="label.height"
-        :rx="label.height / 2"
-        fill="white"
-        :stroke="`var(${label.edge})`"
-        stroke-width="1.5"
-        vector-effect="non-scaling-stroke"
-      />
-      <text
-        :x="label.x + label.width / 2"
-        :y="label.y + label.height / 2"
-        :font-size="LABEL_TEXT_PX * mmPerPx"
-        font-family="Outfit, sans-serif"
-        font-weight="600"
-        text-anchor="middle"
-        dy="0.36em"
-        fill="var(--mm-black)"
-      >
-        {{ label.text }}
-      </text>
-    </g>
-
-    <!-- What the editor draws over the map, in the map's millimetres: the selection's frame and
-         its corners' turn knobs. -->
-    <slot :mmPerPx="mmPerPx" />
   </svg>
 </template>
 

@@ -117,6 +117,7 @@ function textCell(vendor: Vendor, columnId: string): string {
   const cells: Record<string, string> = {
     name: vendor.name,
     preferredName: vendor.export.preferredName,
+    businessName: vendor.business,
     email: vendor.email,
     status: labelOf(offered.statuses, STATUS_OF[vendor.review.state]),
     datesPlaced: String(seatsOf(vendor).size),

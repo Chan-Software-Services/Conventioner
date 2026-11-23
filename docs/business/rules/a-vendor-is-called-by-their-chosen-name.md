@@ -17,6 +17,7 @@ sources:
   - E19
   - E38/F03/S01
   - T123
+  - T502
 ---
 
 # A vendor is called by their chosen name
@@ -37,17 +38,19 @@ Names arrived after markets had applications, so a market whose applications car
 
 **The name is one field, a person's.**
 The names organizers already collect arrive whole (a Google Form's "Full Legal Name" question holds a whole name in one answer), so a first-and-last split would guess, and get every "van der Berg" wrong.
-A trading name is not an essential question; an organizer who wants one asks it as their own question, and the search on the results finds a short text answer too.
+A business name is a question of its own, asked of every applicant and never required ([essential fields](../../implementation/modules/essential-fields.md), [ADR 0042](../../adr/0042-every-form-asks-a-built-in-business-name.md)): it is never the name a vendor is called by, and at the door it shows as a second line under that name.
+The search on the results finds a vendor by it, as it finds a short text answer of the market's own questions.
 
 **The name is essential because identity is, not because the solver reads it.**
-The full name is asked of every market unconditionally and required on every new save; the preferred name is asked of everyone and never required.
-Neither is solver-relevant, so correcting a spelling reopens no review, and the solver names the answers it reads, so an application stored before names existed still assigns with no migration ([essential fields](../../implementation/modules/essential-fields.md)).
+The full name is asked of every market unconditionally and required on every new save; the preferred name and the business name are asked of everyone and never required.
+None of them is solver-relevant, so correcting a spelling reopens no review, and the solver names the answers it reads, so an application stored before names existed still assigns with no migration ([essential fields](../../implementation/modules/essential-fields.md)).
 
 **The review card shows both names, labelled**, since deciding about a person is not scanning a list.
 The results download carries both too: the name they chose, then their full name, then the address.
 
-**A search finds a vendor by name or address**: the Vendors page reads "Filter by name or email…", and the search on the results also matches their short text answers.
+**A search finds a vendor by name or address**: the Vendors page reads "Filter by name or email…", and the search on the results also matches their business name and their short text answers.
 The Vendors and Payments pages and the export find them by the name on their identification as well as the one they chose, so someone going by another name can be found by either, and Applications All, the search on the results and the door's search, on its list and its map, do too.
+Applications All finds an application by its business name as well.
 
 ## Where it is kept
 

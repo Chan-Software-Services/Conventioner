@@ -7,6 +7,7 @@
  * address; a market whose map is not open reads "Page not found", as an address naming nothing.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { defineComponent, h } from 'vue';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import type { PublicMapAnswer } from '@/components/daymap/dayMap';
 import { publicDayLocations } from '@/components/daymap/dayMap';
@@ -728,6 +729,192 @@ describe('the address', () => {
       query: { date: TODAY, location: 'loc-lower' },
     });
     expect(fetchPublicMapImage).not.toHaveBeenCalledWith('harbour-night-market', 'loc-lower');
+  });
+});
+
+describe("each hall's floorplan, drawn in step with its tables (T501)", () => {
+  /** Three halls, each with an image: Upper Hall, Lower Hall and Annex. */
+  const IMAGED: PublicMapAnswer = {
+    ...ANSWER,
+    locations: [
+      ANSWER.locations[0]!,
+      { ...ANSWER.locations[1]!, layout: { ...ANSWER.locations[1]!.layout, hasImage: true } },
+      {
+        ...ANSWER.locations[1]!,
+        id: 'loc-annex',
+        name: 'Annex',
+        layout: {
+          ...ANSWER.locations[1]!.layout,
+          id: 'fp-annex',
+          locationId: 'loc-annex',
+          hasImage: true,
+          tables: [],
+        },
+      },
+    ],
+  };
+
+  /** Each image fetch held until released, by the slug and location it asked for. */
+  let held: Map<string, { release: () => void; refuse: () => void }>;
+  /** Every object URL made, each its own, and every one revoked. */
+  let made: string[];
+  let revoked: string[];
+
+  beforeEach(() => {
+    held = new Map();
+    made = [];
+    revoked = [];
+    fetchPublicMapImage.mockImplementation(
+      (slug, locationId) =>
+        new Promise<Blob>((resolve, reject) => {
+          held.set(`${slug}/${locationId}`, {
+            release: () => resolve(new Blob([`${slug}/${locationId}`], { type: 'image/png' })),
+            refuse: () => reject(new Error('network')),
+          });
+        }),
+    );
+    vi.mocked(URL.createObjectURL).mockImplementation(() => {
+      made.push(`blob:image-${made.length + 1}`);
+      return made.at(-1)!;
+    });
+    vi.mocked(URL.revokeObjectURL).mockImplementation((url) => {
+      revoked.push(url);
+    });
+  });
+
+  const asked = () => fetchPublicMapImage.mock.calls.map(([, locationId]) => locationId);
+  async function release(locationId: string, slug = 'harbour-night-market') {
+    held.get(`${slug}/${locationId}`)!.release();
+    await flushPromises();
+  }
+  const image = () => wrapper!.find('[data-testid="layout-map-image"]');
+  const tables = () => wrapper!.findAll('[data-testid="layout-table"]');
+  /** What the page says outside the drawing of the hall. */
+  const said = () => wrapper!.text().replace(wrapper!.get('[data-testid="layout-map"]').text(), '');
+
+  it("reads the open hall's image first, then each other hall's, one at a time", async () => {
+    await open(found(IMAGED), { location: 'loc-lower' });
+    expect(asked()).toEqual(['loc-lower']);
+    await release('loc-lower');
+    expect(asked()).toEqual(['loc-lower', 'loc-upper']);
+    await release('loc-upper');
+    expect(asked()).toEqual(['loc-lower', 'loc-upper', 'loc-annex']);
+    await release('loc-annex');
+    expect(asked()).toEqual(['loc-lower', 'loc-upper', 'loc-annex']);
+  });
+
+  it("holds the open hall's tables back until its image is drawn, and draws both together", async () => {
+    await open(found(IMAGED));
+    expect(tables()).toHaveLength(0);
+    expect(image().exists()).toBe(false);
+    await release('loc-upper');
+    expect(tables()).toHaveLength(4);
+    expect(image().attributes('href')).toBe('blob:image-1');
+  });
+
+  it('opens a hall read before at once, its image never read again', async () => {
+    await open(found(IMAGED));
+    await release('loc-upper');
+    await release('loc-lower');
+    await release('loc-annex');
+    for (const hall of ['loc-lower', 'loc-upper', 'loc-lower', 'loc-annex']) {
+      await locationSelect().setValue(hall);
+      await flushPromises();
+      // The hall's own image with its tables at once, and no other hall's.
+      expect(image().attributes('href')).toBe(made[asked().indexOf(hall)]);
+    }
+    expect(tables()).toHaveLength(0);
+    expect(asked()).toEqual(['loc-upper', 'loc-lower', 'loc-annex']);
+  });
+
+  it("never draws one hall's tables over another's image on a switch while its image is read", async () => {
+    await open(found(IMAGED));
+    await release('loc-upper');
+    await locationSelect().setValue('loc-lower');
+    await flushPromises();
+    expect(image().exists()).toBe(false);
+    expect(tables()).toHaveLength(0);
+    await release('loc-lower');
+    expect(image().attributes('href')).toBe('blob:image-2');
+    expect(tables().map((t) => t.attributes('data-table-id'))).toEqual(['s1']);
+  });
+
+  it('draws the image as the original: in its own colours, at full strength', async () => {
+    await open(found(IMAGED));
+    await release('loc-upper');
+    expect(image().classes()).toContain('layout-map__image--colour');
+    expect(image().attributes('opacity')).toBeUndefined();
+  });
+
+  it('offers no control over the image', async () => {
+    const page = await open(found(IMAGED));
+    await release('loc-upper');
+    for (const words of ['Show the floorplan', 'Greyscale', 'Faded']) {
+      expect(page.text()).not.toContain(words);
+    }
+    expect(page.find('input[type="checkbox"]').exists()).toBe(false);
+    expect(page.find('[role="menuitemcheckbox"]').exists()).toBe(false);
+  });
+
+  it('draws the tables on the floor, saying nothing, once the image failed', async () => {
+    await open(found(IMAGED));
+    const before = said();
+    held.get('harbour-night-market/loc-upper')!.refuse();
+    await flushPromises();
+    expect(tables()).toHaveLength(4);
+    expect(image().exists()).toBe(false);
+    expect(said()).toBe(before);
+    expect(said()).not.toMatch(/floorplan|image/i);
+  });
+
+  it('draws the tables on the floor, saying nothing, while a slow image is read past two seconds', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    await open(found(IMAGED));
+    const before = said();
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(tables()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(tables()).toHaveLength(4);
+    expect(image().exists()).toBe(false);
+    expect(said()).toBe(before);
+    expect(said()).not.toMatch(/floorplan|image/i);
+    await release('loc-upper');
+    expect(image().attributes('href')).toBe('blob:image-1');
+  });
+
+  it('places the card of a table in the address once its held tables are drawn', async () => {
+    drawnAt([
+      ['[data-testid="public-map-bubble-layer"]', new DOMRect(0, 0, 1200, 900)],
+      ['[data-testid="public-map-bubble"]', new DOMRect(0, 0, 288, 200)],
+      ['[data-table-id="g1"]', new DOMRect(500, 500, 60, 30)],
+    ]);
+    const page = await open(found(IMAGED), { table: 'g1' });
+    await release('loc-upper');
+    await frame();
+    await flushPromises();
+    const bubble = page.get('[data-testid="public-map-bubble"]');
+    expect(bubble.classes()).not.toContain('public-map-bubble--hidden');
+  });
+
+  it("forgets one market's images when another market is opened under the page", async () => {
+    // The market page keys the map by the slug, as here, so another market's map is mounted afresh.
+    fetchPublicMap.mockResolvedValue(found(IMAGED));
+    wrapper = mount(
+      defineComponent(() => () => h(PublicMapView, { key: routing.route.params.marketSlug })),
+      { attachTo: document.body },
+    );
+    await flushPromises();
+    await release('loc-upper');
+    await release('loc-lower');
+    routing.route.params = { marketSlug: 'river-craft-fair' };
+    await flushPromises();
+    await release('loc-annex');
+    // Each image read revoked, and the one landing after the page left dropped, never made into a URL; none drawn again.
+    expect(revoked).toEqual(['blob:image-1', 'blob:image-2']);
+    expect(made).toHaveLength(2);
+    expect(fetchPublicMapImage).toHaveBeenLastCalledWith('river-craft-fair', 'loc-upper');
+    await release('loc-upper', 'river-craft-fair');
+    expect(image().attributes('href')).toBe('blob:image-3');
   });
 });
 

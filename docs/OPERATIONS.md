@@ -225,7 +225,7 @@ An application that changed between the script's read and its write on three tri
 A market past Draft whose sections were set up under each other's location name is put right by [`swap_location_names.py`](../back-end/migrations/swap_location_names.py), since the app refuses the rename once [the setup has settled](business/rules/the-setup-settles-on-leaving-draft.md).
 It trades the two locations' names in the plan, in each section's copy of its location and in each stored seat's copy, and keeps every id, so a layout stays on its location under the new name.
 It needs no deploy: it changes one market's document and adds one history entry, of a kind the running release already reads.
-Run it from `back-end/` in a checkout that holds the script and whose `back-end/` otherwise equals production's, so the plan's fingerprint is computed as that release computes it: `git diff <production's commit> HEAD -- back-end ':!back-end/tests'` lists the script alone.
+Run it from `back-end/` in a checkout that holds the script and whose `back-end/` otherwise equals production's, so the plan's fingerprint is computed as that release computes it: `git diff <production's commit> HEAD -- back-end ':!back-end/tests'` lists the script alone, or it and [`rename_location.py`](../back-end/migrations/rename_location.py), the operator's script below, which the swap does not read.
 **Run it while no organizer is working on the market**: a seat assigned, freed or swapped by hand from a read just before the swap is not refused, since the assignment's revision is left unmoved, and puts every seat back under the old names over the swapped plan.
 Take a `mongodump` first ([backups](#backups-and-restoring)), then:
 
@@ -247,10 +247,115 @@ The assignment's revision and the published results are left as they are, and no
 A run records itself in the market's history as one change on Market Setup with no actor, which Manage market reads as "Someone changed Market Setup: locations and sections" when either location holds a section; a dry run records none, and a second run records a second entry.
 That entry holds the plan's whole list of locations, and its whole list of sections when either location holds one, before and after, as a plan save's entry does, so every location's name is in it, not the two alone.
 That entry is a second write, after the swap: if it fails, the names stand swapped with no entry, the script's own output holds a warning naming the market by id, and the next dry run's line "run(s) of this script recorded so far" counts one fewer than were run.
+That line counts every Market Setup change with no actor, so it also counts each run of `rename_location.py` ([below](#giving-a-location-a-new-name)).
 Do not run again to repair it, since that swaps back.
 The market's history keeps the names as they were when each entry was recorded, in three kinds of entry: a layout's save (`floorplan`) and a layout removed with its location (`floorplan_removed`), whose sentence in Manage market names the location, and a change on Market Setup (`plan`), whose detail holds the locations and sections before and after.
 None is rewritten, by Daniel's choice, for a later fix: a layout's save recorded before the swap still names its location by the old name, and the script prints how many of the first two kinds name either location.
 It prints the market's id, the two locations' names, their sections' names and counts, never a vendor's name or address and no other location's name; that is of what it prints, not of the history entry.
+
+### Giving a location a new name
+
+One location of a market past Draft is given a new name by [`rename_location.py`](../back-end/migrations/rename_location.py), since the app refuses the rename once [the setup has settled](business/rules/the-setup-settles-on-leaving-draft.md).
+It follows the swap above step for step, for one location and a name no location of the market holds: it writes the name in the plan, in each section's copy of its location and in each stored seat's copy, and keeps every id, so a layout stays on its location under the new name.
+It needs no deploy: it changes one market's document and adds one history entry, of a kind the running release already reads.
+
+Run it from `back-end/` in a checkout of the commit production serves, with the script taken from a commit that holds it, so the plan's fingerprint is computed as that release computes it.
+This holds before and after a deploy:
+
+```bash
+git fetch origin
+git checkout --detach <production's commit>
+git checkout origin/dev -- back-end/migrations/rename_location.py
+git diff --name-only <production's commit> -- back-end ':!back-end/tests'   # lists rename_location.py alone
+```
+
+The last line is the check: the working tree differs from production's commit, outside the tests, by operator scripts alone (this one, and `swap_location_names.py` when production's commit does not hold it and the checkout does).
+The script imports nothing of the swap's, so it runs on a release from before the swap as well.
+A checkout of `dev`'s head serves as well exactly when `git diff <production's commit> HEAD -- back-end ':!back-end/tests'` lists nothing but those scripts, which holds from the deploy of a commit until the next merge into `dev` that changes the back end.
+The fingerprint and the write are computed by `assignment/made_from.py`, `market_documents.py`, `market_write.py` and `datatypes.py`, with `tombstone.py` and `assignment/utils.py`, which they import: a checkout where one of them differs from production's may compute another fingerprint, which the dry run shows as the allocation's record "left as it is" on a market whose allocation the app shows as current.
+
+**Run it while no organizer is working on the market**, for the swap's reason: a seat assigned, freed or swapped by hand from a read just before the rename is not refused, and puts every seat back under the old name over the renamed plan.
+Take a `mongodump` first ([backups](#backups-and-restoring)), then:
+
+```bash
+MONGODB_URI='<URI>' .venv/bin/python migrations/rename_location.py <market-id> '<location>' '<new name>' --dry-run   # writes nothing
+MONGODB_URI='<URI>' .venv/bin/python migrations/rename_location.py <market-id> '<location>' '<new name>'
+MONGODB_URI='<URI>' .venv/bin/python migrations/rename_location.py <market-id> '<location id>' '<old name>' --dry-run   # shows the way back, and writes nothing
+```
+
+The location is named by its id or its exact name.
+The dry run prints the location's id, its name before and after, and each section in it; read it before the run.
+**A rename is undone by a second run giving the old name**, which restores every value the first wrote but the plan's revision, which counts each run; the last line above is that run's dry run, and shows the first one's "after" as its "before".
+That holds but for an old name that is empty or starts or ends with a space, which the script refuses as a new name: the first dry run shows the old name in quotes, and the way back from such a name is the backup.
+The new name is stored as given.
+Market Setup stores a location's name as typed, trims nothing, sets no limit and does not refuse two locations of one name; the script is stricter, since a seat's copy of a name must say which location it means.
+It refuses, exiting 1 with nothing written: a name that is empty or only spaces, that starts or ends with a space, that the location already has, or that another of the market's locations has; a name a section's or a seat's copy already holds; and each case the swap refuses that applies to one location (a draft, a location it does not find or that shares its name, a location or section with no stored id, a plan or a seat whose copy of the name disagrees with the location it belongs to).
+Its docstring lists each refusal.
+The rename is one update of the market's document, so it lands whole or not at all; a market whose plan, seats or phase changed between the read and the write is refused with nothing written, and running it again reads it afresh.
+It counts the plan's revision, so a plan or layout save that read the market before the rename is refused as a market that changed.
+If the dry run of the way back refuses with a stored seat that "already names a location" of the old name, a seat was written by hand across the rename: stop, and put the seats' names right in the database by hand, each to its section's location.
+If a dry run says the allocation's record of the plan is "left as it is, since it already differs from the plan as read" on a market whose allocation the app shows as current, stop: the checkout computes the fingerprint differently from the release.
+The assignment's revision and the published results are left as they are, and nothing is sent to anyone.
+
+A run records itself in the market's history as one change on Market Setup with no actor, as a swap does, which Manage market reads as "Someone changed Market Setup: locations and sections" when the location holds a section; a dry run records none.
+That entry holds the plan's whole list of locations, and its whole list of sections when the location holds one, before and after, so every location's name is in it.
+It is a second write, after the rename: if it fails, the location stands renamed with no entry, the script's own output holds a warning naming the market by id, and running again repairs nothing.
+**The two scripts count each other's entries differently.**
+The swap's line "run(s) of this script recorded so far" counts every Market Setup change with no actor, so after a rename it reads one more than the swaps that were run.
+The rename's line "rename(s) by this script recorded so far, of N Market Setup change(s) with no actor" counts as a rename only an entry whose locations differ, before and after, in the name of exactly one, and gives beside it the N the swap would count.
+So the two may be run in either order, and the swaps recorded are N less the renames.
+The market's earlier history keeps the name as it was when each entry was recorded, as after a swap, and none is rewritten: the script prints how many layout saves and layout removals name the location.
+It prints the market's id, the location's id and names, its sections' names and counts, never a vendor's name or address and no other location's name; that is of what it prints, not of the history entry.
+
+### Moving a market's business name question to the built-in field
+
+Every form asks a built-in, optional "Business name" ([ADR 0042](adr/0042-every-form-asks-a-built-in-business-name.md)), which Attendance shows under each vendor's name.
+A market whose form asked one as a short text question of its own keeps its vendors' answers under that question's key, where Attendance does not read them, until [`migrate_business_name.py`](../back-end/migrations/migrate_business_name.py) moves them, for one market and one question key at a time, and takes the question off the form past [the form's lock](business/rules/the-form-locks-at-the-first-application.md).
+
+**Run it after the deploy of a release that holds it**, from `back-end/` in a checkout of the commit production serves: it reads the built-in field's own rules (`essential_fields.given_business_name`) and the stored run's fingerprint (`assignment/made_from.py`) as that release has them.
+The release is safe before the script runs: until then the market reads as before, its answers under its own question.
+**Run it once the market's applications stage is over** where its vendors apply on its page, and while no import of that market is under way.
+A vendor's save and an import build the answers from the form as the market asks it then and compare them whole to what is stored, so from step 1 until step 3 is done either reads a moved answer as changed and sends a verdict back to open, and an import of the same file before step 2 removes the copies step 1 made.
+A vendor's save holds no form revision either, so one from a page opened before the run sends the old question's answer, which the form no longer keeps, beside a blank built-in field, and the business name is stored nowhere.
+So a run that moves the question is refused on a market whose vendors apply on its page while it is in its applications stage, taking applications or stopped, and a run left after step 1 or step 2 is finished before any import of that market.
+A market moved back into the applications stage after a run can still lose a business name that way, from a page a vendor opened before the run.
+An organizer with the form editor open (a draft only) is refused their next save and reads the form again.
+Take a `mongodump` first ([backups](#backups-and-restoring)), then list, dry-run and run:
+
+```bash
+MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_business_name.py --list   # writes nothing
+MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_business_name.py --market <market-id> --question <key> --dry-run   # writes nothing
+MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_business_name.py --market <market-id> --question <key>
+```
+
+`--list` prints each live market's short text question whose key or label holds "business", with the market's id, name, phase and intake mode, the question's key and label, how many applications answered it, how many already hold a built-in business name, and what else names it, and says so where a run that moves the question is refused until the market's applications stage is over.
+The run takes the key from that list, never a label: `--market` and `--question` are both required, and without either the script prints its usage and exits 1.
+The dry run prints the lines the run prints, but for its first line, which says it is a dry run, and its last, which says what a run would do; read them before the run.
+
+The run writes in three steps, each held to what it read and safe to repeat:
+
+1. Each vendor's answer, stripped, is copied to the built-in key, and each organizer's update of it to the built-in's update, its value and the answer it was made over as the built-in stores them.
+   An update whose value is the vendor's own business name is not copied, as Update info would not store it, and step 3 removes it.
+   A blank answer, or one that is exactly a none word ("N/A", "none" and the rest of the import's `NONE_WORDS`, in any capitals), is no business name and is not copied; "N/A Studios" is.
+   An application that already holds a different built-in business name keeps it, and an organizer's update of the question moves beside it all the same, made over the old answer, so every organizer's screen and the public map read the update where one moved; the run prints its id.
+2. One write of the market, holding its form's revision and every part it reads: the question leaves the form and the rest are renumbered, and the public map's name, a review highlight, the saved import mapping and a stored run's record of the applications follow it to the built-in key; its example column is removed.
+   It records one form change with no actor in the market's history.
+3. The old answers and updates are cleared.
+
+From step 1 a vendor's business name shows on Attendance at its next read, and the public map shows the same name for each vendor whose answer was copied throughout; a vendor whose answer was a none word, shown on the map as written until step 2, shows no name after it, and one who kept another built-in business name shows that, or the organizer's update of the question where one moved beside it.
+The script touches no status, verdict or `updated_at`, and sends nothing to anyone.
+
+It refuses, exiting 1 with nothing written: a market it does not find or that is being deleted; a run that moves the question on a market whose vendors apply on its page while it is in its applications stage (a finishing run is let through, since it only copies what is left and clears the old key, which ends the state in which every save reads as changed); a key under the `essential_` prefix; a question that is not a short text question; a question the public map's website or Instagram choice, Discord's username question, a priority rule, a price group or a rejection rule names (each named in the refusal: change that first); and a saved mapping that already maps a column to the built-in field.
+Its docstring lists each refusal.
+A market that changed between the read and step 2 (a form save, an import, another run), or was deleted then, is left as it was, and the script says it "stopped after step 1": the copied business names stay, and running it again finishes.
+**A run cut anywhere is finished by running it again with the same arguments**, but for the history entry of a run cut between step 2's write and its entry, which no later run records.
+With the question still on the form, the run is made whole again, finding step 1's copies made; with the question off the form and answers left under it, the script says it is finishing a run and does steps 1 and 3; with none left, it says the market is already migrated, writes nothing and exits 0.
+A key the form never asked also reads as already migrated, so take the key from `--list`.
+If it prints that some applications "changed during the run and were left", a vendor saved meanwhile: run it again.
+
+**It is forward-only.**
+A rollback of the code after a run leaves the business names stored and unshown, since an older build ignores the built-in key, until a release with the field is promoted again; the moved question does not come back.
+It prints ids, keys, labels and counts, never a vendor's answer, name or address.
 
 ### When the back end refuses to boot
 

@@ -106,10 +106,10 @@ const PLACES = [
     today: 'At most one, its count in brackets; a second press lets go, with a cross.',
   },
   {
-    place:
-      'Attendance: the dates, and All, Not yet (Did not come once the day is over), Checked in',
+    place: 'Attendance: All, Not checked in, Checked in, Checked out',
     file: 'views/AttendanceStatusView.vue',
-    today: 'Two rows, one choice each; a date counts "here of expected", two figures.',
+    today:
+      'One choice, its count after its label, the last three apart; the date is a select, and the bar counts "N of M checked in".',
   },
   {
     place: 'Assignments: the status pills',

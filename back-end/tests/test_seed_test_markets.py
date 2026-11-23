@@ -79,6 +79,13 @@ def test_each_market_decides_its_review_setup_before_it_may_enter_review(monkeyp
     assert moves == ([] if test_market.intake_mode is IntakeMode.CSV else [len(writes) - 1])
 
 
+def test_its_form_asks_no_business_name_of_its_own():
+    """Every form asks the built-in one (T502): a question of the market's own beside it would ask
+    each test vendor for their business name twice."""
+    assert [(field["key"], field["order"]) for field in seeder.TEST_FORM_FIELDS] == [
+        ("product_type", 0)]
+
+
 def test_nothing_it_writes_names_a_person():
     """No real applicant's details: the markets hold a plan and questions, and nobody's address."""
     written = repr((seeder.TEST_ORGANIZATION, seeder.TEST_MARKETS, seeder.test_plan(TODAY),

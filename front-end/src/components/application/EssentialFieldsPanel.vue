@@ -13,6 +13,7 @@ import { computed } from 'vue';
 import type { EssentialFormOptions } from '@/assets/types/datatypes';
 import {
   AVAILABLE_DATES_LABEL,
+  BUSINESS_NAME_LABEL,
   FULL_NAME_LABEL,
   MAX_DATES_LABEL,
   PREFERRED_NAME_LABEL,
@@ -119,6 +120,16 @@ function asks(key: string): boolean {
       </p>
     </div>
 
+    <div class="essential-item" data-testid="essential-item-business-name">
+      <div class="essential-item-header">
+        <span class="essential-item-label">{{ BUSINESS_NAME_LABEL }}</span>
+        <span class="essential-type-badge">text</span>
+      </div>
+      <p class="essential-item-detail">
+        Optional. The name they trade under, shown under their name on Attendance.
+      </p>
+    </div>
+
     <div class="essential-item" data-testid="essential-item-available-dates">
       <div class="essential-item-header">
         <span class="essential-item-label">{{ AVAILABLE_DATES_LABEL }}</span>
@@ -201,9 +212,8 @@ function asks(key: string): boolean {
         <span class="essential-type-badge">optional</span>
       </div>
       <p class="essential-item-detail">
-        The only optional essential question. An applicant who names a partner is assigned to the
-        same table as them when possible; one who leaves it blank may be paired with anyone else
-        sharing.
+        Optional. An applicant who names a partner is assigned to the same table as them when
+        possible; one who leaves it blank may be paired with anyone else sharing.
       </p>
     </div>
 

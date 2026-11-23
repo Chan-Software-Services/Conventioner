@@ -19,6 +19,7 @@ import app as app_module
 import db_config as test_db_config
 import services.gridfs_service as GridfsService
 from datatypes import MarketPhase, market_name_slug
+from essential_fields import BUSINESS_NAME_KEY
 
 SLUG = market_name_slug("Test Market")
 MARKET = "market-123"
@@ -436,6 +437,102 @@ class TestTheGate:
         assert response.status_code == 200
 
 
+def _built_in(doc):
+    """The map takes its public name from the built-in business name."""
+    doc["publicMap"]["nameQuestion"] = BUSINESS_NAME_KEY
+
+
+def _name_of(client, table):
+    return [seat["name"] for seat in _map(client).get_json()["seats"]
+            if seat["tableId"] == table]
+
+
+class TestTheBuiltInBusinessName:
+    """A map whose public name is the built-in business name (T502, ADR 0042): open under the
+    same gate, each seat named by what the organizer reads, cleaned as any published name."""
+
+    @pytest.fixture(autouse=True)
+    def named_by_the_built_in(self, world, applications):
+        _built_in(world.doc)
+        for email, name in (("ana@ember.test", "  Paper   & Pine "),
+                            ("ben@kiln.test", "orders@kiln-studio.test"),
+                            ("dev@dough.test", "Dev's Donuts")):
+            applications.update_one({"applicant_email": email},
+                                    {"$set": {f"form_data.{BUSINESS_NAME_KEY}": name}})
+
+    def test_a_seat_is_named_by_its_vendors_built_in_business_name(self, client, world):
+        assert _name_of(client, "t-a1") == ["Paper & Pine"]
+        assert _name_of(client, "t-b2") == ["Dev's Donuts"]
+
+    def test_the_forms_own_question_is_no_longer_read_for_the_name(self, client, world):
+        text = _map(client).get_data(as_text=True)
+
+        assert "Ember Ceramics" not in text
+        assert "Dev's Doughnuts" not in text
+
+    def test_the_website_and_instagram_are_still_the_forms_questions(self, client, world):
+        assert _map(client).get_json()["seats"][0] == {
+            "date": DAY_ONE, "tableId": "t-a1", "half": "whole", "name": "Paper & Pine",
+            "website": "https://ember-ceramics.test", "instagram": "example.ember"}
+
+    def test_a_vendor_with_none_is_a_taken_table_with_no_details(self, client, world):
+        seats = _map(client).get_json()["seats"]
+
+        assert {"date": DAY_ONE, "tableId": "t-a3", "half": "right", "name": None,
+                "website": None, "instagram": None} in seats
+
+    def test_one_that_is_an_email_address_is_withheld(self, client, world):
+        ben = next(seat for seat in _map(client).get_json()["seats"] if seat["half"] == "left")
+
+        assert ben["name"] is None
+        assert "@" not in _map(client).get_data(as_text=True)
+
+    def test_a_long_one_is_cut_as_any_published_name(self, client, world, applications):
+        applications.update_one({"applicant_email": "ana@ember.test"},
+                                {"$set": {f"form_data.{BUSINESS_NAME_KEY}": "P" * 200}})
+
+        assert _name_of(client, "t-a1") == ["P" * 80]
+
+    def test_an_organizers_update_stands_over_the_vendors_answer(
+            self, client, world, applications):
+        applications.update_one({"applicant_email": "dev@dough.test"}, {"$set": {
+            f"answer_updates.{BUSINESS_NAME_KEY}": {
+                "value": "Dev's Doughnuts & Co", "by": "owner@example.com",
+                "at": "2099-07-01T00:00:00+00:00", "over": "Dev's Donuts"}}})
+
+        assert _name_of(client, "t-b2") == ["Dev's Doughnuts & Co"]
+
+    def test_an_organizers_blank_update_leaves_the_table_with_no_name(
+            self, client, world, applications):
+        applications.update_one({"applicant_email": "dev@dough.test"}, {"$set": {
+            f"answer_updates.{BUSINESS_NAME_KEY}": {
+                "value": "", "by": "owner@example.com",
+                "at": "2099-07-01T00:00:00+00:00", "over": "Dev's Donuts"}}})
+
+        assert _name_of(client, "t-b2") == [None]
+
+    def test_it_is_open_on_a_form_with_no_short_text_question(self, client, world):
+        world.doc["applicationForm"]["fields"] = world.doc["applicationForm"]["fields"][4:]
+
+        response = _map(client)
+
+        assert response.status_code == 200
+        assert response.get_json()["seats"][0] == {
+            "date": DAY_ONE, "tableId": "t-a1", "half": "whole", "name": "Paper & Pine",
+            "website": None, "instagram": None}
+
+    @pytest.mark.parametrize("close", [
+        close for close in CLOSED
+        if close not in (_name_question_removed_from_the_form, _name_question_no_longer_text)
+    ], ids=lambda close: close.__name__.strip("_"))
+    def test_it_closes_for_the_same_reasons(self, client, world, close):
+        close(world.doc)
+
+        assert _answer(_map(client)) == _answer(_map(client, "no-such-market"))
+        assert _answer(_image(client)) == _answer(_image(client, slug="no-such-market"))
+        assert _map(client).status_code == 404
+
+
 class TestTheImage:
     def test_it_is_the_layouts_image_with_its_type_and_cache_header(self, client, world):
         world.images.files[next(iter(world.images.files))]["data"] = _png()
@@ -446,6 +543,8 @@ class TestTheImage:
         assert response.get_data() == _png()
         assert response.headers["Content-Type"] == "image/png"
         assert response.headers["Cache-Control"] == "public, max-age=300"
+        # Its tag would be the image's id, which this route never shows (T501).
+        assert "ETag" not in response.headers
 
     @pytest.mark.parametrize("location", [SOUTH["id"], ANNEX["id"], "loc-nowhere", "fp-north"])
     def test_a_location_the_map_does_not_draw_or_with_no_image_is_absent(

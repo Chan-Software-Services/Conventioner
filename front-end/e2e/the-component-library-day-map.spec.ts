@@ -6,9 +6,9 @@ import { inTheWindow } from './helpers/phoneWindow';
 /**
  * The component library's `day-map` entry (T422): `DayMap` on the fixture's market day, Upper
  * Hall and Lower Hall with their seats dealt from seed 422, at a desk and on a phone. Each table is
- * drawn filled, outlined or free, a shared table is two halves each pressed on its own, a press is
- * read out, the location switch opens Lower Hall with its turned stage, a search's mark outlines
- * one half, and the map zooms by its buttons and, at a desk, by Ctrl and the wheel. Filling a box
+ * drawn filled, checked out in the darker out shade (T501), outlined or free, a shared table is
+ * two halves each pressed on its own, a press is read out, the location switch opens Lower Hall
+ * with its turned stage, a search's mark outlines one half, and the map zooms by its buttons and, at a desk, by Ctrl and the wheel. Filling a box
  * of its own, as the public map's hall draws it (T465), the map takes the box whole, and the
  * caller's legend and the zoom stand over its bottom corners, or in a row under it in a narrow box.
  */
@@ -37,7 +37,7 @@ eachWindow('the day map entry', (size) => {
     await expect(page.getByTestId('choices-for-you').getByRole('listitem')).toHaveCount(8);
     const door = page.getByTestId('library-day-map-door');
     await expect(readOutsOf(door).nth(2)).toHaveText(
-      'Dealt: 63 tables, 45 seats filled, 18 outlined, 8 tables free, 13 shared, 5 of them with a half free',
+      'Dealt: 63 tables, 33 seats filled, 12 in the out shade, 18 outlined, 8 tables free, 13 shared, 5 of them with a half free',
     );
     await expectLaidOut(page, size, 'the day map entry');
     await expectAccessible('the day map entry');
@@ -48,15 +48,22 @@ eachWindow('the day map entry', (size) => {
     const door = page.getByTestId('library-day-map-door');
     const map = door.getByTestId('layout-map');
     await expect(map).toHaveAccessibleName('Upper Hall layout, 49 tables');
+    // Attendance's three states in its words, and the free table (T501).
     await expect(door.getByTestId('day-map-legend-item')).toHaveText([
-      'Here',
-      'Expected',
+      'Checked in',
+      'Checked out',
+      'Not checked in',
       'No vendor',
     ]);
 
-    // Filled in Silver aisle's tint, outlined white, free on the floor with a dashed edge.
+    // Filled in Silver aisle's tint, checked out in its darker out shade, outlined white, free on
+    // the floor with a dashed edge.
     const here = map.getByRole('button', { name: 'Silver aisle 5, Standard 6 ft, Oakmoss Soaps' });
     expect(await fillOf(here.getByTestId('layout-table-top'))).toBe('rgb(220, 233, 238)');
+    const gone = map.getByRole('button', {
+      name: 'Silver aisle 2, Standard 6 ft, Fennel Leather',
+    });
+    expect(await fillOf(gone.getByTestId('layout-table-top'))).toBe('rgb(146, 187, 200)');
     const free = map.getByRole('button', { name: 'Gold row 6, Standard 6 ft, no vendor' });
     expect(await fillOf(free.getByTestId('layout-table-top'))).toBe('rgb(244, 242, 238)');
     await expect(free.getByTestId('layout-table-top')).toHaveAttribute('stroke-dasharray', '4 3');

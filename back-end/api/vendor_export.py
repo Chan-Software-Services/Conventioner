@@ -334,6 +334,8 @@ def offered_columns(market: Market) -> List[Column]:
     return [
         Column("name", "Name", answer(EssentialFields.FULL_NAME_KEY)),
         Column("preferredName", "Preferred name", answer(EssentialFields.PREFERRED_NAME_KEY)),
+        Column("businessName", EssentialFields.BUSINESS_NAME_LABEL,
+               lambda vendor: EssentialFields.business_name(vendor.answers)),
         Column("email", "Email", lambda vendor: vendor.application.applicant_email.strip()),
         Column("status", "Status", lambda vendor: _status_text(vendor.application)),
         *(

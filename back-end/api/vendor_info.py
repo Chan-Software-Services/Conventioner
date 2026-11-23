@@ -88,14 +88,14 @@ def update_vendor_info(
     kept_over: Dict[str, Any] = {}
     matched: Dict[str, Any] = {}
     for key, value in values.items():
-        if value == before.get(key):
+        if value == _as_an_update_stores(key, before.get(key)):
             # Restated over an answer the vendor changed since: the organizer keeps their update
             # over what they wrote now, which is what "Their answer changed since your update."
             # asked of them; where what they wrote now is the update itself, the update is taken
             # away, as setting an answer back to theirs does. Restated otherwise, it changes
             # nothing and keeps who made it.
             if key in standing and _over(standing[key]) != theirs.get(key):
-                if value == theirs.get(key):
+                if value == _as_an_update_stores(key, theirs.get(key)):
                     matched[key] = value
                     cleared.append(key)
                 else:
@@ -104,7 +104,7 @@ def update_vendor_info(
                     updates[key] = AnswerUpdate(
                         value=value, by=updater, at=now, over=theirs.get(key))
             continue
-        if value == theirs.get(key):
+        if value == _as_an_update_stores(key, theirs.get(key)):
             cleared.append(key)
         else:
             updates[key] = AnswerUpdate(value=value, by=updater, at=now, over=theirs.get(key))
@@ -182,6 +182,15 @@ def assert_may_update_what_the_assignment_or_prices_read(
         Actions.UPDATE_ASSIGNMENT_OR_PRICE_INFO, change.asked.actor, market, change.organization)
     if refused:
         raise ForbiddenError(refused)
+
+
+def _as_an_update_stores(key: str, answer: Any) -> Any:
+    """An answer as an update of it would be stored, to compare the two. The business name is kept
+    only when given (``EssentialFields.BUSINESS_NAME_KEY``) and an update of it left blank is
+    ``""``, so a blank one over a vendor who gave none is their own answer, not an update."""
+    if key == EssentialFields.BUSINESS_NAME_KEY and answer is None:
+        return ""
+    return answer
 
 
 def _over(update: Any) -> Any:

@@ -16,7 +16,7 @@ describes:
   - front-end/e2e/the-public-map.spec.ts
   - back-end/market_documents.py#public_map_is_open
   - front-end/src/views/MarketPublicView.vue
-verified: 2026-11-19
+verified: 2026-11-20
 sources:
   - wayfinding/v0-1-0/06
   - wayfinding/v0-1-0/07
@@ -74,7 +74,7 @@ One that has reached its market days has a page too, published or not: a Google 
 An archived one that reached them counts, by its phase record, and where that record began late, by a check-in, as everywhere else that asks whether a market ran.
 
 **A market's public map answers the same way while it is closed** ([ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md)).
-It is open only while the vendor page finds the market and `public_map_is_open` holds: its results are out (published, or it reached its market days), it is not archived, an Admin has turned it on, its public name question is still a short text question of the form, and a location is laid out with a table in a section; its read and its image then answer byte for byte as a slug naming no market does, with the vendor page's own body.
+It is open only while the vendor page finds the market and `public_map_is_open` holds: its results are out (published, or it reached its market days), it is not archived, an Admin has turned it on, its public name question is still one the map may name (the built-in business name, or a short text question of the form), and a location is laid out with a table in a section; its read and its image then answer byte for byte as a slug naming no market does, with the vendor page's own body.
 A seat is never public before its vendor is told it, and an archived market can no longer be written, so its switch could never be turned off.
 What a public read may answer at all is [security invariants](../../implementation/conventions/security-invariants.md#each-request)' to say.
 The map is shown on the market page while it is open, and `/<slug>/map` lands there; while it is closed the market page shows a market the vendor page finds its application call or its notice instead ("The map isn't published yet." once its results are out), which says no more than the vendor page already does ([the public map page](../../implementation/modules/public-map-page.md)).

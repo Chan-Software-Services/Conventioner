@@ -15,7 +15,7 @@ import { VendorsPage } from './pages/VendorsPage';
  * The Stats tab's strip (T201): three or four tiles chosen by the market's phase, each the figure
  * the page it links to shows, and the link opens that page with its filter - none in draft; who
  * applied, who is open to review and the table-days asked in applications; the table-days used, who
- * is unassigned and what is still owed in assignment; who is in and who is not yet on the day
+ * is unassigned and what is still owed in assignment; who is checked in and who is not on the day
  * counted, and what is still owed, in Market Days; who came, the table-days used and what was paid in
  * the archive.
  * Below them the Money section tells the market's money with a bar of paid against owed, and from
@@ -271,13 +271,13 @@ test('from assignment to the archive, each tile is the figure of the page it lin
   stats = await openStats(page, marketId);
   expect(await tiles(stats)).toEqual([
     '1 of 2 checked in, May 1, 2099',
-    '1 not yet in',
+    '1 not checked in',
     '$35.00 still owed',
   ]);
   await expectOneRow(stats);
 
   const door = new AttendanceStatusPage(page);
-  for (const id of ['checkedIn', 'notYet']) {
+  for (const id of ['checkedIn', 'notCheckedIn']) {
     await follow(stats, marketId, id, async () => {
       await expect(page).toHaveURL(new RegExp(`/attendance\\?date=${SEED_MARKET_DATE}$`));
       await expect(door.dateSelect).toHaveValue(SEED_MARKET_DATE, { timeout: 15000 });
@@ -385,7 +385,7 @@ test("the money reads the Payments page's figures, a bar of paid against owed, a
   });
 });
 
-test("check-in reads each day's vendors in of those expected from Market Days, and who is not yet in opens that day", async ({
+test("check-in reads each day's vendors in of those expected from Market Days, and who is not checked in opens that day", async ({
   authenticatedPage: page,
   request,
 }) => {
@@ -402,7 +402,7 @@ test("check-in reads each day's vendors in of those expected from Market Days, a
 
   await publishResults(request, BACKEND_URL, TEST_USER.email, marketId);
   await call(request, 'post', `/markets/${marketId}/transition`, { toPhase: 'market_days' });
-  // Alice and Bob are in on the first day; Carol is in on the second, where Alice is not yet.
+  // Alice and Bob are in on the first day; Carol is in on the second, where Alice is not.
   recordCheckIns(
     marketId,
     [
@@ -424,10 +424,10 @@ test("check-in reads each day's vendors in of those expected from Market Days, a
   // Nobody missing is said, not linked; a reader hears the row as one line.
   await expect(first.getByTestId('stats-check-in-missing')).toHaveText('Everyone is in');
   await expect(first.getByRole('link')).toHaveCount(0);
-  await expect(second).toHaveText('Friday, May 8, 2099: 1 of 2 checked in, 1 not yet');
+  await expect(second).toHaveText('Friday, May 8, 2099: 1 of 2 checked in, 1 not checked in');
   await expect(second.getByTestId('stats-check-in-row-bar')).toHaveAttribute('aria-hidden', 'true');
 
-  await second.getByRole('link', { name: '1 not yet' }).click();
+  await second.getByRole('link', { name: '1 not checked in' }).click();
   await expect(page).toHaveURL(new RegExp(`/attendance\\?date=${SECOND_DATE}$`));
   const door = new AttendanceStatusPage(page);
   await expect(door.dateSelect).toHaveValue(SECOND_DATE, { timeout: 15000 });

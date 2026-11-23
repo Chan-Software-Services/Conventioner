@@ -29,6 +29,14 @@ export const ESSENTIAL_KEY_PREFIX = 'essential_';
 export const FULL_NAME_KEY = 'essential_full_name';
 /** The name a vendor is CALLED, as against the one on their identification (E19/F02/S01). */
 export const PREFERRED_NAME_KEY = 'essential_preferred_name';
+/**
+ * The name a vendor TRADES under, asked of every applicant right after the preferred name and never
+ * required (T502, ADR 0042). Never the name a vendor is called by: `applicantName` does not read it.
+ *
+ * The server stores it only when one was given, so read it through `businessName`, never by the
+ * key. Mirrors `BUSINESS_NAME_KEY` in `back-end/essential_fields.py`.
+ */
+export const BUSINESS_NAME_KEY = 'essential_business_name';
 
 export const AVAILABLE_DATES_KEY = 'essential_available_dates';
 export const MAX_DATES_KEY = 'essential_max_dates';
@@ -53,6 +61,7 @@ export const REQUEST_KEY = 'essential_request';
 
 export const FULL_NAME_LABEL = 'Full name';
 export const PREFERRED_NAME_LABEL = 'Preferred name';
+export const BUSINESS_NAME_LABEL = 'Business name';
 export const AVAILABLE_DATES_LABEL = 'Available dates';
 export const MAX_DATES_LABEL = 'Number of dates you want';
 export const TIER_PREFERENCE_LABEL = 'Tier preference';
@@ -168,7 +177,8 @@ export function askedEssentialAnswers(
 /**
  * The asked essential questions that depend on the plan offering something: what an applicant
  * applies FOR. The mirror of `plan_derived_asked_keys` in `back-end/essential_fields.py`, which
- * leaves out identity and the free request: a form asking only those asks nothing.
+ * leaves out identity, the business name and the free request: a form asking only those asks
+ * nothing.
  */
 export function planDerivedAskedKeys(options: EssentialFormOptions): string[] {
   const asked: string[] = [];
@@ -259,6 +269,7 @@ const ESSENTIAL_ORDER: ReadonlyArray<[string, string, (value: unknown) => unknow
   // Both names on the review card, labelled: an organizer deciding about a PERSON is doing
   // something different from one scanning a list, where only the chosen name appears.
   [PREFERRED_NAME_KEY, PREFERRED_NAME_LABEL, (v) => v],
+  [BUSINESS_NAME_KEY, BUSINESS_NAME_LABEL, (v) => v],
   [
     AVAILABLE_DATES_KEY,
     AVAILABLE_DATES_LABEL,
@@ -366,6 +377,16 @@ export function answerText(value: unknown): string {
 export function applicantName(formData: Record<string, unknown> | null | undefined): string {
   const answers = formData ?? {};
   return String(answers[PREFERRED_NAME_KEY] || answers[FULL_NAME_KEY] || '').trim();
+}
+
+/**
+ * The business name some answers give, or `''` when they give none (T502). The client's reading of
+ * `business_name` in `back-end/essential_fields.py`: the key is absent where the vendor gave none,
+ * holds `''` where an organizer's update removed one, and neither draws a line.
+ */
+export function businessName(formData: Record<string, unknown> | null | undefined): string {
+  const given = formData?.[BUSINESS_NAME_KEY];
+  return typeof given === 'string' ? given.trim() : '';
 }
 
 /**

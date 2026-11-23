@@ -110,7 +110,7 @@ async function dragAndPlace(
 }
 
 test.describe('Rows fill a hall', () => {
-  test('a hall shown whole is fitted again when the options strip takes room from the map, and a view zoomed is kept', async ({
+  test('a hall shown whole is fitted again as the window is made taller, then narrower, then as it was, and a view zoomed is kept', async ({
     authenticatedPage: page,
     request,
   }) => {
@@ -135,18 +135,39 @@ test.describe('Rows fill a hall', () => {
       }
       return true;
     };
-    await expect(layout.rowGap).toBeVisible();
+    /** How much of the hall the map shows, in millimetres. */
+    const shown = () =>
+      layout.map.evaluate((svg) => {
+        const { width, height } = (svg as SVGSVGElement).viewBox.baseVal;
+        return { width, height };
+      });
+    const desk = page.viewportSize()!;
     await expect.poll(whole).toBe(true);
-    await layout.toolSelect.click();
-    await expect(layout.rowGap).toBeHidden();
+    const fitted = (await layout.zoom.textContent())!;
+
+    // The map's height follows the window's, and its width the window's below a wide desk: each
+    // change of the stage fits the hall to it again, drawn larger or smaller and still whole.
+    await page.setViewportSize({ width: desk.width, height: desk.height + 280 });
+    await expect(layout.zoom).not.toHaveText(fitted);
+    await expect.poll(whole).toBe(true);
+    const taller = (await layout.zoom.textContent())!;
+    await page.setViewportSize({ width: 700, height: desk.height + 280 });
+    await expect(layout.zoom).not.toHaveText(taller);
+    await expect.poll(whole).toBe(true);
+    await page.setViewportSize(desk);
+    await expect(layout.zoom).toHaveText(fitted);
     await expect.poll(whole).toBe(true);
 
-    // Zoomed in, the view is the organizer's: the strip coming back keeps its zoom.
+    // Zoomed in, the view is the organizer's: the window made taller shows more of the hall at the
+    // same zoom.
     await layout.zoomIn.click();
-    const zoomed = await layout.zoom.textContent();
-    await layout.toolRow.click();
-    await expect(layout.rowGap).toBeVisible();
-    await expect(layout.zoom).toHaveText(zoomed!);
+    await expect(layout.zoom).not.toHaveText(fitted);
+    const zoomed = (await layout.zoom.textContent())!;
+    const before = await shown();
+    await page.setViewportSize({ width: desk.width, height: desk.height + 280 });
+    await expect.poll(async () => (await shown()).height).toBeGreaterThan(before.height + 1000);
+    await expect(layout.zoom).toHaveText(zoomed);
+    expect((await shown()).width).toBeCloseTo(before.width, 0);
   });
 
   test('a straight drag of 20 m waits with ten tables touching, placed by Enter centred on the line, and nine with a gap of 30 cm, the count following the drag', async ({
@@ -1124,8 +1145,7 @@ test.describe('A row is drawn by hand', () => {
     }
     await expect(layout.rowTables.first()).toBeVisible();
 
-    // The view holds still under the drag in hand. Its zoom is read here, once the drag is in
-    // hand: before it, the hall is fitted again to the room the options strip leaves it.
+    // The view holds still under the drag in hand: neither + nor 0 changes its zoom.
     const zoom = await layout.zoom.textContent();
     await page.keyboard.press('+');
     await page.keyboard.press('0');

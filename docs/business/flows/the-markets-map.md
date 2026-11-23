@@ -11,6 +11,8 @@ sources:
   - T465
   - T466
   - T469
+  - T501
+  - T502
 ---
 
 # The market's map: published, found and directed by
@@ -22,7 +24,7 @@ sources:
 A location's layout ([E6](planning.md#e6-a-locations-layout)) is each market day's map in two places: a public page anyone opens, and Attendance's map beside its list.
 Both draw each table by who holds it that day, a shared table as two halves, each its own vendor's.
 A layout can be made after Draft too, following the plan's settled seats, so a market planned without one can still have a map ([ADR 0034](../../adr/0034-a-layout-started-after-draft-follows-the-plan.md)).
-The public map shows a vendor's public name, website and Instagram, read from the questions the Admin chose and cleaned on the server, and nothing else of them: never an email address or a full name ([ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md)).
+The public map shows a vendor's public name, website and Instagram, read from the answers the Admin chose and cleaned on the server, and nothing else of them: never an email address or a full name ([ADR 0035](../../adr/0035-the-public-map-publishes-a-vendors-chosen-answers.md)).
 How it is built is [the public map](../../implementation/modules/public-map.md), [the public map page](../../implementation/modules/public-map-page.md) and [attendance and the door](../../implementation/modules/attendance-and-door.md).
 
 ## K7. An Admin opens the public map
@@ -31,7 +33,8 @@ How it is built is [the public map](../../implementation/modules/public-map.md),
 **Task:** "Let visitors find each vendor's table on the day."
 
 1. Tools tab, the "Public map" card ([`MarketPublicMapCard.vue`](../../../front-end/src/components/market/MarketPublicMapCard.vue)), after Discord's: "A page anyone can open, with no sign-in, that shows each market day's tables and who is at them. It shows only the answers you choose here, never an email address or a full name.", with the switch "Show the public map" off.
-2. "Public name": choose the form's short text question that holds each vendor's business or artist name; "Website" and "Instagram" are chosen the same way, or left at "Not shown".
+2. "Public name": choose "Business name (built in)", the business name every form asks ([ADR 0042](../../adr/0042-every-form-asks-a-built-in-business-name.md)), or the form's short text question that holds each vendor's business or artist name; "Website" and "Instagram" are each one of the form's short text questions, or left at "Not shown".
+   A form with no short text question can still open its map under the built-in name; the card then says "The form asks no short text question yet. Add one to show each vendor's website or Instagram handle.".
    Each choice saves at once; until a public name is chosen the switch is disabled, with "Choose the public name's question first." under it.
 3. Turn on "Show the public map".
    Expect the address, the market page's `/<market-slug>` under the app's origin, with "Copy link" and "Open the map", which opens it in a new tab.
@@ -53,6 +56,7 @@ Covered by:
 1. Open the market's address, or a link to `/<market-slug>/map`, which lands there with its day, location, table and half ([`PublicMapView.vue`](../../../front-end/src/views/PublicMapView.vue)); it opens on today when today is a market date, else the next, else the last.
    Expect one sheet filling the window on a soft backdrop in the market's own section colours, the page never scrolling: the market's name in bold over a marker stroke with "vendor map" under it, the day ("Nov 18") and, at a market of two halls or more, the hall as two dropdowns at the map's top right, and the hall filling the rest, each table taken drawn in its section's colours and each free one a grey dashed outline, with a legend naming the hall's sections ("Section A") and "Free table" on a day the hall has one.
    The no-table zones and their labels ("Stage") are drawn to orient by, with no legend item.
+   The hall's floorplan is drawn as the organizer uploaded it, in its own colours and at full strength, with no control over it; a hall's tables and its floorplan appear together, the other halls' floorplans load in the background, so switching halls is instant, and a floorplan that is slow or cannot be loaded leaves the tables on the plain floor with nothing said (T501).
 2. "Find a vendor", over every named vendor of the day: type part of their public name, their website, their Instagram handle, their table's code or their section's name, and pick them from the dropdown.
    Expect the map to open their hall and outline their table, or their half of a shared one, the card to read their table's code in its section's colours, the hall, their public name, and their website and Instagram as links that open in a new tab, and the field to empty for the next search.
    An email address or a full name finds nobody.
@@ -70,6 +74,7 @@ Covered by:
 
 - `the-market-page.spec.ts`
 - `the-public-map-bubble.spec.ts`
+- `the-public-map-draws-its-floorplan-in-step.spec.ts`
 - `the-public-map-half.spec.ts`
 - `the-public-map-phone-card.spec.ts`
 - `the-public-map-vendors.spec.ts`
@@ -82,17 +87,21 @@ Covered by:
 
 1. Attendance, the open day, "Map" beside "List" ([`AttendanceMap.vue`](../../../front-end/src/components/attendance/AttendanceMap.vue)) ([K5](market-day-door.md#k5-watch-attendance), step 9).
 2. "Find a vendor" ("Name, email or table"): type part of their name (the one they go by or the full one), address or table, and pick them from the dropdown, each row saying where they sit ("Table Aisle A 3, left half", or "No table"), with the mouse or with the arrow keys and Enter.
-   Expect their [drawer](vendor-drawer.md) open on its Application tab, as a press on their table or their name on the list opens it, and their table outlined on the map, drawn filled once they are here and outlined while they are expected; a vendor sitting in the other location switches the map to it, and Back closes the drawer there.
+   Expect their [drawer](vendor-drawer.md) open on its Application tab, as a press on their table or their name on the list opens it, and their table outlined on the map, drawn filled once they are checked in and outlined while they are not checked in; a vendor sitting in the other location switches the map to it, and Back closes the drawer there.
    Typing alone outlines nothing, and closing the drawer clears the outline (T466).
+   The location's tables and its floorplan appear together, and a switch to the other location never shows its tables over this one's floorplan; under the legend, "Show the floorplan", "Greyscale" and "Faded" draw the floorplan as on the Layout page, the same choices on both pages (T501).
 3. Point them to it; or press their table, or their half of a shared one, to open their drawer, as their name on the list does.
 4. Check them in on "List" or have them scan the door code ([K2](market-day-door.md#k2-a-vendor-scans-the-door-code-and-is-checked-in)): the map checks nobody in, and their table is drawn filled on the roster's next read.
 
-A press on a table with nobody says "Table <code>: no vendor on <date>." under the map; vendors here with no table, and those at tables on no layout, are counted under it with "Show in the list".
-The legend under the map reads "Here" and "Expected" ("Did not come" once the day is over), and "No vendor" only on a day the open location's map draws a table, or a half of a shared one, nobody sits at; the no-table zones, the stage or the entrance, are still drawn and named on the map, with no legend item (T466).
+A press on a table with nobody says "Table <code>: no vendor on <date>." under the map; vendors checked in with no table, and those at tables on no layout, are counted under it with "Show in the list".
+A vendor's table is filled once they are checked in, drawn in a darker shade of the same colour once they have checked out, and outlined while they are not checked in; a screen reader hears each vendor's table with their state, "Ana Rivera, checked out" (T501).
+The legend under the map reads "Checked in", "Checked out" and "Not checked in" at every time of day, and "No vendor" only on a day the open location's map draws a table, or a half of a shared one, nobody sits at; the no-table zones, the stage or the entrance, are still drawn and named on the map, with no legend item (T466).
 Covered by:
 
 - `a-market-past-draft-gets-a-public-map.spec.ts`
 - `the-door-as-a-map.spec.ts`
+- `the-door-map-draws-its-floorplan-in-step.spec.ts`
+- `the-door-map-keeps-the-floorplan-choices.spec.ts`
 
 ## The rules it obeys
 
