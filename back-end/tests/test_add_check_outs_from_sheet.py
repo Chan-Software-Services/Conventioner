@@ -601,13 +601,14 @@ def test_no_output_prints_an_address(database, sheet, capsys):
         assert address not in captured.out + captured.err
 
 
-def test_only_a_match_not_made_by_name_prints_a_vendors_name(database, sheet, capsys):
+def test_only_a_match_not_made_by_name_prints_conventioners_name_for_a_vendor(
+        database, sheet, capsys):
     database(a_market())
 
     dry_run(sheet())
 
     out = capsys.readouterr().out
-    # The vendors matched by name, the ones left off the sheet and the one with no seat.
+    # No vendor matched by name, left off the sheet or with no seat is named, by either name.
     for name in ("Kiln Works", "Fern & Feather", "Dee Sample", "Oak & Ash", "Pip Prints",
                  "Nest Notes", "Quill Things", "Honey Hut", "Ivy Inks", "Vendor"):
         assert name not in out
@@ -1070,3 +1071,62 @@ def test_a_run_cut_after_some_writes_is_finished_by_a_second(
         record = record_of(db, email)
         assert (record["checked_out_at"], record["checked_out_by"]) == (AT_IN_UTC, ORGANIZER)
     assert lines_of(capsys.readouterr().out)[-1] == "added 3 check-out(s)."
+
+
+# --- a vendor at two seats that day --------------------------------------------------------------
+
+#: Kim holds two whole tables on the day, each its own row of the sheet.
+KIMS_SEATS = [a_seat("kim@example.com", "Upper Hall 7", FULL),
+              a_seat("kim@example.com", "Upper Hall 8", FULL)]
+
+
+def kims_rows(at_eight=(True, True)):
+    checked_in, checked_out = at_eight
+    return [a_row("Upper Hall 7", a_half("Kite Co", checked_in=True, checked_out=True)),
+            a_row("Upper Hall 8", a_half("Kite Co", checked_in=checked_in,
+                                         checked_out=checked_out))]
+
+
+def kims_line(table_code, text):
+    return (f'  {table_code}, whole table: {text} (the table\'s one seat: sheet "Kite Co", '
+            'Conventioner "Kite Co")')
+
+
+def test_a_vendor_at_two_seats_ticked_alike_is_judged_once(database, sheet, capsys):
+    db = database(a_market(seats=KIMS_SEATS),
+                  attendance=[a_check_in("kim@example.com", "Upper Hall 7")])
+
+    assert dry_run(sheet(rows=kims_rows())) == 0
+
+    assert lines_of(capsys.readouterr().out)[1:] == [
+        kims_line("Upper Hall 7", "add a check-out"),
+        kims_line("Upper Hall 8", "leave: the same vendor as at Upper Hall 7, judged there"),
+        "would add 1, left 1, reported 0, unmatched 0, changed since the read 0",
+        "would add 1 check-out(s).",
+    ]
+
+    assert run(sheet(rows=kims_rows())) == 0
+
+    assert lines_of(capsys.readouterr().out)[-2:] == [
+        "added 1, left 1, reported 0, unmatched 0, changed since the read 0",
+        "added 1 check-out(s)."]
+    assert record_of(db, "kim@example.com")["checked_out_at"] == AT_IN_UTC
+    assert entries(db) == [the_entry("kim@example.com")]
+
+
+def test_a_vendor_at_two_seats_ticked_differently_is_reported_and_not_written(
+        database, sheet, capsys):
+    db = database(a_market(seats=KIMS_SEATS),
+                  attendance=[a_check_in("kim@example.com", "Upper Hall 7")])
+    before = everything(db)
+
+    assert run(sheet(rows=kims_rows(at_eight=(True, False)))) == 0
+
+    apart = "report: the vendor's seats that day tick differently, not written"
+    assert lines_of(capsys.readouterr().out)[1:] == [
+        kims_line("Upper Hall 7", apart),
+        kims_line("Upper Hall 8", apart),
+        "added 0, left 0, reported 2, unmatched 0, changed since the read 0",
+        "added 0 check-out(s).",
+    ]
+    assert everything(db) == before

@@ -38,7 +38,10 @@ unmatched, and a seat left is not on the sheet.
 and checked in, not out, adds a check-out; already checked out, or ticked in and not out and here,
 or ticked nothing and never checked in, is left; every other disagreement (a check-in or check-out
 the sheet ticks that Conventioner does not hold, or one Conventioner holds the sheet does not tick)
-is reported and not written. A seat on no row, and a check-in with no seat that day, are left.
+is reported and not written. A vendor seated at two tables that day is judged once, on the first
+of their lines, when their rows tick alike, their other lines left; when the rows tick differently,
+each of their lines is reported and not written. A seat on no row, and a check-in with no seat that
+day, are left.
 
 **The run**, the same arguments without ``--dry-run``, prints the dry run's lines and, one vendor
 at a time in their order, adds each check-out it said it would: ``checked_out_at`` the time in UTC
@@ -61,8 +64,7 @@ sharing a table code, each naming the line and never a cell's text.
 It prints market ids and names, table codes, counts, and, for a match made other than by name, the
 sheet's name for the vendor (its business name, else the name they go by) beside Conventioner's, and
 for an unmatched row the sheet's names, so the operator can check them: never an address, a vendor's
-or the organizer's. So its output stays
-on the operator's terminal.
+or the organizer's. So its output stays on the operator's terminal.
 
 Usage (the production database address passed inline, never from back-end/.env):
     MONGODB_URI='<URI>' python migrations/add_check_outs_from_sheet.py --list
@@ -133,6 +135,8 @@ OUT_UNTICKED = "report: Conventioner holds a check-out the sheet does not tick, 
 IN_NOT_HELD = "report: the sheet ticks a check-in Conventioner does not hold, not written"
 IN_UNTICKED = "report: checked in at Conventioner, the sheet ticks no check-in, left"
 OUT_WITHOUT_IN = "report: the sheet ticks a check-out with no check-in, not written"
+SAME_VENDOR = "leave: the same vendor as at {}, judged there"
+SEATS_APART = "report: the vendor's seats that day tick differently, not written"
 NOT_ON_THE_SHEET = "not on the sheet, left"
 CHECKED_OUT_SINCE = "checked out since the read, left"
 GONE_SINCE = "the record is gone since the read, left"
@@ -398,14 +402,34 @@ def judged(document: Mapping[str, Any], day: str, rows: List[SheetRow],
 
     out = Judged()
     on_the_sheet: Set[str] = set()
+    read: List[Tuple[str, List[Tuple[SheetVendor, Seat, str]], List[Tuple[str, List[str], int]],
+                     List[Seat]]] = []
     for row in rows:
         key = _key(row.table_code)
         on_the_sheet.add(key)
         held = by_table.get(key, [])
-        code = held[0].table_code if held else row.table_code
-        pairs, unmatched, seats_left = _match(row, held, names)
+        read.append((held[0].table_code if held else row.table_code, *_match(row, held, names)))
+    read.sort(key=lambda row: table_code_sort_key(row[0]))
+
+    # A vendor may hold two seats that day: their record is judged once, on the first of their
+    # lines, when every one of their rows ticks alike, and reported on each when they differ.
+    ticked: Dict[str, Set[Tuple[bool, bool]]] = {}
+    first: Dict[str, str] = {}
+    for code, pairs, _unmatched, _left in read:
+        for vendor, seat, _how in pairs:
+            ticked.setdefault(seat.email, set()).add((vendor.checked_in, vendor.checked_out))
+            first.setdefault(seat.email, code)
+    judged_once: Set[str] = set()
+
+    for code, pairs, unmatched, seats_left in read:
         for vendor, seat, how in pairs:
-            text, counts = _what(vendor, by_vendor.get(seat.email))
+            if len(ticked[seat.email]) > 1:
+                text, counts = SEATS_APART, "reported"
+            elif seat.email in judged_once:
+                text, counts = SAME_VENDOR.format(first[seat.email]), "left"
+            else:
+                text, counts = _what(vendor, by_vendor.get(seat.email))
+                judged_once.add(seat.email)
             shown = how if how == BY_NAME else (
                 f"{how}: sheet {_quoted([vendor.name])}, Conventioner {_quoted([names.of(seat)])}")
             out.lines.append(Line(code, _seat_line(seat, f"{text} ({shown})"), counts,
@@ -415,7 +439,6 @@ def judged(document: Mapping[str, Any], day: str, rows: List[SheetRow],
             out.lines.append(Line(code, f"  {code}: unmatched, {why}{shown}", "unmatched", many))
         for seat in seats_left:
             out.lines.append(Line(code, _seat_line(seat, NOT_ON_THE_SHEET), "left"))
-    out.lines.sort(key=lambda line: table_code_sort_key(line.table_code))
 
     seated = {seat.email for seat in seats}
     for seat in sorted(seats, key=lambda seat: (table_code_sort_key(seat.table_code),
