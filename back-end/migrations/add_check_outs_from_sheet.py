@@ -63,8 +63,9 @@ sharing a table code, each naming the line and never a cell's text.
 
 It prints market ids and names, table codes, counts, and, for a match made other than by name, the
 sheet's name for the vendor (its business name, else the name they go by) beside Conventioner's, and
-for an unmatched row the sheet's names, so the operator can check them: never an address, a vendor's
-or the organizer's. So its output stays on the operator's terminal.
+for an unmatched row the sheet's names (the row's business names alone on a row no seat holds and on
+a half ticked with no name), so the operator can check them: never an address, a vendor's or the
+organizer's. So its output stays on the operator's terminal.
 
 Usage (the production database address passed inline, never from back-end/.env):
     MONGODB_URI='<URI>' python migrations/add_check_outs_from_sheet.py --list

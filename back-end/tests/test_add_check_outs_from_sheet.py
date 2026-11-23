@@ -621,7 +621,8 @@ def test_only_a_match_not_made_by_name_prints_conventioners_name_for_a_vendor(
 # --- matching, rule by rule --------------------------------------------------------------------
 
 def one_row_dry_run(database, sheet, capsys, rows, seats, attendance=(), apps=None):
-    """The dry run's row lines alone, on a day of ``seats`` and a sheet of ``rows``."""
+    """The dry run's lines between its first line and its count line, the not-on-the-sheet
+    lines included, on a day of ``seats`` and a sheet of ``rows``."""
     database(a_market(seats=seats), attendance=list(attendance), apps=apps)
     assert dry_run(sheet(rows=rows)) == 0
     out = lines_of(capsys.readouterr().out)

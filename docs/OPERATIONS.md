@@ -373,7 +373,7 @@ The dry run prints, by table code, each seat's line: what the run adds, leaves o
 A line that adds a check-out is a vendor the sheet ticks in and out whom Conventioner holds checked in and not out; a "leave" line is a vendor whose record already says what the sheet says, and a check-out Conventioner already holds is left as it is, whoever made it.
 A "report" line is a disagreement the run does not write: a check-in or check-out the sheet ticks that Conventioner does not hold, or one Conventioner holds that the sheet does not tick.
 A vendor seated at two tables that day is judged once, on the first of their lines, when their rows tick alike, and each other line of theirs is left, naming the table they were judged at; when their rows tick differently, each of their lines is reported and none written.
-An "unmatched" line is a row, or a half, the script could not give a vendor, with the sheet's names for it where it has any, so you can find it on the sheet; "not on the sheet" lists the day's seats on no row and the check-ins with no seat that day.
+An "unmatched" line is a row, or a half, the script could not give a vendor, with the sheet's names for it where it has any (the row's business names alone on a row no seat holds and on a half ticked with no name), so you can find it on the sheet; "not on the sheet" lists the day's seats on no row and the check-ins with no seat that day.
 The count line says how many it would add, left, reported, could not match, and found changed since the read.
 Read the dry run before the run: the run prints the same lines, but for the first line, which says it is a dry run, and its count and last lines, which say what it added.
 
