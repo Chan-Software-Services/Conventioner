@@ -20,7 +20,7 @@ describes:
   - .github/actions/e2e-stack/action.yml
   - .github/actions/front-end-deps/action.yml
   - front-end/scripts/e2e-repeat.ts
-verified: 2026-11-23
+verified: 2026-11-24
 sources:
   - T47
   - T53
@@ -62,7 +62,7 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 **`backend`**
 
-- Python 3.12, the locks `requirements.txt`, `requirements-floorplan-solver.txt` and `requirements-dev.txt`, a re-lock that fails on any difference ([the locks](../../TECH_STACK.md#python-dependencies-are-locked)), then pytest, with a `mongo:7` service ([why not 8.0](real-mongo-suite.md#the-mongodb-version)) on runner port 27117, allowed [64000 open files](real-mongo-suite.md#the-mongodb-version), for [the real-MongoDB suite](real-mongo-suite.md), which `REAL_MONGODB_REQUIRED=true` makes fail rather than skip without it
+- Python 3.12, the locks `requirements.txt`, `requirements-floorplan-solver.txt` and `requirements-dev.txt`, a re-lock of every lock, `requirements-audit.txt` among them, that fails on any difference ([the locks](../../TECH_STACK.md#python-dependencies-are-locked)), then pytest, with a `mongo:7` service ([why not 8.0](real-mongo-suite.md#the-mongodb-version)) on runner port 27117, allowed [64000 open files](real-mongo-suite.md#the-mongodb-version), for [the real-MongoDB suite](real-mongo-suite.md), which `REAL_MONGODB_REQUIRED=true` makes fail rather than skip without it
 
 **`python-advisories`**
 
@@ -211,7 +211,8 @@ The refresh lists the suite and refuses, naming each file, when a spec file it l
 **Ten shards, since the suite is the run's critical path.**
 With six, the slowest shard ended a median 21.5 minutes into a run, while every other job was done by 2.7; a shard is about 3 minutes of setup and its share of the suite, so ten bring a shard to about 12 minutes at about 13 more runner-minutes of setup a run.
 That holds while runners are free: the account is on GitHub Free, which runs 20 jobs at once across the repository.
-One pull request's run asks for 20 at once, so it fits alone: 17 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, the ten shards and `e2e-repeat`), `python-advisories` only once `real-data-and-workflows`, under a minute, is done, `e2e` only once the shards are done, and CodeQL's three; a push to `dev` or a trial commit starts 16 Test jobs, with no `e2e-repeat`, and CodeQL's three, 19 in all, as does a push to `main`, and a push to `dev` or `main` then starts `python-advisories`, as a pull request's run does; on `dev` `test-map` starts once the shards are done, beside `e2e`.
+One pull request's run asks for 20 at once, so it fits alone: 17 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, the ten shards and `e2e-repeat`), `python-advisories` only once `real-data-and-workflows`, under a minute, is done, `e2e` only once the shards are done, and CodeQL's three; a push to `dev` or `main` starts 16 Test jobs, with no `e2e-repeat`, and CodeQL's three, 19 in all, then `python-advisories` once `real-data-and-workflows` is done, as on a pull request.
+A trial commit starts the same 16 and CodeQL's three, 19 in all, with no `python-advisories`; on `dev` `test-map` starts once the shards are done, beside `e2e`.
 That is why the five short checks (drift, the real-data scan with gitleaks, zizmor offline, zizmor online and actionlint) are steps of `knowledge-graph` and `real-data-and-workflows`: as five jobs of their own they made one run ask for 24, more than the account runs at once.
 `python-advisories` is a job of its own, since a step's failure would fail a required check, so it waits for `real-data-and-workflows` instead, and takes the runner that job leaves.
 With another run going, shards still wait: on one such run four shards queued 9 to 12 minutes, and the run ended at 23 minutes while each shard's own time was 10.5 to 12.5.
