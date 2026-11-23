@@ -25,7 +25,7 @@ describes:
   - front-end/e2e/the-public-map-vendors.spec.ts
   - front-end/e2e/the-public-map-draws-its-floorplan-in-step.spec.ts
   - front-end/e2e/pages/PublicMapPage.ts
-verified: 2026-11-18
+verified: 2026-11-24
 sources:
   - T422
   - T465
@@ -164,6 +164,7 @@ The E2E specs open the page signed out on [the seeded market day](../testing/e2e
 [`PublicMapPage.ts`](../../../front-end/e2e/pages/PublicMapPage.ts) is their page object; the map's tables are found by their accessible names, as a layout's are ([E2E patterns](../testing/e2e-patterns.md)).
 The three public map screens of the screen sweeps walk the page before a pick, with the shared table picked whole, and with its right half picked (`SCREENS` in `e2e/helpers/screens.ts`).
 Each opens the seed's first day by its address (`publicMapAt`), since the page opens on the browser's today, and a sweep seeded before midnight would otherwise open on the seed's second day, where the shared table seats nobody.
+The public map's specs hold each page's clock at the seed's instant (`seededAt`) for the same reason, since several of them read the day the page opens on by itself.
 
 ## Why
 
