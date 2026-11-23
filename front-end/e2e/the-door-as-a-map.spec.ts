@@ -34,8 +34,8 @@ import { LoginPage } from './pages/LoginPage';
 const VIEWER = { email: 'e2e-door-map-viewer@example.com', password: 'e2epassword123' };
 
 /**
- * The roster reads itself again every 15 seconds (`REREAD_MS`); the test runs them on `page.clock`,
- * so a check-in made elsewhere shows with no real wait.
+ * The roster reads itself again every 15 seconds; the test runs that re-read on `page.clock`, so a
+ * check-in made elsewhere shows with no real wait.
  */
 const REREAD = 15_000;
 
