@@ -21,8 +21,7 @@ type ListedSuite = { title: string; file: string; suites?: ListedSuite[] };
 
 /**
  * The environment the listing runs in: this run's, less the JSON reporter's output settings. A run
- * that sends its JSON report to a file (`e2e-repeat.ts` sets `PLAYWRIGHT_JSON_OUTPUT_FILE`) would
- * pass that on, and the listing would then print its list as text, not JSON, to stdout.
+ * that sends its JSON report to a file through `PLAYWRIGHT_JSON_OUTPUT_FILE` would pass that on, and the listing would then print its list as text, not JSON, to stdout.
  */
 function listingEnv(): NodeJS.ProcessEnv {
   return Object.fromEntries(

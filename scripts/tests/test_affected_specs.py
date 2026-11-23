@@ -368,10 +368,9 @@ class TestAFileNoRulePlaces:
             "front-end/.prettierignore",
             "front-end/.editorconfig",
             "back-end/pytest.ini",
-            # The scripts that deal, repeat or measure the specs, or that nothing runs.
+            # The scripts that deal or measure the specs, or that nothing runs.
             "front-end/scripts/e2e-shard-timings.json",
             "front-end/scripts/e2e-shards.ts",
-            "front-end/scripts/e2e-repeat.ts",
             "front-end/scripts/bundle-budget.ts",
             "front-end/scripts/no-eval.ts",
             "front-end/scripts/brand-icons.ts",

@@ -6,9 +6,10 @@ describes:
   - back-end/tests/test_map_plugin.py
   - front-end/e2e/helpers/testMap.ts
   - scripts/affected-specs.py
-verified: 2026-11-16
+verified: 2026-11-23
 sources:
   - T349
+  - T510
 ---
 
 # The test map
@@ -107,7 +108,7 @@ A spec is chosen by five rules:
    - the unit suite's config: `front-end/vitest.config.ts` and `front-end/tsconfig.vitest.json`
    - the back end's pytest config, `back-end/pytest.ini`
    - the lint and format configs: `eslint.config.ts`, `stylelint.config.js`, `.prettierrc.json`, `.prettierignore` and `.editorconfig` in `front-end/`
-   - the scripts in `front-end/scripts/` that deal, repeat or measure the specs, or that nothing runs: `e2e-shard-timings.json`, `e2e-shards.ts`, `e2e-repeat.ts`, `bundle-budget.ts`, `no-eval.ts` and `brand-icons.ts`
+   - the scripts in `front-end/scripts/` that deal or measure the specs, or that nothing runs: `e2e-shard-timings.json`, `e2e-shards.ts`, `bundle-budget.ts`, `no-eval.ts` and `brand-icons.ts`
    - the back end's deploy config, `back-end/vercel.json`
 
 The chosen specs are ordered by score: each changed thing a spec reaches adds 1 divided by how many specs reach it, so a module every spec loads (`App.vue`) or an endpoint every spec's setup calls adds almost nothing, while one that three specs reach decides the order.
@@ -133,7 +134,7 @@ On a pull request, once the shards have run, CI's `e2e` job audits the selection
 python3 scripts/affected-specs.py audit --github --base HEAD^1 --head HEAD <each shard's results.json>
 ```
 
-It takes the pull request's diff from its merge commit's first parent, as `e2e-repeat` does, and the newest map and its minutes as a builder's run does, and names each spec file with a failed test in the shards' reports, a test a helper registers counting under the spec file that calls it, as one of three:
+It takes the pull request's diff from its merge commit's first parent, hence two commits, and the newest map and its minutes as a builder's run does, and names each spec file with a failed test in the shards' reports, a test a helper registers counting under the spec file that calls it, as one of three:
 
 - **ran**: the selection runs it, so a builder's `--run` would have shown the failure;
 - **left to CI**: the selection chose it, but past the cap;

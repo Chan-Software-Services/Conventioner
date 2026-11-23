@@ -19,8 +19,7 @@ describes:
   - front-end/vite.config.ts#noDevModules
   - .github/actions/e2e-stack/action.yml
   - .github/actions/front-end-deps/action.yml
-  - front-end/scripts/e2e-repeat.ts
-verified: 2026-11-17
+verified: 2026-11-23
 sources:
   - T47
   - T53
@@ -39,6 +38,7 @@ sources:
   - T375
   - T424
   - T464
+  - T510
 ---
 
 # CI and the gate
@@ -92,13 +92,6 @@ Each job is one block, what it runs one item a line ([two features never share a
 - it posts a flaky-test summary and uploads its JSON report (`e2e-results-shard-<n>`, kept 90 days) on every run, and on failure uploads the whole report
 - on a push to `dev` alone it also records [the test map](the-test-map.md) (`TEST_MAP_OUT`) and uploads the records with the back end's timestamped log (`test-map-shard-<n>`, kept 90 days)
 
-**`e2e-repeat`**
-
-- on a pull request only, [the spec files it adds or changes, several times each](#the-e2e-repeat), on one runner set up as a shard is, with no retry
-- it passes at once, starting no stack, when the pull request changes no spec file
-- on failure it uploads the whole report
-- not a required check
-
 **`e2e`**
 
 - passes only when every shard did
@@ -117,7 +110,6 @@ Both require `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-buil
 The ruleset has no bypass actor, so nothing merges into `dev`, the merge of `main` back into it included, without all eleven, short of changing the ruleset itself; `main`'s rulesets let an admin bypass them through a pull request only, which is how the Release PR merges with `--admin`, and let no one but the Promote workflow's App push to `main` ([RELEASING.md](../../RELEASING.md#branch-model), [ADR 0027](../../adr/0027-main-moves-only-through-promote.md)).
 `e2e` is a job of its own so the rules name one check whatever the shard count becomes.
 It runs whatever the shards' result, so a failed shard fails it, but not on a cancelled run (`if: ${{ !cancelled() }}`), which would post a red `e2e` on the head a later push made moot.
-`e2e-repeat` is not required: it is read over its first week, and then made required or dropped.
 `knowledge-graph` fails a pull request that changes a described file without touching its node or bumping `verified`: its drift step is part of the required check.
 The online zizmor step never fails `real-data-and-workflows`: a rate limit or outage of GitHub's API would otherwise block a merge, and the offline step already holds the workflows to the offline audits.
 The selection audit never fails `e2e`, for the same reason: a failed download or an outage of GitHub's API would otherwise block a merge whose shards all passed.
@@ -143,7 +135,6 @@ On it `github.base_ref` and `github.event.pull_request` are empty, since they be
 | `real-data-and-workflows`                                             | zizmor offline and actionlint; the real-data scans, gitleaks and zizmor online, each `if: github.event_name == 'pull_request'`, are skipped, as on a push                                                          |
 | `e2e-shard`                                                           | every step, as on a push, but shard 1 saves no cache ([why](#the-e2e-stack-and-its-caches)) and no shard records [the test map](the-test-map.md), which only a push to `dev` records (`RECORD_TEST_MAP`)           |
 | `e2e`                                                                 | its `if: ${{ !cancelled() }}`, which reads no event; the selection audit's steps, each `if: github.event_name == 'pull_request'`, are skipped, as on a push                                                        |
-| `e2e-repeat`                                                          | skipped (`if: github.event_name == 'pull_request'`), as on a push; not a required check                                                                                                                            |
 | `test-map`                                                            | skipped (`if:` a push to `dev`), as on a push to `main`; not a required check                                                                                                                                      |
 | CodeQL's `analyze`, the three `Analyze (<language>)` checks           | every step, as on a push: none has an `if:`                                                                                                                                                                        |
 
@@ -175,14 +166,14 @@ The first timings came from run 42493172818's list-reporter times, before the re
 **Ten shards, since the suite is the run's critical path.**
 With six, the slowest shard ended a median 21.5 minutes into a run, while every other job was done by 2.7; a shard is about 3 minutes of setup and its share of the suite, so ten bring a shard to about 12 minutes at about 13 more runner-minutes of setup a run.
 That holds while runners are free: the account is on GitHub Free, which runs 20 jobs at once across the repository.
-One pull request's run asks for 20, so it fits alone: 17 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, the ten shards and `e2e-repeat`), `e2e` only once the shards are done, and CodeQL's three; a push to `dev` or a trial commit starts 16 Test jobs, with no `e2e-repeat`, and CodeQL's three, 19 in all, as does a push to `main`; on `dev` `test-map` starts once the shards are done, beside `e2e`.
+One run asks for 19, so it fits alone: 16 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build` and the ten shards), `e2e` only once the shards are done, and CodeQL's three, on a pull request, a trial commit and a push to `dev` or `main` alike; on `dev` `test-map` starts once the shards are done, beside `e2e`.
 That is why the five short checks (drift, the real-data scan with gitleaks, zizmor offline, zizmor online and actionlint) are steps of `knowledge-graph` and `real-data-and-workflows`: as five jobs of their own they made one run ask for 24, more than the account runs at once.
 With another run going, shards still wait: on one such run four shards queued 9 to 12 minutes, and the run ended at 23 minutes while each shard's own time was 10.5 to 12.5.
 The matrix lists the shards and their `total`, which move together.
 
 ## The e2e stack and its caches
 
-Two composite actions set a runner up for Playwright, shared by `e2e-shard` and `e2e-repeat`.
+Two composite actions set an `e2e-shard` runner up for Playwright.
 [`.github/actions/front-end-deps/action.yml`](../../../.github/actions/front-end-deps/action.yml) sets up the Node `.nvmrc` pins and fills `front-end/node_modules`; it runs first, since with no `front-end/node_modules` on the host Docker (as root) creates the anonymous volume's mountpoint there root-owned, and a later `npm ci` fails with `EACCES`.
 [`.github/actions/e2e-stack/action.yml`](../../../.github/actions/e2e-stack/action.yml) installs Chromium, gets the stack's two images, pulls `mongo:7` and `mongo-express:latest` from Docker Hub, retrying only that pull a handful of times, because a transient registry 500 once failed a shard outright, so a stack that genuinely fails to start fails the job at once, then starts the stack and seeds it.
 Each `uses:` line calls an action by its path (`./.github/actions/...`) with a `zizmor: ignore[self-repository]`: zizmor asks for GitHub's newer `$/` form, which actionlint 1.7.12, the latest, refuses.
@@ -202,18 +193,6 @@ Only shard 1 saves (`save-cache` and `save-caches`), and only what it did not re
 A cache written on `dev` is read by every pull request; one written on a pull request's run only by that pull request's later runs.
 A trial commit's shards read `dev`'s, the default branch's, and save none: a cache written on its queue branch would be read by no other run.
 The three caches are about 660 MB together (the images' archive about 340, the browsers about 280, `node_modules` about 40), saved once by each pull request that changes a key's files, against the repository's 10 GB of Actions cache, which GitHub evicts least recently used first and after 7 days unread.
-
-## The e2e repeat
-
-**A spec file a pull request adds or changes runs several times before it merges.**
-A shard runs each spec once, so a spec that fails only sometimes can pass on its own pull request and merge, then fail the shards of later ones: 13 of 21 shard failures from 2026-11-03 to 11-11 were tests that passed on a retry, which `failOnFlakyTests` fails ([above](#ci)), and three or four of the flaky specs fixed since 11-01 were races in the product that had merged on one green run.
-The `e2e-repeat` job runs [`front-end/scripts/e2e-repeat.ts`](../../../front-end/scripts/e2e-repeat.ts) `run HEAD^1`: the spec files that the diff from the merge commit's first parent, the base the pull request is tested against, adds, changes or renames to, kept where `playwright test --list` lists them, so a helper, a fixture or a deleted file never runs; `changed HEAD^1`, run first, prints them, and with none the job passes at once.
-The checkout fetches two commits of history for that parent.
-Every file runs the same number of times (`--repeat-each`), with `--retries=0` and `--trace=retain-on-failure`, on one stack, so any failed run fails the job: as many times as fit 10 minutes of tests, at least 2 and at most 5; five runs catch a spec failing one run in three 87% of the time.
-**The files run once first, and that run's time decides how many more follow**, so a new file, which has no timing yet, is bounded by what it really takes rather than by a guess: a first run of 3 minutes gets two more, one past 5 minutes one more, one past 15 minutes none.
-Before anything runs, [the timings](#the-e2e-shards) (a file with no timing, new or renamed, weighing their median) decide only whether the files are too many to run at all: past 15 minutes a run, as on a change that sweeps through the suite, none runs and the job passes with a warning annotation, since its shards have still run each file once.
-**The first run is cut at 15 minutes** (Playwright's `--global-timeout`), so files the timings misjudge, such as heavy spec files a pull request moves, never hold the runner past it: a run cut there with no test failed passes with the same warning, read from its JSON report, and one with a failed test fails the job.
-So the tests take at most twice 15 minutes, and the job's `timeout-minutes: 40` covers that and its setup.
 
 ## The bundle budget
 
