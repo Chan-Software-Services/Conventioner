@@ -522,10 +522,10 @@ describe('chooseTimings', () => {
         if (answers.failing && path.includes(answers.failing))
           throw new Error('GitHub answered 503');
         if (path.startsWith(`/repos/${REPOSITORY}/actions/artifacts?name=${TIMINGS_ARTIFACT}`)) {
-          return {
-            total_count: answers.artifacts?.length ?? 0,
-            artifacts: answers.artifacts ?? [],
-          };
+          // GitHub's pages of 100, newest first.
+          const page = Number(/[?&]page=(\d+)/.exec(path)?.[1] ?? 1);
+          const all = answers.artifacts ?? [];
+          return { total_count: all.length, artifacts: all.slice((page - 1) * 100, page * 100) };
         }
         const run = /\/actions\/runs\/(\d+)$/.exec(path);
         const found = run ? { [RUN.id]: RUN, ...answers.runs }[Number(run[1])] : undefined;
@@ -555,6 +555,23 @@ describe('chooseTimings', () => {
       timings: { 'a.spec.ts': 12.5 },
     });
     expect(gh.asked).toContain(`zip ${REPOSITORY} 901`);
+  });
+
+  it('reads on past a page of newer artifacts, as a re-run days later does', async () => {
+    const newer = Array.from({ length: 150 }, (_, n) =>
+      artifact(
+        2000 - n,
+        52,
+        new Date(Date.parse('2026-11-23T00:00:00Z') - n * 60_000).toISOString(),
+      ),
+    );
+    const gh = github({
+      runs: { 51: devRun(51), 52: devRun(52) },
+      artifacts: [...newer, artifact(901, 51, '2026-11-20T11:40:00Z')],
+      texts: { 901: '{"a.spec.ts": 12.5}' },
+    });
+    expect((await chooseTimings(gh, REPOSITORY, '100')).source).toMatch(/\(artifact 901, /);
+    expect(gh.asked.filter((path) => path.includes('artifacts?name'))).toHaveLength(2);
   });
 
   it('passes over an artifact whose run is not a push to dev or a trial commit', async () => {

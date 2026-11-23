@@ -463,7 +463,8 @@ const committed = (why?: string): ChosenTimings => ({
   timings: parseTimings(readFileSync(timingsFile(), 'utf8')),
 });
 
-/** A GitHub API call with this run's token, tried three times over a few seconds. */
+/** A GitHub API call with this run's token, tried up to three times on a timeout, a network error,
+ * a 5xx or a 429, and once on any other failing answer. */
 async function github(path: string, accept = 'application/vnd.github+json'): Promise<Response> {
   const api = process.env.GITHUB_API_URL ?? 'https://api.github.com';
   let failure: unknown;
@@ -517,6 +518,34 @@ const githubReads: GitHubReads = {
   },
 };
 
+/** How many pages of 100 artifacts the lookup reads at most: a re-run may come weeks later, with
+ * every run on `dev` and the merge queue since having published one. */
+const ARTIFACT_PAGES = 20;
+
+/**
+ * The artifacts `chooseTimingsArtifacts` names for `run`, reading GitHub's list, which it gives
+ * newest first, page after page, until a page holds one or the list ends, so an artifact many newer ones have buried
+ * since is still found.
+ */
+async function listCandidates(
+  gh: GitHubReads,
+  repository: string,
+  run: WorkflowRun,
+): Promise<Artifact[]> {
+  for (let page = 1; page <= ARTIFACT_PAGES; page++) {
+    const listed = (await gh.json(
+      `/repos/${repository}/actions/artifacts?name=${TIMINGS_ARTIFACT}&per_page=100&page=${page}`,
+    )) as { artifacts: Artifact[] };
+    const candidates = chooseTimingsArtifacts(
+      listed.artifacts,
+      run.repository.id,
+      new Date(run.created_at!),
+    );
+    if (candidates.length > 0 || listed.artifacts.length < 100) return candidates;
+  }
+  return [];
+}
+
 /**
  * The timings this CI run deals by: the best artifact `chooseTimingsArtifacts` names whose run is
  * trusted, or the committed file when there is none, it is corrupt, or GitHub's API fails.
@@ -531,14 +560,7 @@ export async function chooseTimings(
   let candidates: Artifact[];
   try {
     run = (await gh.json(`/repos/${repository}/actions/runs/${runId}`)) as WorkflowRun;
-    const listed = (await gh.json(
-      `/repos/${repository}/actions/artifacts?name=${TIMINGS_ARTIFACT}&per_page=100`,
-    )) as { artifacts: Artifact[] };
-    candidates = chooseTimingsArtifacts(
-      listed.artifacts,
-      run.repository.id,
-      new Date(run.created_at!),
-    );
+    candidates = await listCandidates(gh, repository, run);
   } catch (error) {
     return committed(`GitHub's API failed: ${(error as Error).message}`);
   }
