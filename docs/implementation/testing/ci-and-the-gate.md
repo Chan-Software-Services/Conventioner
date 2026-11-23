@@ -20,7 +20,7 @@ describes:
   - .github/actions/e2e-stack/action.yml
   - .github/actions/front-end-deps/action.yml
   - front-end/scripts/e2e-repeat.ts
-verified: 2026-11-24
+verified: 2026-11-23
 sources:
   - T47
   - T53
