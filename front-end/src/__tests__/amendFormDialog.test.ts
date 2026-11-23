@@ -123,6 +123,9 @@ describe('AmendFormDialog', () => {
       ).toBe(false);
 
       expect(wrapper.find('[data-testid="amend-form-asks-nothing"]').exists()).toBe(true);
+      expect(
+        wrapper.get('[data-testid="amend-form-submit-button"]').attributes('disabled'),
+      ).toBeDefined();
     });
 
     it('says nothing once a question is added', async () => {
