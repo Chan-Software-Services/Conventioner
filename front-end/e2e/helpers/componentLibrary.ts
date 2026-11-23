@@ -24,8 +24,15 @@ export function eachWindow(title: string, body: (size: PhoneOrDesk) => void): vo
   }
 }
 
+/**
+ * Set on the production-build experiment's shards: a production build has no component library,
+ * so each test that opens it is skipped there, and counted as skipped in the shard's report.
+ */
+const PRODUCTION_BUILD = process.env.E2E_PRODUCTION_BUILD === 'true';
+
 /** The library's index, or one entry by its id, drawn. */
 export async function openEntry(page: Page, entry?: string): Promise<void> {
+  test.skip(PRODUCTION_BUILD, "the component library is a development build's only");
   await page.goto(entry ? `${LIBRARY_PATH}/${entry}` : LIBRARY_PATH);
   await expect(page.getByTestId(entry ? `library-entry-${entry}` : 'library-index')).toBeVisible();
 }

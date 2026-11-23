@@ -1,0 +1,16 @@
+# Experiment only, never merged: the E2E shards run against a production build of the front end in
+# place of the Vite dev server. Laid over docker-compose.yml by the e2e-shard job's COMPOSE_FILE.
+# The container builds once (`vite build`, no type-check), then serves the build with `vite preview`
+# on the dev server's port, which takes the same `/api` proxy from `server.proxy` and sends
+# vercel.json's headers, its Content-Security-Policy included. The build's seconds are printed in
+# the container's log, which the job's "Docker compose logs" step shows.
+services:
+  frontend:
+    command:
+      - sh
+      - -c
+      - >-
+        start=$$(date +%s) &&
+        npx vite build &&
+        echo "[e2e-build] vite build took $$(( $$(date +%s) - start ))s" &&
+        exec npx vite preview --host 0.0.0.0 --port 5173 --strictPort
