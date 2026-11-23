@@ -489,7 +489,7 @@ A stack that is OOM-killed shows `OOMKilled: true` in `docker inspect`; raise it
   The e2e helpers authenticate by logging in, and no spec or seed sends an identity header.
 - **Email verification**: The seed fixture creates users with `email_verified=true`
   via `back-end/create_test_user.py` so they can log in immediately.
-  Their passwords are hashed at bcrypt's lowest cost, 4, so each sign-in checks its hash in about a millisecond, where an account sign-up makes is checked at 12, about 0.16 s ([E2E seeds](implementation/testing/e2e-seeds.md#users)).
+  Their passwords are hashed at bcrypt's lowest cost, 4, so each sign-in checks its hash in about a millisecond, where an account made by sign-up is checked at 12, about 0.16 s ([E2E seeds](implementation/testing/e2e-seeds.md#users)).
 - **The Google Forms fixture**: `back-end/tests/test_data/google_forms/five-day-grid.csv` is a
   synthetic response export in a Google Form's shape, written by
   `back-end/tests/fixtures/synthetic_form_exports.py`.
