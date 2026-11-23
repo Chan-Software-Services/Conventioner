@@ -16,6 +16,7 @@ sources:
   - T271
   - T411
   - T469
+  - T507
 ---
 
 # Applying online
@@ -66,13 +67,17 @@ A reload, or a phone discarding the tab, opens the form again by itself on those
 A save the server takes, "Cancel", "Sign out" and another address signing in to the market on that tab drop them; answers kept for one address never open for another.
 Once the market no longer takes applications, kept answers are dropped and the page reads as it would without them.
 A save that meets a sign-in that has ended, when the device cannot sign them straight back in, keeps the answers it sent in the tab, and the page asks for sign-in again, saying "Your session has expired. Sign in again, and your answers will be saved."
-Signed in again as the same address, the form opens on those answers and sends the save once by itself; a save the server takes closes the form as any save does, and a refusal says why above "Save application", every answer kept.
+Signed in again as the same address, the form opens on those answers and sends the save once by itself, carrying the form version they were first sent with; a save the server takes closes the form as any save does, and a refusal says why above "Save application", every answer kept.
+A save from a page drawn from an older form, the market taken back to draft and its form or plan changed while the page was open, is refused, storing nothing: "This form changed since you opened it. Reload to continue." above "Save application", with "Reload" beside it ([a vendor's save is held to the form they saw](../rules/a-vendors-save-is-held-to-the-form-they-saw.md)).
+Reload reloads the page, which opens the form again by itself on the answers typed, with the note above, drawn as the form now asks: an answer to a question it still asks is there, a question taken away is gone, and a new one is blank.
+A browser that keeps no site data loses the typed answers on that reload, as on any reload.
 A one-choice answer the form no longer offers counts as blank there, since its control shows nothing chosen: a required one is named, and an optional one is sent unanswered (`answersToSend` in [`applicationForm.ts`](../../../front-end/src/utils/applicationForm.ts)), so the server does not refuse it with a list of every option.
 A question of more than 12 options is a field they type in to find an answer, one choice or several as chips; words they typed and did not choose clear when they leave the field ([the design language](../../design-system.md)).
 The vendor page reads the form and the saved application together before it draws; when either does not load within 15 seconds, or the request fails, it says "This page could not be loaded" with "Try again", never that the market is not open and never an endless "Loading..." (E06/F01/S01).
 Covered by:
 
 - `a-first-time-vendor-applies.spec.ts`
+- `a-save-from-an-older-form-is-refused.spec.ts`
 - `a-vendors-answers-survive.spec.ts`
 - `choices-at-scale.spec.ts`
 - `essential-fields.spec.ts`

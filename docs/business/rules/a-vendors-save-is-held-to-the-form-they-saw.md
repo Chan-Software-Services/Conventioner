@@ -5,6 +5,8 @@ describes:
   - back-end/api/applicants.py#applicant_form_version
   - back-end/api/applicants.py#save_applicant_application
   - back-end/app.py#public_save_applicant_application
+  - front-end/src/utils/api.ts#isFormChanged
+  - front-end/src/components/vendorPage/VendorApplicationForm.vue
 verified: 2026-11-24
 sources:
   - T507
@@ -60,11 +62,21 @@ A body naming no version, from a tab opened before the version existed, is still
 
 ## On the page
 
-The vendor reads the sentence where a refused save's reason always shows, with Reload beside it, and the reloaded page reopens the form by itself on the answers they typed, drawn as the form now asks: an answer to a question it still asks is there, a question taken away is gone, and a new one is blank ([applying online](../flows/applying-online.md#h3a-a-new-vendor-applies)).
+The vendor page's store keeps the version its form read answered (`formVersion` in [`stores/application.ts`](../../../front-end/src/stores/application.ts)), and every save sends it beside the answers.
+The vendor reads the sentence where a refused save's reason always shows, the form's error box, with Reload after it in a row that wraps, under the sentence on a phone ([`VendorApplicationForm.vue`](../../../front-end/src/components/vendorPage/VendorApplicationForm.vue)).
+The page tells the refusal apart by its code (`isFormChanged` in [`api.ts`](../../../front-end/src/utils/api.ts), beside the other coded 409s of [an exception never reaches a client](../../implementation/conventions/an-exception-never-reaches-a-client.md#what-the-organizer-reads)); any other refusal offers no Reload, and the next save takes it away as it starts.
+"Save application" and "Cancel" stay: a second save is refused the same way, and Cancel drops the kept answers as it always has.
+
+Reload reloads the page, which reopens the form by itself on the answers the vendor typed, kept in the tab as they typed them (T271), drawn as the form now asks: an answer to a question it still asks is there, a question taken away is gone, and a new one is blank ([applying online](../flows/applying-online.md#h3a-a-new-vendor-applies)).
+No restore of its own is written for it: the reloaded form puts the kept answers over the application as stored now, and a key the new form does not ask is dropped as it is sent.
+
+A save that met an ended sign-in keeps the version it was sent with beside its answers, and the save the page sends by itself after the vendor signs in again carries that version, not the one read after the sign-in (`takeSaveAfterSignIn`), so a form that changed in between refuses it with the sentence and Reload rather than take it unseen.
+Answers kept before the version existed carry none, and are refused the same way.
 
 ## Where it is kept
 
 - [`back-end/api/applicants.py`](../../../back-end/api/applicants.py): `applicant_form_version`, the form read's `formVersion`, and the save's check (`FORM_CHANGED`).
 - [`back-end/app.py`](../../../back-end/app.py): `public_save_applicant_application` reads `formVersion` from the body.
 - [The market write](../../implementation/modules/market-write.md#the-forms-revision): the organizer's form save holds `formRevision`; the vendor's save holds the form version instead.
-- Pinned by `back-end/tests/test_a_save_from_an_older_form_is_refused.py`, and for the business name migration by `back-end/tests/test_migrate_business_name.py`.
+- [`front-end/src/stores/application.ts`](../../../front-end/src/stores/application.ts) and [`VendorApplicationForm.vue`](../../../front-end/src/components/vendorPage/VendorApplicationForm.vue): the version kept and sent, `formChanged`, and Reload.
+- Pinned by `back-end/tests/test_a_save_from_an_older_form_is_refused.py`, and for the business name migration by `back-end/tests/test_migrate_business_name.py`; on the page by `VendorPage.test.ts` ("a save from a form that changed since the page read it") and `a-save-from-an-older-form-is-refused.spec.ts`.

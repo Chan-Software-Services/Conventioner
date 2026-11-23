@@ -123,6 +123,7 @@ sources:
   - T318
   - T335
   - T422
+  - T507
 ---
 
 # An exception never reaches a client
@@ -337,6 +338,9 @@ Sign out everywhere (`signOutEverywhere`, [the app bar](../modules/app-bar.md#si
 
 **A write over a market that changed** answers `MarketChanged`'s 409, which `isMarketChanged` in `api.ts` tells apart by its `code`.
 A second response interceptor, `installMarketChanged` in [`front-end/src/stores/market.ts`](../../../front-end/src/stores/market.ts), installed from `main.ts` beside the session's, re-reads the open market on it, and the screen's own catch shows the server's sentence through `getApiErrorMessage`, as any refusal's ([the market write](../modules/market-write.md#on-the-screen)).
+
+**A vendor's save from a page drawn from an older form** answers 409 with `code: "form_changed"`, which `isFormChanged` in `api.ts` tells apart by its `code`; no interceptor reads it, since it is never `market_changed` and re-reads nothing.
+The vendor page's store marks it (`formChanged`), and the form shows the server's sentence where any refused save's shows, with Reload beside it ([a vendor's save is held to the form they saw](../../business/rules/a-vendors-save-is-held-to-the-form-they-saw.md#on-the-page)).
 
 **The shell's session probe at load ends a session only on an answer that says so.**
 No answer, or a 5xx, says nothing of the session, so `keepsTheSession` keeps the stored user and the page, whose own read says what went wrong; any other failure goes to sign in carrying the page, with `ended=1` on a 401.

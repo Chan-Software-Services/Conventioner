@@ -18,7 +18,7 @@ import {
   undoOwnCheckIn,
   undoOwnCheckOut,
 } from '@/utils/applicantApi';
-import { getApiErrorMessage, getApiErrorStatus } from '@/utils/api';
+import { getApiErrorMessage, getApiErrorStatus, isFormChanged } from '@/utils/api';
 import {
   IntakeMode,
   type Application,
@@ -143,7 +143,8 @@ function keepDoorCode(held: HeldDoorCode | null): void {
  *
  * A save that meets an ended sign-in the device cannot renew keeps the answers it sent, marked
  * `saveAfterSignIn`, and the form sends them once by itself after the vendor signs in again as the
- * same address (`takeSaveAfterSignIn`).
+ * same address (`takeSaveAfterSignIn`), with the form version they were first sent with, so a form
+ * that changed in between refuses them rather than takes them unseen (T507).
  */
 const DRAFT_KEY = 'conventioner.applicationDraft';
 
@@ -153,6 +154,11 @@ export interface ApplicationDraft {
   formData: Record<string, unknown>;
   /** A save met an ended sign-in: send it once the vendor signs in again. */
   saveAfterSignIn: boolean;
+  /**
+   * The form version that save was sent with; null for answers kept as they are typed, which
+   * never use it, and for answers kept before the version existed, which the server refuses.
+   */
+  formVersion: string | null;
 }
 
 function storedDraft(): ApplicationDraft | null {
@@ -174,6 +180,7 @@ function storedDraft(): ApplicationDraft | null {
       applicantEmail: draft.applicantEmail,
       formData: draft.formData,
       saveAfterSignIn: draft.saveAfterSignIn === true,
+      formVersion: typeof draft.formVersion === 'string' ? draft.formVersion : null,
     };
   } catch {
     return null;
@@ -229,6 +236,16 @@ export const useApplicationStore = defineStore('application', () => {
   const page = ref<VendorPageInfo | null>(null);
   const formFields = ref<FormField[]>([]);
   const essentialOptions = ref<EssentialFormOptions>(EMPTY_ESSENTIAL_OPTIONS);
+  /**
+   * The version of the form on screen, as its read answered it, which every save carries (T507);
+   * null when the market asks no questions or the read carried none.
+   */
+  const formVersion = ref<string | null>(null);
+  /**
+   * The last save was refused because the form changed since the page read it (`isFormChanged`):
+   * the form offers Reload beside the sentence. False as each save starts.
+   */
+  const formChanged = ref(false);
   const heldDoorCode = ref<HeldDoorCode | null>(storedDoorCode());
   /** The vendor's unsaved answers, kept in this tab; read through `draftFor`. */
   const draft = ref<ApplicationDraft | null>(storedDraft());
@@ -248,6 +265,7 @@ export const useApplicationStore = defineStore('application', () => {
       applicantEmail: applicantEmail.value,
       formData: JSON.parse(JSON.stringify(formData)) as Record<string, unknown>,
       saveAfterSignIn: false,
+      formVersion: null,
     };
     keepDraft(draft.value);
   }
@@ -258,15 +276,17 @@ export const useApplicationStore = defineStore('application', () => {
   }
 
   /**
-   * Whether the signed-in vendor's kept answers wait to be sent after this sign-in, taken: the mark
-   * is cleared here, before the save is out, so a save that fails is never sent again by itself.
+   * The save the signed-in vendor's kept answers wait to be sent in after this sign-in, taken, or
+   * null when none waits: the form version it was first sent with, which it is sent with again.
+   * The mark is cleared here, before the save is out, so a save that fails is never sent again by
+   * itself; the answers stay kept as typed ones are.
    */
-  function takeSaveAfterSignIn(): boolean {
+  function takeSaveAfterSignIn(): { formVersion: string | null } | null {
     const held = marketSlug.value ? draftFor(marketSlug.value, applicantEmail.value) : null;
-    if (!held?.saveAfterSignIn) return false;
-    draft.value = { ...held, saveAfterSignIn: false };
+    if (!held?.saveAfterSignIn) return null;
+    draft.value = { ...held, saveAfterSignIn: false, formVersion: null };
     keepDraft(draft.value);
-    return true;
+    return { formVersion: held.formVersion };
   }
 
   function isAuthenticatedFor(slug: string): boolean {
@@ -301,6 +321,7 @@ export const useApplicationStore = defineStore('application', () => {
     if (epoch !== asked) return { failed: false, notFound: false };
     formFields.value = form?.fields ?? [];
     essentialOptions.value = form?.essentialOptions ?? EMPTY_ESSENTIAL_OPTIONS;
+    formVersion.value = form?.formVersion ?? null;
     return {
       failed: read.failed || Boolean(form?.failed && !form.notFound),
       notFound: Boolean(form?.notFound),
@@ -459,16 +480,24 @@ export const useApplicationStore = defineStore('application', () => {
    * Save the vendor's answers; their application as the server now holds it, or null with the
    * reason in `error`. Answering after the vendor signed out, it writes nothing - no application,
    * no sentence, no answers kept for the next sign-in - and answers null (`epoch`).
+   *
+   * It carries `version`, the form version the answers were typed against: the form on screen's
+   * unless the caller names one, as the save sent by itself after a sign-in names the version its
+   * answers were first sent with (T507).
    */
-  async function saveApplication(formData: Record<string, unknown>): Promise<Application | null> {
+  async function saveApplication(
+    formData: Record<string, unknown>,
+    version: string | null = formVersion.value,
+  ): Promise<Application | null> {
     if (!token.value || !marketSlug.value) return null;
     const slug = marketSlug.value;
     const email = applicantEmail.value;
     const asked = epoch;
     error.value = null;
+    formChanged.value = false;
     try {
       const app = await withRenewal(asked, (slug, current) =>
-        saveApplicantApplication(slug, current, formData),
+        saveApplicantApplication(slug, current, formData, version),
       );
       if (epoch !== asked) return null;
       application.value = app;
@@ -484,6 +513,7 @@ export const useApplicationStore = defineStore('application', () => {
             applicantEmail: email,
             formData: JSON.parse(JSON.stringify(formData)) as Record<string, unknown>,
             saveAfterSignIn: true,
+            formVersion: version,
           };
           keepDraft(draft.value);
         }
@@ -493,6 +523,7 @@ export const useApplicationStore = defineStore('application', () => {
           : 'Your session has expired. Please sign in again.';
       } else {
         error.value = saveErrorFrom(err);
+        formChanged.value = isFormChanged(err);
       }
       return null;
     }
@@ -636,6 +667,8 @@ export const useApplicationStore = defineStore('application', () => {
     application.value = null;
     formFields.value = [];
     essentialOptions.value = EMPTY_ESSENTIAL_OPTIONS;
+    formVersion.value = null;
+    formChanged.value = false;
     error.value = null;
     keepSession(null);
   }
@@ -668,6 +701,8 @@ export const useApplicationStore = defineStore('application', () => {
     page,
     formFields,
     essentialOptions,
+    formVersion,
+    formChanged,
     heldDoorCode,
     draft,
     draftFor,
