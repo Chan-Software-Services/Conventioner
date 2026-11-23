@@ -6,7 +6,7 @@ describes:
   - back-end/tests/test_map_plugin.py
   - front-end/e2e/helpers/testMap.ts
   - scripts/affected-specs.py
-verified: 2026-11-16
+verified: 2026-11-24
 sources:
   - T349
 ---
@@ -92,6 +92,7 @@ The map is the newest `test-map` artifact of a push to `dev`, which it downloads
 A spec is chosen by five rules:
 
 1. **The change edits it, or a file it imports**, transitively: a helper two levels down counts, and so does a `front-end/src/` file a spec imports itself.
+   A spec whose imports at the base reached a file the change deletes counts too, since its imports at the head no longer name that file; its reason is "imported `<path>`, which the change deletes".
 2. **Its pages loaded a changed file under `front-end/src/`.**
 3. **It called an endpoint whose requests ran a changed back-end function.**
    The function is the one holding a changed line on either side of the hunk, so a deleted function is found by its old name; a blank or comment-only line names none.
@@ -101,6 +102,7 @@ A spec is chosen by five rules:
 5. **Every spec, for a file under `front-end/` or `back-end/` that no rule places**: not a spec, not imported by one at the head or the base, in no spec's modules and no endpoint's files.
    Such a file can drive any spec: a stylesheet `main.css` pulls in by `@import`, which Vite inlines so no page requests it, a back-end module no endpoint ran in the suite, or a file no rule reads, such as `back-end/docker-entrypoint.sh` or `front-end/tsconfig.app.json`.
    Its reason is "`<path>` is not in the map".
+   A file the change deletes is placed by its deletion and chooses nothing here, since whatever read it, an importer, a stylesheet's `@import` or a config naming it, changes with it and is placed on its own; a deleted file a rule does place still chooses what that rule chooses.
    These drive no spec and choose nothing, since neither the stack nor a page reads them:
    - the docs and any Markdown
    - the suites that are not E2E: `back-end/tests/`, `scripts/tests/`, `front-end/src/__tests__/`, a `*.test.ts`, and a `*.test.ts(x)` or `*.spec.ts(x)` under `front-end/src/`
