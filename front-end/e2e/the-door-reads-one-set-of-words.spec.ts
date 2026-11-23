@@ -39,7 +39,7 @@ import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
  * A market date has passed only once it has passed everywhere, at UTC-12 (`SetupHasDatesGuard`),
  * and the seed walks the market out of draft with its day over among its dates: reckoned on the
  * runner's clock, that day had passed everywhere from noon UTC, and the seed was refused every
- * afternoon. A day before today at UTC+14 is still today at UTC-12, at any hour, and the
+ * afternoon. A day before today at UTC+14 has not yet passed at UTC-12, at any hour, and the
  * organizer's door takes it and today, which have both begun by the server's UTC date.
  */
 const ZONE = 'Pacific/Kiritimati';
