@@ -279,6 +279,11 @@ jobs:
       DISABLE_CAPTCHA: "true"
       DISABLE_EMAIL: "true"
       DISCORD_FAKE: "true"
+      # Experiment only: the stack serves a production build of the front end
+      # (docker-compose.e2e-build.yml), and the tests that open the component library through
+      # openEntry skip on it.
+      COMPOSE_FILE: docker-compose.yml:docker-compose.e2e-build.yml
+      E2E_PRODUCTION_BUILD: "true"
       # On a push to dev only, the shards record the test map (front-end/e2e/helpers/testMap.ts),
       # which the test-map job below builds; every other run records nothing.
       RECORD_TEST_MAP: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
@@ -294,6 +299,12 @@ jobs:
       - uses: ./.github/actions/e2e-stack # zizmor: ignore[self-repository] actionlint 1.7.12, the latest, refuses the $/ form
         with:
           save-caches: ${{ matrix.shard == 1 && github.event_name != 'merge_group' }}
+      # The front end's container builds before it serves, so the run waits for the build's page.
+      - name: Wait for the production build to serve
+        timeout-minutes: 10
+        run: |
+          until curl --silent --fail --output /dev/null http://127.0.0.1:5173/; do sleep 2; done
+          docker compose logs frontend | grep -F '[e2e-build]'
       - name: Run Playwright tests
         working-directory: front-end
         env:
