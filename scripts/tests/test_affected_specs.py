@@ -377,6 +377,9 @@ class TestAFileNoRulePlaces:
             "front-end/scripts/brand-icons.ts",
             # The back end's deploy config, which the stack does not read.
             "back-end/vercel.json",
+            # The advisory scan's lock, which only CI's python-advisories job installs.
+            "back-end/requirements-audit.in",
+            "back-end/requirements-audit.txt",
         ],
     )
     def test_docs_and_the_suites_that_are_not_e2e_choose_nothing(self, repo, path):

@@ -39,6 +39,7 @@ sources:
   - T375
   - T424
   - T464
+  - T528
 ---
 
 # CI and the gate
@@ -62,6 +63,15 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 - Python 3.12, the locks `requirements.txt`, `requirements-floorplan-solver.txt` and `requirements-dev.txt`, a re-lock that fails on any difference ([the locks](../../TECH_STACK.md#python-dependencies-are-locked)), then pytest, with a `mongo:7` service ([why not 8.0](real-mongo-suite.md#the-mongodb-version)) on runner port 27117, allowed [64000 open files](real-mongo-suite.md#the-mongodb-version), for [the real-MongoDB suite](real-mongo-suite.md), which `REAL_MONGODB_REQUIRED=true` makes fail rather than skip without it
 
+**`python-advisories`**
+
+- [pip-audit](https://github.com/pypa/pip-audit) 2.10.1, from its own lock, `back-end/requirements-audit.txt`, over every back-end lock (`requirements*.txt`, its own among them), one lock a run, since pip-audit refuses a package listed in two of the files it is given
+- each lock is read as locked (`--disable-pip`): every pinned version with its hashes, against the advisories PyPI publishes, resolving and installing nothing, and `--strict` fails on a package it could not look up
+- any known advisory fails the job, and its summary names, for each lock, each advisory, its version and the version that fixes it; move the package with `scripts/lock-backend-requirements.sh --upgrade-package <name>` ([the locks](../../TECH_STACK.md#python-dependencies-are-locked))
+- on every pull request and every push to `dev` and `main`, but not on a [trial commit](#a-merge-queues-trial-commit)
+- it starts once `real-data-and-workflows` has ended, whatever its result, so a run never asks for more than [the account's 20 jobs](#the-e2e-shards) at once
+- not a required check, so an advisory published overnight never holds an unrelated pull request: the red job on a push to `dev` is the alert
+
 **`frontend-unit`**
 
 - the Node `.nvmrc` pins, `npm ci`, Vitest
@@ -77,7 +87,8 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 **`real-data-and-workflows`**
 
-- four short checks in one job, so [one run fits the account's 20 jobs](#the-e2e-shards): on a pull request only, [`real_data_check.py`](../../../scripts/real_data_check.py) on the PR's commits since the base branch ("No real data in the PR's commits") and then on every file of the merge it checks out ("No real data anywhere in the tree"), then gitleaks 8.28.0 (checksum-verified, fully redacted) on the same commits, which lets by only the fingerprints in the root `.gitleaksignore` (a fixture value gitleaks takes for a key, in a commit already pushed, which only a force-push could take out of the range), the backstop to the git hooks and the gate, which run the checker before anything is pushed ([real data never leaves the PC](../conventions/security-invariants.md#real-data-never-leaves-the-pc))
+- four short checks in one job, so [one run fits the account's 20 jobs](#the-e2e-shards): on a pull request only, [`real_data_check.py`](../../../scripts/real_data_check.py) on the PR's commits since the base branch ("No real data in the PR's commits") and then on every file of the merge it checks out ("No real data anywhere in the tree"), the backstop to the git hooks and the gate, which run the checker before anything is pushed ([real data never leaves the PC](../conventions/security-invariants.md#real-data-never-leaves-the-pc))
+- then gitleaks 8.28.0 (checksum-verified, fully redacted), "No secret in the new commits": on a pull request, on the same commits; on a push to `dev` or `main`, on the commits the push added (`<before>..<after>`, the push event's two commits), never the history before them, so a secret that reached either branch other than through a pull request's scan (a Release PR, merged with `--admin`, gets no CI) fails the push's run; a push that created the branch has no `before` and fails the step, which neither branch ever does; it lets by only the fingerprints in the root `.gitleaksignore` (a fixture value gitleaks takes for a key, in a commit already pushed, which only a force-push could take out of the range)
 - on every run, [zizmor](https://docs.zizmor.sh/) 1.31.1 (checksum-verified) with `--offline` over the repository, which audits the five workflows (Test, CodeQL, Deploy, Release Please and Promote), the [shared e2e actions](#the-e2e-stack-and-its-caches) and `dependabot.yml` without a token, where any finding fails the job and its log names the audit, file and line, an accepted finding is ignored on the line zizmor reports, with its audit and the reason after it (`# zizmor: ignore[<audit>] <reason>`), and there is no zizmor config file, so nothing is ignored wholesale
 - then [actionlint](https://github.com/rhysd/actionlint) 1.7.12 (checksum-verified) over the five workflows: their syntax, expressions, job references and action inputs (a local action's against its `action.yml`), and each `run:` script through the runner's shellcheck, which zizmor's security audits do not read, but not a composite action's own scripts, where any finding fails the job and its log names the file, line and rule
 - last, on a pull request only, zizmor without `--offline`, given the run's read-only token, for the audits that look actions up on GitHub (an impostor commit, a known-vulnerable action or a confused ref behind a pin), with `--format github`, so each finding is an annotation on the pull request, and `continue-on-error`, so a finding or an outage of GitHub's API never fails the job
@@ -140,7 +151,8 @@ On it `github.base_ref` and `github.event.pull_request` are empty, since they be
 | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-build` | every step, as on a push: none has an `if:`                                                                                                                                                                        |
 | `knowledge-graph`                                                     | the scripts' tests and `knowledge_graph.py check`; the drift step, which reads `github.base_ref`, is skipped, as on a push, since it judges a pull request against its base, which the pull request's own run does |
-| `real-data-and-workflows`                                             | zizmor offline and actionlint; the real-data scans, gitleaks and zizmor online, each `if: github.event_name == 'pull_request'`, are skipped, as on a push                                                          |
+| `real-data-and-workflows`                                             | zizmor offline and actionlint; the real-data scans and zizmor online (`if:` a pull request), and gitleaks (`if:` a pull request or a push), are skipped                                                            |
+| `python-advisories`                                                   | skipped (`if:` not a `merge_group`); not a required check                                                                                                                                                          |
 | `e2e-shard`                                                           | every step, as on a push, but shard 1 saves no cache ([why](#the-e2e-stack-and-its-caches)) and no shard records [the test map](the-test-map.md), which only a push to `dev` records (`RECORD_TEST_MAP`)           |
 | `e2e`                                                                 | its `if: ${{ !cancelled() }}`, which reads no event; the selection audit's steps, each `if: github.event_name == 'pull_request'`, are skipped, as on a push                                                        |
 | `e2e-repeat`                                                          | skipped (`if: github.event_name == 'pull_request'`), as on a push; not a required check                                                                                                                            |
@@ -175,8 +187,9 @@ The first timings came from run 42493172818's list-reporter times, before the re
 **Ten shards, since the suite is the run's critical path.**
 With six, the slowest shard ended a median 21.5 minutes into a run, while every other job was done by 2.7; a shard is about 3 minutes of setup and its share of the suite, so ten bring a shard to about 12 minutes at about 13 more runner-minutes of setup a run.
 That holds while runners are free: the account is on GitHub Free, which runs 20 jobs at once across the repository.
-One pull request's run asks for 20, so it fits alone: 17 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, the ten shards and `e2e-repeat`), `e2e` only once the shards are done, and CodeQL's three; a push to `dev` or a trial commit starts 16 Test jobs, with no `e2e-repeat`, and CodeQL's three, 19 in all, as does a push to `main`; on `dev` `test-map` starts once the shards are done, beside `e2e`.
+One pull request's run asks for 20 at once, so it fits alone: 17 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, the ten shards and `e2e-repeat`), `python-advisories` only once `real-data-and-workflows`, under a minute, is done, `e2e` only once the shards are done, and CodeQL's three; a push to `dev` or a trial commit starts 16 Test jobs, with no `e2e-repeat`, and CodeQL's three, 19 in all, as does a push to `main`, and a push to `dev` or `main` then starts `python-advisories`, as a pull request's run does; on `dev` `test-map` starts once the shards are done, beside `e2e`.
 That is why the five short checks (drift, the real-data scan with gitleaks, zizmor offline, zizmor online and actionlint) are steps of `knowledge-graph` and `real-data-and-workflows`: as five jobs of their own they made one run ask for 24, more than the account runs at once.
+`python-advisories` is a job of its own, since a step's failure would fail a required check, so it waits for `real-data-and-workflows` instead, and takes the runner that job leaves.
 With another run going, shards still wait: on one such run four shards queued 9 to 12 minutes, and the run ended at 23 minutes while each shard's own time was 10.5 to 12.5.
 The matrix lists the shards and their `total`, which move together.
 
@@ -261,6 +274,7 @@ The workflow analyses `main` too, on every pull request and push to it, though `
 
 [`.github/dependabot.yml`](../../../.github/dependabot.yml) has Dependabot open version-update pull requests weekly, for `npm` in `front-end/` and for the `github-actions` of the workflows and of the composite actions under `.github/actions/` (`directories`).
 It has no `pip` entry: the back end's hashed locks are written by `uv` through `scripts/lock-backend-requirements.sh` ([the locks](../../TECH_STACK.md#python-dependencies-are-locked)), and that Dependabot writes them as the script does is unverified, so a back-end version bump is made by hand with the script.
+A known advisory against a back-end lock is caught by [`python-advisories`](#ci) instead, on every pull request and push.
 Dependabot alerts, and the security-update toggle, are repository settings, not this file: they follow the dependency graph, so a `pip` security update can still arrive as a pull request; make it with the script rather than merging Dependabot's lock edits.
 
 **Its pull requests target `dev`**, the default branch, and their titles are Conventional Commits that release-please reads:
@@ -345,7 +359,7 @@ To see who holds it and who waits: `cat ~/.local/state/agent-team/heavy.lock` na
 The lock is the one place T19's `team-capacity run --kind gate:conventioner` is to take over, keeping the lock as the fallback where `team-capacity` is absent; `nm-test.sh` does not call it yet, and the lock can go once the browser is isolated from the host's network changes.
 `nm-test.sh` never calls `sudo`: it installs Chromium with `npx playwright install chromium`, never `--with-deps` or `install-deps`, because those run `sudo` with no terminal and each failed attempt counts toward the account's `pam_faillock` lockout; the machine's own package manager provides the system libraries.
 CI's [e2e action](#the-e2e-stack-and-its-caches) keeps `--with-deps`, and `install-deps` when the browser comes from its cache, which is correct on GitHub's Ubuntu runners.
-What it does not run is CI's alone: `docker compose build`, gitleaks, zizmor, actionlint, the knowledge graph's drift check and CodeQL.
+What it does not run is CI's alone: `docker compose build`, gitleaks, pip-audit, zizmor, actionlint, the knowledge graph's drift check and CodeQL.
 
 ## Stack identity
 

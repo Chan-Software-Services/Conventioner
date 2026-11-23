@@ -13,9 +13,9 @@
 # so every machine writes the same locks, and CI's backend job re-runs it and fails on any
 # difference, which is what catches a lock edited by hand.
 # The locks are universal (every platform, for the Python in back-end/.python-version), so the
-# hashes cover Vercel's Amazon Linux, Docker's Debian and CI's Ubuntu alike. The floorplan solver's
-# and the dev locks are constrained by requirements.txt, so a package that appears in two locks has
-# the same pin in both and they install together.
+# hashes cover Vercel's Amazon Linux, Docker's Debian and CI's Ubuntu alike. The floorplan solver's,
+# the dev and the audit locks are constrained by requirements.txt, so a package that appears in two
+# locks has the same pin in both and they install together.
 #
 set -euo pipefail
 
@@ -38,3 +38,4 @@ lock() {
 lock requirements.in -o requirements.txt "$@"
 lock requirements-floorplan-solver.in -c requirements.txt -o requirements-floorplan-solver.txt "$@"
 lock requirements-dev.in -c requirements.txt -o requirements-dev.txt "$@"
+lock requirements-audit.in -c requirements.txt -o requirements-audit.txt "$@"
