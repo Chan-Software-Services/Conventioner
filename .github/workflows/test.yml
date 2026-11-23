@@ -330,12 +330,19 @@ jobs:
   # tenth of the suite rather than all of it (89 runner-minutes of tests on 2026-11-11, 1 to 3
   # more per runner to set up, by what the caches hold). The tests share one database WITHIN a runner (`workers: 1`),
   # never across runners. `front-end/scripts/e2e-shards.ts` deals the spec files to the shards by
-  # the minutes in `e2e-shard-timings.json`, not Playwright's `--shard`, which cuts the
-  # alphabetical list by test count and once left one shard at 24 minutes and another at 6.
+  # their measured seconds, not Playwright's `--shard`, which cuts the alphabetical list by test
+  # count and once left one shard at 24 minutes and another at 6. The seconds are the newest
+  # `e2e-shard-timings` artifact a run on dev or a merge queue trial commit published, made at
+  # least ten minutes before this run was created, so every shard and every re-run picks the same
+  # one; with none, or one it cannot read, the committed `e2e-shard-timings.json`.
   # `total` is the length of `shard`'s list: the two move together.
   e2e-shard:
     name: e2e shard ${{ matrix.shard }}/${{ matrix.total }}
     runs-on: ubuntu-latest
+    # The timings step lists the artifacts and reads its own run's creation time.
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -360,6 +367,16 @@ jobs:
       - uses: ./.github/actions/e2e-stack # zizmor: ignore[self-repository] actionlint 1.7.12, the latest, refuses the $/ form
         with:
           save-caches: ${{ matrix.shard == 1 && github.event_name != 'merge_group' }}
+      # Never fails: with no artifact to take, or one it cannot read, it writes the committed
+      # timings, with a warning. Should it fail all the same, the next step deals by the committed
+      # file too.
+      - name: The timings to deal by
+        working-directory: front-end
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/e2e-shards.ts timings "$RUNNER_TEMP/e2e-shard-timings.json"
       - name: Run Playwright tests
         working-directory: front-end
         env:
@@ -367,7 +384,7 @@ jobs:
           TOTAL: ${{ matrix.total }}
           # Empty, so off, unless this run records the test map.
           TEST_MAP_OUT: ${{ env.RECORD_TEST_MAP == 'true' && format('{0}/test-map/records.jsonl', github.workspace) || '' }}
-        run: node scripts/e2e-shards.ts "--shard=$SHARD/$TOTAL"
+        run: node scripts/e2e-shards.ts "--shard=$SHARD/$TOTAL" "--timings=$RUNNER_TEMP/e2e-shard-timings.json"
       - name: Report flaky tests
         if: always()
         working-directory: front-end
@@ -414,12 +431,15 @@ jobs:
           path: test-map/
           if-no-files-found: ignore
           retention-days: 90
-      # The report that refreshes `e2e-shard-timings.json` (`node scripts/e2e-shards.ts refresh`).
+      # The report and the deal record, which the `e2e` job checks and blends into the next
+      # timings; the selection audit reads the report too.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: e2e-results-shard-${{ matrix.shard }}
-          path: front-end/test-results/results.json
+          path: |
+            front-end/test-results/results.json
+            front-end/test-results/e2e-deal.json
           if-no-files-found: ignore
           retention-days: 90
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -529,10 +549,10 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  # The one check to require: it passes only when every shard did, so the rules name a single job
-  # whatever the shard count becomes. It runs whatever the shards' result, so a failed
-  # shard fails it, but not on a run that was cancelled, which would post a red check on the head
-  # a later push made moot.
+  # The one check to require: it passes only when every shard did and the shards ran every spec
+  # file exactly once, so the rules name a single job whatever the shard count becomes. It runs
+  # whatever the shards' result, so a failed shard fails it, but not on a run that was cancelled,
+  # which would post a red check on the head a later push made moot.
   e2e:
     name: e2e
     if: ${{ !cancelled() }}
@@ -542,25 +562,53 @@ jobs:
     permissions:
       contents: read
       actions: read
+    env:
+      # A push to dev, a scheduled run on dev and a merge queue trial commit publish the next
+      # timings; no other run does, and a run whose shards did not all pass publishes nothing.
+      PUBLISHES_TIMINGS: ${{ github.event_name == 'merge_group' || ((github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/dev') }}
     steps:
-      # On a pull request, the selection audit (docs/implementation/testing/the-test-map.md): each
-      # spec the shards failed, as `scripts/affected-specs.py` would have treated it for the PR's
-      # diff (from the merge commit's first parent, as e2e-repeat reads it, hence two commits):
-      # ran, left to CI past the cap, or missed, each miss a warning annotation once a test map
-      # exists. Every step of it continues on error, so the job passes or fails on the last step
-      # alone.
+      # The checkout and the shards' artifacts serve the deal's check below and, on a pull request,
+      # the selection audit. The checkout takes two commits for the audit's diff.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: github.event_name == 'pull_request'
-        continue-on-error: true
         with:
           persist-credentials: false
           fetch-depth: 2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      # Continues on error, so a run with no shard artifact to download breaks nothing here; once
+      # every shard passed, the check below fails on a missing one.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        if: github.event_name == 'pull_request'
         continue-on-error: true
         with:
           pattern: e2e-results-shard-*
           path: ${{ runner.temp }}/e2e-results
+      # Once every shard passed: every shard dealt by the same timings and their reports hold every
+      # spec file exactly once, or this fails the job, since a file no shard ran was never tested.
+      # The job summary names the timings' source, each shard's seconds and the spread. When this run
+      # publishes the timings (PUBLISHES_TIMINGS) it also writes the next timings, the ones the run dealt
+      # by blended with what it measured, for the step after it to publish.
+      - name: Every spec file ran on one shard
+        if: needs.e2e-shard.result == 'success'
+        working-directory: front-end
+        run: |
+          if [ "$PUBLISHES_TIMINGS" = true ]; then
+            node scripts/e2e-shards.ts check "$RUNNER_TEMP/e2e-results" "--publish=$RUNNER_TEMP/e2e-shard-timings.json"
+          else
+            node scripts/e2e-shards.ts check "$RUNNER_TEMP/e2e-results"
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: needs.e2e-shard.result == 'success' && env.PUBLISHES_TIMINGS == 'true'
+        with:
+          name: e2e-shard-timings
+          path: ${{ runner.temp }}/e2e-shard-timings.json
+          if-no-files-found: error
+          retention-days: 90
+      # On a pull request, the selection audit (docs/implementation/testing/the-test-map.md): each
+      # spec the shards failed, as `scripts/affected-specs.py` would have treated it for the PR's
+      # diff (from the merge commit's first parent, as e2e-repeat reads it): ran, left to CI past
+      # the cap, or missed, each miss a warning annotation once a test map exists. It continues on
+      # error, so it never decides the job.
       # The script needs only the standard library, so the runner's own Python runs it.
       - name: Audit the selection
         if: github.event_name == 'pull_request'

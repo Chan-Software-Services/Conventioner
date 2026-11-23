@@ -56,12 +56,31 @@ sources:
   - T422
   - T469
   - T501
+  - T519
 ---
 
 # E2E patterns
 
 How a Playwright spec under `front-end/e2e/` is written.
 How to run the suite is [TESTING.md](../../TESTING.md#end-to-end-e2e-tests); the helpers that put a market in a given state are [the E2E seeds](e2e-seeds.md); which spec to extend is [the market journey spec](the-market-journey-spec.md).
+
+## Every E2E test says why it is one
+
+An E2E test costs CI about a second before it tests anything, on every full run, and the suite runs on every pull request, every queued merge and every push to `dev` and `main`.
+So a test is E2E only when a cheaper test cannot prove it: a Vitest test in `front-end/src/__tests__/` (happy-dom, `@vue/test-utils`, a real `vue-router` where routing matters), or a pytest in `back-end/tests/`.
+
+A test must be E2E when what it proves needs one of these:
+
+- **layout**: a real box, width, scroll, overflow, clip, paint or contrast (happy-dom lays nothing out);
+- **a browser behaviour happy-dom does not model**: real focus and Tab order, `:focus-visible`, a pointer or touch gesture, a native control's keys, `beforeunload`, the clipboard, a download, print, an `IntersectionObserver` in a real scroller, the History API across reloads;
+- **the session**: a real cookie, sign-in, sign-out or session end;
+- **the stack together**: what the server stores or refuses, reached through the page, where the unit tests mock one side.
+
+A rule the page computes (which words, which items, which order, which keys do what) is a unit test, and the E2E test, when one is needed at all, proves only the wiring, once.
+
+Every spec file a change adds starts its header comment with a line `Why E2E: <the reasons above it needs, in a few words>`.
+Every test a change adds, to a new file or an existing one, is listed in the pull request's body under **New E2E tests**, one line each, `<file>:<line> <title> - <the reason it needs>`; a test that runs once per window size says what it measures at each size, or runs at one size.
+A test a change adds that a unit or component test could prove is written as that test instead.
 
 ## Selectors and page objects
 
@@ -96,6 +115,7 @@ A spec that needs several people at once drives each in a browser context of its
 Every `page`, and the page `withUser()` opens, is watched by [`helpers/browserSaid.ts`](../../../front-end/e2e/helpers/browserSaid.ts) so that a failing test carries what the browser said (console errors, page errors, crashes, failed requests other than a navigation's aborts), since the suite has failed on pages that never painted with nothing in the stack's logs to say why.
 The fixture's page attaches it when the test fails, and a `withUser()` page when its sign-in or body throws, headed with whose page it was; [`a-stalled-helper-says-why.spec.ts`](../../../front-end/e2e/a-stalled-helper-says-why.spec.ts) shows both that and the people-at-scale wait for quiet naming each API request still open and its age.
 That wait ([`helpers/peopleAtScale.ts`](../../../front-end/e2e/helpers/peopleAtScale.ts), `requestsWhile`) lets go of the requests the old page still had out when a reload or a `goto` inside it brings a new page, since Playwright reports neither their end nor their failure, and still waits for the new page's own.
+It fails after 15 seconds, or after the `within` its caller gives: the self-test gives it 2, since its stall is certain.
 `expectAccessible(state)` runs axe over the page as it stands and fails on any WCAG A or AA violation, one line per element as `rule (impact) target`; its configuration and why `color-contrast` is off are [the design language's](../../design-system.md#what-keeps-this-true).
 `settle(page)` ([`helpers/settle.ts`](../../../front-end/e2e/helpers/settle.ts)) waits, bounded, for CSS transitions to end, since a control mid-transition reports its passing paint rather than its own; every sweep calls it before it looks.
 The screen sweeps' tests are registered by `sweepTheScreens()`, so Playwright reports each under [`helpers/screenSweeps.ts`](../../../front-end/e2e/helpers/screenSweeps.ts), the line of its `test()` call, never the group's spec file; the describe title names the group, a screen's test runs each check as a step, `<check> at <width>x<height>`, and `npx playwright test e2e/screen-sweeps- --grep '<screen>'` runs the checks of the screens whose names match alone.
@@ -197,6 +217,11 @@ A route that must fail the screen's own read fails every matching request until 
 **A spec that waits on a file chooser listens for it from before the page loads.**
 `page.waitForEvent('filechooser')` turns on Playwright's catching of choosers as it is called, without waiting for the browser to agree, so a chooser opened by the very next key press can slip past it and the wait times out with focus still on the input: [`the-upload-steps-are-one.spec.ts`](../../../front-end/e2e/the-upload-steps-are-one.spec.ts) missed its first Enter in 4 runs of 20 this way.
 It adds `page.on('filechooser', () => {})` before it opens the page, then waits for each chooser as before.
+
+**A wait on one of the page's own timers runs on `page.clock`, never in real time.**
+The spec calls `page.clock.install()` before the page loads and `runFor` the timer's span, as [`the-door-stays-fresh.spec.ts`](../../../front-end/e2e/the-door-stays-fresh.spec.ts) and [`the-door-as-a-map.spec.ts`](../../../front-end/e2e/the-door-as-a-map.spec.ts) run the roster's 15-second re-read.
+To prove that nothing happens in a quiet, it stops the clock with `pauseAt` once the action's answers have landed, runs the quiet with `runFor`, and reads a state the page would still hold had it acted: [`plan-saves-once.spec.ts`](../../../front-end/e2e/plan-saves-once.spec.ts) reads the save line, which a save made in the quiet leaves lit ("Saving…" or "Plan saved"), since the timer that clears "Plan saved" never fires on the stopped clock.
+A request's own timeout, an axios `timeout`, is the XHR's and runs on no clock a test moves, so a spec meets a failed read through a route instead, and the bound itself is a unit test's ([`applicantReads.test.ts`](../../../front-end/src/__tests__/applicantReads.test.ts)).
 
 ## Chasing a flake
 
