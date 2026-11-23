@@ -158,6 +158,9 @@ export class LoginPage {
     await this.fillEmail(email);
     await this.fillPassword(password);
     const reads = Promise.all([answered('/api/markets'), answered('/api/organizations')]);
+    // Set before the submit, so its timers end first: a sign-in that never lands fails on the
+    // landing below, which says so, rather than on these waits.
+    reads.catch(() => undefined);
     await this.clickSubmit();
     await this.waitForMarkets();
     await reads;

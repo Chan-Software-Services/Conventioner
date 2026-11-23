@@ -1,4 +1,4 @@
-import { test, expect, TEST_USER } from './fixtures';
+import { test, expect, TEST_USER, LoginPage } from './fixtures';
 import { requestsWhile } from './helpers/peopleAtScale';
 import { withUser } from './helpers/withUser';
 
@@ -7,7 +7,8 @@ import { withUser } from './helpers/withUser';
  * reproduced still names its cause: a `withUser` page attaches what its browser said, as the
  * fixture's page does, and the people-at-scale wait for quiet names each request still open.
  * Each is made to fail on purpose here, with the failure caught, so the self-test passes. And that
- * wait neither stalls on the reads a reload drops nor ends before the new page's own.
+ * wait neither stalls on the reads a reload drops nor ends before the new page's own. A sign-in to
+ * Markets that never lands fails on the landing, not on its wait for Markets' reads.
  */
 
 /** The markets list's one read, `GET /api/markets`. */
@@ -45,18 +46,40 @@ test('the wait for quiet fails naming each API request still open, and its age',
   await expect(stalled).rejects.toThrow(/still open: (?:.+; )?GET \/api\/markets for \d+ms/);
 });
 
+test('a sign-in to Markets that never lands fails on the landing, not on the wait for its reads', async ({
+  page,
+}) => {
+  // An address with no account, so the refused sign-in spends no try of the fixture organizer's.
+  const signIn = new LoginPage(page).signInToMarkets(
+    'fixture-never-lands@example.com',
+    'fixture-wrong-password',
+  );
+  await expect(signIn).rejects.toThrow(/page\.waitForURL: Timeout/);
+});
+
 /** The page's organizations read, `GET /api/organizations`. */
 const THE_ORGANIZATIONS_READ = /\/api\/organizations$/;
 
 test('the wait for quiet ends across a reload, though the old page dropped its reads', async ({
   authenticatedPage: page,
 }) => {
-  // The sign-in has just landed on Markets, whose reads are still out; the reload drops them with
-  // the old page, and Playwright reports neither their end nor their failure (T284).
+  // The sign-in returns once Markets' reads have answered, so the old page is given a read of its
+  // own, held unanswered; the reload drops it with the old page, and Playwright reports neither its
+  // end nor its failure (T284). The new page's markets read is answered.
+  let heldOne = false;
+  let isOut!: () => void;
+  const out = new Promise<void>((resolve) => (isOut = resolve));
+  await page.route(THE_MARKETS_READ, async (route) => {
+    if (heldOne) return route.continue();
+    heldOne = true;
+    isOut();
+  });
   const made = await requestsWhile(page, {}, async () => {
+    await page.evaluate(() => void fetch('/api/markets'));
+    await out;
     await page.reload();
   });
-  expect(made).toContain('GET /api/markets');
+  expect(made.filter((read) => read === 'GET /api/markets')).toHaveLength(2);
 });
 
 test("the wait for quiet still waits for the new page's reads after a reload", async ({
