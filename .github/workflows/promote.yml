@@ -6,9 +6,9 @@ name: Promote
 # `gh workflow run promote.yml --ref dev -f commit=<sha>`. A check-only run
 # (`-f check-only=true`) makes every check and mints the App's token, but moves nothing.
 #
-# scripts/promote_check.py refuses unless the commit's Test run on a push to `dev` passed, the
-# commit is on `dev`, and `main` is its ancestor; docs/RELEASING.md says how a promotion proves
-# itself. Then `main` is fast-forwarded as a GitHub App, the only actor `main`'s rulesets let push
+# scripts/promote_check.py refuses unless the commit has a green Test run, from `dev`'s merge
+# queue or a push to `dev` (the newest of them decides), the commit is on `dev`, and `main` is its
+# ancestor; docs/RELEASING.md says how a promotion proves itself. Then `main` is fast-forwarded as a GitHub App, the only actor `main`'s rulesets let push
 # to it. The App's push starts the Test and release-please workflows on `main`, which a push with
 # this run's own token would not.
 #
