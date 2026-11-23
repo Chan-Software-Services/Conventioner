@@ -6,6 +6,9 @@ import { transitionMarket } from './helpers/seedPhaseMarket';
 import { signInOnThePage } from './helpers/vendorSignIn';
 
 /**
+ * Why E2E: the stack together - what the server refuses and stores, reached through the page - and
+ * a real reload reopening the form on the answers kept in the tab.
+ *
  * A vendor's save from a page drawn from an older form is refused, and Reload reopens the form as
  * it now asks on the answers they typed (T507).
  *
