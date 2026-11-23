@@ -202,6 +202,23 @@ class TestWhatTheVendorCannotSee:
         assert _read_version() == version
         assert _save(world, version).status_code == 200
 
+    def test_the_first_application_freezing_the_offering_leaves_the_version_and_a_save_is_taken(
+            self, world):
+        # Every page opened before a market's first application saves after it: were the freeze
+        # to move the version, each of them would be told the form changed.
+        version = _read_version()
+        assert _form(world).get("essentialOptions") is None
+        world.vendor = "first@vendor.test"
+        first = app_module.app.test_client().put(
+            f"/public/markets/{SLUG}/applicant/application",
+            json={"formData": {**VALID_ANSWERS, "business_name": "First Stall"},
+                  "formVersion": version})
+        assert first.status_code == 200, first.get_json()
+        assert _form(world).get("essentialOptions") is not None
+
+        assert _read_version() == version
+        assert _save(world, version).status_code == 200
+
     def test_a_phase_move_leaves_the_version(self, world):
         version = _read_version()
         world.markets.doc["phase"] = MarketPhase.ASSIGNMENT.value

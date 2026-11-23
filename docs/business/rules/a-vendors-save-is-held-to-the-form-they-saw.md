@@ -38,7 +38,7 @@ So the server refuses the save rather than guess what the vendor meant, and the 
 The read and the version are made from one helper's payload, so they never disagree.
 
 - It moves with everything the vendor sees: a question's label, help text, options, order or required flag, a question added or removed, the plan's dates, sections or tiers before the first application froze the offering, and an essential question left unasked.
-- It does not move with what the vendor cannot see: a layout saved, a form saved with nothing changed, a phase move.
+- It does not move with what the vendor cannot see: a layout saved, a form saved with nothing changed, a phase move, or the first application freezing the offering the page already showed, so every page opened before a market's first application still saves after it.
 - Neither revision counter stands in for it: `formRevision` misses the plan's options, and `planRevision` moves on every layout save past draft, which would refuse vendors whenever an organizer moves a table ([ADR 0044](../../adr/0044-a-vendors-save-is-held-to-the-form-their-page-drew.md)).
 - It is never stored: computed on each read and each save.
 
