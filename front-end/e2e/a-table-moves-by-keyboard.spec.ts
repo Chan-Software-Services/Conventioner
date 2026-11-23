@@ -109,8 +109,18 @@ test.describe('A table moves by keyboard', () => {
     await expect(layout.table(GOLD_1)).toBeFocused();
     await expect(layout.announcement).toHaveText('');
 
+    // The map's stop follows the focus: left on the second table, a Tab out and a Shift+Tab back
+    // land there, not on the first.
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Tab');
+    await expect(layout.viewMenuButton).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(layout.table(GOLD_2)).toBeFocused();
+    await page.keyboard.press('ArrowLeft');
+    await expect(layout.table(GOLD_1)).toBeFocused();
+
     // Another Tab leaves the map, for the zoom bar on its corner, each of its buttons a stop, then
-    // the panel.
+    // the panel; Shift+Tab walks the same stops back to the table.
     await page.keyboard.press('Tab');
     await expect(layout.viewMenuButton).toBeFocused();
     for (const next of [layout.zoomOut, layout.zoomIn, layout.fit]) {
@@ -119,6 +129,8 @@ test.describe('A table moves by keyboard', () => {
     }
     await page.keyboard.press('Tab');
     await expect(layout.sectionColour('Gold row')).toBeFocused();
+    for (let back = 0; back < 5; back += 1) await page.keyboard.press('Shift+Tab');
+    await expect(layout.table(GOLD_1)).toBeFocused();
 
     // With a table selected that never had the focus, the map's stop is the selected one.
     await page.reload();
