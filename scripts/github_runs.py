@@ -92,6 +92,8 @@ def dev_runs(sha: str, api: str, repository: str, token: str) -> Tuple[Optional[
         if run["event"] == "push":
             return run["head_branch"] == "dev"
         if run["event"] == "merge_group":
+            if not isinstance(run["head_branch"], str):
+                raise TypeError("head_branch")
             return run["head_branch"].startswith(DEV_QUEUE)
         return False
 

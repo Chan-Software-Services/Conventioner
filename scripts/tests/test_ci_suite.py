@@ -384,6 +384,7 @@ def without(run, key):
         (RUNS, runs(without(queued(1345), "conclusion"))),
         (RUNS, runs(without(queued(1345), "html_url"))),
         (RUNS, runs(without(queued(1345, status="in_progress", conclusion=None), "id"))),
+        (RUNS, runs({**queued(1345), "head_branch": None})),
         (jobs_path(1345), (200, "not json")),
         (jobs_path(1345), (200, json.dumps({"total_count": 1}))),
         (jobs_path(1345), (200, json.dumps({"jobs": [job("backend")]}))),
@@ -393,6 +394,7 @@ def without(run, key):
     ],
     ids=["runs-not-json", "runs-unlike-github", "a-run-without-its-number", "a-run-without-its-status",
          "a-run-without-its-conclusion", "a-run-without-its-link", "a-run-going-without-its-id",
+         "a-queue-run-without-its-branch",
          "jobs-not-json", "jobs-without-the-list", "jobs-without-the-count", "a-job-without-its-status",
          "a-job-without-its-conclusion", "a-count-that-is-text"],
 )
@@ -471,9 +473,11 @@ def test_a_map_a_push_run_made_before_the_nightly_run_counts(stub, mapper_env):
         [artifact(44100000001, head_sha=OTHER)],
         [artifact(44100000001, expired=True)],
         [artifact(44100000001, name="test-map-shard-1")],
+        [artifact(44100000001, branch="feat/something")],
         [artifact(44100000001, head_sha=OTHER), artifact(44100000002, expired=True)],
     ],
-    ids=["no-map", "a-map-at-another-commit", "an-expired-map-at-it", "a-shard-s-records-at-it", "neither"],
+    ids=["no-map", "a-map-at-another-commit", "an-expired-map-at-it", "a-shard-s-records-at-it",
+         "a-map-made-on-another-branch-at-it", "neither"],
 )
 @pytest.mark.parametrize("event", MAPPERS)
 def test_a_commit_with_no_map_records_one(stub, mapper_env, event, listed):
@@ -545,12 +549,15 @@ def without_run_key(item, key):
         artifacts({**artifact(44100000002), "workflow_run": None}),
         artifacts(without_run_key(artifact(44100000002), "head_sha")),
         artifacts(without_run_key(artifact(44100000002), "id")),
+        artifacts(without_run_key(artifact(44100000002), "head_branch")),
+        artifacts(artifact(44100000002, branch=None)),
         artifacts({**artifact(44100000002), "workflow_run": {"id": "44100000002", "head_sha": SHA}}),
         artifacts({**artifact(44100000002), "expired": "false"}),
     ],
     ids=["not-json", "without-the-list", "a-list-that-is-not-one", "a-map-without-its-name",
          "a-map-without-its-expiry", "a-map-without-its-run", "a-map-whose-run-is-null",
-         "a-run-without-its-commit", "a-run-without-its-id", "a-run-id-that-is-text", "an-expiry-that-is-text"],
+         "a-run-without-its-commit", "a-run-without-its-id", "a-run-without-its-branch",
+         "a-run-whose-branch-is-null", "a-run-id-that-is-text", "an-expiry-that-is-text"],
 )
 def test_an_answer_unlike_github_s_at_the_maps_records_one(stub, mapper_env, answer):
     stub.serve(ARTIFACTS, answer)

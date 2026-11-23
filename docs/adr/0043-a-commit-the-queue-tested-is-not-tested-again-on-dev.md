@@ -5,7 +5,7 @@ describes:
   - .github/workflows/test.yml
   - scripts/ci_suite.py
   - scripts/promote_check.py
-verified: 2026-11-23
+verified: 2026-11-24
 sources:
   - T510
 status: accepted
@@ -46,7 +46,9 @@ No other run records any more, so recording, which slowed the suite, is never on
 - A commit that reached `dev` without the queue still gets the whole suite on its push.
 - Promote's link may be a warm push run's, which tests nothing; that run's summary names and links the queue's run that proved the commit.
 - A whole-suite push run that fails on a commit whose queue run passed refuses the promotion, as before; a re-run of its failed jobs makes it pass.
-- The test map is up to a day behind `dev`, which its readers already allowed for; a red nightly run is information only, since no rule reads it, and the next night tries again.
+- The test map is up to a day behind `dev`, which its readers already allowed for; a red nightly run that ran only the shards and `test-map` is information only, since no rule reads those checks, and the next night tries again.
+- A nightly or hand-started run whose `suite` job itself fails (a runner or checkout failure, since the script says `map` on any doubt) runs the whole suite on `dev`'s tip, as any empty word does, and posts the required checks there under their names, newer than the queue's.
+  A red one among them may lead `main`'s rule to refuse the App's fast-forward of that commit, while Promote's own check, which reads no nightly run, passes; `main` stays unmoved, and a re-run of that run's failed jobs, then Promote again, moves it.
 - `main`'s rule that requires the six checks reads the App's fast-forward to a queue-tested commit through the queue run's checks and the warm push's skipped ones, which GitHub reports as success.
 
 ## Considered and rejected

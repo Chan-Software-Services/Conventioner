@@ -13,9 +13,9 @@ GITHUB_STEP_SUMMARY is set, as a line of the run's summary:
   after its last job ended: every job passed or skipped is `warm`. No queue run, one that did not
   pass, or GitHub unread is `full`, the whole suite.
 - `schedule` and `workflow_dispatch` (the nightly run on `dev`'s tip, and one started by hand):
-  the test map. An unexpired `test-map` artifact made by a run at the commit, whichever run made
-  it, is `none`, nothing to do; no such map, or GitHub unread, is `map`, the shards recording and
-  the `test-map` job.
+  the test map. An unexpired `test-map` artifact made by a run on `dev` at the commit, nightly,
+  by hand or a push's, is `none`, nothing to do; no such map (one made on another branch is never
+  read), or GitHub unread, is `map`, the shards recording and the `test-map` job.
 - Any other event: `full`.
 
 The workflow treats anything but a word, a crash or a usage error included, as `full`, so a doubt
@@ -127,7 +127,9 @@ def on_push(sha: str, api: str, repository: str, token: str) -> int:
 
 
 def map_run(sha: str):
-    """A parse of GitHub's artifacts answer: the id of a run that made a live test map at `sha`, or None.
+    """A parse of GitHub's artifacts answer: the id of a run on `dev` that made a live test map at
+    `sha`, or None. A map made on another branch does not count, since affected-specs.py reads only
+    `dev`'s.
 
     Raises on an answer unlike GitHub's, a missing key or a wrong type, so it is read as unread.
     """
@@ -140,9 +142,13 @@ def map_run(sha: str):
             if item["name"] != "test-map":
                 continue
             expired, made_by = item["expired"], item["workflow_run"]
-            if not isinstance(expired, bool) or not isinstance(made_by["id"], int):
+            if (
+                not isinstance(expired, bool)
+                or not isinstance(made_by["id"], int)
+                or not isinstance(made_by["head_branch"], str)
+            ):
                 raise TypeError("artifact")
-            if not expired and made_by["head_sha"] == sha:
+            if not expired and made_by["head_sha"] == sha and made_by["head_branch"] == "dev":
                 return made_by["id"]
         return None
 

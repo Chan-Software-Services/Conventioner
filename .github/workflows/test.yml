@@ -43,12 +43,12 @@ env:
 jobs:
   # Which suite this run runs (scripts/ci_suite.py), on a push to dev, a nightly run or one started
   # by hand. A commit dev's merge queue already passed is the commit the queue tested, so its push
-  # only warms the caches the pull requests read (`warm`); every other commit, or any doubt, runs the
-  # whole suite (`full`). A nightly or hand-started run makes the test map (`map`: the shards,
+  # only warms the caches the pull requests read (`warm`); every other commit, or any doubt, runs
+  # the whole suite (`full`). A nightly or hand-started run makes the test map (`map`: the shards,
   # recording, and `test-map`), or nothing when the commit has one (`none`). Every other run skips
-  # this job and starts every job at once. The step's shell makes anything but one
-  # of the script's words `full`, and the jobs read an empty output, this job skipped or failed, as
-  # `full` too, so nothing here can skip a test it should not.
+  # this job and starts every job at once. The step's shell makes anything but one of the script's
+  # words `full`, and the jobs read an empty output, this job skipped or failed, as `full` too, so
+  # nothing here can skip a test it should not.
   suite:
     name: suite
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -501,8 +501,8 @@ jobs:
   # whatever the shard count becomes. It runs whatever the shards' result, so a failed
   # shard fails it, but not on a run that was cancelled, which would post a red check on the head
   # a later push made moot, nor on a warm push, whose skipped shards would post a red one on a
-  # commit the queue's run passed, nor on a nightly or hand-started run, which posts no `e2e` check
-  # on dev's tip.
+  # commit the queue's run passed, nor on a nightly or hand-started run, which posts it on dev's tip
+  # only as skipped, read as passing, never a red one.
   e2e:
     name: e2e
     needs: [suite, e2e-shard]

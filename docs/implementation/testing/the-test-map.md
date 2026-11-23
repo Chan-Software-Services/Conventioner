@@ -50,7 +50,7 @@ One JSON file, `test-map.json`:
 ## Where it comes from
 
 The nightly Test run, at 19:17 UTC on `dev`'s tip, records three things and builds the map from them, the last two steps by [`scripts/test_map.py`](../../../scripts/test_map.py).
-Its first job, `suite` ([`scripts/ci_suite.py`](../../../scripts/ci_suite.py)), finds whether that commit already has an unexpired `test-map` artifact, from whichever run made it: then the run does nothing, as on a night with no merge; else it runs only the ten shards, recording, and the `test-map` job, and when GitHub cannot be read it records too.
+Its first job, `suite` ([`scripts/ci_suite.py`](../../../scripts/ci_suite.py)), finds whether that commit already has an unexpired `test-map` artifact made by a run on `dev`, whichever run made it: then the run does nothing, as on a night with no merge; else it runs only the ten shards, recording, and the `test-map` job, and when GitHub cannot be read it records too.
 `gh workflow run test.yml --ref dev` starts the same run by hand, to have a map of a large change before the night.
 
 1. **The shards record each test.**
