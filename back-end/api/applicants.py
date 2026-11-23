@@ -406,8 +406,8 @@ def applicant_form_version(market_doc: Dict[str, Any]) -> str:
     The SHA-256 hex digest of the canonical JSON of what the public form read serves of the form,
     the market's own questions and the essential options, so it moves with anything the vendor
     sees (a question's label, help text, options, order or required flag, a question added or
-    removed, the plan's dates, sections, tiers or table types before the first application froze
-    them, an unasked essential) and never with what they cannot (a layout saved, a form saved
+    removed, the plan's dates, sections or tiers before the first application froze them, an
+    unasked essential) and never with what they cannot (a layout saved, a form saved
     unchanged, a phase move). Neither revision counter stands in for it: ``formRevision`` misses
     the plan's options, and ``planRevision`` moves on every layout save. The read serves it as
     ``formVersion``, and ``save_applicant_application`` refuses a save carrying another

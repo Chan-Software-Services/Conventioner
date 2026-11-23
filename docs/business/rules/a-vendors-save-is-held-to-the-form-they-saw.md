@@ -28,7 +28,7 @@ The form changes under an open page only while the market is back in draft (Reop
 
 - An answer to a question taken away is dropped without a word, and a new question is stored blank.
 - An answer to a question moved to another key is lost: after the migration, a page opened before its run sends the old key beside a blank built-in field, and the business name would be stored nowhere while an approved application went back to open.
-- Dates, sections, tiers or table types changed before the first application are checked against options the vendor never saw.
+- Dates, sections or tiers changed before the first application are checked against options the vendor never saw.
 
 So the server refuses the save rather than guess what the vendor meant, and the page sends them back to the form as it asks now.
 
@@ -37,7 +37,7 @@ So the server refuses the save rather than guess what the vendor meant, and the 
 **The form version** is a fingerprint of the form as the vendor's page draws it: the SHA-256 hex digest of the canonical JSON of the market's own questions as the public form read serves them and of what the essential questions offer (`applicant_form_version` in [`back-end/api/applicants.py`](../../../back-end/api/applicants.py)).
 The read and the version are made from one helper's payload, so they never disagree.
 
-- It moves with everything the vendor sees: a question's label, help text, options, order or required flag, a question added or removed, the plan's dates, sections, tiers or table types before the first application froze the offering, and an essential question left unasked.
+- It moves with everything the vendor sees: a question's label, help text, options, order or required flag, a question added or removed, the plan's dates, sections or tiers before the first application froze the offering, and an essential question left unasked.
 - It does not move with what the vendor cannot see: a layout saved, a form saved with nothing changed, a phase move.
 - Neither revision counter stands in for it: `formRevision` misses the plan's options, and `planRevision` moves on every layout save past draft, which would refuse vendors whenever an organizer moves a table ([ADR 0044](../../adr/0044-a-vendors-save-is-held-to-the-form-their-page-drew.md)).
 - It is never stored: computed on each read and each save.

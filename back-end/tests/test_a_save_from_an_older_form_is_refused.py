@@ -2,9 +2,9 @@
 
 The vendor's page reads, with the form, the form's version as the page draws it: its own questions
 and what the essential questions offer. Every save carries that version, and a save whose version
-is not the form's version now is answered 409 ``form_changed`` before anything is judged or
-written, so no answer lands against a form the vendor never saw, and a reload brings them the form
-as it now asks.
+is not the form's version now is answered 409 ``form_changed`` before any answer is judged or
+anything written, so no answer lands against a form the vendor never saw, and a reload brings them
+the form as it now asks.
 
 The world's market already holds applications, so the form lock refuses its form route: each test
 changes the stored market document in place (``world.markets.doc``), as a trip back to draft would
@@ -214,7 +214,7 @@ def _version(doc):
 
 
 class TestWhatTheVersionCovers:
-    """One part the vendor sees at a time, through the one function the read and the save call."""
+    """One part the vendor sees at a time, through the function the save calls, built on the read's helpers."""
 
     @pytest.fixture
     def doc(self, world):

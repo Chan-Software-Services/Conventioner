@@ -111,7 +111,7 @@ See [ADR 0042](docs/adr/0042-every-form-asks-a-built-in-business-name.md).
 
 **Form version**:
 The fingerprint of the application form as a vendor's page draws it, its own questions and the options its essential questions offer. The vendor's page reads it with the form and every save carries it, and a save from a page drawn from another version is refused.
-_Avoid_: Form revision, which is the count of the organizer's writes of the form's questions
+_Avoid_: Form revision, which is the count of the writes of the form's questions
 See [a vendor's save is held to the form they saw](docs/business/rules/a-vendors-save-is-held-to-the-form-they-saw.md).
 
 **Required answer**:

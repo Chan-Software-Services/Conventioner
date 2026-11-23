@@ -17,7 +17,7 @@ The rule it keeps: [a vendor's save is held to the form they saw](../business/ru
 ## Context
 
 A vendor's save carried only the answers, so the server judged them against the form as the market asked it at the save, whatever the vendor's page had drawn.
-The form changes under an open page only while the market is back in draft or by the operator's business name migration, but then an answer to a question taken away was dropped without a word, a business name moved to the built-in field was stored nowhere, and choices were checked against dates, sections, tiers or table types the vendor never saw.
+The form changes under an open page only while the market is back in draft or by the operator's business name migration, but then an answer to a question taken away was dropped without a word, a business name moved to the built-in field was stored nowhere, and choices were checked against dates, sections or tiers the vendor never saw.
 The organizer's own form save is already held: it carries `formRevision`, the count of the writes of the form's questions.
 
 ## Decision
@@ -38,7 +38,7 @@ The organizer's own form save is already held: it carries `formRevision`, the co
 
 ## Considered and rejected
 
-- **Holding the save to `formRevision`**: it counts the writes of the form's questions only, so a change to the plan's dates, sections, tiers or table types before the first application would still reach the vendor unseen.
+- **Holding the save to `formRevision`**: it counts the writes of the form's questions only, so a change to the plan's dates, sections or tiers before the first application would still reach the vendor unseen.
 - **Holding it to `planRevision` as well**: it moves on every layout save past draft, so vendors would be sent to reload whenever an organizer moved a table.
 - **Storing the version on the market**: every writer of the form or the plan would have to keep it, and one that forgot would refuse or let through saves wrongly; computed from what the read serves, it cannot drift.
 - **Carrying a moved answer over to its new key on the page**: the server cannot know which question the vendor's answer meant once the form moved, and the migration has already copied the stored answer.
