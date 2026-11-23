@@ -80,7 +80,7 @@ Checking in again updates the table with the time, so a vendor checked in again 
 A check-in made on the public check-in page before it was removed has `checked_in_by` None and no `checked_in_via`, and one made before T318 has no `table_code`: it is read as made at the seat the vendor holds now, which is the answer a stored table would give, so nothing was migrated.
 The vendor's address is normalised (`utils/email_address.normalized_email`) on every write and lookup.
 Undoing a check-in deletes its document: nothing else was changed by it.
-A check-out is three more fields on that document (`CHECK_OUT_FIELDS`, T496): `checked_out_at` (ISO 8601 UTC), `checked_out_by` (the organizer's address, or None for the vendor's own) and `checked_out_via` (`door_code` for the vendor's own, else None), set by `record_check_out` and unset by `undo_check_out`.
+A check-out is three more fields on that document (`CHECK_OUT_FIELDS`, T496): `checked_out_at` (ISO 8601 UTC), `checked_out_by` (the organizer's address, or None for the vendor's own) and `checked_out_via` (`door_code` for the vendor's own, else None), set by `record_check_out` (or, on a past day, by the operator's [`add_check_outs_from_sheet.py`](../../../back-end/migrations/add_check_outs_from_sheet.py), below) and unset by `undo_check_out`.
 A document with no `checked_out_at` is a vendor not checked out, which is every document stored before check-outs, so nothing was migrated.
 The collection goes with the market when it is deleted.
 
