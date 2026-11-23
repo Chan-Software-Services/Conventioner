@@ -9,7 +9,7 @@ describes:
   - front-end/src/__tests__/theImportAsksBeforeItDropsAMapping.test.ts
   - front-end/e2e/the-import-asks-before-it-drops-a-mapping.spec.ts
   - front-end/e2e/a-layout-saves-once.spec.ts
-verified: 2026-11-17
+verified: 2026-11-24
 sources:
   - T271
   - T244

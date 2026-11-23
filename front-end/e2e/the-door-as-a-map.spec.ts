@@ -33,8 +33,11 @@ import { LoginPage } from './pages/LoginPage';
 
 const VIEWER = { email: 'e2e-door-map-viewer@example.com', password: 'e2epassword123' };
 
-/** The roster reads itself again every 15 seconds; a check-in made elsewhere shows within that. */
-const REREAD = 20_000;
+/**
+ * The roster reads itself again every 15 seconds; the test runs that re-read on `page.clock`, so a
+ * check-in made elsewhere shows with no real wait.
+ */
+const REREAD = 15_000;
 
 /** The legend's three states, in its order, at every time of day (T501). */
 const STATES = ['Checked in', 'Checked out', 'Not checked in'];
@@ -118,6 +121,7 @@ for (const size of PHONE_AND_DESK) {
         TEST_USER.password,
       );
       const vendors = aisleA(seeded);
+      await page.clock.install();
       const door = await openTheMap(page, seeded);
       await expectFits(page, 'The door as a map');
       await expectAccessible('the door as a map');
@@ -216,7 +220,8 @@ for (const size of PHONE_AND_DESK) {
         data: { vendorEmail: vendors.moth, date: seeded.today },
       });
       expect(elsewhere.ok(), await elsewhere.text()).toBeTruthy();
-      await expect.poll(() => door.tone('Aisle A 3', 'right'), { timeout: REREAD }).toBe('filled');
+      await page.clock.runFor(REREAD);
+      await expect.poll(() => door.tone('Aisle A 3', 'right')).toBe('filled');
       expect(await door.tone('Aisle A 3', 'left')).toBe('outlined');
       expect(await door.tone('Aisle A 1')).toBe('checkedOut');
 

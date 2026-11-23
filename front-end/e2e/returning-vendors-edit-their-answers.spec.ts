@@ -104,8 +104,10 @@ test('a saved application that does not arrive is said so, never shown as none, 
   // Loading the saved answers (bug 21) added a second request to the form page of old with no time
   // limit beside the form's 15 s one, so a stalled stack left the page loading for ever - the
   // state E06/F01/S01 had removed - and the same failure on Your Application read as "You have
-  // not applied to this market yet." (E26, found as a CI flake on #88).
-  test.setTimeout(90_000);
+  // not applied to this market yet." (E26, found as a CI flake on #88). That both reads are
+  // bounded, and that one with no answer is a failure, is `applicantReads.test.ts`'s: the bound is
+  // the request's own timeout, which no clock a test moves can run, so the page meets a failed read
+  // here.
   const market = await seedApplicantMarket(
     request,
     BACKEND_URL,
@@ -137,19 +139,6 @@ test('a saved application that does not arrive is said so, never shown as none, 
   await page.unroute(saved);
   await page.getByTestId('vendor-page-retry-button').click();
   await expect(page.getByTestId('vendor-page-answers')).toContainText('Stalled Prints');
-
-  // A reload, and this time the read never answers, as on a stalled stack: the page says so
-  // within its bound, never "loading" for ever, and a retry brings the answers and the form.
-  const held: Array<{ abort: () => Promise<void> }> = [];
-  await page.route(saved, (route) => {
-    if (route.request().method() !== 'GET') return route.continue();
-    held.push(route);
-  });
-  await page.reload();
-  await expect(page.getByTestId('vendor-page-load-failed')).toBeVisible({ timeout: 25_000 });
-  await page.unroute(saved);
-  await Promise.all(held.map((route) => route.abort().catch(() => undefined)));
-  await page.getByTestId('vendor-page-retry-button').click();
   await login.editButton.click();
   await expect(login.input('business_name')).toHaveValue('Stalled Prints');
 });

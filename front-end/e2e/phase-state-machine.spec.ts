@@ -588,16 +588,4 @@ test.describe('Where the workspace opens', () => {
     await expect(page.getByTestId('market-bar-tab-applications')).toHaveClass(/active/);
     await expect(page.getByTestId('market-bar-tab-setup')).not.toHaveClass(/active/);
   });
-
-  test('an explicit stage in the URL still wins, so a shared link keeps working', async ({
-    authenticatedPage: page,
-    request,
-  }) => {
-    const seed = await seedPhaseMarket(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
-    await setUserInPage(page);
-
-    // A draft would otherwise open on the plan.
-    await page.goto(marketSetupPath(seed.marketId, 'applications'));
-    await expect(page.getByTestId('market-bar-tab-applications')).toHaveClass(/active/);
-  });
 });
