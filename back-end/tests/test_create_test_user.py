@@ -143,6 +143,25 @@ def test_the_bulk_form_refuses_a_database_the_environment_does_not_name(monkeypa
     assert hashes == []
 
 
+@pytest.mark.parametrize("make", [
+    lambda: Script.create_test_user("e2e@example.com", "e2epassword123"),
+    lambda: Script.create_test_users(["person-001@people.test"], "pw-123"),
+], ids=["one address", "bulk"])
+def test_a_hosted_database_gets_no_fixture_account(monkeypatch, hashes, make):
+    """A fixture account's password is hashed at bcrypt's lowest cost, so it is never made in a
+    database reached by ``MONGODB_URI``, as production is: every stack names its own by
+    ``MONGODB_HOST``."""
+    users = _database(monkeypatch)
+    monkeypatch.setenv("MONGODB_URI", "mongodb+srv://fixture.example.net/conventioner")
+    monkeypatch.setenv("MONGODB_HOST", "mongodb")
+
+    with pytest.raises(SystemExit) as refused:
+        make()
+    assert str(refused.value) == Script.HOSTED_REFUSAL
+    assert users.inserted == []
+    assert hashes == []
+
+
 @pytest.mark.parametrize("argv", [["--bulk"], ["--bulk", "pw-123"], ["e2e@example.com"]])
 def test_a_command_missing_its_values_says_how_to_run_it(monkeypatch, capsys, argv):
     users = _named_stack(monkeypatch)
