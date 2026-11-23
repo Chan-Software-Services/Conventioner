@@ -12,7 +12,6 @@ import {
 import { inTheWindow, PHONE_AND_DESK } from './helpers/phoneWindow';
 import { loginViaApi, seedPublishedMarketWithAssignments } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
-import { calendarToday } from './helpers/vendorSignIn';
 import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
 
 /**
@@ -33,20 +32,27 @@ import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
  * on a plain muted line after it, under it on a phone and beside it at a desk, the address breaking
  * only before its "@" or a dot.
  */
-// The days are the server's UTC date and the two after it, and the browser's clock stands at noon
-// on the middle one. The server refuses to open a market on a date that has passed everywhere on
-// Earth (`SetupHasDatesGuard`), so the browser's yesterday was refused from noon UTC on; it takes a
-// check-in on a day up to the day after its UTC date (`day_has_begun`).
-const [YEAR, MONTH, DATE] = new Date().toISOString().slice(0, 10).split('-').map(Number) as [
-  number,
-  number,
-  number,
-];
-const YESTERDAY = calendarToday(new Date(YEAR, MONTH - 1, DATE));
-const TODAY = calendarToday(new Date(YEAR, MONTH - 1, DATE + 1));
-const TOMORROW = calendarToday(new Date(YEAR, MONTH - 1, DATE + 2));
-/** Noon on TODAY, on the browser's calendar. */
-const THE_BROWSERS_NOW = new Date(YEAR, MONTH - 1, DATE + 1, 12);
+
+/**
+ * The three days are reckoned, and the door is read, at UTC+14, the first clock to reach a day.
+ *
+ * A market date has passed only once it has passed everywhere, at UTC-12 (`SetupHasDatesGuard`),
+ * and the seed walks the market out of draft with its day over among its dates: reckoned on the
+ * runner's clock, that day had passed everywhere from noon UTC, and the seed was refused every
+ * afternoon. A day before today at UTC+14 has not yet passed at UTC-12, at any hour, and the
+ * organizer's door takes it and today, which have both begun by the server's UTC date.
+ */
+const ZONE = 'Pacific/Kiritimati';
+const DAY = 24 * 60 * 60 * 1000;
+/** The calendar day at UTC+14 of an instant, as a market date; the zone keeps no summer time. */
+const dayAt = (instant: number) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: ZONE }).format(new Date(instant));
+const NOW = Date.now();
+const TODAY = dayAt(NOW);
+const YESTERDAY = dayAt(NOW - DAY);
+const TOMORROW = dayAt(NOW + DAY);
+
+test.use({ timezoneId: ZONE });
 
 /** An organizer of the market whose address is too long to share a phone's line with the time. */
 const LONG_ORGANIZER = {
@@ -180,7 +186,6 @@ for (const size of PHONE_AND_DESK) {
       test(`on ${day.name} the door says Not checked in, Checked in and Checked out, and no other word`, async ({
         authenticatedPage: page,
       }) => {
-        await page.clock.setFixedTime(THE_BROWSERS_NOW);
         const door = new AttendanceStatusPage(page);
         await page.goto(`${marketScreenPath(marketId, 'attendance')}?date=${day.date}`);
         await expect(door.rows).toHaveCount(3);
