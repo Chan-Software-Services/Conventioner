@@ -33,17 +33,16 @@ async function finalPath(page: Page, slug: string, suffix: string): Promise<stri
 }
 
 /**
- * The market's own address (its market page), its vendor page (T469), and addresses under them
- * that name no page, old and new.
+ * The market's own address (its market page) and its vendor page (T469). That each reads as an
+ * unknown market's, to a stranger and to the signed-in organizer, is `the-market-page.spec.ts`'s
+ * ("a draft and a Google Form market before its results read as a slug naming nothing, at both
+ * addresses"), which a CSV draft reads as too, since the server refuses a draft before it reads
+ * the intake mode.
  */
-const GATED_SUFFIXES = [
-  '',
-  '/vendor',
-  '/apply',
-  '/applicant-login',
-  '/applicant/dashboard',
-  '/vendor/apply',
-];
+const PAGE_SUFFIXES = ['', '/vendor'];
+/** Addresses under them that name no page, old and new. */
+const UNDER_PAGE_SUFFIXES = ['/apply', '/applicant-login', '/applicant/dashboard', '/vendor/apply'];
+const GATED_SUFFIXES = [...PAGE_SUFFIXES, ...UNDER_PAGE_SUFFIXES];
 
 test.describe('Intake mode - a CSV market has no public applicant surface', () => {
   let csvMarket: ApplicantMarketSeed;
@@ -58,7 +57,7 @@ test.describe('Intake mode - a CSV market has no public applicant surface', () =
     );
   });
 
-  for (const suffix of GATED_SUFFIXES) {
+  for (const suffix of UNDER_PAGE_SUFFIXES) {
     test(`a stranger at /<slug>${suffix} is shown what an unknown market shows`, async ({
       page,
     }) => {
@@ -67,7 +66,9 @@ test.describe('Intake mode - a CSV market has no public applicant surface', () =
 
       expect(gated).toBe(absent);
     });
+  }
 
+  for (const suffix of GATED_SUFFIXES) {
     test(`/<slug>${suffix} lands a stranger where an unknown market lands them`, async ({
       page,
     }) => {
@@ -80,7 +81,7 @@ test.describe('Intake mode - a CSV market has no public applicant surface', () =
 
   // "Page not found" offers an organizer who is signed in another way onward. It decides on the
   // person and never on the address, so the market's own owner reads the two alike too.
-  for (const suffix of GATED_SUFFIXES) {
+  for (const suffix of UNDER_PAGE_SUFFIXES) {
     test(`an organizer signed in at /<slug>${suffix} is shown what an unknown market shows`, async ({
       authenticatedPage: page,
     }) => {

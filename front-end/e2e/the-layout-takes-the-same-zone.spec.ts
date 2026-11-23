@@ -385,36 +385,4 @@ test.describe('A layout is saved once', () => {
     expect(again.status()).toBe(409);
     expect(await again.json()).toEqual({ error: STALE });
   });
-
-  test('a save from a tab that read an older layout says so, and Reload shows the latest', async ({
-    authenticatedPage: page,
-    request,
-  }) => {
-    const seeded = await seedLayout(request, BACKEND_URL, TEST_USER.email, TEST_USER.password, {
-      layout: true,
-    });
-    const layout = new LayoutPage(page);
-    await layout.goto(seeded.marketId, seeded.upper.id);
-    await expect(layout.calibrationMap).toBeVisible();
-
-    // Another tab sets the scale meanwhile.
-    const market = await (await request.get(`${BACKEND_URL}/markets/${seeded.marketId}`)).json();
-    const stored = market.market.setupObject.floorplans[0];
-    const elsewhere = await request.post(`${BACKEND_URL}/floorplans/save-to-market`, {
-      data: {
-        market_id: seeded.marketId,
-        revision: stored.revision,
-        floorplan: { ...stored, scalePxPerUnit: 800 / 40_000 },
-      },
-    });
-    expect(elsewhere.ok()).toBeTruthy();
-
-    await layout.calibrate([0, 300], [800, 300], '30');
-
-    await expect(page.getByRole('alert')).toContainText(STALE);
-    await expect(layout.scale).toHaveText('Not calibrated');
-    await page.getByTestId('layout-save-reload').click();
-    await expect(layout.scale).toHaveText('40.0 m across');
-    await expect(page.getByRole('alert')).toHaveCount(0);
-  });
 });

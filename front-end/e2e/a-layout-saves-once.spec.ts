@@ -45,6 +45,7 @@ test.describe('A layout saves once', () => {
     await second.toolAdd.click();
     await second.clickAt([20_000, 6000]);
     await expect(second.saveState).toContainText(STALE);
+    await expect(second.saveState, 'read out as it is said').toHaveRole('alert');
     await expect(second.saveReload).toBeVisible();
     await expect(second.saveRetry).toHaveCount(0);
     // Nothing is lost from what the tab shows: its new table still stands, the first where it was.

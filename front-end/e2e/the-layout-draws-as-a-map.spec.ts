@@ -12,8 +12,9 @@ import {
  * A calibrated layout draws as a map (T257 ticket 03): the seeded Upper Hall, 30 m by 22.5 m, with
  * Gold row's 13 tables, Silver aisle's 6, one table in no section, a stage and a pillar. Each table
  * stands where the layout says, at its true size and turn, in its section's colour with its number;
- * the sections are named beside their tables and listed in the panel; the floorplan lies faded
- * under them; and the map is one Tab stop, its tables reached by the arrow keys.
+ * the sections are named beside their tables and listed in the panel; and the floorplan lies faded
+ * under them. That the map is one Tab stop, its tables reached by the arrow keys, is
+ * `a-table-moves-by-keyboard.spec.ts`'s.
  */
 const HALL_MM = { width: 30_000, height: 22_500 };
 const TABLE_MM = { width: 1830, depth: 760 };
@@ -247,49 +248,6 @@ test.describe('A calibrated layout draws as a map', () => {
     await expect(layout.tables).toHaveCount(20);
     await expect(layout.mapImage).toHaveCount(0);
     await expect(layout.sectionLabels).toHaveText(['Gold row', 'Silver aisle']);
-  });
-
-  test('Tab reaches the toolbar and the map once each, and the arrow keys move between the tables', async ({
-    authenticatedPage: page,
-  }) => {
-    const layout = new LayoutPage(page);
-    await layout.goto(seeded.marketId, seeded.upper.id);
-    await expect(layout.tables).toHaveCount(20);
-
-    // The toolbar is one stop, on its pressed tool, and the map the next.
-    await layout.backToSetup.focus();
-    await page.keyboard.press('Tab');
-    await expect(layout.toolSelect).toBeFocused();
-    await page.keyboard.press('Tab');
-    await expect(layout.table('Gold row 1, Standard 6 ft')).toBeFocused();
-    // The focused table draws its ring.
-    await expect(layout.tableFocusBorder('Gold row 1, Standard 6 ft')).toBeVisible();
-
-    // One stop: the next Tab leaves the map for the zoom bar on its corner, and after it the
-    // panel, whose first control is Gold row's colour, with nothing selected.
-    await page.keyboard.press('Tab');
-    await expect(layout.viewMenuButton).toBeFocused();
-    for (let press = 0; press < 3; press += 1) await page.keyboard.press('Tab');
-    await expect(layout.fit).toBeFocused();
-    await page.keyboard.press('Tab');
-    await expect(layout.sectionColour('Gold row')).toBeFocused();
-    for (let press = 0; press < 5; press += 1) await page.keyboard.press('Shift+Tab');
-    await expect(layout.table('Gold row 1, Standard 6 ft')).toBeFocused();
-
-    // Down the west wall, then back up, and across to the row along the top.
-    await page.keyboard.press('ArrowDown');
-    await expect(layout.table('Gold row 2, Standard 6 ft')).toBeFocused();
-    await page.keyboard.press('ArrowUp');
-    await page.keyboard.press('ArrowUp');
-    await expect(layout.table('Gold row 10, Standard 6 ft')).toBeFocused();
-    await page.keyboard.press('ArrowRight');
-    await expect(layout.table('Gold row 11, Standard 6 ft')).toBeFocused();
-
-    // The stop follows the focus: leaving and coming back lands where it was left.
-    await page.keyboard.press('Tab');
-    await expect(layout.viewMenuButton).toBeFocused();
-    await page.keyboard.press('Shift+Tab');
-    await expect(layout.table('Gold row 11, Standard 6 ft')).toBeFocused();
   });
 
   test('a focused, selected table wears its focus border on its edge, the outline flush outside it and the frame clear of both, and so does a carried one', async ({

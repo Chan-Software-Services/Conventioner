@@ -34,11 +34,17 @@ test('a withUser page that fails attaches what its browser said, naming a failed
 test('the wait for quiet fails naming each API request still open, and its age', async ({
   authenticatedPage: page,
 }) => {
-  // The markets list's read is held, never answered, so the API never goes quiet.
+  // The markets list's read is held, never answered, so the API never goes quiet; the wait is
+  // given 2 seconds rather than its 15, since the stall is certain.
   await page.route(THE_MARKETS_READ, () => {});
-  const stalled = requestsWhile(page, {}, async () => {
-    await page.reload();
-  });
+  const stalled = requestsWhile(
+    page,
+    {},
+    async () => {
+      await page.reload();
+    },
+    { within: 2_000 },
+  );
   // The reads still open are named in the order they were sent, and other reads may be open
   // beside the held one, so any may come first; the markets read must still be named, with its
   // age.
