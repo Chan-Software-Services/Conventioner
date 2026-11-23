@@ -33,10 +33,20 @@ import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
  * on a plain muted line after it, under it on a phone and beside it at a desk, the address breaking
  * only before its "@" or a dot.
  */
-const TODAY = calendarToday();
-const [YEAR, MONTH, DATE] = TODAY.split('-').map(Number) as [number, number, number];
-const YESTERDAY = calendarToday(new Date(YEAR, MONTH - 1, DATE - 1));
-const TOMORROW = calendarToday(new Date(YEAR, MONTH - 1, DATE + 1));
+// The days are the server's UTC date and the two after it, and the browser's clock stands at noon
+// on the middle one. The server refuses to open a market on a date that has passed everywhere on
+// Earth (`SetupHasDatesGuard`), so the browser's yesterday was refused from noon UTC on; it takes a
+// check-in on a day up to the day after its UTC date (`day_has_begun`).
+const [YEAR, MONTH, DATE] = new Date().toISOString().slice(0, 10).split('-').map(Number) as [
+  number,
+  number,
+  number,
+];
+const YESTERDAY = calendarToday(new Date(YEAR, MONTH - 1, DATE));
+const TODAY = calendarToday(new Date(YEAR, MONTH - 1, DATE + 1));
+const TOMORROW = calendarToday(new Date(YEAR, MONTH - 1, DATE + 2));
+/** Noon on TODAY, on the browser's calendar. */
+const THE_BROWSERS_NOW = new Date(YEAR, MONTH - 1, DATE + 1, 12);
 
 /** An organizer of the market whose address is too long to share a phone's line with the time. */
 const LONG_ORGANIZER = {
@@ -170,6 +180,7 @@ for (const size of PHONE_AND_DESK) {
       test(`on ${day.name} the door says Not checked in, Checked in and Checked out, and no other word`, async ({
         authenticatedPage: page,
       }) => {
+        await page.clock.setFixedTime(THE_BROWSERS_NOW);
         const door = new AttendanceStatusPage(page);
         await page.goto(`${marketScreenPath(marketId, 'attendance')}?date=${day.date}`);
         await expect(door.rows).toHaveCount(3);
