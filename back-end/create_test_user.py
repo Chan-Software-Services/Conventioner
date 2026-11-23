@@ -13,6 +13,11 @@ Example:
 The bulk form makes each address as the one-address form does, in one process with the password
 hashed once, for a seed of many people (T204); an address already made is left as it is. It prints
 one line per address, "created <email> <id>" or "exists <email> <id>", and never the password.
+
+A fixture account's password is hashed at bcrypt's lowest cost, 4, where the app hashes at 12, so
+each of the E2E suite's thousands of sign-ins checks it in about a millisecond: a hash carries its
+own cost, and the sign-in checks it at that cost. Never use it for a real account; an operator
+makes one with ``create_account.py``.
 """
 
 import sys
@@ -27,8 +32,12 @@ def _users():
     return get_database()["users"]
 
 
+#: bcrypt's lowest cost; ``test_the_app_hashes_at_bcrypts_full_cost.py`` holds it, and the app at 12.
+FIXTURE_BCRYPT_ROUNDS = 4
+
+
 def _hashed(password: str) -> str:
-    return Bcrypt().generate_password_hash(password).decode('utf-8')
+    return Bcrypt().generate_password_hash(password, rounds=FIXTURE_BCRYPT_ROUNDS).decode('utf-8')
 
 
 def _insert_verified(users_collection, email: str, hashed_password: str, organizations=None,

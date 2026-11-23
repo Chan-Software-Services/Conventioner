@@ -81,9 +81,9 @@ def hashes(monkeypatch):
     made = []
     real = Script.Bcrypt.generate_password_hash
 
-    def counted(self, password, *args):
+    def counted(self, password, *args, **kwargs):
         made.append(password)
-        return real(self, password, *args)
+        return real(self, password, *args, **kwargs)
 
     monkeypatch.setattr(Script.Bcrypt, "generate_password_hash", counted)
     return made
