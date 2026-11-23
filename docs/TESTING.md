@@ -6,7 +6,7 @@ describes:
   - scripts/seed_fixture.sh
   - scripts/lib/stack-identity.sh
   - scripts/nm-test.sh
-verified: 2026-11-14
+verified: 2026-11-24
 sources:
   - E34/F03/S02
   - E35/F02/S01
@@ -22,6 +22,7 @@ sources:
   - T381
   - T375
   - T349
+  - T510
 ---
 
 # Testing Conventioner
@@ -41,7 +42,7 @@ Before it delivers, a builder runs only the tests its change reaches:
 - **E2E**: on the worktree's stack (`scripts/th-compose.sh up -d` then `./scripts/seed_fixture.sh`, a team worker's with `team-stack up` then `team-stack seed`), `python3 scripts/affected-specs.py --run` from the worktree root.
 - **The knowledge graph**: `python3 scripts/knowledge_graph.py check` when you changed any Markdown.
 
-It never runs a whole suite, which CI runs on every pull request's head and every push to `dev` and `main` ([CI and the gate](implementation/testing/ci-and-the-gate.md)).
+It never runs a whole suite, which CI runs on every pull request's head, every merge queue trial commit and every push to `main`, and on a push to `dev` only when the queue did not test it ([CI and the gate](implementation/testing/ci-and-the-gate.md#which-suite-a-run-runs)).
 That is Daniel's rule (2026-11-15): a whole suite run on the machine every worktree shares repeats what CI runs anyway, beside every other task's work.
 The E2E specs are chosen by `affected-specs.py`, since the whole suite takes about an hour and a half locally, while CI's [test map](implementation/testing/the-test-map.md#choosing-a-builders-specs) says which specs a change reaches, and the script runs them by score up to 30 of CI's minutes, a spec the change edits whatever the cap, and leaves the rest to CI's full run.
 

@@ -6,7 +6,7 @@ describes:
   - back-end/tests/test_map_plugin.py
   - front-end/e2e/helpers/testMap.ts
   - scripts/affected-specs.py
-verified: 2026-11-23
+verified: 2026-11-24
 sources:
   - T349
   - T510
@@ -16,8 +16,8 @@ sources:
 
 **The test map says, for each E2E spec file, which app modules its pages loaded and which back-end endpoints it called, and for each endpoint, which back-end functions it runs.**
 It is made to tell which E2E specs a change reaches, without running all of them, which `scripts/affected-specs.py` does for a builder ([choosing a builder's specs](#choosing-a-builders-specs)).
-CI's `test-map` job writes it on every push to `dev`, as the artifact `test-map` of that run, kept 90 days ([CI and the gate](ci-and-the-gate.md)).
-A pull request's run records nothing and has no `test-map` job; when a shard's test failed, its `e2e` job reads the newest map, to [name a miss of the selection](#where-a-miss-shows).
+CI's `test-map` job writes it on the nightly Test run on `dev`'s tip, as the artifact `test-map` of that run, kept 90 days ([CI and the gate](ci-and-the-gate.md#which-suite-a-run-runs)).
+No other run records or has a `test-map` job: not a pull request's, not the merge queue's, not a push's; when a pull request's shard test failed, its `e2e` job reads the newest map, to [name a miss of the selection](#where-a-miss-shows).
 
 ## What it holds
 
@@ -49,12 +49,15 @@ One JSON file, `test-map.json`:
 
 ## Where it comes from
 
-Each push to `dev` records three things and builds the map from them, the last two steps by [`scripts/test_map.py`](../../../scripts/test_map.py):
+The nightly Test run, at 19:17 UTC on `dev`'s tip, records three things and builds the map from them, the last two steps by [`scripts/test_map.py`](../../../scripts/test_map.py).
+Its first job, `suite` ([`scripts/ci_suite.py`](../../../scripts/ci_suite.py)), finds whether that commit already has an unexpired `test-map` artifact, from whichever run made it: then the run does nothing, as on a night with no merge; else it runs only the ten shards, recording, and the `test-map` job, and when GitHub cannot be read it records too.
+`gh workflow run test.yml --ref dev` starts the same run by hand, to have a map of a large change before the night.
 
 1. **The shards record each test.**
-   On a push to `dev`, each `e2e-shard` job sets `TEST_MAP_OUT`, and [`front-end/e2e/helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts), which `fixtures.ts` wraps Playwright's `test` in, appends one JSON line per test to it: its spec file, its start and end on the wall clock, every request its browser contexts made under `/src/` and `/api/`, and the V8 block coverage of its pages' modules (a DevTools session of each page's own, Chromium) as the stretches of each module that ran.
+   On the nightly run, or one started by hand, each `e2e-shard` job sets `TEST_MAP_OUT`, and [`front-end/e2e/helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts), which `fixtures.ts` wraps Playwright's `test` in, appends one JSON line per test to it: its spec file, its start and end on the wall clock, every request its browser contexts made under `/src/` and `/api/`, and the V8 block coverage of its pages' modules (a DevTools session of each page's own, Chromium) as the stretches of each module that ran.
    A retry is a line of its own; a context a `beforeAll` opens records nothing, since no test is running then.
-   The recording makes each test slower, and only a push to `dev` records, so a test near its timeout can pass on every pull request and fail only on that push.
+   The recording makes each test slower (on `3c1d7e14`, the push run that recorded spent 127 minutes in tests across its ten shards, the queue's run that did not 99, +28%), and only the nightly run records, so a test near its timeout can pass on every pull request and the queue and fail only while recording.
+   Then the nightly run fails, which no rule reads and which never holds back a merge, and the map is not made that night: the next night tries again, since that commit still has no map, and the map's readers keep the older one meanwhile.
    It takes no script's source: Playwright's `page.coverage` fetched the source of every module Vite serves, and a run recorded through it took some 40% longer in CI than one that recorded nothing.
    The build reads the requests and the window; the stretches are in the shard's records for a reader who wants more than the map holds, as T349's pruning did.
 2. **The shards keep the back end's log.**
@@ -73,7 +76,8 @@ Code that runs before the app dispatches a request, such as the session's loadin
 
 ## How old it can be
 
-The newest map is the newest push to `dev` whose run made one, which is `dev`'s last push unless that run was cancelled, a shard recorded nothing, or the back end's suite failed under coverage; then it is the push before.
+The newest map is the newest run on `dev` that made one, which is the last night's on `dev`'s tip of then, so at most a day behind a merge, unless that run failed, a shard recorded nothing, or the back end's suite failed under coverage; then it is an older night's.
+A map made by hand on another branch is never read, since its run's branch is not `dev`; a map a push to `dev` made before T510 is read until a nightly run makes a newer one.
 A branch is ahead of it by its own commits and by what `dev` took since its run, and an artifact goes after 90 days.
 So a spec, a module or a function that is newer than the map is not in it, and a reader of the map takes a branch's own diff from its merge-base for what the map cannot know.
 
@@ -87,7 +91,7 @@ python3 scripts/affected-specs.py --list [--json]
 ```
 
 The diff is from the merge-base with `origin/dev` to the worktree, uncommitted and untracked files included, both sides of every hunk read.
-The map is the newest `test-map` artifact of a push to `dev`, which it downloads once a run, beside that run's shard reports, to `.stack-logs/test-map/<run id>/`, removing the ones it downloaded before; offline, it reads the one it has.
+The map is the newest `test-map` artifact of a run on `dev`, the nightly run's, which it downloads once a run, beside that run's shard reports, to `.stack-logs/test-map/<run id>/`, removing the ones it downloaded before; offline, it reads the one it has.
 `--map`, `--results`, `--base` and `--head` (with `--list`) name a map, shard reports and commits instead, as for replaying a merged pull request.
 
 A spec is chosen by five rules:
@@ -119,7 +123,7 @@ They run in that order until the next would pass the cap, 30 CI minutes (`--minu
 A spec the change edits runs whatever the cap.
 It prints what it runs and what it leaves to CI, each with its reasons, and with `--run` leaves out a spec the map names that the worktree does not have yet, saying so, and answers with Playwright's exit code.
 
-With no map at all (no `gh`, offline with none downloaded, or no push to `dev` has made one yet), it says so and chooses by rule 1 alone, which is what Playwright's own `--only-changed` chooses.
+With no map at all (no `gh`, offline with none downloaded, or no run on `dev` has made one in 90 days), it says so and chooses by rule 1 alone, which is what Playwright's own `--only-changed` chooses.
 
 The selection is a builder's, never a gate's or a merge's: CI's full run on every pull request runs every spec, so a spec the cap or the map left out still runs before anything merges, and its failure comes back as a red check.
 A spec can fail through the data its setup seeds, where no map of the code a spec runs tells it from the other specs seeding the same way; that is the miss the full run is for.

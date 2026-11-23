@@ -11,6 +11,13 @@ on:
   merge_group:
     types: [checks_requested]
     branches: [dev]
+  # The nightly test map (docs/implementation/testing/the-test-map.md), on dev's tip at 19:17 UTC,
+  # off the hour GitHub's scheduler is busiest at: the shards record and `test-map` builds it, and
+  # the run does nothing when that commit already has a map, as on a night with no merge.
+  schedule:
+    - cron: "17 19 * * *"
+  # The same on demand, with `gh workflow run test.yml --ref dev`.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -34,15 +41,17 @@ env:
 # Each job's `name:` is its check's name, which the rules of dev and main require a check by:
 # renaming a required job drops its check from the required list.
 jobs:
-  # Which suite this run runs (scripts/ci_suite.py), on a push to dev alone. A commit dev's merge
-  # queue already passed is the commit the queue tested, so its push only warms the caches the pull
-  # requests read (`warm`); every other commit, or any doubt, runs the whole suite (`full`). Every
-  # other run skips this job and starts every job at once. The step's shell makes anything but one
+  # Which suite this run runs (scripts/ci_suite.py), on a push to dev, a nightly run or one started
+  # by hand. A commit dev's merge queue already passed is the commit the queue tested, so its push
+  # only warms the caches the pull requests read (`warm`); every other commit, or any doubt, runs the
+  # whole suite (`full`). A nightly or hand-started run makes the test map (`map`: the shards,
+  # recording, and `test-map`), or nothing when the commit has one (`none`). Every other run skips
+  # this job and starts every job at once. The step's shell makes anything but one
   # of the script's words `full`, and the jobs read an empty output, this job skipped or failed, as
   # `full` too, so nothing here can skip a test it should not.
   suite:
     name: suite
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -323,9 +332,10 @@ jobs:
       DISABLE_CAPTCHA: "true"
       DISABLE_EMAIL: "true"
       DISCORD_FAKE: "true"
-      # On a push to dev only, the shards record the test map (front-end/e2e/helpers/testMap.ts),
-      # which the test-map job below builds; every other run records nothing.
-      RECORD_TEST_MAP: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+      # On the nightly run only, or one started by hand, the shards record the test map
+      # (front-end/e2e/helpers/testMap.ts), which the test-map job below builds; every other run
+      # records nothing, so recording's slowdown is never on a pull request's or the queue's path.
+      RECORD_TEST_MAP: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -415,7 +425,8 @@ jobs:
   # frontend-lint-and-types', which `npm ci` fills for the setup-node post step to save on a miss;
   # front-end/node_modules, Playwright's browser and the stack's images are the shards'. It never
   # fails the run: the queue's run already proved the commit, and a cache it could not save only
-  # costs the next pull requests a cold start, until the next warm push saves it.
+  # costs the next pull requests a cold start, until the next warm push or a nightly run's shard 1
+  # saves it.
   warm-caches:
     name: warm-caches
     needs: suite
@@ -442,17 +453,17 @@ jobs:
           save-caches: true
           start: "false"
 
-  # The test map (docs/implementation/testing/the-test-map.md), on a push to dev whose shards ran
-  # (not a warm one), once they have recorded what each spec reached: the back end's suite once
-  # under coverage, for what each endpoint runs, then the build of both into the `test-map`
-  # artifact. No check requires it, and a pull request never runs it. A shard that failed still
-  # recorded; a shard that recorded
-  # nothing makes the build refuse, so the map is whole or not made. `--shards-expected` is the
+  # The test map (docs/implementation/testing/the-test-map.md), on a nightly or hand-started run
+  # whose shards ran (not one whose commit had a map), once they have recorded what each spec
+  # reached: the back end's suite once under coverage, for what each endpoint runs, then the build
+  # of both into the `test-map` artifact. No check requires it, and a push or a pull request never
+  # runs it. A shard that failed still recorded; a shard that recorded nothing makes the build
+  # refuse, so the map is whole or not made. `--shards-expected` is the
   # matrix's `total`: the two move together.
   test-map:
     name: test-map
     needs: [suite, e2e-shard]
-    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/dev' && needs.e2e-shard.result != 'skipped' }}
+    if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && needs.e2e-shard.result != 'skipped' }}
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -490,13 +501,14 @@ jobs:
   # whatever the shard count becomes. It runs whatever the shards' result, so a failed
   # shard fails it, but not on a run that was cancelled, which would post a red check on the head
   # a later push made moot, nor on a warm push, whose skipped shards would post a red one on a
-  # commit the queue's run passed.
+  # commit the queue's run passed, nor on a nightly or hand-started run, which posts no `e2e` check
+  # on dev's tip.
   e2e:
     name: e2e
     needs: [suite, e2e-shard]
     if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
-    # The audit reads the newest dev push's `test-map` artifact, which another run made.
+    # The audit reads dev's newest `test-map` artifact, which a nightly run made.
     permissions:
       contents: read
       actions: read

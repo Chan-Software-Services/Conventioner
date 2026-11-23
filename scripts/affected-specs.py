@@ -10,8 +10,10 @@ From the worktree root, on the worktree's stack (`team-stack up`, `team-stack se
 `eval "$(~/agent-team/bin/team-stack env)"`, so Playwright reaches it). The change is the diff from
 the merge-base with `origin/dev` to the worktree, uncommitted and untracked files included
 (`--base` and `--head` name two commits instead, for `--list`). The map is the newest `test-map`
-artifact of a push to `dev`, downloaded once a run to `.stack-logs/test-map/<run id>/` beside that
-run's shard results (`--map` and `--results` name files instead). A spec is chosen:
+artifact of a run on `dev`, which the nightly Test run makes on `dev`'s tip (or one started by hand,
+`gh workflow run test.yml --ref dev`), so up to a day behind `dev`; it is downloaded once a run to
+`.stack-logs/test-map/<run id>/` beside that run's shard results (`--map` and `--results` name
+files instead). A spec is chosen:
 
 1. when the change edits it, or a file it imports, transitively (scores 1);
 2. when its pages loaded a changed file under `front-end/src/` (scores 1 / the specs that did);
@@ -430,8 +432,9 @@ def gh(root: Path, *args: str) -> Optional[str]:
 
 
 def newest_map(root: Path) -> Tuple[Optional[dict], Optional[dict], Optional[Path]]:
-    """(the map, where it came from, its run's shard results) of the newest push to `dev` that
-    made one, downloaded once a run; offline, the newest one downloaded before."""
+    """(the map, where it came from, its run's shard results) of the newest run on `dev` that
+    made one (a nightly run's, or an older push's), downloaded once a run; offline, the newest one
+    downloaded before."""
     cache = root / CACHE
     listing = gh(root, "api", "repos/{owner}/{repo}/actions/artifacts?name=test-map&per_page=50")
     run_id: Optional[int] = None

@@ -6,12 +6,16 @@
 It writes one word to stdout and exits 0, and one sentence saying why to stderr and, when
 GITHUB_STEP_SUMMARY is set, as a line of the run's summary:
 
-- `push` (the job runs on a push to `dev` alone): the newest by `run_number` of `dev`'s merge queue
+- `push` (the job runs on a push to `dev`): the newest by `run_number` of `dev`'s merge queue
   runs on the commit decides, read by scripts/github_runs.py's `dev_runs`. A run that passed is
   `warm`: the queue tested this very commit, so the push only warms the caches the pull requests
   read. A run still going is settled by its jobs, since GitHub can mark a run completed seconds
   after its last job ended: every job passed or skipped is `warm`. No queue run, one that did not
   pass, or GitHub unread is `full`, the whole suite.
+- `schedule` and `workflow_dispatch` (the nightly run on `dev`'s tip, and one started by hand):
+  the test map. An unexpired `test-map` artifact made by a run at the commit, whichever run made
+  it, is `none`, nothing to do; no such map, or GitHub unread, is `map`, the shards recording and
+  the `test-map` job.
 - Any other event: `full`.
 
 The workflow treats anything but a word, a crash or a usage error included, as `full`, so a doubt
@@ -19,8 +23,9 @@ always runs the whole suite. Every read goes through `github_runs.read`, fails c
 reason and is never retried.
 
 The commit must be a full 40-character sha (upper case is read as lower). Needs GITHUB_REPOSITORY
-and GITHUB_TOKEN; GITHUB_API_URL defaults to https://api.github.com. Exit codes: 0 decided, 2 a
-usage error, with nothing on stdout. Nothing printed holds the token.
+and GITHUB_TOKEN; GITHUB_API_URL defaults to https://api.github.com and GITHUB_SERVER_URL, for a
+map's link, to https://github.com. Exit codes: 0 decided, 2 a usage error, with nothing on stdout.
+Nothing printed holds the token.
 """
 import argparse
 import os
@@ -33,6 +38,8 @@ import github_runs
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 SHOWN = 80
 JOB_PASSED = {"success", "skipped"}
+#: The events whose run makes the test map: the nightly run and one started by hand.
+MAPPERS = {"schedule", "workflow_dispatch"}
 
 
 def short(sha: str) -> str:
@@ -119,6 +126,41 @@ def on_push(sha: str, api: str, repository: str, token: str) -> int:
     )
 
 
+def map_run(sha: str):
+    """A parse of GitHub's artifacts answer: the id of a run that made a live test map at `sha`, or None.
+
+    Raises on an answer unlike GitHub's, a missing key or a wrong type, so it is read as unread.
+    """
+
+    def parse(data):
+        listed = data["artifacts"]
+        if not isinstance(listed, list):
+            raise TypeError("artifacts")
+        for item in listed:
+            if item["name"] != "test-map":
+                continue
+            expired, made_by = item["expired"], item["workflow_run"]
+            if not isinstance(expired, bool) or not isinstance(made_by["id"], int):
+                raise TypeError("artifact")
+            if not expired and made_by["head_sha"] == sha:
+                return made_by["id"]
+        return None
+
+    return parse
+
+
+def on_map(sha: str, api: str, server: str, repository: str, token: str) -> int:
+    run_id, reason = github_runs.read(
+        api, f"/repos/{repository}/actions/artifacts", token, map_run(sha), {"name": "test-map", "per_page": 100}
+    )
+    if reason is not None:
+        return say("map", f"Could not read the test maps from GitHub ({reason}), so this run records one.")
+    if run_id is None:
+        return say("map", f"No test map has been made at {short(sha)}, so this run records one.")
+    link = f"{server.rstrip('/')}/{repository}/actions/runs/{run_id}"
+    return say("none", f"A test map was already made at {short(sha)} ({link}), so this run makes none.")
+
+
 def required(command: argparse.ArgumentParser, name: str) -> str:
     value = os.environ.get(name, "")
     if not value:
@@ -139,6 +181,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     api = os.environ.get("GITHUB_API_URL") or "https://api.github.com"
     if args.event == "push":
         return on_push(sha, api, repository, token)
+    if args.event in MAPPERS:
+        server = os.environ.get("GITHUB_SERVER_URL") or "https://github.com"
+        return on_map(sha, api, server, repository, token)
     return say("full", f"A {args.event[:SHOWN]} run runs the whole suite.")
 
 

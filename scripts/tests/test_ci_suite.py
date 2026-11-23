@@ -408,10 +408,165 @@ def test_an_answer_unlike_github_s_runs_the_whole_suite(stub, env, path, answer)
     assert stderr.endswith("), so this push runs the whole suite.\n")
 
 
+# A nightly run, or one started by hand: the test map, unless the commit has one.
+
+ARTIFACTS = "/repos/owner/repo/actions/artifacts"
+MAPPERS = ["schedule", "workflow_dispatch"]
+SERVER = "https://github.example"
+NO_MAP = f"No test map has been made at {SHORT}, so this run records one."
+
+
+def artifact(run_id, head_sha=SHA, name="test-map", expired=False, branch="dev"):
+    """An artifact as GitHub lists it, with the run that made it."""
+    return {
+        "id": run_id + 7,
+        "name": name,
+        "expired": expired,
+        "workflow_run": {"id": run_id, "head_sha": head_sha, "head_branch": branch},
+    }
+
+
+def artifacts(*items, total=None):
+    return (200, json.dumps({"total_count": len(items) if total is None else total, "artifacts": list(items)}))
+
+
+def made(run_id):
+    return f"A test map was already made at {SHORT} ({SERVER}/owner/repo/actions/runs/{run_id}), so this run makes none."
+
+
+def map_unread(reason):
+    return f"Could not read the test maps from GitHub ({reason}), so this run records one."
+
+
+@pytest.fixture
+def mapper_env(env):
+    return {**env, "GITHUB_SERVER_URL": SERVER}
+
+
+@pytest.mark.parametrize("event", MAPPERS)
+def test_a_commit_that_has_a_map_makes_none(stub, mapper_env, event):
+    stub.serve(ARTIFACTS, artifacts(artifact(44100000001, head_sha=OTHER), artifact(44100000002)))
+
+    code, *out = decide(mapper_env, event)
+
+    assert code == 0
+    said(*out, "none", made(44100000002))
+
+
+def test_a_map_a_push_run_made_before_the_nightly_run_counts(stub, mapper_env):
+    # Any map at the commit counts, whichever run made it, so the first night after this change
+    # makes nothing when the last push already made one.
+    stub.serve(ARTIFACTS, artifacts(artifact(44324061105)))
+
+    code, *out = decide(mapper_env, "schedule")
+
+    assert code == 0
+    said(*out, "none", made(44324061105))
+
+
+@pytest.mark.parametrize(
+    "listed",
+    [
+        [],
+        [artifact(44100000001, head_sha=OTHER)],
+        [artifact(44100000001, expired=True)],
+        [artifact(44100000001, name="test-map-shard-1")],
+        [artifact(44100000001, head_sha=OTHER), artifact(44100000002, expired=True)],
+    ],
+    ids=["no-map", "a-map-at-another-commit", "an-expired-map-at-it", "a-shard-s-records-at-it", "neither"],
+)
+@pytest.mark.parametrize("event", MAPPERS)
+def test_a_commit_with_no_map_records_one(stub, mapper_env, event, listed):
+    stub.serve(ARTIFACTS, artifacts(*listed))
+
+    code, *out = decide(mapper_env, event)
+
+    assert code == 0
+    said(*out, "map", NO_MAP)
+
+
+def test_it_asks_for_the_test_maps_by_name_with_the_token(stub, mapper_env):
+    stub.serve(ARTIFACTS, artifacts())
+
+    decide(mapper_env, "schedule")
+
+    [(path, query, headers)] = stub.requests
+    assert path == ARTIFACTS
+    assert query == {"name": ["test-map"], "per_page": ["100"]}
+    assert headers["authorization"] == f"Bearer {GITHUB_TOKEN}"
+
+
+def test_the_link_names_github_s_own_server_by_default(stub, env):
+    stub.serve(ARTIFACTS, artifacts(artifact(44100000002)))
+
+    _, _, stderr, _ = decide(env, "schedule")
+
+    assert stderr == (
+        f"A test map was already made at {SHORT} (https://github.com/owner/repo/actions/runs/44100000002),"
+        " so this run makes none.\n"
+    )
+
+
+def test_an_api_error_at_the_maps_records_one_with_no_retry(stub, mapper_env):
+    stub.serve(ARTIFACTS, (500, "upstream broke"))
+
+    code, *out = decide(mapper_env, "schedule")
+
+    assert code == 0
+    said(*out, "map", map_unread("500"))
+    assert stub.count(ARTIFACTS) == 1
+
+
+def test_no_answer_at_the_maps_records_one_with_no_retry(stub, mapper_env):
+    stub.serve(ARTIFACTS, DROP)
+
+    code, stdout, stderr, _ = decide(mapper_env, "schedule")
+
+    assert code == 0
+    assert stdout == "map\n"
+    assert stderr.startswith("Could not read the test maps from GitHub (")
+    assert "(500)" not in stderr
+    assert stub.count(ARTIFACTS) == 1
+
+
+def without_run_key(item, key):
+    return {**item, "workflow_run": without(item["workflow_run"], key)}
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        (200, "not json"),
+        (200, json.dumps({"total_count": 0})),
+        (200, json.dumps({"total_count": 1, "artifacts": {"name": "test-map"}})),
+        artifacts(without(artifact(44100000002), "name")),
+        artifacts(without(artifact(44100000002), "expired")),
+        artifacts(without(artifact(44100000002), "workflow_run")),
+        artifacts({**artifact(44100000002), "workflow_run": None}),
+        artifacts(without_run_key(artifact(44100000002), "head_sha")),
+        artifacts(without_run_key(artifact(44100000002), "id")),
+        artifacts({**artifact(44100000002), "workflow_run": {"id": "44100000002", "head_sha": SHA}}),
+        artifacts({**artifact(44100000002), "expired": "false"}),
+    ],
+    ids=["not-json", "without-the-list", "a-list-that-is-not-one", "a-map-without-its-name",
+         "a-map-without-its-expiry", "a-map-without-its-run", "a-map-whose-run-is-null",
+         "a-run-without-its-commit", "a-run-without-its-id", "a-run-id-that-is-text", "an-expiry-that-is-text"],
+)
+def test_an_answer_unlike_github_s_at_the_maps_records_one(stub, mapper_env, answer):
+    stub.serve(ARTIFACTS, answer)
+
+    code, stdout, stderr, _ = decide(mapper_env, "schedule")
+
+    assert code == 0
+    assert stdout == "map\n"
+    assert stderr.startswith("Could not read the test maps from GitHub (")
+    assert stderr.endswith("), so this run records one.\n")
+
+
 # Any other event
 
 
-@pytest.mark.parametrize("event", ["pull_request", "merge_group", "release", "schedule", "workflow_dispatch"])
+@pytest.mark.parametrize("event", ["pull_request", "merge_group", "release"])
 def test_any_other_event_runs_the_whole_suite_and_reads_nothing(stub, env, event):
     code, *out = decide(env, event)
 
@@ -603,11 +758,32 @@ def test_the_workflow_has_exactly_these_jobs_suite_first():
     assert jobs_found["suite"]["order"] == 0
 
 
-def test_suite_runs_only_on_a_push_to_dev_reading_the_runs_and_nothing_more():
+def test_the_workflow_runs_nightly_and_by_hand_as_well():
+    lines = WORKFLOW.read_text().splitlines()
+    on = block(lines, lines.index("on:"), 0)
+
+    assert mapping(on, 2) == {
+        "push": "",
+        "pull_request": "",
+        "merge_group": "",
+        "schedule": "",
+        "workflow_dispatch": "",
+    }
+    schedule = block(on, on.index("  schedule:"), 2)
+    assert [line.strip() for line in schedule if not line.strip().startswith("#")] == ['- cron: "17 19 * * *"']
+    # By hand with no inputs: `gh workflow run test.yml --ref dev`.
+    by_hand = block(on, on.index("  workflow_dispatch:"), 2)
+    assert all(not line.strip() or line.strip().startswith("#") for line in by_hand)
+
+
+def test_suite_runs_only_on_a_push_to_dev_a_nightly_run_or_one_by_hand_reading_and_nothing_more():
     suite = workflow_jobs()["suite"]
 
     assert suite["name"] == "suite"
-    assert suite["if"] == "github.event_name == 'push' && github.ref == 'refs/heads/dev'"
+    assert suite["if"] == (
+        "github.event_name == 'push' && github.ref == 'refs/heads/dev'"
+        " || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
+    )
     assert suite["permissions"] == {"contents": "read", "actions": "read"}
     assert suite["outputs"] == {"run": "${{ steps.decide.outputs.run }}"}
     assert "needs" not in suite
@@ -654,15 +830,27 @@ def test_e2e_runs_only_on_the_whole_suite():
     assert e2e["if"] == FULL
 
 
-def test_the_test_map_is_built_only_on_a_push_to_dev_whose_shards_ran():
+def test_the_test_map_is_built_only_on_a_nightly_or_hand_started_run_whose_shards_ran():
     test_map = workflow_jobs()["test-map"]
 
     assert test_map["needs"] == "[suite, e2e-shard]"
     assert test_map["if"] == (
-        "${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/dev'"
+        "${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')"
         " && needs.e2e-shard.result != 'skipped' }}"
     )
     assert test_map["continue-on-error"] == "true"
+
+
+def test_only_a_nightly_or_hand_started_run_s_shards_record():
+    lines = WORKFLOW.read_text().splitlines()
+    jobs_block = block(lines, lines.index("jobs:"), 0)
+    shard = block(jobs_block, jobs_block.index("  e2e-shard:"), 2)
+    shard_env = mapping(block(shard, shard.index("    env:"), 4), 6)
+
+    assert shard_env["RECORD_TEST_MAP"] == (
+        "${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}"
+    )
+    assert WORKFLOW.read_text().count("RECORD_TEST_MAP:") == 1
 
 
 def test_warm_caches_runs_only_on_warm_and_never_fails_the_run():

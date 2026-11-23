@@ -22,7 +22,7 @@ describes:
   - front-end/e2e/helpers/signInWindow.ts
   - front-end/e2e/helpers/mongoSession.ts
   - front-end/e2e/helpers/mongoScript.ts
-verified: 2026-11-20
+verified: 2026-11-24
 sources:
   - E21/F02/S02
   - E22/F04/S02
@@ -56,6 +56,7 @@ sources:
   - T422
   - T469
   - T501
+  - T510
 ---
 
 # E2E patterns
@@ -102,7 +103,7 @@ The screen sweeps' tests are registered by `sweepTheScreens()`, so Playwright re
 So does `expectInside`, the window check of the phone journeys ([`helpers/phoneWindow.ts`](../../../front-end/e2e/helpers/phoneWindow.ts)), since a box read in a slide's last frames stands a fraction of a thousandth of a pixel past where it rests, enough to fail an exact comparison with the window's edge.
 The same fixture hides the Vue DevTools floating panel (`#__vue-devtools-container__`) that the dev server injects, in every tab of its context: it overlays the app and intercepts clicks aimed at it, so a test failed on a click that hit that button instead of its own target.
 A context a test opens itself with `browser.newContext()` is outside the fixture, so it calls [`hideDevToolsPanel`](../../../front-end/e2e/helpers/hideDevToolsPanel.ts), as `withUser()` does: a click there may otherwise wait on the panel until the test times out, as the vendor's Send code did on the Google Form market's page.
-With `TEST_MAP_OUT` set, as CI's shards set it on a push to `dev` alone, `test` also records what each test's pages loaded and called, for [the test map](the-test-map.md) ([`helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts)); with it unset, no fixture of it is added.
+With `TEST_MAP_OUT` set, as CI's shards set it on [the nightly Test run](ci-and-the-gate.md#the-nightly-test-map) alone, or one started by hand, `test` also records what each test's pages loaded and called, for [the test map](the-test-map.md) ([`helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts)); with it unset, no fixture of it is added.
 
 ## Opening a market, and shelling into Mongo
 
