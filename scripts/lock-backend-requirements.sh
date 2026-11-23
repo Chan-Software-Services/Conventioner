@@ -14,8 +14,8 @@
 # difference, which is what catches a lock edited by hand.
 # The locks are universal (every platform, for the Python in back-end/.python-version), so the
 # hashes cover Vercel's Amazon Linux, Docker's Debian and CI's Ubuntu alike. The floorplan solver's,
-# the dev and the audit locks are constrained by requirements.txt, so a package that appears in two
-# locks has the same pin in both and they install together.
+# the dev and the audit locks are constrained by requirements.txt, so a package one of them shares
+# with requirements.txt has the same pin in both and they install together.
 #
 set -euo pipefail
 

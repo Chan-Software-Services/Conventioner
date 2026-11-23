@@ -85,7 +85,7 @@ jobs:
   # red job on a push to dev is the alert. It waits for real-data-and-workflows, which ends in under
   # a minute, so a pull request's run never asks for more than the account's 20 jobs at once
   # (docs/implementation/testing/ci-and-the-gate.md#the-e2e-shards). A trial commit skips it, as it
-  # skips every check no rule requires.
+  # skips e2e-repeat and test-map.
   python-advisories:
     name: python-advisories
     needs: real-data-and-workflows

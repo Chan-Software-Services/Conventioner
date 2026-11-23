@@ -298,7 +298,7 @@ The workflow analyses `main` too, on every pull request and push to it, though `
 
 [`.github/dependabot.yml`](../../../.github/dependabot.yml) has Dependabot open version-update pull requests weekly, for `npm` in `front-end/` and for the `github-actions` of the workflows and of the composite actions under `.github/actions/` (`directories`).
 It has no `pip` entry: the back end's hashed locks are written by `uv` through `scripts/lock-backend-requirements.sh` ([the locks](../../TECH_STACK.md#python-dependencies-are-locked)), and that Dependabot writes them as the script does is unverified, so a back-end version bump is made by hand with the script.
-A known advisory against a back-end lock is caught by [`python-advisories`](#ci) instead, on every pull request and push.
+A known advisory against a back-end lock is caught by [`python-advisories`](#ci) instead, on every pull request and every push to `dev` and `main`.
 Dependabot alerts, and the security-update toggle, are repository settings, not this file: they follow the dependency graph, so a `pip` security update can still arrive as a pull request; make it with the script rather than merging Dependabot's lock edits.
 
 **Its pull requests target `dev`**, the default branch, and their titles are Conventional Commits that release-please reads:
