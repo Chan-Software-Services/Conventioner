@@ -34,8 +34,40 @@ env:
 # Each job's `name:` is its check's name, which the rules of dev and main require a check by:
 # renaming a required job drops its check from the required list.
 jobs:
+  # Which suite this run runs (scripts/ci_suite.py), on a push to dev alone. A commit dev's merge
+  # queue already passed is the commit the queue tested, so its push only warms the caches the pull
+  # requests read (`warm`); every other commit, or any doubt, runs the whole suite (`full`). Every
+  # other run skips this job and starts every job at once. The step's shell makes anything but one
+  # of the script's words `full`, and the jobs read an empty output, this job skipped or failed, as
+  # `full` too, so nothing here can skip a test it should not.
+  suite:
+    name: suite
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The script needs only the standard library, so the runner's own Python runs it.
+      - id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          COMMIT: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          run="$(python3 scripts/ci_suite.py --event "$EVENT" --commit "$COMMIT")" || run=full
+          case "$run" in warm | map | none) ;; *) run=full ;; esac
+          echo "run=$run" >>"$GITHUB_OUTPUT"
+
   backend:
     name: backend
+    needs: suite
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
     # The real-MongoDB tests (back-end/tests/real_mongo/) run on this server, the compose file's
     # MongoDB, whose comment says why it is 7 while production runs 8.0. REAL_MONGODB_REQUIRED
@@ -84,6 +116,8 @@ jobs:
   # bumped. Drift reads the base branch's history, hence the full clone.
   knowledge-graph:
     name: knowledge-graph
+    needs: suite
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -123,6 +157,8 @@ jobs:
   # security, does not read. Every finding fails the job.
   real-data-and-workflows:
     name: real-data-and-workflows
+    needs: suite
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
     env:
       BASE_REF: ${{ github.base_ref }}
@@ -181,6 +217,8 @@ jobs:
 
   frontend-unit:
     name: frontend-unit
+    needs: suite
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -199,6 +237,8 @@ jobs:
 
   frontend-lint-and-types:
     name: frontend-lint-and-types
+    needs: suite
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -253,6 +293,8 @@ jobs:
 
   docker-build:
     name: docker-build
+    needs: suite
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -269,6 +311,8 @@ jobs:
   # `total` is the length of `shard`'s list: the two move together.
   e2e-shard:
     name: e2e shard ${{ matrix.shard }}/${{ matrix.total }}
+    needs: suite
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full' || needs.suite.outputs.run == 'map') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -365,16 +409,50 @@ jobs:
             front-end/test-results/
           retention-days: 7
 
-  # The test map (docs/implementation/testing/the-test-map.md), on a push to dev only, once the
-  # shards have recorded what each spec reached: the back end's suite once under coverage, for what
-  # each endpoint runs, then the build of both into the `test-map` artifact. No check requires it,
-  # and a pull request never runs it. A shard that failed still recorded; a shard that recorded
+  # On a push to dev the merge queue already passed (`suite` says `warm`), this job alone runs: it
+  # restores or makes each cache a pull request's run reads, saved in dev's scope as shard 1 of a
+  # whole-suite run would, and runs no test. npm's cache is frontend-unit's and
+  # frontend-lint-and-types', which `npm ci` fills for the setup-node post step to save on a miss;
+  # front-end/node_modules, Playwright's browser and the stack's images are the shards'. It never
+  # fails the run: the queue's run already proved the commit, and a cache it could not save only
+  # costs the next pull requests a cold start, until the next warm push saves it.
+  warm-caches:
+    name: warm-caches
+    needs: suite
+    if: needs.suite.outputs.run == 'warm'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: front-end/package-lock.json
+      - name: Fill npm's cache
+        working-directory: front-end
+        run: npm ci
+      - uses: ./.github/actions/front-end-deps # zizmor: ignore[self-repository] actionlint 1.7.12, the latest, refuses the $/ form
+        with:
+          save-cache: true
+      - uses: ./.github/actions/e2e-stack # zizmor: ignore[self-repository] actionlint 1.7.12, the latest, refuses the $/ form
+        with:
+          save-caches: true
+          start: "false"
+
+  # The test map (docs/implementation/testing/the-test-map.md), on a push to dev whose shards ran
+  # (not a warm one), once they have recorded what each spec reached: the back end's suite once
+  # under coverage, for what each endpoint runs, then the build of both into the `test-map`
+  # artifact. No check requires it, and a pull request never runs it. A shard that failed still
+  # recorded; a shard that recorded
   # nothing makes the build refuse, so the map is whole or not made. `--shards-expected` is the
   # matrix's `total`: the two move together.
   test-map:
     name: test-map
-    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
-    needs: e2e-shard
+    needs: [suite, e2e-shard]
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/dev' && needs.e2e-shard.result != 'skipped' }}
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -411,11 +489,12 @@ jobs:
   # The one check to require: it passes only when every shard did, so the rules name a single job
   # whatever the shard count becomes. It runs whatever the shards' result, so a failed
   # shard fails it, but not on a run that was cancelled, which would post a red check on the head
-  # a later push made moot.
+  # a later push made moot, nor on a warm push, whose skipped shards would post a red one on a
+  # commit the queue's run passed.
   e2e:
     name: e2e
-    if: ${{ !cancelled() }}
-    needs: e2e-shard
+    needs: [suite, e2e-shard]
+    if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
     # The audit reads the newest dev push's `test-map` artifact, which another run made.
     permissions:

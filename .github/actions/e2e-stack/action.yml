@@ -1,7 +1,8 @@
 name: Start the e2e stack
 description: >-
   Installs Playwright's Chromium, builds or restores the stack's images, starts the stack and seeds
-  it, for a job that runs Playwright on one runner. The job checks the repository out and runs the
+  it, for a job that runs Playwright on one runner; with `start: "false"`, only restores-or-makes
+  the browser's and the images' caches, for the warm-caches job. The job checks the repository out and runs the
   front-end-deps action first, which says why front-end/node_modules must be there before the stack
   starts. Browsers and images come from GitHub's cache when an earlier run left them,
   keyed on what decides them: the Playwright version for the browsers, scripts/image-tags.sh's tags
@@ -15,6 +16,12 @@ inputs:
       job of a run saves, so the others do not race to write the same key.
     required: false
     default: "false"
+  start:
+    description: >-
+      "false" to only restore-or-make the caches, for warm-caches: no system libraries, no image
+      load, no stack. A restore then only looks the key up, so a hit downloads nothing.
+    required: false
+    default: "true"
 
 runs:
   using: composite
@@ -30,14 +37,19 @@ runs:
       with:
         path: ~/.cache/ms-playwright
         key: playwright-chromium-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+        lookup-only: ${{ inputs.start != 'true' }}
+    # `--with-deps` adds the system libraries, which only a browser that runs needs: not when only
+    # filling the cache.
     - name: Install Playwright's Chromium
       if: steps.browsers.outputs.cache-hit != 'true'
       shell: bash
       working-directory: front-end
-      run: npx playwright install chromium --with-deps
+      env:
+        WITH_DEPS: ${{ inputs.start == 'true' && '--with-deps' || '' }}
+      run: npx playwright install chromium ${WITH_DEPS:+"$WITH_DEPS"}
     # The cache holds the browser only; its system libraries are the runner's packages.
     - name: Install Chromium's system libraries
-      if: steps.browsers.outputs.cache-hit == 'true'
+      if: inputs.start == 'true' && steps.browsers.outputs.cache-hit == 'true'
       shell: bash
       working-directory: front-end
       run: npx playwright install-deps chromium
@@ -63,8 +75,9 @@ runs:
       with:
         path: ${{ runner.temp }}/e2e-images
         key: e2e-images-${{ runner.os }}-${{ runner.arch }}-${{ steps.images.outputs.TH_BACKEND_TAG }}-${{ steps.images.outputs.TH_FRONTEND_TAG }}
+        lookup-only: ${{ inputs.start != 'true' }}
     - name: Load the images
-      if: steps.images-cache.outputs.cache-hit == 'true'
+      if: inputs.start == 'true' && steps.images-cache.outputs.cache-hit == 'true'
       shell: bash
       run: docker load --input "$RUNNER_TEMP/e2e-images/images.tar"
     - name: Build the images
@@ -91,6 +104,7 @@ runs:
     # A transient Docker Hub 500 on one of the stack's registry images once failed one shard
     # outright. Retry only that pull, so a stack that genuinely fails to start fails the job at once.
     - name: Pull the stack's registry images
+      if: inputs.start == 'true'
       shell: bash
       run: |
         for attempt in 1 2 3 4 5 6; do
@@ -100,8 +114,10 @@ runs:
         done
         exit 1
     - name: Start the stack
+      if: inputs.start == 'true'
       shell: bash
       run: docker compose up -d
     - name: Seed it
+      if: inputs.start == 'true'
       shell: bash
       run: ./scripts/seed_fixture.sh --primary
