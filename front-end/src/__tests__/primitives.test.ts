@@ -422,7 +422,8 @@ describe('the primitives exist and own what tokens cannot', () => {
   it("holds every global rule in the global layer, so a component's own rule outranks it", () => {
     // A production build links a shared chunk's CSS before the entry's, and the dev server injects
     // them the other way round, so a component rule that tied a global one on specificity won on the
-    // dev server and lost in production: every ScrollBox drew the outer halo its frame cut off.
+    // dev server and lost in production: every ScrollBox scroller that was a Tab stop drew the outer
+    // halo its frame cut off.
     // Unlayered rules outrank every layered one, whatever their order or specificity.
     const outside: string[] = [];
     for (const node of MAIN.nodes) {

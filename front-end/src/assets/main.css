@@ -6,8 +6,9 @@
  * Without the layer a component rule that tied a global one on specificity lost or won by the order
  * of the sheets, and that order is not the same everywhere: the dev server injects this file before
  * each component's style, while a production build links a shared chunk's CSS before the entry's.
- * A `ScrollBox` scroller drew its inset focus halo on the dev server and, in production, the outer
- * halo of `primitives.css`'s `[tabindex='0']` rule, which the dialog or panel around it cut off.
+ * A `ScrollBox` scroller that is a Tab stop drew its inset focus halo on the dev server and, in
+ * production, the outer halo of `primitives.css`'s `[tabindex='0']` rule, which the dialog or panel
+ * around it cut off.
  */
 @import './base.css' layer(global);
 @import './primitives.css' layer(global);
