@@ -168,6 +168,7 @@ The market document keeps `formRevision`, a count of the writes of the form's qu
 A form save's body (`PUT /markets/<id>/application-form`) carries `formRevision`, the revision its copy of the form was read at, and the answer carries the revision now stored, for the next save.
 A body naming none, the page from before the revision existed still open after a deploy, is answered `MarketChanged`, so it reloads; one naming anything but a whole number from 0 (`true` included) is answered 400 "formRevision must be a whole number.".
 The lock and the form's own refusals are judged first, so a locked form still says why it is locked.
+A vendor's save holds no `formRevision`: it holds the form version, a fingerprint of the form as the vendor's page drew it, plan's options included ([a vendor's save is held to the form they saw](../../business/rules/a-vendors-save-is-held-to-the-form-they-saw.md)).
 
 The write sets `applicationForm.fields` and `applicationForm.unaskedEssentials` only, never `publishedAt`, which Open applications stamps, or `essentialOptions`, which the first application freezes, and holds the phase, `applicationForm.essentialOptions` as read and the revision.
 So a save from an older copy is refused rather than replacing the questions another person saved, and a save crossing Open applications or the first application is refused rather than erasing the stamp or the frozen offering; a market whose vendors arrive by import takes its first row in draft, so there only the offering's hold tells the save it crossed it.

@@ -229,6 +229,23 @@ export function isVendorHere(err: unknown): boolean {
   );
 }
 
+/** The `code` of the vendor's save's 409 for a page drawn from another form version (T507). */
+export const FORM_CHANGED_CODE = 'form_changed';
+
+/**
+ * Whether a failed request is a vendor's save the server refused because the form changed since
+ * their page read it (`back-end/api/applicants.py`, T507): a 409 whose body's `code` is
+ * `form_changed`. It stored nothing; its sentence is the server's, and the page offers Reload,
+ * which opens the form as it now asks on the answers kept in the tab.
+ */
+export function isFormChanged(err: unknown): boolean {
+  if (!axios.isAxiosError(err) || err.response?.status !== 409) return false;
+  const data: unknown = err.response.data;
+  return (
+    !!data && typeof data === 'object' && (data as { code?: unknown }).code === FORM_CHANGED_CODE
+  );
+}
+
 /**
  * Run `handler` when a request answers that the market changed under it (`isMarketChanged`). The
  * request still fails as it would have, so the screen's own catch runs too and shows the sentence.
