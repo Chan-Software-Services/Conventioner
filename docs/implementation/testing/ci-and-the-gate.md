@@ -9,6 +9,7 @@ describes:
   - scripts/nm-test.sh
   - scripts/e2e-lock.sh
   - scripts/image-tags.sh
+  - scripts/chromium-packages.sh
   - scripts/th-compose.sh
   - front-end/e2e/helpers/stack.ts
   - front-end/e2e/helpers/containerNames.ts
@@ -39,6 +40,7 @@ sources:
   - T375
   - T424
   - T464
+  - T527
 ---
 
 # CI and the gate
@@ -184,16 +186,17 @@ The matrix lists the shards and their `total`, which move together.
 
 Two composite actions set a runner up for Playwright, shared by `e2e-shard` and `e2e-repeat`.
 [`.github/actions/front-end-deps/action.yml`](../../../.github/actions/front-end-deps/action.yml) sets up the Node `.nvmrc` pins and fills `front-end/node_modules`; it runs first, since with no `front-end/node_modules` on the host Docker (as root) creates the anonymous volume's mountpoint there root-owned, and a later `npm ci` fails with `EACCES`.
-[`.github/actions/e2e-stack/action.yml`](../../../.github/actions/e2e-stack/action.yml) installs Chromium, gets the stack's two images, pulls `mongo:7` and `mongo-express:latest` from Docker Hub, retrying only that pull a handful of times, because a transient registry 500 once failed a shard outright, so a stack that genuinely fails to start fails the job at once, then starts the stack and seeds it.
+[`.github/actions/e2e-stack/action.yml`](../../../.github/actions/e2e-stack/action.yml) installs Chromium and [the system packages it needs](#chromiums-system-packages), gets the stack's two images, pulls `mongo:7` and `mongo-express:latest` from Docker Hub, retrying only that pull a handful of times, because a transient registry 500 once failed a shard outright, so a stack that genuinely fails to start fails the job at once, then starts the stack and seeds it.
 Each `uses:` line calls an action by its path (`./.github/actions/...`) with a `zizmor: ignore[self-repository]`: zizmor asks for GitHub's newer `$/` form, which actionlint 1.7.12, the latest, refuses.
 
-**Dependencies, browsers and images come from GitHub's Actions cache, keyed on the files that decide them.**
+**Dependencies, browsers, system packages and images come from GitHub's Actions cache, keyed on what decides them.**
 
-| Cache                                                               | Key                                                                                                                                                                            | On a hit                                                           | On a miss                                     |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ | --------------------------------------------- |
-| `front-end/node_modules`                                            | `front-end-node-modules-<os>-<arch>-<hash>`, the hash of `.nvmrc` and `package-lock.json`                                                                                      | nothing more                                                       | `npm ci`                                      |
-| Playwright's browsers, `~/.cache/ms-playwright`                     | `playwright-chromium-<os>-<arch>-<version>`, the version `npx playwright --version` prints, which `package-lock.json` decides                                                  | `npx playwright install-deps chromium`, the system libraries alone | `npx playwright install chromium --with-deps` |
-| the back end's and front end's images, as one `docker save` archive | `e2e-images-<os>-<arch>-<backend tag>-<frontend tag>`, the tags [`scripts/image-tags.sh`](../../../scripts/image-tags.sh) prints, a hash of the files each image is built from | `docker load`                                                      | `docker compose build`                        |
+| Cache                                                                                                          | Key                                                                                                                                                                            | On a hit                          | On a miss                                                       |
+| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- | --------------------------------------------------------------- |
+| `front-end/node_modules`                                                                                       | `front-end-node-modules-<os>-<arch>-<hash>`, the hash of `.nvmrc` and `package-lock.json`                                                                                      | nothing more                      | `npm ci`                                                        |
+| Playwright's browsers, `~/.cache/ms-playwright`                                                                | `playwright-chromium-<os>-<arch>-<version>`, the version `npx playwright --version` prints, which `package-lock.json` decides                                                  | nothing more                      | `npx playwright install chromium`                               |
+| the `.deb` files of the system packages Chromium needs that the runner lacks, `$RUNNER_TEMP/chromium-packages` | `chromium-packages-<os>-<arch>-<hash>`, the hash of the runner's Ubuntu release and of each package with the version the runner's package lists would install                  | installed from the files, offline | downloaded from Ubuntu's mirrors, then installed from the files |
+| the back end's and front end's images, as one `docker save` archive                                            | `e2e-images-<os>-<arch>-<backend tag>-<frontend tag>`, the tags [`scripts/image-tags.sh`](../../../scripts/image-tags.sh) prints, a hash of the files each image is built from | `docker load`                     | `docker compose build`                                          |
 
 The source is not in the images' key: an image's `COPY` of the source is stale on a hit, and the compose file's bind mounts of `back-end/` and `front-end/` put the checked-out source over it, while the front end's `node_modules` volume is filled from the image, whose `package-lock.json` is in the key.
 That is the rule by which every worktree and `nm-test.sh` stack shares its images ([below](#the-no-mistakes-gate)).
@@ -201,7 +204,17 @@ Only shard 1 saves (`save-cache` and `save-caches`), and only what it did not re
 `docker-build` never uses the cache: it builds both images from nothing on every run, so a base image or a dependency that no longer builds still fails it.
 A cache written on `dev` is read by every pull request; one written on a pull request's run only by that pull request's later runs.
 A trial commit's shards read `dev`'s, the default branch's, and save none: a cache written on its queue branch would be read by no other run.
-The three caches are about 660 MB together (the images' archive about 340, the browsers about 280, `node_modules` about 40), saved once by each pull request that changes a key's files, against the repository's 10 GB of Actions cache, which GitHub evicts least recently used first and after 7 days unread.
+The four caches are about 680 MB together (the images' archive about 340, the browsers about 280, `node_modules` about 40, the packages about 22), saved once by each pull request that changes a key's files, against the repository's 10 GB of Actions cache, which GitHub evicts least recently used first and after 7 days unread.
+
+### Chromium's system packages
+
+**A shard installs Chromium's system packages without Ubuntu's apt mirrors whenever the cache has them**, so an outage of the mirrors, of minutes or of hours, fails no shard.
+GitHub's Ubuntu runner has most of the packages Playwright's Chromium needs; on `ubuntu-26.04` it lacks only nine, fonts and their tools, about 22 MB.
+[`scripts/chromium-packages.sh`](../../../scripts/chromium-packages.sh) `missing` asks Playwright which are missing (`npx playwright install-deps --dry-run chromium`, which simulates the install with `apt-get` against the runner's own package lists, offline), and its `install` puts their `.deb` files from the cache in apt's own archive directory and installs them with `apt-get install --no-download`, which checks each against the package lists and fails before it changes anything if a file it needs is not there, then asks Playwright again and fails the job if any is still missing.
+The key is the runner's release and each package it lacks with the version its package lists would install, read by a second simulation, and only on a new key, such as a runner image whose lists move a font to a new version, are the files downloaded: at those versions, or, when the mirrors no longer have them, at those of lists refreshed from the mirrors (`apt-get update`), which are then not saved, since they are not the key's.
+That download, with its refresh, is tried 6 times, a minute apart, so a short outage on a new key's run fails no shard either; [`scripts/tests/test_chromium_packages.py`](../../../scripts/tests/test_chromium_packages.py) holds those bounds, and that a hit reaches no mirror, with fakes of `npx`, `sudo`, `apt-get`, `apt-config`, `dpkg-deb` and `sleep`.
+Cached files that do not install are passed over for an install from the mirrors, under the same retry, and are not saved.
+No shard runs `npx playwright install-deps chromium` or `--with-deps`: each refreshes the package lists and fetches the packages from the mirrors on every run, with no retry.
 
 ## The e2e repeat
 
@@ -344,7 +357,7 @@ Under a `team-heavy` run, which sets `TEAM_HEAVY_HELD` for its command and holds
 To see who holds it and who waits: `cat ~/.local/state/agent-team/heavy.lock` names the last run to take it, and `lsof ~/.local/state/agent-team/heavy.lock` lists every process with it open, the holder and its guard, and each waiting run with its `flock`.
 The lock is the one place T19's `team-capacity run --kind gate:conventioner` is to take over, keeping the lock as the fallback where `team-capacity` is absent; `nm-test.sh` does not call it yet, and the lock can go once the browser is isolated from the host's network changes.
 `nm-test.sh` never calls `sudo`: it installs Chromium with `npx playwright install chromium`, never `--with-deps` or `install-deps`, because those run `sudo` with no terminal and each failed attempt counts toward the account's `pam_faillock` lockout; the machine's own package manager provides the system libraries.
-CI's [e2e action](#the-e2e-stack-and-its-caches) keeps `--with-deps`, and `install-deps` when the browser comes from its cache, which is correct on GitHub's Ubuntu runners.
+CI's [e2e action](#chromiums-system-packages) installs them with `sudo` through `scripts/chromium-packages.sh`, which is correct on GitHub's Ubuntu runners.
 What it does not run is CI's alone: `docker compose build`, gitleaks, zizmor, actionlint, the knowledge graph's drift check and CodeQL.
 
 ## Stack identity
