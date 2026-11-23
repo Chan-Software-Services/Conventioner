@@ -15,7 +15,7 @@ describes:
   - .github/workflows/promote.yml
   - scripts/promote_check.py
   - scripts/github_runs.py
-verified: 2026-11-19
+verified: 2026-11-23
 sources:
   - T74
   - T254
@@ -41,11 +41,11 @@ This project uses a **dev → main promotion flow**:
 
 **Both branches are protected**: a PR into either needs the `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, `e2e` and `real-data-and-workflows` checks to pass (`e2e` passes only when every shard does).
 A PR into `dev` also needs `knowledge-graph`, CodeQL's three `Analyze (<language>)` checks and `agent-review`, eleven in all; `main` asks only the six ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)).
-Branches need not be up to date before merging, because a promotion is only ever made from a commit whose own `dev` run passed, and a PR into `dev` merges through a merge queue, which runs the checks again on the commit it would merge.
+Branches need not be up to date before merging, because a promotion is only ever made from a commit with a green Test run on it, from `dev`'s merge queue or a push to `dev`, and a PR into `dev` merges through a merge queue, which runs the checks again on the commit it would merge.
 `dev`'s is a ruleset with no bypass actor, so it binds admins too: nothing merges into `dev`, the merge of `main` back into it included, without all eleven checks, short of changing the ruleset itself; its code scanning rule holds back a PR with a new CodeQL alert ([CodeQL](implementation/testing/ci-and-the-gate.md#codeql)), and force pushes to it and its deletion are blocked.
 `main`'s are two rulesets ([ADR 0027](adr/0027-main-moves-only-through-promote.md)).
 "main is promoted or merged" takes a change only through a pull request, except from the Promote workflow's GitHub App, the only actor that may push to `main` ([how a promotion proves itself](#how-a-promotion-proves-itself)).
-"main is tested" requires the six checks, keeps `main`'s history linear, and blocks force pushes and deletion; the App is held to it too, so the commit it pushes must already have passed the six, as a commit whose `dev` run passed has.
+"main is tested" requires the six checks, keeps `main`'s history linear, and blocks force pushes and deletion; the App is held to it too, so the commit it pushes must already have passed the six, as a commit whose Test run from `dev`'s merge queue or a push to `dev` passed has.
 An admin may bypass both through a pull request only: it is how the Release PR, which gets no CI, is merged (below).
 No one pushes to `main` directly, an admin included, so an emergency push means editing a ruleset first.
 
@@ -85,9 +85,9 @@ No checkout in them keeps git credentials (`persist-credentials: false`).
 ### How a Release Happens
 
 1. **Feature work lands on `dev`** through normal PRs with conventional commit messages.
-2. **Daniel starts Promote with the sha** of a `dev` commit whose `dev` CI run passed ([`.github/workflows/promote.yml`](../.github/workflows/promote.yml)): Actions tab, Promote, Run workflow from `dev`, giving the commit's full 40-character sha, or `gh workflow run promote.yml --ref dev -f commit=<sha>`.
+2. **Daniel starts Promote with the sha** of a `dev` commit with a green Test run on it, from `dev`'s merge queue or a push to `dev` ([`.github/workflows/promote.yml`](../.github/workflows/promote.yml)): Actions tab, Promote, Run workflow from `dev`, giving the commit's full 40-character sha, or `gh workflow run promote.yml --ref dev -f commit=<sha>`.
    Promote that commit by its sha, not "whatever `dev` is now": anything merged since has not passed CI as part of that commit.
-   The workflow refuses unless the commit's Test run on a push to `dev` passed, the commit is on `dev`, and `main` is its ancestor, then fast-forwards `main` to it as the Promote App ([how a promotion proves itself](#how-a-promotion-proves-itself)); the run's summary says what `main` is now and what comes next.
+   The workflow refuses unless the newest of those runs passed, the commit is on `dev`, and `main` is its ancestor, then fast-forwards `main` to it as the Promote App ([how a promotion proves itself](#how-a-promotion-proves-itself)); the run's summary says what `main` is now and what comes next.
    This is the **only** way a `dev` commit reaches `main`: `main`'s rulesets refuse a push from anyone but the App, an admin's included.
    A fast-forward puts exactly the commit CI tested on `dev` onto `main`; a merge or rebase would make a new commit nobody tested.
    The App's push starts the Test and release-please workflows on `main`, which a push with a workflow run's own token would not.
@@ -122,7 +122,7 @@ No checkout in them keeps git credentials (`persist-credentials: false`).
 ### How a promotion proves itself
 
 Every check the Promote workflow makes before it moves `main` lives in [`scripts/promote_check.py`](../scripts/promote_check.py), which reads GitHub and writes nothing, so it can be run anywhere without promoting: `GITHUB_TOKEN="$(gh auth token)" GITHUB_REPOSITORY=Chan-Software-Services/Conventioner python3 scripts/promote_check.py --commit <sha>`.
-It reads the Test runs through [`scripts/github_runs.py`](../scripts/github_runs.py), the same code Deploy's Test check uses, so "the newest run decides" means one thing in both.
+It reads the Test runs through [`scripts/github_runs.py`](../scripts/github_runs.py), the same module Deploy's Test check reads `main`'s runs through, so which runs count is said in one place.
 [`scripts/tests/test_promote_check.py`](../scripts/tests/test_promote_check.py) runs it against a stub server, pins the workflow's steps, and runs the workflow's own shell with a fake `gh`.
 
 The workflow runs only from `dev`, in the `promote` environment, whose deployment branches are `dev` alone, so a run from a branch with an edited copy of the workflow never reaches the App's key.
@@ -133,8 +133,10 @@ A check-only run (`-f check-only=true`, or the box in the Actions tab) makes eve
 2. **"The commit may be promoted"** runs the check with the run's own read-only token.
    It takes only a full 40-character sha, upper case read as lower, so a short or ambiguous one never resolves to the wrong commit; anything else is a usage error before GitHub is read.
    Then, in order, each refusal is one `::error::` line, `<short>` being the commit's first 12 characters:
-   - The Test workflow's newest run, by run number, on a push to `dev` at the commit decides.
-     None: "No Test run on a push to dev at `<short>`. Promote only a commit on dev whose Test run has passed."
+   - A green Test run on the commit, from `dev`'s merge queue or a push to `dev`: the newest of those runs, by run number, decides, whatever its event.
+     A run number grows across events in one workflow, so a merged commit's push run, which runs after its queue run, decides; a commit the queue merged inside a batch, whose push was a later commit, has only its queue run, which decides.
+     A queue run is one whose event is `merge_group` and whose head branch starts `gh-readonly-queue/dev/`; a nightly, a hand-started, a pull request's or another queue's run never counts.
+     None: "No Test run on dev at `<short>`, from the merge queue or a push. Promote only a commit on dev whose Test run has passed."
      Still running: "Test is still running on dev at `<short>` (`<url>`). Run Promote again once it has passed."
      Any conclusion but success: "Test `<conclusion>` on dev at `<short>` (`<url>`). Promote only a commit whose Test run has passed."
    - The commit is on `dev`: GitHub's compare of `dev...<sha>` says `behind` or `identical`, so a pull request's head or a typo never reaches `main`.
