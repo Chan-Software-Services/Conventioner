@@ -157,7 +157,7 @@ A custom question can be made optional on Market Setup's form while the market i
 2. The dialog "Fix the form" lists "Questions this market asks" and offers "Add a question" (Question, Answer key), prefilled from the column.
 3. Save: the form is written, as Market Setup would write it, and the market stays a draft; "Your upload and your mapping stay exactly as they are."
 
-Refused when it would leave the form asking nothing, which could not enter Review.
+When the change would leave the form asking nothing, which could not enter Review, the dialog says so before Save ("That would leave the form asking nothing at all, so this market could not enter Review.") and Save stays disabled; the same holds when a question is switched off under H2f.
 Refused, too, when the form was saved elsewhere since the dialog read it: the dialog stays open on [the market write's one sentence](../../implementation/modules/market-write.md#what-it-answers) and shows the questions as they now stand.
 "Add a question for it" and "Stop asking it" wait, disabled, while the values are checked or the questions are read again, so the dialog never opens over a request still out.
 Once anything is imported the questions are fixed, and the dead end says so in the lock's own words ("The questions are fixed: …") instead of offering the dialog.
