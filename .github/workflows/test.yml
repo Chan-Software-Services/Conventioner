@@ -280,7 +280,8 @@ jobs:
       DISABLE_EMAIL: "true"
       DISCORD_FAKE: "true"
       # Experiment only: the stack serves a production build of the front end
-      # (docker-compose.e2e-build.yml), and the component library's tests skip on it.
+      # (docker-compose.e2e-build.yml), and the tests that open the component library through
+      # openEntry skip on it.
       COMPOSE_FILE: docker-compose.yml:docker-compose.e2e-build.yml
       E2E_PRODUCTION_BUILD: "true"
       # On a push to dev only, the shards record the test map (front-end/e2e/helpers/testMap.ts),

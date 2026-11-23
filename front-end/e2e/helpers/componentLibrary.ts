@@ -26,7 +26,8 @@ export function eachWindow(title: string, body: (size: PhoneOrDesk) => void): vo
 
 /**
  * Set on the production-build experiment's shards: a production build has no component library,
- * so each test that opens it is skipped there, and counted as skipped in the shard's report.
+ * so each test that opens it through `openEntry` is skipped there, and counted as skipped in the
+ * shard's report. The library's "page not found" test opens its path directly, and still runs.
  */
 const PRODUCTION_BUILD = process.env.E2E_PRODUCTION_BUILD === 'true';
 
