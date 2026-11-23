@@ -266,7 +266,7 @@ jobs:
   # never across runners. `front-end/scripts/e2e-shards.ts` deals the spec files to the shards by
   # their measured seconds, not Playwright's `--shard`, which cuts the alphabetical list by test
   # count and once left one shard at 24 minutes and another at 6. The seconds are the newest
-  # `e2e-shard-timings` artifact a push to dev or a merge queue trial commit published, made at
+  # `e2e-shard-timings` artifact a run on dev or a merge queue trial commit published, made at
   # least ten minutes before this run was created, so every shard and every re-run picks the same
   # one; with none, or one it cannot read, the committed `e2e-shard-timings.json`.
   # `total` is the length of `shard`'s list: the two move together.
@@ -497,8 +497,9 @@ jobs:
       contents: read
       actions: read
     env:
-      # A push to dev and a merge queue trial commit publish the next timings; no other run does.
-      PUBLISHES_TIMINGS: ${{ github.event_name == 'merge_group' || (github.event_name == 'push' && github.ref == 'refs/heads/dev') }}
+      # A push to dev, a scheduled run on dev and a merge queue trial commit publish the next
+      # timings; no other run does, and a run whose shards did not all pass publishes nothing.
+      PUBLISHES_TIMINGS: ${{ github.event_name == 'merge_group' || ((github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/dev') }}
     steps:
       # The checkout and the shards' artifacts serve the deal's check below and, on a pull request,
       # the selection audit. The checkout takes two commits for the audit's diff.
@@ -509,14 +510,17 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
+      # Continues on error, so a run with no shard artifact to download breaks nothing here; once
+      # every shard passed, the check below fails on a missing one.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
         with:
           pattern: e2e-results-shard-*
           path: ${{ runner.temp }}/e2e-results
       # Once every shard passed: every shard dealt by the same timings and their reports hold every
       # spec file exactly once, or this fails the job, since a file no shard ran was never tested.
-      # The job summary names the timings' source, each shard's seconds and the spread. On a push to
-      # dev or a merge queue trial commit it also writes the next timings, the ones the run dealt
+      # The job summary names the timings' source, each shard's seconds and the spread. When this run
+      # publishes the timings (PUBLISHES_TIMINGS) it also writes the next timings, the ones the run dealt
       # by blended with what it measured, for the step after it to publish.
       - name: Every spec file ran on one shard
         if: needs.e2e-shard.result == 'success'

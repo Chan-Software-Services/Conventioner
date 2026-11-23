@@ -372,8 +372,9 @@ describe('trustedRun', () => {
     head_repository: { id: 7 },
   };
 
-  it("trusts the Test workflow's run on a push to dev or a merge queue trial commit", () => {
+  it("trusts the Test workflow's run on a push to dev, a schedule on dev or a merge queue trial commit", () => {
     expect(trustedRun(run, 7)).toBe(true);
+    expect(trustedRun({ ...run, event: 'schedule' }, 7)).toBe(true);
     expect(
       trustedRun({ ...run, event: 'merge_group', head_branch: 'gh-readonly-queue/dev/pr-1' }, 7),
     ).toBe(true);
@@ -381,6 +382,8 @@ describe('trustedRun', () => {
 
   it('trusts no pull request, other branch, other workflow or other repository', () => {
     expect(trustedRun({ ...run, event: 'pull_request' }, 7)).toBe(false);
+    expect(trustedRun({ ...run, event: 'workflow_dispatch' }, 7)).toBe(false);
+    expect(trustedRun({ ...run, event: 'schedule', head_branch: 'main' }, 7)).toBe(false);
     expect(trustedRun({ ...run, head_branch: 'main' }, 7)).toBe(false);
     expect(trustedRun({ ...run, path: '.github/workflows/codeql.yml' }, 7)).toBe(false);
     expect(trustedRun({ ...run, head_repository: { id: 8 } }, 7)).toBe(false);
