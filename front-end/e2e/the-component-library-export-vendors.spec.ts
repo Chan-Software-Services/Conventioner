@@ -8,9 +8,10 @@ import { VendorExportDialog } from './pages/VendorExportDialog';
 /**
  * The component library's `export-vendors` entry (T200, T217): the product's own form, mounted on the
  * fixture's market of 43 columns and six answer filters, at a desk and on a phone, so what is
- * critiqued there is what ships. A column is found and added, one removed, one moved up by its button
- * and one dragged, an answer filters, each filter narrows the file, and the tray stays in view while
- * the body scrolls. Nothing asks the server.
+ * critiqued there is what ships. A column is found and added and one moved up by its button, an
+ * answer filters, each filter narrows the file, and the tray stays in view while the body scrolls.
+ * Nothing asks the server. A remove, a drag and the dialog's size at a desk are the export dialogs'
+ * own specs' (`the-export-dialogs-*.spec.ts`), on the product's page.
  *
  * The counts are the fixture's: 359 vendors, 181 who sell stickers, 110 open and 62 of those.
  */
@@ -247,28 +248,6 @@ eachWindow('the export-vendors entry', (size) => {
     await expect(up('status')).toBeDisabled();
   });
 
-  test("a cart row's remove takes the column out, and the focus goes on", async ({ page }) => {
-    const dialog = await open(page);
-    await openTray(dialog);
-    const remove = dialog.removeButton('email');
-    await expect(remove).toHaveAccessibleName('Remove Email');
-    await press(remove);
-    await expect(dialog.orderLabels).toHaveText(['Name', 'Status']);
-    await expect(dialog.column('email')).not.toBeChecked();
-    await expect(dialog.removeButton('status')).toBeFocused();
-
-    await press(dialog.removeButton('status'));
-    await expect(dialog.removeButton('name')).toBeFocused();
-    await press(dialog.removeButton('name'));
-    await expect(dialog.orderLabels).toHaveCount(0);
-
-    // Nothing chosen: nothing to download, and the tray says what to do.
-    await expect(dialog.summary).toHaveText('359 vendors, 0 columns');
-    await expect(page.getByTestId('vendor-export-order-none')).toBeVisible();
-    await expect(dialog.downloadButton).toBeDisabled();
-    await expect(dialog.preview).toHaveCount(0);
-  });
-
   test('the longest label is whole in the cart: its row is never clipped on the right', async ({
     page,
   }) => {
@@ -434,27 +413,6 @@ eachWindow('the export-vendors entry', (size) => {
     await expect(dialog.previewRows.first().getByRole('cell').last()).toHaveText(/^-\$\d/);
   });
 
-  test('Enter in the name or email field only looks', async ({ page }) => {
-    const dialog = await open(page);
-    await openFilters(dialog);
-    await dialog.search.fill('angela');
-    await dialog.search.press('Enter');
-
-    await expect(dialog.window).toBeVisible();
-    await expect(dialog.search).toHaveValue('angela');
-    await expect(readOut(page)).toHaveText('Download CSV would export: nothing');
-  });
-
-  test('Enter on the Mine tick only looks', async ({ page }) => {
-    const dialog = await open(page);
-    await openFilters(dialog);
-    await dialog.mine.focus();
-    await dialog.mine.press('Enter');
-
-    await expect(dialog.window).toBeVisible();
-    await expect(readOut(page)).toHaveText('Download CSV would export: nothing');
-  });
-
   test('Download only reads out what it would export, and asks no server', async ({ page }) => {
     const asked: string[] = [];
     page.on('request', (request) => {
@@ -550,52 +508,6 @@ eachWindow('the export-vendors entry', (size) => {
     await expect(page.getByTestId('library-order-slot-list-row').first()).toContainText('Vendor');
     await expectLaidOut(page, size, 'the ordered list');
     await expectAccessible('the ordered list');
-  });
-});
-
-test.describe('at 1280 wide', () => {
-  test.use({ viewport: { width: 1280, height: 800 } });
-
-  test('broad, no taller than 80% of the window, with the tray in view', async ({ page }) => {
-    await openEntry(page, 'export-vendors');
-    await page.getByTestId('library-export-open').click();
-    const dialog = new VendorExportDialog(page);
-    await expect(dialog.window).toBeVisible();
-    const box = (await dialog.window.boundingBox())!;
-    expect(box.width).toBe(960);
-    expect(box.height).toBeLessThanOrEqual(800 * 0.8);
-    await expectInView(page, dialog.tray, 'the tray');
-  });
-});
-
-test.describe('dragging a row, at a desk', () => {
-  test.use({ viewport: { width: 1440, height: 900 } });
-
-  test('the handle sets the order, the preview with it', async ({ page }) => {
-    await openEntry(page, 'export-vendors');
-    await page.getByTestId('library-export-open').click();
-    const dialog = new VendorExportDialog(page);
-    await expect(dialog.window).toBeVisible();
-
-    const rows = dialog.orderRows;
-    const handle = (await rows.nth(2).getByTestId('vendor-export-order-handle').boundingBox())!;
-    const x = handle.x + handle.width / 2;
-    await page.mouse.move(x, handle.y + handle.height / 2);
-    await page.mouse.down();
-    // A row at a time, the list settling between, as a hand would take it.
-    for (const over of [rows.nth(1), rows.first()]) {
-      const box = (await over.boundingBox())!;
-      await page.mouse.move(x, box.y + box.height / 2, { steps: 8 });
-      await settle(page);
-    }
-    await page.mouse.up();
-
-    await expect(dialog.orderLabels).toHaveText(['Status', 'Name', 'Email']);
-    await expect(dialog.previewHeader.getByRole('columnheader')).toHaveText([
-      'Status',
-      'Name',
-      'Email',
-    ]);
   });
 });
 

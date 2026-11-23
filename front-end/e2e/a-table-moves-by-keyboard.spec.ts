@@ -72,8 +72,11 @@ test.describe('A table moves by keyboard', () => {
   }) => {
     const { layout } = await open(page, request, HALL);
 
-    // The toolbar is one stop, its buttons reached by the arrow keys.
-    await layout.toolSelect.focus();
+    // Tab from the head lands on the toolbar's pressed tool: the toolbar is one stop, its buttons
+    // reached by the arrow keys.
+    await layout.backToSetup.focus();
+    await page.keyboard.press('Tab');
+    await expect(layout.toolSelect).toBeFocused();
     await page.keyboard.press('ArrowRight');
     await expect(layout.toolAdd).toBeFocused();
     // The last that can be pressed: with nothing to undo or redo, the keyboard button.
