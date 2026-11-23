@@ -353,7 +353,7 @@ It prints ids, keys, labels and counts, never a vendor's answer, name or address
 On a market day kept before check-out existed, the organizers ticked who arrived and who left on a spreadsheet, and Conventioner holds that day's check-ins alone.
 [`add_check_outs_from_sheet.py`](../back-end/migrations/add_check_outs_from_sheet.py) reads the sheet's CSV export against the day's seats and attendance records and adds a check-out to each vendor the sheet ticks as checked out whom Conventioner holds checked in and not out.
 
-**It needs no deploy** but a release holding the script: run it from `back-end/` in a checkout of the commit production serves.
+**It needs no deploy**: run it from `back-end/` in a checkout of the commit production serves, with the script taken from a commit that holds it, as [the rename](#giving-a-location-a-new-name) does, so the code it imports is production's.
 Take a `mongodump` first ([backups](#backups-and-restoring)), then list, dry-run and run:
 
 ```bash
