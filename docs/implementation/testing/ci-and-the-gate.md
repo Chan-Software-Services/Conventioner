@@ -204,7 +204,7 @@ Only shard 1 saves (`save-cache` and `save-caches`), and only what it did not re
 `docker-build` never uses the cache: it builds both images from nothing on every run, so a base image or a dependency that no longer builds still fails it.
 A cache written on `dev` is read by every pull request; one written on a pull request's run only by that pull request's later runs.
 A trial commit's shards read `dev`'s, the default branch's, and save none: a cache written on its queue branch would be read by no other run.
-The four caches are about 680 MB together (the images' archive about 340, the browsers about 280, `node_modules` about 40, the packages about 22), saved once by each pull request that changes a key's files, against the repository's 10 GB of Actions cache, which GitHub evicts least recently used first and after 7 days unread.
+The four caches are about 680 MB together (the images' archive about 340, the browsers about 280, `node_modules` about 40, the packages about 22), the first three saved once by each pull request that changes a key's files and the packages once for each runner image that moves their versions, against the repository's 10 GB of Actions cache, which GitHub evicts least recently used first and after 7 days unread.
 
 ### Chromium's system packages
 

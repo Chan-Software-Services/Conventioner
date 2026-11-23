@@ -12,8 +12,9 @@ description: >-
 inputs:
   save-caches:
     description: >-
-      "true" to save the browsers, the packages and the images to the cache when they were not
-      restored. Only one job of a run saves, so the others do not race to write the same key.
+      "true" to save the browsers and the images to the cache when they were not restored, and the
+      packages when they were not restored and are the versions the key names. Only one job of a
+      run saves, so the others do not race to write the same key.
     required: false
     default: "false"
 
