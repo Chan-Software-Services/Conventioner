@@ -72,8 +72,11 @@ test.describe('A table moves by keyboard', () => {
   }) => {
     const { layout } = await open(page, request, HALL);
 
-    // The toolbar is one stop, its buttons reached by the arrow keys.
-    await layout.toolSelect.focus();
+    // Tab from the head lands on the toolbar's pressed tool: the toolbar is one stop, its buttons
+    // reached by the arrow keys.
+    await layout.backToSetup.focus();
+    await page.keyboard.press('Tab');
+    await expect(layout.toolSelect).toBeFocused();
     await page.keyboard.press('ArrowRight');
     await expect(layout.toolAdd).toBeFocused();
     // The last that can be pressed: with nothing to undo or redo, the keyboard button.
@@ -106,8 +109,18 @@ test.describe('A table moves by keyboard', () => {
     await expect(layout.table(GOLD_1)).toBeFocused();
     await expect(layout.announcement).toHaveText('');
 
+    // The map's stop follows the focus: left on the second table, a Tab out and a Shift+Tab back
+    // land there, not on the first.
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Tab');
+    await expect(layout.viewMenuButton).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(layout.table(GOLD_2)).toBeFocused();
+    await page.keyboard.press('ArrowLeft');
+    await expect(layout.table(GOLD_1)).toBeFocused();
+
     // Another Tab leaves the map, for the zoom bar on its corner, each of its buttons a stop, then
-    // the panel.
+    // the panel; Shift+Tab walks the same stops back to the table.
     await page.keyboard.press('Tab');
     await expect(layout.viewMenuButton).toBeFocused();
     for (const next of [layout.zoomOut, layout.zoomIn, layout.fit]) {
@@ -116,6 +129,8 @@ test.describe('A table moves by keyboard', () => {
     }
     await page.keyboard.press('Tab');
     await expect(layout.sectionColour('Gold row')).toBeFocused();
+    for (let back = 0; back < 5; back += 1) await page.keyboard.press('Shift+Tab');
+    await expect(layout.table(GOLD_1)).toBeFocused();
 
     // With a table selected that never had the focus, the map's stop is the selected one.
     await page.reload();

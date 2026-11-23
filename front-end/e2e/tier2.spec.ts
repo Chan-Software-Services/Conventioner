@@ -131,7 +131,6 @@ test.describe('Tier 2 - Market role management', () => {
     await manageMarket.waitForOverlay();
 
     await manageMarket.addUser(SECOND_USER.email, 'editor');
-    await page.waitForTimeout(1000);
 
     await expect(page.locator('.user-card').filter({ hasText: SECOND_USER.email })).toBeVisible({
       timeout: 5000,

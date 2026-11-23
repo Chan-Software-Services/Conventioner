@@ -20,7 +20,7 @@ describes:
   - front-end/e2e/the-app-bar.spec.ts
   - front-end/src/__tests__/theBarsCurrentPlace.test.ts
   - front-end/src/__tests__/theAppBarsVendorLink.test.ts
-verified: 2026-11-14
+verified: 2026-11-24
 sources:
   - T209
   - T214
@@ -170,7 +170,7 @@ The menu button and the sheet's Sign out and Sign out everywhere are buttons, so
 
 **The bar does not print**: `App.vue` hides its `header` under `@media print`.
 
-**Tests drive it as a person does**: [`the-app-bar.spec.ts`](../../../front-end/e2e/the-app-bar.spec.ts) at 1280 and under a phone's own emulation, dragging a floored screen sideways with a synthesized gesture, since `window.scrollTo` moves the layout viewport and says nothing of a thumb; `helpers/screens.ts` walks the account menu, the sheet and Sign out everywhere's dialog, opened from each, through the layout, contrast, focus and accessibility sweeps.
+**Tests drive it as a person does**: [`the-app-bar.spec.ts`](../../../front-end/e2e/the-app-bar.spec.ts) at 1280 and under a phone's own emulation (where signing in lands, and the shell probing no session on a public page, at 1280 alone, since neither follows the window), dragging a floored screen sideways with a synthesized gesture, since `window.scrollTo` moves the layout viewport and says nothing of a thumb; `helpers/screens.ts` walks the account menu, the sheet and Sign out everywhere's dialog, opened from each, through the layout, contrast, focus and accessibility sweeps.
 [`sign-out-everywhere.spec.ts`](../../../front-end/e2e/sign-out-everywhere.spec.ts), at a desk and on a phone, on an account of its own, signs in a second browser with "Remember me", asks and cancels, then confirms, and finds the second browser's next page on sign-in saying its session ended, a copy of its cookies and its remember cookie alone answering 401, and an aborted request leaving the dialog saying so with both browsers signed in; [`signingOutEverywhere.test.ts`](../../../front-end/src/__tests__/signingOutEverywhere.test.ts) holds each outcome of `signOutEverywhere` and the dialog's hold, failure and 401.
 
 ## Why

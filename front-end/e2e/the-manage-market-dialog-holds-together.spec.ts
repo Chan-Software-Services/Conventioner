@@ -9,7 +9,8 @@ import { ensureVerifiedUser } from './helpers/verifiedUser';
  *
  * Its buttons were the compact size, smaller than every other button in the product. "Add user"
  * turned into a lone Cancel above the row it opened. The owner's own row offered a role select the
- * server refused every use of, and the refusal appeared at the foot of the dialog. Delete asked
+ * server refused every use of, and the refusal appeared at the foot of the dialog: it is said
+ * under the person's row now, as `changing-a-role-asks-first.spec.ts` proves. Delete asked
  * "Are you sure?" inline, Confirm before Cancel, with focus left on the page.
  */
 test.use({ viewport: { width: 1440, height: 900 } });
@@ -112,42 +113,6 @@ test('on a phone, the email field takes the add row, with the role, Add and Canc
     return { text, room };
   });
   expect(fits.text, 'the role is not cut').toBeLessThanOrEqual(fits.room);
-});
-
-test("a refused change is said beneath the person's row, which keeps the role they hold", async ({
-  authenticatedPage: page,
-  request,
-}) => {
-  const { marketId, marketName } = await seedApplicantMarket(
-    request,
-    BACKEND_URL,
-    TEST_USER.email,
-    TEST_USER.password,
-  );
-  const added = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-    data: { user_email: COLLEAGUE.email, role: 'editor' },
-  });
-  expect(added.ok(), await added.text()).toBeTruthy();
-  const manage = await openManage(page, marketName);
-
-  // The server's refusal, whatever it is, for a change this page offers.
-  await page.route('**/api/markets/*/roles/*', (route) =>
-    route.request().method() === 'PUT'
-      ? route.fulfill({ status: 403, json: { error: 'You cannot make that change.' } })
-      : route.continue(),
-  );
-  const row = page.locator('.user-entry').filter({ hasText: COLLEAGUE.email });
-  const select = row.getByTestId('manage-market-role-select');
-  await select.selectOption('viewer');
-  await manage.roleChangeConfirmButton.click();
-
-  await expect(manage.roleChangeConfirm).toHaveCount(0);
-  await expect(row.getByTestId('manage-market-user-error')).toHaveText(
-    'You cannot make that change.',
-  );
-  await expect(select).toHaveValue('editor');
-  // Not also at the foot of the dialog, where it used to be the only place it was said.
-  await expect(page.getByTestId('manage-market-error')).toHaveCount(0);
 });
 
 test('deleting is a destructive dialog that opens on Cancel and says what goes', async ({
