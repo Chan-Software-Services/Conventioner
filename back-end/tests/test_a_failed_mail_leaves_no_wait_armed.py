@@ -20,7 +20,6 @@ from conftest import skip_without_real_dependencies
 skip_without_real_dependencies()
 
 import account_secrets
-import app as app_module
 import api.users as UsersApi
 import sign_in_limits
 from sign_in_secrets import (
@@ -28,8 +27,8 @@ from sign_in_secrets import (
     stored_verification_link,
 )
 from test_the_organizer_sign_in_is_bounded import (  # noqa: F401
-    ACCOUNT_EMAIL, CALLER, FAST_ROUNDS, PASSWORD, UNVERIFIED_EMAIL, WINDOW_STARTS, Users, _account,
-    client, clock, fast_stand_in_hash,
+    ACCOUNT_EMAIL, CALLER, PASSWORD, UNVERIFIED_EMAIL, WINDOW_STARTS, Users, _account, client,
+    clock,
 )
 
 NEW_PASSWORD = "fixture-new-password-1"
@@ -50,8 +49,6 @@ def users(monkeypatch):
         FIRST_LINK, WINDOW_STARTS + timedelta(minutes=30))}
     fake = Users(_account(ACCOUNT_EMAIL), unverified)
     monkeypatch.setattr(UsersApi, "users_collection", fake)
-    # A reset hashes its new password at bcrypt's lowest cost, as the accounts here are hashed.
-    monkeypatch.setattr(app_module.bcrypt, "_log_rounds", FAST_ROUNDS)
     return fake
 
 

@@ -137,4 +137,32 @@ export class LoginPage {
   async waitForMarkets(): Promise<void> {
     await this.page.waitForURL((url) => url.pathname === '/markets', { timeout: 10000 });
   }
+
+  /**
+   * Sign in from the login page, and return once Markets, where it lands, has the answers to its
+   * two reads, the account's markets and its organizations.
+   *
+   * A seed that then signs in on this page's cookies (`page.request`) ends this sign-in first, as
+   * every sign-in ends the one its browser held, so a read of Markets still out then answers 401
+   * and the page signs out. A fixture account's sign-in takes a few milliseconds, its password
+   * hashed at bcrypt's lowest cost, so without this wait the seed's sign-in lands among those reads.
+   */
+  async signInToMarkets(email: string, password: string): Promise<void> {
+    const answered = (path: string) =>
+      this.page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === path && response.request().method() === 'GET',
+        { timeout: 10000 },
+      );
+    await this.goto();
+    await this.fillEmail(email);
+    await this.fillPassword(password);
+    const reads = Promise.all([answered('/api/markets'), answered('/api/organizations')]);
+    // Set before the submit, so its timers end first: a sign-in that never lands fails on the
+    // landing below, which says so, rather than on these waits.
+    reads.catch(() => undefined);
+    await this.clickSubmit();
+    await this.waitForMarkets();
+    await reads;
+  }
 }

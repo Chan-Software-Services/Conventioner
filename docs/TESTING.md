@@ -174,6 +174,8 @@ So a read that fetches too little, or a write the server would apply otherwise, 
 Shared module stubs live in `back-end/tests/conftest.py`, which also points the `.env` loader at a path that does not exist.
 The suite reads no `.env`, so a stale one on your machine cannot change its result.
 It turns `ALLOW_INSECURE_LOCAL_DEV` on unless the shell set it, and clears `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` before any test runs, so a shell that exported a stack's switches cannot change its result either; a test that needs a switch sets it itself, and `test_the_suite_reads_no_switch_from_its_shell.py` keeps that true.
+It hashes every password at bcrypt's lowest cost, 4, where the app hashes at flask-bcrypt's default of 12, since a hash at 12 takes about 0.16 s and the tests that sign in make many: `back-end/tests/conftest.py` lowers it on flask-bcrypt's `Bcrypt` class before any module makes its own, so it holds for the app's and `create_account.py`'s, and for the stand-in hash an address with no account is checked against; `create_test_user.py` hashes its fixture accounts at 4 itself.
+`test_the_app_hashes_at_bcrypts_full_cost.py` holds the app and `create_account.py` to 12 outside that lowering, in a fresh interpreter, and the app's config to no `BCRYPT_LOG_ROUNDS`.
 
 ### The real-MongoDB suite
 
@@ -487,6 +489,7 @@ A stack that is OOM-killed shows `OOMKilled: true` in `docker inspect`; raise it
   The e2e helpers authenticate by logging in, and no spec or seed sends an identity header.
 - **Email verification**: The seed fixture creates users with `email_verified=true`
   via `back-end/create_test_user.py` so they can log in immediately.
+  Their passwords are hashed at bcrypt's lowest cost, 4, so each sign-in checks its hash in about a millisecond, where an account made by sign-up is checked at 12, about 0.16 s ([E2E seeds](implementation/testing/e2e-seeds.md#users)).
 - **The Google Forms fixture**: `back-end/tests/test_data/google_forms/five-day-grid.csv` is a
   synthetic response export in a Google Form's shape, written by
   `back-end/tests/fixtures/synthetic_form_exports.py`.

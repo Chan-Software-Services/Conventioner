@@ -27,8 +27,7 @@ import app as app_module
 import api.users as UsersApi
 from test_a_failed_mail_leaves_no_wait_armed import outbox  # noqa: F401
 from test_the_organizer_sign_in_is_bounded import (  # noqa: F401
-    ACCOUNT_EMAIL, CALLER, FAST_ROUNDS, PASSWORD, UNVERIFIED_EMAIL, _account, client, clock,
-    fast_stand_in_hash,
+    ACCOUNT_EMAIL, CALLER, PASSWORD, UNVERIFIED_EMAIL, _account, client, clock,
 )
 
 NEW_PASSWORD = "fixture-new-password-1"
@@ -83,8 +82,6 @@ class Users:
 def users(monkeypatch):
     fake = Users(_account(ACCOUNT_EMAIL), _account(UNVERIFIED_EMAIL, verified=False))
     monkeypatch.setattr(UsersApi, "users_collection", fake)
-    # A reset hashes its new password at bcrypt's lowest cost, as the accounts here are hashed.
-    monkeypatch.setattr(app_module.bcrypt, "_log_rounds", FAST_ROUNDS)
     return fake
 
 
