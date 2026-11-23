@@ -5,16 +5,33 @@
  * itself and runs its own hand, so the dealing must be the same on every runner and must hand every
  * spec file to exactly one shard.
  */
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import {
+  BLEND_WEIGHT,
+  blendTimings,
+  checkShards,
+  chooseTimings,
+  chooseTimingsArtifacts,
   dealShards,
+  type DealRecord,
   defaultSeconds,
   fileFilter,
+  type GitHubReads,
   parseShard,
+  parseTimings,
+  publishedTimings,
+  refreshTimings,
   secondsFromReports,
+  shardSummary,
   specFiles,
+  TIMINGS_ARTIFACT,
+  TIMINGS_MARGIN_MS,
+  timingsFile,
   timingsFromReports,
+  trustedRun,
 } from '../../scripts/e2e-shards';
 
 const FILES = Array.from({ length: 40 }, (_, n) => `spec-${String(n).padStart(2, '0')}.spec.ts`);
@@ -204,5 +221,401 @@ describe('timingsFromReports', () => {
     const shard1 = report({ 'a.spec.ts': [[1000]], 'b.spec.ts': [[2000]], 'c.spec.ts': [[1]] });
     const shard2 = report({ 'deleted.spec.ts': [[5000]] });
     expect(Object.keys(timingsFromReports(listed, [shard1, shard2]))).toEqual(listed);
+  });
+});
+
+describe('refreshTimings', () => {
+  const listed = ['a.spec.ts', 'b.spec.ts', 'new.spec.ts'];
+
+  it("is one run's timings when given one run", () => {
+    const run = [report({ 'a.spec.ts': [[1000]], 'b.spec.ts': [[2000]], 'new.spec.ts': [[3000]] })];
+    expect(refreshTimings(listed, [run])).toEqual(timingsFromReports(listed, run));
+  });
+
+  it('blends the runs oldest first, a file new in a later run starting at its own time', () => {
+    const older = [report({ 'a.spec.ts': [[10_000]], 'b.spec.ts': [[20_000]] })];
+    const newer = [
+      report({ 'a.spec.ts': [[20_000]], 'b.spec.ts': [[20_000]], 'new.spec.ts': [[5000]] }),
+    ];
+    expect(refreshTimings(listed, [older, newer])).toEqual({
+      'a.spec.ts': 13,
+      'b.spec.ts': 20,
+      'new.spec.ts': 5,
+    });
+  });
+
+  it('refuses when the newest run is not whole, as one run does', () => {
+    const older = [report({ 'a.spec.ts': [[1000]], 'b.spec.ts': [[1000]], 'new.spec.ts': [[1]] })];
+    const newer = [report({ 'a.spec.ts': [[1000]] })];
+    expect(() => refreshTimings(listed, [older, newer])).toThrow(/in no report/);
+  });
+});
+
+describe('parseTimings', () => {
+  it("reads a file's seconds by spec file", () => {
+    expect(parseTimings('{"a.spec.ts": 1.5, "b.spec.ts": 0}')).toEqual({
+      'a.spec.ts': 1.5,
+      'b.spec.ts': 0,
+    });
+  });
+
+  it('refuses anything else, so a corrupt artifact is never dealt by', () => {
+    for (const bad of [
+      'not json',
+      '[]',
+      'null',
+      '3',
+      '{}',
+      '{"a.spec.ts": "12"}',
+      '{"a.spec.ts": -1}',
+      '{"a.spec.ts": 1e999}',
+      '{"a.spec.ts": null}',
+    ])
+      expect(() => parseTimings(bad), bad).toThrow();
+  });
+});
+
+describe('blendTimings', () => {
+  it(`weighs this run at ${BLEND_WEIGHT} against the timings it dealt by`, () => {
+    expect(BLEND_WEIGHT).toBe(0.3);
+    expect(blendTimings({ 'a.spec.ts': 100 }, { 'a.spec.ts': 200 }, ['a.spec.ts'])).toEqual({
+      'a.spec.ts': 130,
+    });
+  });
+
+  it('times a file new to the timings by this run alone, and keeps a file this run did not time', () => {
+    expect(
+      blendTimings({ 'old.spec.ts': 40 }, { 'new.spec.ts': 7.25 }, ['old.spec.ts', 'new.spec.ts']),
+    ).toEqual({ 'new.spec.ts': 7.3, 'old.spec.ts': 40 });
+  });
+
+  it('leaves out a file not listed, and writes the files in alphabetical order', () => {
+    const blended = blendTimings(
+      { 'z.spec.ts': 1, 'gone.spec.ts': 5 },
+      { 'a.spec.ts': 1, 'z.spec.ts': 1 },
+      ['z.spec.ts', 'a.spec.ts'],
+    );
+    expect(Object.keys(blended)).toEqual(['a.spec.ts', 'z.spec.ts']);
+  });
+
+  it('refuses a listed file timed by neither', () => {
+    expect(() => blendTimings({}, {}, ['a.spec.ts'])).toThrow(/a\.spec\.ts/);
+  });
+});
+
+describe('chooseTimingsArtifacts', () => {
+  const REPO = 7;
+  const created = new Date('2026-11-20T12:00:00Z');
+  const before = (minutes: number) =>
+    new Date(created.getTime() - minutes * 60_000).toISOString().replace('.000', '');
+  function artifact(
+    id: number,
+    createdAt: string,
+    workflowRun: { head_branch?: string; repository_id?: number; head_repository_id?: number } = {},
+    extra: { name?: string; expired?: boolean } = {},
+  ) {
+    return {
+      id,
+      name: extra.name ?? TIMINGS_ARTIFACT,
+      expired: extra.expired ?? false,
+      created_at: createdAt,
+      workflow_run: {
+        id: id * 10,
+        head_branch: 'dev',
+        repository_id: REPO,
+        head_repository_id: REPO,
+        ...workflowRun,
+      },
+    };
+  }
+  const ids = (list: { id: number }[]) => list.map((a) => a.id);
+
+  it('takes the newest made a margin before the run was created, whatever order they are listed in', () => {
+    expect(TIMINGS_MARGIN_MS).toBe(10 * 60_000);
+    const listed = [artifact(1, before(60)), artifact(3, before(11)), artifact(2, before(30))];
+    expect(ids(chooseTimingsArtifacts(listed, REPO, created))).toEqual([3, 2, 1]);
+  });
+
+  it('skips one made within the margin or after the run was created, so a re-run picks the same', () => {
+    const first = [artifact(1, before(30)), artifact(2, before(9))];
+    const onARerun = [...first, artifact(3, before(-5)), artifact(4, before(-60 * 24))];
+    expect(ids(chooseTimingsArtifacts(first, REPO, created))[0]).toBe(1);
+    expect(ids(chooseTimingsArtifacts(onARerun, REPO, created))[0]).toBe(1);
+  });
+
+  it("takes a merge queue trial commit's, and none from another branch, a fork, another name or past its expiry", () => {
+    const listed = [
+      artifact(1, before(90), { head_branch: 'gh-readonly-queue/dev/pr-1-abc' }),
+      artifact(2, before(80), { head_branch: 'feat/something' }),
+      artifact(3, before(70), { head_branch: 'main' }),
+      artifact(4, before(60), { head_repository_id: 99 }),
+      artifact(5, before(50), {}, { name: 'e2e-results-shard-1' }),
+      artifact(6, before(40), {}, { expired: true }),
+      artifact(7, before(30), { repository_id: 99, head_repository_id: 99 }),
+      artifact(8, before(20), { head_branch: 'gh-readonly-queue/main/pr-1-abc' }),
+    ];
+    expect(ids(chooseTimingsArtifacts(listed, REPO, created))).toEqual([1]);
+  });
+
+  it('takes none when none was made before the margin', () => {
+    expect(chooseTimingsArtifacts([artifact(1, before(5))], REPO, created)).toEqual([]);
+  });
+});
+
+describe('trustedRun', () => {
+  const run = {
+    id: 1,
+    event: 'push',
+    head_branch: 'dev',
+    path: '.github/workflows/test.yml',
+    repository: { id: 7 },
+    head_repository: { id: 7 },
+  };
+
+  it("trusts the Test workflow's run on a push to dev or a merge queue trial commit", () => {
+    expect(trustedRun(run, 7)).toBe(true);
+    expect(
+      trustedRun({ ...run, event: 'merge_group', head_branch: 'gh-readonly-queue/dev/pr-1' }, 7),
+    ).toBe(true);
+  });
+
+  it('trusts no pull request, other branch, other workflow or other repository', () => {
+    expect(trustedRun({ ...run, event: 'pull_request' }, 7)).toBe(false);
+    expect(trustedRun({ ...run, head_branch: 'main' }, 7)).toBe(false);
+    expect(trustedRun({ ...run, path: '.github/workflows/codeql.yml' }, 7)).toBe(false);
+    expect(trustedRun({ ...run, head_repository: { id: 8 } }, 7)).toBe(false);
+    expect(trustedRun(run, 8)).toBe(false);
+  });
+});
+
+describe('checkShards', () => {
+  const files = ['a.spec.ts', 'b.spec.ts', 'c.spec.ts', 'd.spec.ts'];
+  const timings: Record<string, number> = {
+    'a.spec.ts': 4,
+    'b.spec.ts': 3,
+    'c.spec.ts': 2,
+    'd.spec.ts': 1,
+  };
+  const SOURCE = "run 5's e2e-shard-timings";
+  function shards(total = 2, source = SOURCE) {
+    return dealShards(files, timings, total).map((hand, n) => ({
+      shard: n + 1,
+      deal: { shard: n + 1, total, source, timings, files, hand } satisfies DealRecord,
+      report: report(Object.fromEntries(hand.map((file) => [file, [[timings[file]! * 1000]]]))),
+    }));
+  }
+
+  it('passes when the shards dealt alike and their reports hold every spec file once', () => {
+    const { problems, seconds } = checkShards(shards());
+    expect(problems).toEqual([]);
+    expect(seconds).toEqual([5, 5]);
+  });
+
+  it('names a shard whose deal record or report is missing, as when its upload failed', () => {
+    const [one, two] = shards();
+    expect(checkShards([one!]).problems).toEqual([
+      'shard 2/2 uploaded no deal record',
+      'shard 2/2 uploaded no report',
+      'b.spec.ts, c.spec.ts ran on no shard',
+    ]);
+    expect(checkShards([one!, { ...two!, report: undefined }]).problems).toContain(
+      'shard 2/2 uploaded no report',
+    );
+  });
+
+  it('names shards that dealt by different timings', () => {
+    const [one] = shards();
+    const [, two] = shards(2, 'the committed scripts/e2e-shard-timings.json');
+    expect(checkShards([one!, two!]).problems[0]).toMatch(
+      /^the shards dealt by different timings: shard 1 by run 5's e2e-shard-timings; shard 2 by the committed/,
+    );
+  });
+
+  it('names a spec file run twice or by no shard, and a report that holds other files than its hand', () => {
+    const [one, two] = shards();
+    const twice = { ...two!, report: report({ 'a.spec.ts': [[1]], 'b.spec.ts': [[1]] }) };
+    expect(checkShards([one!, twice]).problems).toEqual([
+      'shard 2/2 was dealt b.spec.ts, c.spec.ts but its report holds a.spec.ts, b.spec.ts',
+      'a.spec.ts ran on more than one shard',
+      'c.spec.ts ran on no shard',
+    ]);
+  });
+
+  it('refuses with no deal record at all', () => {
+    expect(checkShards([]).problems).toEqual(['no shard uploaded a deal record']);
+  });
+});
+
+describe('publishedTimings', () => {
+  it('blends the timings the run dealt by with what its shards measured', () => {
+    const files = ['a.spec.ts', 'b.spec.ts'];
+    const timings = { 'a.spec.ts': 10, 'b.spec.ts': 10 };
+    const deal = (shard: number, hand: string[]): DealRecord => ({
+      shard,
+      total: 2,
+      source: 'x',
+      timings,
+      files,
+      hand,
+    });
+    expect(
+      publishedTimings([
+        { shard: 1, deal: deal(1, ['a.spec.ts']), report: report({ 'a.spec.ts': [[20_000]] }) },
+        { shard: 2, deal: deal(2, ['b.spec.ts']), report: report({ 'b.spec.ts': [[10_000]] }) },
+      ]),
+    ).toEqual({ 'a.spec.ts': 13, 'b.spec.ts': 10 });
+  });
+});
+
+describe('shardSummary', () => {
+  it("names the timings' source, each shard's seconds and the spread", () => {
+    const text = shardSummary("run 5's e2e-shard-timings", [600, 750.4, 700], []);
+    expect(text).toContain("Dealt by run 5's e2e-shard-timings.");
+    expect(text).toContain('| 2/3 | 750 |');
+    expect(text).toContain('Spread: 150 seconds between the fastest and the slowest shard');
+  });
+
+  it('lists the problems the check found', () => {
+    expect(shardSummary('x', [1], ['c.spec.ts ran on no shard'])).toContain(
+      '- c.spec.ts ran on no shard',
+    );
+  });
+});
+
+describe('chooseTimings', () => {
+  // GitHub's answers, written by hand in the shapes its REST API gives: this run, made at noon, the
+  // list of `e2e-shard-timings` artifacts, each artifact's run, and the artifacts' contents.
+  const REPOSITORY = 'owner/repo';
+  const RUN = {
+    id: 100,
+    event: 'pull_request',
+    head_branch: 'a-branch',
+    path: '.github/workflows/test.yml',
+    created_at: '2026-11-20T12:00:00Z',
+    repository: { id: 7 },
+    head_repository: { id: 7 },
+  };
+  const devRun = (id: number) => ({ ...RUN, id, event: 'push', head_branch: 'dev' });
+  const artifact = (id: number, runId: number, createdAt: string) => ({
+    id,
+    name: TIMINGS_ARTIFACT,
+    expired: false,
+    created_at: createdAt,
+    workflow_run: { id: runId, head_branch: 'dev', repository_id: 7, head_repository_id: 7 },
+  });
+  const COMMITTED = JSON.parse(readFileSync(timingsFile(), 'utf8'));
+
+  function github(answers: {
+    runs?: Record<number, unknown>;
+    artifacts?: unknown[];
+    texts?: Record<number, string>;
+    failing?: string;
+  }): GitHubReads & { asked: string[] } {
+    const asked: string[] = [];
+    return {
+      asked,
+      async json(path) {
+        asked.push(path);
+        if (answers.failing && path.includes(answers.failing))
+          throw new Error('GitHub answered 503');
+        if (path.startsWith(`/repos/${REPOSITORY}/actions/artifacts?name=${TIMINGS_ARTIFACT}`)) {
+          return {
+            total_count: answers.artifacts?.length ?? 0,
+            artifacts: answers.artifacts ?? [],
+          };
+        }
+        const run = /\/actions\/runs\/(\d+)$/.exec(path);
+        const found = run ? { [RUN.id]: RUN, ...answers.runs }[Number(run[1])] : undefined;
+        if (!found) throw new Error(`GitHub answered 404 to ${path}`);
+        return found;
+      },
+      async artifactText(repository, id) {
+        asked.push(`zip ${repository} ${id}`);
+        if (answers.failing === 'zip') throw new Error('unzip exited 9');
+        return answers.texts?.[id] ?? '';
+      },
+    };
+  }
+
+  it('takes the newest trusted artifact made ten minutes before this run was created', async () => {
+    const gh = github({
+      runs: { 51: devRun(51), 52: devRun(52) },
+      artifacts: [
+        artifact(902, 52, '2026-11-20T11:55:00Z'),
+        artifact(901, 51, '2026-11-20T11:40:00Z'),
+        artifact(900, 51, '2026-11-20T09:00:00Z'),
+      ],
+      texts: { 901: '{"a.spec.ts": 12.5}' },
+    });
+    expect(await chooseTimings(gh, REPOSITORY, '100')).toEqual({
+      source: "run 51's e2e-shard-timings (artifact 901, made 2026-11-20T11:40:00Z)",
+      timings: { 'a.spec.ts': 12.5 },
+    });
+    expect(gh.asked).toContain(`zip ${REPOSITORY} 901`);
+  });
+
+  it('passes over an artifact whose run is not a push to dev or a trial commit', async () => {
+    const pullRequest = { ...RUN, id: 52, head_branch: 'dev' };
+    const gh = github({
+      runs: { 51: devRun(51), 52: pullRequest },
+      artifacts: [
+        artifact(902, 52, '2026-11-20T11:40:00Z'),
+        artifact(901, 51, '2026-11-20T11:00:00Z'),
+      ],
+      texts: { 901: '{"a.spec.ts": 1}', 902: '{"a.spec.ts": 999}' },
+    });
+    expect((await chooseTimings(gh, REPOSITORY, '100')).source).toMatch(/^run 51's /);
+  });
+
+  it('falls back to the committed file with none made before the margin', async () => {
+    const gh = github({
+      runs: { 52: devRun(52) },
+      artifacts: [artifact(902, 52, '2026-11-20T11:55:00Z')],
+    });
+    expect(await chooseTimings(gh, REPOSITORY, '100')).toEqual({
+      source:
+        'the committed scripts/e2e-shard-timings.json ' +
+        '(no trusted e2e-shard-timings artifact made before 2026-11-20T11:50:00Z)',
+      timings: COMMITTED,
+    });
+  });
+
+  it('falls back to the committed file on a corrupt artifact, never trying an older one', async () => {
+    const gh = github({
+      runs: { 51: devRun(51) },
+      artifacts: [
+        artifact(901, 51, '2026-11-20T11:00:00Z'),
+        artifact(900, 51, '2026-11-20T10:00:00Z'),
+      ],
+      texts: { 901: '{"a.spec.ts": "soon"}', 900: '{"a.spec.ts": 1}' },
+    });
+    const chosen = await chooseTimings(gh, REPOSITORY, '100');
+    expect(chosen.source).toMatch(
+      /^the committed scripts\/e2e-shard-timings\.json \(run 51's e2e-shard-timings \(artifact 901, made 2026-11-20T11:00:00Z\) could not be read: the timing of a\.spec\.ts is "soon", not seconds\)$/,
+    );
+    expect(chosen.timings).toEqual(COMMITTED);
+    expect(gh.asked).not.toContain(`zip ${REPOSITORY} 900`);
+  });
+
+  it("falls back to the committed file when GitHub's API or the zip fails", async () => {
+    for (const failing of ['/actions/runs/100', 'artifacts?name', '/actions/runs/51', 'zip']) {
+      const gh = github({
+        runs: { 51: devRun(51) },
+        artifacts: [artifact(901, 51, '2026-11-20T11:00:00Z')],
+        texts: { 901: '{"a.spec.ts": 1}' },
+        failing,
+      });
+      const chosen = await chooseTimings(gh, REPOSITORY, '100');
+      expect(chosen.source, failing).toMatch(/^the committed scripts\/e2e-shard-timings\.json \(/);
+      expect(chosen.timings).toEqual(COMMITTED);
+    }
+  });
+
+  it('deals by the committed file outside a GitHub Actions run, asking GitHub nothing', async () => {
+    const gh = github({});
+    expect((await chooseTimings(gh, undefined, undefined)).source).toBe(
+      'the committed scripts/e2e-shard-timings.json (not in a GitHub Actions run)',
+    );
+    expect(gh.asked).toEqual([]);
   });
 });
