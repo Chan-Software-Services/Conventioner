@@ -137,7 +137,7 @@ Within a shard the tests share one database (`workers: 1`); never across shards.
 
 **A push to `dev` of a commit the merge queue passed runs no test: it only warms the caches.**
 The queue merges a pull request by the very trial commit it tested, so the push of that commit to `dev` would run the same suite on the same tree a second time, about 165 runner minutes that tested nothing new ([ADR 0043](../../adr/0043-a-commit-the-queue-tested-is-not-tested-again-on-dev.md)).
-`suite`'s one step, `decide`, runs `ci_suite.py --event <event> --commit <sha>`, which prints one word and says why in one sentence, in its log and in the run's summary:
+`suite`'s step `decide`, after the checkout, runs `ci_suite.py --event <event> --commit <sha>`, which prints one word and says why in one sentence, in its log and in the run's summary:
 
 - `warm`: the newest run of `dev`'s merge queue on the commit (an event `merge_group` whose head branch starts `gh-readonly-queue/dev/`, by `run_number`, read through `github_runs.dev_runs`) completed with `success`; or it is still going and every one of its jobs has passed or was skipped, since GitHub can mark a run completed seconds after the push it merged has started
 - `full`: no such run, one that ended otherwise, one with a job not passed yet, GitHub unread or answering unlike GitHub, and every event but a push, a `schedule` and a `workflow_dispatch`
@@ -217,7 +217,7 @@ With six, the slowest shard ended a median 21.5 minutes into a run, while every 
 That holds while runners are free: the account is on GitHub Free, which runs 20 jobs at once across the repository.
 A pull request's or a trial commit's run asks for 19, so it fits alone: 16 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build` and the ten shards), `e2e` only once the shards are done, and CodeQL's three; a push to `main` asks for the same.
 A [warm push](#which-suite-a-run-runs) to `dev` asks for two, `suite` then `warm-caches`, and CodeQL's three; a whole-suite push to `dev` asks for `suite` first, then the same 16, then `e2e` once the shards are done.
-A [nightly run](#the-nightly-test-map) asks for `suite`, then the ten shards, then `test-map`, eleven at once at most; one whose commit has a map asks for `suite` alone.
+A [nightly run](#the-nightly-test-map) asks for `suite`, then the ten shards, then `test-map`, ten at once at most; one whose commit has a map asks for `suite` alone.
 That is why the five short checks (drift, the real-data scan with gitleaks, zizmor offline, zizmor online and actionlint) are steps of `knowledge-graph` and `real-data-and-workflows`: as five jobs of their own they made one run ask for 24, more than the account runs at once.
 With another run going, shards still wait: on one such run four shards queued 9 to 12 minutes, and the run ended at 23 minutes while each shard's own time was 10.5 to 12.5.
 The matrix lists the shards and their `total`, which move together.
