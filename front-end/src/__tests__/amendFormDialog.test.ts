@@ -72,6 +72,75 @@ describe('AmendFormDialog', () => {
     expect(toggle.text()).toBe('Stop asking Anything else you need from us?');
   });
 
+  describe('a form that would ask nothing', () => {
+    /** A plan that offers two sections and no dates, and a form with no question of its own. */
+    const TWO_SECTIONS = { ...EMPTY_ESSENTIAL_OPTIONS, sections: ['Hall A', 'Hall B'] };
+
+    function mountOnTwoSections() {
+      return mount(AmendFormDialog, {
+        props: {
+          open: true,
+          marketId: 'market-1',
+          applicationForm: { fields: [] },
+          formRevision: 0,
+          essentialOptions: TWO_SECTIONS,
+        },
+        global: { stubs: { teleport: true } },
+      });
+    }
+
+    it('says so at once when the last question the plan asks is turned off, as the move to Review refuses it', async () => {
+      const wrapper = mountOnTwoSections();
+      await wrapper.vm.$nextTick();
+      expect(wrapper.find('[data-testid="amend-form-asks-nothing"]').exists()).toBe(false);
+
+      // Only the name and the business name are left, which every form asks: they ask nothing
+      // the plan offers, so they are not a form that asks something.
+      await wrapper
+        .get('[data-testid="amend-form-unask-essential_section_ranking"] input')
+        .setValue(true);
+      await wrapper.get('[data-testid="amend-form-unask-essential_request"] input').setValue(true);
+
+      expect(wrapper.find('[data-testid="amend-form-asks-nothing"]').exists()).toBe(true);
+      expect(
+        wrapper.get('[data-testid="amend-form-submit-button"]').attributes('disabled'),
+      ).toBeDefined();
+    });
+
+    it('counts the free request as asking nothing, as the server does', async () => {
+      const wrapper = mountOnTwoSections();
+      await wrapper.vm.$nextTick();
+
+      // The request is still asked, but it applies for nothing the plan offers.
+      await wrapper
+        .get('[data-testid="amend-form-unask-essential_section_ranking"] input')
+        .setValue(true);
+      expect(
+        (
+          wrapper.get('[data-testid="amend-form-unask-essential_request"] input')
+            .element as HTMLInputElement
+        ).checked,
+      ).toBe(false);
+
+      expect(wrapper.find('[data-testid="amend-form-asks-nothing"]').exists()).toBe(true);
+    });
+
+    it('says nothing once a question is added', async () => {
+      const wrapper = mountOnTwoSections();
+      await wrapper.vm.$nextTick();
+      await wrapper
+        .get('[data-testid="amend-form-unask-essential_section_ranking"] input')
+        .setValue(true);
+
+      await wrapper.get('[data-testid="amend-form-label-input"]').setValue('What do you sell?');
+
+      expect(wrapper.find('[data-testid="amend-form-asks-nothing"]').exists()).toBe(false);
+      expect(
+        wrapper.get('[data-testid="amend-form-submit-button"]').attributes('disabled'),
+      ).toBeUndefined();
+    });
+  });
+
   /** Mounted to add a question for a column with nowhere to go, then saved. */
   async function saveANewQuestion() {
     const wrapper = mountTheDialog();
