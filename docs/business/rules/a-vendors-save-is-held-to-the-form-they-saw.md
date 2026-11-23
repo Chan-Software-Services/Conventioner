@@ -61,7 +61,7 @@ The code `form_changed` is the vendor's own, never `market_changed`, which re-re
 A body naming no version, from a tab opened before the version existed, is refused the same way.
 That page drew its form before anything could say which form it was, so the server cannot tell whether the vendor saw the form it asks now, and taking the save would judge their answers against a form they may never have seen, the loss this rule exists to prevent.
 The old page shows the server's sentence in its error box, as it shows any refusal, with no Reload of its own, and keeps the typed answers in the tab, so the vendor's own reload loses nothing.
-The deploy that ships the version tells the operator of those tabs in [releasing](../../RELEASING.md#after-every-deploy).
+[Releasing](../../RELEASING.md#after-every-deploy) tells the operator that the deploy shipping the version refuses those tabs' next save.
 
 ## On the page
 
