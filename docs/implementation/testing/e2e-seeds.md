@@ -323,7 +323,7 @@ A spec of what check-ins count, the Stats tab's, keeps its days to come and stor
 `seedTheScreens()` checks half of its rules market's first day in this way, for the Stats tab's check-in rows.
 
 **A vendor checks themselves in or out only at a market that turned its self check-in switch on** (T496, [attendance and the door](../modules/attendance-and-door.md#sharp-edges)), and every seeded market has it off, so a spec in which a vendor checks themselves in or out first calls `letVendorsCheckThemselvesIn(request, marketId)` ([file](../../../front-end/e2e/helpers/selfCheckIn.ts)), which turns it on through the switch's own `PUT`, with the session of someone who may check vendors in, on a market in its market days.
-The layout sweep's vendor page states on a market day are walked signed out, so `asAVendorAt` in `helpers/screens.ts` sets the stored switch on `big` with `mongoEval` each time it opens, on, or off for the state checked in at the door.
+The layout sweep's vendor page states on a market day are walked signed out, so `asAVendorAt` in `helpers/screens.ts` sets the stored switch on `big` with `mongoEval` each time it opens, on, or off for the state checked in at the door, and holds the page's clock at the instant it builds the seats on.
 
 ## Sharp edges
 
