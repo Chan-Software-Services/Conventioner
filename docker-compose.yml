@@ -120,7 +120,7 @@ services:
       - VITE_TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY:-}
       # This stack is a local development one, and it says so - the same declaration the back end
       # makes with ALLOW_INSECURE_LOCAL_DEV. It is what lets the front end run with no Turnstile
-      # site key, sending a placeholder token that only a back end with DISABLE_CAPTCHA accepts.
+      # site key, sending a placeholder token that only a local development back end accepts.
       - VITE_ALLOW_INSECURE_LOCAL_DEV=true
     ports:
       - "127.0.0.1:5173:5173"

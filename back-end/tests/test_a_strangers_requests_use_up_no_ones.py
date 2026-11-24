@@ -1,7 +1,7 @@
 """A request that mails a code or a link counts per caller and address, and per address by the hour.
 
 Five requests that mail, the vendor's code request and the organizer's code, reset link,
-verification link and sign-up, are each counted twice before anything is looked up or mailed:
+verification link and sign-up, are each counted twice more, after their caller, before anything is looked up or mailed:
 per caller and address together (5 in 15 minutes), so one caller's requests for an address leave
 every other caller's requests for it as they were, and per address alone (20 in an hour), so one
 inbox's mail stays bounded whoever asks. A request the pair refused is not counted on the address.

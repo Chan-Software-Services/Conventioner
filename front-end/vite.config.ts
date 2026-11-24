@@ -42,7 +42,7 @@ function assertHumanCheckSiteKey(env: Record<string, string>) {
     if (hatch) {
       console.warn(
         "[human check] VITE_ALLOW_INSECURE_LOCAL_DEV is set: building a bundle with Cloudflare's " +
-          'test site key. Only a back end running with DISABLE_CAPTCHA accepts its token. Never ' +
+          'test site key. Only a local development back end accepts its token. Never ' +
           'deploy this bundle.',
       );
       return;
@@ -58,8 +58,8 @@ function assertHumanCheckSiteKey(env: Record<string, string>) {
   if (hatch) {
     console.warn(
       '[human check] VITE_ALLOW_INSECURE_LOCAL_DEV is set: building a bundle with no Turnstile ' +
-        'site key. It sends a placeholder token, which only a back end running with ' +
-        'DISABLE_CAPTCHA accepts. Never deploy this bundle.',
+        'site key. It sends a placeholder token, which only a local development back end ' +
+        'accepts. Never deploy this bundle.',
     );
     return;
   }

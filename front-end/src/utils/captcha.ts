@@ -52,8 +52,8 @@ export const HUMAN_CHECK_LOAD_TIMEOUT_MS = 15_000;
 export const HUMAN_CHECK_SITE_KEY: string = import.meta.env.VITE_TURNSTILE_SITE_KEY?.trim() ?? '';
 
 /**
- * The token a build with no site key sends. Only a back end running with `DISABLE_CAPTCHA`
- * accepts it; `vite build` refuses a bundle with no site key unless it is a local development one.
+ * The token a build with no site key sends. Only a local development back end (`DISABLE_CAPTCHA`,
+ * or no secret under `ALLOW_INSECURE_LOCAL_DEV`) accepts it; `vite build` refuses a bundle with no site key unless it is a local development one.
  */
 export const PLACEHOLDER_TOKEN = 'e2e-test-captcha-token';
 

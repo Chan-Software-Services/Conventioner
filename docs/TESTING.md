@@ -425,7 +425,7 @@ In the back-end suite, every test runs with the autouse `human_check` fixture
 refuses an absent one, as the local stack does, records each check's action in `actions`, and
 refuses every token once a test sets `refuse = True`. A test whose request needs a token sends
 `"captcha_token": "test-human-check"`. Only a module marked `real_human_check`
-(`test_captcha.py`) meets the real function, with Cloudflare stood in for by a fake
+(`test_captcha.py`, `test_a_code_request_asks_the_human_check.py`) meets the real function, with Cloudflare stood in for by a fake
 `requests.post`.
 
 Similarly, set `DISABLE_EMAIL=true` (or `1`) so the Resend-backed

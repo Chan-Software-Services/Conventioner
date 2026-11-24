@@ -104,12 +104,11 @@ const A_TEST_SITE_KEY =
   'always ask every person whatever the back end checks.';
 const NO_SITE_KEY_WARNING =
   '[human check] VITE_ALLOW_INSECURE_LOCAL_DEV is set: building a bundle with no Turnstile site ' +
-  'key. It sends a placeholder token, which only a back end running with DISABLE_CAPTCHA ' +
-  'accepts. Never deploy this bundle.';
+  'key. It sends a placeholder token, which only a local development back end accepts. Never ' +
+  'deploy this bundle.';
 const TEST_SITE_KEY_WARNING =
   "[human check] VITE_ALLOW_INSECURE_LOCAL_DEV is set: building a bundle with Cloudflare's test " +
-  'site key. Only a back end running with DISABLE_CAPTCHA accepts its token. Never deploy this ' +
-  'bundle.';
+  'site key. Only a local development back end accepts its token. Never deploy this bundle.';
 const API_HOST = 'https://api.example.com';
 
 describe('a production build', () => {

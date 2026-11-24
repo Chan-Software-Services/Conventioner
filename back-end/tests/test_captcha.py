@@ -1,8 +1,8 @@
 """The human check on the server (``utils.captcha``): Cloudflare Turnstile's siteverify, driven as a
 route drives it, with Cloudflare stood in for by a fake ``requests.post``.
 
-Every other test in the suite runs with the ``human_check`` stand-in from ``conftest.py``; this module
-is marked ``real_human_check``, so it alone meets the real function.
+Every test but those of a module marked ``real_human_check`` runs with the ``human_check`` stand-in
+from ``conftest.py``; this module is marked, so it meets the real function.
 """
 
 import logging

@@ -37,7 +37,7 @@ The vendor's code request and a sign-in past its limits each need the same kind 
 - **Cloudflare unreachable lets the request through under the sign-in limits.**
   When the server cannot reach siteverify (a timeout, a connection error, a 5xx, a body that is not JSON, or Cloudflare's `internal-error`), [`captcha_passes`](../../back-end/utils/captcha.py) passes and logs the kind alone, so the door does not depend on a third party being up; the limits still stand in front of the request.
 - **A deployment cannot run on a test key.**
-  The back end refuses to boot without `TURNSTILE_SECRET_KEY` or with one of Cloudflare's published test secrets, and `vite build` refuses a bundle without `VITE_TURNSTILE_SITE_KEY` or with a test site key, each unless it is a local development one.
+  The back end refuses to boot without `TURNSTILE_SECRET_KEY` unless it is a local development one, and with one of Cloudflare's published test secrets even then; `vite build` refuses a bundle without `VITE_TURNSTILE_SITE_KEY` or with a test site key unless it is a local development one.
 - **The CSP ([`front-end/vercel.json`](../../front-end/vercel.json)) adds `https://challenges.cloudflare.com` to `script-src` and `frame-src`**, as Cloudflare's reference lists Turnstile's sources, and drops every Google host.
 
 ## Consequences
@@ -47,7 +47,7 @@ The vendor's code request and a sign-in past its limits each need the same kind 
 - An organizer's everyday sign-in loads no Cloudflare script: its forms mount the check only after a `captcha: required` answer.
 - A browser that cannot load the check is told so in one sentence, and the step stays as it was.
 - The reCAPTCHA variables are no longer read; Daniel deletes them once the release is live ([releasing](../RELEASING.md)).
-- Local stacks and E2E run with no site key: the check renders nothing and sends a placeholder token, which only a back end with `DISABLE_CAPTCHA` accepts, and a request with no token is still refused there.
+- Local stacks and E2E run with no site key: the check renders nothing and sends a placeholder token, which only a local development back end (with `DISABLE_CAPTCHA`, or with no secret) accepts, and a request with no token is still refused there.
 
 ## Rejected
 
