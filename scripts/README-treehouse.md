@@ -115,7 +115,8 @@ and ports as `export` lines (`eval "$(scripts/th-compose.sh ports)"`).
   treehouse refuses every lease at 0 or a negative value, and caps an omitted key at 16.
 
 > **⚠️ `treehouse prune` and `treehouse destroy` do NOT tear down per-slot docker
-> stacks.** Docker teardown lives only in `th-return.sh`. If you `prune` (it
+> stacks.** Docker teardown lives in `th-return.sh` and in the agent team's
+> `team-stack down`. If you `prune` (it
 > auto-removes stale idle worktrees) or `destroy` a worktree whose stack is still
 > up, its offset-port containers keep running and can collide when that slot is
 > reused. Always `scripts/th-return.sh "$path"` first, or run the cleanup below.
@@ -205,6 +206,6 @@ docker ps -a --filter name=conventioner- --format '{{.ID}}\t{{.Names}}' \
   `th-lease.sh` still hands out the slot, with its hooks set and no `front-end/node_modules`.
   Fix the lockfile on its branch and commit it.
 - If you `treehouse destroy` or `treehouse prune` a worktree without returning it
-  first, its docker stack lingers (only `th-return.sh` tears stacks down) - run
+  first, its docker stack lingers (only `th-return.sh` and `team-stack down` tear stacks down) - run
   `scripts/th-compose.sh down -v` in the worktree beforehand, or see
   [Kill lingering worktree stacks](#kill-lingering-worktree-stacks) above.
