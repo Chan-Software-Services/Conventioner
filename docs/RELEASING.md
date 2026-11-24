@@ -6,7 +6,6 @@ describes:
   - .github/workflows/release-please.yml
   - release-please-config.json
   - back-end/app.py#check_public_endpoint_defenses
-  - front-end/vite.config.ts#assertHumanCheckSiteKey
   - back-end/app.py#healthz
   - front-end/vite.config.ts#buildCommit
   - scripts/deploy_proof.py
@@ -15,6 +14,7 @@ describes:
   - .github/workflows/promote.yml
   - scripts/promote_check.py
   - scripts/github_runs.py
+  - front-end/vite.config.ts#assertHumanCheckSiteKey
 verified: 2026-11-19
 sources:
   - T74
@@ -215,6 +215,8 @@ Check, in this order:
 1. `curl https://api.conventioner.io/healthz` answers `"status": "ok"`, `"deployed": true` and `"localDev": false` with the released commit as `commit` (the back end booted, which proves its configuration and migration markers, and its database answers), and `curl https://conventioner.io/version.json` names the same commit.
 2. `https://conventioner.io/markets` opens when loaded directly, not only when navigated to (the SPA fallback in `front-end/vercel.json`).
 3. Sign in as an organizer.
+
+After the deploy that ships the form version, every vendor tab opened before it has its next save refused with "This form changed since you opened it. Reload to continue.", and the vendor must reload ([a vendor's save is held to the form they saw](business/rules/a-vendors-save-is-held-to-the-form-they-saw.md), [ADR 0044](adr/0044-a-vendors-save-is-held-to-the-form-their-page-drew.md)).
 
 ### Hotfixes
 

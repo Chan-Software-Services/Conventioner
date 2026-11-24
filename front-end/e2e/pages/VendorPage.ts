@@ -334,6 +334,11 @@ export class VendorPage {
     return this.page.getByTestId('apply-error');
   }
 
+  /** Reload, beside the refusal of a save from a form that changed since the page read it. */
+  get reloadButton(): Locator {
+    return this.page.getByTestId('apply-reload-button');
+  }
+
   get essentialFields(): Locator {
     return this.page.getByTestId('apply-essential-fields');
   }

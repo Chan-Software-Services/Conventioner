@@ -146,17 +146,22 @@ class TestTheThreeApplicationEndpoints:
         assert gated == absent
 
     def test_saving_an_application_is_refused_for_a_csv_market(self, applicant_markets):
-        applicant_markets(_market("csv"))
-        _, status = ApplicantsApi.save_applicant_application(SLUG, TOKEN, {"a": "b"})
+        csv = _market("csv")
+        applicant_markets(csv)
+        _, status = ApplicantsApi.save_applicant_application(
+            SLUG, TOKEN, {"a": "b"}, ApplicantsApi.applicant_form_version(csv))
         assert status == 404
 
     def test_a_csv_market_answers_an_application_save_as_an_unknown_slug_does(
         self, applicant_markets
     ):
-        applicant_markets(_market("csv"))
-        gated = ApplicantsApi.save_applicant_application(SLUG, TOKEN, {"a": "b"})
-        applicant_markets(_market("form"))
-        absent = ApplicantsApi.save_applicant_application("no-such-market", TOKEN, {"a": "b"})
+        csv, form = _market("csv"), _market("form")
+        applicant_markets(csv)
+        gated = ApplicantsApi.save_applicant_application(
+            SLUG, TOKEN, {"a": "b"}, ApplicantsApi.applicant_form_version(csv))
+        applicant_markets(form)
+        absent = ApplicantsApi.save_applicant_application(
+            "no-such-market", TOKEN, {"a": "b"}, ApplicantsApi.applicant_form_version(form))
         assert gated == absent
 
 

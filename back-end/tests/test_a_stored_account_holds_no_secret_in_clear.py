@@ -17,7 +17,7 @@ skip_without_real_dependencies()
 import api.users as UsersApi
 from test_a_failed_mail_leaves_no_wait_armed import outbox  # noqa: F401
 from test_the_organizer_sign_in_is_bounded import (  # noqa: F401
-    ACCOUNT_EMAIL, CALLER, PASSWORD, UNVERIFIED_EMAIL, client, clock, fast_stand_in_hash,
+    ACCOUNT_EMAIL, CALLER, PASSWORD, UNVERIFIED_EMAIL, client, clock,
 )
 from test_the_sign_in_secrets_hold_one_state import users  # noqa: F401
 

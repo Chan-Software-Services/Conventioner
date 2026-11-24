@@ -16,6 +16,7 @@ One line per node, sorted by file name.
 - [A seat only for an applicant](a-seat-only-for-an-applicant.md) - a seat goes only to someone with an application; anyone may be pinned, warned, and is held
 - [A vendor is called by their chosen name](a-vendor-is-called-by-their-chosen-name.md) - the name they chose, else their full name, with their address beside it; the address alone when there is none
 - [A vendor signs in before they have applied](a-vendor-signs-in-before-applying.md) - every address is sent a code, the token names market and address, the first valid save creates the application
+- [A vendor's save is held to the form they saw](a-vendors-save-is-held-to-the-form-they-saw.md) - a save carries the form version its page read, and one from a page drawn from another form is refused, storing nothing, "This form changed since you opened it. Reload to continue."
 - [Adding a vendor who never applied](adding-a-vendor-who-never-applied.md) - from Assignment on, added by name, address and the answers its prices read, approved, assigned by hand, never in the table allocation
 - [An amount reads to the cent](an-amount-reads-to-the-cent.md) - every amount on screen and in the file reads in the market's currency with two decimals, "$50.00", "-$15.00"; one table of cases pins both sides
 - [An applicant never reads a verdict early](an-applicant-never-reads-a-verdict-early.md) - "Submitted" until results are published, then a table or none, read off the stored seats

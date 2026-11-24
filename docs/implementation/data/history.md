@@ -15,7 +15,7 @@ describes:
   - back-end/api/organizations.py#get_default_permission_history
   - back-end/tests/test_the_history.py
   - back-end/tests/test_only_an_asking_writes_a_markets_history.py
-verified: 2026-11-19
+verified: 2026-11-24
 sources:
   - wayfinding/readable-journey/08
   - E40/F01/S01

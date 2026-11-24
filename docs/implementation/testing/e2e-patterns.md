@@ -12,7 +12,6 @@ describes:
   - front-end/e2e/helpers/settledPlanChanged.ts
   - front-end/e2e/helpers/seeds.ts#SEED_MARKET_DATE
   - front-end/e2e/helpers/seeds.ts#completePlan
-  - front-end/e2e/helpers/humanCheck.ts
   - front-end/e2e/date-display-timezone.spec.ts
   - front-end/e2e/global-setup.ts
   - front-end/e2e/helpers/networkSettles.ts
@@ -21,9 +20,10 @@ describes:
   - front-end/e2e/helpers/phoneWindow.ts#inTheWindow
   - front-end/e2e/helpers/stackReady.ts
   - front-end/e2e/helpers/signInWindow.ts
-  - front-end/e2e/helpers/signInLimits.ts
   - front-end/e2e/helpers/mongoSession.ts
   - front-end/e2e/helpers/mongoScript.ts
+  - front-end/e2e/helpers/humanCheck.ts
+  - front-end/e2e/helpers/signInLimits.ts
 verified: 2026-11-20
 sources:
   - E21/F02/S02
@@ -60,6 +60,7 @@ sources:
   - T501
   - T519
   - T539
+  - T507
 ---
 
 # E2E patterns
@@ -98,9 +99,10 @@ Everything else on the page is found by its `data-testid`.
 **A page object wraps one screen** ([`front-end/e2e/pages/`](../../../front-end/e2e/pages/)): it holds `getByTestId()` locators and exposes action methods, and a spec calls those methods rather than reaching for locators of its own.
 `LoginPage.login` opens a bare `/login` first; `signIn` signs in on the page as it stands, so a spec about where signing in returns to keeps the address's `next`.
 `waitForMarkets` waits for where signing in lands by the path, since `/login?next=/markets` ends in `/markets` too and a glob would be met before the sign-in had happened; a spec asserts a landing the same way.
+`signInToMarkets`, the sign-in of the `authenticatedPage` fixture and of `withUser()`, returns only once Markets has the answers to its two reads, the account's markets and its organizations ([a seed's sign-in ends the page's](#sharp-edges)).
 A new page follows the existing ones (`LoginPage`, `MarketsPage`, `NewMarketPage`, `MarketSetupPage`, `ResultPage`, `OrganizationsPage`, `ManageMarketPage`); TESTING.md lists them all.
 `MarketSetupPage` holds more than the plan: the market's tabs and the phase rail are there too, because every market page stands in the same frame, and `publishResults`, which a walk into market days takes on either path.
-`VendorPage` is the one object for a market's vendor page, `/<slug>/vendor`, signed out and in, the application form on it included; `MarketPage` is the one for the market page, `/<slug>`, its application call and its notice, and `PublicMapPage` for the map it shows while open.
+`VendorPage` is the one object for a market's vendor page, `/<slug>/vendor`, signed out and in, the application form on it included, with a refused save's box (`formError`) and the Reload a changed form offers there (`reloadButton`, T507); `MarketPage` is the one for the market page, `/<slug>`, its application call and its notice, and `PublicMapPage` for the map it shows while open.
 Its `decideOnReviewSetup` follows the rail's "Decide what reviewers read first" to Review setup and chooses "Nothing leads the card" and "No automatic rejections", so a walk that opens Review through the screens decides as an organizer does ([review waits on the review setup](../../business/rules/review-waits-on-the-review-setup.md)).
 On a form of essential questions alone the rail offers the form first (T260), so `decideOnReviewSetupAskingNothingOfTheirOwn` waits for that offer by its name, opens Review setup as the form tab's last step and decides the same way.
 A dialog that more than one screen opens has an object of its own (`FollowUpDialog`, opened from One by one's card and from the All view's drawer), so a test id renamed in it is one line to change for every spec that drives the dialog through the object.
@@ -203,6 +205,7 @@ A spec that ends it to have a press find it ended ends it as the press's request
 **A call made with a page's cookies goes to `APP_API`, as the page's own calls do** (E38/F14/S01).
 `APP_API` is the address the app's pages call the API at, through the dev server's proxy, so such a call reaches the back end the way the page's do.
 Until T318 a `page.request` at `BACKEND_URL` was refused as signed out, since the back end held a session to the client's address as well as its browser; it holds it to the browser string alone now ([the cookies](../conventions/security-invariants.md#the-cookies)), so one there is taken too, but no spec relies on that.
+A seed that signs in with a page's cookies (`loginViaApi` on `page.request`) ends the page's own sign-in first, as every sign-in ends the one its browser held, so a read the page still has out answers 401 and the page goes to sign in; the fixture's sign-in therefore waits for Markets' reads before the test starts, since a fixture account's sign-in, hashed at bcrypt's lowest cost, takes a few milliseconds and lands among them.
 A page of another browser context (`withUser()`'s) is a page too; a request context of its own (the `request` fixture, `playwright.request.newContext()`) is a client of its own, and may call either.
 A request with no cookie at all answers 401; [`a-failure-says-what-to-do.spec.ts`](../../../front-end/e2e/a-failure-says-what-to-do.spec.ts) holds that, from a page of the app's origin that runs none of its code.
 

@@ -109,6 +109,11 @@ The name a vendor trades under, asked of every applicant by a built-in optional 
 _Avoid_: Trading name, stall name, shop name (a market's own question may be worded so; the built-in one is the business name)
 See [ADR 0042](docs/adr/0042-every-form-asks-a-built-in-business-name.md).
 
+**Form version**:
+The fingerprint of the application form as a vendor's page draws it, its own questions and the options its essential questions offer. The vendor's page reads it with the form and every save carries it, and a save from a page drawn from another version is refused.
+_Avoid_: Form revision, which is the count of the writes of the form's questions
+See [a vendor's save is held to the form they saw](docs/business/rules/a-vendors-save-is-held-to-the-form-they-saw.md).
+
 **Required answer**:
 An answer the applicant cannot submit the form without. A property of the question, enforced at the applicant's keyboard. Says nothing about whether anyone reads it afterwards.
 _Avoid_: Essential (that is the product's own set of questions, and a custom field can be required too)

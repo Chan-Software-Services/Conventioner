@@ -12,7 +12,6 @@ describes:
   - back-end/api/users.py#request_otp
   - back-end/api/users.py#request_password_reset
   - back-end/api/users.py#resend_verification_email
-  - back-end/api/users.py#_sign_in_refused
   - back-end/api/users.py#_password_matches
   - back-end/api/users.py#get_user_by_login_id
   - back-end/api/users.py#signed_in_account
@@ -27,8 +26,6 @@ describes:
   - back-end/tests/test_the_organizer_sign_in_is_bounded.py
   - back-end/tests/test_one_account_per_address.py
   - back-end/tests/test_a_failed_mail_leaves_no_wait_armed.py
-  - back-end/tests/test_a_strangers_requests_use_up_no_ones.py
-  - back-end/tests/test_a_strangers_tries_shut_no_one_out.py
   - back-end/tests/test_delete_user_authorization.py
   - back-end/account_secrets.py
   - back-end/api/users.py#verify_email
@@ -48,6 +45,9 @@ describes:
   - back-end/tests/real_mongo/test_the_sign_in_secret_races.py
   - back-end/tests/test_the_organizer_sessions_are_indexed.py
   - back-end/tests/real_mongo/test_organizer_sessions_on_the_server.py
+  - back-end/api/users.py#_sign_in_refused
+  - back-end/tests/test_a_strangers_requests_use_up_no_ones.py
+  - back-end/tests/test_a_strangers_tries_shut_no_one_out.py
 verified: 2026-11-14
 sources:
   - E32/F03/S04
@@ -128,6 +128,7 @@ A route test that signs in by writing the session with an address points the use
 
 **A refused sign-in says what to do next, in three named sentences in `users.py`** (E38/F14/S02, [the sign-in's messages](../../business/flows/accounts.md#a2-sign-in-and-sign-out)).
 `SIGN_IN_DOES_NOT_MATCH` answers a wrong password and an address with no account alike, the same status and body, and the password is checked either way: against one stand-in hash, made once at the app's cost factor, when the address has no account (`_password_matches`).
+That cost is bcrypt's 12, flask-bcrypt's default, which the app's config leaves alone, and [`test_the_app_hashes_at_bcrypts_full_cost.py`](../../../back-end/tests/test_the_app_hashes_at_bcrypts_full_cost.py) holds; the back-end tests and the E2E suite's fixture accounts hash at 4 ([testing](../../TESTING.md#back-end-tests)).
 A password longer than bcrypt reads answers it too, checked against nothing ([the sign-in is bounded](#the-sign-in-is-bounded)).
 `SIGN_IN_VERIFY_FIRST` answers a right password, a right code or a code asked for on an account not yet verified.
 `SIGN_IN_WRONG_CODE` answers a wrong code and a code for an address with no account alike at every try, an account's fifth wrong code included, which discards its code without saying so ([a code's tries](#a-codes-tries-are-counted-in-one-update)); the sign-in limits count both alike.
