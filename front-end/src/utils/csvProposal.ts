@@ -37,6 +37,8 @@ export interface ProposedChoices {
   options: ProposedOption[];
   /** What each applicant answered, as indexes into `options`, one list per applicant. */
   answers: number[][];
+  /** Why these options are worth a second look, in the proposal's own words; empty when not. */
+  check: string[];
 }
 
 export interface ProposedField {
@@ -121,6 +123,11 @@ export interface RowChoice {
   kept: Partial<Record<ChoiceType, string[]>>;
   /** Once the organizer touches a row it is theirs, and no longer one to check. */
   corrected: boolean;
+  /**
+   * The organizer's last change was the type, so the row lists a reading's options they have not
+   * looked at yet: it carries that reading's own checks until they touch the row again.
+   */
+  newReading: boolean;
 }
 
 export interface ProposalDraft {
@@ -149,6 +156,7 @@ export function draftFrom(proposal: Proposal, planCeiling: number | null = null)
       required: row.field?.required ?? false,
       kept,
       corrected: false,
+      newReading: false,
     };
   }
   return {
@@ -164,7 +172,8 @@ export function draftFrom(proposal: Proposal, planCeiling: number | null = null)
 export function correct(draft: ProposalDraft, row: number, change: Partial<RowChoice>): void {
   const current = draft.rows[row];
   if (!current) return;
-  const next = { ...current, ...change, corrected: true };
+  const newReading = change.type !== undefined && change.type !== current.type;
+  const next = { ...current, ...change, corrected: true, newReading };
   if (change.fate && change.fate !== 'essential') next.essential = null;
   draft.rows[row] = next;
 }
@@ -318,10 +327,21 @@ export function draftRows(proposal: Proposal, draft: ProposalDraft): LedgerRow[]
       fate: choice.fate,
       essential: choice.essential,
       why: proposed ? row.why : '',
-      check: choice.corrected ? [] : row.check,
+      check: checksOf(row, choice),
       field,
     };
   });
+}
+
+/**
+ * Why a row is worth a second look: the proposal's reasons until the organizer touches it, and
+ * after a change of type the reasons of the reading it now lists, which the proposal made for the
+ * type it proposed alone.
+ */
+function checksOf(row: LedgerRow, choice: RowChoice): string[] {
+  if (!choice.corrected) return row.check;
+  if (!choice.newReading || !isChoice(choice.type)) return [];
+  return row.field?.optionsByType[choice.type]?.check ?? [];
 }
 
 function optionsFor(

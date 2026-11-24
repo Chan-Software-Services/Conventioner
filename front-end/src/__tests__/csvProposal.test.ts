@@ -23,6 +23,9 @@ import {
   type ProposedField,
 } from '@/utils/csvProposal';
 
+const RARE = 'Has options few applicants chose';
+const NAMES = 'Has an option that names someone';
+
 function column(index: number, overrides: Partial<ProposedColumn> = {}): ProposedColumn {
   return {
     index,
@@ -235,8 +238,38 @@ describe('the working copy', () => {
         type: 'select',
         options: one,
         optionsByType: {
-          select: { options: one, answers: [] },
-          multi_select: { options: several, answers: [] },
+          select: { options: one, answers: [], check: [RARE] },
+          multi_select: { options: several, answers: [], check: [RARE] },
+        },
+      },
+    };
+  }
+
+  /** A question the rules proposed as Text, whose choice readings each earn their own checks. */
+  function textColumn(index: number): ProposedColumn {
+    const one = [
+      { value: 'Pottery', count: 15, rare: false, namesSomeone: false, keep: true },
+      {
+        value: 'See https://example.com/shop',
+        count: 3,
+        rare: false,
+        namesSomeone: true,
+        keep: false,
+      },
+      { value: 'Oneoff item A', count: 1, rare: true, namesSomeone: false, keep: false },
+    ];
+    const several = [
+      { value: 'Pottery', count: 15, rare: false, namesSomeone: false, keep: true },
+      { value: 'Oneoff item A', count: 1, rare: true, namesSomeone: false, keep: false },
+    ];
+    const base = column(index);
+    return {
+      ...base,
+      field: {
+        ...(base.field as ProposedField),
+        optionsByType: {
+          select: { options: one, answers: [], check: [RARE, NAMES] },
+          multi_select: { options: several, answers: [], check: [RARE] },
         },
       },
     };
@@ -266,6 +299,46 @@ describe('the working copy', () => {
 
     correct(draft, 0, { fate: 'essential', essential: 'essential_max_dates' });
     expect(draftRows(p, draft)[0].why).toBe('');
+  });
+
+  it("shows a reading's own checks once a question proposed as Text becomes a choice", () => {
+    const p = proposal([textColumn(0)]);
+    const draft = draftFrom(p);
+    expect(draftRows(p, draft)[0].check).toEqual([]);
+    expect(proposalCounts(p, draft).toCheck).toBe(0);
+
+    correct(draft, 0, { type: 'select' });
+    expect(draftRows(p, draft)[0].check).toEqual([RARE, NAMES]);
+    expect(proposalCounts(p, draft).toCheck).toBe(1);
+
+    correct(draft, 0, { type: 'multi_select' });
+    expect(draftRows(p, draft)[0].check).toEqual([RARE]);
+  });
+
+  it('drops the checks again once the question is turned back to Text', () => {
+    const p = proposal([textColumn(0)]);
+    const draft = draftFrom(p);
+    correct(draft, 0, { type: 'select' });
+    correct(draft, 0, { type: 'text' });
+    expect(draftRows(p, draft)[0].check).toEqual([]);
+    expect(proposalCounts(p, draft).toCheck).toBe(0);
+  });
+
+  it("drops a reading's checks once the organizer touches the row after choosing it", () => {
+    const p = proposal([textColumn(0), textColumn(1)]);
+    const draft = draftFrom(p);
+    correct(draft, 0, { type: 'select' });
+    toggleOption(draft, 0, 'Oneoff item A');
+    correct(draft, 1, { type: 'select' });
+    correct(draft, 1, { required: true });
+    expect(draftRows(p, draft).map((row) => row.check)).toEqual([[], []]);
+  });
+
+  it("keeps a choice's proposed checks until the organizer touches the row, as before", () => {
+    const p = proposal([choiceColumn(0)]);
+    const draft = draftFrom(p);
+    toggleOption(draft, 0, 'ECVAS');
+    expect(draftRows(p, draft)[0].check).toEqual([]);
   });
 
   it('keeps a rare option the organizer ticks', () => {
@@ -324,6 +397,7 @@ describe('the working copy', () => {
       })),
       // Prints only; Prints and plushies; plushies only; nothing at all.
       answers: [[0], [0, 2], [2], []],
+      check: [],
     };
     expect(droppedBy(read, new Set(['Prints', 'Stickers']))).toBe(1);
     expect(droppedBy(read, new Set(['Prints', 'Stickers', 'Crochet plushies']))).toBe(0);

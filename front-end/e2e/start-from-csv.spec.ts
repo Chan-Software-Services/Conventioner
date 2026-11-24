@@ -379,8 +379,12 @@ test.describe('Draft this market from a Google Form', () => {
       clubs.getByTestId('proposal-check').filter({ hasText: 'Could allow several answers' }),
     ).toHaveCount(1);
     await clubs.getByTestId('proposal-row-type').selectOption('multi_select');
-    await expect(clubs.getByTestId('proposal-check')).toHaveCount(0);
-    await expect(flow.toCheck).toHaveText(String(toCheck - 2));
+    // The options inside the answers have one-offs of their own, which the server checks for that
+    // reading: the row stays one to check, for them alone.
+    await expect(clubs.getByTestId('proposal-check')).toHaveText([
+      'Has options few applicants chose',
+    ]);
+    await expect(flow.toCheck).toHaveText(String(toCheck - 1));
 
     // A rare option kept.
     const student = flow.row('Are you an Example College student, alum or staff member?');
@@ -388,7 +392,21 @@ test.describe('Draft this market from a Google Form', () => {
     await rare.locator('input').check();
     await expect(rare.locator('input')).toBeChecked();
     await expect(student.getByTestId('proposal-check')).toHaveCount(0);
-    await expect(flow.toCheck).toHaveText(String(toCheck - 3));
+    await expect(flow.toCheck).toHaveText(String(toCheck - 2));
+
+    // A question read as words turned into one choice gains the checks its options earn, and turned
+    // back, loses them.
+    const portfolio = flow.row('Please share a link to your portfolio');
+    await expect(portfolio.getByTestId('proposal-check')).toHaveCount(0);
+    await portfolio.getByTestId('proposal-row-type').selectOption('select');
+    await expect(portfolio.getByTestId('proposal-check')).toHaveText([
+      'Has options few applicants chose',
+      'Has an option that names someone',
+    ]);
+    await expect(flow.toCheck).toHaveText(String(toCheck - 1));
+    await portfolio.getByTestId('proposal-row-type').selectOption('text');
+    await expect(portfolio.getByTestId('proposal-check')).toHaveCount(0);
+    await expect(flow.toCheck).toHaveText(String(toCheck - 2));
   });
 
   test('the seam: confirm, add a left-out column, and the import of the same file asks nothing', async ({
