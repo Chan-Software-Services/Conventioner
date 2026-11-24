@@ -25,6 +25,13 @@ Adding someone gives one answer for every address: whether or not the address ha
   Whoever may give its role may withdraw it while it waits.
 - **Inviting is bounded.**
   An organizer sends at most 100 invitations, and one address is sent at most 5, in a quarter of an hour; past either the organizer reads how long to wait, alike for every address.
+- **Only the invited address may answer.**
+  A person signed in with the address it was sent to lists it, accepts it or declines it; to anyone else it reads as an invitation that has ended, so a forwarded email lets nobody else join.
+- **Accepting is the inviter's act, judged again.**
+  It gives the role only while the market is live, the inviter's account is the one that sent it, and the inviter may still give that role; otherwise the invitation has ended, and the invitee is told to ask for it again.
+  The market's history records the inviter giving the role, by an invitation accepted.
+  Someone who already holds a role on the market is told so, and the invitation ends: accepting never changes a role.
+- **Declining leaves nothing of the person on the market**; the history records that they declined.
 - **A market's invitations go with it** when it is deleted.
 - **Everyone already holding a role keeps it**, unasked.
 

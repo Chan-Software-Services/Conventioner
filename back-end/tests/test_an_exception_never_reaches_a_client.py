@@ -39,6 +39,7 @@ import api.applicants as ApplicantsApi
 import api.attendance as AttendanceApi
 import api.discord_connection as DiscordConnectionApi
 import api.door as DoorApi
+import api.invitees as InviteesApi
 import api.markets as MarketsApi
 import api.organizations as OrgsApi
 import application_status as ReviewState
@@ -430,6 +431,9 @@ ORGANIZATION_AND_ROLE_ROUTES = [
     ("get", "/markets/market-123/invitations", None, MarketsApi, "market_invitations"),
     ("delete", "/markets/market-123/invitations/invitation-1", None,
      MarketsApi, "withdraw_market_invitation"),
+    ("get", "/invitations", None, InviteesApi, "waiting"),
+    ("post", "/invitations/invitation-1/accept", None, InviteesApi, "accept"),
+    ("post", "/invitations/invitation-1/decline", None, InviteesApi, "decline"),
 ]
 
 
@@ -1416,6 +1420,8 @@ READS_NO_BODY = [
     ("delete", "/markets/<market_id>/roles/<user_id>", [(MarketsApi, "remove_market_role", True)]),
     ("delete", "/markets/<market_id>/invitations/<invitation_id>",
      [(MarketsApi, "withdraw_market_invitation", None)]),
+    ("post", "/invitations/<invitation_id>/accept", [(InviteesApi, "accept", {})]),
+    ("post", "/invitations/<invitation_id>/decline", [(InviteesApi, "decline", None)]),
     ("delete", "/markets/<market_id>/permissions/<action_id>",
      [(MarketsApi, "reset_permission", [])]),
     ("delete", "/markets/<market_id>/permissions", [(MarketsApi, "reset_permissions", [])]),

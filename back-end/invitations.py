@@ -31,6 +31,7 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 import sign_in_limits
+from client_errors import NotFoundError
 from db_config import get_database
 from unique_indexes import ensure_unique_index
 
@@ -61,6 +62,13 @@ CHANGED_MEANWHILE = (
     "That invitation was sent again meanwhile. Read the invitations again, and withdraw it if you "
     "still mean to.")
 
+#: Said to an invitee of any invitation they cannot answer: another address's, an id that never
+#: was, one past its 14 days, withdrawn, declined or accepted, one whose target is gone, and one
+#: whose inviter can no longer give it. One sentence for all, so an id tells nothing of another's.
+INVITATION_ENDED = (
+    "This invitation has ended: it was withdrawn, it ran out, or whoever sent it can no longer "
+    "give it. Ask them to invite you again.")
+
 #: Said of an invitation refused by either limit, with ``{wait}`` for how long to wait.
 TOO_MANY = "You have sent many invitations. Try again in {wait}."
 
@@ -78,6 +86,17 @@ class TooManyInvitations(Exception):
     def __init__(self, retry_after: int):
         super().__init__(retry_after)
         self.retry_after = retry_after
+
+
+class InvitationEnded(NotFoundError):
+    """An invitation the signed-in person cannot answer (``INVITATION_ENDED``): a 404, coded
+    ``invitation_ended``, which the Invitations page tells apart from the other refusals."""
+
+    def __init__(self):
+        super().__init__(INVITATION_ENDED)
+
+    def body(self) -> Dict[str, Any]:
+        return {"error": INVITATION_ENDED, "code": "invitation_ended"}
 
 
 def now() -> datetime:
@@ -177,6 +196,43 @@ def waiting(target_kind: str, target_id: str, invitation_id: str) -> Optional[Di
         {"id": invitation_id, "target_kind": target_kind, "target_id": target_id}), {"_id": 0})
 
 
+def waiting_for_address(email: str) -> List[Dict[str, Any]]:
+    """Every invitation waiting for ``email``, a normalized address, newest sent first."""
+    return list(invitations_collection.find(_waiting({"email": email}), {"_id": 0}).sort(
+        [("sent_at", -1), ("id", -1)]))
+
+
+def addressed(invitation_id: str, email: str) -> Dict[str, Any]:
+    """The invitation with this id waiting for ``email``, a normalized address.
+
+    Raises ``InvitationEnded`` for any other: the id held only by an invitation to another address
+    reads as one that ended, so a forwarded email lets nobody else answer it.
+    """
+    invitation = invitations_collection.find_one(
+        _waiting({"id": invitation_id, "email": email}), {"_id": 0})
+    if invitation is None:
+        raise InvitationEnded()
+    return invitation
+
+
+def end(invitation: Dict[str, Any]) -> bool:
+    """Delete the invitation, by its id and address: accepted, declined, or one that can no longer
+    be accepted. Whether it was there to delete."""
+    return invitations_collection.delete_one(
+        {"id": invitation["id"], "email": invitation["email"]}).deleted_count == 1
+
+
+def take_back(invitation: Dict[str, Any]) -> None:
+    """Take back the two counts an accepted invitation was counted with, at its ``counted_at``,
+    so only invitations nobody accepts pile up against the limits."""
+    # The driver hands a stored time back without its zone, and the limits' window reads a naive
+    # time as the machine's own.
+    at = _utc(invitation["counted_at"])
+    sign_in_limits.take_back_attempt(
+        sign_in_limits.INVITATION_PER_INVITER, invitation["invited_by"], at)
+    sign_in_limits.take_back_attempt(sign_in_limits.INVITATION_PER_ADDRESS, invitation["email"], at)
+
+
 def withdraw(invitation: Dict[str, Any]) -> bool:
     """Delete the invitation as it was read, holding its role; whether it was there to delete.
 
@@ -195,17 +251,21 @@ def delete_for_market(market_id: str) -> int:
         {"target_kind": MARKET, "target_id": market_id}).deleted_count
 
 
-def _instant(value: datetime) -> str:
-    """A stored time as ISO 8601 in UTC: the driver reads one back without its zone."""
+def _utc(value: datetime) -> datetime:
+    """A stored time in UTC: the driver reads one back without its zone."""
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc).isoformat()
+    return value.astimezone(timezone.utc)
+
+
+def _instant(value: datetime) -> str:
+    """A stored time as ISO 8601 in UTC."""
+    return _utc(value).isoformat()
 
 
 def ends_at(invitation: Dict[str, Any]) -> datetime:
     """When the invitation ends, in UTC."""
-    value = invitation["expires_at"]
-    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+    return _utc(invitation["expires_at"])
 
 
 def served(invitation: Dict[str, Any]) -> Dict[str, Any]:
@@ -213,6 +273,20 @@ def served(invitation: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "id": invitation["id"],
         "email": invitation["email"],
+        "role": invitation["role"],
+        "invitedBy": invitation.get("invited_by_email"),
+        "sentAt": _instant(invitation["sent_at"]),
+        "endsAt": _instant(invitation["expires_at"]),
+    }
+
+
+def invitee_served(invitation: Dict[str, Any], target_name: str) -> Dict[str, Any]:
+    """An invitation as the person it was sent to reads it: to what, as what, by whom, and when."""
+    return {
+        "id": invitation["id"],
+        "kind": invitation["target_kind"],
+        "targetId": invitation["target_id"],
+        "targetName": target_name,
         "role": invitation["role"],
         "invitedBy": invitation.get("invited_by_email"),
         "sentAt": _instant(invitation["sent_at"]),

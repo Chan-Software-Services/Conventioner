@@ -90,6 +90,11 @@ CALLERS_OWN = {
     ("POST", "/organizations"): "makes an organization the caller owns",
     ("GET", "/floorplans/templates"): "lists the caller's templates, or their organization's",
     ("POST", "/floorplans/templates"): "makes a template the caller owns",
+    ("GET", "/invitations"): "lists the invitations sent to the caller's own address",
+    ("POST", "/invitations/<invitation_id>/accept"):
+        "answers an invitation sent to the caller's own address, and refuses any other",
+    ("POST", "/invitations/<invitation_id>/decline"):
+        "answers an invitation sent to the caller's own address, and refuses any other",
 }
 
 SCOPING_ARGUMENTS = {"market_id", "org_id", "gridfs_id", "template_id"}

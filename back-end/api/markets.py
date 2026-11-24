@@ -2421,6 +2421,109 @@ def withdraw_market_invitation(market_id: str, invitation_id: str, requesting_us
                  detail={"role": role.value})
 
 
+#: Said to an invitee accepting an invitation to a market they already have a role on: accepting
+#: never changes a role, so the invitation ends.
+ALREADY_ON_THE_MARKET = (
+    "You already have a role on this market, so this invitation has ended. Ask its owner or an "
+    "Admin to change your role.")
+
+#: Why a decline is recorded under a row no request asked: the invitee holds no role on the market,
+#: and their sign-in with the address it was sent to is the check. Its actor is that address.
+AN_INVITEE_ANSWERS = (
+    "the person invited declines their own invitation: they hold no role on the market, and "
+    "their sign-in with the address it was sent to is the check")
+
+
+def live_market_names(market_ids: Iterable[str]) -> Dict[str, str]:
+    """The names of the live markets among ``market_ids``, by id, in one read: the markets an
+    invitee's waiting invitations are to. A market gone or being deleted is not among them."""
+    wanted = sorted(set(market_ids))
+    if not wanted:
+        return {}
+    return {doc["id"]: doc.get("name") or "" for doc in markets_collection.find(
+        live({"id": {"$in": wanted}}), {"_id": 0, "id": 1, "name": 1})}
+
+
+def _ended(invitation: Dict[str, Any]) -> Invitations.InvitationEnded:
+    """End an invitation that can no longer be accepted, and the refusal that says so."""
+    Invitations.end(invitation)
+    return Invitations.InvitationEnded()
+
+
+def give_role_by_invitation(invitation: Dict[str, Any], invitee: Any) -> Dict[str, Any]:
+    """Give ``invitee``, the signed-in account the invitation is addressed to, the role it offers
+    (T538, ADR 0047): what they accepted, to show them.
+
+    Judged again, at the moment it is accepted, as the inviter's act, and in this order: the market
+    live, the inviter's account still the one that sent it, the row that gives the role asked of
+    the inviter again, and the invitee holding no role here yet. The first three refused end the
+    invitation and answer it ended; the last ends it and says they already have a role. Then the
+    role is written holding the invitee's key absent and the inviter's role as read
+    (``_write_role``), recorded through the inviter's asking as their giving it, by an invitation
+    accepted, and only then is the invitation ended and its limit counts taken back: a cut between
+    the write and the delete leaves an invitation the next accept ends as already on the market.
+
+    Raises:
+        Invitations.InvitationEnded: it can no longer be accepted, and is ended.
+        MarketChanged: the inviter's role or the invitee's moved since the read; the invitation is
+            kept, so accepting again judges again.
+    """
+    context = load_market_context(invitation["target_id"])
+    if context is None or context.market is None:
+        raise _ended(invitation)
+    market = context.market
+
+    # By the address it was sent from, and the id it was sent by: an account deleted, or deleted
+    # and made again, is no longer the one that invited.
+    inviter = UsersApi.get_user(invitation["invited_by_email"])
+    if inviter is None or inviter.id != invitation["invited_by"]:
+        raise _ended(invitation)
+
+    role = MarketRole(invitation["role"])
+    asked = Actions.ask(Actions.roles_row(role), inviter.email, market, context.organization)
+    if asked.refused:
+        raise _ended(invitation)
+
+    if invitee.id in (context.document.get('roles') or {}):
+        Invitations.end(invitation)
+        raise BadRequestError(ALREADY_ON_THE_MARKET)
+
+    try:
+        _write_role(market, {"$set": {_role_key(invitee.id): role.value}}, invitee.id,
+                    inviter.email, owner_count_read=False)
+    except MarketNotFoundError:
+        raise _ended(invitation) from None
+    asked.record(
+        kind=History.ROLE_GIVEN, subject={"user_id": invitee.id, "email": invitee.email},
+        detail=lambda: {**History.changes({"role": None}, {"role": role.value}),
+                        "by_invitation": True},
+    )
+    Invitations.end(invitation)
+    Invitations.take_back(invitation)
+    return {"kind": Invitations.MARKET, "targetId": market.id, "targetName": market.name,
+            "role": role.value}
+
+
+def decline_market_invitation(invitation: Dict[str, Any], invitee_address: str) -> None:
+    """End an invitation to a market, as the person it was sent to, and record that they declined,
+    under the row that gives its role (``AN_INVITEE_ANSWERS``). Nothing of them is written to the
+    market.
+
+    Raises:
+        Invitations.InvitationEnded: the market is gone, or the invitation ended meanwhile.
+    """
+    if markets_collection.find_one(live({"id": invitation["target_id"]}), {"_id": 1}) is None:
+        raise _ended(invitation)
+    if not Invitations.end(invitation):
+        raise Invitations.InvitationEnded()
+    role = MarketRole(invitation["role"])
+    History.unasked(
+        invitation["target_id"], invitee_address, Actions.roles_row(role),
+        because=AN_INVITEE_ANSWERS,
+    ).record(kind=History.INVITATION_DECLINED, subject={"email": invitee_address},
+             detail={"role": role.value})
+
+
 NO_LONGER_ON_THE_MARKET = "They no longer have a role on this market."
 
 #: Said of removing the market's one Owner: it changes only when ownership is transferred.

@@ -31,6 +31,7 @@ import api.vendor_check_in as VendorCheckInApi
 import api.applications as ApplicationsApi
 import api.applicant_auth as ApplicantAuthApi
 import api.applicants as ApplicantsApi
+import api.invitees as InviteesApi
 import api.market_actions as Actions
 import history as History
 import invitations as Invitations
@@ -1023,6 +1024,27 @@ def withdraw_market_invitation(market_id: str, invitation_id: str) -> Response:
     """Withdraw a waiting invitation, as whoever may give its role."""
     MarketsApi.withdraw_market_invitation(market_id, invitation_id, authenticated_email())
     return jsonify({"message": "Invitation withdrawn"}), 200
+
+# The invitee's side (T538): the invitations waiting for the signed-in address, and their answers.
+
+@app.route('/invitations', methods=['GET'])
+@login_required
+def get_my_invitations() -> Response:
+    """Every invitation waiting for the signed-in address, newest first."""
+    return jsonify({"invitations": InviteesApi.waiting(authenticated_email())}), 200
+
+@app.route('/invitations/<invitation_id>/accept', methods=['POST'])
+@login_required
+def accept_invitation(invitation_id: str) -> Response:
+    """Accept an invitation sent to the signed-in address, judged again as its inviter's act."""
+    return jsonify({"accepted": InviteesApi.accept(invitation_id, authenticated_email())}), 200
+
+@app.route('/invitations/<invitation_id>/decline', methods=['POST'])
+@login_required
+def decline_invitation(invitation_id: str) -> Response:
+    """Decline an invitation sent to the signed-in address: it ends, and gives nothing."""
+    InviteesApi.decline(invitation_id, authenticated_email())
+    return jsonify({"message": "Invitation declined"}), 200
 
 @app.route('/markets/<market_id>/roles/<user_id>', methods=['DELETE'])
 @login_required
