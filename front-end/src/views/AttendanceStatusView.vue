@@ -597,8 +597,9 @@ function holdBusy(key: string, busy: boolean): void {
  * came from, and posts there only: no read asked before it lands, so none undoes it, and an answer
  * after the organizer moved to another market says nothing there. A check-in is here at the seat
  * the row holds; an undo leaves a seat expected, and a row with no seat has nothing left to show.
- * A check-out is the signed-in organizer's at the time the server answered, and its undo clears
- * it, the row otherwise as it was (T496).
+ * A check-out is the one the server answers, made now or by whoever checked the vendor out first,
+ * another organizer or the vendor's own scan, and its undo clears it, the row otherwise as it was
+ * (T496).
  */
 async function write(row: RosterRow, what: DoorWrite) {
   const forMarket = rosterRead.key.value;
@@ -631,11 +632,15 @@ async function write(row: RosterRow, what: DoorWrite) {
         checkedInVia: null,
       };
     } else if (what === 'check-out') {
-      const { data } = await api.post<{ checkedOutAt: string }>(checkOut, body);
+      const { data } = await api.post<{
+        checkedOutAt: string;
+        checkedOutBy: string | null;
+        checkedOutVia: string | null;
+      }>(checkOut, body);
       answered = {
         checkedOutAt: data.checkedOutAt,
-        checkedOutBy: signedInEmail(),
-        checkedOutVia: null,
+        checkedOutBy: data.checkedOutBy,
+        checkedOutVia: data.checkedOutVia,
       };
     } else {
       await api.delete(checkOut, { data: body });

@@ -381,9 +381,9 @@ html.holds-still {
 
 /* On a phone's browser `100vh` is the window with its bars hidden, taller than the one shown while
    they are, so a page and a shell at least that tall scroll by the bars' height: while the page
-   fills the window they take the window shown, `100dvh`, and every other page keeps `100vh`. */
-html.fills-the-window body,
-html.fills-the-window .app-container {
+   fills the window they take the window shown, `100dvh`, and every other page keeps `100vh`. The
+   shell, `.app-container`, says so in `App.vue`'s own rule, which outranks any rule here. */
+html.fills-the-window body {
   min-height: 100dvh;
 }
 
