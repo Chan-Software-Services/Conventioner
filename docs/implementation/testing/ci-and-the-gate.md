@@ -20,7 +20,8 @@ describes:
   - .github/actions/e2e-stack/action.yml
   - .github/actions/front-end-deps/action.yml
   - front-end/scripts/e2e-repeat.ts
-verified: 2026-11-17
+  - scripts/chromium-packages.sh
+verified: 2026-11-24
 sources:
   - T47
   - T53
@@ -39,6 +40,8 @@ sources:
   - T375
   - T424
   - T464
+  - T527
+  - T508
 ---
 
 # CI and the gate
@@ -50,7 +53,7 @@ What each suite covers is [TESTING.md](../../TESTING.md); how a commit reaches p
 ## CI
 
 [`.github/workflows/test.yml`](../../../.github/workflows/test.yml) runs on pushes and pull requests to `dev` and `main`, and on [a merge queue's trial commit](#a-merge-queues-trial-commit) for `dev`.
-Its token is read-only (`permissions: contents: read`, and on the `e2e` job `actions: read` too, for the newest `test-map` artifact, another run's), every action is pinned by its full commit SHA with the version in a comment beside it, which [Dependabot](#dependabot) bumps together, and no checkout keeps its git credentials (`persist-credentials: false`), since no job pushes.
+Its token is read-only (`permissions: contents: read`, and on the `e2e-shard` and `e2e` jobs `actions: read` too, for [the timings artifact](#the-timings-refresh-themselves) and the newest `test-map` artifact, other runs'), every action is pinned by its full commit SHA with the version in a comment beside it, which [Dependabot](#dependabot) bumps together, and no checkout keeps its git credentials (`persist-credentials: false`), since no job pushes.
 No `${{ }}` expression is written inside a `run:` script: a value reaches the shell through the step's `env:` and is read as a variable.
 A push to a pull request's branch cancels the run of its earlier head (`concurrency`); a push to `dev` or `main` never cancels one, since each commit there keeps the checks a promotion reads, and neither does a trial commit, whose group is its own queue branch and commit.
 Every job but `e2e-shard` (whose checks are `e2e shard <n>/10`) sets `name:` to its id, the name `dev`'s and `main`'s rules require its check by, so renaming a job drops a required check.
@@ -88,8 +91,8 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 **`e2e-shard`**
 
-- ten runners, each running the [shared actions](#the-e2e-stack-and-its-caches), which fill `front-end/node_modules`, install Chromium, load the stack's images from the cache or build them, start the stack and seed it with `seed_fixture.sh --primary`, then running the spec files [dealt to it by time](#the-e2e-shards), with `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` set
-- it posts a flaky-test summary and uploads its JSON report (`e2e-results-shard-<n>`, kept 90 days) on every run, and on failure uploads the whole report
+- ten runners, each running the [shared actions](#the-e2e-stack-and-its-caches), which fill `front-end/node_modules`, install Chromium, load the stack's images from the cache or build them, start the stack and seed it with `seed_fixture.sh --primary`, then taking [the timings to deal by](#the-timings-refresh-themselves) and running the spec files [dealt to it by them](#the-e2e-shards), with `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` set
+- it posts a flaky-test summary and uploads its JSON report and its deal record (`e2e-results-shard-<n>`, kept 90 days) on every run, and on failure uploads the whole report
 - on a push to `dev` alone it also records [the test map](the-test-map.md) (`TEST_MAP_OUT`) and uploads the records with the back end's timestamped log (`test-map-shard-<n>`, kept 90 days)
 
 **`e2e-repeat`**
@@ -101,8 +104,9 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 **`e2e`**
 
-- passes only when every shard did
-- on a pull request it first runs [the selection audit](the-test-map.md#where-a-miss-shows), which lists each spec the shards failed in the job's summary as ran, left to CI or missed by `affected-specs.py` for the pull request's diff, each miss also a warning annotation once a test map exists, its steps continuing on error so they never decide the job
+- passes only when every shard did and [the shards ran every spec file exactly once](#the-timings-refresh-themselves), whose check writes the timings' source, each shard's seconds and their spread to the job summary
+- on a push to `dev`, a scheduled run on `dev` or a trial commit, whose shards all passed, it publishes the next timings (`e2e-shard-timings`, kept 90 days); a run whose shards did not all pass, or ran none, publishes nothing
+- on a pull request it then runs [the selection audit](the-test-map.md#where-a-miss-shows), which lists each spec the shards failed in the job's summary as ran, left to CI or missed by `affected-specs.py` for the pull request's diff, each miss also a warning annotation once a test map exists, its steps continuing on error so they never decide the job
 
 **`test-map`**
 
@@ -142,7 +146,7 @@ On it `github.base_ref` and `github.event.pull_request` are empty, since they be
 | `knowledge-graph`                                                     | the scripts' tests and `knowledge_graph.py check`; the drift step, which reads `github.base_ref`, is skipped, as on a push, since it judges a pull request against its base, which the pull request's own run does |
 | `real-data-and-workflows`                                             | zizmor offline and actionlint; the real-data scans, gitleaks and zizmor online, each `if: github.event_name == 'pull_request'`, are skipped, as on a push                                                          |
 | `e2e-shard`                                                           | every step, as on a push, but shard 1 saves no cache ([why](#the-e2e-stack-and-its-caches)) and no shard records [the test map](the-test-map.md), which only a push to `dev` records (`RECORD_TEST_MAP`)           |
-| `e2e`                                                                 | its `if: ${{ !cancelled() }}`, which reads no event; the selection audit's steps, each `if: github.event_name == 'pull_request'`, are skipped, as on a push                                                        |
+| `e2e`                                                                 | its `if: ${{ !cancelled() }}`, which reads no event, and the deal's check; it publishes the next timings, as on a push to `dev`; the selection audit, `if: github.event_name == 'pull_request'`, is skipped        |
 | `e2e-repeat`                                                          | skipped (`if: github.event_name == 'pull_request'`), as on a push; not a required check                                                                                                                            |
 | `test-map`                                                            | skipped (`if:` a push to `dev`), as on a push to `main`; not a required check                                                                                                                                      |
 | CodeQL's `analyze`, the three `Analyze (<language>)` checks           | every step, as on a push: none has an `if:`                                                                                                                                                                        |
@@ -156,21 +160,43 @@ Promotion never reads a trial commit's run: [`promote_check.py`](../../../script
 
 Each `e2e-shard` job runs [`front-end/scripts/e2e-shards.ts`](../../../front-end/scripts/e2e-shards.ts) `--shard=<n>/10`, not Playwright's `--shard`.
 Playwright's `--shard` cuts the alphabetical list of spec files into runs of equal test count, whatever the tests cost (with `fullyParallel: false` a spec file is never split), so on the first six-shard run the three people-at-scale files, whose names sort together, all landed on one shard: 24 minutes of tests on it, 6 on another, and 28 minutes for the workflow.
-The script lists the suite with `playwright test --list`, deals the spec files heaviest first, each to the shard with the fewest seconds so far, by the seconds in [`front-end/scripts/e2e-shard-timings.json`](../../../front-end/scripts/e2e-shard-timings.json), and runs its own hand in alphabetical order.
-The hands depend only on the list and the timings, so every runner deals the same ones and each spec file is in exactly one (`src/__tests__/e2eShards.test.ts`); before it runs, the script lists its hand again through the filters it passes and fails the shard if Playwright selects any other set of files.
+The script lists the suite with `playwright test --list`, deals the spec files heaviest first, each to the shard with the fewest seconds so far, by [the timings](#the-timings-refresh-themselves), and runs its own hand in alphabetical order.
+The hands depend only on the list and the timings, so every runner given the same timings deals the same ones and each spec file is in exactly one (`src/__tests__/e2eShards.test.ts`); before it runs, the script lists its hand again through the filters it passes and fails the shard if Playwright selects any other set of files.
 A spec file with no timing yet weighs the median of those measured.
 
-The timings are the summed duration of every attempt of every test in a file, from CI's own reports.
-Refresh them when a shard runs well over the others, or after a large spec file lands:
+### The timings refresh themselves
+
+The timings are each spec file's seconds, the summed duration of every attempt of every test in it, from CI's own reports; no one refreshes them by hand.
+
+- **Published.**
+  On a push to `dev`, a scheduled run on `dev` or a trial commit, whose ten shards all passed, the `e2e` job blends the timings the run dealt by with the seconds it measured, 0.3 of this run to 0.7 of the earlier timings (`BLEND_WEIGHT`), a file new to the timings taking its measure alone, and uploads them as the `e2e-shard-timings` artifact.
+  Over twelve runs that weight left the next run's shards about 130 seconds apart where one run's timings alone left them about 200, since a file's time moves by about a fifth from run to run.
+- **Taken.**
+  Each shard first runs `node scripts/e2e-shards.ts timings <file>`, which takes the newest `e2e-shard-timings` artifact made at least 10 minutes (`TIMINGS_MARGIN_MS`) before its own run was created, by the Test workflow on a push to `dev`, a scheduled run on `dev` or a trial commit in this repository: never a pull request's, whose code no one has merged.
+  It reads the run behind each of the ten newest such artifacts at most, and deals by the committed file when none of those ten is trusted.
+  The Test workflow has no schedule yet; a nightly run on `dev`'s tip, once it has one, publishes and is trusted as a push is, so the timings stay fresh even if a push to `dev` runs no shards.
+- **The same on every shard and every re-run.**
+  A run's creation time stays the same on every re-run attempt, and an artifact never changes once made, so the newest made before that time is the same artifact however late a shard looks, and the lookup reads GitHub's list of them page after page (up to 20 pages of 100, far more than are published in the 30 days within which GitHub allows a re-run) until it lists one made an hour before the best found so far, then takes the newest of all it read: GitHub lists artifacts by id, which only roughly follows the order they were made (seen out of order by up to 15 minutes), so the choice never hangs on where a page ends; the margin is far longer than an upload takes, so no shard can see an artifact another shard could not.
+- **Never a failed shard.**
+  With no such artifact (as before the first one is published, or after 90 days without one), a corrupt one, or GitHub's API failing (after up to three tries), the shard deals by the committed [`front-end/scripts/e2e-shard-timings.json`](../../../front-end/scripts/e2e-shard-timings.json) with a warning annotation, and a corrupt artifact is never passed over for an older one, so every shard falls back alike.
+- **Checked.**
+  Each shard writes its deal record, `test-results/e2e-deal.json` (the timings' source, the timings, every listed file and its hand), uploaded beside its report.
+  Once every shard has passed, `e2e` runs `node scripts/e2e-shards.ts check`, which fails the job unless every shard dealt by the same timings and the reports hold every listed file exactly once, as when one shard fell back on a failed API call while the others took the artifact: a file no shard ran was never tested.
+  Shards that all fell back to the committed file, for different reasons, dealt by the same timings and pass.
+  A re-run of the whole run then deals again by the same artifact.
+- **Read.**
+  Each shard's log names the timings it dealt by and the minutes they give its hand; the `e2e` job's summary names the source, or each source and its shards when they differ, each shard's seconds of tests and the spread between the fastest and the slowest.
+
+The committed file is the fallback, and `scripts/affected-specs.py` and `e2e-repeat.ts` read it.
+It was refreshed last from twelve whole runs on `dev` and the merge queue, 44525439048 to 44721661345, blended oldest first as CI publishes them; to refresh it again, download each run's reports into a folder of its own and give the folders oldest first, the newest a whole run:
 
 ```sh
-gh run download <run id> -R Chan-Software-Services/Conventioner -p 'e2e-results-shard-*' -D <an empty dir>
-cd front-end && node scripts/e2e-shards.ts refresh <that dir>
+gh run download <run id> -R Chan-Software-Services/Conventioner -p 'e2e-results-shard-*' -D <a folder for that run>
+cd front-end && node scripts/e2e-shards.ts refresh <folder>...
 ```
 
 and commit the rewritten file in its own `ci:` PR.
-The refresh lists the suite and refuses, naming each file, when a spec file it lists is in none of the reports, as when a shard stopped before Playwright wrote its report, so a missing shard never drops its files to the median.
-The first timings came from run 42493172818's list-reporter times, before the reports were uploaded on a passing run; they were refreshed from run 42973207637 (89 minutes of tests) when the shards went from six to ten.
+The refresh lists the suite and refuses, naming each file, when a spec file it lists is in none of the newest run's reports, as when a shard stopped before Playwright wrote its report, so a missing shard never drops its files to the median.
 
 **Ten shards, since the suite is the run's critical path.**
 With six, the slowest shard ended a median 21.5 minutes into a run, while every other job was done by 2.7; a shard is about 3 minutes of setup and its share of the suite, so ten bring a shard to about 12 minutes at about 13 more runner-minutes of setup a run.
@@ -184,16 +210,17 @@ The matrix lists the shards and their `total`, which move together.
 
 Two composite actions set a runner up for Playwright, shared by `e2e-shard` and `e2e-repeat`.
 [`.github/actions/front-end-deps/action.yml`](../../../.github/actions/front-end-deps/action.yml) sets up the Node `.nvmrc` pins and fills `front-end/node_modules`; it runs first, since with no `front-end/node_modules` on the host Docker (as root) creates the anonymous volume's mountpoint there root-owned, and a later `npm ci` fails with `EACCES`.
-[`.github/actions/e2e-stack/action.yml`](../../../.github/actions/e2e-stack/action.yml) installs Chromium, gets the stack's two images, pulls `mongo:7` and `mongo-express:latest` from Docker Hub, retrying only that pull a handful of times, because a transient registry 500 once failed a shard outright, so a stack that genuinely fails to start fails the job at once, then starts the stack and seeds it.
+[`.github/actions/e2e-stack/action.yml`](../../../.github/actions/e2e-stack/action.yml) installs Chromium and [the system packages it needs](#chromiums-system-packages), gets the stack's two images, pulls `mongo:7` and `mongo-express:latest` from Docker Hub, retrying only that pull a handful of times, because a transient registry 500 once failed a shard outright, so a stack that genuinely fails to start fails the job at once, then starts the stack and seeds it.
 Each `uses:` line calls an action by its path (`./.github/actions/...`) with a `zizmor: ignore[self-repository]`: zizmor asks for GitHub's newer `$/` form, which actionlint 1.7.12, the latest, refuses.
 
-**Dependencies, browsers and images come from GitHub's Actions cache, keyed on the files that decide them.**
+**Dependencies, browsers, system packages and images come from GitHub's Actions cache, keyed on what decides them.**
 
-| Cache                                                               | Key                                                                                                                                                                            | On a hit                                                           | On a miss                                     |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ | --------------------------------------------- |
-| `front-end/node_modules`                                            | `front-end-node-modules-<os>-<arch>-<hash>`, the hash of `.nvmrc` and `package-lock.json`                                                                                      | nothing more                                                       | `npm ci`                                      |
-| Playwright's browsers, `~/.cache/ms-playwright`                     | `playwright-chromium-<os>-<arch>-<version>`, the version `npx playwright --version` prints, which `package-lock.json` decides                                                  | `npx playwright install-deps chromium`, the system libraries alone | `npx playwright install chromium --with-deps` |
-| the back end's and front end's images, as one `docker save` archive | `e2e-images-<os>-<arch>-<backend tag>-<frontend tag>`, the tags [`scripts/image-tags.sh`](../../../scripts/image-tags.sh) prints, a hash of the files each image is built from | `docker load`                                                      | `docker compose build`                        |
+| Cache                                                                                                          | Key                                                                                                                                                                            | On a hit                          | On a miss                                                       |
+| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- | --------------------------------------------------------------- |
+| `front-end/node_modules`                                                                                       | `front-end-node-modules-<os>-<arch>-<hash>`, the hash of `.nvmrc` and `package-lock.json`                                                                                      | nothing more                      | `npm ci`                                                        |
+| Playwright's browsers, `~/.cache/ms-playwright`                                                                | `playwright-chromium-<os>-<arch>-<version>`, the version `npx playwright --version` prints, which `package-lock.json` decides                                                  | nothing more                      | `npx playwright install chromium`                               |
+| the `.deb` files of the system packages Chromium needs that the runner lacks, `$RUNNER_TEMP/chromium-packages` | `chromium-packages-<os>-<arch>-<hash>`, the hash of the runner's Ubuntu release and of each package with the version the runner's package lists would install                  | installed from the files, offline | downloaded from Ubuntu's mirrors, then installed from the files |
+| the back end's and front end's images, as one `docker save` archive                                            | `e2e-images-<os>-<arch>-<backend tag>-<frontend tag>`, the tags [`scripts/image-tags.sh`](../../../scripts/image-tags.sh) prints, a hash of the files each image is built from | `docker load`                     | `docker compose build`                                          |
 
 The source is not in the images' key: an image's `COPY` of the source is stale on a hit, and the compose file's bind mounts of `back-end/` and `front-end/` put the checked-out source over it, while the front end's `node_modules` volume is filled from the image, whose `package-lock.json` is in the key.
 That is the rule by which every worktree and `nm-test.sh` stack shares its images ([below](#the-no-mistakes-gate)).
@@ -201,7 +228,18 @@ Only shard 1 saves (`save-cache` and `save-caches`), and only what it did not re
 `docker-build` never uses the cache: it builds both images from nothing on every run, so a base image or a dependency that no longer builds still fails it.
 A cache written on `dev` is read by every pull request; one written on a pull request's run only by that pull request's later runs.
 A trial commit's shards read `dev`'s, the default branch's, and save none: a cache written on its queue branch would be read by no other run.
-The three caches are about 660 MB together (the images' archive about 340, the browsers about 280, `node_modules` about 40), saved once by each pull request that changes a key's files, against the repository's 10 GB of Actions cache, which GitHub evicts least recently used first and after 7 days unread.
+The four caches are about 680 MB together (the images' archive about 340, the browsers about 280, `node_modules` about 40, the packages about 22), the first three saved once by each pull request that changes a key's files and the packages once for each runner image that moves their versions, against the repository's 10 GB of Actions cache, which GitHub evicts least recently used first and after 7 days unread.
+
+### Chromium's system packages
+
+**A shard installs Chromium's system packages without Ubuntu's apt mirrors whenever the cache has them and they install**, so an outage of the mirrors, of minutes or of hours, fails no such shard.
+GitHub's Ubuntu runner has most of the packages Playwright's Chromium needs; on `ubuntu-26.04` it lacks only nine, fonts and their tools, about 22 MB.
+[`scripts/chromium-packages.sh`](../../../scripts/chromium-packages.sh) `missing` asks Playwright which are missing (`npx playwright install-deps --dry-run chromium`, which simulates the install with `apt-get` against the runner's own package lists, offline), and its `install` puts their `.deb` files from the cache in apt's own archive directory and installs them with `apt-get install --no-download`, which checks each against the package lists and fails before it changes anything if a file it needs is not there, then asks Playwright again and fails the job if any is still missing.
+The key is the runner's release and each package it lacks with the version its package lists would install, read by a second simulation, and only on a new key, such as a runner image whose lists move a font to a new version, are the files downloaded: at those versions, or, when the mirrors no longer have them, at those of lists refreshed from the mirrors (`apt-get update`), which are then not saved, since they are not the key's.
+That download, with its refresh, is tried 6 times, a minute apart, and each call to the mirrors is cut at 2 minutes (`timeout 120`), so on a new key's run a shard waits out an outage of at least 5 minutes, its pauses, and the download gives up within 41: 6 tries of at most 3 calls, and the pauses; [`scripts/tests/test_chromium_packages.py`](../../../scripts/tests/test_chromium_packages.py) holds those bounds, and that a hit reaches no mirror, with fakes of `npx`, `sudo`, `apt-get`, `apt-config`, `dpkg-deb`, `timeout` and `sleep`.
+Cached files that do not install are passed over for an install from the mirrors, under the same retry, and are not saved: its download (`apt-get update`, then `apt-get install --download-only`) gives up within 29 minutes, 6 tries of 2 calls and the pauses, and dpkg's part, which runs offline (`--no-download`), is never cut, since a cut there could leave dpkg interrupted.
+When Playwright cannot say which packages are missing, as with no package lists, `missing` refreshes the lists under the same retry first, which gives up within 17 minutes, 6 calls and the pauses, so a shard's worst case is about 87 minutes.
+No shard runs `npx playwright install-deps chromium` or `--with-deps`: each refreshes the package lists and fetches the packages from the mirrors on every run, with no retry.
 
 ## The e2e repeat
 
@@ -211,7 +249,7 @@ The `e2e-repeat` job runs [`front-end/scripts/e2e-repeat.ts`](../../../front-end
 The checkout fetches two commits of history for that parent.
 Every file runs the same number of times (`--repeat-each`), with `--retries=0` and `--trace=retain-on-failure`, on one stack, so any failed run fails the job: as many times as fit 10 minutes of tests, at least 2 and at most 5; five runs catch a spec failing one run in three 87% of the time.
 **The files run once first, and that run's time decides how many more follow**, so a new file, which has no timing yet, is bounded by what it really takes rather than by a guess: a first run of 3 minutes gets two more, one past 5 minutes one more, one past 15 minutes none.
-Before anything runs, [the timings](#the-e2e-shards) (a file with no timing, new or renamed, weighing their median) decide only whether the files are too many to run at all: past 15 minutes a run, as on a change that sweeps through the suite, none runs and the job passes with a warning annotation, since its shards have still run each file once.
+Before anything runs, [the committed timings](#the-timings-refresh-themselves) (a file with no timing, new or renamed, weighing their median) decide only whether the files are too many to run at all: past 15 minutes a run, as on a change that sweeps through the suite, none runs and the job passes with a warning annotation, since its shards have still run each file once.
 **The first run is cut at 15 minutes** (Playwright's `--global-timeout`), so files the timings misjudge, such as heavy spec files a pull request moves, never hold the runner past it: a run cut there with no test failed passes with the same warning, read from its JSON report, and one with a failed test fails the job.
 So the tests take at most twice 15 minutes, and the job's `timeout-minutes: 40` covers that and its setup.
 
@@ -344,7 +382,7 @@ Under a `team-heavy` run, which sets `TEAM_HEAVY_HELD` for its command and holds
 To see who holds it and who waits: `cat ~/.local/state/agent-team/heavy.lock` names the last run to take it, and `lsof ~/.local/state/agent-team/heavy.lock` lists every process with it open, the holder and its guard, and each waiting run with its `flock`.
 The lock is the one place T19's `team-capacity run --kind gate:conventioner` is to take over, keeping the lock as the fallback where `team-capacity` is absent; `nm-test.sh` does not call it yet, and the lock can go once the browser is isolated from the host's network changes.
 `nm-test.sh` never calls `sudo`: it installs Chromium with `npx playwright install chromium`, never `--with-deps` or `install-deps`, because those run `sudo` with no terminal and each failed attempt counts toward the account's `pam_faillock` lockout; the machine's own package manager provides the system libraries.
-CI's [e2e action](#the-e2e-stack-and-its-caches) keeps `--with-deps`, and `install-deps` when the browser comes from its cache, which is correct on GitHub's Ubuntu runners.
+CI's [e2e action](#chromiums-system-packages) installs them with `sudo` through `scripts/chromium-packages.sh`, which is correct on GitHub's Ubuntu runners.
 What it does not run is CI's alone: `docker compose build`, gitleaks, zizmor, actionlint, the knowledge graph's drift check and CodeQL.
 
 ## Stack identity

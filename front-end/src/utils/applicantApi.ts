@@ -146,15 +146,19 @@ export async function fetchApplicantApplication(
  * Save/submit the authenticated applicant's application.
  * PUT /public/markets/<slug>/applicant/application
  * Requires Bearer token in Authorization header.
+ *
+ * `formVersion` is the version of the form the answers were typed against, as its read answered
+ * it; the server refuses a save from another (409 `form_changed`, `isFormChanged`, T507).
  */
 export async function saveApplicantApplication(
   marketSlug: string,
   token: string,
   formData: Record<string, unknown>,
+  formVersion: string | null,
 ): Promise<ApplicantApplication> {
   const { data } = await api.put(
     `/public/markets/${marketSlug}/applicant/application`,
-    { formData },
+    { formData, formVersion },
     { headers: { Authorization: `Bearer ${token}` } },
   );
   return data.application as ApplicantApplication;

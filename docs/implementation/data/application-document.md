@@ -17,6 +17,7 @@ describes:
   - back-end/tests/test_the_review_state_table.py
   - back-end/tests/test_changed_answers_are_one_event.py
   - back-end/datatypes.py#ApplicationOrigin
+  - back-end/migrations/migrate_business_name.py
   - back-end/review_team.py#ReviewView
   - back-end/review_team.py#review_view
   - back-end/review_team.py#share_of
@@ -26,8 +27,7 @@ describes:
   - back-end/migrations/migrate_application_status.py
   - back-end/tests/test_migrate_application_status.py
   - back-end/tests/real_mongo/test_the_application_status_migration_on_the_server.py
-  - back-end/migrations/migrate_business_name.py
-verified: 2026-11-20
+verified: 2026-11-24
 sources:
   - wayfinding/v0-1-0/map
   - wayfinding/real-market-readiness/01

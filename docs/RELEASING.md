@@ -39,7 +39,7 @@ This project uses a **dev → main promotion flow**:
   It is deployed only by hand, through the Deploy workflow, and is reached **only** by promoting `dev` → `main` as a deliberate, versioned release.
   Never commit or open PRs directly against `main` (the release-please Release PR and a `hotfix/` PR are the exceptions, [below](#hotfixes)).
 
-**Both branches are protected**: a PR into either needs the `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, `e2e` and `real-data-and-workflows` checks to pass (`e2e` passes only when every shard does).
+**Both branches are protected**: a PR into either needs the `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, `e2e` and `real-data-and-workflows` checks to pass (`e2e` passes only when every shard does and [the shards ran every spec file once](implementation/testing/ci-and-the-gate.md#the-timings-refresh-themselves)).
 A PR into `dev` also needs `knowledge-graph`, CodeQL's three `Analyze (<language>)` checks and `agent-review`, eleven in all; `main` asks only the six ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)).
 Branches need not be up to date before merging, because a promotion is only ever made from a commit whose own `dev` run passed, and a PR into `dev` merges through a merge queue, which runs the checks again on the commit it would merge.
 `dev`'s is a ruleset with no bypass actor, so it binds admins too: nothing merges into `dev`, the merge of `main` back into it included, without all eleven checks, short of changing the ruleset itself; its code scanning rule holds back a PR with a new CodeQL alert ([CodeQL](implementation/testing/ci-and-the-gate.md#codeql)), and force pushes to it and its deletion are blocked.
@@ -214,6 +214,8 @@ Check, in this order:
 1. `curl https://api.conventioner.io/healthz` answers `"status": "ok"`, `"deployed": true` and `"localDev": false` with the released commit as `commit` (the back end booted, which proves its configuration and migration markers, and its database answers), and `curl https://conventioner.io/version.json` names the same commit.
 2. `https://conventioner.io/markets` opens when loaded directly, not only when navigated to (the SPA fallback in `front-end/vercel.json`).
 3. Sign in as an organizer.
+
+After the deploy that ships the form version, every vendor tab opened before it has its next save refused with "This form changed since you opened it. Reload to continue.", and the vendor must reload ([a vendor's save is held to the form they saw](business/rules/a-vendors-save-is-held-to-the-form-they-saw.md), [ADR 0044](adr/0044-a-vendors-save-is-held-to-the-form-their-page-drew.md)).
 
 ### Hotfixes
 

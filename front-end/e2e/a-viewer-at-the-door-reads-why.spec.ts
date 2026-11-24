@@ -48,6 +48,11 @@ const SIZES = [
 ] as const;
 
 let marketId: string;
+/**
+ * The instant the market's one day is reckoned from, at which each test holds its page's clock: a
+ * run that passes midnight after the seed would find the day over, and the rail would say so.
+ */
+let seededAt: Date;
 
 /** px between a box's right edge and the right edge of the row's content, inside its padding. */
 async function shortOfTheRowsEnd(row: Locator, inside: Locator): Promise<number> {
@@ -96,8 +101,12 @@ async function expectLeftOf(undo: Locator, chip: Locator, what: string): Promise
   expect(undoBox.height, `${what} is as tall as the chip`).toBeGreaterThanOrEqual(chipBox.height);
 }
 
-/** Signed in on the test's own page, so the size the test uses is the window the door is drawn in. */
+/**
+ * Signed in on the test's own page, so the size the test uses is the window the door is drawn in,
+ * its clock held at the seed's instant.
+ */
 async function signIn(page: Page, person: { email: string; password: string }, width: number) {
+  await page.clock.setFixedTime(seededAt);
   const login = new LoginPage(page);
   await login.login(person.email, person.password);
   await login.waitForMarkets();
@@ -108,12 +117,14 @@ test.beforeAll(async ({ request }) => {
   ensureVerifiedUser(VIEWER.email, VIEWER.password);
   ensureVerifiedUser(EDITOR.email, EDITOR.password);
   // On its day, today: the door offers no check-in for a day that has not begun (T318).
+  seededAt = new Date();
+  const onTheDay = calendarToday(seededAt);
   ({ marketId } = await seedPublishedMarketWithAssignments(
     request,
     BACKEND_URL,
     TEST_USER.email,
     TEST_USER.password,
-    { marketDate: calendarToday(), vendors: [HERE, NOT_YET, OUT, IN_BY_EDITOR, OUT_BY_EDITOR] },
+    { marketDate: onTheDay, vendors: [HERE, NOT_YET, OUT, IN_BY_EDITOR, OUT_BY_EDITOR] },
   ));
   // The seed leaves the owner's session on `request`: they give each person their role, check one
   // vendor in, so the door has a row an Undo would stand on, and check another in and out.
@@ -132,7 +143,7 @@ test.beforeAll(async ({ request }) => {
     [OUT, 'attendance/check-out'],
   ] as const) {
     const res = await request.post(`${BACKEND_URL}/markets/${marketId}/${path}`, {
-      data: { vendorEmail, date: calendarToday() },
+      data: { vendorEmail, date: onTheDay },
     });
     expect(res.ok(), await res.text()).toBeTruthy();
   }
@@ -146,7 +157,7 @@ test.beforeAll(async ({ request }) => {
     [OUT_BY_EDITOR, 'attendance/check-out'],
   ] as const) {
     const res = await editor.post(`${BACKEND_URL}/markets/${marketId}/${path}`, {
-      data: { vendorEmail, date: calendarToday() },
+      data: { vendorEmail, date: onTheDay },
     });
     expect(res.ok(), await res.text()).toBeTruthy();
   }

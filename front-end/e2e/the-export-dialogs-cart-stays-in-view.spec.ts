@@ -83,6 +83,7 @@ for (const viewport of [
       expect(box.height, 'at most 80% of the window').toBeLessThanOrEqual(viewport.height * 0.8);
 
       const seen: [Locator, string][] = [
+        [dialog.tray, 'the tray'],
         [dialog.summary, 'the summary'],
         [dialog.previewHeader, "the preview's header"],
         [dialog.cancelButton, 'Cancel'],
@@ -160,6 +161,8 @@ test.describe('at a desk', () => {
     await expect(dialog.orderLabels).toHaveText(['Status', 'Email', 'Name']);
     await expect(header).toHaveText(['Status', 'Email', 'Name']);
 
+    // A remove button is named for its column, though it shows an icon alone.
+    await expect(dialog.removeButton('email')).toHaveAccessibleName('Remove Email');
     await dialog.removeButton('email').focus();
     await page.keyboard.press('Enter');
     await expect(dialog.orderLabels).toHaveText(['Status', 'Name']);

@@ -16,7 +16,7 @@ describes:
   - front-end/e2e/helpers/seedApplication.ts#nameFromEmail
   - scripts/real_data_check.py
   - scripts/real_data_terms.txt
-verified: 2026-11-18
+verified: 2026-11-24
 sources:
   - T109
   - T131

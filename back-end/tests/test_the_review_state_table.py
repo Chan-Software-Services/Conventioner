@@ -21,7 +21,7 @@ from typing import Callable, Dict, Optional, Tuple
 
 import pytest
 
-from conftest import seen_as_stored
+from conftest import applicant_form_version_now, seen_as_stored
 from test_choosing_reviewers_deals_the_open_applications import (  # noqa: F401  (the fixture)
     ADMIN, EDITOR, MARKET, OWNER, _client, world,
 )
@@ -180,7 +180,8 @@ def applicant_saves(world):
     from app import app
 
     return app.test_client().put("/public/markets/test-market/applicant/application",
-                                 json={"formData": CHANGED})
+                                 json={"formData": CHANGED,
+                                       "formVersion": applicant_form_version_now("test-market")})
 
 
 def an_import_row(world, vendor=VENDOR):

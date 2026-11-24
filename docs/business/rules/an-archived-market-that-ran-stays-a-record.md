@@ -7,7 +7,7 @@ describes:
   - back-end/api/attendance.py#_closed_since
   - front-end/src/components/vendorPage/VendorCheckIn.vue
   - front-end/e2e/an-archive-keeps-its-vendor-page.spec.ts
-verified: 2026-11-17
+verified: 2026-11-24
 sources:
   - E26/F06/S02
   - E26/F06/S03

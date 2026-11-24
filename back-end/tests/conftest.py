@@ -63,6 +63,27 @@ for _switch in LOCAL_SWITCHES:
 # every signed-in test then answered 401 on that checkout.
 os.environ.setdefault("SESSION_TYPE", "null")
 
+# Every password the suite hashes is hashed at bcrypt's lowest cost, where the app hashes at
+# flask-bcrypt's default of 12: a hash at 12 takes about 0.16 s, and the tests that sign in make
+# many. Set on the class before any module makes its `Bcrypt`, so it holds for each the back end
+# makes: `app.bcrypt` (whose `init_app` falls back to 12, since the config sets no
+# `BCRYPT_LOG_ROUNDS`), `create_account`'s, and so the stand-in hash `api.users` makes once for an
+# address with no account; `create_test_user` hashes at 4 itself. A test that asks for a cost still gets it.
+# `test_the_app_hashes_at_bcrypts_full_cost.py` holds the app, outside the suite, to 12.
+TEST_BCRYPT_ROUNDS = 4
+
+if importlib.util.find_spec("flask_bcrypt") is not None:
+    import flask_bcrypt
+
+    _init_bcrypt_for = flask_bcrypt.Bcrypt.init_app
+
+    def _init_bcrypt_at_the_tests_cost(self, flask_app):
+        _init_bcrypt_for(self, flask_app)
+        self._log_rounds = TEST_BCRYPT_ROUNDS
+
+    flask_bcrypt.Bcrypt._log_rounds = TEST_BCRYPT_ROUNDS
+    flask_bcrypt.Bcrypt.init_app = _init_bcrypt_at_the_tests_cost
+
 
 def _needs_stub(module_name: str) -> bool:
     """True when module_name is neither already imported nor installed."""
@@ -1329,6 +1350,16 @@ def a_review_view(chosen=(), may_own=(), intake=None):
 
     return ReviewTeam.ReviewView(chosen=frozenset(chosen), may_own=frozenset(may_own),
                                  intake=intake)
+
+
+def applicant_form_version_now(slug: str) -> str:
+    """The form version a vendor's page opened now reads with the form, as every save carries it
+    (T507): read through the public form route, so from whichever database the test configured."""
+    import app as app_module
+
+    response = app_module.app.test_client().get(f"/public/markets/{slug}/application-form")
+    assert response.status_code == 200, response.get_json()
+    return response.get_json()["formVersion"]
 
 
 def seen_as_read(app_id: str) -> dict:

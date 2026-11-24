@@ -235,14 +235,16 @@ class TestTheyApplyWhen:
         from conftest import FakeSlugMarketsCollection
         from test_essential_fields import VALID_ANSWERS, _applicant_market_doc, _token
 
-        markets = FakeSlugMarketsCollection(_applicant_market_doc(rejectionRules=[
-            {"key": "essential_table_choice", "answers": ["half"]}]))
+        doc = _applicant_market_doc(rejectionRules=[
+            {"key": "essential_table_choice", "answers": ["half"]}])
+        markets = FakeSlugMarketsCollection(doc)
         monkeypatch.setattr(db_config, "get_database",
                             lambda *_a, **_kw: type("Db", (dict,), {
                                 "__getitem__": lambda self, name: markets})())
 
         body, status = ApplicantsApi.save_applicant_application(
-            "test-market", _token(), {**VALID_ANSWERS, "business_name": "Acme"})
+            "test-market", _token(), {**VALID_ANSWERS, "business_name": "Acme"},
+            ApplicantsApi.applicant_form_version(doc))
 
         assert status == 200, body
         stored = applications.find_one({"applicant_email": "vendor@example.com"})

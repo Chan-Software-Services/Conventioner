@@ -20,7 +20,7 @@ describes:
   - back-end/tests/test_a_deleted_market_takes_its_floorplan_images.py
   - back-end/tests/test_every_read_of_a_target_asks_for_a_live_one.py
   - back-end/tests/real_mongo/test_a_deletion_leaves_a_tombstone.py
-verified: 2026-11-17
+verified: 2026-11-24
 sources:
   - E20/F04/S01
   - bug/47
