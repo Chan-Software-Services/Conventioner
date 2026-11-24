@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import crypto, { randomInt } from 'node:crypto';
 import type { APIRequestContext } from '@playwright/test';
 import { loginViaApi, ensureTestOrgAuthenticated, marketNameToSlug } from './seeds';
 import { decideReviewSetup } from './decideReviewSetup';
@@ -11,8 +11,8 @@ import { saveApplicationForm } from './saveApplicationForm';
  * Seed result for a market that an applicant can log into.
  *
  * The market is published past `draft` and in the `applications` phase with a
- * configured application form. An Application document exists for the applicant
- * so the back end treats their email as known.
+ * configured application form. No applicant is seeded on it: a test that needs a known address
+ * seeds one (`seedApplicationDoc`), on an address of its own (`anApplicantEmail`).
  */
 export interface ApplicantMarketSeed {
   marketId: string;
@@ -86,14 +86,12 @@ export function planSetupObject(dates: string[] = PLAN_DATES) {
 
 /**
  * Create a published market in the `applications` phase with an application
- * form and an Application document for the test applicant. A Google Form
- * market (`intakeMode: 'csv'`) is left a draft, ready for its first import,
- * and so is one asked for as a `draft`, ready to be opened from the rail.
+ * form. A Google Form market (`intakeMode: 'csv'`) is left a draft, ready for
+ * its first import, and so is one asked for as a `draft`, ready to be opened
+ * from the rail.
  *
  * This is the minimum setup needed for the applicant login flow: the market
- * must be past `draft` so the public login endpoint can resolve it, and an
- * Application document must exist so the back end considers the email known
- * when sending login codes.
+ * must be past `draft` so the public login endpoint can resolve it.
  *
  * @returns Metadata needed to navigate to the login page and reference the market.
  */
@@ -166,17 +164,22 @@ export async function seedApplicantMarket(
 }
 
 /**
+ * An applicant address no other test signs in on. The server takes at most five code requests and
+ * ten code checks an address in fifteen minutes, counted across every market, so one address
+ * shared by a file's tests, run again and again, is refused within a run (`sign_in_limits.py`).
+ */
+export function anApplicantEmail(prefix = 'applicant-e2e'): string {
+  return `${prefix}-${Date.now()}${randomInt(1000, 10000)}@example.com`;
+}
+
+/**
  * Create an Application document for a market, straight into Mongo.
  *
- * The back end's `request-code` endpoint checks whether an Application exists
- * for the given email on the market before considering it a "known" address
- * (which gates the email send). This helper seeds that document so the test
- * can exercise the known-address branch.
+ * An address with an Application on the market is one that has applied, so a
+ * signed-in vendor reads their saved application, and a test of the
+ * anti-oracle can ask for a code for a known address beside a stranger's.
  */
-export function seedApplicationDoc(
-  marketId: string,
-  applicantEmail: string = 'applicant-e2e@example.com',
-): string {
+export function seedApplicationDoc(marketId: string, applicantEmail: string): string {
   return seedApplication(marketId, applicantEmail, {});
 }
 
