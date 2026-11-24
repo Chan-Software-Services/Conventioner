@@ -303,10 +303,11 @@ TAG = re.compile(r"</?([A-Za-z][\w-]*)")
 
 
 class Words:
-    """What runs of a script or a Vue file: its text with every comment out and each run of white
-    space outside a string, a template, a regex or a tag, a comment counting as such a run, as one
-    space, or one line break when it held one (on which a statement may end), so two whose comments
-    alone differ, in the same white space, read the same.
+    """What runs of a script or a Vue file: its text with its comments out and each run of white
+    space outside a string, a template, a regex or a tag as one space, or one line break when it
+    held one (on which a statement may end), a script's comment counting as such a run and a
+    template's as nothing (`vue`), so two whose comments alone differ, in the same white space,
+    read the same.
 
     A `/` after a value (a word, a literal, `)`, `]` or `}`) is read as a division, and after
     anything else, or a word such as `return`, as opening a regex: a regex just after a `)` or a
@@ -411,8 +412,9 @@ class Words:
 
     def vue(self) -> None:
         """Read a Vue file: its `<script>` blocks as scripts, the rest as a template, whose
-        `<!-- -->` comments are out; a tag, an interpolation and the text of a `<style>`, `<pre>`,
-        `<textarea>` or `<title>` are kept as written."""
+        `<!-- -->` comments read as nothing, but one with white space beside it on its line and no
+        line break there, which is kept; a tag, an interpolation and the text of a `<style>`,
+        `<pre>`, `<textarea>` or `<title>` are kept as written."""
         text = self.text
         while self.at < len(text):
             c, at = text[self.at], self.at
@@ -423,6 +425,12 @@ class Words:
                 self.at = space.end()
             elif text.startswith("<!--", at):
                 self.at = self.till("-->", at + 4)
+                after = SPACE.match(text, self.at)
+                around = self.space + (after.group() if after else "")
+                if around and "\n" not in around:
+                    # Vue's dev build keeps the comment and drops the white space between it and an
+                    # element, so one with white space beside it and no line break is code.
+                    self.put(text[at : self.at], False)
             elif text.startswith("{{", at):
                 self.at = self.till("}}", at + 2)
                 self.put(text[at : self.at], False)

@@ -342,6 +342,18 @@ class TestWordsOnly:
         assert set(rows) == {"b.spec.ts"}
         assert rows["b.spec.ts"]["why"] == ["back-end/api/door.py:check_in via POST /checkin (1/1)"]
 
+    def test_a_comment_line_inside_a_function_chooses_nothing(self, repo):
+        write(repo, {"back-end/api/door.py": DOOR_PY.replace('    vendor["here"]', '    # here\n    vendor["here"]')})
+        assert chosen(choose(repo)) == {}
+
+    def test_code_on_a_line_with_a_comment_still_chooses_its_function(self, repo):
+        commented = DOOR_PY.replace("= True", "= True  # here")
+        base(repo, {"back-end/api/door.py": commented})
+        write(repo, {"back-end/api/door.py": commented.replace("= True", "= 'yes'")})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"b.spec.ts"}
+        assert rows["b.spec.ts"]["why"] == ["back-end/api/door.py:check_in via POST /checkin (1/1)"]
+
     def test_a_string_that_does_not_open_its_body_is_code(self, repo):
         loose = DOOR_PY.replace("LIMIT = 3\n", 'LIMIT = 3\n"""A note."""\n')
         base(repo, {"back-end/api/door.py": loose})
@@ -467,6 +479,18 @@ class TestWordsOnly:
     def test_code_in_a_vue_file_still_chooses_its_specs(self, scripted, old, new):
         assert old in self.DOOR_VUE
         write(scripted, {"front-end/src/views/Door.vue": self.DOOR_VUE.replace(old, new)})
+        assert set(chosen(choose(scripted))) == {"a.spec.ts"}
+
+    @pytest.mark.parametrize(
+        "between",
+        ["<b>x</b> <!-- c --> <i>y</i>", "<b>x</b> <!-- c --><i>y</i>", "<b>x</b><!-- c --> <i>y</i>"],
+    )
+    def test_a_template_comment_inline_between_elements_is_code(self, scripted, between):
+        # Vue's dev build keeps the comment, and drops the white space between it and an element,
+        # so `x y` without it renders `xy` with it.
+        inline = self.DOOR_VUE.replace("<p title", between + "<p title")
+        base(scripted, {"front-end/src/views/Door.vue": inline})
+        write(scripted, {"front-end/src/views/Door.vue": inline.replace(between, "<b>x</b> <i>y</i>")})
         assert set(chosen(choose(scripted))) == {"a.spec.ts"}
 
     def test_a_vue_file_in_another_language_counts_its_comments(self, scripted):
