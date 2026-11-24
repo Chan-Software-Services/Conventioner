@@ -15,6 +15,7 @@ describes:
   - back-end/api/organizations.py#get_default_permission_history
   - back-end/tests/test_the_history.py
   - back-end/tests/test_only_an_asking_writes_a_markets_history.py
+  - back-end/migrations/history_follows_location_swap.py
 verified: 2026-11-24
 sources:
   - wayfinding/readable-journey/08
@@ -125,6 +126,7 @@ One block per action, in the order of [the actions table](../modules/market-acti
   - Detail: whichever of `currency`, `half_table_percent`, `groups` (each `{name, conditions, prices}`, the whole list) and `everyone_else` (each tier's `{tier, cents}`) changed; a market never priced is the card's defaults before (CAD, 50, no group, no price), so its first price records only the prices typed
 - `floorplan`: saving a location's layout (T257)
   - Subject: `floorplan_id`, and `location`, its location's name
+  - Renamed after a swap of two locations' names by an operator's script ([`history_follows_location_swap.py`](../../../back-end/migrations/history_follows_location_swap.py)), so it names the place it was about: `location` is that place's name, and `location_as_recorded` the name the save recorded; an entry never renamed has no `location_as_recorded`
   - Detail: what the save changed, `layout.describe_change`'s fields, with no before and after: `started` (its first save), `added` and `removed` (tables counted per section name), `moved`, `turned` (the short way round, so 359.999° to 0° is no turn) and `retyped` (given another table type; how many tables), `renumbered` (section names), `zones` (added, changed and removed counted), `image` (`"replaced"`), `scale` (metres across to the millimetre, `before` and `after`), `colours` and `labels` (section names); never a table itself, and a save that changes nothing records nothing
   - An entry the beta's save wrote, before this, has `before` and `after`: whichever of `sections`, `locations` and `floorplan_ids` changed, and the saved floorplan's `tables` and `no_go_zones` counted and its `layout_digest`, and earlier still `walls` and `table_types`; it reads as it did
 - `floorplan_image_deleted`: deleting a floorplan image
@@ -132,6 +134,7 @@ One block per action, in the order of [the actions table](../modules/market-acti
   - Detail: `image_id`, then null
 - `floorplan_removed`: a location's layout taken with its location by a plan write or the CSV start, its image deleted with it (T257)
   - Subject: `floorplan_id`, and `location`, its name as the market last held it
+  - Renamed after a swap as a `floorplan` entry is, with the same `location_as_recorded`
   - Detail: `tables`, the layout's table count, then null
 - `table_types`: the market's table types replaced by `PUT /markets/:id/table-types` (T257)
   - Detail: `table_types`, before and after, each type `{id, name, size}` with its size in words ("122 x 122 cm"); a write that restates the types records nothing
