@@ -347,6 +347,46 @@ If it prints that some applications "changed during the run and were left", a ve
 A rollback of the code after a run leaves the business names stored and unshown, since an older build ignores the built-in key, until a release with the field is promoted again; the moved question does not come back.
 It prints ids, keys, labels and counts, never a vendor's answer, name or address.
 
+### Adding a market day's check-outs from the organizers' sheet
+
+On a market day kept before check-out existed, the organizers ticked who arrived and who left on a spreadsheet, and Conventioner holds that day's check-ins alone.
+[`add_check_outs_from_sheet.py`](../back-end/migrations/add_check_outs_from_sheet.py) reads the sheet's CSV export against the day's seats and attendance records and adds a check-out to each vendor the sheet ticks as checked out whom Conventioner holds checked in and not out.
+
+**It needs no deploy**: run it from `back-end/` in a checkout of the commit production serves, with the script taken from a commit that holds it, as [the rename](#giving-a-location-a-new-name) does, so the code it imports is production's.
+Take a `mongodump` first ([backups](#backups-and-restoring)), then list, dry-run and run:
+
+```bash
+MONGODB_URI='<URI>' .venv/bin/python migrations/add_check_outs_from_sheet.py --list   # writes nothing
+MONGODB_URI='<URI>' .venv/bin/python migrations/add_check_outs_from_sheet.py --market <market-id> --day <YYYY-MM-DD> --sheet <path to the CSV> --checked-out-at <ISO 8601 time with its offset> --by <organizer address> --dry-run   # writes nothing
+MONGODB_URI='<URI>' .venv/bin/python migrations/add_check_outs_from_sheet.py --market <market-id> --day <YYYY-MM-DD> --sheet <path to the CSV> --checked-out-at <ISO 8601 time with its offset> --by <organizer address>
+```
+
+`--list` prints each live market in its market days or archived, with its id, name and phase, and for each of its dates the seats that day, the check-ins and the check-outs.
+`--checked-out-at` is every check-out's time, given with its UTC offset (as `-07:00`) and on the day in that offset; it is stored in UTC, as the door stores a check-out's.
+`--by` is the organizer address every check-out is recorded as made by, and it must be one that may check vendors in on the market.
+So each check-out reads on Attendance as that organizer's at the time given, and in Manage market's history as theirs for that day, recorded at the time of the run.
+
+The sheet is five header lines, skipped unread, then one row per table of 14 cells: the table code, its location, then two halves of six, each a business name, the name the vendor goes by, and four ticks (checked in, lanyard taken, checked out, lanyard returned), each `TRUE`, `FALSE` or blank.
+A row is matched to the day's seats by table code, and within a shared table each half to a vendor by business name or the name they go by, ignoring case, spaces and punctuation.
+The dry run prints, by table code, each seat's line: what the run adds, leaves or reports, and how it matched.
+A line that adds a check-out is a vendor the sheet ticks in and out whom Conventioner holds checked in and not out; a "leave" line is a vendor whose record already says what the sheet says, and a check-out Conventioner already holds is left as it is, whoever made it.
+A "report" line is a disagreement the run does not write: a check-in or check-out the sheet ticks that Conventioner does not hold, or one Conventioner holds that the sheet does not tick.
+A vendor seated at two tables that day is judged once, on the first of their lines, when their rows tick alike, and each other line of theirs is left, naming the table they were judged at; when their rows tick differently, each of their lines is reported and none written.
+An "unmatched" line is a row, or a half, the script could not give a vendor, with the sheet's names for it where it has any (the row's business names alone on a row no seat holds and on a half ticked with no name), so you can find it on the sheet; "not on the sheet" lists the day's seats on no row and the check-ins with no seat that day.
+The count line says how many it would add, left, reported, could not match, and found changed since the read.
+Read the dry run before the run: the run prints the same lines, but for the first line, which says it is a dry run, and its count and last lines, which say what it added.
+
+The run writes each check-out one vendor at a time, held to the record not being checked out, and records one "checked out" entry each in the market's history.
+A record checked out at the door, or whose check-in was undone, between the run's read and its write is left with no entry, and its line says it changed since the read.
+**A second run with the same arguments writes nothing**: it reads each check-out added as already checked out, so a run cut part way is finished by running it again; with another `--checked-out-at` or `--by` it leaves those as they are and writes only the vendors not yet checked out.
+A run cut between a check-out's write and its history entry loses that one entry, which no later run records.
+
+It refuses, exiting 1 with nothing written and its reason on stderr: a market it does not find or that is being deleted, or that does not parse; a market neither in its market days nor archived; a day that is not one of the market's dates or has not begun; a time that is not ISO 8601, has no offset or is on another date; an address that may not check vendors in, which the refusal never names; and a sheet that is not UTF-8 CSV, has fewer than five lines, holds a row not of 14 cells or a tick that is not `TRUE`, `FALSE` or blank, or two rows sharing a table code, each naming its line, never a cell's text.
+Its docstring lists each refusal.
+
+It prints market ids and names, table codes and counts, the sheet's and Conventioner's names for a vendor on a line matched other than by name, and the sheet's names on an unmatched one, never an address, a vendor's or yours.
+So keep its output on your terminal: it names vendors.
+
 ### When the back end refuses to boot
 
 The back end checks the database as it starts and refuses to serve one it cannot trust: the migration markers ([`market_documents.py`](../back-end/market_documents.py)) and these unique indexes, in the order the boot builds them:
