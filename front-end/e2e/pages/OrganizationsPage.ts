@@ -67,9 +67,6 @@ export class OrganizationsPage {
   readonly manageCloseButton: Locator;
   readonly adminEmails: Locator;
   readonly memberEmails: Locator;
-  readonly adminsFind: Locator;
-  readonly adminsCount: Locator;
-  readonly adminsMore: Locator;
   readonly membersFind: Locator;
   readonly membersCount: Locator;
   readonly membersMore: Locator;
@@ -151,9 +148,6 @@ export class OrganizationsPage {
     this.blockingMarkets = page.getByTestId('delete-org-blocking-market');
     this.adminEmails = this.manageWindow.getByTestId('manage-org-admin-email');
     this.memberEmails = this.manageWindow.getByTestId('manage-org-member-email');
-    this.adminsFind = page.getByTestId('manage-org-admin-list-find');
-    this.adminsCount = page.getByTestId('manage-org-admin-list-count');
-    this.adminsMore = page.getByTestId('manage-org-admin-list-more');
     this.membersFind = page.getByTestId('manage-org-member-list-find');
     this.membersCount = page.getByTestId('manage-org-member-list-count');
     this.membersMore = page.getByTestId('manage-org-member-list-more');

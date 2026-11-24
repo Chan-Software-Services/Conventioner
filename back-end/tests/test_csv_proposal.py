@@ -157,6 +157,16 @@ ANSWER_KEY = {
     },
 }
 
+# Each file's grid, by its stem's first words and the columns it spans: those columns are one group,
+# so one row of the organizer's ledger, and every other column is a row of its own.
+GRIDS = {
+    "five-day-grid": ("For each market day, tick every table tier", range(19, 24)),
+    "four-day-grid": ("For each day of the fair, choose the table", range(18, 22)),
+    "no-timestamp": ("For each day, choose every table tier", range(18, 23)),
+    "days-as-one-question": None,
+    "team-status-column": ("Which tables would you take on each day", range(24, 29)),
+}
+
 # Google's collected address and the asked one: either may be the applicant's email, as long as
 # the other is the duplicate.
 EITHER_EMAIL = {"five-day-grid": (2, 5), "team-status-column": (2, 5)}
@@ -193,6 +203,16 @@ class TestTheAnswerKey:
             assert len(proposal["columns"]) == len(key) == len(headers), name
             for index, (prefix, _) in key.items():
                 assert " ".join(headers[index].split()).startswith(prefix), (name, index)
+
+    def test_a_grid_is_one_group_and_every_other_column_alone(self):
+        for name, _, _, proposal in _proposals():
+            grid = GRIDS[name]
+            stem, spans = grid if grid else ("", range(0))
+            groups = [column["group"] for column in proposal["columns"]]
+            if grid:
+                assert len({groups[index] for index in spans}) == 1, name
+                assert (groups[spans[0]] or "").startswith(stem), name
+            assert [i for i, group in enumerate(groups) if group is not None] == list(spans), name
 
     def test_every_columns_kind_is_right(self):
         wrong = []
