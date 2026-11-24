@@ -408,7 +408,7 @@ describe('the components, on fixture CSS', () => {
   it("lists the last selector's declarations no sub-token carries, under its group", () => {
     expect(components).toContain(
       '### Buttons\n\nThe buttons.\n\n' +
-        '- **`btn`** (`.btn`): `display: inline-flex`, `cursor: pointer`.\n' +
+        '- **`btn`** (`.btn`): `display: inline-flex`, `font-weight: 400`, `cursor: pointer`.\n' +
         '- **`btn-primary`** (`.btn`, `.btn--primary`): `--focus-border: var(--focus-border)`.\n' +
         '- **`btn-primary-hover`** (`.btn`, `.btn--primary`, `.btn--primary:hover:not(:disabled)`).\n' +
         '- **`btn-quiet`** (`.btn`, `.btn--quiet`): `background: none`.\n' +
@@ -492,6 +492,33 @@ describe('the components, on fixture CSS', () => {
         '    padding: "0 var(--space-1)"\n' +
         '    height: "{spacing.control-height}"\n' +
         '---\n',
+    );
+  });
+
+  it('carries a font-weight only as the -strong level, so a 400 stays on the line', () => {
+    const heading = `${COMPONENT_PRIMITIVES}
+.t th {
+  font-size: var(--text-sm);
+  font-weight: 400;
+}
+`;
+    const withHeading: Content = {
+      ...COMPONENTS,
+      componentEntries: [
+        ...COMPONENTS.componentEntries,
+        { key: 't-heading', group: 'Titles', selectors: ['.t th'] },
+      ],
+    };
+    const rendered = (primitives: string) =>
+      render({ ...COMPONENT_FIXTURE, primitives }, withHeading).text;
+    const text = rendered(heading);
+    expect(text).toContain('- **`t-heading`** (`.t th`): `font-weight: 400`.\n');
+    // Losing the 400 is drift, as losing any declaration is.
+    expect(rendered(heading.replace('  font-weight: 400;\n', ''))).not.toBe(text);
+    // Merge One's level carries the family, never a weight it does not write.
+    expect(components).toContain('- **`title`** (`.title`).\n');
+    expect(components).toContain(
+      '- **`btn`** (`.btn`): `display: inline-flex`, `font-weight: 400`',
     );
   });
 
@@ -744,6 +771,12 @@ describe('the real files', () => {
         ['--text-xs', '--text-sm', '--text-md', '--text-lg', '--text-xl', '--text-2xl'],
       ],
       [
+        CONTENT.dosAndDonts,
+        'a font size off the six steps',
+        names.filter((name) => name.startsWith('--text-')).length,
+        6,
+      ],
+      [
         CONTENT.colors,
         '(`--layout-section-1-fill` to `--layout-section-8-fill`)',
         sections,
@@ -780,10 +813,6 @@ describe('the real files', () => {
         ([, key, body]) => [key!, body!],
       ),
     );
-    const endingOn = (selector: string) =>
-      CONTENT.componentEntries
-        .filter(({ selectors }) => selectors.at(-1) === selector)
-        .map(({ key }) => entries.get(key) ?? '');
     const subTokens: Record<string, string> = {
       background: 'backgroundColor',
       'background-color': 'backgroundColor',
@@ -796,33 +825,57 @@ describe('the real files', () => {
       height: 'height',
       width: 'width',
     };
+    // The level an entry names carries its size's step, Merge One as `heading-*`, and 600 as
+    // `-strong`; any other weight or family has to be on the entry's line.
+    const carriesType = (body: string, prop: string, value: string) => {
+      const level = /^ {4}typography: "\{typography\.([a-z0-9-]+)\}"$/m.exec(body)?.[1];
+      if (level === undefined) return false;
+      if (prop === 'font-size') {
+        const step = /^var\(--text-([a-z0-9-]+)\)$/.exec(value)?.[1];
+        return level.replace(/^(?:text|heading)-/, '').replace(/-strong$/, '') === step;
+      }
+      if (prop === 'font-weight') return value === '600' && level.endsWith('-strong');
+      return level.startsWith('heading-') && value.includes(CONTENT.headingFamily);
+    };
+    const tidy = (raw: string) =>
+      raw.replace(/\s+/g, ' ').trim().replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
+    const lines = text.split('\n');
+    const lineOf = (key: string) =>
+      lines.find((line) => line.startsWith(`- **\`${key}\`** `)) ?? '';
+    const block = text
+      .slice(text.indexOf('### Rules no entry ends on'), text.indexOf("## Do's and Don'ts"))
+      .split('\n');
     const missing: string[] = [];
     let seen = 0;
+    // Each declaration is on its own rule's line: every entry ending on the rule shows it, on the
+    // entry's line or as a sub-token (as written or as a reference), else the block lists the rule.
     postcss.parse(sources.primitives).walkDecls((decl) => {
       seen++;
-      const value = decl.value
-        .replace(/\s+/g, ' ')
-        .trim()
-        .replace(/\(\s+/g, '(')
-        .replace(/\s+\)/g, ')');
-      if (text.includes(`\`${decl.prop}: ${value}\``)) return;
-      // Else an entry ending on the rule carries it as a sub-token, as written or as a reference.
+      const value = tidy(decl.value);
+      const shown = `\`${decl.prop}: ${value}\``;
       const rule = decl.parent as Rule;
       const subToken = subTokens[decl.prop];
       const ref = /^var\(--([\w-]+)\)$/.exec(value)?.[1];
-      const carried =
-        rule.parent?.type === 'root' &&
+      const carriedBy = (body: string) =>
         subToken !== undefined &&
-        rule.selectors.some((selector) =>
-          endingOn(selector).some((body) =>
-            subToken === 'typography'
-              ? body.includes('    typography: ')
-              : body.includes(`    ${subToken}: "${value}"`) ||
-                (ref !== undefined && body.includes(`.${ref}}"`)),
-          ),
-        );
-      if (!carried)
-        missing.push(`${rule.selector.replace(/\s+/g, ' ')} { ${decl.prop}: ${value} }`);
+        (subToken === 'typography'
+          ? carriesType(body, decl.prop, value)
+          : body.includes(`    ${subToken}: "${value}"`) ||
+            (ref !== undefined &&
+              body.includes(`    ${subToken}: "{`) &&
+              body.includes(`.${ref}}"`)));
+      const keys =
+        rule.parent?.type === 'root'
+          ? CONTENT.componentEntries
+              .filter(({ selectors }) => rule.selectors.includes(selectors.at(-1)!))
+              .map(({ key }) => key)
+          : [];
+      const ok = keys.length
+        ? keys.every((key) => lineOf(key).includes(shown) || carriedBy(entries.get(key) ?? ''))
+        : block.some(
+            (line) => line.startsWith(`- \`${tidy(rule.selector)}\``) && line.includes(shown),
+          );
+      if (!ok) missing.push(`${tidy(rule.selector)} { ${decl.prop}: ${value} }`);
     });
     expect(seen).toBeGreaterThan(200);
     expect(missing).toEqual([]);

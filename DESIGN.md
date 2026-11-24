@@ -585,7 +585,7 @@ A row's destructive action is `.btn--secondary.btn--destructive`, red ink on the
 A toggle that is on is a `.btn` with `aria-pressed="true"`, tinted rather than filled.
 There is one disabled look for every intent.
 
-- **`btn`** (`.btn`): `display: inline-flex`, `align-items: center`, `justify-content: center`, `gap: var(--space-2)`, `border: 1px solid transparent`, `font-family: inherit`, `line-height: normal`, `white-space: nowrap`, `cursor: pointer`, `transition: background-color 0.15s ease-in-out`.
+- **`btn`** (`.btn`): `display: inline-flex`, `align-items: center`, `justify-content: center`, `gap: var(--space-2)`, `border: 1px solid transparent`, `font-family: inherit`, `font-weight: 400`, `line-height: normal`, `white-space: nowrap`, `cursor: pointer`, `transition: background-color 0.15s ease-in-out`.
 - **`btn-compact`** (`.btn`, `.btn--compact`).
 - **`btn-primary`** (`.btn`, `.btn--primary`): `--focus-border: var(--focus-border-on-fill)`.
 - **`btn-primary-hover`** (`.btn`, `.btn--primary`, `.btn--primary:hover:not(:disabled)`).
@@ -596,13 +596,13 @@ There is one disabled look for every intent.
 - **`btn-destructive`** (`.btn`, `.btn--destructive`): `--focus-border: var(--focus-border-on-fill)`.
 - **`btn-destructive-hover`** (`.btn`, `.btn--destructive`, `.btn--destructive:hover:not(:disabled)`).
 - **`btn-destructive-pressed`** (`.btn`, `.btn--destructive`, `.btn--destructive:active:not(:disabled)`).
-- **`btn-row-destructive`** (`.btn`, `.btn--secondary`, `.btn--destructive`, `.btn--secondary.btn--destructive`): `--focus-border: var(--mm-green)`, `border-color: var(--mm-border)`.
+- **`btn-row-destructive`** (`.btn`, `.btn--secondary`, `.btn--destructive`, `.btn--secondary.btn--destructive`): `--focus-border: var(--mm-green)`, `border-color: var(--mm-border)`, `font-weight: 400`.
 - **`btn-row-destructive-hover`** (`.btn`, `.btn--secondary`, `.btn--destructive`, `.btn--secondary.btn--destructive`, `.btn--secondary.btn--destructive:hover:not(:disabled)`).
 - **`btn-row-destructive-pressed`** (`.btn`, `.btn--secondary`, `.btn--destructive`, `.btn--secondary.btn--destructive`, `.btn--secondary.btn--destructive:active:not(:disabled)`).
 - **`btn-on`** (`.btn`, `.btn--secondary`, `.btn[aria-pressed='true']`): `--focus-border: var(--focus-border-on-fill)`, `border-color: var(--mm-green)`.
 - **`btn-on-hover`** (`.btn`, `.btn--secondary`, `.btn[aria-pressed='true']`, `.btn[aria-pressed='true']:hover:not(:disabled)`).
 - **`btn-on-pressed`** (`.btn`, `.btn--secondary`, `.btn[aria-pressed='true']`, `.btn[aria-pressed='true']:active:not(:disabled)`).
-- **`btn-disabled`** (`.btn`, `.btn:disabled`): `border-color: var(--mm-border)`, `cursor: not-allowed`.
+- **`btn-disabled`** (`.btn`, `.btn:disabled`): `border-color: var(--mm-border)`, `font-weight: 400`, `cursor: not-allowed`.
 
 ### Fields
 
@@ -639,14 +639,14 @@ There is one disabled look for every intent.
 - **`data-table`** (`.data-table`): `border-collapse: collapse`.
 - **`data-table-cell`** (`.data-table`, `.data-table :is(th, td)`, `.data-table tbody :is(th, td)`): `border-top: 1px solid var(--mm-border)`.
 - **`data-table-column-heading`** (`.data-table`, `.data-table :is(th, td)`, `.data-table thead th`): `white-space: nowrap`.
-- **`data-table-row-heading`** (`.data-table`, `.data-table :is(th, td)`, `.data-table tbody :is(th, td)`, `.data-table tbody th`).
+- **`data-table-row-heading`** (`.data-table`, `.data-table :is(th, td)`, `.data-table tbody :is(th, td)`, `.data-table tbody th`): `font-weight: 400`.
 - **`data-table-one-line`** (`.data-table--one-line :is(th, td)`): `white-space: nowrap`.
 
 ### Rows
 
 `.add-row` is a button that adds a row to a plan card, and `.drag-handle` is the control grabbed to reorder one.
 
-- **`add-row`** (`.add-row`): `display: inline-flex`, `align-items: center`, `justify-content: center`, `gap: var(--space-2)`, `background: none`, `border: none`, `font-family: inherit`, `line-height: normal`, `cursor: pointer`.
+- **`add-row`** (`.add-row`): `display: inline-flex`, `align-items: center`, `justify-content: center`, `gap: var(--space-2)`, `background: none`, `border: none`, `font-family: inherit`, `font-weight: 400`, `line-height: normal`, `cursor: pointer`.
 - **`add-row-icon`** (`.add-row__icon`): `flex: 0 0 auto`, `stroke-width: 1.25`.
 - **`drag-handle`** (`.drag-handle`): `display: inline-flex`, `align-items: center`, `justify-content: center`, `min-width: var(--space-6)`, `border: none`, `background: none`, `cursor: grab`.
 - **`drag-handle-hover`** (`.drag-handle`, `.drag-handle:hover`).

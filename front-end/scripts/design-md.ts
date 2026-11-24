@@ -6,8 +6,8 @@
  * format has a group for, and its body the rules, the other tokens' tables and every rule of
  * primitives.css no entry ends on, each section but the Do's and Don'ts linking into
  * `docs/design-system.md` for the reasons. It is generated rather than kept by hand so it cannot
- * drift from the CSS; the words the CSS cannot give live in `design-md-content.ts`. The output is a pure function of those files: no date, and every
- * list in source order.
+ * drift from the CSS; the words the CSS cannot give live in `design-md-content.ts`. The output is
+ * a pure function of those files: no date, and every list in source order.
  *
  * Run it after changing either CSS file: `npm run design-md`, then commit `DESIGN.md`.
  * `npm run design-md:check` (`--check`), which CI's frontend-lint-and-types job and
@@ -390,7 +390,9 @@ export function render(sources: Sources, content: Content = CONTENT): Rendered {
       subTokens.push(['typography', `{typography.${level}}`]);
       carried.add('font-size');
       if (heading) carried.add('font-family');
-      if (heading || weight === '600' || weight === '400') carried.add('font-weight');
+      // Only `-strong` writes a weight of its own, so a 400 stays on the entry's line and removing
+      // it is drift; a heading level carries a family, never a declared weight.
+      if (!heading && weight === '600') carried.add('font-weight');
     }
     for (const [prop, subToken] of [
       ['border-radius', 'rounded'],
