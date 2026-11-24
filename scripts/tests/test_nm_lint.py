@@ -271,6 +271,23 @@ def test_a_branch_changing_root_markdown_runs_prettier_on_it_as_format_check_doe
     ]
 
 
+def test_a_changed_symlink_is_skipped_as_format_check_skips_it(repo, run):
+    (repo / "README.md").write_text("# Readme\n")
+    git(repo, "add", "README.md")
+    git(repo, "commit", "-q", "--no-verify", "-m", "chore: readme")
+    git(repo, "update-ref", "refs/remotes/origin/dev", "HEAD")
+    (repo / "NOTES.md").symlink_to("README.md")
+    change(repo, {"OTHER.md": "# Other\n"})
+
+    result, log = run(repo)
+
+    assert result.returncode == 0, result.stderr
+    assert log == [
+        "prettier --config .prettierrc.json --check --ignore-unknown ../OTHER.md "
+        f"(in {repo / 'front-end'})"
+    ]
+
+
 def test_a_failing_whole_script_fails_the_run(repo, run):
     change(repo, {"front-end/eslint.config.ts": "export default [{}];\n"})
 

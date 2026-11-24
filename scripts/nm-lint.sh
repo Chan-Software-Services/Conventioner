@@ -11,7 +11,8 @@
 # --prepare once a run, before its first configured command, and its `lint` runs it without.
 #
 # Without a switch it takes every file changed since the merge base with origin/dev that is still
-# there (committed, staged, edited or new and not ignored), and runs from front-end/:
+# there (committed, staged, edited or new and not ignored) and is not a symlink, and runs from
+# front-end/:
 #   - Prettier's check, as format:check, on those under front-end/ and docs/ and the Markdown files
 #     at the root (a file Prettier has no parser for, or .prettierignore names, is skipped);
 #   - ESLint, as lint:check, on those under front-end/ it can read (a file its config ignores is
@@ -81,6 +82,8 @@ WHOLE_PRETTIER=false
 WHOLE_ESLINT=false
 WHOLE_STYLELINT=false
 for path in ${CHANGED[@]+"${CHANGED[@]}"}; do
+  # Prettier refuses a symlink named on its command line, and format:check's globs pass over one.
+  [[ -L "$path" ]] && continue
   case "$path" in
     front-end/package.json | front-end/package-lock.json)
       WHOLE_PRETTIER=true WHOLE_ESLINT=true WHOLE_STYLELINT=true ;;
