@@ -262,7 +262,7 @@ jobs:
 
   # Split by spec file across ten runners, each with its own Docker stack, so a PR waits for a
   # tenth of the suite rather than all of it (89 runner-minutes of tests on 2026-11-11, 1 to 3
-  # more per runner to set up, by what the caches hold). The tests share one database WITHIN a runner (`workers: 1`),
+  # more per runner to set up, by what the caches hold). The tests share one database WITHIN a runner (two workers, the shared-state specs first at one),
   # never across runners. `front-end/scripts/e2e-shards.ts` deals the spec files to the shards by
   # their measured seconds, not Playwright's `--shard`, which cuts the alphabetical list by test
   # count and once left one shard at 24 minutes and another at 6. The seconds are the newest
@@ -286,6 +286,9 @@ jobs:
       DISABLE_CAPTCHA: "true"
       DISABLE_EMAIL: "true"
       DISCORD_FAKE: "true"
+      # Two Playwright workers per shard, the serial project's files first at one
+      # (front-end/scripts/e2e-shards.ts).
+      E2E_WORKERS: "2"
       # On a push to dev only, the shards record the test map (front-end/e2e/helpers/testMap.ts),
       # which the test-map job below builds; every other run records nothing.
       RECORD_TEST_MAP: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
@@ -374,6 +377,7 @@ jobs:
           path: |
             front-end/test-results/results.json
             front-end/test-results/e2e-deal.json
+            front-end/test-results/e2e-phases.json
           if-no-files-found: ignore
           retention-days: 90
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

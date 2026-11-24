@@ -25,7 +25,10 @@ import {
   parseTimings,
   publishedTimings,
   refreshTimings,
+  mergeReports,
   secondsFromReports,
+  SERIAL_PROJECT,
+  serialFiles,
   shardSummary,
   specFiles,
   TIMINGS_ARTIFACT,
@@ -719,5 +722,63 @@ describe('chooseTimings', () => {
       'the committed scripts/e2e-shard-timings.json (not in a GitHub Actions run)',
     );
     expect(gh.asked).toEqual([]);
+  });
+});
+
+describe('serialFiles', () => {
+  it("names the hand's files Playwright lists under the serial project, once each, in order", () => {
+    const listed = {
+      suites: [
+        { file: 'b.spec.ts', specs: [{ tests: [{ projectName: SERIAL_PROJECT }] }] },
+        { file: 'a.spec.ts', specs: [{ tests: [{ projectName: 'chromium' }] }] },
+        {
+          file: 'c.spec.ts',
+          suites: [{ specs: [{ tests: [{ projectName: SERIAL_PROJECT }] }] }],
+          specs: [{ tests: [{ projectName: SERIAL_PROJECT }] }],
+        },
+      ],
+    };
+    expect(serialFiles(listed)).toEqual(['b.spec.ts', 'c.spec.ts']);
+  });
+});
+
+describe('mergeReports', () => {
+  it("joins the passes' files and sums their counts, so one report holds the shard's hand", () => {
+    const serial = {
+      ...report({ 'b.spec.ts': [[100]] }),
+      errors: [{ message: 'one' }],
+      stats: {
+        startTime: '2026-11-24T00:00:00Z',
+        duration: 10,
+        expected: 1,
+        unexpected: 0,
+        flaky: 1,
+        skipped: 0,
+      },
+    };
+    const parallel = {
+      ...report({ 'a.spec.ts': [[200]] }),
+      errors: [],
+      stats: {
+        startTime: '2026-11-24T00:01:00Z',
+        duration: 20,
+        expected: 2,
+        unexpected: 1,
+        flaky: 0,
+        skipped: 3,
+      },
+    };
+    const merged = mergeReports([serial, parallel]);
+    expect(specFiles(merged)).toEqual(['a.spec.ts', 'b.spec.ts']);
+    expect(merged.config).toEqual(serial.config);
+    expect(merged.errors).toEqual([{ message: 'one' }]);
+    expect(merged.stats).toEqual({
+      startTime: '2026-11-24T00:00:00Z',
+      duration: 30,
+      expected: 3,
+      unexpected: 1,
+      flaky: 1,
+      skipped: 3,
+    });
   });
 });
