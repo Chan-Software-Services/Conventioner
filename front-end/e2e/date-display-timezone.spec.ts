@@ -13,17 +13,20 @@ import type { APIRequestContext } from '@playwright/test';
  * Alaska in winter) saw the PREVIOUS day. On an application form whose whole
  * purpose is picking attendance days, that silently misassigns people.
  *
- * These tests render the same stored date in browser contexts fixed to three
- * timezones spanning the bug boundary and assert every viewer sees the same
+ * These tests render the same stored date in browser contexts fixed to two
+ * timezones, one on each side of UTC, and assert every viewer sees the same
  * calendar day:
- *   - Pacific/Honolulu    (UTC-10: west of the pin - where the bug bit)
- *   - America/Los_Angeles (UTC-8:  at the pin - where the bug hid)
- *   - Asia/Tokyo          (UTC+9:  far east - always looked correct)
+ *   - Pacific/Honolulu (UTC-10: west of UTC - a UTC midnight read locally is
+ *     the day before, the bug that bit here)
+ *   - Asia/Tokyo       (UTC+9:  east of UTC - a local midnight sent through
+ *     toISOString is stored as the day before)
+ * A zone between them fails only as one of these does, so two are enough;
+ * `src/__tests__/utils.test.ts` loops more zones over the formatters themselves.
  */
 
 const MARKET_DATE = '2026-07-31';
 const EXPECTED_LABEL = 'Friday, July 31, 2026';
-const TIMEZONES = ['Pacific/Honolulu', 'America/Los_Angeles', 'Asia/Tokyo'];
+const TIMEZONES = ['Pacific/Honolulu', 'Asia/Tokyo'];
 
 /**
  * Seed a market whose setupObject already holds MARKET_DATE, so the setup

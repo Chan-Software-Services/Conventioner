@@ -161,7 +161,7 @@ A `csv` market enters `applications` only holding an application, so a spec that
 
 **Market dates are calendar days, not instants**: a stored `YYYY-MM-DD` renders as the same day for every viewer, wherever they are.
 [`getFormattedDate`](../../../front-end/src/utils/utils.ts) formats with pure UTC arithmetic; never parse a market date through `new Date()` with an offset.
-[`date-display-timezone.spec.ts`](../../../front-end/e2e/date-display-timezone.spec.ts) pins it in Honolulu, Los Angeles and Tokyo through Playwright's `timezoneId`.
+[`date-display-timezone.spec.ts`](../../../front-end/e2e/date-display-timezone.spec.ts) pins it in Honolulu and Tokyo, one zone each side of UTC, through Playwright's `timezoneId`; a zone between them fails only as one of the two does, and `utils.test.ts` loops more zones over the formatters themselves.
 
 ## Sharp edges
 
