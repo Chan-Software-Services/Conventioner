@@ -52,12 +52,12 @@ It touches nothing the review state owns: no status, no verdict, no ``updated_at
 and an import, though, build the answers from the form as the market asks it then and compare them
 whole to what is stored, so from step 1 until step 3 is done either reads a moved answer as changed
 and sends a verdict back to open, and an import of the same file before step 2 also removes the
-copies step 1 made. And a vendor's save holds no form revision, so one from a page opened before the
-run sends the old question's answer, which the form no longer keeps, and a blank built-in field: the
-business name is stored nowhere. So a run that moves the question waits for the applications stage
-to be over on a market whose vendors apply on its page, and a run left after step 1 or step 2 is
-finished before any import of that market. A market moved back into the applications stage after a
-run can still lose a business name that way, from a page a vendor opened before the run.
+copies step 1 made. So a run that moves the question waits for the applications stage to be over
+on a market whose vendors apply on its page, and a run left after step 1 or step 2 is finished
+before any import of that market. A vendor's save from a page opened before the run, which sends the
+old question's answer beside a blank built-in field, is refused: it carries the form version its
+page read, which the question's move changed (``api.applicants.applicant_form_version``), so on a
+market moved back into the applications stage after a run the business name the run copied stays.
 
 **It refuses**, writing nothing and exiting 1, when: no live market has the id (none, or it is being
 deleted); the market's vendors apply on its page and it is in its applications stage, taking
@@ -354,9 +354,10 @@ def _in_the_applications_stage(document: Mapping[str, Any]) -> bool:
     """Whether the market's vendors apply on its page and it is in the stage they may save in,
     taking applications or stopped. A save builds its answers from the form as the market asks it
     then, with no form revision to hold, and compares them whole to what is stored: from step 1
-    until step 3 is done it reads a moved answer as changed and sends a verdict back to open, and
-    a page opened before the run sends the old question's answer, which the form no longer keeps.
-    A stop is undone by a click, so only the stage's end is waited for."""
+    until step 3 is done it reads a moved answer as changed and sends a verdict back to open. A
+    save from a page opened before the run, which sends the old question's answer, is refused once
+    the question is off the form, for the form version it carries. A stop is undone by a click, so
+    only the stage's end is waited for."""
     return (intake_mode_from_market_document(dict(document)) is IntakeMode.FORM
             and phase_from_market_document(dict(document)) is MarketPhase.APPLICATIONS)
 
