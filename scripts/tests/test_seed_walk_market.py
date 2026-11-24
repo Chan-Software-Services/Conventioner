@@ -8,6 +8,8 @@ The script is run for real, with the stub `docker` and `th-compose.sh` of `stack
 every call; each case here stops before the script dials a back end.
 """
 
+import importlib.util
+
 import pytest
 from stacks import REPO, run_seed, slot_path
 
@@ -84,3 +86,43 @@ def test_both_seeds_take_the_stack_by_the_one_rule():
         assert 'stack_identity "$PROJECT_DIR" "$PRIMARY"' in text, seed
         # Neither reads a slot or a stack's variables by a copy of its own.
         assert "STACK_VARS" not in text and r"\.treehouse/" not in text, seed
+
+
+def the_seeds_python(monkeypatch):
+    """The Python the script runs, loaded without running it: its main() runs only as a program."""
+    text = WALK.read_text()
+    source = text.split("exec python3 -I - <<'PY'\n", 1)[1].split("\nPY\n", 1)[0]
+    for name, value in {"SEED_PROJECT_DIR": str(REPO), "SEED_BACKEND_URL": "https://127.0.0.1:1",
+                        "SEED_FRONTEND_URL": "http://127.0.0.1:1", "SEED_EMAIL": "e2e@example.com",
+                        "SEED_PASSWORD": "unused", "SEED_TODAY": "2026-12-05"}.items():
+        monkeypatch.setenv(name, value)
+    namespace = {"__name__": "seed_walk_market"}
+    exec(compile(source, str(WALK), "exec"), namespace)
+    return namespace
+
+
+def the_common_name_pools():
+    path = REPO / "back-end" / "tests" / "fixtures" / "synthetic_form_exports.py"
+    spec = importlib.util.spec_from_file_location("synthetic_form_exports", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.GIVEN_NAMES, module.FAMILY_NAMES
+
+
+def test_every_vendor_it_makes_is_named_from_the_common_name_pools(monkeypatch):
+    # Test data names a person only from the generator's pools of common names, so no seeded
+    # vendor reads as a real person (docs/implementation/testing/test-data.md).
+    given, family = the_common_name_pools()
+    vendors = the_seeds_python(monkeypatch)["make_vendors"]()
+
+    assert len(vendors) == 184
+    for vendor in vendors:
+        first, last = vendor["full_name"].split(" ")
+        assert first in given, vendor["full_name"]
+        assert last in family, vendor["full_name"]
+        assert vendor["preferred"] in ("", first)
+        assert vendor["email"].startswith(f"{first.lower()}.{last.lower()}{vendor['n']}@")
+
+
+def test_every_run_makes_the_same_vendors(monkeypatch):
+    assert the_seeds_python(monkeypatch)["make_vendors"]() == the_seeds_python(monkeypatch)["make_vendors"]()
