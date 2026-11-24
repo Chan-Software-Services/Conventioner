@@ -21,6 +21,7 @@ describes:
   - front-end/e2e/helpers/phoneWindow.ts#inTheWindow
   - front-end/e2e/helpers/stackReady.ts
   - front-end/e2e/helpers/signInWindow.ts
+  - front-end/e2e/helpers/signInLimits.ts
   - front-end/e2e/helpers/mongoSession.ts
   - front-end/e2e/helpers/mongoScript.ts
 verified: 2026-11-20
@@ -169,9 +170,11 @@ That, the self-signed certificate and the other suite-wide traps are TESTING.md'
 
 **A vendor's code request asks the human check** ([every code request asks the human check](../../business/rules/a-vendor-signs-in-before-applying.md#where-it-is-kept)): the stack has no site key, so its screens send the placeholder token, and its back end, with `DISABLE_CAPTCHA`, passes any token and refuses a request that sends none, as production does.
 An API helper or spec that posts to `applicant-login/request-code` sends `captcha_token: HUMAN_CHECK_TOKEN` from [`helpers/humanCheck.ts`](../../../front-end/e2e/helpers/humanCheck.ts), the one constant, and the vendor's sign-in helpers send it with the code too, as the screen does.
-**Applicant sign-in is rate limited** ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)): the run reaches the stack as two callers, its pages and a spec's `page.request` calls to `APP_API` through the dev server's proxy and a spec's own requests to `BACKEND_URL` directly, so one caller may ask five codes for an address per 15 minutes and twenty an hour whoever asks, an address may try ten, and each caller 300 of each, which the whole serial run shares.
+**Applicant sign-in is rate limited** ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)): the run reaches the stack as two callers, its pages and a spec's `page.request` calls to `APP_API` through the dev server's proxy and a spec's own requests to `BACKEND_URL` directly, so one caller may ask five codes for an address per 15 minutes and twenty an hour whoever asks, try ten wrong codes at an address, and each caller 300 of each, which the whole serial run shares; a right code takes its try back.
 A spec that fills a count per caller and address with requests over the API and meets the refusal on the screen sends them to `APP_API` with `page.request`, as `sign-in-is-bounded.spec.ts` does, so both are one caller.
 [`global-setup.ts`](../../../front-end/e2e/global-setup.ts) clears the counters at the start of every run; a spec that signs the same address in more than that within one run trips the limit, so a spec that spends a code's five tries uses an address of its own.
+**A spec that needs an address past its own count fills the counter** rather than sending the tries: an address's fifty wrong codes, past which a try asks the human check, are only reached from many callers.
+[`helpers/signInLimits.ts`](../../../front-end/e2e/helpers/signInLimits.ts) names such a limit and fills it for an address in the current window (`fillSignInLimit`), through `mongoEval`, by the key `sign_in_limits.py` computes, after `waitForRoomInWindow`, and reads its count back (`signInLimitCount`), as `a-vendor-signs-in-past-others-wrong-codes.spec.ts` does.
 **The organizer's password and code sign-ins are rate limited too** ([the sign-in is bounded](../data/users-and-email.md#the-sign-in-is-bounded)): ten tries per address per 15 minutes on each, and fifty per caller on the password, sixty on the code.
 A try that signs in takes its count back, so the suite's hundreds of fixture sign-ins cost nothing; wrong passwords and codes share the caller's fifty and sixty across the serial run, so a spec that goes past a limit, or tries many wrong ones, clears the counters in its `finally` (`db.sign_in_attempts.deleteMany({})`), as `the-sign-in-says-what-to-do-next.spec.ts` does.
 Asking for an organizer's code, a reset link or a verification link, and signing up, take nothing back: five of each per address and thirty per caller per 15 minutes, so a spec that goes past one clears the counters in its `finally` too.

@@ -314,6 +314,12 @@ Most people never see it; a person Cloudflare is unsure of ticks one box.
 _Avoid_: captcha, Turnstile, in what a person reads (the request field `captcha_token` and the `captcha` modules keep their names)
 See [ADR 0045](docs/adr/0045-turnstile-is-the-one-human-check.md).
 
+**Sign-in limit**:
+A count of tries in a fixed window, per caller, per caller and address, or per address alone, kept in the database and naming nobody.
+A sign-in that checks a secret says to wait only for one caller's own tries at an address; past the address's own count it asks the **human check** instead.
+_Avoid_: rate limit, throttle, lockout, in what a person reads
+See [ADR 0046](docs/adr/0046-a-sign-in-limit-never-shuts-out-the-person-it-protects.md).
+
 **Sign-in secret**:
 What a mail carries to an organizer's account so they can sign in or settle the account: its sign-in code, reset link or verification link.
 The server keeps one record of a sign-in secret, never the secret itself but its hash, in one of four states: being mailed, live, used or discarded.
