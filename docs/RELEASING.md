@@ -24,6 +24,7 @@ sources:
   - T270
   - T273
   - T317
+  - T567
 ---
 
 # Release Process
@@ -43,9 +44,11 @@ This project uses a **dev → main promotion flow**:
 A PR into `dev` also needs `knowledge-graph`, CodeQL's three `Analyze (<language>)` checks and `agent-review`, eleven in all; `main` asks only the six ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)).
 Branches need not be up to date before merging, because a promotion is only ever made from a commit whose own `dev` run passed, and a PR into `dev` merges through a merge queue, which runs the checks again on the commit it would merge.
 `dev`'s is a ruleset with no bypass actor, so it binds admins too: nothing merges into `dev`, the merge of `main` back into it included, without all eleven checks, short of changing the ruleset itself; its code scanning rule holds back a PR with a new CodeQL alert ([CodeQL](implementation/testing/ci-and-the-gate.md#codeql)), and force pushes to it and its deletion are blocked.
-`main`'s are two rulesets ([ADR 0027](adr/0027-main-moves-only-through-promote.md)).
-"main is promoted or merged" takes a change only through a pull request, except from the Promote workflow's GitHub App, the only actor that may push to `main` ([how a promotion proves itself](#how-a-promotion-proves-itself)).
-"main is tested" requires the six checks, keeps `main`'s history linear, and blocks force pushes and deletion; the App is held to it too, so the commit it pushes must already have passed the six, as a commit whose `dev` run passed has.
+`main`'s are two rulesets ([ADR 0027](adr/0027-main-moves-only-through-promote.md)), each targeting `main` alone, and a ruleset rebuilt from these lines holds what it holds now.
+"main is promoted or merged" takes a change only through a pull request (Require a pull request before merging, with no approvals and stale approvals dismissed), except from the Promote workflow's GitHub App, the only actor that may push to `main`, which its bypass list always allows ([how a promotion proves itself](#how-a-promotion-proves-itself)).
+"main is tested" requires the six checks from GitHub Actions, with branches not required to be up to date, and blocks force pushes and deletion; the App is not on its bypass list, so the commit it pushes must already have passed the six, as a commit whose `dev` run passed has.
+"main is tested" has no Require linear history rule, and must not have one while `dev` takes merge commits: every `dev` commit Promote fast-forwards `main` to brings merge commits with it, and GitHub refuses a push that does under that rule ("This branch must not contain merge commits").
+The ruleset was first made with that rule, which refused every promotion until Daniel removed it on 2026-11-18.
 An admin may bypass both through a pull request only: it is how the Release PR, which gets no CI, is merged (below).
 No one pushes to `main` directly, an admin included, so an emergency push means editing a ruleset first.
 
@@ -128,6 +131,8 @@ It reads the Test runs through [`scripts/github_runs.py`](../scripts/github_runs
 The workflow runs only from `dev`, in the `promote` environment, whose deployment branches are `dev` alone, so a run from a branch with an edited copy of the workflow never reaches the App's key.
 One promotion runs at a time, and none is cancelled part-way.
 A check-only run (`-f check-only=true`, or the box in the Actions tab) makes every check and mints the App's token but moves nothing, which proves the App's setup before a real promotion.
+It cannot prove that `main`'s rulesets let the App's move through, since it pushes nothing: a rule on a push shows only when `main` really moves, as Require linear history did, which no check-only run showed.
+So try a change to `main`'s rulesets with a real push first, of a `dev` commit to a scratch branch that a copy of the changed ruleset targets, or name the change unproven until a promotion has moved `main` under it.
 
 1. **"Refuse to run half-configured"** refuses when the `promote` environment lacks the `PROMOTE_APP_CLIENT_ID` variable or the `PROMOTE_APP_PRIVATE_KEY` secret, one `::error::` line for each; it sees only whether the key is set, never the key.
 2. **"The commit may be promoted"** runs the check with the run's own read-only token.
