@@ -127,7 +127,7 @@ def signed_in_as(person):
 
 
 def invite(inviter, email=INVITEE.email, place="member", org_id=ORG_ID):
-    """Invite through the organization's route, as Manage organization does; the invitation's id."""
+    """Invite through the organization's route; the invitation's id."""
     response = signed_in_as(inviter).post(
         f"/organizations/{org_id}/invitations", json={"email": email, "place": place})
     assert response.status_code == 200, response.get_json()

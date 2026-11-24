@@ -8,8 +8,9 @@ sources:
 
 # A person accepts before they join
 
-A person gains a role on a market, or a place in an organization, only by accepting an invitation, signed in with the address it was sent to.
-Adding someone gives one answer for every address: whether or not the address has an account, the organizer reads "Invitation sent", the address is sent the same email, and the market's or the organization's history records the same entry.
+A person invited to a role on a market, or a place in an organization, gains it only by accepting the invitation, signed in with the address it was sent to.
+Inviting someone gives one answer for every address: whether or not the address has an account, the invite answers the same status and body, the address is sent the same email, and the market's or the organization's history records the same entry.
+Manage market's "Add user" and Manage organization's "Add admin" and "Add member" still add a person directly, at once, until they invite instead and the direct adds are removed.
 
 ## The rule
 

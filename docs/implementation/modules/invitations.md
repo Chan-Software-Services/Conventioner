@@ -78,7 +78,7 @@ Two upserts that both match nothing race on the unique index; the refused one is
 **An answered invitation ends**: `end` deletes it by id and address, on an accept, a decline, or once it can no longer be accepted.
 An accepted one's two limit counts are taken back (`take_back`) in the window of its `counted_at`, read as UTC since the driver hands a stored time back without its zone, so only invitations nobody accepts pile up against the limits.
 
-**A withdrawal holds the role it read**: `withdraw` deletes by id, target and role, so an invitation sent again to another role between the read and the delete is left, and the withdrawal answers 409 `CHANGED_MEANWHILE`; one gone meanwhile answers 404 `ALREADY_ENDED`, "That invitation has already ended.", which Manage market reads as done.
+**A withdrawal holds the role it read**: `withdraw` deletes by id, target and role, so an invitation sent again to another role between the read and the delete is left, and the withdrawal answers 409 `CHANGED_MEANWHILE`; one gone meanwhile answers 404 `ALREADY_ENDED`, "That invitation has already ended."
 
 **A market's invitations go with it**: `delete_for_market`, in `market_deletion.delete_records` ([market deletion](market-deletion.md#sharp-edges)).
 **An organization's go with it**: `delete_for_organization`, in `api/organizations.delete_organization` beside its own history, and each of its markets' with the market ([when an organization may be deleted](../../business/rules/when-an-organization-may-be-deleted.md)).

@@ -6,8 +6,8 @@ import { loginViaApi } from './seeds';
  * Invitations through the API (T538, ADR 0047): a role on a market and a place in an organization
  * are offered to an address, and given only once someone signed in with it accepts.
  *
- * `inviteToMarket` and `inviteToOrganization` invite as whoever `request`'s session is, as Manage
- * market and Manage organization do. `acceptInvitation` accepts as the invitee on a request
+ * `inviteToMarket` and `inviteToOrganization` invite as whoever `request`'s session is.
+ * `acceptInvitation` accepts as the invitee on a request
  * context of its own, signed in for the call and disposed after it, never on the inviter's: a sign-in
  * ends the sign-in that context held.
  */

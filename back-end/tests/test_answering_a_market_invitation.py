@@ -135,7 +135,7 @@ def signed_in_as(person):
 
 
 def invite(inviter, email=INVITEE.email, role="editor", market_id=MARKET_ID):
-    """Invite through the organizer's route, as Manage market does; the invitation's id."""
+    """Invite through the organizer's route; the invitation's id."""
     response = signed_in_as(inviter).post(
         f"/markets/{market_id}/invitations", json={"email": email, "role": role})
     assert response.status_code == 200, response.get_json()

@@ -779,7 +779,7 @@ def withdraw_organization_invitation(
 
     Anyone but its owner and its admins is refused first, in one sentence, whether or not the
     invitation waits. One that has already ended is a 404 saying so, written and recorded as
-    nothing, which Manage organization reads as done. One sent again to another place between the
+    nothing. One sent again to another place between the
     read and the delete is left, and answers 409: the withdrawal asked about the place it read.
     """
     _org, people, requester = _people_and_requester(org_id, requesting_user_email)

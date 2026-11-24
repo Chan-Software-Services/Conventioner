@@ -21,6 +21,7 @@ The add's answer also depended on the address typed, where the sign-up, the sign
 ## Decision
 
 **Every role and place a person gains, after the market's or the organization's creation, is an invitation they accept.**
+The invitations come first, beside the direct adds (`POST /markets/<id>/roles`, `POST /organizations/<id>/admins` and `/members`), which still place a person at once until Manage market and Manage organization invite instead and the direct adds are removed.
 The organizer types an address and a role; every address gets the same answer, the same email and the same history entry, and an invitation is written in `invitations` ([`back-end/invitations.py`](../../back-end/invitations.py)), keyed by its target and address.
 Only someone signed in with that address accepts it, on the Invitations page.
 
@@ -42,5 +43,4 @@ Only someone signed in with that address accepts it, on the Invitations page.
 
 ## Consequences
 
-- An organizer waits for the person to accept, where before the role was there at once; the market's history says who invited whom, who withdrew it and who declined.
-- Every E2E spec and seed that gave a role directly gives it by inviting and accepting.
+- An organizer who invites waits for the person to accept, where an add gave the role at once; the market's history says who invited whom, who withdrew it and who declined.

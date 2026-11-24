@@ -38,7 +38,7 @@ Covered by:
 **Status:** Works (`answering-an-invitation.spec.ts`).
 **Task:** "Someone invited me to their market."
 
-1. Open the email's link, which is `/invitations`; signed out, sign in first, or create an account with that address and verify it, and the page opens after ([accounts](accounts.md)).
+1. Open the email's link, which is `/invitations`; signed out, sign in first and the page opens after, or create an account with that address, verify it and sign in, and the Markets list points to it, as step 2 says ([accounts](accounts.md)).
 2. Or, on the Markets list, read "You have an invitation waiting." or "You have 2 invitations waiting." above the other lines, and "See invitations" ([C2](finding-a-market.md#c2-the-markets-list)).
 3. Expect the heading "Invitations", "Loading invitations…" while it first reads, then a row each: "dana@example.com invited you to Riverside Market as an Editor." (an Admin, a Viewer), or "… invited you to the organization Ember Makers as a member." (an admin), and under it "Until 8 December.", the day it ends in the reader's own timezone, then "Accept" and "Decline".
 

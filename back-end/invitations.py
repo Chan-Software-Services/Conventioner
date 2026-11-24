@@ -1,9 +1,9 @@
 """Single owner of the ``invitations`` collection: offers, each sent to an address, of a role on one
 market or a place in one organization (T538, ADR 0047).
 
-**A person joins only by accepting.** Adding someone to a market or an organization is an
-invitation: the organizer types an address and a role, and every address gets the same answer, the
-same email and the same history entry, whether or not it has an account. The invitation gives
+**A person joins only by accepting.** To invite someone to a market or an organization, the
+organizer types an address and a role; every address not already on it gets the same answer,
+the same email and the same history entry, whether or not it has an account. The invitation gives
 nothing: no read of a market's roles, its people with access or a permission check reads this
 collection, so nobody gains a role or a place by being invited.
 
@@ -15,8 +15,9 @@ refused is sent once more, finding the other's document.
 
 **It waits 14 days.** ``expires_at`` is 14 days after it was sent, and a TTL index removes it then;
 the TTL monitor runs about once a minute, so every read also asks for ``expires_at`` after now.
-An invitation also ends on a decline, a withdrawal, or once its inviter can no longer give it, and
-with its market or its organization (``market_deletion``, ``api.organizations``).
+An invitation also ends on a decline or a withdrawal, an accept finds it ended once its inviter can
+no longer give it, and it goes with its market or its organization (``market_deletion``,
+``api.organizations``).
 
 **What a request sends counts.** Each invitation sends an email, so it is counted against two
 limits of ``sign_in_limits`` before the account is looked up, by the inviter and by the address,
@@ -53,7 +54,7 @@ EMAIL_INDEX = "invitation_email"
 EXPIRY_INDEX = "invitation_ttl"
 
 #: Said of an invitation withdrawn that nobody can accept any more: it was withdrawn, declined,
-#: accepted or ran out first. Manage market and Manage organization read it as done.
+#: accepted or ran out first.
 ALREADY_ENDED = "That invitation has already ended."
 
 #: Said of an invitation withdrawn that was sent again to another role between its read and its

@@ -2393,7 +2393,7 @@ def withdraw_market_invitation(market_id: str, invitation_id: str, requesting_us
     """Withdraw a waiting invitation, as whoever may give its role (``Actions.roles_row``).
 
     One that has already ended - withdrawn, accepted, declined or past its 14 days - is a 404
-    saying so, written and recorded as nothing, which Manage market reads as done. A requester
+    saying so, written and recorded as nothing. A requester
     whom neither roles row lets through is refused first, in one sentence, whether or not the
     invitation waits. One sent again to another role between the read and the delete is
     left, and answers 409: the withdrawal asked the row of the role it read.
