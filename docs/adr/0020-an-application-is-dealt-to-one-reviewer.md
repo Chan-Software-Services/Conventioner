@@ -4,7 +4,7 @@ kind: adr
 describes:
   - back-end/review_team.py
   - back-end/datatypes.py#ReviewTeam
-verified: 2026-11-18
+verified: 2026-11-24
 sources:
   - E38/F07
   - E38/F07/S01

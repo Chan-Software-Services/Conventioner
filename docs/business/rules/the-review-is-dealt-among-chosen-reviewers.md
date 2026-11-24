@@ -13,7 +13,7 @@ describes:
   - front-end/src/utils/reviewers.ts
   - front-end/src/components/market/ReviewerName.vue
   - back-end/review_team.py#deal_waiting
-verified: 2026-11-18
+verified: 2026-11-24
 sources:
   - E38/F07
   - E38/F07/S01
@@ -25,8 +25,8 @@ sources:
   - T270
   - T263
   - T411
-  - T452
   - T484
+  - T452
 ---
 
 # The review is dealt among chosen reviewers
