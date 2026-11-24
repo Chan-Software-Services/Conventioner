@@ -372,7 +372,9 @@ test("the map's search finds a vendor by their business name and says it, and th
   const seeded = await seedMarketDayMap(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
   const [wren] = seeded.vendors;
   setApplicationAnswer(seeded.marketId, wren!.email, BUSINESS_NAME, PAPER_AND_PINE);
-  await openTheDoor(page, seeded.marketId, '?view=map');
+  // On the day it seeded, so a run past midnight does not open the map on the seed's next day,
+  // where Wren sits at another table.
+  await openTheDoor(page, seeded.marketId, `?view=map&date=${seeded.today}`);
   const map = page.getByTestId('attendance-map');
   await expect(map.getByTestId('layout-map')).toBeVisible();
 
