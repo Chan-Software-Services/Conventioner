@@ -43,9 +43,8 @@ So after the swap an entry of a layout's save still names its location by the ol
 means the other place, until ``history_follows_location_swap.py``, beside this script, is run
 after it: that one renames each layout's save of the two locations, so it names its location as it
 is called now, and leaves the ``floorplan_removed`` and ``plan`` entries as written. This script
-counts the market's ``floorplan`` and
-``floorplan_removed`` entries naming either location and prints the two counts, so the operator
-knows they are there.
+counts the market's ``floorplan`` and ``floorplan_removed`` entries naming either location and
+prints the two counts, so the operator knows they are there.
 
 It refuses, writing nothing and exiting 1, when: the market is not found, is being deleted, does
 not parse, has no plan or is a draft (rename it on Market Setup); either location is not found, or
