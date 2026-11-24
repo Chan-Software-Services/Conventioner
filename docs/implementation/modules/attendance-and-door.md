@@ -32,7 +32,7 @@ describes:
   - front-end/src/components/attendance/AttendanceMap.vue
   - front-end/src/utils/useUpdatedWords.ts
   - front-end/src/components/attendance/laidOutLocations.ts
-verified: 2026-11-19
+verified: 2026-11-24
 sources:
   - wayfinding/real-market-readiness/map
   - wayfinding/claims-and-room/map
