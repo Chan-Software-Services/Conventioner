@@ -4,6 +4,7 @@ kind: module
 describes:
   - back-end/requirements.txt
   - back-end/requirements.in
+  - back-end/requirements-audit.in
   - scripts/lock-backend-requirements.sh
   - front-end/package.json
   - .nvmrc
@@ -30,7 +31,8 @@ How each part of the code works is in the implementation layer of the [knowledge
 
 - Each back-end requirements file that Vercel, Docker, CI or the gate installs is a lock: every package, direct or not, at one exact version with its hashes, so a redeploy of unchanged code installs exactly what was tested
   - The redeploy of 2026-10-23 re-resolved six packages left unpinned, openai 3.35.1 to 3.37.0 among them; the first locks hold what that deploy installed
-- People edit the `.in` file beside each lock (`requirements.in`, `requirements-floorplan-solver.in`, `requirements-dev.in`), never the `.txt`
+- People edit the `.in` file beside each lock (`requirements.in`, `requirements-floorplan-solver.in`, `requirements-dev.in`, `requirements-audit.in`), never the `.txt`
+- [`requirements-audit.in`](../back-end/requirements-audit.in) is pip-audit alone, for [CI's `python-advisories` job](implementation/testing/ci-and-the-gate.md#ci), which checks every lock against known advisories; it is its own lock so no test run installs the scanner
 - [`scripts/lock-backend-requirements.sh`](../scripts/lock-backend-requirements.sh) (needs any [uv](https://docs.astral.sh/uv/); it runs the uv pinned in `requirements-dev.in`, so every machine writes the same locks) is the one way to change a lock: with no options it keeps every pin and adds or drops only what an `.in` changed; `--upgrade-package <name>` moves one package on purpose, `--upgrade` everything
 - Two checks hold the locks to that command:
   - `tests/test_requirements_are_locked.py` fails on a lock line that is not a hashed pin, a lock whose direct requirements are not exactly its `.in`'s or whose pins no longer satisfy it, and a package pinned differently in two locks
