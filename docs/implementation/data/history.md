@@ -322,16 +322,16 @@ One block per action, in the order of [the actions table](../modules/market-acti
   - Detail: `role`
 - `invited`: an address invited to a role ([invitations](../modules/invitations.md)), under the row that gives the role
   - Subject: `email`, the address alone, whether or not it has an account
-  - Detail: `role`, the role it offers; inviting the address again records again, with the new role
+  - Detail: `role`, the role it offers; inviting the address again records again, with the new role; read "<actor> invited <email> as an Editor"
 - `invitation_withdrawn`: a waiting invitation withdrawn, under the row that gives its role
   - Subject: `email`
-  - Detail: `role`
+  - Detail: `role`; read "<actor> withdrew the invitation to <email>"
 - `invitation_declined`: an invitation declined by the person it was sent to, through the unasked door `AN_INVITEE_ANSWERS`, under the row that gives its role
   - Actor: the invitee's address
   - Subject: `email`
-  - Detail: `role`
+  - Detail: `role`; read "<email> declined the Editor role"
 - `role_given` by an invitation accepted: through the inviter's asking of the row that gives the role, at the moment it was accepted, so its actor is the inviter
-  - Detail: `role`, and `by_invitation: true`
+  - Detail: `role`, and `by_invitation: true`; read "<actor> gave <email> the Editor role, which they accepted"
 
 **`hand-on-market`**
 
@@ -382,7 +382,7 @@ One block per action, in the order its constants stand in `history.py`; a new ki
   - Subject: `email`, the address alone, whether or not it has an account
   - Detail: `role`: `admin`
 - `role_given` or `role_changed` by an invitation accepted: its actor the inviter, at the moment it was accepted; `role_changed` for a member made an admin
-  - Detail: `role` before and after, and `by_invitation: true`
+  - Detail: `role` before and after, and `by_invitation: true`; read as a market's are, "… the Admin role, which they accepted", or "<actor> changed <email> from Member to Admin, which they accepted"
 
 **`manage-organization-members`**
 

@@ -324,7 +324,7 @@ A download asks for a blob, so `downloadErrorMessage` in [`front-end/src/utils/d
 The account pages (sign in, register, password reset, email verification) still word their own failures.
 
 **A screen whose own read failed offers Try again**: [`ReadFailed.vue`](../../../front-end/src/components/ReadFailed.vue) shows the message with a button that runs the read once more, its test ids `<name>-read-failed` and `<name>-retry`.
-Applications (both views, `applications`), Markets (`markets`), Organizations (`organizations`), Assignments (`tables`) and Attendance (`attendance`) use it; a market that could not be loaded at all is [the market frame](../modules/market-frame.md)'s `MarketArrival` to say, with its own Try again.
+Applications (both views, `applications`), Markets (`markets`), Organizations (`organizations`), Invitations (`invitations`), Assignments (`tables`) and Attendance (`attendance`) use it; a market that could not be loaded at all is [the market frame](../modules/market-frame.md)'s `MarketArrival` to say, with its own Try again.
 A list the server pages shows it at the list's end for a page that failed, from [`PagedList.vue`](../../../front-end/src/components/PagedList.vue) (Manage market's History and a vendor's, `market-history`, and the organization's, `org-history`).
 Its button is a `.btn`, so it is 44px on a phone.
 

@@ -21,6 +21,12 @@ vi.mock('@/utils/organizations', async (importOriginal) => ({
   fetchOrganizations: () => Promise.resolve([]),
 }));
 
+const fetchInvitations = vi.fn();
+vi.mock('@/utils/invitations', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/utils/invitations')>()),
+  fetchInvitations: () => fetchInvitations(),
+}));
+
 const A_MARKET = {
   id: 'market-1',
   name: 'Riverside Spring Market',
@@ -79,6 +85,8 @@ describe('Markets, the first thing it says', () => {
     push.mockClear();
     fetchMarkets.mockReset();
     serverHas();
+    fetchInvitations.mockReset();
+    fetchInvitations.mockResolvedValue([]);
   });
 
   describe('an organizer who has never had a market', () => {
@@ -314,5 +322,99 @@ describe('Markets, the first thing it says', () => {
     const wrapper = await mountMarkets();
 
     expect(wrapper.find(LINE).find('h1, h2, h3, h4, h5, h6').exists()).toBe(false);
+  });
+});
+
+describe('Markets, when invitations wait (T538)', () => {
+  const WAITING = '[data-testid="markets-invitations-waiting"]';
+  const invitation = (id: string) => ({
+    id,
+    kind: 'market',
+    targetId: 'market-9',
+    targetName: 'Harbour Winter Market',
+    role: 'editor',
+    invitedBy: 'dana@ember.test',
+    sentAt: '2026-11-24T12:00:00+00:00',
+    endsAt: '2026-12-08T12:00:00+00:00',
+  });
+
+  beforeEach(() => {
+    localStorage.clear();
+    fetchMarkets.mockReset();
+    fetchInvitations.mockReset();
+  });
+
+  it('says one waits, and links the Invitations page, above every other opening line', async () => {
+    browserRemembers(A_MARKET);
+    serverHas(A_MARKET, ANOTHER_MARKET);
+    fetchInvitations.mockResolvedValue([invitation('inv-1')]);
+
+    const wrapper = await mountMarkets();
+
+    const line = wrapper.get(WAITING);
+    expect(line.classes()).toEqual(expect.arrayContaining(['note', 'opening-line']));
+    expect(line.text()).toBe('You have an invitation waiting. See invitations');
+    const link = line.findComponent(RouterLinkStub);
+    expect(link.text()).toBe('See invitations');
+    expect(link.props('to')).toBe('/invitations');
+    const block = wrapper.get('.markets-block').element;
+    expect(block.firstElementChild).toBe(line.element);
+    expect(wrapper.find(LINE).exists()).toBe(true);
+  });
+
+  it('counts several', async () => {
+    serverHas(A_MARKET);
+    fetchInvitations.mockResolvedValue([
+      invitation('inv-1'),
+      invitation('inv-2'),
+      invitation('inv-3'),
+    ]);
+
+    const wrapper = await mountMarkets();
+
+    expect(wrapper.get(WAITING).text()).toBe('You have 3 invitations waiting. See invitations');
+  });
+
+  it('says it to someone with no market yet, beside the first-time words', async () => {
+    serverHas();
+    fetchInvitations.mockResolvedValue([invitation('inv-1'), invitation('inv-2')]);
+
+    const wrapper = await mountMarkets();
+
+    expect(wrapper.get(WAITING).text()).toBe('You have 2 invitations waiting. See invitations');
+    expect(wrapper.find(MESSAGE).exists()).toBe(true);
+  });
+
+  it('says nothing when none wait', async () => {
+    serverHas(A_MARKET);
+    fetchInvitations.mockResolvedValue([]);
+
+    const wrapper = await mountMarkets();
+
+    expect(wrapper.find(WAITING).exists()).toBe(false);
+  });
+
+  it('says nothing when the invitations cannot be read, and the markets load as before', async () => {
+    serverHas(A_MARKET, ANOTHER_MARKET);
+    fetchInvitations.mockRejectedValue(new Error('offline'));
+
+    const wrapper = await mountMarkets();
+
+    expect(wrapper.find(WAITING).exists()).toBe(false);
+    expect(wrapper.find('[data-testid="markets-read-failed"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Riverside Spring Market');
+  });
+
+  it('reads them again with the markets, so an answered one stops being counted', async () => {
+    serverHas(A_MARKET);
+    fetchInvitations.mockResolvedValueOnce([invitation('inv-1')]).mockResolvedValueOnce([]);
+
+    const wrapper = await mountMarkets();
+    expect(wrapper.find(WAITING).exists()).toBe(true);
+
+    await closeManage(wrapper);
+
+    expect(fetchInvitations).toHaveBeenCalledTimes(2);
+    expect(wrapper.find(WAITING).exists()).toBe(false);
   });
 });

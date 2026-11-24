@@ -260,6 +260,75 @@ describe('what an entry says', () => {
     ).toBe('dana@ember.test changed priya@ember.test from Viewer to Editor');
   });
 
+  it('words an invitation by its address and role, under either roles row (T538)', () => {
+    const invited = (action: string, role: string) =>
+      sentence({
+        action,
+        kind: 'invited',
+        vendors: [],
+        subject: { email: 'priya@ember.test' },
+        detail: { role },
+      });
+    expect(invited('manage-editors-and-viewers', 'editor')).toBe(
+      'dana@ember.test invited priya@ember.test as an Editor',
+    );
+    expect(invited('manage-editors-and-viewers', 'viewer')).toBe(
+      'dana@ember.test invited priya@ember.test as a Viewer',
+    );
+    expect(invited('manage-admins', 'admin')).toBe(
+      'dana@ember.test invited priya@ember.test as an Admin',
+    );
+  });
+
+  it('words an invitation withdrawn by its address, and one declined by its invitee', () => {
+    for (const action of ['manage-editors-and-viewers', 'manage-admins']) {
+      expect(
+        sentence({
+          action,
+          kind: 'invitation_withdrawn',
+          vendors: [],
+          subject: { email: 'priya@ember.test' },
+          detail: { role: 'editor' },
+        }),
+      ).toBe('dana@ember.test withdrew the invitation to priya@ember.test');
+    }
+    expect(
+      sentence({
+        action: 'manage-admins',
+        kind: 'invitation_declined',
+        actor: 'priya@ember.test',
+        vendors: [],
+        subject: { email: 'priya@ember.test' },
+        detail: { role: 'admin' },
+      }),
+    ).toBe('priya@ember.test declined the Admin role');
+    expect(
+      sentence({
+        action: 'manage-editors-and-viewers',
+        kind: 'invitation_declined',
+        actor: 'priya@ember.test',
+        vendors: [],
+        subject: { email: 'priya@ember.test' },
+        detail: { role: 'viewer' },
+      }),
+    ).toBe('priya@ember.test declined the Viewer role');
+  });
+
+  it('words a role given by an invitation accepted as the inviter’s, which they accepted', () => {
+    const given = (detail: Record<string, unknown>) =>
+      sentence({
+        action: 'manage-editors-and-viewers',
+        kind: 'role_given',
+        vendors: [],
+        subject: { user_id: 'u1', email: 'priya@ember.test' },
+        detail: { before: { role: null }, after: { role: 'editor' }, ...detail },
+      });
+    expect(given({ by_invitation: true })).toBe(
+      'dana@ember.test gave priya@ember.test the Editor role, which they accepted',
+    );
+    expect(given({})).toBe('dana@ember.test gave priya@ember.test the Editor role');
+  });
+
   it('words a phase move by both phases, as the market’s path names them', () => {
     const move = entry({
       action: 'move-phase',

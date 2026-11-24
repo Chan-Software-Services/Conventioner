@@ -140,6 +140,7 @@ The withdrawal refuses anyone else first in that sentence, whether or not the in
 
 ## Answering an invitation
 
+The invitee answers on the Invitations page, `/invitations`, which the email links to and the Markets list points at when any wait ([answering an invitation](../../business/flows/answering-an-invitation.md)).
 The invitee's routes, in [`back-end/app.py`](../../../back-end/app.py), each `@login_required`, for the signed-in account; [`back-end/api/invitees.py`](../../../back-end/api/invitees.py) answers them and hands each kind to the module that writes its target:
 
 | Route                                       | Answers                                                        |

@@ -2,12 +2,18 @@
  * The People group's words: a market's roles, and its permission table.
  *
  * Reads:
- * - `manage-editors-and-viewers/role_given`
+ * - `manage-editors-and-viewers/role_given`, said as accepted when given by an invitation
  * - `manage-editors-and-viewers/role_changed`
  * - `manage-editors-and-viewers/role_taken`
- * - `manage-admins/role_given`
+ * - `manage-editors-and-viewers/invited`
+ * - `manage-editors-and-viewers/invitation_withdrawn`
+ * - `manage-editors-and-viewers/invitation_declined`
+ * - `manage-admins/role_given`, said as accepted when given by an invitation
  * - `manage-admins/role_changed`
  * - `manage-admins/role_taken`
+ * - `manage-admins/invited`
+ * - `manage-admins/invitation_withdrawn`
+ * - `manage-admins/invitation_declined`
  * - `hand-on-market/handed_on`
  * - `change-the-table/permission_set`
  * - `change-the-table/permission_reset`
@@ -19,6 +25,9 @@
  */
 import { getRoleDisplayName } from '@/utils/permissions';
 import {
+  invitationDeclined,
+  invitationWithdrawn,
+  invited,
   listed,
   permissionRows,
   roleChanged,
@@ -42,9 +51,15 @@ export const readers: HistoryReaders = {
   'manage-editors-and-viewers/role_given': { parts: roleGiven },
   'manage-editors-and-viewers/role_changed': { parts: roleChanged },
   'manage-editors-and-viewers/role_taken': { parts: roleTaken },
+  'manage-editors-and-viewers/invited': { parts: invited },
+  'manage-editors-and-viewers/invitation_withdrawn': { parts: invitationWithdrawn },
+  'manage-editors-and-viewers/invitation_declined': { parts: invitationDeclined },
   'manage-admins/role_given': { parts: roleGiven },
   'manage-admins/role_changed': { parts: roleChanged },
   'manage-admins/role_taken': { parts: roleTaken },
+  'manage-admins/invited': { parts: invited },
+  'manage-admins/invitation_withdrawn': { parts: invitationWithdrawn },
+  'manage-admins/invitation_declined': { parts: invitationDeclined },
   'hand-on-market/handed_on': {
     parts(entry, context) {
       const { actor, text } = sentence(entry, context);

@@ -16,7 +16,13 @@ import { createApplicantLoginChallenge } from './seedApplicantMarket';
 import { loginViaApi, UPPER_HALL_SECTIONED_TABLES, UPPER_HALL_TABLES } from './seeds';
 import { letVendorsCheckThemselvesIn } from './selfCheckIn';
 import { calendarToday } from './vendorSignIn';
-import { FIRST_IMPORT, LATER_IMPORT, SCREENS_EDITOR, type TheScreensSeed } from './seedTheScreens';
+import {
+  FIRST_IMPORT,
+  LATER_IMPORT,
+  SCREENS_EDITOR,
+  SCREENS_INVITEE,
+  type TheScreensSeed,
+} from './seedTheScreens';
 import { settle } from './settle';
 
 /**
@@ -54,6 +60,7 @@ const PUBLIC = [DESKTOP, PHONE];
  * - the Assignments page (T142), so "Change assignment" at the door lands on a page that fits the
  *   phone it was tapped on;
  * - Organizations (T148);
+ * - Invitations (T538), answered from the email on whatever is to hand;
  * - Vendors (T180), with its drawer and dialogs, so a vendor is looked up and corrected at the door;
  * - Payments (T180), so who still owes is read at the door;
  * - the Applications page (T180), the one page of Market Setup's view that fits, both its views,
@@ -65,7 +72,7 @@ const PUBLIC = [DESKTOP, PHONE];
 const FITS_A_PHONE = [DESKTOP, LAPTOP, PHONE];
 
 /** Who is signed in to see a screen. */
-export type Who = 'organizer' | 'editor' | 'no organization' | 'applicant' | 'nobody';
+export type Who = 'organizer' | 'editor' | 'no organization' | 'invitee' | 'applicant' | 'nobody';
 
 export interface Screen {
   name: string;
@@ -689,6 +696,27 @@ export const SCREEN_GROUPS = {
       who: 'organizer',
       sizes: FITS_A_PHONE,
       open: at(fixed('/organizations'), 'organization-card'),
+    },
+    {
+      // Two invitations waiting, to a market and an organization whose names are long (T538).
+      name: 'the invitations, two waiting',
+      who: 'invitee',
+      sizes: FITS_A_PHONE,
+      open: at(fixed('/invitations'), 'invitation-row'),
+    },
+    {
+      name: 'the invitations, none waiting',
+      who: 'organizer',
+      sizes: FITS_A_PHONE,
+      open: at(fixed('/invitations'), 'invitations-none'),
+    },
+    {
+      // Someone with no market yet whom two invitations wait for: the line above the first-time
+      // words.
+      name: 'the markets list, invitations waiting',
+      who: 'invitee',
+      sizes: FITS_A_PHONE,
+      open: at(fixed('/markets'), 'markets-invitations-waiting'),
     },
     {
       // With its default permissions for new markets open over it (E39/F02/S01, T217).
@@ -2220,9 +2248,12 @@ export async function signIn(page: Page, who: Who, seed: TheScreensSeed): Promis
     );
     return;
   }
-  const user = { organizer: TEST_USER, editor: SCREENS_EDITOR, 'no organization': NO_ORG_USER }[
-    who
-  ];
+  const user = {
+    organizer: TEST_USER,
+    editor: SCREENS_EDITOR,
+    'no organization': NO_ORG_USER,
+    invitee: SCREENS_INVITEE,
+  }[who];
   // At the page's own address for the API (`APP_API`), as its sign-in page would sign in.
   await loginViaApi(page.request, APP_API, user.email, user.password);
   // The shell keeps who is signed in here, and the router reads it before any probe (`App.vue`).
