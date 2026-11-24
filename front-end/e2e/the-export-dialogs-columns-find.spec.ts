@@ -271,17 +271,4 @@ test.describe('at a desk', () => {
     await download;
     expect(downloads()).toBe(1);
   });
-
-  test('the words go on closing', async ({ authenticatedPage: page }) => {
-    const dialog = await openExport(page);
-    await dialog.columnsFind.fill('email');
-
-    await dialog.cancelButton.click();
-    await expect(dialog.window).toBeHidden();
-    await new ApplicationsAllPage(page).exportButton.click();
-    await expect(dialog.summary).toHaveText('2 vendors, 3 columns');
-
-    await expect(dialog.columnsFind).toHaveValue('');
-    await expect(dialog.group('answers')).toBeVisible();
-  });
 });

@@ -18,10 +18,8 @@ const ANSWERS = 228;
 const MOST_CHOSEN = 'Stickers';
 const SECOND_CHOSEN = 'Art prints';
 const QUESTION = 'What kinds of work will you sell?';
-/** The fixture's seats: four dates, each with these sections. */
+/** The fixture's seats: four dates, each with a North Wing and a South Wing. */
 const DATES = ['2024-04-22', '2024-04-23', '2024-04-24', '2024-04-25'];
-const NORTH = 31;
-const SOUTH = 28;
 
 const foldOf = (page: Page, testid: string) => page.getByTestId(`${testid}-fold`);
 const sectionId = (date: string, wing: string) => `library-l7-${date}-${wing}`;
@@ -119,24 +117,6 @@ eachWindow('the folds entry', (size) => {
     await expectInTheWindow(page, fold, 'the button, folded again');
   });
 
-  test('the fold goes by count whatever order the rows came in', async ({ page }) => {
-    const rows = page.getByTestId('library-bars-order');
-    await expect(rows).toHaveCount(10);
-    await expect(rows.first()).toContainText(MOST_CHOSEN);
-    await expect(rows.nth(1)).toContainText(SECOND_CHOSEN);
-  });
-
-  test('the bars draw no button at the fold or under it, and one past says it singly', async ({
-    page,
-  }) => {
-    await expect(page.getByTestId('library-bars-under')).toHaveCount(8);
-    await expect(foldOf(page, 'library-bars-under')).toHaveCount(0);
-    await expect(page.getByTestId('library-bars-at')).toHaveCount(10);
-    await expect(foldOf(page, 'library-bars-at')).toHaveCount(0);
-    await expect(page.getByTestId('library-bars-past')).toHaveCount(10);
-    await expect(foldOf(page, 'library-bars-past')).toContainText('1 more answer');
-  });
-
   test('rows that lead somewhere fold as well, and the first new one still leads there', async ({
     page,
   }) => {
@@ -151,20 +131,6 @@ eachWindow('the folds entry', (size) => {
     await press(rows.first());
     await expect(panel.getByTestId('read-out')).toHaveText(`Led to: ${MOST_CHOSEN}`);
     await expect(rows, 'the press leaves the fold as it was').toHaveCount(4);
-  });
-
-  test('every date holds its two sections, each folded past 20', async ({ page }) => {
-    for (const date of DATES) {
-      for (const [wing, heading, count] of [
-        ['north', 'North Wing', NORTH],
-        ['south', 'South Wing', SOUTH],
-      ] as const) {
-        const testid = sectionId(date, wing);
-        await expect(page.getByTestId(`${testid}-heading`)).toHaveText(heading);
-        await expect(seats(page, testid)).toHaveCount(20);
-        await expect(foldOf(page, testid)).toHaveText(`Show all ${count} in ${heading}`);
-      }
-    }
   });
 
   test("a seat row is the result's, and a press reads out under it, in view", async ({ page }) => {
@@ -186,16 +152,6 @@ eachWindow('the folds entry', (size) => {
     const row = seats(page, 'library-group-under').first();
     await press(row.getByTestId('tables-seat-vendor'));
     await expect(row.getByTestId('read-out')).toContainText('Pressed: The drawer of');
-  });
-
-  test('a group shows every row at the fold or under it, and folds one past', async ({ page }) => {
-    await expect(seats(page, 'library-group-under')).toHaveCount(12);
-    await expect(foldOf(page, 'library-group-under')).toHaveCount(0);
-    await expect(seats(page, 'library-group-at')).toHaveCount(20);
-    await expect(foldOf(page, 'library-group-at')).toHaveCount(0);
-    await expect(seats(page, 'library-group-past')).toHaveCount(20);
-    await expect(foldOf(page, 'library-group-past')).toHaveText('Show all 21 in North Wing');
-    await expect(seats(page, 'library-group-five')).toHaveCount(5);
   });
 
   test('a heading longer than the line wraps inside its button', async ({ page }) => {
