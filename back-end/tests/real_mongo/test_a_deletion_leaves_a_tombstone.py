@@ -373,7 +373,8 @@ class TestAWriteRacingTheDeletion:
 
         body, status = ApplicantsApi.save_applicant_application(
             market["slug"], {"market_id": market["id"], "email": APPLICANT},
-            {**VALID_ANSWERS, "business_name": "Fixture Stall"})
+            {**VALID_ANSWERS, "business_name": "Fixture Stall"},
+            ApplicantsApi.applicant_form_version(market))
 
         assert status == 404, body
         _nothing_left_of([market], real_db, applications, market_records)
@@ -393,7 +394,8 @@ class TestAWriteRacingTheDeletion:
 
         body, status = ApplicantsApi.save_applicant_application(
             market["slug"], {"market_id": market["id"], "email": APPLICANT},
-            {**VALID_ANSWERS, "business_name": "Fixture Stall"})
+            {**VALID_ANSWERS, "business_name": "Fixture Stall"},
+            ApplicantsApi.applicant_form_version(market))
 
         assert status == 404, body
         _nothing_left_of([market], real_db, applications, market_records)
@@ -419,7 +421,8 @@ class TestAWriteRacingTheDeletion:
 
         body, status = ApplicantsApi.save_applicant_application(
             market["slug"], {"market_id": market["id"], "email": APPLICANT},
-            {**VALID_ANSWERS, "business_name": "Fixture Stall"})
+            {**VALID_ANSWERS, "business_name": "Fixture Stall"},
+            ApplicantsApi.applicant_form_version(market))
 
         assert status == 404, body
         _nothing_left_of([market], real_db, applications, market_records)
