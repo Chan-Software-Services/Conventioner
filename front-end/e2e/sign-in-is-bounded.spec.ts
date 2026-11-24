@@ -6,13 +6,14 @@ import { waitForRoomInWindow } from './helpers/signInWindow';
 /**
  * Nobody can use the applicant sign-in to flood an address with codes (T12).
  *
- * An address may be sent five codes in a quarter of an hour; past that the back end answers 429
- * with a Retry-After and sends nothing, and the sign-in screen says so in words. The limit is per
- * address whoever asks, so the first five are asked for over the API and the one past it through
- * the screen, as a vendor would meet it.
+ * One caller may ask for five codes to an address in a quarter of an hour; past that the back end
+ * answers 429 with a Retry-After and sends nothing, and the sign-in screen says so in words. The
+ * count is per caller and address, and the API and the browser reach the stack as one caller, so
+ * the first five are asked for over the API and the one past it through the screen, as a vendor
+ * would meet it.
  */
 
-const ALLOWED_PER_ADDRESS = 5;
+const ALLOWED_PER_CALLER_AND_ADDRESS = 5;
 
 test('asking for codes past the limit says to wait, and sends nothing more', async ({
   page,
@@ -34,7 +35,7 @@ test('asking for codes past the limit says to wait, and sends nothing more', asy
       { data: { email: address, captcha_token: HUMAN_CHECK_TOKEN } },
     );
 
-  for (let i = 0; i < ALLOWED_PER_ADDRESS; i += 1) {
+  for (let i = 0; i < ALLOWED_PER_CALLER_AND_ADDRESS; i += 1) {
     expect((await requestCode()).status()).toBe(200);
   }
 

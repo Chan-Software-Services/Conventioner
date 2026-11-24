@@ -4,8 +4,9 @@ Every sign-in endpoint is public: the applicant's code sign-in, the organizer's 
 sign-ins and the requests that mail an organizer a code or a link, the sign-up among them, and the
 vendor's check-in at the door. A request that sends an email, left unbounded, could flood
 any address with mail, spending the sender's money and reputation; a sign-in try is a guess at a
-password or a code. Each limit here is counted per address, per caller or both, small enough to
-stop that and far above what a vendor or an organizer who mistypes or asks again ever reaches.
+password or a code. Each limit here is counted per address, per caller, or per caller and address
+together, small enough to stop that and far above what a vendor or an organizer who mistypes or
+asks again ever reaches.
 Where a try that signs in is taken back (``take_back_attempt``), only wrong tries pile up.
 
 **The counters live in the database, never in a process.** A serverless deployment runs many
@@ -20,7 +21,7 @@ in, since one line or machine is handed a whole /64. So a per-caller limit count
 once, on IPv6 as on IPv4, and the addresses of its own network add nothing to its allowance.
 
 **A counter names nobody.** Its key is a hash of the limit, the subject and the window: the
-collection holds how many times someone knocked in the last quarter of an hour, not who.
+collection holds how many times someone knocked in a window, not who.
 
 **A limit is the same for every address**, with an account or an application or neither, and it
 is counted before the account or the market is looked up, so a refusal says nothing about who has
@@ -59,9 +60,18 @@ class SignInLimit:
 
 # Every limit, in one place. A vendor asks for a code, perhaps once more, and enters it; vendors on
 # one venue's wifi share an address, so a caller is allowed far more than an address is. What bounds
-# a guess at a code, and the mail one address is sent, stays the per-address limit.
-REQUEST_CODE_PER_ADDRESS = SignInLimit("request-code:address", attempts=5, window=timedelta(minutes=15))
+# a guess at a code stays the per-address limit.
+#
+# A request that mails a code or a link (``MailBounds``) is counted three ways: per caller, per
+# caller and address together, and per address alone by the hour. The pair's five a quarter of an
+# hour bound what one caller may ask for one address, and leave every other caller's requests for it
+# as they were; the address's twenty an hour bound one inbox's mail, whoever asks. Twenty is four
+# callers' fives, so a person who asks again from a second network is never near it.
 REQUEST_CODE_PER_CALLER = SignInLimit("request-code:caller", attempts=300, window=timedelta(minutes=15))
+REQUEST_CODE_PER_CALLER_AND_ADDRESS = SignInLimit(
+    "request-code:caller-address", attempts=5, window=timedelta(minutes=15))
+REQUEST_CODE_PER_ADDRESS_HOUR = SignInLimit(
+    "request-code:address-hour", attempts=20, window=timedelta(hours=1))
 VERIFY_CODE_PER_ADDRESS = SignInLimit("verify-code:address", attempts=10, window=timedelta(minutes=15))
 VERIFY_CODE_PER_CALLER = SignInLimit("verify-code:caller", attempts=300, window=timedelta(minutes=15))
 # A remembered vendor's page asks once per visit (``applicant-login/resume``). Its secret is not to
@@ -89,25 +99,35 @@ ORGANIZER_CODE_PER_CALLER = SignInLimit(
     "organizer-code:caller", attempts=60, window=timedelta(minutes=15))
 # The organizer's requests that send a mail (``api/users.py``): a sign-in code (``/request-otp``),
 # a reset link, a verification link, and the sign-up's own link. Every request counts and none is
-# taken back: an organizer asks once, perhaps again, so five bound the mail one address is sent,
-# and a caller is allowed thirty for organizers who share a venue's address. Each request has its
-# own pair, so each refusal names its request and one request's use holds back no other.
-ORGANIZER_CODE_REQUEST_PER_ADDRESS = SignInLimit(
-    "organizer-code-request:address", attempts=5, window=timedelta(minutes=15))
+# taken back. A caller is allowed thirty for organizers who share a venue's address; the pair and
+# the address are counted as the vendor's code request is. Each request has its own three, so each
+# refusal names its request and one request's use holds back no other.
 ORGANIZER_CODE_REQUEST_PER_CALLER = SignInLimit(
     "organizer-code-request:caller", attempts=30, window=timedelta(minutes=15))
-RESET_LINK_PER_ADDRESS = SignInLimit("reset-link:address", attempts=5, window=timedelta(minutes=15))
+ORGANIZER_CODE_REQUEST_PER_CALLER_AND_ADDRESS = SignInLimit(
+    "organizer-code-request:caller-address", attempts=5, window=timedelta(minutes=15))
+ORGANIZER_CODE_REQUEST_PER_ADDRESS_HOUR = SignInLimit(
+    "organizer-code-request:address-hour", attempts=20, window=timedelta(hours=1))
 RESET_LINK_PER_CALLER = SignInLimit("reset-link:caller", attempts=30, window=timedelta(minutes=15))
-VERIFICATION_LINK_PER_ADDRESS = SignInLimit(
-    "verification-link:address", attempts=5, window=timedelta(minutes=15))
+RESET_LINK_PER_CALLER_AND_ADDRESS = SignInLimit(
+    "reset-link:caller-address", attempts=5, window=timedelta(minutes=15))
+RESET_LINK_PER_ADDRESS_HOUR = SignInLimit(
+    "reset-link:address-hour", attempts=20, window=timedelta(hours=1))
 VERIFICATION_LINK_PER_CALLER = SignInLimit(
     "verification-link:caller", attempts=30, window=timedelta(minutes=15))
-SIGN_UP_PER_ADDRESS = SignInLimit("sign-up:address", attempts=5, window=timedelta(minutes=15))
+VERIFICATION_LINK_PER_CALLER_AND_ADDRESS = SignInLimit(
+    "verification-link:caller-address", attempts=5, window=timedelta(minutes=15))
+VERIFICATION_LINK_PER_ADDRESS_HOUR = SignInLimit(
+    "verification-link:address-hour", attempts=20, window=timedelta(hours=1))
 SIGN_UP_PER_CALLER = SignInLimit("sign-up:caller", attempts=30, window=timedelta(minutes=15))
+SIGN_UP_PER_CALLER_AND_ADDRESS = SignInLimit(
+    "sign-up:caller-address", attempts=5, window=timedelta(minutes=15))
+SIGN_UP_PER_ADDRESS_HOUR = SignInLimit("sign-up:address-hour", attempts=20, window=timedelta(hours=1))
 
 LIMITS = (
-    REQUEST_CODE_PER_ADDRESS,
     REQUEST_CODE_PER_CALLER,
+    REQUEST_CODE_PER_CALLER_AND_ADDRESS,
+    REQUEST_CODE_PER_ADDRESS_HOUR,
     VERIFY_CODE_PER_ADDRESS,
     VERIFY_CODE_PER_CALLER,
     RESUME_PER_CALLER,
@@ -116,14 +136,18 @@ LIMITS = (
     PASSWORD_PER_CALLER,
     ORGANIZER_CODE_PER_ADDRESS,
     ORGANIZER_CODE_PER_CALLER,
-    ORGANIZER_CODE_REQUEST_PER_ADDRESS,
     ORGANIZER_CODE_REQUEST_PER_CALLER,
-    RESET_LINK_PER_ADDRESS,
+    ORGANIZER_CODE_REQUEST_PER_CALLER_AND_ADDRESS,
+    ORGANIZER_CODE_REQUEST_PER_ADDRESS_HOUR,
     RESET_LINK_PER_CALLER,
-    VERIFICATION_LINK_PER_ADDRESS,
+    RESET_LINK_PER_CALLER_AND_ADDRESS,
+    RESET_LINK_PER_ADDRESS_HOUR,
     VERIFICATION_LINK_PER_CALLER,
-    SIGN_UP_PER_ADDRESS,
+    VERIFICATION_LINK_PER_CALLER_AND_ADDRESS,
+    VERIFICATION_LINK_PER_ADDRESS_HOUR,
     SIGN_UP_PER_CALLER,
+    SIGN_UP_PER_CALLER_AND_ADDRESS,
+    SIGN_UP_PER_ADDRESS_HOUR,
 )
 
 
@@ -151,6 +175,12 @@ def caller() -> str:
         return str(address.ipv4_mapped)
     network = ipaddress.IPv6Network((int(address), IPV6_CALLER_PREFIX), strict=False)
     return str(network)
+
+
+def caller_and_address(address: str) -> str:
+    """The subject of a per-caller-and-address limit: this caller and the normalized ``address``,
+    joined by a NUL, which neither holds. The counter's key is a hash of it, as of any subject."""
+    return f"{caller()}\0{address}"
 
 
 def ensure_expiry_index() -> None:
@@ -226,3 +256,60 @@ def too_many(
     response = jsonify({key: sentence.format(wait=wait_in_words(retry_after))})
     response.headers["Retry-After"] = str(retry_after)
     return response, 429
+
+
+@dataclass(frozen=True)
+class TooMany:
+    """A limit refused the request: its window ends in ``seconds``, the ``Retry-After``."""
+
+    seconds: int
+
+
+#: What a bounds shape answers when it refuses; the route says it in its own words (``answer``).
+Refusal = TooMany
+
+
+def answer(
+    refusal: Optional[Refusal], sentence: str, key: str = "message",
+) -> Optional[Tuple[Any, int]]:
+    """The route's answer for a refusal, or None when there was none: the 429 of ``too_many`` with
+    the route's ``sentence`` under its ``key``, so the vendor's and the organizer's words stay their
+    own."""
+    if refusal is None:
+        return None
+    return too_many(refusal.seconds, sentence, key=key)
+
+
+def _refused(limit: SignInLimit, subject: str, now: datetime) -> Optional[TooMany]:
+    retry_after = count_attempt(limit, subject, now)
+    return None if retry_after is None else TooMany(retry_after)
+
+
+@dataclass(frozen=True)
+class MailBounds:
+    """How a request that mails a code or a link is bounded: per caller, per caller and address,
+    and per address alone.
+
+    A route keeps one order: ``caller_refusal`` before the body is read, then whatever else it asks
+    first (the human check, a missing address), then ``before_the_mail`` before any account,
+    application or market is looked up, so a refusal is the same for every address. The pair is
+    counted first, and a request it refused is not counted on the address, so one caller adds at
+    most the pair's limit to the address's count in a window. Nothing is taken back: each counts a
+    request, whether or not a mail went.
+    """
+
+    per_caller: SignInLimit
+    per_caller_and_address: SignInLimit
+    per_address: SignInLimit
+
+    def caller_refusal(self, now: datetime) -> Optional[TooMany]:
+        """The refusal when this caller is past its limit, else None; counts the request either way."""
+        return _refused(self.per_caller, caller(), now)
+
+    def before_the_mail(self, address: str, now: datetime) -> Optional[TooMany]:
+        """The refusal when this caller and ``address`` together, or ``address`` alone, is past its
+        limit, else None; counts the pair, then the address unless the pair refused."""
+        refused = _refused(self.per_caller_and_address, caller_and_address(address), now)
+        if refused is not None:
+            return refused
+        return _refused(self.per_address, address, now)

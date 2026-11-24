@@ -92,7 +92,41 @@ def test_every_limit_fits_a_real_applicant():
     """A vendor who mistypes or asks again is never near a limit; a flood is."""
     for limit in sign_in_limits.LIMITS:
         assert limit.attempts >= 5
-        assert limit.window <= timedelta(minutes=15)
+        assert limit.window <= timedelta(hours=1)
+
+
+QUARTER = timedelta(minutes=15)
+HOUR = timedelta(hours=1)
+
+
+def test_the_table_holds_every_limit_in_use_once():
+    """Every limit, its count and its window; a name that left the table is never read again, and
+    its counters expire with their window."""
+    assert {limit.name: (limit.attempts, limit.window) for limit in sign_in_limits.LIMITS} == {
+        "request-code:caller": (300, QUARTER),
+        "request-code:caller-address": (5, QUARTER),
+        "request-code:address-hour": (20, HOUR),
+        "verify-code:caller": (300, QUARTER),
+        "verify-code:address": (10, QUARTER),
+        "resume:caller": (300, QUARTER),
+        "check-in:address": (10, QUARTER),
+        "password:caller": (50, QUARTER),
+        "password:address": (10, QUARTER),
+        "organizer-code:caller": (60, QUARTER),
+        "organizer-code:address": (10, QUARTER),
+        "organizer-code-request:caller": (30, QUARTER),
+        "organizer-code-request:caller-address": (5, QUARTER),
+        "organizer-code-request:address-hour": (20, HOUR),
+        "reset-link:caller": (30, QUARTER),
+        "reset-link:caller-address": (5, QUARTER),
+        "reset-link:address-hour": (20, HOUR),
+        "verification-link:caller": (30, QUARTER),
+        "verification-link:caller-address": (5, QUARTER),
+        "verification-link:address-hour": (20, HOUR),
+        "sign-up:caller": (30, QUARTER),
+        "sign-up:caller-address": (5, QUARTER),
+        "sign-up:address-hour": (20, HOUR),
+    }
 
 
 # Taking a try back: a try that signs in returns its count, so only wrong tries pile up.
@@ -188,17 +222,21 @@ def test_the_organizers_code_sign_in_is_limited_per_address_and_per_caller():
 
 
 @pytest.mark.parametrize("prefix, name", [
+    ("REQUEST_CODE", "request-code"),
     ("ORGANIZER_CODE_REQUEST", "organizer-code-request"),
     ("RESET_LINK", "reset-link"),
     ("VERIFICATION_LINK", "verification-link"),
     ("SIGN_UP", "sign-up"),
 ])
-def test_each_organizer_mail_request_is_limited_per_address_and_per_caller(prefix, name):
-    per_address = getattr(sign_in_limits, f"{prefix}_PER_ADDRESS")
-    per_caller = getattr(sign_in_limits, f"{prefix}_PER_CALLER")
-    assert per_address == SignInLimit(f"{name}:address", attempts=5, window=timedelta(minutes=15))
-    assert per_caller == SignInLimit(f"{name}:caller", attempts=30, window=timedelta(minutes=15))
-    assert {per_address, per_caller} <= set(sign_in_limits.LIMITS)
+def test_each_mail_request_is_limited_per_caller_and_address_and_per_address_by_the_hour(
+    prefix, name,
+):
+    per_caller_and_address = getattr(sign_in_limits, f"{prefix}_PER_CALLER_AND_ADDRESS")
+    per_address = getattr(sign_in_limits, f"{prefix}_PER_ADDRESS_HOUR")
+    assert per_caller_and_address == SignInLimit(f"{name}:caller-address", attempts=5,
+                                                 window=QUARTER)
+    assert per_address == SignInLimit(f"{name}:address-hour", attempts=20, window=HOUR)
+    assert not hasattr(sign_in_limits, f"{prefix}_PER_ADDRESS")
 
 
 def test_every_limit_has_a_name_of_its_own():
@@ -256,3 +294,101 @@ def test_a_mapped_ipv4_caller_shares_the_ipv4_callers_count(sign_in_attempts):
     for _ in range(3):
         assert count_attempt(THREE_A_MINUTE, _caller_from("192.0.2.1"), NOW) is None
     assert count_attempt(THREE_A_MINUTE, _caller_from("::ffff:192.0.2.1"), NOW) == 30
+
+
+# A request that mails: ``MailBounds``.
+
+PER_CALLER = SignInLimit("test-mail:caller", attempts=4, window=timedelta(minutes=1))
+PER_PAIR = SignInLimit("test-mail:caller-address", attempts=2, window=timedelta(minutes=1))
+PER_ADDRESS = SignInLimit("test-mail:address-hour", attempts=3, window=timedelta(hours=1))
+MAIL = sign_in_limits.MailBounds(PER_CALLER, PER_PAIR, PER_ADDRESS)
+# 30 seconds into a minute and into an hour, so a minute's window ends in 30 seconds and the hour's
+# in 3,570.
+MAIL_NOW = datetime(2026, 10, 22, 12, 0, 30, tzinfo=timezone.utc)
+
+
+def _as(remote_addr, bounds_call):
+    app = Flask(__name__)
+    with app.test_request_context("/", environ_base={"REMOTE_ADDR": remote_addr}):
+        return bounds_call()
+
+
+def _mail(remote_addr, address="a@example.com", now=MAIL_NOW):
+    return _as(remote_addr, lambda: MAIL.before_the_mail(address, now))
+
+
+def _count(sign_in_attempts, limit, subject, now=MAIL_NOW):
+    key, _ = sign_in_limits._window(limit, subject, now)
+    return sign_in_attempts.docs.get(key, {}).get("count", 0)
+
+
+def test_a_mail_request_counts_its_caller(sign_in_attempts):
+    answers = [_as("203.0.113.7", lambda: MAIL.caller_refusal(MAIL_NOW)) for _ in range(5)]
+
+    assert answers == [None] * 4 + [sign_in_limits.TooMany(30)]
+
+
+def test_a_mail_request_counts_its_caller_and_address_then_its_address(sign_in_attempts):
+    assert [_mail("203.0.113.7") for _ in range(2)] == [None, None]
+
+    assert _count(sign_in_attempts, PER_PAIR, "203.0.113.7\0a@example.com") == 2
+    assert _count(sign_in_attempts, PER_ADDRESS, "a@example.com") == 2
+
+
+def test_past_its_pair_a_request_waits_for_the_pairs_window(sign_in_attempts):
+    _mail("203.0.113.7")
+    _mail("203.0.113.7")
+
+    assert _mail("203.0.113.7") == sign_in_limits.TooMany(30)
+
+
+def test_a_request_the_pair_refused_is_not_counted_on_the_address(sign_in_attempts):
+    for _ in range(10):
+        _mail("203.0.113.7")
+
+    assert _count(sign_in_attempts, PER_ADDRESS, "a@example.com") == 2
+    assert _mail("198.51.100.1") is None
+
+
+def test_past_its_address_a_request_waits_for_the_addresss_window_whoever_asks(sign_in_attempts):
+    for caller_address in ("198.51.100.1", "198.51.100.2", "198.51.100.3"):
+        assert _mail(caller_address) is None
+
+    assert _mail("198.51.100.4") == sign_in_limits.TooMany(3570)
+
+
+def test_each_address_is_counted_apart(sign_in_attempts):
+    for caller_address in ("198.51.100.1", "198.51.100.2", "198.51.100.3", "198.51.100.4"):
+        _mail(caller_address)
+
+    assert _mail("198.51.100.5", address="b@example.com") is None
+
+
+def test_the_pairs_counter_names_no_address_and_no_caller(sign_in_attempts):
+    _mail("203.0.113.7")
+
+    stored = repr(sign_in_attempts.docs)
+    assert "a@example.com" not in stored
+    assert "203.0.113.7" not in stored
+
+
+def test_the_pair_is_the_callers_network_and_the_address():
+    """Two addresses of one IPv6 network are one caller asking, as for any per-caller count."""
+    one = _as("2001:db8:1:2::1", lambda: sign_in_limits.caller_and_address("a@example.com"))
+    other = _as("2001:db8:1:2::9", lambda: sign_in_limits.caller_and_address("a@example.com"))
+
+    assert one == other == "2001:db8:1:2::/64\0a@example.com"
+
+
+def test_a_refusal_is_said_in_the_routes_words_under_its_key():
+    with Flask(__name__).app_context():
+        response, status = sign_in_limits.answer(
+            sign_in_limits.TooMany(3570), "Try again in {wait}.", key="msg")
+
+    assert status == 429
+    assert response.get_json() == {"msg": "Try again in 60 minutes."}
+    assert response.headers["Retry-After"] == "3570"
+
+
+def test_no_refusal_is_no_answer():
+    assert sign_in_limits.answer(None, "Try again in {wait}.") is None

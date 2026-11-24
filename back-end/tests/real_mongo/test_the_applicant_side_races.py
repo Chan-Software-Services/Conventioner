@@ -269,7 +269,7 @@ class TestTheRateLimitCountsEveryAttempt:
     def test_twenty_attempts_at_once_count_twenty(self, sign_in_attempts, race):
         """The counter is one ``$inc`` upsert; twenty at once on a new window make one document
         counting twenty, and exactly the limit's five are let through."""
-        limit = sign_in_limits.REQUEST_CODE_PER_ADDRESS
+        limit = sign_in_limits.REQUEST_CODE_PER_CALLER_AND_ADDRESS
         harness.warm(sign_in_attempts, 20)
         now = datetime.now(timezone.utc)  # one window for every thread
 

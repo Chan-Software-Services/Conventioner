@@ -1024,37 +1024,57 @@ class TestSignInIsBounded:
         assert int(body.headers["Retry-After"]) >= 1
         return body.get_json()
 
-    def test_asking_for_codes_past_the_limit_for_an_address_is_refused_and_sends_nothing(
+    def test_asking_for_codes_past_the_limit_for_a_caller_and_address_is_refused_and_sends_nothing(
         self, applicant_auth_module, test_db, monkeypatch
     ):
         sent = []
         monkeypatch.setattr(applicant_auth_module, "_send_code_email",
                             lambda *args: sent.append(args) or True)
-        allowed = sign_in_limits.REQUEST_CODE_PER_ADDRESS.attempts
-        for i in range(allowed):
-            # From different callers, so only the address is counted against.
-            assert self._request(applicant_auth_module, caller=f"198.51.100.{i}")[1] == 200
+        allowed = sign_in_limits.REQUEST_CODE_PER_CALLER_AND_ADDRESS.attempts
+        for _ in range(allowed):
+            assert self._request(applicant_auth_module)[1] == 200
         stored = test_db.challenges.find_one({"email": "applicant@example.com"})
 
-        body = self._refused(self._request(applicant_auth_module, caller="198.51.100.99"))
+        body = self._refused(self._request(applicant_auth_module))
 
         assert "Too many sign-in attempts" in body["message"]
         assert len(sent) == allowed
         assert test_db.challenges.find_one({"email": "applicant@example.com"}) == stored
+        # Another caller's request for the address is not held back by these.
+        assert self._request(applicant_auth_module, caller="198.51.100.99")[1] == 200
+
+    def test_asking_for_codes_past_the_hours_limit_for_an_address_is_refused_whoever_asks(
+        self, applicant_auth_module, test_db, monkeypatch
+    ):
+        monkeypatch.setattr(applicant_auth_module, "_limit_clock",
+                            lambda: datetime(2026, 11, 9, 12, 0, 0, tzinfo=timezone.utc))
+        sent = []
+        monkeypatch.setattr(applicant_auth_module, "_send_code_email",
+                            lambda *args: sent.append(args) or True)
+        allowed = sign_in_limits.REQUEST_CODE_PER_ADDRESS_HOUR.attempts
+        for i in range(allowed):
+            assert self._request(applicant_auth_module, caller=f"198.51.100.{i}")[1] == 200
+
+        result = self._request(applicant_auth_module, caller="198.51.100.99")
+        body = self._refused(result)
+
+        assert body["message"] == "Too many sign-in attempts. Please try again in 60 minutes."
+        assert result[0].headers["Retry-After"] == "3600"
+        assert len(sent) == allowed
 
     def test_the_address_is_counted_as_typed_or_not(self, applicant_auth_module):
-        allowed = sign_in_limits.REQUEST_CODE_PER_ADDRESS.attempts
-        for i in range(allowed):
-            self._request(applicant_auth_module, email="Applicant@Example.com ",
-                          caller=f"198.51.100.{i}")
-        self._refused(self._request(applicant_auth_module, caller="198.51.100.99"))
+        allowed = sign_in_limits.REQUEST_CODE_PER_CALLER_AND_ADDRESS.attempts
+        for _ in range(allowed):
+            self._request(applicant_auth_module, email="Applicant@Example.com ")
+        self._refused(self._request(applicant_auth_module))
 
     def test_a_venues_shared_address_may_ask_for_300_codes_in_15_minutes(self):
         """Vendors on one venue's wifi share a caller, so it is allowed far more than an address."""
         assert sign_in_limits.REQUEST_CODE_PER_CALLER == sign_in_limits.SignInLimit(
             "request-code:caller", attempts=300, window=timedelta(minutes=15),
         )
-        assert sign_in_limits.REQUEST_CODE_PER_ADDRESS.attempts == 5
+        assert sign_in_limits.REQUEST_CODE_PER_CALLER_AND_ADDRESS.attempts == 5
+        assert sign_in_limits.REQUEST_CODE_PER_ADDRESS_HOUR.attempts == 20
 
     def test_asking_for_codes_for_many_addresses_from_one_caller_is_refused(
         self, applicant_auth_module, monkeypatch

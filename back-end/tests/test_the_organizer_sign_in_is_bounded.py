@@ -3,8 +3,10 @@
 Every try is counted per address and per caller before the account is looked up, so a refusal is
 the same for an address with an account and without, and whether the password was right. A try
 that signs in takes its count back, so an organizer who signs in all day is never held back and
-only wrong tries pile up. A refusal answers 429 with a sentence that says the wait, under the key
-the route's other answers use, and ``Retry-After``.
+only wrong tries pile up. A request that mails a code or a link is counted per caller and address
+and per address by the hour instead (``test_a_strangers_requests_use_up_no_ones.py``). A refusal
+answers 429 with a sentence that says the wait, under the key the route's other answers use, and
+``Retry-After``.
 """
 import copy
 import os
@@ -600,9 +602,9 @@ ASKED_REFUSED = (429, {"msg": ASKED_TOO_OFTEN}, "900")
 class MailRequest:
     """One request that sends a mail, its limits, and an address it would send to if let through."""
 
-    def __init__(self, path, per_address, per_caller, sends_to, extra=None):
+    def __init__(self, path, per_caller_and_address, per_caller, sends_to, extra=None):
         self.path = path
-        self.per_address = per_address
+        self.per_caller_and_address = per_caller_and_address
         self.per_caller = per_caller
         self.sends_to = sends_to
         self.extra = extra or {}
@@ -616,14 +618,15 @@ class MailRequest:
 
 
 MAIL_REQUESTS = [
-    MailRequest("/request-otp", sign_in_limits.ORGANIZER_CODE_REQUEST_PER_ADDRESS,
+    MailRequest("/request-otp", sign_in_limits.ORGANIZER_CODE_REQUEST_PER_CALLER_AND_ADDRESS,
                 sign_in_limits.ORGANIZER_CODE_REQUEST_PER_CALLER, ACCOUNT_EMAIL),
-    MailRequest("/request-password-reset", sign_in_limits.RESET_LINK_PER_ADDRESS,
+    MailRequest("/request-password-reset", sign_in_limits.RESET_LINK_PER_CALLER_AND_ADDRESS,
                 sign_in_limits.RESET_LINK_PER_CALLER, ACCOUNT_EMAIL),
-    MailRequest("/resend-verification", sign_in_limits.VERIFICATION_LINK_PER_ADDRESS,
+    MailRequest("/resend-verification", sign_in_limits.VERIFICATION_LINK_PER_CALLER_AND_ADDRESS,
                 sign_in_limits.VERIFICATION_LINK_PER_CALLER, UNVERIFIED_EMAIL),
-    MailRequest("/register", sign_in_limits.SIGN_UP_PER_ADDRESS, sign_in_limits.SIGN_UP_PER_CALLER,
-                NO_ACCOUNT_EMAIL, {"password": PASSWORD, "captcha_token": "fixture-captcha"}),
+    MailRequest("/register", sign_in_limits.SIGN_UP_PER_CALLER_AND_ADDRESS,
+                sign_in_limits.SIGN_UP_PER_CALLER, NO_ACCOUNT_EMAIL,
+                {"password": PASSWORD, "captcha_token": "fixture-captcha"}),
 ]
 
 
@@ -670,21 +673,21 @@ def mail(mailing_users, outbox, human_check, clock, monkeypatch):
 
 @pytest.mark.parametrize("asked", MAIL_REQUESTS, ids=repr)
 class TestTheMailRequestsAreBounded:
-    def test_past_five_at_an_address_the_next_waits_alike_for_every_address(
+    def test_past_five_from_a_caller_at_an_address_the_next_waits_alike_for_every_address(
         self, client, mail, asked,
     ):
         addresses = ((ACCOUNT_EMAIL, "198.51.100.1"), (UNVERIFIED_EMAIL, "198.51.100.2"),
                      (NO_ACCOUNT_EMAIL, "198.51.100.3"))
         for email, caller in addresses:
             answers = [_answer(asked.ask(client, email, caller))
-                       for _ in range(asked.per_address.attempts)]
+                       for _ in range(asked.per_caller_and_address.attempts)]
             assert ASKED_REFUSED not in answers
 
         refusals = [_answer(asked.ask(client, email, caller)) for email, caller in addresses]
-        # Another caller asking for the same address is held back too.
-        refusals.append(_answer(asked.ask(client, ACCOUNT_EMAIL, "198.51.100.4")))
 
-        assert refusals == [ASKED_REFUSED] * 4
+        assert refusals == [ASKED_REFUSED] * 3
+        # Another caller asking for the same address is not held back by these.
+        assert _answer(asked.ask(client, ACCOUNT_EMAIL, "198.51.100.4")) != ASKED_REFUSED
 
     def test_past_thirty_from_a_caller_every_address_waits_alike(self, client, mail, asked):
         # Three requests for each of ten addresses: every address within its own limit.
@@ -697,11 +700,11 @@ class TestTheMailRequestsAreBounded:
         # Another caller is not held back by this one's requests.
         assert _answer(asked.ask(client, ACCOUNT_EMAIL, "198.51.100.9")) != ASKED_REFUSED
 
-    def test_a_request_refused_at_its_address_reads_no_account_and_sends_nothing(
+    def test_a_request_refused_at_its_caller_and_address_reads_no_account_and_sends_nothing(
         self, client, mail, asked,
     ):
-        for n in range(asked.per_address.attempts):
-            asked.ask(client, asked.sends_to, f"198.51.100.{n}")
+        for _ in range(asked.per_caller_and_address.attempts):
+            asked.ask(client, asked.sends_to)
         mail.users.reads.clear()
         mail.outbox.clear()
         mail.human_checks.clear()
@@ -735,7 +738,7 @@ class TestTheMailRequestsAreBounded:
         assert _answer(asked.ask(client, asked.sends_to)) == ASKED_REFUSED
 
     def test_the_next_window_starts_from_nothing(self, client, mail, clock, asked):
-        for _ in range(asked.per_address.attempts + 1):
+        for _ in range(asked.per_caller_and_address.attempts + 1):
             asked.ask(client, NO_ACCOUNT_EMAIL, "198.51.100.1")
 
         clock["at"] = WINDOW_STARTS + timedelta(minutes=15)
@@ -745,9 +748,10 @@ class TestTheMailRequestsAreBounded:
     def test_one_requests_use_holds_back_no_other(self, client, mail, asked):
         for n in range(asked.per_caller.attempts + 1):
             asked.ask(client, f"fixture-guess-{n % 10}@example.com")
-        for _ in range(asked.per_address.attempts + 1):
+        for _ in range(asked.per_caller_and_address.attempts + 1):
             asked.ask(client, ACCOUNT_EMAIL, "198.51.100.1")
         assert _answer(asked.ask(client, ACCOUNT_EMAIL)) == ASKED_REFUSED
+        assert _answer(asked.ask(client, ACCOUNT_EMAIL, "198.51.100.1")) == ASKED_REFUSED
 
         others = [_answer(other.ask(client, ACCOUNT_EMAIL))
                   for other in MAIL_REQUESTS if other is not asked]
@@ -761,20 +765,20 @@ SIGN_UP = next(asked for asked in MAIL_REQUESTS if asked.path == "/register")
 
 
 class TestASignUpAsksTheHumanCheckBetweenItsCounts:
-    """A sign-up counts its caller, then asks the human check, then counts its address."""
+    """A sign-up counts its caller, then asks the human check, then counts its caller and address
+    and its address."""
 
     def test_a_sign_up_that_fails_the_check_is_not_counted_on_its_address(
         self, client, mail, human_check,
     ):
         human_check.refuse = True
-        for n in range(SIGN_UP.per_address.attempts + 1):
-            assert _answer(SIGN_UP.ask(client, NO_ACCOUNT_EMAIL, f"198.51.100.{n}")) == (
-                HUMAN_CHECK_NEEDED)
+        for _ in range(SIGN_UP.per_caller_and_address.attempts + 1):
+            assert _answer(SIGN_UP.ask(client, NO_ACCOUNT_EMAIL)) == HUMAN_CHECK_NEEDED
         assert mail.outbox == []
 
         human_check.refuse = False
-        assert SIGN_UP.ask(client, NO_ACCOUNT_EMAIL, "198.51.100.99").status_code == 201
-        assert human_check.actions == ["sign-up"] * (SIGN_UP.per_address.attempts + 2)
+        assert SIGN_UP.ask(client, NO_ACCOUNT_EMAIL).status_code == 201
+        assert human_check.actions == ["sign-up"] * (SIGN_UP.per_caller_and_address.attempts + 2)
 
     def test_a_sign_up_that_fails_the_check_still_counts_against_its_caller(
         self, client, mail, human_check,

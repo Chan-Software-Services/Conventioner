@@ -20,7 +20,8 @@ constraints:
 2. **Requesting a code is indistinguishable, always.** Same HTTP status, shape
    and body whether or not the address is known. Every request asks the human
    check first, after the caller's limit, and its refusal is one 403 for every
-   address and every market.
+   address and every market. Then it is counted per caller and address and per
+   address by the hour, for every address alike, before the market is looked up.
 
 3. **Verifying a code tells nothing about who applied.** Every way a code cannot
    pass (unknown address, no code issued, expired, already consumed, the fifth wrong
@@ -235,10 +236,32 @@ def _address_refusal(limit: sign_in_limits.SignInLimit, email: Optional[str]):
     return _too_many(sign_in_limits.count_attempt(limit, email))
 
 
+#: What the sign-in says past a limit, ``{wait}`` being the time left of the limit's window.
+_TOO_MANY = "Too many sign-in attempts. Please try again in {wait}."
+
+
 def _too_many(retry_after: Optional[int]):
     """The sign-in's refusal for a limit that says to wait, or None (``sign_in_limits.too_many``)."""
-    return sign_in_limits.too_many(
-        retry_after, "Too many sign-in attempts. Please try again in {wait}.")
+    return sign_in_limits.too_many(retry_after, _TOO_MANY)
+
+
+#: How a code request is bounded (``sign_in_limits.MailBounds``): per caller, per caller and
+#: address, and per address by the hour.
+_CODE_REQUEST = sign_in_limits.MailBounds(
+    sign_in_limits.REQUEST_CODE_PER_CALLER,
+    sign_in_limits.REQUEST_CODE_PER_CALLER_AND_ADDRESS,
+    sign_in_limits.REQUEST_CODE_PER_ADDRESS_HOUR,
+)
+
+
+def _too_many_requests(refusal: Optional[sign_in_limits.Refusal]):
+    """The code request's answer for a refusal, in the sign-in's words, or None."""
+    return sign_in_limits.answer(refusal, _TOO_MANY)
+
+
+def _limit_clock() -> datetime:
+    """The moment a code request is counted at."""
+    return datetime.now(timezone.utc)
 
 
 def _email_from(data) -> Optional[str]:
@@ -405,24 +428,26 @@ def request_login_code(market_slug: str) -> tuple:
     Always returns the same 200 response regardless of whether the email is
     known to this market, and whether its email was sent. A challenge is created,
     and its code sent, for every address, before the response returns - unless the
-    caller or the address is past its rate limit, which answers 429 and sends nothing.
+    caller is past its rate limit, or the caller and the address together, or the
+    address alone in the hour (``_CODE_REQUEST``), which answers 429 and sends nothing.
 
     Every request asks the human check, right after the caller's limit and before anything else is
     counted, stored or sent: one without a passing ``captcha_token`` for ``vendor-sign-in`` answers
     one 403 for every address and market, counted against the caller only.
     """
-    refused = _caller_refusal(sign_in_limits.REQUEST_CODE_PER_CALLER)
+    now = _limit_clock()
+    refused = _too_many_requests(_CODE_REQUEST.caller_refusal(now))
     if refused:
         return refused
     data = request.get_json(silent=True)
     if not captcha.captcha_passes(string_field(data, "captcha_token"), captcha.VENDOR_SIGN_IN):
         return captcha.human_check_needed("message")
     email = _email_from(data)
-    refused = _address_refusal(sign_in_limits.REQUEST_CODE_PER_ADDRESS, email)
-    if refused:
-        return refused
     if not email:
         return jsonify(_REQUEST_CODE_BODY), _REQUEST_CODE_STATUS
+    refused = _too_many_requests(_CODE_REQUEST.before_the_mail(email, now))
+    if refused:
+        return refused
 
     # Resolve the slug to a market. If the market does not exist, return the
     # same response - the caller cannot distinguish "no such market" from
