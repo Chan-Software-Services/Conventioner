@@ -230,7 +230,8 @@ describe('the working copy', () => {
       { value: 'Zines', count: 9, rare: false, namesSomeone: false, keep: true },
       { value: 'ECVAS', count: 1, rare: true, namesSomeone: false, keep: false },
     ];
-    const base = column(index, { check: ['Could allow several answers'], ...overrides });
+    // The server's row list holds its reading's option checks beside its own (`proposal`).
+    const base = column(index, { check: ['Could allow several answers', RARE], ...overrides });
     return {
       ...base,
       field: {
@@ -284,7 +285,7 @@ describe('the working copy', () => {
       'Pottery, Zines',
       'Zines',
     ]);
-    expect(rows[0].check).toEqual(['Could allow several answers']);
+    expect(rows[0].check).toEqual(['Could allow several answers', RARE]);
   });
 
   /*
@@ -337,6 +338,7 @@ describe('the working copy', () => {
   it("keeps a choice's proposed checks until the organizer touches the row, as before", () => {
     const p = proposal([choiceColumn(0)]);
     const draft = draftFrom(p);
+    expect(draftRows(p, draft)[0].check).toEqual(['Could allow several answers', RARE]);
     toggleOption(draft, 0, 'ECVAS');
     expect(draftRows(p, draft)[0].check).toEqual([]);
   });
