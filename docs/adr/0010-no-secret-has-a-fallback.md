@@ -4,7 +4,7 @@ kind: adr
 describes:
   - back-end/utils/secret_key.py
   - back-end/utils/configured_secret.py
-verified: 2026-10-22
+verified: 2026-11-24
 status: accepted
 ---
 
@@ -28,7 +28,7 @@ A committed fallback is a published key.
 
 [`back-end/utils/configured_secret.py`](../../back-end/utils/configured_secret.py) is the single answer to "does this variable hold a secret?", and all three secrets ask it: `signing_secret()` ([`back-end/utils/secret_key.py`](../../back-end/utils/secret_key.py)), `verifiable_secret()` (`utils/captcha.py`) and `sendable_key()` (`utils/email.py`).
 `configured_secret()` strips the value, and a blank value or a published one is not a secret.
-`is_published()` refuses every value this repository has printed where a secret goes (`PUBLISHED_VALUES`, case does not launder one) and anything shaped like one: a run of four x's, a `your-` prefix, a value in angle brackets.
+`is_published()` refuses every value this repository has printed where a secret goes (`PUBLISHED_VALUES`, case does not launder one) and anything shaped like one: a run of four x's, a `your-` prefix, a value in angle brackets, or Cloudflare's published Turnstile test keys (a digit, an `x`, a run of zeros, two letters).
 
 A published value is refused by name, on a laptop as on a deployment.
 `ALLOW_INSECURE_LOCAL_DEV` does not excuse one, for any of the three: the hatch exists so a process with **no** key can boot, and a `.env` holding a published literal is exactly the file that gets copied onto a deployment.

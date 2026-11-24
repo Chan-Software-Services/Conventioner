@@ -295,7 +295,7 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
    - Email and password authentication
    - Requires email verification
    - Session-based authentication
-   - Rate limited: ten tries per address and fifty per caller in 15 minutes, a try that signs in taken back (429 with the wait)
+   - Rate limited: ten tries per caller and address and fifty per caller in 15 minutes (429 with the wait), and past fifty wrong tries at an address in 15 minutes from all callers a try asks the human check (403); a try that signs in taken back from each count
    - A password longer than 72 bytes, which bcrypt does not read, does not match
 
 2. **Passwordless Login (OTP)**
@@ -303,7 +303,7 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
    - 6-digit code sent via Resend
    - Code expires in 5 minutes
    - Its tries are counted in the update that reads it; the fifth wrong code discards it and keeps its wait
-   - Rate limited: ten tries per address and sixty per caller in 15 minutes, a try that signs in taken back (429 with the wait); another code is refused (429 with the wait) until an hour after the last one expired, unless it was used
+   - Rate limited: ten tries per caller and address and sixty per caller in 15 minutes (429 with the wait), and past fifty wrong tries at an address in 15 minutes from all callers a try asks the human check (403); a try that signs in taken back from each count; another code is refused (429 with the wait) until an hour after the last one expired, unless it was used
    - Asking for a code is rate limited too: five requests per caller and address and thirty per caller in 15 minutes, and twenty per address in an hour (429 with the wait)
 
 ### Password Reset

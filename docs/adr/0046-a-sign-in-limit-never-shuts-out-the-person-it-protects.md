@@ -19,11 +19,11 @@ The nodes it constrains: [a vendor signs in before applying](../business/rules/a
 
 ## Context
 
-Every sign-in limit per address was counted before the code was checked, from every caller alike.
-The vendor's code sign-in allowed 10 tries per address in 15 minutes and gave a right one back to no one, so 10 wrong tries from anywhere refused the vendor's right code for the rest of the window.
-The organizer's password and code sign-ins allowed 10 per address too, and gave a right try back only after it had been let through, so 10 wrong tries from anywhere refused the organizer's right password or code the same way.
-The requests that mail a code or a link allowed 5 per address the same way, so anyone else's requests used up the person's own.
+Every sign-in limit per address was one count for all callers together, checked before the code or the password was.
+The vendor's code sign-in allowed 10 tries per address in 15 minutes and took no right try back; the organizer's password and code sign-ins allowed 10 per address and took a right try back.
+The requests that mail a code or a link allowed 5 per address, counted the same way.
 And a caller was an address, so a machine handed an IPv6 network counted as many callers.
+The limits are hardened so that each bounds guesses and mail while a person's own tries are counted apart from every other caller's.
 
 ## Decision
 
@@ -53,6 +53,6 @@ Each limit, its count and its window, are in [users, and the one spelling of an 
 
 ## Rejected
 
-- **Counting per address only**, as before: anyone's tries refuse the person.
+- **Counting per address only**, as before: it counts a person's own tries together with every other caller's.
 - **Counting per caller only**: one address could be guessed at from as many callers as a script can find.
 - **A slower answer past a count** (a growing delay rather than a refusal): it holds the person back as much as a script, and a serverless process waiting costs as much as one working.
