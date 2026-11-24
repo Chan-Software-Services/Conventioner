@@ -91,7 +91,8 @@ class TooManyInvitations(Exception):
 
 class InvitationEnded(NotFoundError):
     """An invitation the signed-in person cannot answer (``INVITATION_ENDED``): a 404, coded
-    ``invitation_ended``, which the Invitations page tells apart from the other refusals."""
+    ``invitation_ended``; the Invitations page reads any 404 or 400 on an answer as an invitation
+    that has ended."""
 
     def __init__(self):
         super().__init__(INVITATION_ENDED)
