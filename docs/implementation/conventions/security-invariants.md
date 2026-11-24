@@ -302,10 +302,12 @@ VITE_ALLOW_INSECURE_LOCAL_DEV=true npm run build-only && VITE_BACKEND_URL="https
 `VITE_ALLOW_INSECURE_LOCAL_DEV` lets the build go without a site key ([the front end's half](#the-front-ends-half)); sign in at the address the preview prints.
 [`securityHeaders.test.ts`](../../../front-end/src/__tests__/securityHeaders.test.ts) pins the headers and the policy's shape, and that `vite preview` serves them on the root and a deep link; the Deploy workflow checks that the staged front end sends every one before it is promoted, and that `conventioner.io` does once it serves the new commit.
 
-**Every API answer carries `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`**, added by one `after_request`, [`install_security_headers()`](../../../back-end/utils/security_headers.py), so a route added later, an error answer and a CORS preflight carry them without doing anything.
+**Every API answer carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Strict-Transport-Security: max-age=63072000; includeSubDomains`**, added by one `after_request`, [`install_security_headers()`](../../../back-end/utils/security_headers.py), so a route added later, an error answer and a CORS preflight carry them without doing anything.
+The transport-security header is the front end's value, sent by the API itself so that its HTTPS-only stance does not rest on the `max-age=63072000` Vercel adds on its own.
+A browser ignores it on plain HTTP, on an IP address and over a certificate it does not trust, so the local stack, at `127.0.0.1` with a self-signed certificate, is untouched by it.
 The API answers JSON, a CSV export and floorplan images, never a page, so it sends no policy of its own.
 It is installed after the [error answers](an-exception-never-reaches-a-client.md), outside `configure_public_endpoint_defenses()`, because it depends on no configuration; it only adds headers, so it leaves the order of the defenses above, flask-cors's `after_request` among them, as it was.
-[`test_security_headers.py`](../../../back-end/tests/test_security_headers.py) reads both on a JSON answer, a 401, a 404 and a preflight that CORS still answers; the Deploy workflow checks `/healthz` for both on the staged back end before it is promoted, and on `api.conventioner.io` once it serves the new commit.
+[`test_security_headers.py`](../../../back-end/tests/test_security_headers.py) reads all three on a JSON answer, a 401, a 404 and a preflight that CORS still answers; the Deploy workflow checks `/healthz` for all three on the staged back end before it is promoted, and on `api.conventioner.io` once it serves the new commit.
 
 ## A mail carries a stranger's words only as words
 
