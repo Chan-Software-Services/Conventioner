@@ -5,15 +5,15 @@
 #
 # Usage:
 #     ./scripts/nm-lint.sh --prepare   # npm ci in front-end/, from the machine's npm cache
-#     ./scripts/nm-lint.sh             # lint the branch's changed front-end and docs files
+#     ./scripts/nm-lint.sh             # lint the branch's changed front-end, docs and root Markdown
 #
 # The gate's run worktree holds tracked files only, so .no-mistakes.yaml's `prepare` runs this with
 # --prepare once a run, before its first configured command, and its `lint` runs it without.
 #
 # Without a switch it takes every file changed since the merge base with origin/dev that is still
 # there (committed, staged, edited or new and not ignored), and runs from front-end/:
-#   - Prettier's check, as format:check, on those under front-end/ and docs/ (a file Prettier has no
-#     parser for, or .prettierignore names, is skipped);
+#   - Prettier's check, as format:check, on those under front-end/ and docs/ and the Markdown files
+#     at the root (a file Prettier has no parser for, or .prettierignore names, is skipped);
 #   - ESLint, as lint:check, on those under front-end/ it can read (a file its config ignores is
 #     skipped);
 #   - Stylelint, as lint:css, on the .css and .vue files under front-end/src/.
@@ -100,11 +100,13 @@ for path in ${CHANGED[@]+"${CHANGED[@]}"}; do
         src/*.css | src/*.vue) STYLELINT_FILES+=("$local_path") ;;
       esac
       ;;
+    */*) ;;
+    *.md) PRETTIER_FILES+=("../$path") ;;
   esac
 done
 
 if [[ ${#PRETTIER_FILES[@]} -eq 0 ]]; then
-  echo "nm-lint: no changed front-end or docs file to lint"
+  echo "nm-lint: no changed front-end, docs or root Markdown file to lint"
   exit 0
 fi
 

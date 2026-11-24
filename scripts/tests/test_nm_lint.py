@@ -112,13 +112,13 @@ def change(root, files, commit=True):
         git(root, "commit", "-q", "--no-verify", "-m", "feat: change")
 
 
-def test_a_branch_changing_no_front_end_or_docs_file_lints_nothing(repo, run):
-    change(repo, {"back-end/app.py": "print(2)\n"})
+def test_a_branch_changing_no_front_end_docs_or_root_markdown_file_lints_nothing(repo, run):
+    change(repo, {"back-end/app.py": "print(2)\n", "back-end/README.md": "# Back end\n"})
 
     result, log = run(repo)
 
     assert result.returncode == 0, result.stderr
-    assert "nm-lint: no changed front-end or docs file to lint" in result.stdout
+    assert "nm-lint: no changed front-end, docs or root Markdown file to lint" in result.stdout
     assert log == []
 
 
@@ -255,6 +255,18 @@ def test_a_branch_changing_docs_alone_runs_prettier_alone(repo, run):
     assert result.returncode == 0, result.stderr
     assert log == [
         "prettier --config .prettierrc.json --check --ignore-unknown ../docs/new.md ../docs/old.md "
+        f"(in {repo / 'front-end'})"
+    ]
+
+
+def test_a_branch_changing_root_markdown_runs_prettier_on_it_as_format_check_does(repo, run):
+    change(repo, {"README.md": "# Readme\n", "back-end/README.md": "# Back end\n"})
+
+    result, log = run(repo)
+
+    assert result.returncode == 0, result.stderr
+    assert log == [
+        "prettier --config .prettierrc.json --check --ignore-unknown ../README.md "
         f"(in {repo / 'front-end'})"
     ]
 

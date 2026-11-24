@@ -49,7 +49,7 @@ sources:
 
 # CI and the gate
 
-GitHub Actions runs the suites before code reaches `dev`, on every push, pull request and merge queue trial commit; the no-mistakes gate, on a branch pushed through it, checks it for real data before it pushes, [lints the front-end and docs files it changes](#the-gates-lint-step) and [leaves the suites to CI](#the-no-mistakes-gate).
+GitHub Actions runs the suites before code reaches `dev`, on every push, pull request and merge queue trial commit; the no-mistakes gate, on a branch pushed through it, checks it for real data before it pushes, [lints the front-end, docs and root Markdown files it changes](#the-gates-lint-step) and [leaves the suites to CI](#the-no-mistakes-gate).
 [Dependabot's pull requests](#dependabot) meet only the first.
 What each suite covers is [TESTING.md](../../TESTING.md); how a commit reaches production is [RELEASING.md](../../RELEASING.md).
 
@@ -410,9 +410,9 @@ So the gate runs `prepare` once a run, before the first of its commands it reach
 Both modes run on the `.nvmrc` Node: the one on `PATH`, else nvm's (`$NVM_DIR/versions/node/v<pinned>/bin`, printing `nm-lint: Node on PATH is <found>; using nvm's <pinned>`), else they fail with `nm-lint: ERROR: Node is <found>, not <pinned> (.nvmrc), and nvm has no <pinned>; run nvm install`.
 A failed `prepare` fails the step that ran it, the test step as a rule, before its real-data checks.
 
-Without a switch the script takes every file changed since the merge base with `origin/dev` that is still there (committed, staged, edited, or new and not ignored), and from `front-end/` runs Prettier's check on those under `front-end/` and `docs/` (skipping a file it has no parser for or `.prettierignore` names), ESLint with `--max-warnings 0` on those under `front-end/` ending `.js`, `.mjs`, `.cjs`, `.ts`, `.mts`, `.cts`, `.tsx` or `.vue` (skipping a file its config ignores), and Stylelint with `--max-warnings 0` on the `.css` and `.vue` files under `front-end/src/`, each the binary in `front-end/node_modules/.bin`, never an `npx` download.
+Without a switch the script takes every file changed since the merge base with `origin/dev` that is still there (committed, staged, edited, or new and not ignored), and from `front-end/` runs Prettier's check on those under `front-end/` and `docs/` and the Markdown files at the root, as `format:check` reads them (skipping a file it has no parser for or `.prettierignore` names), ESLint with `--max-warnings 0` on those under `front-end/` ending `.js`, `.mjs`, `.cjs`, `.ts`, `.mts`, `.cts`, `.tsx` or `.vue` (skipping a file its config ignores), and Stylelint with `--max-warnings 0` on the `.css` and `.vue` files under `front-end/src/`, each the binary in `front-end/node_modules/.bin`, never an `npx` download.
 A tool whose config the branch changes (`.prettierrc.json` or `.prettierignore`, `eslint.config.ts`, `stylelint.config.js`), or every tool when it changes `front-end/package.json` or its lockfile, runs its whole npm script instead (`format:check`, `lint:check`, `lint:css`), as [`frontend-lint-and-types`](#ci) does, since such a change may reach any file.
-Each tool with files to check runs even after another fails, the run ends `nm-lint: OK` or `nm-lint: FAILED: <the tools that failed>`, and a branch that changes no front-end or docs file lints nothing (`nm-lint: no changed front-end or docs file to lint`).
+Each tool with files to check runs even after another fails, the run ends `nm-lint: OK` or `nm-lint: FAILED: <the tools that failed>`, and a branch that changes no front-end, docs or root Markdown file lints nothing (`nm-lint: no changed front-end, docs or root Markdown file to lint`).
 A failure parks the lint step as auto-fixable, and a fix round has the gate's agent fix the files and run the command again.
 The gate's lint step runs no type-check; CI runs it and every one of these checks again on the whole front end, as `nm-test.sh` does without `--real-data-only`.
 

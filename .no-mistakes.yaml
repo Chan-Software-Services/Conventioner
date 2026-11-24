@@ -6,5 +6,5 @@ commands:
   # The real-data checks alone, which must pass before the gate pushes to this public repository;
   # every suite runs in CI's required jobs (docs/implementation/testing/ci-and-the-gate.md).
   test: ./scripts/nm-test.sh --real-data-only
-  # Prettier, ESLint and Stylelint on the branch's changed front-end and docs files.
+  # Prettier, ESLint and Stylelint on the branch's changed front-end, docs and root Markdown files.
   lint: ./scripts/nm-lint.sh
