@@ -25,6 +25,18 @@ export const VERIFY_CODE_PER_ADDRESS_CEILING: SignInLimit = {
   attempts: 50,
 };
 
+/** The organizer's password sign-in's count per address alone, past which it asks the check. */
+export const PASSWORD_PER_ADDRESS_CEILING: SignInLimit = {
+  name: 'password:address-ceiling',
+  attempts: 50,
+};
+
+/** The organizer's code sign-in's count per address alone, past which it asks the check. */
+export const ORGANIZER_CODE_PER_ADDRESS_CEILING: SignInLimit = {
+  name: 'organizer-code:address-ceiling',
+  attempts: 50,
+};
+
 function counter(limit: SignInLimit, subject: string): { key: string; windowEnds: Date } {
   const window = Math.floor(Date.now() / WINDOW_MS);
   const key = createHash('sha256').update(`${limit.name}\0${subject}\0${window}`).digest('hex');
