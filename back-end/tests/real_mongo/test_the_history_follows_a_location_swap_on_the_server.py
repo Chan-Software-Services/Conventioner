@@ -30,7 +30,9 @@ def settled_market():
                 {"id": "sec-b", "name": "Aisle B", "count": 2, "tier": GOLD,
                  "location": copy.deepcopy(SOUTH)},
             ],
-            "assignmentOptions": {}, "floorplans": [],
+            "assignmentOptions": {},
+            "floorplans": [{"id": f"fp-{place['id']}", "locationId": place["id"], "revision": 1,
+                            "tables": []} for place in (NORTH, SOUTH)],
         })
 
 
@@ -42,13 +44,14 @@ def lines(history):
 def test_the_older_lines_follow_the_swap_once_and_a_second_run_changes_nothing(real_db):
     real_db["markets"].insert_one(settled_market())
     history = real_db["history"]
-    for number, (kind, location) in enumerate((
-            ("floorplan", "North Wing"), ("floorplan_removed", "South Wing"),
-            ("floorplan", "West Wing"))):
+    for number, (kind, floorplan, location) in enumerate((
+            ("floorplan", "fp-loc-north", "North Wing"),
+            ("floorplan", "fp-loc-south", "South Wing"),
+            ("floorplan_removed", "fp-loc-west", "West Wing"))):
         history.insert_one({
             "id": f"h-{number}", "market_id": MARKET, "actor": "owner@example.com",
             "at": "2026-07-01T00:00:00+00:00", "action": "change-setup", "kind": kind,
-            "vendors": [], "subject": {"floorplan_id": f"fp-{number}", "location": location},
+            "vendors": [], "subject": {"floorplan_id": floorplan, "location": location},
             "detail": {}})
     swap(MARKET, "North Wing", "South Wing")
     before = lines(history)
@@ -60,11 +63,11 @@ def test_the_older_lines_follow_the_swap_once_and_a_second_run_changes_nothing(r
     follow(MARKET, "loc-north", "loc-south")
 
     assert lines(history) == [
-        ("h-0", {"floorplan_id": "fp-0", "location": "South Wing",
+        ("h-0", {"floorplan_id": "fp-loc-north", "location": "South Wing",
                  "location_as_recorded": "North Wing"}),
-        ("h-1", {"floorplan_id": "fp-1", "location": "North Wing",
+        ("h-1", {"floorplan_id": "fp-loc-south", "location": "North Wing",
                  "location_as_recorded": "South Wing"}),
-        ("h-2", {"floorplan_id": "fp-2", "location": "West Wing"}),
+        ("h-2", {"floorplan_id": "fp-loc-west", "location": "West Wing"}),
     ]
     assert list(history.find({"kind": "plan"}, {"_id": 0})) == plans
     renamed = lines(history)
@@ -79,7 +82,7 @@ def test_a_refusal_writes_nothing(real_db):
     real_db["history"].insert_one({
         "id": "h-0", "market_id": MARKET, "actor": "owner@example.com",
         "at": "2026-07-01T00:00:00+00:00", "action": "change-setup", "kind": "floorplan",
-        "vendors": [], "subject": {"floorplan_id": "fp-0", "location": "North Wing"},
+        "vendors": [], "subject": {"floorplan_id": "fp-loc-north", "location": "North Wing"},
         "detail": {}})
     before = lines(real_db["history"])
 

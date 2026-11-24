@@ -3,10 +3,10 @@
 ``swap_location_names.py`` trades two locations' names on the market's document, and the history
 keeps each name as it was when its entry was recorded: so a layout's save recorded before the swap
 names its location by the name that now means the other place. ``history_follows_location_swap.py``
-renames those lines. These tests read the history as Manage market reads it
-(``MarketsApi.get_history``) before and after, and hold the script to what it must leave alone: a
-change on Market Setup, a line of another location, a line recorded after the swap, and every
-other market's history.
+renames those lines, each to the name its layout's location has now. These tests read the history
+as Manage market reads it (``MarketsApi.get_history``) before and after, and hold the script to
+what it must leave alone: a change on Market Setup, a layout removed with its location, a line of
+another location, and every other market's history.
 """
 import copy
 
@@ -36,7 +36,8 @@ LATER = "2999-01-01T00:00:00+00:00"
 
 
 def plan(*locations):
-    """A plan past draft with a section in each location."""
+    """A plan past draft with a section and a layout in each location, the layout's id
+    ``fp-<location id>``."""
     places = [copy.deepcopy(place) for place in (locations or (NORTH, SOUTH, EAST))]
     return {
         "priority": [], "marketDates": [{"date": "2099-08-01"}], "tiers": [GOLD],
@@ -44,7 +45,9 @@ def plan(*locations):
         "sections": [{"id": f"sec-{place['id']}", "name": f"Aisle {number}", "count": 1,
                       "location": copy.deepcopy(place), "tier": GOLD}
                      for number, place in enumerate(places, start=1)],
-        "assignmentOptions": {}, "floorplans": [],
+        "assignmentOptions": {},
+        "floorplans": [{"id": f"fp-{place['id']}", "locationId": place["id"], "revision": 1,
+                        "tables": []} for place in places],
     }
 
 
@@ -79,13 +82,14 @@ def database(monkeypatch, market_records):
     return make
 
 
-def line(history, number, kind, location, at=EARLIER, market_id=MARKET):
+def line(history, number, kind, location, floorplan, at=EARLIER, market_id=MARKET):
     """A layout's line as the layout's save (``floorplan``) or a plan write that drops a location
-    with its layout (``floorplan_removed``) records it."""
+    with its layout (``floorplan_removed``) records it: the layout's id, and its location's name
+    as it was then."""
     history.insert_one({
         "id": f"h-{number:02d}", "market_id": market_id, "actor": OWNER, "at": at,
         "action": "change-setup", "kind": kind, "vendors": [],
-        "subject": {"floorplan_id": f"fp-{number}", "location": location},
+        "subject": {"floorplan_id": floorplan, "location": location},
         "detail": {"started": True} if kind == "floorplan" else {
             "before": {"tables": 4}, "after": {"tables": None}},
     })
@@ -127,50 +131,51 @@ def without_plan_lines(shown):
 def test_each_older_layout_line_names_the_place_it_was_about(database, market_records, capsys):
     db = database(settled_market())
     history = market_records.history
-    line(history, 1, "floorplan", "North Wing")
-    line(history, 2, "floorplan", "South Wing")
-    line(history, 3, "floorplan_removed", "North Wing")
-    line(history, 4, "floorplan", "East Wing")
-    # Another market's line, and a line naming a location gone before the swap.
-    line(history, 5, "floorplan", "North Wing", market_id="market-other")
-    line(history, 6, "floorplan_removed", "West Wing")
+    line(history, 1, "floorplan", "North Wing", "fp-loc-north")
+    line(history, 2, "floorplan", "South Wing", "fp-loc-south")
+    line(history, 3, "floorplan", "East Wing", "fp-loc-east")
+    # A layout removed with its location, another market's line, and the line of a layout no
+    # longer in the plan.
+    line(history, 4, "floorplan_removed", "West Wing", "fp-loc-west")
+    line(history, 5, "floorplan", "North Wing", "fp-loc-north", market_id="market-other")
+    line(history, 6, "floorplan", "West Wing", "fp-loc-west")
     swap(MARKET, "North Wing", "South Wing", db)
     # Saved after the swap, so named as the place is called now: the North Wing's layout, under
     # the South Wing's old name.
-    line(history, 7, "floorplan", "South Wing", at=LATER)
+    line(history, 7, "floorplan", "South Wing", "fp-loc-north", at=LATER)
     assert without_plan_lines(read(market_records)) == [
-        ("floorplan", "North Wing"), ("floorplan", "South Wing"),
-        ("floorplan_removed", "North Wing"), ("floorplan", "East Wing"),
-        ("floorplan_removed", "West Wing"), ("floorplan", "South Wing")]
+        ("floorplan", "North Wing"), ("floorplan", "South Wing"), ("floorplan", "East Wing"),
+        ("floorplan_removed", "West Wing"), ("floorplan", "West Wing"),
+        ("floorplan", "South Wing")]
     plans = [each for each in read(market_records) if each[0] == "plan"]
     capsys.readouterr()
 
     follow(MARKET, "South Wing", "North Wing", db)
 
     assert without_plan_lines(read(market_records)) == [
-        ("floorplan", "South Wing"), ("floorplan", "North Wing"),
-        ("floorplan_removed", "South Wing"), ("floorplan", "East Wing"),
-        ("floorplan_removed", "West Wing"), ("floorplan", "South Wing")]
+        ("floorplan", "South Wing"), ("floorplan", "North Wing"), ("floorplan", "East Wing"),
+        ("floorplan_removed", "West Wing"), ("floorplan", "West Wing"),
+        ("floorplan", "South Wing")]
     # The swap's own change on Market Setup is left as written.
     assert [each for each in read(market_records) if each[0] == "plan"] == plans
     other = next(entry for entry in history.documents if entry["market_id"] == "market-other")
-    assert other["subject"] == {"floorplan_id": "fp-5", "location": "North Wing"}
+    assert other["subject"] == {"floorplan_id": "fp-loc-north", "location": "North Wing"}
     printed = capsys.readouterr().out
-    assert "layout save(s): 2 to rename, 0 renamed before" in printed
-    assert "layout removal(s): 1 to rename, 0 renamed before" in printed
-    assert "renamed 3 line(s)." in printed
+    assert "their layouts' save(s): 2 to rename, 0 renamed before" in printed
+    assert "renamed 2 line(s)." in printed
 
 
 def test_a_renamed_line_keeps_the_name_it_was_recorded_under(database, market_records):
     db = database(settled_market())
-    line(market_records.history, 1, "floorplan", "North Wing")
+    line(market_records.history, 1, "floorplan", "North Wing", "fp-loc-north")
     swap(MARKET, "North Wing", "South Wing", db)
 
     follow(MARKET, "loc-north", "loc-south", db)
 
     [entry] = [each for each in market_records.history.documents if each["kind"] == "floorplan"]
     assert entry["subject"] == {
-        "floorplan_id": "fp-1", "location": "South Wing", "location_as_recorded": "North Wing"}
+        "floorplan_id": "fp-loc-north", "location": "South Wing",
+        "location_as_recorded": "North Wing"}
     assert entry["detail"] == {"started": True}
     assert (entry["actor"], entry["at"]) == (OWNER, EARLIER)
 
@@ -180,7 +185,7 @@ def test_a_change_on_market_setup_is_left_as_written(database, market_records):
     db = database(settled_market())
     renamed_wing = {**NORTH, "name": "Old North"}
     plan_change(market_records.history, 1, [renamed_wing, SOUTH, EAST], [NORTH, SOUTH, EAST])
-    line(market_records.history, 2, "floorplan", "North Wing")
+    line(market_records.history, 2, "floorplan", "North Wing", "fp-loc-north")
     swap(MARKET, "North Wing", "South Wing", db)
     plans = [entry for entry in copy.deepcopy(market_records.history.documents)
              if entry["kind"] == "plan"]
@@ -193,8 +198,8 @@ def test_a_change_on_market_setup_is_left_as_written(database, market_records):
 
 def test_a_second_run_changes_nothing(database, market_records, capsys):
     db = database(settled_market())
-    line(market_records.history, 1, "floorplan", "North Wing")
-    line(market_records.history, 2, "floorplan_removed", "South Wing")
+    line(market_records.history, 1, "floorplan", "North Wing", "fp-loc-north")
+    line(market_records.history, 2, "floorplan", "South Wing", "fp-loc-south")
     swap(MARKET, "North Wing", "South Wing", db)
     follow(MARKET, "North Wing", "South Wing", db)
     after_one = copy.deepcopy(market_records.history.documents)
@@ -204,20 +209,20 @@ def test_a_second_run_changes_nothing(database, market_records, capsys):
 
     assert market_records.history.documents == after_one
     printed = capsys.readouterr().out
-    assert "layout save(s): 0 to rename, 1 renamed before" in printed
-    assert "layout removal(s): 0 to rename, 1 renamed before" in printed
+    assert "their layouts' save(s): 0 to rename, 2 renamed before" in printed
     assert "renamed 0 line(s)." in printed
 
 
 def test_a_swap_back_puts_each_line_back_under_its_recorded_name(
         database, market_records, monkeypatch):
     db = database(settled_market())
-    line(market_records.history, 1, "floorplan", "North Wing")
+    line(market_records.history, 1, "floorplan", "North Wing", "fp-loc-north")
     monkeypatch.setattr(History, "_now", lambda: "2026-08-01T00:00:00+00:00")
     swap(MARKET, "North Wing", "South Wing", db)
     follow(MARKET, "North Wing", "South Wing", db)
     # Saved between the swap and the swap back, under the name the North Wing then had.
-    line(market_records.history, 2, "floorplan", "South Wing", at="2026-08-02T00:00:00+00:00")
+    line(market_records.history, 2, "floorplan", "South Wing", "fp-loc-north",
+         at="2026-08-02T00:00:00+00:00")
     monkeypatch.setattr(History, "_now", lambda: "2026-08-03T00:00:00+00:00")
     swap(MARKET, "North Wing", "South Wing", db)
 
@@ -227,12 +232,68 @@ def test_a_swap_back_puts_each_line_back_under_its_recorded_name(
         ("floorplan", "North Wing"), ("floorplan", "North Wing")]
 
 
+def test_a_swap_with_a_third_location_is_followed_by_the_layouts_location(
+        database, market_records, monkeypatch):
+    """The North Wing traded names with the South Wing, then with the East Wing: its layout's line
+    names it as it is called now after each follow-up, whichever pair it was run for."""
+    db = database(settled_market())
+    line(market_records.history, 1, "floorplan", "North Wing", "fp-loc-north")
+    monkeypatch.setattr(History, "_now", lambda: "2026-08-01T00:00:00+00:00")
+    swap(MARKET, "North Wing", "South Wing", db)
+    follow(MARKET, "North Wing", "South Wing", db)
+    assert without_plan_lines(read(market_records)) == [("floorplan", "South Wing")]
+    monkeypatch.setattr(History, "_now", lambda: "2026-08-02T00:00:00+00:00")
+    swap(MARKET, "loc-north", "loc-east", db)
+
+    follow(MARKET, "loc-north", "loc-east", db)
+
+    assert without_plan_lines(read(market_records)) == [("floorplan", "East Wing")]
+    follow(MARKET, "loc-north", "loc-south", db)
+    assert without_plan_lines(read(market_records)) == [("floorplan", "East Wing")]
+
+
+def test_a_layout_removed_with_its_location_is_left_as_written(database, market_records):
+    """A layout is removed only with its location, so its line is about a location no longer in
+    the plan, though another location took its name in the same save."""
+    db = database(settled_market())
+    plan_change(market_records.history, 1,
+                [{"id": "loc-gone", "name": "North Wing"}, SOUTH, EAST], [NORTH, SOUTH, EAST])
+    line(market_records.history, 2, "floorplan_removed", "North Wing", "fp-loc-gone",
+         at="2026-07-01T00:00:01+00:00")
+    swap(MARKET, "North Wing", "South Wing", db)
+
+    follow(MARKET, "South Wing", "North Wing", db)
+
+    assert without_plan_lines(read(market_records)) == [("floorplan_removed", "North Wing")]
+
+
+def test_a_line_before_an_ordinary_rename_takes_the_name_its_location_has_now(
+        database, market_records, monkeypatch):
+    """A line names its layout's location as it is called now, also after a rename of it, past
+    draft by an operator's script, that was no trade."""
+    db = database(settled_market())
+    line(market_records.history, 1, "floorplan", "North Wing", "fp-loc-north")
+    monkeypatch.setattr(History, "_now", lambda: "2026-08-01T00:00:00+00:00")
+    swap(MARKET, "North Wing", "South Wing", db)
+    hall = {**NORTH, "name": "Hall"}
+    plan_change(market_records.history, 2, [{**NORTH, "name": "South Wing"},
+                                            {**SOUTH, "name": "North Wing"}, EAST],
+                [hall, {**SOUTH, "name": "North Wing"}, EAST],
+                at="2026-08-02T00:00:00+00:00", actor=None)
+    renamed = db["markets"].docs[0]["setupObject"]
+    renamed["locations"][0]["name"] = renamed["sections"][0]["location"]["name"] = "Hall"
+
+    follow(MARKET, "Hall", "North Wing", db)
+
+    assert without_plan_lines(read(market_records)) == [("floorplan", "Hall")]
+
+
 def test_an_organizers_trade_of_the_two_names_is_followed_too(database, market_records):
     """A trade of the two names saved on Market Setup in draft makes the lines before it read as
     about the other place, as the operator's swap does."""
     traded = [{**NORTH, "name": "South Wing"}, {**SOUTH, "name": "North Wing"}, EAST]
     db = database(settled_market(*traded))
-    line(market_records.history, 1, "floorplan", "North Wing")
+    line(market_records.history, 1, "floorplan", "North Wing", "fp-loc-north")
     plan_change(market_records.history, 2, [NORTH, SOUTH, EAST], traded,
                 at="2026-07-02T00:00:00+00:00")
 
@@ -243,9 +304,9 @@ def test_an_organizers_trade_of_the_two_names_is_followed_too(database, market_r
 
 def test_a_dry_run_writes_nothing_and_prints_counts_only(database, market_records, capsys):
     db = database(settled_market())
-    line(market_records.history, 1, "floorplan", "North Wing")
-    line(market_records.history, 2, "floorplan", "South Wing")
-    line(market_records.history, 3, "floorplan_removed", "South Wing")
+    line(market_records.history, 1, "floorplan", "North Wing", "fp-loc-north")
+    line(market_records.history, 2, "floorplan", "South Wing", "fp-loc-south")
+    line(market_records.history, 3, "floorplan_removed", "West Wing", "fp-loc-west")
     swap(MARKET, "North Wing", "South Wing", db)
     before = copy.deepcopy(market_records.history.documents)
     capsys.readouterr()
@@ -257,10 +318,9 @@ def test_a_dry_run_writes_nothing_and_prints_counts_only(database, market_record
     assert printed == (
         f"market {MARKET}: (dry run: nothing is written)\n"
         "  - locations loc-north and loc-south: 1 trade(s) of their names recorded\n"
-        "  - layout save(s): 2 to rename, 0 renamed before\n"
-        "  - layout removal(s): 1 to rename, 0 renamed before\n"
-        "  - changes on Market Setup: left as written\n"
-        "\nwould rename 3 line(s).\n")
+        "  - their layouts' save(s): 2 to rename, 0 renamed before\n"
+        "  - layouts removed with their location, and changes on Market Setup: left as written\n"
+        "\nwould rename 2 line(s).\n")
 
 
 # --- refusals ------------------------------------------------------------------------------------
@@ -273,35 +333,15 @@ def _no_trade_recorded(db, history):
     history.documents.clear()
 
 
-def _a_later_change_unrecorded(db, history):
-    """The plan names the two as before the swap, and the history's last change says otherwise:
-    a run's entry failed to write."""
-    db["markets"].docs[0]["setupObject"] = plan()
-
-
-def _a_name_that_came_to_mean_the_other(db, history):
-    """An organizer gave the North Wing another name in draft and the South Wing its old one, so a
-    line before that, naming the North Wing, came to read as about the South Wing; no trade says
-    which place the line meant once the swap traded them."""
-    plan_change(history, 9, [NORTH, SOUTH, EAST],
-                [{**NORTH, "name": "Hall"}, {**SOUTH, "name": "North Wing"}, EAST],
-                at="2026-07-02T00:00:00+00:00")
-    line(history, 8, "floorplan", "North Wing", at="2026-06-01T00:00:00+00:00")
-
-
 @pytest.mark.parametrize("change, locations, words", [
     (_missing_market, ("North Wing", "South Wing"), "No market has the id"),
     (None, ("North Wing", "West Wing"), "no location with the id or name 'West Wing'"),
     (None, ("loc-north", "South Wing"), "Both arguments name the same location"),
     (_no_trade_recorded, ("North Wing", "South Wing"), "records no trade of the two names"),
-    (_a_later_change_unrecorded, ("North Wing", "South Wing"),
-     "does not record the last change of the two names"),
-    (_a_name_that_came_to_mean_the_other, ("North Wing", "South Wing"),
-     "h-08 names a location by a name another change gave to one of the two"),
 ])
 def test_it_refuses_and_writes_nothing(database, market_records, change, locations, words):
     db = database(settled_market())
-    line(market_records.history, 1, "floorplan", "North Wing")
+    line(market_records.history, 1, "floorplan", "North Wing", "fp-loc-north")
     swap(MARKET, "North Wing", "South Wing", db)
     if change is not None:
         change(db, market_records.history)
@@ -325,8 +365,8 @@ def test_a_location_without_a_stored_id_is_refused(database, market_records):
 def test_a_line_changed_between_the_read_and_the_write_is_left_for_a_second_run(
         database, market_records, monkeypatch):
     db = database(settled_market())
-    line(market_records.history, 1, "floorplan", "North Wing")
-    line(market_records.history, 2, "floorplan", "South Wing")
+    line(market_records.history, 1, "floorplan", "North Wing", "fp-loc-north")
+    line(market_records.history, 2, "floorplan", "South Wing", "fp-loc-south")
     swap(MARKET, "North Wing", "South Wing", db)
     history = market_records.history
     written = history.update_one
@@ -353,7 +393,7 @@ def test_a_line_changed_between_the_read_and_the_write_is_left_for_a_second_run(
 
 def test_the_command_renames_and_exits_zero(database, market_records):
     db = database(settled_market())
-    line(market_records.history, 1, "floorplan", "North Wing")
+    line(market_records.history, 1, "floorplan", "North Wing", "fp-loc-north")
     swap(MARKET, "North Wing", "South Wing", db)
 
     assert main([MARKET, "North Wing", "South Wing"]) == 0
@@ -363,7 +403,7 @@ def test_the_command_renames_and_exits_zero(database, market_records):
 
 def test_the_commands_dry_run_writes_nothing(database, market_records):
     db = database(settled_market())
-    line(market_records.history, 1, "floorplan", "North Wing")
+    line(market_records.history, 1, "floorplan", "North Wing", "fp-loc-north")
     swap(MARKET, "North Wing", "South Wing", db)
 
     assert main([MARKET, "North Wing", "South Wing", "--dry-run"]) == 0
