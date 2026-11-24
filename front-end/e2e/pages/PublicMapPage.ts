@@ -102,11 +102,6 @@ export class PublicMapPage {
     return this.page.getByTestId('layout-map-image');
   }
 
-  /** The day map's own legend items, which the page never draws: its legend is `sectionLegend`. */
-  get legend(): Locator {
-    return this.page.getByTestId('day-map-legend-item');
-  }
-
   get zoomIn(): Locator {
     return this.page.getByTestId('day-map-zoom-in');
   }

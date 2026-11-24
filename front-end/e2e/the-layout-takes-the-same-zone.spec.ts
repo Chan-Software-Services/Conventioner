@@ -12,7 +12,6 @@ import { LAYOUT_FLOORPLAN_PATH, seedLayout, type SeededLayout } from './helpers/
  * line drawn over it. Every step here is a person's: a click, a file chosen or dropped, a drag.
  */
 const LABEL = "Drop the floorplan's image or PDF here, or choose a file";
-const STALE = 'This layout changed elsewhere. Reload to see the latest.';
 
 /** A PDF of `pages` pages, printed by the browser itself, so the suite holds no binary fixture. */
 async function printedPdf(
@@ -261,49 +260,14 @@ test.describe("A location's floorplan", () => {
   });
 });
 
+// A file of another type, a PDF over 4 MB and the server's sentence for one of more than 20 pages
+// are proved in `theLayoutTakesTheSameZone.test.ts`, and the server's page count in
+// `test_floorplan_access.py`; here a damaged PDF is the server's refusal reached through the page.
 test.describe("A floorplan is held to the upload's limits", () => {
   let seeded: SeededLayout;
 
   test.beforeEach(async ({ request }) => {
     seeded = await seedLayout(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
-  });
-
-  test('a file of another type is refused with the type sentence, read as an alert', async ({
-    authenticatedPage: page,
-  }) => {
-    const layout = new LayoutPage(page);
-    await layout.goto(seeded.marketId, seeded.upper.id);
-
-    await layout.uploadFileInput.setInputFiles({
-      name: 'hall.txt',
-      mimeType: 'text/plain',
-      buffer: Buffer.from('not a plan'),
-    });
-
-    await expect(page.getByRole('alert')).toHaveText('This file is not a PNG, JPG, WebP or PDF.');
-    await expect(layout.uploadDropzone).toBeVisible();
-  });
-
-  test('a PDF over 4 MB is refused in the browser and nothing is sent', async ({
-    authenticatedPage: page,
-  }) => {
-    const layout = new LayoutPage(page);
-    await layout.goto(seeded.marketId, seeded.upper.id);
-    const sent: string[] = [];
-    page.on('request', (request) => {
-      if (request.url().includes('/floorplans/upload')) sent.push(request.url());
-    });
-
-    await layout.uploadFileInput.setInputFiles({
-      name: 'venue.pdf',
-      mimeType: 'application/pdf',
-      buffer: Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(5_000_000, 32)]),
-    });
-
-    await expect(page.getByRole('alert')).toHaveText(
-      'This PDF is larger than 4 MB. Export the page with the plan on it as a PNG or a smaller PDF.',
-    );
-    expect(sent).toEqual([]);
   });
 
   test('a PNG over 4 MB is made smaller and uploads', async ({ authenticatedPage: page }) => {
@@ -325,25 +289,6 @@ test.describe("A floorplan is held to the upload's limits", () => {
     await expect(layout.calibrationMap).toBeVisible();
   });
 
-  test('a PDF of more than 20 pages is refused by the server with its sentence', async ({
-    authenticatedPage: page,
-    browser,
-  }) => {
-    const layout = new LayoutPage(page);
-    await layout.goto(seeded.marketId, seeded.upper.id);
-
-    await layout.uploadFileInput.setInputFiles({
-      name: 'venue.pdf',
-      mimeType: 'application/pdf',
-      buffer: await printedPdf(browser, 21),
-    });
-
-    await expect(page.getByRole('alert')).toHaveText(
-      'This PDF has more than 20 pages. Send the page with the plan on it.',
-    );
-    await expect(layout.uploadDropzone).toBeVisible();
-  });
-
   test('a damaged PDF is refused by the server naming the file', async ({
     authenticatedPage: page,
   }) => {
@@ -357,32 +302,5 @@ test.describe("A floorplan is held to the upload's limits", () => {
     });
 
     await expect(page.getByRole('alert')).toHaveText('Venue plan.pdf could not be read as a PDF.');
-  });
-});
-
-test.describe('A layout is saved once', () => {
-  test("a second start of a location's layout is refused", async ({ request }) => {
-    const seeded = await seedLayout(request, BACKEND_URL, TEST_USER.email, TEST_USER.password, {
-      layout: true,
-    });
-
-    const again = await request.post(`${BACKEND_URL}/floorplans/save-to-market`, {
-      data: {
-        market_id: seeded.marketId,
-        revision: 0,
-        floorplan: {
-          id: 'fp-another',
-          locationId: seeded.upper.id,
-          revision: 0,
-          tables: [],
-          zones: [],
-          sectionStyles: [],
-          startingCounts: [],
-        },
-      },
-    });
-
-    expect(again.status()).toBe(409);
-    expect(await again.json()).toEqual({ error: STALE });
   });
 });

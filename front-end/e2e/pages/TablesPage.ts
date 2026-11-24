@@ -49,7 +49,6 @@ export class TablesPage {
   readonly historyMarketDay: Locator;
   readonly historyDays: Locator;
   readonly historyClear: Locator;
-  readonly historyEmpty: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -78,7 +77,6 @@ export class TablesPage {
     this.historyMarketDay = this.historyDialog.getByTestId('market-history-market-day');
     this.historyDays = this.historyDialog.getByTestId('market-history-day');
     this.historyClear = this.historyDialog.getByTestId('market-history-clear');
-    this.historyEmpty = this.historyDialog.getByTestId('market-history-empty');
   }
 
   async goto(marketId: string): Promise<void> {
