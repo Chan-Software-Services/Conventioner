@@ -7,14 +7,17 @@ import type { Application } from '@/assets/types/datatypes';
  * POST /public/markets/<slug>/applicant-login/request-code
  *
  * The backend (5d) is oracle-free: always returns the same 200 response
- * whether or not the email is known to this market.
+ * whether or not the email is known to this market. Every request carries the human check's
+ * token (`captchaToken`), without which the server answers a 403 with `captcha: required`.
  */
 export async function requestLoginCode(
   marketSlug: string,
   email: string,
+  captchaToken: string,
 ): Promise<{ message: string }> {
   const { data } = await api.post(`/public/markets/${marketSlug}/applicant-login/request-code`, {
     email,
+    captcha_token: captchaToken,
   });
   return data;
 }
@@ -30,17 +33,21 @@ export async function requestLoginCode(
  * A code lasts ten minutes and takes five tries; neither answer says whether the address applied.
  * With `remember`, a right code also leaves this device remembered for the market (ADR 0022): the
  * server sets an HttpOnly cookie no script here reads, which `resumeSignIn` spends.
+ * It carries the human check's token too (`captchaToken`), which the server asks for only once
+ * the address has met many wrong tries.
  */
 export async function verifyLoginCode(
   marketSlug: string,
   email: string,
   code: string,
   remember: boolean,
+  captchaToken: string,
 ): Promise<SignedIn> {
   const { data } = await api.post(`/public/markets/${marketSlug}/applicant-login/verify-code`, {
     email,
     code,
     remember,
+    captcha_token: captchaToken,
   });
   return signedInFrom(data);
 }

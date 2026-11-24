@@ -14,7 +14,7 @@ status: accepted
 
 # Turnstile is the one human check
 
-The nodes it constrains: [security invariants](../implementation/conventions/security-invariants.md), [the component library](../implementation/modules/component-library.md) and [users, and the one spelling of an address](../implementation/data/users-and-email.md); the glossary's **Human check** ([`CONTEXT.md`](../../CONTEXT.md)).
+The nodes it constrains: [security invariants](../implementation/conventions/security-invariants.md), [the component library](../implementation/modules/component-library.md), [users, and the one spelling of an address](../implementation/data/users-and-email.md) and [a vendor signs in before applying](../business/rules/a-vendor-signs-in-before-applying.md); the glossary's **Human check** ([`CONTEXT.md`](../../CONTEXT.md)).
 
 ## Context
 

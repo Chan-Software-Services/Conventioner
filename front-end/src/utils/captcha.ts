@@ -130,17 +130,21 @@ export function isHumanCheckRequired(error: unknown): boolean {
  * The check is reset after every answer, since a token is spent once sent. A second "required"
  * refuses with `HUMAN_CHECK_NOT_CONFIRMED`; a check that cannot give a token refuses with
  * `HUMAN_CHECK_DIDNT_LOAD`, sending nothing.
+ *
+ * `required` tells what `send` throws when the server asked for the check: the server's own 403
+ * unless `send` turns its answers into errors of its own, as the vendor's sign-in does.
  */
 export async function withHumanCheck<T>(
   check: HumanCheckHandle,
   send: (token: string) => Promise<T>,
+  required: (error: unknown) => boolean = isHumanCheckRequired,
 ): Promise<T> {
   for (let attempt = 1; ; attempt += 1) {
     const token = await check.token();
     try {
       return await send(token);
     } catch (error) {
-      if (!isHumanCheckRequired(error)) throw error;
+      if (!required(error)) throw error;
       if (attempt === 2) throw new Refusal(HUMAN_CHECK_NOT_CONFIRMED);
     } finally {
       check.reset();

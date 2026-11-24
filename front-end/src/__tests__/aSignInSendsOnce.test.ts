@@ -251,6 +251,7 @@ describe('the vendor sign-in reads its own answer', () => {
       ok: false,
       sentence: 'Too many codes asked for. Please try again later.',
       codeState: null,
+      humanCheckRequired: false,
     });
     const w = signInWith();
     await w.get('[data-testid="vendor-sign-in-email-input"]').setValue('ana@example.com');
@@ -280,7 +281,12 @@ describe('the vendor sign-in reads its own answer', () => {
     const back = w.get('[data-testid="vendor-sign-in-back-btn"]');
     expect((back.element as HTMLButtonElement).disabled).toBe(true);
     await back.trigger('click');
-    checked.resolve({ ok: false, sentence: 'That code is not right.', codeState: 'retry' });
+    checked.resolve({
+      ok: false,
+      sentence: 'That code is not right.',
+      codeState: 'retry',
+      humanCheckRequired: false,
+    });
     await flushPromises();
 
     expect(w.find('[data-testid="vendor-sign-in-code-step"]').exists()).toBe(true);
@@ -432,5 +438,160 @@ describe('sign-up asks the human check (T539)', () => {
       delete window.turnstile;
       vi.unstubAllEnvs();
     }
+  });
+});
+
+describe('the vendor sign-in asks the human check (T539)', () => {
+  const PLACEHOLDER = 'e2e-test-captcha-token';
+  const asked: CodeAnswer = {
+    ok: false,
+    sentence: "Confirm you're a person, then try again.",
+    codeState: null,
+    humanCheckRequired: true,
+  };
+
+  /** The sign-in built with a site key, over a stand-in for Cloudflare's `window.turnstile`. */
+  async function withASiteKey(turnstile: unknown) {
+    vi.stubEnv('VITE_TURNSTILE_SITE_KEY', 'a-site-key');
+    vi.resetModules();
+    window.turnstile = turnstile as never;
+    const pinia = await import('pinia');
+    pinia.setActivePinia(pinia.createPinia());
+    const { useApplicationStore: freshStore } = await import('@/stores/application');
+    const { default: FreshSignIn } = await import('@/components/vendorPage/VendorSignIn.vue');
+    const store = freshStore();
+    wrapper = mount(FreshSignIn, { props: { marketSlug: 'spring' }, attachTo: document.body });
+    await flushPromises();
+    return { w: wrapper, store };
+  }
+
+  function withoutAKey() {
+    setActivePinia(createPinia());
+    const store = useApplicationStore();
+    wrapper = mount(VendorSignIn, { props: { marketSlug: 'spring' }, attachTo: document.body });
+    return { w: wrapper, store };
+  }
+
+  async function sendCode(w: VueWrapper) {
+    await w.get('[data-testid="vendor-sign-in-email-input"]').setValue('ana@example.com');
+    await w.get('[data-testid="vendor-sign-in-email-step"]').trigger('submit');
+    await flushPromises();
+  }
+
+  async function signIn(w: VueWrapper) {
+    await w.get('[data-testid="vendor-sign-in-code-input"]').setValue('123456');
+    await w.get('[data-testid="vendor-sign-in-code-step"]').trigger('submit');
+    await flushPromises();
+  }
+
+  const nextTo = (w: VueWrapper) =>
+    w.get('[data-testid="human-check"]').element.nextElementSibling?.getAttribute('data-testid');
+
+  afterEach(() => {
+    delete window.turnstile;
+    vi.unstubAllEnvs();
+  });
+
+  it("sends one check's token with Send code and with Sign in, resetting it after each answer", async () => {
+    let callback: (token: string) => void = () => {};
+    const turnstile = {
+      render: vi.fn((_box: HTMLElement, options: { callback: (token: string) => void }) => {
+        callback = options.callback;
+        return 'widget-1';
+      }),
+      reset: vi.fn(),
+      remove: vi.fn(),
+    };
+    const { w, store } = await withASiteKey(turnstile);
+    const requestCode = vi.spyOn(store, 'requestCode').mockResolvedValue({ ok: true });
+    const verifyCode = vi.spyOn(store, 'verifyCode').mockResolvedValue({ ok: true });
+
+    expect(turnstile.render).toHaveBeenCalledTimes(1);
+    expect(turnstile.render.mock.calls[0]![1]).toMatchObject({ action: 'vendor-sign-in' });
+    expect(nextTo(w)).toBe('vendor-sign-in-request-btn');
+
+    callback('the-first-token');
+    await sendCode(w);
+
+    expect(requestCode).toHaveBeenCalledWith('spring', 'ana@example.com', 'the-first-token');
+    expect(turnstile.reset).toHaveBeenCalledTimes(1);
+    // The same check, kept from one step to the next, above the code step's button.
+    expect(turnstile.render).toHaveBeenCalledTimes(1);
+    expect(nextTo(w)).toBe('vendor-sign-in-verify-btn');
+
+    callback('the-second-token');
+    await signIn(w);
+
+    expect(verifyCode).toHaveBeenCalledWith(
+      'spring',
+      'ana@example.com',
+      '123456',
+      false,
+      'the-second-token',
+    );
+    expect(turnstile.reset).toHaveBeenCalledTimes(2);
+  });
+
+  it('with no site key sends the placeholder token, and loads no script', async () => {
+    const { w, store } = withoutAKey();
+    const requestCode = vi.spyOn(store, 'requestCode').mockResolvedValue({ ok: true });
+
+    expect(w.find('[data-testid="human-check"]').exists()).toBe(false);
+    await sendCode(w);
+
+    expect(requestCode).toHaveBeenCalledWith('spring', 'ana@example.com', PLACEHOLDER);
+    expect(document.querySelector('script[src*="challenges.cloudflare.com"]')).toBeNull();
+  });
+
+  it('sends Send code once more when the server asks for the check, and moves on', async () => {
+    const { w, store } = withoutAKey();
+    const requestCode = vi
+      .spyOn(store, 'requestCode')
+      .mockResolvedValueOnce(asked)
+      .mockResolvedValueOnce({ ok: true });
+
+    await sendCode(w);
+
+    expect(requestCode).toHaveBeenCalledTimes(2);
+    expect(w.find('[data-testid="vendor-sign-in-code-step"]').exists()).toBe(true);
+    expect(w.find('[data-testid="vendor-sign-in-error"]').exists()).toBe(false);
+  });
+
+  it("says it couldn't confirm a person when Sign in's retry is asked the same, keeping the step", async () => {
+    const { w, store } = withoutAKey();
+    vi.spyOn(store, 'requestCode').mockResolvedValue({ ok: true });
+    const verifyCode = vi.spyOn(store, 'verifyCode').mockResolvedValue(asked);
+    await sendCode(w);
+
+    await signIn(w);
+
+    expect(verifyCode).toHaveBeenCalledTimes(2);
+    expect(w.get('[data-testid="vendor-sign-in-error"]').text()).toBe(
+      "We couldn't confirm you're a person. Try again.",
+    );
+    expect(w.find('[data-testid="vendor-sign-in-code-step"]').exists()).toBe(true);
+    expect(
+      (w.get('[data-testid="vendor-sign-in-code-input"]').element as HTMLInputElement).value,
+    ).toBe('123456');
+  });
+
+  it("says the check didn't load, sends nothing, and keeps the step", async () => {
+    const { w, store } = await withASiteKey({
+      render: (_box: HTMLElement, options: { 'unsupported-callback': () => void }) => {
+        queueMicrotask(options['unsupported-callback']);
+        return 'widget-1';
+      },
+      reset: vi.fn(),
+      remove: vi.fn(),
+    });
+    const requestCode = vi.spyOn(store, 'requestCode');
+
+    await sendCode(w);
+
+    expect(requestCode).not.toHaveBeenCalled();
+    expect(w.get('[data-testid="vendor-sign-in-error"]').text()).toBe(
+      "The check that you're a person didn't load. Check your connection, then reload the page.",
+    );
+    expect(w.find('[data-testid="vendor-sign-in-email-step"]').exists()).toBe(true);
   });
 });

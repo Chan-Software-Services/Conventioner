@@ -20,6 +20,7 @@ sources:
   - T251
   - T273
   - T318
+  - T539
 ---
 
 # A vendor signs in before they have applied
@@ -44,6 +45,10 @@ Telling the person who just read the code whether they have applied leaks nothin
   A failed send, a send Resend has not answered within 10 seconds among them, is logged and answered as a sent one.
   The code is six digits, kept hashed in `applicant_login_challenges` keyed by market and address, and lasts ten minutes.
   Asking again replaces it, so only the newest code works, and its count of tries starts again.
+- **Every code request asks the human check** ([ADR 0045](../../adr/0045-turnstile-is-the-one-human-check.md)), right after the caller's limit and before anything else is counted, stored or sent: the caller's limit, then the check, then the address's count, then the market.
+  A request whose token is absent, refused or made for another action than `vendor-sign-in` answers one 403, `{"message": "Confirm you're a person, then try again.", "captcha": "required"}`, the same for every address and every market, real or not, and counts against the caller alone: no code is stored or sent and the address is not counted.
+  The sign-in holds one check for both its steps and sends its token as `captcha_token` with Send code and with Sign in, resetting it after each answer; asked for the check, it sends the request once more with a new token, and asked again it says "We couldn't confirm you're a person. Try again.", keeping the step.
+  Cloudflare shows its tick box only when it is unsure of the browser, so a vendor at the door usually meets no new step; a check that cannot load says so in the sign-in's error line, and a remembered vendor resumes with no check at all.
 - **Each code email's subject carries its own number**, "Your sign-in code for <market> (#<n>)", and never the code; its body says only the newest code works.
   With one subject for all, a mail client threaded the emails and buried the newest code under an older one, which a vendor then typed (T191 F22).
   The number is the challenge's `sequence`, counted by the request's upsert; it starts again once the TTL index removes an expired challenge.
@@ -86,7 +91,7 @@ A venue's wifi is one caller for every vendor on it, so a per-caller count of wr
 - **The counters live in the database, never in a process**: a serverless deployment forgets memory.
   One document per limit, subject and fixed clock-aligned window in `sign_in_attempts`, counted by an atomic `$inc` upsert and removed by a TTL index ([lookup indexes](../../implementation/data/lookup-indexes.md)).
   Its key is a hash, so the collection names no address and no caller.
-- **The caller is counted before the body or the slug is read**, then the address, so a refusal is the same for every address and every market, real or not.
+- **The caller is counted before the body or the slug is read**, then, for a code request, the human check is asked, then the address is counted, so a refusal is the same for every address and every market, real or not.
   A limit is the same for every address, applicant or not, so it is not the attempt counter the login ruling forbids: that one existed only for addresses that had applied, and so answered whether they had.
   The caller is `request.remote_addr` as [`TRUSTED_PROXY_HOPS`](../../implementation/conventions/security-invariants.md#the-boot-check) resolves it, counted as a network (`sign_in_limits.caller()`): an IPv4 address as it is, an IPv6 address as its /64 network, and an IPv4-mapped IPv6 address as its IPv4 address.
   A line or a machine is handed a whole /64, so one machine is one caller on IPv6 as on IPv4, and vendors on a venue's IPv6 wifi share a caller as they do on IPv4.

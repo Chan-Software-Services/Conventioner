@@ -228,7 +228,7 @@ class TestRequestCodeIndistinguishable:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={"email": "applicant@example.com"},
+            json={"email": "applicant@example.com", "captcha_token": "test-human-check"},
         ):
             result_known = applicant_auth_module.request_login_code("test-market")
         body_known, status_known = result_known
@@ -237,7 +237,7 @@ class TestRequestCodeIndistinguishable:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={"email": "unknown@example.com"},
+            json={"email": "unknown@example.com", "captcha_token": "test-human-check"},
         ):
             result_unknown = applicant_auth_module.request_login_code("test-market")
         body_unknown, status_unknown = result_unknown
@@ -257,7 +257,7 @@ class TestRequestCodeIndistinguishable:
         with app.test_request_context(
             "/public/markets/no-such-market/request-code",
             method="POST",
-            json={"email": "someone@example.com"},
+            json={"email": "someone@example.com", "captcha_token": "test-human-check"},
         ):
             result = applicant_auth_module.request_login_code("no-such-market")
         body, status = result
@@ -277,7 +277,7 @@ class TestRequestCodeIndistinguishable:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={},
+            json={"captcha_token": "test-human-check"},
         ):
             result = applicant_auth_module.request_login_code("test-market")
         body, status = result
@@ -297,7 +297,7 @@ class TestRequestCodeIndistinguishable:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={"email": "not-an-email"},
+            json={"email": "not-an-email", "captcha_token": "test-human-check"},
         ):
             result = applicant_auth_module.request_login_code("test-market")
         body, status = result
@@ -331,7 +331,8 @@ def _post(handler, path, payload):
 
 def _request_code(mod, email=APPLICANT, slug="test-market"):
     return _post(lambda: mod.request_login_code(slug),
-                 f"/public/markets/{slug}/applicant-login/request-code", {"email": email})
+                 f"/public/markets/{slug}/applicant-login/request-code",
+                 {"email": email, "captcha_token": "test-human-check"})
 
 
 def _verify(mod, code, email=APPLICANT, slug="test-market"):
@@ -620,7 +621,7 @@ class TestCrossMarketIsolation:
         with app.test_request_context(
             f"/public/markets/{slug_a}/request-code",
             method="POST",
-            json={"email": "applicant@example.com"},
+            json={"email": "applicant@example.com", "captcha_token": "test-human-check"},
         ):
             mod.request_login_code(slug_a)
 
@@ -676,7 +677,7 @@ class TestD9LockPreservation:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={"email": "complete-stranger@example.com"},
+            json={"email": "complete-stranger@example.com", "captcha_token": "test-human-check"},
         ):
             applicant_auth_module.request_login_code("test-market")
 
@@ -697,7 +698,7 @@ class TestD9LockPreservation:
         with app.test_request_context(
             "/public/markets/no-such-market/request-code",
             method="POST",
-            json={"email": "someone@example.com"},
+            json={"email": "someone@example.com", "captcha_token": "test-human-check"},
         ):
             applicant_auth_module.request_login_code("no-such-market")
 
@@ -741,7 +742,7 @@ class TestEdgeCases:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={"email": "applicant@example.com"},
+            json={"email": "applicant@example.com", "captcha_token": "test-human-check"},
         ):
             applicant_auth_module.request_login_code("test-market")
 
@@ -755,7 +756,7 @@ class TestEdgeCases:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={"email": "applicant@example.com"},
+            json={"email": "applicant@example.com", "captcha_token": "test-human-check"},
         ):
             applicant_auth_module.request_login_code("test-market")
 
@@ -790,7 +791,7 @@ class TestEdgeCases:
         with app.test_request_context(
             f"/public/markets/{slug}/request-code",
             method="POST",
-            json={"email": "someone@example.com"},
+            json={"email": "someone@example.com", "captcha_token": "test-human-check"},
         ):
             result = mod.request_login_code(slug)
         body, status = result
@@ -828,7 +829,7 @@ class TestTheCodeIsSentWithinTheRequest:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={"email": email},
+            json={"email": email, "captcha_token": "test-human-check"},
         ):
             return applicant_auth_module.request_login_code("test-market")
 
@@ -891,7 +892,7 @@ class TestTheCodeIsSentWithinTheRequest:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={"email": "stranger@example.com"},
+            json={"email": "stranger@example.com", "captcha_token": "test-human-check"},
         ):
             applicant_auth_module.request_login_code("test-market")
 
@@ -1003,7 +1004,7 @@ class TestSignInIsBounded:
         return self._post(
             lambda: mod.request_login_code(slug),
             f"/public/markets/{slug}/applicant-login/request-code",
-            {"email": email},
+            {"email": email, "captcha_token": "test-human-check"},
             caller,
         )
 

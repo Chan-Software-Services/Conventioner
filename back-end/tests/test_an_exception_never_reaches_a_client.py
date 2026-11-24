@@ -998,7 +998,8 @@ APPLICANT_REVIEW_IMPORT_AND_DOOR_ROUTES = [
      {"date": "2099-08-01", "doorCode": "K7M4QP"}, VendorCheckInApi, "check_out", SLUG),
     ("delete", f"/public/markets/{SLUG}/vendor/check-out", {"date": "2099-08-01"},
      VendorCheckInApi, "undo_check_out", SLUG),
-    ("post", f"/public/markets/{SLUG}/applicant-login/request-code", {"email": "ana@example.com"},
+    ("post", f"/public/markets/{SLUG}/applicant-login/request-code",
+     {"email": "ana@example.com", "captcha_token": "test-human-check"},
      ApplicantAuthApi, "request_login_code", SLUG),
     ("post", f"/public/markets/{SLUG}/applicant-login/verify-code",
      {"email": "ana@example.com", "code": "123456"},
@@ -2055,7 +2056,7 @@ class TestAFailureARouteSurvivesIsLoggedWithoutItsMessage:
         with caplog.at_level(logging.DEBUG):
             response = app_module.app.test_client().post(
                 f"/public/markets/{SLUG}/applicant-login/request-code",
-                json={"email": STRANGERS_ADDRESS},
+                json={"email": STRANGERS_ADDRESS, "captcha_token": "test-human-check"},
             )
 
         assert response.status_code == 200

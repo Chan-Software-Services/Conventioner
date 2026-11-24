@@ -12,6 +12,7 @@ describes:
   - front-end/e2e/helpers/settledPlanChanged.ts
   - front-end/e2e/helpers/seeds.ts#SEED_MARKET_DATE
   - front-end/e2e/helpers/seeds.ts#completePlan
+  - front-end/e2e/helpers/humanCheck.ts
   - front-end/e2e/date-display-timezone.spec.ts
   - front-end/e2e/global-setup.ts
   - front-end/e2e/helpers/networkSettles.ts
@@ -57,6 +58,7 @@ sources:
   - T469
   - T501
   - T519
+  - T539
 ---
 
 # E2E patterns
@@ -165,6 +167,8 @@ A `csv` market enters `applications` only holding an application, so a spec that
 **Identity comes from the session cookie alone**: the helpers authenticate by logging in, and no spec or seed sends an identity header.
 That, the self-signed certificate and the other suite-wide traps are TESTING.md's [testing gotchas](../../TESTING.md#testing-gotchas).
 
+**A vendor's code request asks the human check** ([every code request asks the human check](../../business/rules/a-vendor-signs-in-before-applying.md#where-it-is-kept)): the stack has no site key, so its screens send the placeholder token, and its back end, with `DISABLE_CAPTCHA`, passes any token and refuses a request that sends none, as production does.
+An API helper or spec that posts to `applicant-login/request-code` sends `captcha_token: HUMAN_CHECK_TOKEN` from [`helpers/humanCheck.ts`](../../../front-end/e2e/helpers/humanCheck.ts), the one constant, and the vendor's sign-in helpers send it with the code too, as the screen does.
 **Applicant sign-in is rate limited** ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)): an address is sent at most five codes per 15 minutes and may try ten, and a caller 300 of each, which the whole serial run shares.
 [`global-setup.ts`](../../../front-end/e2e/global-setup.ts) clears the counters at the start of every run; a spec that signs the same address in more than that within one run trips the limit, so a spec that spends a code's five tries uses an address of its own.
 **The organizer's password and code sign-ins are rate limited too** ([the sign-in is bounded](../data/users-and-email.md#the-sign-in-is-bounded)): ten tries per address per 15 minutes on each, and fifty per caller on the password, sixty on the code.

@@ -1,5 +1,6 @@
 import type { APIRequestContext } from '@playwright/test';
 import { createApplicantLoginChallenge } from './seedApplicantMarket';
+import { HUMAN_CHECK_TOKEN } from './humanCheck';
 import { mongoEval } from './mongo';
 import type { VendorPage } from '../pages/VendorPage';
 
@@ -34,13 +35,13 @@ export async function vendorToken(
 ): Promise<string> {
   const asked = await request.post(
     `${baseURL}/public/markets/${marketSlug}/applicant-login/request-code`,
-    { data: { email } },
+    { data: { email, captcha_token: HUMAN_CHECK_TOKEN } },
   );
   if (!asked.ok()) throw new Error(`request-code: ${asked.status()} ${await asked.text()}`);
   createApplicantLoginChallenge(marketId, email, VENDOR_CODE);
   const verified = await request.post(
     `${baseURL}/public/markets/${marketSlug}/applicant-login/verify-code`,
-    { data: { email, code: VENDOR_CODE } },
+    { data: { email, code: VENDOR_CODE, captcha_token: HUMAN_CHECK_TOKEN } },
   );
   if (!verified.ok()) throw new Error(`verify-code: ${verified.status()} ${await verified.text()}`);
   return ((await verified.json()) as { token: string }).token;

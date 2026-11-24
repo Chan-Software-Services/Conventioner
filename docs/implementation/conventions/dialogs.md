@@ -68,6 +68,7 @@ sources:
   - T315
   - T411
   - T422
+  - T539
 ---
 
 # Dialogs
@@ -154,7 +155,8 @@ So Send code pressed twice sends one request and keeps "code sent", where the se
 Each button is disabled while its request is out and says so: "Signing in…", "Creating account…" and "Sending…"; the way-in tabs and "Use a different email" stay enabled, since moving on is allowed and drops the answer.
 Each form's line stays the page's own, written from its answer, so the submit's sentence is unused there.
 A market's vendor sign-in ([`VendorSignIn.vue`](../../../front-end/src/components/vendorPage/VendorSignIn.vue), [applying online](../../business/flows/applying-online.md)) has one scoped by its step, so Send code, Send a new code and Sign in go through it.
-It moves to the code step, and says a refusal, from its own request's answer, which the store's `requestCode` and `verifyCode` return (`{ ok: true }`, or the sentence and where the code stands), never from the store's shared `error`, which another reader may write while the request is out.
+It moves to the code step, and says a refusal, from its own request's answer, which the store's `requestCode` and `verifyCode` return (`{ ok: true }`, or the sentence, where the code stands and whether the server asked for the human check), never from the store's shared `error`, which another reader may write while the request is out.
+A request the server answers by asking for the human check is sent once more, with a new token, within the same submit (`withHumanCheck`, [ADR 0045](../../adr/0045-turnstile-is-the-one-human-check.md)).
 Until the vendor sends a request it says the store's sentence for a sign-in that ended under them ("Your session has expired..."), which brought them to it.
 "Use a different email" is disabled while a request is out, so a late answer never lands on the email step.
 

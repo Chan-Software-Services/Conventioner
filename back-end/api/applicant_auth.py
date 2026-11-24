@@ -18,7 +18,9 @@ constraints:
    at a six-digit code to 10 per address per 15 minutes.
 
 2. **Requesting a code is indistinguishable, always.** Same HTTP status, shape
-   and body whether or not the address is known.
+   and body whether or not the address is known. Every request asks the human
+   check first, after the caller's limit, and its refusal is one 403 for every
+   address and every market.
 
 3. **Verifying a code tells nothing about who applied.** Every way a code cannot
    pass (unknown address, no code issued, expired, already consumed, the fifth wrong
@@ -67,6 +69,7 @@ import sign_in_limits
 from client_errors import traceback_without_messages
 from db_config import get_database
 from market_documents import market_dates_of, market_id_at_slug, vendor_page_market_by_slug
+from utils import captcha
 from utils.email import frontend_url, one_line, send_mail
 from utils.application_token import generate_application_token
 from utils.email_address import normalized_email
@@ -403,11 +406,18 @@ def request_login_code(market_slug: str) -> tuple:
     known to this market, and whether its email was sent. A challenge is created,
     and its code sent, for every address, before the response returns - unless the
     caller or the address is past its rate limit, which answers 429 and sends nothing.
+
+    Every request asks the human check, right after the caller's limit and before anything else is
+    counted, stored or sent: one without a passing ``captcha_token`` for ``vendor-sign-in`` answers
+    one 403 for every address and market, counted against the caller only.
     """
     refused = _caller_refusal(sign_in_limits.REQUEST_CODE_PER_CALLER)
     if refused:
         return refused
-    email = _email_from(request.get_json(silent=True))
+    data = request.get_json(silent=True)
+    if not captcha.captcha_passes(string_field(data, "captcha_token"), captcha.VENDOR_SIGN_IN):
+        return captcha.human_check_needed("message")
+    email = _email_from(data)
     refused = _address_refusal(sign_in_limits.REQUEST_CODE_PER_ADDRESS, email)
     if refused:
         return refused

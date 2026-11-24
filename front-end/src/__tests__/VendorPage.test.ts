@@ -1529,6 +1529,7 @@ describe('Remember me on this device (ADR 0022)', () => {
       'vendor@example.com',
       '123456',
       ticked,
+      'e2e-test-captcha-token',
     );
   });
 
