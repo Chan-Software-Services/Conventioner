@@ -440,16 +440,30 @@ def _field(column: _Column, taken_keys: Set[str]) -> Dict[str, Any]:
 
 def _choices(counts: Dict[str, int], held: Dict[str, Set[str]], filled: int,
              share_floor: float) -> Dict[str, Any]:
-    """Every option, and what each applicant answered as indexes into them.
+    """Every option, what each applicant answered as indexes into them, and the checks the options
+    earn.
 
     The answers are what let the ledger say how many applicants a set of left-out options would
     leave with nothing, for whichever options the organizer keeps - a count per option cannot,
     because one applicant can choose several (bug 4). Indexes, sorted, in no row order.
+    The checks are the reading's own, so a row the organizer turns to this reading shows them too,
+    and not only a row the rules proposed as it.
     """
     options = _options(counts, filled, share_floor)
     position = {option["value"]: index for index, option in enumerate(options)}
     answers = sorted(sorted(position[value] for value in values) for values in held.values())
-    return {"options": options, "answers": answers}
+    return {"options": options, "answers": answers, "check": _option_checks(options)}
+
+
+def _option_checks(options: List[Dict[str, Any]]) -> List[str]:
+    """Why a reading's options are worth a second look: some few applicants chose, or one names
+    someone, each left unticked by default."""
+    check = []
+    if any(option["rare"] for option in options):
+        check.append(CHECK_RARE_OPTIONS)
+    if any(option["namesSomeone"] for option in options):
+        check.append(CHECK_NAMES_SOMEONE)
+    return check
 
 
 def _options(counts: Dict[str, int], filled: int, share_floor: float) -> List[Dict[str, Any]]:
@@ -941,10 +955,7 @@ def proposal(headers: Sequence[str], rows: Sequence[Sequence[str]],
                 check.append(CHECK_UPLOAD)
             if field["type"] == "select" and column.joins_its_options():
                 check.append(CHECK_SEVERAL_ANSWERS)
-            if any(option["rare"] for option in field["options"]):
-                check.append(CHECK_RARE_OPTIONS)
-            if any(option["namesSomeone"] for option in field["options"]):
-                check.append(CHECK_NAMES_SOMEONE)
+            check.extend(_option_checks(field["options"]))
         proposed.append({
             "index": index,
             "header": column.header,
