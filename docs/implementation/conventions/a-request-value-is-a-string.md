@@ -14,6 +14,7 @@ sources:
   - T251
   - T315
   - T496
+  - T539
 ---
 
 # A request value is a string before it reaches a query
@@ -29,7 +30,7 @@ It is the per-request half of the [security invariants](security-invariants.md),
 It never raises, so each handler keeps its own words and status, and answers None as it answers a missing value:
 
 - the account endpoints (`back-end/api/users.py`) answer their "required" 400, for every address, password, token and sign-in code they read;
-- the applicant sign-in (`back-end/api/applicant_auth.py`) answers its one same 200 for a code request and its one same 401 for a verify, so a wrong type tells a caller nothing a missing value does not;
+- the applicant sign-in (`back-end/api/applicant_auth.py`) answers its one same 200 for a code request and its one same 401 for a verify, so a wrong type tells a caller nothing a missing value does not, and a human check token that is not a string is asked for as a missing one is;
 - a vendor's own check-in and its undo (`back-end/api/vendor_check_in.py`) answer a date or a door code that is not a string as a missing one: no table on that date or not this market's door code, and, for the undo, `date is required`, 400;
 - a vendor's own check-out and its undo, in the same module, read theirs the same way: a date that is not a string is a day out of reach, "Check-in is open on the day itself.", 409, a door code that is not one is not this market's, and, for the undo, `date is required`, 400;
 - creating and renaming an organization (`back-end/app.py`) answer 400 for a name that is not a string or is blank;
