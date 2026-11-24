@@ -299,8 +299,8 @@ def name_pools():
     return module.GIVEN_NAMES, module.FAMILY_NAMES
 
 
-# A person's names come from the pools of common names every made-up applicant is drawn from (test
-# data), so no seeded vendor reads as a real person.
+# A person's names come from the synthetic Google Form exports' pools of common names (test data), so
+# no seeded vendor reads as a real person.
 GIVEN_NAMES, FAMILY_NAMES = name_pools()
 STEMS = ["Ash", "Briar", "Cinder", "Dapple", "Ember", "Fen", "Gorse", "Hollow", "Ivy", "Juniper",
          "Kestrel", "Lark", "Moss", "Nettle", "Oak", "Pebble", "Quince", "Rook", "Sorrel", "Thistle",

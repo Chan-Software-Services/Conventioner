@@ -4,7 +4,7 @@ kind: testing
 describes:
   - scripts/seed_fixture.sh
   - scripts/seed_walk_market.sh
-verified: 2026-11-18
+verified: 2026-11-25
 sources:
   - E26
   - E41/F01/S01
@@ -36,7 +36,7 @@ How to run the suites is [`TESTING.md`](../../TESTING.md); the seed helpers are 
 2. Run [`./scripts/seed_fixture.sh`](../../../scripts/seed_fixture.sh) in the worktree, or `./scripts/seed_fixture.sh --primary` in the primary checkout: it empties the stack's database first, so it refuses to guess which stack ([TESTING.md](../../TESTING.md#quick-start-seed-fixture)).
    It creates two verified organizers, `e2e@example.com` / `e2epassword123` (owns `Seed Test Org`) and `e2e-noorg@example.com` / `e2enoorg123` (in no organization), plus one draft market.
 3. For a walk of a market as it stands on a market day, run [`scripts/seed_walk_market.sh`](../../../scripts/seed_walk_market.sh) next, on the same stack, which it takes as the seed does and never starts.
-   Through the back end's own API, signed in as `e2e@example.com`, it makes "Example Winter Makers Fair": three days starting today, or on the day `SEED_TODAY` (`YYYY-MM-DD`) names, two halls laid out with their tables and zones, 184 made-up applications read in through the real import, each vendor named from the pools of common names [test data](test-data.md) draws every person from, 150 approved and 34 rejected, the solver's run, results published, the market in its market days with some of its first day's vendors checked in, and the public map on, each Instagram handle it writes beginning `example`, as [test data](test-data.md) has every handle.
+   Through the back end's own API, signed in as `e2e@example.com`, it makes "Example Winter Makers Fair": three days starting today, or on the day `SEED_TODAY` (`YYYY-MM-DD`) names, two halls laid out with their tables and zones, 184 made-up applications read in through the real import, each vendor named from the synthetic Google Form exports' pools of common names ([test data](test-data.md)), 150 approved and 34 rejected, the solver's run, results published, the market in its market days with some of its first day's vendors checked in, and the public map on, each Instagram handle it writes beginning `example`, as [test data](test-data.md) has every handle.
    It refuses a stack that already holds that market, since it adds to the database rather than emptying it, and prints the market's id, its market page (the map, since the map is on), its vendor page and what it seeded (T467).
 4. Open the front end printed by the script (`http://127.0.0.1:5173` on the primary stack, port `5173 + slot*10` in a worktree; never `localhost`, see [Testing gotchas](../../TESTING.md#testing-gotchas)) and sign in.
 

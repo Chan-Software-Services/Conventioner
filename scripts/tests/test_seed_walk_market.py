@@ -110,8 +110,8 @@ def the_common_name_pools():
 
 
 def test_every_vendor_it_makes_is_named_from_the_common_name_pools(monkeypatch):
-    # Test data names a person only from the generator's pools of common names, so no seeded
-    # vendor reads as a real person (docs/implementation/testing/test-data.md).
+    # The walk's seed names a person from the generator's pools of common names, as test data names
+    # a person, so no seeded vendor reads as a real person (docs/implementation/testing/test-data.md).
     given, family = the_common_name_pools()
     vendors = the_seeds_python(monkeypatch)["make_vendors"]()
 
