@@ -6,7 +6,7 @@ describes:
   - scripts/th-compose.sh
   - scripts/th-return.sh
   - docker-compose.worktree.yml
-verified: 2026-10-25
+verified: 2026-11-24
 ---
 
 # Treehouse worktrees for agents
@@ -72,7 +72,7 @@ With `TEAM_STACK_DOWN=1`, `th-return.sh` runs no teardown of its own and goes st
 While a heavy run (an end-to-end run) holds the machine, `team-stack down` removes the stack's
 containers and volumes but leaves its network for its sweep, since removing a network fails
 every request a running browser has in flight; a `down` here would remove that network at once.
-Only `1` skips the teardown, and a return run by hand, which does not set it, always tears down.
+Only `1` skips the teardown, and a return run by hand, which does not set it, tears down as before.
 
 ## Port map (per worktree slot)
 

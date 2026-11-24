@@ -12,7 +12,8 @@
 # With TEAM_STACK_DOWN=1 in its environment, which the agent team's team-close sets once its
 # team-stack down has taken the slot's stack down, it runs no teardown of its own: while a heavy run
 # holds the machine, team-stack down leaves the stack's network for its sweep, and a down here would
-# remove it at once, beside a browser that run is driving. A return run by hand always tears down.
+# remove it at once, beside a browser that run is driving. A return run by hand, which does not set
+# it, tears down as before.
 #
 #     scripts/th-return.sh <worktree-path>
 #     scripts/th-return.sh <worktree-path> --force   # no prompts; return even if the teardown failed
