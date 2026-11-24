@@ -501,6 +501,9 @@ test.describe('The reviewed applications on a phone', () => {
             applicantEmail: up,
             verdictBy: { kind: 'person', email: giver },
             verdictAt: new Date().toISOString(),
+            // Served on every application an organizer reads, the 409's included.
+            origin: 'applied',
+            review: { state: 'approved', undecided: false, share: [], waiting: false },
           },
         },
       }),

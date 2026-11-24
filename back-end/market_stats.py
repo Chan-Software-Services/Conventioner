@@ -8,12 +8,13 @@ amounts owed, paid and still owed by the Payments page (``market_money``). Place
 until an assignment is stored, money where the market sets no prices or the Payments page has
 nobody to count.
 
-Who applied: every application by its stored status, how many were added by hand, and the time
-each of the others applied. Statuses go out as stored, and the page counts them into the
-Applications tab's All view filters, which are decided by status alone, so the two agree; times go
-out rather than days because the server keeps no time zone for a market, and a day is the
-reader's. Beside them, when applications opened and closed, from the phase record
-(``intake_window``), which bound the page's chart of applications over time (T201).
+Who applied: every application by its served review state, how many were added by hand, and the
+time each of the others applied. The page counts the states into the Applications tab's All view
+filters, which list by the served state, so the two agree; the stored statuses go out beside them
+for a front end built before the states (``count_applicants``). Times go out rather than days
+because the server keeps no time zone for a market, and a day is the reader's. Beside them, when
+applications opened and closed, from the phase record (``intake_window``), which bound the page's
+chart of applications over time (T201).
 
 Room: per market date, and per tier over the dates, the tables asked against the plan's tables
 (``count_room``, T201), from Draft on, so a draft shows its tables with nothing asked.
@@ -176,16 +177,28 @@ def count_money(market: Market) -> Optional[Dict[str, Any]]:
 
 
 def count_applicants(applications: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Every application by its stored status, and when each that was not added by hand applied.
+    """Every application by its served review state (``states``, each of the four, zero
+    included), and when each that was not added by hand applied.
 
-    Only the times are sent, never who: the page needs nothing more to count them by day.
+    ``statuses``, every application by its stored status, is served beside the states for a front
+    end built before them, which reads it while a deploy promotes the back end first; no screen of
+    this release reads it. A status no state reads is counted in the whole and in no state, as the
+    organizer's list leaves such an application out. Only the times are sent, never who: the page
+    needs nothing more to count them by day.
     """
     statuses: Dict[str, int] = {}
+    states: Dict[str, int] = {state.value: 0 for state in ReviewState.Served}
     submitted: List[str] = []
     added = 0
     for application in applications:
         status = str(application.get("status") or "")
         statuses[status] = statuses.get(status, 0) + 1
+        try:
+            served = ReviewState.state_of(application).served
+        except ValueError:
+            served = None
+        if served is not None:
+            states[served.value] += 1
         if ReviewState.is_added(application):
             added += 1
         elif application.get("submitted_at"):
@@ -194,6 +207,7 @@ def count_applicants(applications: List[Dict[str, Any]]) -> Dict[str, Any]:
         "total": len(applications),
         "addedByHand": added,
         "statuses": statuses,
+        "states": states,
         "submittedAt": submitted,
     }
 

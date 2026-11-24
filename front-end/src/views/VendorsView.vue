@@ -28,7 +28,7 @@ import {
   type VendorsShown,
 } from '@/utils/resultFilters';
 import { statusChip, statusLabel } from '@/utils/verdicts';
-import { ApplicationStatus } from '@/assets/types/datatypes';
+import type { ReviewState } from '@/assets/types/datatypes';
 import { useMarketStore } from '@/stores/market';
 import { useResultFilters } from '@/utils/useResultFilters';
 import { signedInEmail } from '@/utils/signedIn';
@@ -105,7 +105,7 @@ const vendors = computed(() => details.rows.value);
  */
 const placementsRefused = computed(() => details.loaded.value && !details.placementsRead.value);
 const tableVendors = computed(() => vendors.value.filter((v) => v.needsATable));
-const isRejected = (v: { status: string }) => v.status === ApplicationStatus.ReviewerRejected;
+const isRejected = (v: { reviewState: ReviewState }) => v.reviewState === 'rejected';
 const anyRejected = computed(() => vendors.value.some(isRejected));
 
 /**

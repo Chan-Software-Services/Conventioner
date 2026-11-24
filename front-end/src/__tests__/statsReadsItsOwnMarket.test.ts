@@ -47,7 +47,7 @@ function figures(total: number): MarketStats {
     applicants: {
       total,
       addedByHand: 0,
-      statuses: { open: total },
+      states: { open: total, follow_up: 0, approved: 0, rejected: 0 },
       submittedAt: [],
       openedAt: null,
       closedAt: null,

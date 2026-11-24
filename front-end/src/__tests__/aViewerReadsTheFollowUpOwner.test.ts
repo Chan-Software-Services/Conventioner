@@ -13,9 +13,9 @@ import { flushPromises, mount } from '@vue/test-utils';
 import ApplicationMonitor from '@/components/application/ApplicationMonitor.vue';
 import { ApplicationStatus, type Application, type Market } from '@/assets/types/datatypes';
 import { MarketAction } from '@/utils/marketActions';
-import { isDecided } from '@/utils/verdicts';
 import { reassignFollowUp } from '@/utils/applicantApi';
 import { answersRefusing } from './support/servedAnswers';
+import { servedReview } from './support/servedReview';
 
 const fetchMarketApplications = vi.fn();
 
@@ -31,8 +31,7 @@ vi.mock('@/utils/api', async (importOriginal) => {
     const apps: Application[] = await fetchMarketApplications('m1');
     const handed = apps.find(
       (app) =>
-        !isDecided(app) &&
-        (body.includeFollowUps || app.status !== ApplicationStatus.NeedsFollowUp),
+        app.review.state === 'open' || (body.includeFollowUps && app.review.state === 'follow_up'),
     );
     return { data: { application: handed ?? null } };
   };
@@ -55,6 +54,7 @@ function followUpApplication(email: string): Application {
     marketId: 'm1',
     applicantEmail: email,
     status: ApplicationStatus.NeedsFollowUp,
+    ...servedReview('follow_up', { share: ['robin@org.test'] }),
     formData: {},
     submittedAt: '2026-09-15T14:20:18.000Z',
     followUpOwner: { email: 'robin@org.test' },

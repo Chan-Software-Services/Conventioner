@@ -3,6 +3,7 @@
  * link to where its figure is worked on, a zero whose link would list nothing told but not linked.
  */
 import { describe, expect, it } from 'vitest';
+import { applicantStats } from '@/utils/applicantStats';
 import type { MarketStats } from '@/utils/marketStats';
 import { statsHeadlines } from '@/utils/statsHeadlines';
 
@@ -15,13 +16,8 @@ function stats(over: Partial<MarketStats> = {}): MarketStats {
     applicants: {
       total: 36,
       addedByHand: 4,
-      statuses: {
-        open: 10,
-        under_review: 2,
-        needs_follow_up: 3,
-        reviewer_approved: 17,
-        reviewer_rejected: 4,
-      },
+      // By served state: the 12 open among them were stored at both spellings of open.
+      states: { open: 12, follow_up: 3, approved: 17, rejected: 4 },
       submittedAt: [],
       openedAt: null,
       closedAt: null,
@@ -89,9 +85,23 @@ describe('statsHeadlines', () => {
     ]);
   });
 
+  it('counts "open to review" as the Open filter counts, from the served states', () => {
+    const open = read('applications').find((tile) => tile.id === 'open')!;
+    const filter = applicantStats(stats().applicants, 'm 1').byStatus.find(
+      (part) => part.value === 'undecided',
+    )!;
+    expect(open.figure).toBe(String(filter.count));
+    expect(filter.count).toBe(12);
+  });
+
   it('in applications, links no zero that would list nothing, and leaves out a plan of no date', () => {
     const none = read('applications', {
-      applicants: { ...stats().applicants, total: 0, addedByHand: 0, statuses: {} },
+      applicants: {
+        ...stats().applicants,
+        total: 0,
+        addedByHand: 0,
+        states: { open: 0, follow_up: 0, approved: 0, rejected: 0 },
+      },
       room: null,
     });
     expect(none).toEqual([

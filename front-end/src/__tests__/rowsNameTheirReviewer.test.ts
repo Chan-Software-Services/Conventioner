@@ -16,9 +16,12 @@ import ApplicationMonitor from '@/components/application/ApplicationMonitor.vue'
 import { ApplicationStatus, type Application, type Market } from '@/assets/types/datatypes';
 import { MarketAction } from '@/utils/marketActions';
 import { answersRefusing } from './support/servedAnswers';
+import { servedReview } from './support/servedReview';
 
 const ME = 'ana@example.com';
 const SAM = 'sam@example.com';
+/** A reviewer taken off the team: what was dealt to them still carries their address. */
+const CARL = 'carl@example.com';
 const WARNING = `This application is dealt to ${SAM}. If you decide it, its history will say you decided it for them.`;
 
 /** The reviewer's address, drawn so it breaks only before its "@" or a dot (T181): its parts. */
@@ -47,7 +50,14 @@ vi.mock('@/utils/applicantApi', async (importOriginal) => {
 });
 vi.mock('@/utils/signedIn', () => ({ signedInEmail: () => ME }));
 
-function application(id: string, status: ApplicationStatus, reviewer: string | null): Application {
+/** An application as stored, with the review the server serves it (`served`). */
+function application(
+  id: string,
+  status: ApplicationStatus,
+  reviewer: string | null,
+  served: ReturnType<typeof servedReview>,
+  owner?: string,
+): Application {
   return {
     id,
     marketId: 'm1',
@@ -56,8 +66,16 @@ function application(id: string, status: ApplicationStatus, reviewer: string | n
     formData: {},
     submittedAt: '2026-09-15T14:20:18.000Z',
     reviewer: reviewer ? { userId: reviewer, email: reviewer } : null,
+    followUpOwner: owner ? { userId: owner, email: owner } : null,
+    ...served,
   } as unknown as Application;
 }
+
+/** Open and dealt to a chosen reviewer: theirs. */
+const openOf = (id: string, reviewer: string) =>
+  application(id, ApplicationStatus.Open, reviewer, servedReview('open', { share: [reviewer] }));
+/** The same application on a market with no reviewers chosen: nobody's share, nothing waits. */
+const unchosen = (app: Application): Application => ({ ...app, ...servedReview(app.review.state) });
 
 /** A market in the review, with Ana and Sam chosen or nobody, read by someone who may decide or not. */
 function market({ chosen = true, decides = true } = {}): Market {
@@ -95,10 +113,19 @@ beforeEach(() => {
 // --- The All view ----------------------------------------------------------------------------
 
 const ROWS = [
-  application('mine', ApplicationStatus.Open, ME),
-  application('sams', ApplicationStatus.Open, SAM),
-  application('sams-follow-up', ApplicationStatus.NeedsFollowUp, SAM),
-  application('never-dealt', ApplicationStatus.Open, null),
+  openOf('mine', ME),
+  openOf('sams', SAM),
+  application(
+    'sams-follow-up',
+    ApplicationStatus.NeedsFollowUp,
+    SAM,
+    servedReview('follow_up', { share: [SAM] }),
+    SAM,
+  ),
+  // Arrived while the deal could not deal it: it waits for the next.
+  application('never-dealt', ApplicationStatus.Open, null, servedReview('open', { waiting: true })),
+  // Dealt to Carl before he was taken off the team: in nobody's share until the next deal.
+  application('carls', ApplicationStatus.Open, CARL, servedReview('open', { waiting: true })),
 ];
 
 async function allView(props: { market: Market }) {
@@ -134,16 +161,24 @@ describe('the All view’s rows', () => {
     route.query = { reviewer: 'anyone' };
   });
 
-  it('name the reviewer, "you" for the reader’s own, and nothing on one never dealt', async () => {
+  it('name the reviewer, "you" for the reader’s own, and "not dealt yet" on one never dealt', async () => {
     const wrapper = await allView({ market: market() });
 
     expect(reviewerOf(wrapper, 'mine')?.text()).toBe('Reviewer: you');
     expect(reviewerOf(wrapper, 'sams')?.text()).toBe(`Reviewer: ${SAM}`);
     expect(addressPartsOf(reviewerOf(wrapper, 'sams')!)).toEqual(SAMS_PARTS);
-    expect(reviewerOf(wrapper, 'never-dealt')?.exists()).toBe(false);
+    expect(reviewerOf(wrapper, 'never-dealt')?.text()).toBe('Reviewer: not dealt yet');
+  });
+
+  it('read "not dealt yet" on one still carrying a removed reviewer’s address', async () => {
+    const wrapper = await allView({ market: market() });
+
+    expect(reviewerOf(wrapper, 'carls')?.text()).toBe('Reviewer: not dealt yet');
+    expect(addressPartsOf(reviewerOf(wrapper, 'carls')!)).toEqual([]);
   });
 
   it('name nobody with no reviewers chosen', async () => {
+    fetchMarketApplications.mockResolvedValue(ROWS.map(unchosen));
     const wrapper = await allView({ market: market({ chosen: false }) });
 
     expect(wrapper.findAll('[data-testid="applications-all-reviewer"]')).toHaveLength(0);
@@ -184,6 +219,17 @@ describe('the All view’s drawer', () => {
     );
   });
 
+  it('does not warn on one in nobody’s share, though it carries a removed reviewer’s address', async () => {
+    const wrapper = await drawerOf('carls');
+
+    expect(wrapper.get('[data-testid="applications-all-drawer-reviewer"]').text()).toBe(
+      'Reviewer: not dealt yet',
+    );
+    expect(wrapper.find('[data-testid="applications-all-drawer-dealt-warning"]').exists()).toBe(
+      false,
+    );
+  });
+
   it('does not warn on the reader’s own', async () => {
     const wrapper = await drawerOf('mine');
 
@@ -207,6 +253,7 @@ describe('the All view’s drawer', () => {
   });
 
   it('shows nothing with no reviewers chosen', async () => {
+    fetchMarketApplications.mockResolvedValue(ROWS.map(unchosen));
     const wrapper = await drawerOf('sams', { chosen: false });
 
     expect(wrapper.find('[data-testid="applications-all-drawer-reviewer"]').exists()).toBe(false);
@@ -251,7 +298,7 @@ describe('a selection’s confirmation', () => {
   });
 
   it('reads as today with none dealt to others', async () => {
-    const dialog = await confirming(['mine', 'never-dealt']);
+    const dialog = await confirming(['mine', 'never-dealt', 'carls']);
 
     expect(dialog).not.toBeNull();
     expect(dialog?.querySelector('[data-testid="applications-all-confirm-dealt"]')).toBeNull();
@@ -275,7 +322,7 @@ async function cardOf(app: Application, options = {}) {
 
 describe('One by one’s card', () => {
   it('names the reviewer and warns above the verdict buttons on someone else’s', async () => {
-    const wrapper = await cardOf(application('sams', ApplicationStatus.Open, SAM));
+    const wrapper = await cardOf(openOf('sams', SAM));
 
     const card = wrapper.get('[data-testid="app-monitor-card"]');
     expect(card.get('[data-testid="app-monitor-reviewer"]').text()).toBe(`Reviewer: ${SAM}`);
@@ -291,14 +338,14 @@ describe('One by one’s card', () => {
   });
 
   it('says "you" on the reader’s own, without a warning', async () => {
-    const wrapper = await cardOf(application('mine', ApplicationStatus.Open, ME));
+    const wrapper = await cardOf(openOf('mine', ME));
 
     expect(wrapper.get('[data-testid="app-monitor-reviewer"]').text()).toBe('Reviewer: you');
     expect(wrapper.find('[data-testid="app-monitor-dealt-warning"]').exists()).toBe(false);
   });
 
   it('shows a reader who decides nothing the reviewer’s name only', async () => {
-    const wrapper = await cardOf(application('sams', ApplicationStatus.Open, SAM), {
+    const wrapper = await cardOf(openOf('sams', SAM), {
       decides: false,
     });
 
@@ -307,11 +354,43 @@ describe('One by one’s card', () => {
   });
 
   it('shows nothing with no reviewers chosen', async () => {
-    const wrapper = await cardOf(application('sams', ApplicationStatus.Open, SAM), {
+    const wrapper = await cardOf(unchosen(openOf('sams', SAM)), {
       chosen: false,
     });
 
     expect(wrapper.find('[data-testid="app-monitor-reviewer"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="app-monitor-dealt-warning"]').exists()).toBe(false);
+  });
+
+  it('reads "not dealt yet" on one in nobody’s share, warning of no one', async () => {
+    const wrapper = await cardOf(
+      application('carls', ApplicationStatus.Open, CARL, servedReview('open', { waiting: true })),
+    );
+
+    expect(wrapper.get('[data-testid="app-monitor-reviewer"]').text()).toBe(
+      'Reviewer: not dealt yet',
+    );
+    expect(wrapper.find('[data-testid="app-monitor-dealt-warning"]').exists()).toBe(false);
+  });
+
+  it('names a chosen reviewer who can no longer review here, and warns of their share', async () => {
+    const unable = market();
+    unable.reviewTeam!.reviewers = [
+      { email: ME, able: true },
+      { email: SAM, able: false },
+    ];
+    fetchMarketApplications.mockResolvedValue([openOf('sams', SAM)]);
+    api.post.mockImplementation((url: string) =>
+      Promise.resolve({
+        data: url.endsWith('/review/next') ? { application: openOf('sams', SAM) } : {},
+      }),
+    );
+    const wrapper = mount(ApplicationMonitor, {
+      props: reactive({ market: unable, visible: true }),
+    });
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="app-monitor-reviewer"]').text()).toBe(`Reviewer: ${SAM}`);
+    expect(wrapper.get('[data-testid="app-monitor-dealt-warning"]').text()).toBe(WARNING);
   });
 });
