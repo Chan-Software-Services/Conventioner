@@ -358,6 +358,8 @@ Asked by:
 - `POST` and `DELETE /markets/:id/attendance`
 - `POST` and `DELETE /markets/:id/attendance/check-out`
 - `PUT /markets/:id/self-check-in`
+- `GET /markets/:id/door-code`
+- `POST /markets/:id/door-code`
 
 ### Connect Discord and give roles (`connect-discord`)
 
