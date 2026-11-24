@@ -606,6 +606,8 @@ class TestAFileNoRulePlaces:
             "front-end/scripts/bundle-budget.ts",
             "front-end/scripts/no-eval.ts",
             "front-end/scripts/brand-icons.ts",
+            "front-end/scripts/design-md.ts",
+            "front-end/scripts/design-md-content.ts",
             # The back end's deploy config, which the stack does not read.
             "back-end/vercel.json",
             # The advisory scan's lock, which only CI's python-advisories job installs.

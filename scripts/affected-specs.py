@@ -84,16 +84,16 @@ RUN_EVERY_SPEC = re.compile(
 
 # The changed files that drive no spec, wherever the map places them: the docs, Markdown, the
 # suites the E2E run does not run and their configs, the lint and format configs, the scripts that
-# deal, repeat or measure the specs (or that nothing runs), the back end's deploy config, and the
-# advisory scan's lock, which only CI's python-advisories job installs, none of which the stack or a
-# page reads.
+# deal, repeat or measure the specs (or that nothing runs, or that write DESIGN.md), the back end's
+# deploy config, and the advisory scan's lock, which only CI's python-advisories job installs, none
+# of which the stack or a page reads.
 DRIVES_NO_SPEC = re.compile(
     r"^(?:docs/|back-end/tests/|front-end/src/__tests__/|scripts/tests/)|\.md$|\.test\.ts$"
     r"|^front-end/src/.*\.(?:test|spec)\.tsx?$"
     r"|^front-end/(?:vitest\.config\.ts|tsconfig\.vitest\.json|eslint\.config\.ts"
     r"|stylelint\.config\.js|\.prettierrc\.json|\.prettierignore|\.editorconfig"
     r"|scripts/(?:e2e-shard-timings\.json|e2e-shards\.ts|e2e-repeat\.ts|bundle-budget\.ts"
-    r"|no-eval\.ts|brand-icons\.ts))$"
+    r"|no-eval\.ts|brand-icons\.ts|design-md\.ts|design-md-content\.ts))$"
     r"|^back-end/(?:pytest\.ini|vercel\.json|requirements-audit\.(?:in|txt))$"
 )
 
