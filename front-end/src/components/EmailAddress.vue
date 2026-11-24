@@ -53,6 +53,14 @@ const parts = computed(() =>
   overflow-wrap: anywhere;
 }
 
+/* In a printed table each piece stays whole and sizes its column, as every word does there
+   (primitives.css): paper does not scroll, so the table wraps to the page. */
+@media print {
+  .data-table :is(th, td) .email-address {
+    overflow-wrap: normal;
+  }
+}
+
 /* A place the address may break. The first `content` is for a browser that reads no alternative
    text, which skips the second. */
 .email-address-break::before {

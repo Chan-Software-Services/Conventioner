@@ -6,7 +6,7 @@ describes:
   - back-end/api/attendance.py#record_check_out
   - back-end/api/attendance.py#undo_check_out
   - back-end/datatypes.py#vendor_self_check_in_from_market_document
-verified: 2026-11-19
+verified: 2026-11-24
 sources:
   - T496
 status: accepted
@@ -30,7 +30,7 @@ The vendor's own check-in was also open at every market once a door code existed
 A document with no `checked_out_at` is a vendor not checked out, which is every document stored before, so nothing is migrated.
 
 - One vendor's day stays one record, under the unique index it already has.
-- A check-out is one update filtered to a day not yet checked out, so two at once leave one time and one history entry, and the second answers the stored time.
+- A check-out is one update filtered to a day not yet checked out, so two at once leave one time and one history entry, and the second answers the stored check-out's time, and at the organizer's door who made it and by which way too.
 - The undo of a check-in refuses a checked-out day, 409 "Undo the check-out first.", so a check-out is never dropped without its own entry.
 - Nothing else reads it: a checked-out vendor still came, so the roster's states and counts, the Stats tab, the day map, the public map, the owed days and the placements are as they were.
 

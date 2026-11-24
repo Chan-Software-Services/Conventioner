@@ -136,6 +136,11 @@ onMounted(async () => {
   min-width: 0;
 }
 
+/* While the page fills the window, the shell takes the window shown, as `body` does (base.css). */
+html.fills-the-window .app-container {
+  min-height: 100dvh;
+}
+
 /*
  * The navigation is reachable at any scroll position, on every page (E17/F04/S01).
  *
