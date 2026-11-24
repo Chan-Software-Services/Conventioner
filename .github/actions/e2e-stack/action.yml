@@ -1,18 +1,20 @@
 name: Start the e2e stack
 description: >-
-  Installs Playwright's Chromium, builds or restores the stack's images, starts the stack and seeds
-  it, for a job that runs Playwright on one runner. The job checks the repository out and runs the
-  front-end-deps action first, which says why front-end/node_modules must be there before the stack
-  starts. Browsers and images come from GitHub's cache when an earlier run left them,
-  keyed on what decides them: the Playwright version for the browsers, scripts/image-tags.sh's tags
-  (a hash of the files each image is built from) for the images. The source is not in the key: it
+  Installs Playwright's Chromium and the system packages it needs, builds or restores the stack's
+  images, starts the stack and seeds it, for a job that runs Playwright on one runner. The job checks
+  the repository out and runs the front-end-deps action first, which says why front-end/node_modules
+  must be there before the stack starts. Browsers, packages and images come from GitHub's cache when
+  an earlier run left them, keyed on what decides them: the Playwright version for the browsers, the
+  packages the runner lacks and their versions for the packages, scripts/image-tags.sh's tags (a
+  hash of the files each image is built from) for the images. The source is not in the key: it
   reaches the containers through the compose file's bind mounts.
 
 inputs:
   save-caches:
     description: >-
-      "true" to save the browsers and the images to the cache when they were not restored. Only one
-      job of a run saves, so the others do not race to write the same key.
+      "true" to save the browsers and the images to the cache when they were not restored, and the
+      packages when they were not restored and are the versions the key names. Only one job of a
+      run saves, so the others do not race to write the same key.
     required: false
     default: "false"
 
@@ -34,19 +36,49 @@ runs:
       if: steps.browsers.outputs.cache-hit != 'true'
       shell: bash
       working-directory: front-end
-      run: npx playwright install chromium --with-deps
-    # The cache holds the browser only; its system libraries are the runner's packages.
-    - name: Install Chromium's system libraries
-      if: steps.browsers.outputs.cache-hit == 'true'
-      shell: bash
-      working-directory: front-end
-      run: npx playwright install-deps chromium
+      run: npx playwright install chromium
     - name: Save Playwright's browsers
       if: inputs.save-caches == 'true' && steps.browsers.outputs.cache-hit != 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/ms-playwright
         key: ${{ steps.browsers.outputs.cache-primary-key }}
+
+    # The runner has most of the system packages Chromium needs. The cache keeps the .deb files of
+    # those it lacks, keyed on the release and each package's version, so a shard whose cached
+    # files install reaches Ubuntu's apt mirrors for none of them (scripts/chromium-packages.sh).
+    - name: The system packages Chromium lacks
+      id: packages
+      shell: bash
+      working-directory: front-end
+      run: ../scripts/chromium-packages.sh missing
+    - name: Restore Chromium's system packages
+      id: packages-cache
+      if: steps.packages.outputs.packages != ''
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/chromium-packages
+        key: chromium-packages-${{ runner.os }}-${{ runner.arch }}-${{ steps.packages.outputs.hash }}
+    - name: Install Chromium's system packages
+      id: packages-install
+      if: steps.packages.outputs.packages != ''
+      shell: bash
+      working-directory: front-end
+      env:
+        PACKAGES: ${{ steps.packages.outputs.packages }}
+      run: |
+        # One word a package name, split on purpose.
+        # shellcheck disable=SC2086
+        ../scripts/chromium-packages.sh install "$RUNNER_TEMP/chromium-packages" $PACKAGES
+    - name: Save Chromium's system packages
+      if: >-
+        inputs.save-caches == 'true' && steps.packages.outputs.packages != '' &&
+        steps.packages-cache.outputs.cache-hit != 'true' &&
+        steps.packages-install.outputs.cacheable == 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/chromium-packages
+        key: ${{ steps.packages-cache.outputs.cache-primary-key }}
 
     # The images compose builds are named <project>-<service>, for each service with a `build:`.
     - name: The images and their tags

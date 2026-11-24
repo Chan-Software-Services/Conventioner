@@ -137,7 +137,7 @@ MONGODB_URI='<production URI>' .venv/bin/python create_account.py verify someone
 It lowercases the address (login matches the stored address exactly), makes the account in the shape sign-up makes, and never takes the password as an argument.
 Then give the person access in the product as above.
 A forgotten password is reset by its owner from the sign-in page ("Forgot password?"); there is no operator path, and none is needed.
-`create_test_user.py` is the test fixtures' script: it prints the password it was given, so do not use it for real accounts.
+`create_test_user.py` is the test fixtures' script: it prints the password it was given and hashes it at bcrypt's lowest cost, so do not use it for real accounts; it refuses whenever `MONGODB_URI` is set, the way production is reached.
 
 ### The test markets
 
@@ -307,9 +307,8 @@ A market whose form asked one as a short text question of its own keeps its vend
 The release is safe before the script runs: until then the market reads as before, its answers under its own question.
 **Run it once the market's applications stage is over** where its vendors apply on its page, and while no import of that market is under way.
 A vendor's save and an import build the answers from the form as the market asks it then and compare them whole to what is stored, so from step 1 until step 3 is done either reads a moved answer as changed and sends a verdict back to open, and an import of the same file before step 2 removes the copies step 1 made.
-A vendor's save holds no form revision either, so one from a page opened before the run sends the old question's answer, which the form no longer keeps, beside a blank built-in field, and the business name is stored nowhere.
 So a run that moves the question is refused on a market whose vendors apply on its page while it is in its applications stage, taking applications or stopped, and a run left after step 1 or step 2 is finished before any import of that market.
-A market moved back into the applications stage after a run can still lose a business name that way, from a page a vendor opened before the run.
+A vendor's save from a page opened before the run sends the old question's answer beside a blank built-in field, and is refused, since it carries the form version its page read, which the question's move changed ([a vendor's save is held to the form they saw](business/rules/a-vendors-save-is-held-to-the-form-they-saw.md)): on a market moved back into the applications stage after a run, the business name the run copied stays, and the vendor reloads onto the form as it now asks.
 An organizer with the form editor open (a draft only) is refused their next save and reads the form again.
 Take a `mongodump` first ([backups](#backups-and-restoring)), then list, dry-run and run:
 
@@ -461,7 +460,7 @@ Never delete such a document by hand: its records would stay behind, with nothin
 
 - `reset_database.py` empties every collection. It refuses whenever `MONGODB_URI` is set, so it cannot reach production by accident.
 - `migrations/cleanup_unverified_users.py` deletes every unverified account (use `--dry-run` first, or `--email` for one).
-- `create_test_user.py` makes a fixture account and prints its password (its `--bulk` form makes many and prints none).
+- `create_test_user.py` makes a fixture account, its password hashed at bcrypt's lowest cost, and prints its password (its `--bulk` form makes many and prints none). It refuses whenever `MONGODB_URI` is set, as `reset_database.py` does.
 
 `reset_database.py`, `create_test_user.py` and `seed_test_markets.py` refuse, too, a database the environment does not name (neither `MONGODB_HOST` nor `MONGODB_URI` set), which would be `127.0.0.1:27017`, and that same target named outright: a loopback or unspecified host (`127.0.0.1`, `localhost`, `::1`, `0.0.0.0`, `::`) on port 27017, or with no port, is on a developer's machine the primary checkout's stack's MongoDB, and a `MONGODB_HOST` left over from running the back end on the host names it as easily as a meant one.
 Every stack's back-end container sets `MONGODB_HOST=mongodb`, so `scripts/th-compose.sh exec backend python /app/<script>` (or `docker compose exec` for the primary stack) passes; a slot's MongoDB on the host is port `27017 + slot * 10`; and `ALLOW_PRIMARY_STACK=true` opts in to the primary stack's MongoDB from the host.

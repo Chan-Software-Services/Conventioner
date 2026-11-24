@@ -18,7 +18,7 @@ describes:
   - back-end/tests/test_changed_answers_are_one_event.py
   - back-end/datatypes.py#ApplicationOrigin
   - back-end/migrations/migrate_business_name.py
-verified: 2026-11-20
+verified: 2026-11-24
 sources:
   - wayfinding/v0-1-0/map
   - wayfinding/real-market-readiness/01
