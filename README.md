@@ -7,26 +7,26 @@ It runs in production at [conventioner.io](https://conventioner.io), first for t
 
 ## Where things are
 
-| | |
-| --- | --- |
-| `front-end/` | Vue 3, Vite, TypeScript; Vitest and Playwright |
-| `back-end/` | Python 3.12, Flask, MongoDB; pytest |
-| `docs/` | Everything below |
-| `.scratch/` | A local, ignored working folder; planning lives outside this repo ([the tracker contract](docs/agents/issue-tracker.md)) |
-| `AGENTS.md` (`CLAUDE.md`) | The codebase's sharp edges, for anyone changing it |
+|                           |                                                                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `front-end/`              | Vue 3, Vite, TypeScript; Vitest and Playwright                                                                           |
+| `back-end/`               | Python 3.12, Flask, MongoDB; pytest                                                                                      |
+| `docs/`                   | Everything below                                                                                                         |
+| `.scratch/`               | A local, ignored working folder; planning lives outside this repo ([the tracker contract](docs/agents/issue-tracker.md)) |
+| `AGENTS.md` (`CLAUDE.md`) | The codebase's sharp edges, for anyone changing it                                                                       |
 
 ## Docs
 
-| To | Read |
-| --- | --- |
-| Find what the product does and how the code does it: the knowledge graph | [docs/README.md](docs/README.md) |
-| Run it on your machine | [STARTUP.md](docs/STARTUP.md) |
-| Run the tests | [TESTING.md](docs/TESTING.md) |
-| Ship a change, hotfix, roll back | [RELEASING.md](docs/RELEASING.md) |
-| Run production: accounts, access, the database, logs, incidents | [OPERATIONS.md](docs/OPERATIONS.md) |
-| Rebuild production from nothing | [VERCEL_DEPLOYMENT.md](docs/VERCEL_DEPLOYMENT.md) |
-| See what the product does, flow by flow | [USER_FLOWS.md](docs/USER_FLOWS.md) |
-| Match the design language | [design-system.md](docs/design-system.md) |
+| To                                                                       | Read                                              |
+| ------------------------------------------------------------------------ | ------------------------------------------------- |
+| Find what the product does and how the code does it: the knowledge graph | [docs/README.md](docs/README.md)                  |
+| Run it on your machine                                                   | [STARTUP.md](docs/STARTUP.md)                     |
+| Run the tests                                                            | [TESTING.md](docs/TESTING.md)                     |
+| Ship a change, hotfix, roll back                                         | [RELEASING.md](docs/RELEASING.md)                 |
+| Run production: accounts, access, the database, logs, incidents          | [OPERATIONS.md](docs/OPERATIONS.md)               |
+| Rebuild production from nothing                                          | [VERCEL_DEPLOYMENT.md](docs/VERCEL_DEPLOYMENT.md) |
+| See what the product does, flow by flow                                  | [USER_FLOWS.md](docs/USER_FLOWS.md)               |
+| Match the design language                                                | [design-system.md](docs/design-system.md)         |
 
 ## Contributing
 
