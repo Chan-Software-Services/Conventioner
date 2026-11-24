@@ -2,8 +2,9 @@
  * The design contract (T582): writes `DESIGN.md` at the repository's root, in Google's DESIGN.md
  * format, from `src/assets/base.css` (the tokens) and `primitives.css` (the primitives).
  *
- * Agents building or reviewing a screen read it first: its YAML front matter holds every token, and
- * its body the rules, each section linking into `docs/design-system.md` for the reasons. It is
+ * Agents building or reviewing a screen read it first: its YAML front matter holds every token the
+ * format has a group for, and its body the rules and the other tokens' tables, each section but the
+ * Do's and Don'ts linking into `docs/design-system.md` for the reasons. It is
  * generated rather than kept by hand so it cannot drift from the CSS; the words the CSS cannot give
  * live in `design-md-content.ts`. The output is a pure function of those files: no date, and every
  * list in source order.
@@ -571,7 +572,8 @@ export function lintPolicy(findings: Finding[]): { failing: string[]; summary: s
 
 /**
  * `npm run design-md:check`: compares the file at `target` with what the generator writes from
- * `frontEnd`'s CSS, then lints it with the pinned linter, running both halves every time.
+ * `frontEnd`'s CSS, then lints it with the pinned linter, running both halves whenever the file
+ * exists.
  */
 export function checkDesignMd(
   frontEnd: string,

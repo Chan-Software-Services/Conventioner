@@ -523,11 +523,11 @@ After changing either file, run `npm run design-md` in `front-end/` and commit t
 
 ## Colors
 
-A colour token's name says its role: `--mm-text-*`, `--mm-black` and `--color-text` are ink, held to WCAG AA on each ground they are set on, and a fill names the ink it carries in its note.
+A colour token's name says its role: `--mm-text-*`, `--mm-black` and `--color-text` are ink, held to WCAG AA on each ground they are set on.
 Ink on a dark ground is its own family (`--mm-text-muted-on-dark`), and ink on beige or on a tint is its own token (`--mm-text-muted-on-beige`, `--mm-text-yellow-on-tint`): a colour is AA only on the ground it was measured on.
 Hover and pressed are fills of their own, a step darker each (`--mm-green-hover`, `--mm-green-pressed`), never an opacity.
 `--mm-border`, `--mm-border-soft` and `--edge-shade` are lines and shades, and carry no text.
-The figures after a colour are its contrast, from `base.css`; `front-end/src/__tests__/contrast.test.ts` holds every pair, and the lint's own contrast check reads colours without their alpha.
+Where a colour's note gives a figure on a ground, that is its contrast there, from `base.css`; `front-end/src/__tests__/contrast.test.ts` holds every pair, and the lint's own contrast check reads colours without their alpha.
 A layout names its sections' colours by number (`--layout-section-1-fill` to `--layout-section-8-fill`), so the order is stored data: a ninth goes after them, never between.
 [Colour](docs/design-system.md#colour) and [the contrast contract](docs/design-system.md#the-contrast-contract) say why.
 
@@ -542,7 +542,7 @@ The levels are each size at 400 (`text-*`), at 600 (`text-*-strong`) and in Merg
 
 ## Layout
 
-Spacing is a 4px grid, `--space-1` to `--space-12`, and `--space-hairline` for the gap between an icon and its label, which nothing is laid out on.
+Spacing is the `--space-*` scale, `--space-1` to `--space-12`, and `--space-hairline` for the gap between an icon and its label, which nothing is laid out on.
 A margin, a padding or a gap is `0`, a spacing token, or a sum or negation of tokens; Stylelint refuses a raw pixel.
 A screen is a card of one of two widths, `--workspace-max` for a market screen and `--list-max` for Markets and Organizations, that grows to its content while the page scrolls; no screen caps its own height.
 A control is `--control-height` or `--control-height-compact` tall, and any other target at least `--target-min`; on a phone all three grow, as the table below says.

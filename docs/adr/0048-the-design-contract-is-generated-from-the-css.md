@@ -26,8 +26,8 @@ A hand-kept contract would drift from the CSS the first time a token moved.
 
 **`DESIGN.md`, at the repository's root, is generated from the CSS in Google's DESIGN.md format, and CI fails a stale or unclean one.**
 
-- [`front-end/scripts/design-md.ts`](../../front-end/scripts/design-md.ts) writes it from `base.css` and `primitives.css` (`npm run design-md` in `front-end/`): every token in the format's groups, every primitive and its states as the format's components, and the tables the format has no group for.
-- Its words are hand-kept in one module, [`front-end/scripts/design-md-content.ts`](../../front-end/scripts/design-md-content.ts), which holds no parsing, while the generator holds no prose; the generator refuses words that name a token or class the CSS no longer has, and a primitive class the file never names.
+- [`front-end/scripts/design-md.ts`](../../front-end/scripts/design-md.ts) writes it from `base.css` and `primitives.css` (`npm run design-md` in `front-end/`): every colour, radius, spacing and type token in the format's groups, every primitive and its states as the format's components, and the tables the format has no group for.
+- Its words are hand-kept in one module, [`front-end/scripts/design-md-content.ts`](../../front-end/scripts/design-md-content.ts), which holds no parsing, while the generator writes only the headings, the table heads and the two comments that are its own; the generator refuses words that name a token or class the CSS no longer has, and a primitive class the file never names.
 - `npm run design-md:check`, in CI's required `frontend-lint-and-types` job and in `scripts/nm-test.sh`, fails when the committed file differs by a byte from what the generator writes, and lints it with the pinned package's own linter.
 - `@google/design.md` is pinned exactly in `front-end/package.json`, since the format is alpha and its lint rules change between versions.
 - The lint fails on every error and every warning but `orphaned-tokens`, and prints how many of those it allowed; the generator's unit test holds that allowance to exactly the colours no generated component uses.
@@ -36,7 +36,7 @@ A hand-kept contract would drift from the CSS the first time a token moved.
 ## Consequences
 
 - A change to a token or a primitive needs `npm run design-md` and the regenerated file in the same commit, or CI fails, naming the command and the first line that differs.
-- Nobody edits `DESIGN.md`: a hand edit is drift, and the comment under its front matter and its last Don't say where its words live.
+- Nobody edits `DESIGN.md`: a hand edit is drift, the comment under its front matter says where its words live, and its last Don't says not to edit it.
 - A new primitive class needs a component entry or a mention in the content module before anything is written.
 - A bump of `@google/design.md`, which Dependabot proposes, is a reviewed change: a new rule or a changed severity fails the bump's own pull request, and is answered in the generator, the content module or by holding the pin.
 - The linter's contrast check reads a colour without its alpha, so `contrast.test.ts` stays the contrast guard.
