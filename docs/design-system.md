@@ -835,12 +835,12 @@ A figure is in `tabular-nums`, so a column of them lines up.
 
 [`DESIGN.md`](../DESIGN.md), at the repository's root, is the design contract: the tokens and primitives of this file in [Google's DESIGN.md format](https://github.com/google-labs-code/design.md), short enough for an agent to read before it builds or reviews a screen (T582).
 Its YAML front matter holds every colour, radius and spacing token of `base.css`, each named as its custom property without the `--` and carrying the note written beside it in the CSS, three typography levels for each `--text-*` step, `primary`, the format's name for `--mm-green`, and every primitive of `primitives.css` with each of its states as one of the format's components.
-Its body holds a few hand-kept lines for each of the format's sections, the tables of the tokens the format has no group for (the phone's values, the shadows, the focus halos), each primitive's selectors and the declarations the format has no sub-token for, the Do's and Don'ts, and a link from each other section to the section of this file that says why.
+Its body holds a few hand-kept lines for each of the format's sections, the tables of the tokens the format has no group for (the phone's values, the shadows, the focus halos), each primitive's selectors and the declarations the format has no sub-token for, every rule of `primitives.css` no entry ends on and every `@media` rule under its query, each written whole, the Do's and Don'ts, and a link from each other section to the section of this file that says why.
 It keeps a reason to a clause: this file stays the long source, and `DESIGN.md` states the rules.
 
 **It is generated, and never edited by hand.**
 [`front-end/scripts/design-md.ts`](../front-end/scripts/design-md.ts) writes it from `base.css` and `primitives.css`, and reads `main.css` only to check that each family it names is a face the app loads.
-Its words, the sections' lines, the Do's and Don'ts, the component groups and their entries' selectors, live in [`front-end/scripts/design-md-content.ts`](../front-end/scripts/design-md-content.ts), and the generator writes only the headings, the table heads and the two comments that are its own; no line of them states a token's value, so a changed value never makes the words false.
+Its words, the sections' lines, the Do's and Don'ts, the component groups and their entries' selectors, live in [`front-end/scripts/design-md-content.ts`](../front-end/scripts/design-md-content.ts), and the generator writes only the headings, the table heads, the line that opens each query's rows and the two comments that are its own; no line of them states a token's value, so a changed value never makes the words false, and the test holds each count and range they state to `base.css`.
 `npm run design-md` in `front-end/` rewrites the file; run it after changing either sheet or the words, and commit the file with them.
 `npm run design-md:check` renders it again and fails when the committed file differs by a byte, naming the first line that differs and the command to run, and lints the committed file with the linter of `@google/design.md`, pinned exactly in `front-end/package.json`, since the format is alpha and its rules change between versions.
 CI's required `frontend-lint-and-types` job runs the check right after Stylelint ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)), and `scripts/nm-test.sh` runs it in the same place.
@@ -852,7 +852,8 @@ That rule takes every colour to be a component's fill or ink, while most of Conv
 
 **The generator refuses, and writes nothing, rather than write a contract that is wrong.**
 It refuses a token declared twice, a family `main.css` does not load, a component's font size that is not a `--text-*` token, a component selector no rule of `primitives.css` has, a component whose group has no words, a class `primitives.css` names that the file never does, and words that name a token or class the CSS no longer has; each refusal says what is wrong.
-The same test proves each refusal, and that every token and every class of the two sheets reaches the file.
+The same test proves each refusal, and that every token and every class of the two sheets, and every declaration of `primitives.css`, reaches the file.
+An entry merges its selectors' rules as a state merges with its base, except that a selector inside an earlier one (`.note a` after `.note`) takes from it only what CSS inherits, its ink and type, never its box or fill.
 
 ## What keeps this true
 

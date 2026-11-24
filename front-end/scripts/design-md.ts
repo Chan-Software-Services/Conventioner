@@ -3,10 +3,10 @@
  * format, from `src/assets/base.css` (the tokens) and `primitives.css` (the primitives).
  *
  * Agents building or reviewing a screen read it first: its YAML front matter holds every token the
- * format has a group for, and its body the rules and the other tokens' tables, each section but the
- * Do's and Don'ts linking into `docs/design-system.md` for the reasons. It is
- * generated rather than kept by hand so it cannot drift from the CSS; the words the CSS cannot give
- * live in `design-md-content.ts`. The output is a pure function of those files: no date, and every
+ * format has a group for, and its body the rules, the other tokens' tables and every rule of
+ * primitives.css no entry ends on, each section but the Do's and Don'ts linking into
+ * `docs/design-system.md` for the reasons. It is generated rather than kept by hand so it cannot
+ * drift from the CSS; the words the CSS cannot give live in `design-md-content.ts`. The output is a pure function of those files: no date, and every
  * list in source order.
  *
  * Run it after changing either CSS file: `npm run design-md`, then commit `DESIGN.md`.
@@ -21,7 +21,14 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { lint, type Finding } from '@google/design.md/linter';
-import postcss, { type ChildNode, type Declaration, type Root, type Rule } from 'postcss';
+import postcss, {
+  type AtRule,
+  type ChildNode,
+  type Container,
+  type Declaration,
+  type Root,
+  type Rule,
+} from 'postcss';
 
 import { CONTENT, type Component, type Content } from './design-md-content.ts';
 
@@ -248,6 +255,37 @@ function rulesBySelector(primitives: Root): Map<string, Rule[]> {
   return found;
 }
 
+/**
+ * The properties CSS inherits, which alone pass from an element to one inside it: an entry such as
+ * `(.note, .note a)` takes the note's ink and type, never its padding, width, corners or fill.
+ */
+const INHERITED = new Set([
+  'color',
+  'cursor',
+  'direction',
+  'letter-spacing',
+  'line-height',
+  'quotes',
+  'text-align',
+  'text-indent',
+  'text-shadow',
+  'text-transform',
+  'visibility',
+  'white-space',
+  'word-break',
+  'word-spacing',
+]);
+const inherits = (prop: string) =>
+  INHERITED.has(prop) ||
+  prop.startsWith('--') ||
+  prop === 'font' ||
+  prop.startsWith('font-') ||
+  prop.startsWith('list-style');
+
+/** Whether `inner` matches an element inside what `outer` matches: `outer`, a space or `>`, more. */
+const isInside = (inner: string, outer: string) =>
+  inner.startsWith(outer) && /^(?:\s+|\s*>\s*)[^\s>+~]/.test(inner.slice(outer.length));
+
 /** A declaration's value as an entry's line writes it: whitespace collapsed, none inside brackets. */
 const tidy = (value: string) => collapse(value).replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
 
@@ -311,9 +349,16 @@ export function render(sources: Sources, content: Content = CONTENT): Rendered {
       }
       return found;
     });
-    for (const rule of ruleSets.flat()) {
+    // The selectors before the last step into an element inside are that element's ancestors.
+    const own = component.selectors.findLastIndex(
+      (selector, index) => index > 0 && isInside(selector, component.selectors[index - 1]!),
+    );
+    for (const [index, rule] of ruleSets.flatMap((found, index) =>
+      found.map((rule) => [index, rule] as const),
+    )) {
       rule.each((node) => {
         if (node.type !== 'decl') return;
+        if (index < own && !inherits(node.prop)) return;
         const value = collapse(node.value);
         merged.set(node.prop, value);
         // `background: none` takes the fill away; a `background-color` that is no colour leaves it.
@@ -437,6 +482,50 @@ export function render(sources: Sources, content: Content = CONTENT): Rendered {
   }
   yaml.push('---');
 
+  // Every rule no entry ends on, and every at-rule's rules under its query, written whole, so each
+  // declaration of primitives.css reaches the file and a change to any of them is drift.
+  const ends = new Set(content.componentEntries.map((component) => component.selectors.at(-1)!));
+  const declarationsOf = (container: Container) => {
+    const shown: string[] = [];
+    container.each((node) => {
+      if (node.type === 'decl') shown.push(`\`${node.prop}: ${tidy(node.value)}\``);
+    });
+    return shown;
+  };
+  const ruleLine = (rule: Rule) => {
+    const shown = declarationsOf(rule);
+    return `- \`${tidy(rule.selector)}\`${shown.length ? `: ${shown.join(', ')}` : ''}.`;
+  };
+  const unshown: string[] = [];
+  const queries: string[][] = [];
+  function underQuery(atRule: AtRule, outer: string[]) {
+    const where = [...outer, `@${atRule.name} ${collapse(atRule.params)}`];
+    const own = declarationsOf(atRule);
+    const lines = own.length ? [`- ${own.join(', ')}.`] : [];
+    atRule.each((node) => {
+      if (node.type === 'rule') lines.push(ruleLine(node));
+    });
+    if (lines.length) {
+      queries.push([
+        `Under ${where.map((query) => `\`${query}\``).join(' within ')}:`,
+        '',
+        ...lines,
+      ]);
+    }
+    atRule.each((node) => {
+      if (node.type === 'atrule') underQuery(node, where);
+    });
+  }
+  primitives.each((node) => {
+    if (node.type === 'rule' && !node.selectors.some((selector) => ends.has(selector))) {
+      unshown.push(ruleLine(node));
+    } else if (node.type === 'atrule' && !node.nodes) {
+      unshown.push(`- \`@${node.name} ${collapse(node.params)}\`.`);
+    } else if (node.type === 'atrule') {
+      underQuery(node, []);
+    }
+  });
+
   const table = (rows: Token[]) => [
     '| Token | Value |',
     '| --- | --- |',
@@ -469,6 +558,15 @@ export function render(sources: Sources, content: Content = CONTENT): Rendered {
         return [`### ${group.name}`, '', ...group.words, ...(lines.length ? ['', ...lines] : [])];
       }),
       ['### Tokens the format has no group for', '', ...table(ungrouped)],
+      ...(unshown.length || queries.length
+        ? [
+            [
+              '### Rules no entry ends on',
+              ...(unshown.length ? ['', ...unshown] : []),
+              ...queries.flatMap((query) => ['', ...query]),
+            ],
+          ]
+        : []),
     ],
   };
 

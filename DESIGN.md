@@ -422,16 +422,13 @@ components:
   data-table-cell:
     typography: "{typography.text-sm}"
     padding: "var(--space-2) var(--space-3)"
-    width: "100%"
   data-table-column-heading:
     textColor: "{colors.mm-text-muted}"
     typography: "{typography.text-xs-strong}"
     padding: "var(--space-2) var(--space-3)"
-    width: "100%"
   data-table-row-heading:
     typography: "{typography.text-sm}"
     padding: "var(--space-2) var(--space-3)"
-    width: "100%"
   data-table-one-line: {}
   add-row:
     textColor: "{colors.mm-black}"
@@ -466,7 +463,6 @@ components:
   note-link:
     textColor: "{colors.mm-text-link}"
     typography: "{typography.text-sm}"
-    padding: "var(--space-2) var(--space-3)"
   card-grid: {}
   card-grid-wide: {}
   choice-card:
@@ -711,6 +707,23 @@ A field shows no focus at all, only its caret: that was decided knowing a keyboa
 | `--focus-halo-inset` | `inset 0 0 0 2px white, inset 0 0 0 5px rgba(54, 130, 111, 0.35)` |
 | `--focus-halo-on-dark` | `0 0 0 3px rgba(255, 255, 255, 0.35)` |
 | `--focus-halo-on-dark-inset` | `inset 0 0 0 3px rgba(255, 255, 255, 0.35)` |
+
+### Rules no entry ends on
+
+- `.chip`: `display: inline-flex`, `align-items: center`, `gap: var(--space-1)`, `padding: var(--space-hairline) var(--space-2)`, `border-radius: var(--radius-pill)`, `font-size: var(--text-xs)`, `font-weight: 400`, `line-height: 1.5`, `white-space: nowrap`.
+- `.data-table :is(th, td)`: `padding: var(--space-2) var(--space-3)`, `text-align: left`, `vertical-align: middle`.
+- `:where(:focus-visible:not(input, textarea, select, [tabindex='-1'], .btn, button, [role='button']))`: `outline: none`, `box-shadow: var(--focus-halo)`.
+- `:where(a, button, summary, [role='button'], [tabindex='0']):focus-visible`: `border-radius: var(--radius-control)`.
+- `:where(a, button, summary, [role='button'], [tabindex])`: `scroll-margin: var(--space-2)`.
+- `:where([tabindex='-1']):focus`: `outline: none`.
+
+Under `@media (forced-colors: active)`:
+
+- `.field--select, .field--select:disabled`: `appearance: auto`, `padding-right: var(--space-3)`, `background-image: none`.
+
+Under `@media print`:
+
+- `.data-table :is(th, td)`: `white-space: normal`.
 
 ## Do's and Don'ts
 

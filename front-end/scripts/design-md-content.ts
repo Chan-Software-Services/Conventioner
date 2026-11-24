@@ -3,13 +3,16 @@
  *
  * Each string is one line of the file, a whole sentence or a list item, written without a token's
  * value, so a changed value can never make the words false: the YAML and the generated tables carry
- * every value. A code span naming a token (`--space-4`, `var(--space-4)`) or classes (`.btn`) must
- * name one `base.css` or `primitives.css` has, or the generator refuses, so a rename cannot leave
- * the words behind. The generator writes only the file's headings, its table heads, the comment
- * saying it is generated and the YAML comment on `primary`, and this file holds no parsing.
+ * every value, and the unit test holds each count and range they state to `base.css`. A code span
+ * naming a token (`--space-4`, `var(--space-4)`) or classes (`.btn`) must name one `base.css` or
+ * `primitives.css` has, or the generator refuses, so a rename cannot leave the words behind. The
+ * generator writes only the file's headings, its table heads, the line that opens each query's
+ * rows, the comment saying it is generated and the YAML comment on `primary`, and this file holds
+ * no parsing.
  *
- * `COMPONENTS` names the primitives' entries and the selectors each merges; every class
- * `primitives.css` names must be one of their selectors or named in these words, or it refuses.
+ * `COMPONENTS` names the primitives' entries and the selectors each merges; a rule no entry ends on
+ * is written whole under "Rules no entry ends on", and every class `primitives.css` names must reach
+ * the file (an entry's selector, such a rule, or these words), or it refuses.
  *
  * Change a word here, then run `npm run design-md` in `front-end/` and commit `DESIGN.md` with it.
  */

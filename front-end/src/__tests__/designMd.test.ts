@@ -9,7 +9,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { lint } from '@google/design.md/linter';
-import postcss from 'postcss';
+import postcss, { type Rule } from 'postcss';
 
 import { CONTENT, type Content } from '../../scripts/design-md-content';
 import {
@@ -368,6 +368,9 @@ const COMPONENTS: Content = {
 
 const COMPONENT_FIXTURE: Sources = { ...FIXTURE, primitives: COMPONENT_PRIMITIVES };
 
+/** `.btn--quiet` named only in the list of a rule `btn-primary-hover` ends on. */
+const WITHOUT_QUIET = COMPONENT_PRIMITIVES.replace('.btn--quiet {\n  background: none;\n}\n\n', '');
+
 describe('the components, on fixture CSS', () => {
   const { text, counts } = render(COMPONENT_FIXTURE, COMPONENTS);
   const yaml = frontMatter(text);
@@ -396,7 +399,7 @@ describe('the components, on fixture CSS', () => {
     );
   });
 
-  it('takes the fill away on `background: none`, and leaves @media rules out', () => {
+  it('takes the fill away on `background: none`, and leaves @media rules out of the entries', () => {
     expect(yaml).toContain('  btn-quiet:\n    typography: "{typography.text-sm}"\n');
     expect(yaml).not.toMatch(/ {2}btn-quiet:\n(?: {4}.*\n)*? {4}backgroundColor/);
     expect(yaml).not.toContain('"black"');
@@ -438,6 +441,91 @@ describe('the components, on fixture CSS', () => {
     expect(
       frontMatter(render({ ...COMPONENT_FIXTURE, primitives: bare }, withBare).text),
     ).toContain('  bare: {}\n---\n');
+  });
+
+  it('gives an element inside an earlier selector only what CSS inherits from it', () => {
+    const nested = `${COMPONENT_PRIMITIVES}
+.note {
+  padding: var(--space-3);
+  width: 100%;
+  border-radius: var(--radius-control);
+  background: var(--mm-black);
+  color: var(--mm-black);
+  font-size: var(--text-sm);
+  --focus-border: var(--mm-green);
+}
+
+.note a {
+  color: var(--mm-green);
+}
+
+.note :is(th, td) {
+  padding: 0 var(--space-1);
+}
+
+.note tbody :is(th, td) {
+  height: var(--control-height);
+}
+`;
+    const withNote: Content = {
+      ...COMPONENTS,
+      componentEntries: [
+        ...COMPONENTS.componentEntries,
+        { key: 'note-link', group: 'Titles', selectors: ['.note', '.note a'] },
+        {
+          key: 'note-cell',
+          group: 'Titles',
+          selectors: ['.note', '.note :is(th, td)', '.note tbody :is(th, td)'],
+        },
+      ],
+    };
+    const { text: nestedText } = render({ ...COMPONENT_FIXTURE, primitives: nested }, withNote);
+    // The ink and the type follow the element in; the box, the corners and the fill stay outside.
+    expect(frontMatter(nestedText)).toContain(
+      '  note-link:\n' +
+        '    textColor: "{colors.mm-green}"\n' +
+        '    typography: "{typography.text-sm}"\n' +
+        '  note-cell:\n' +
+        '    textColor: "{colors.mm-black}"\n' +
+        '    typography: "{typography.text-sm}"\n' +
+        // A later selector on the same cell, not inside it, still takes the cell's padding.
+        '    padding: "0 var(--space-1)"\n' +
+        '    height: "{spacing.control-height}"\n' +
+        '---\n',
+    );
+  });
+
+  it('lists whole each rule no entry ends on, and each @media rule under its query', () => {
+    const chip = `${COMPONENT_PRIMITIVES}
+.chip {
+  display: inline-flex;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+}
+
+.chip--neutral {
+  background: var(--mm-green);
+}
+`;
+    const withChip: Content = {
+      ...COMPONENTS,
+      componentEntries: [
+        ...COMPONENTS.componentEntries,
+        { key: 'chip-neutral', group: 'Titles', selectors: ['.chip', '.chip--neutral'] },
+      ],
+    };
+    const rendered = (primitives: string) =>
+      render({ ...COMPONENT_FIXTURE, primitives }, withChip).text;
+    const chipText = rendered(chip);
+    expect(chipText.slice(chipText.indexOf('### Rules no entry ends on'))).toBe(
+      '### Rules no entry ends on\n\n' +
+        '- `.chip`: `display: inline-flex`, `gap: var(--space-1)`, `font-size: var(--text-xs)`.\n' +
+        '\nUnder `@media print`:\n\n' +
+        '- `.title`: `color: black`.\n' +
+        "\n## Do's and Don'ts\n\n- Do one thing.\n",
+    );
+    // A rule only an entry's earlier selector names is drift when it changes.
+    expect(rendered(chip.replace('gap: var(--space-1)', 'gap: var(--space-3)'))).not.toBe(chipText);
   });
 
   it('counts the components', () => {
@@ -486,8 +574,9 @@ describe('the components, on fixture CSS', () => {
         '.btn--ghost (component btn-ghost in scripts/design-md-content.ts) is in no rule of primitives.css',
       ],
       [
+        // Named only beside the selector an entry ends on, in that rule's list.
         'an unnamed class',
-        COMPONENT_FIXTURE,
+        { ...COMPONENT_FIXTURE, primitives: WITHOUT_QUIET },
         {
           ...COMPONENTS,
           componentEntries: COMPONENTS.componentEntries.filter(({ key }) => key !== 'btn-quiet'),
@@ -528,6 +617,7 @@ describe('the components, on fixture CSS', () => {
   });
 
   it('names a class through the prose as well as through a selector', () => {
+    const fixture = { ...COMPONENT_FIXTURE, primitives: WITHOUT_QUIET };
     const named: Content = {
       ...COMPONENTS,
       componentGroups: [
@@ -536,7 +626,7 @@ describe('the components, on fixture CSS', () => {
       ],
       componentEntries: COMPONENTS.componentEntries.filter(({ key }) => key !== 'btn-quiet'),
     };
-    expect(() => render(COMPONENT_FIXTURE, named)).not.toThrow();
+    expect(() => render(fixture, named)).not.toThrow();
   });
 });
 
@@ -620,6 +710,136 @@ describe('the real files', () => {
       .map(([, key]) => key!)
       .filter((key) => !/^(?:text|heading)-/.test(key));
     expect(keys).toEqual(CONTENT.componentEntries.map(({ key }) => key));
+  });
+
+  it('states each count and range of the words as base.css has it', () => {
+    const names = [...tokens().keys()];
+    const steps = (prefix: string) =>
+      names.filter((name) => name.startsWith(prefix) && /^\d+$/.test(name.slice(prefix.length)));
+    const phone: string[] = [];
+    postcss.parse(sources.base).each((node) => {
+      if (node.type === 'atrule' && /width\s*<=/.test(node.params)) {
+        node.walkDecls((decl) => void phone.push(decl.prop));
+      }
+    });
+    const sections = names.filter((name) => /^--layout-section-\d+-fill$/.test(name));
+    // Each: the words' line, what it says, and what base.css has; a change to either fails here.
+    const claims: [readonly string[], string, unknown, unknown][] = [
+      [
+        CONTENT.shapes,
+        'Five radii',
+        names.filter((name) => name.startsWith('--radius-')).length,
+        5,
+      ],
+      [
+        CONTENT.elevation,
+        'Two shadows',
+        names.filter((name) => name.startsWith('--shadow-')).length,
+        2,
+      ],
+      [
+        CONTENT.typography,
+        'Six sizes, `--text-xs` to `--text-2xl`',
+        names.filter((name) => name.startsWith('--text-')),
+        ['--text-xs', '--text-sm', '--text-md', '--text-lg', '--text-xl', '--text-2xl'],
+      ],
+      [
+        CONTENT.colors,
+        '(`--layout-section-1-fill` to `--layout-section-8-fill`)',
+        sections,
+        [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `--layout-section-${n}-fill`),
+      ],
+      [
+        CONTENT.layout,
+        '`--space-1` to `--space-12`',
+        [steps('--space-')[0], steps('--space-').at(-1)],
+        ['--space-1', '--space-12'],
+      ],
+      [
+        CONTENT.layout,
+        'on a phone all three grow',
+        phone,
+        ['--control-height', '--control-height-compact', '--target-min'],
+      ],
+    ];
+    for (const [words, says, has, expected] of claims) {
+      expect(
+        words.some((line) => line.includes(says)),
+        `scripts/design-md-content.ts no longer says "${says}"`,
+      ).toBe(true);
+      expect(
+        has,
+        `base.css no longer bears out "${says}": change that line of scripts/design-md-content.ts`,
+      ).toEqual(expected);
+    }
+  });
+
+  it('shows every declaration of primitives.css, @media rules too, so changing one is drift', () => {
+    const entries = new Map(
+      [...frontMatter(text).matchAll(/^ {2}([a-z0-9-]+):\n((?: {4}.*\n)*)/gm)].map(
+        ([, key, body]) => [key!, body!],
+      ),
+    );
+    const endingOn = (selector: string) =>
+      CONTENT.componentEntries
+        .filter(({ selectors }) => selectors.at(-1) === selector)
+        .map(({ key }) => entries.get(key) ?? '');
+    const subTokens: Record<string, string> = {
+      background: 'backgroundColor',
+      'background-color': 'backgroundColor',
+      color: 'textColor',
+      'font-size': 'typography',
+      'font-weight': 'typography',
+      'font-family': 'typography',
+      'border-radius': 'rounded',
+      padding: 'padding',
+      height: 'height',
+      width: 'width',
+    };
+    const missing: string[] = [];
+    let seen = 0;
+    postcss.parse(sources.primitives).walkDecls((decl) => {
+      seen++;
+      const value = decl.value
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/\(\s+/g, '(')
+        .replace(/\s+\)/g, ')');
+      if (text.includes(`\`${decl.prop}: ${value}\``)) return;
+      // Else an entry ending on the rule carries it as a sub-token, as written or as a reference.
+      const rule = decl.parent as Rule;
+      const subToken = subTokens[decl.prop];
+      const ref = /^var\(--([\w-]+)\)$/.exec(value)?.[1];
+      const carried =
+        rule.parent?.type === 'root' &&
+        subToken !== undefined &&
+        rule.selectors.some((selector) =>
+          endingOn(selector).some((body) =>
+            subToken === 'typography'
+              ? body.includes('    typography: ')
+              : body.includes(`    ${subToken}: "${value}"`) ||
+                (ref !== undefined && body.includes(`.${ref}}"`)),
+          ),
+        );
+      if (!carried)
+        missing.push(`${rule.selector.replace(/\s+/g, ' ')} { ${decl.prop}: ${value} }`);
+    });
+    expect(seen).toBeGreaterThan(200);
+    expect(missing).toEqual([]);
+  });
+
+  it("gives a table's cells and a note's link none of the box around them", () => {
+    const entries = new Map(
+      [...frontMatter(text).matchAll(/^ {2}([a-z0-9-]+):\n((?: {4}.*\n)*)/gm)].map(
+        ([, key, body]) => [key!, body!],
+      ),
+    );
+    for (const key of ['data-table-cell', 'data-table-column-heading', 'data-table-row-heading']) {
+      expect(entries.get(key)).toContain('padding: "var(--space-2) var(--space-3)"');
+      expect(entries.get(key)).not.toContain('width:');
+    }
+    expect(entries.get('note-link')).toContain('textColor: "{colors.mm-text-link}"');
+    expect(entries.get('note-link')).not.toContain('padding:');
   });
 
   it('lints with no error, and no warning but orphaned-tokens', () => {
