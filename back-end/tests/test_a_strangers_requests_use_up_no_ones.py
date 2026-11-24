@@ -22,12 +22,11 @@ import account_secrets
 import api.applicant_auth as ApplicantAuthApi
 import api.applications as ApplicationsApi
 import api.users as UsersApi
-import app as app_module
 from market_documents import market_name_slug
 from test_applicant_auth import FakeDatabase, _application_doc, _published_market_doc
 from test_the_organizer_sign_in_is_bounded import (  # noqa: F401  (the fixtures)
-    ACCOUNT_EMAIL, FAST_ROUNDS, NO_ACCOUNT_EMAIL, PASSWORD, UNVERIFIED_EMAIL, MailingUsers,
-    _account, _answer, client, fast_stand_in_hash,
+    ACCOUNT_EMAIL, NO_ACCOUNT_EMAIL, PASSWORD, UNVERIFIED_EMAIL, MailingUsers,
+    _account, _answer, client,
 )
 
 # The start of an hour, so the hour's window and its first quarter start together.
@@ -124,8 +123,6 @@ def world(monkeypatch, clock, outbox):
     monkeypatch.setattr(ApplicationsApi, "applications_collection", db["applications"])
     users = MailingUsers(_account(ACCOUNT_EMAIL), _account(UNVERIFIED_EMAIL, verified=False))
     monkeypatch.setattr(UsersApi, "users_collection", users)
-    # A sign-up hashes at bcrypt's lowest cost, as the accounts here are hashed.
-    monkeypatch.setattr(app_module.bcrypt, "_log_rounds", FAST_ROUNDS)
     return SimpleNamespace(clock=clock, outbox=outbox, users=users)
 
 

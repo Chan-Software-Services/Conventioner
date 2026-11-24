@@ -210,13 +210,12 @@ VERIFY_FIRST = (403, {"message": "Verify your email address first: we sent you a
 @pytest.fixture
 def organizers(monkeypatch):
     """A verified and an unverified organizer, on the clock held at the start of the window."""
-    from test_the_organizer_sign_in_is_bounded import Users, _account, _hash
+    from test_the_organizer_sign_in_is_bounded import Users, _account
     import account_secrets
     import api.users as UsersApi
 
     users = Users(_account(ORGANIZER_ADDRESS), _account(UNVERIFIED_ADDRESS, verified=False))
     monkeypatch.setattr(UsersApi, "users_collection", users)
-    monkeypatch.setattr(UsersApi, "_no_account_hash", _hash("fixture-stand-in"))
     monkeypatch.setattr(UsersApi, "_now", lambda: WINDOW_STARTS.timestamp())
     monkeypatch.setattr(account_secrets, "now", lambda: WINDOW_STARTS)
     return users
