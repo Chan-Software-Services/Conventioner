@@ -166,6 +166,12 @@ describe('the "Assigned to" filter', () => {
     ]);
   });
 
+  it("stands as tall as the line's compact controls, by the picker's own compact field", async () => {
+    const wrapper = await allView({ market: market() });
+
+    expect(field(wrapper).classes()).toContain('field--compact');
+  });
+
   it('offers no Me to someone not chosen', async () => {
     signedIn.email = 'owner@example.com';
     const wrapper = await allView({ market: market() });
