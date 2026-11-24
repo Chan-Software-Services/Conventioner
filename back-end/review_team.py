@@ -12,11 +12,13 @@ never moves.
 
 With no reviewers chosen, everything is first come, first served, as before this existed.
 
-**Every move into open, and every hand-on of a follow-up, waits for the deal**: an arrival, an
-undo, a rule's return, a re-import's or an applicant's back to review and a follow-up's hand-on
-each mark their application (``arriving``, ``ReviewState.Arrival``) in their own write, whether
-or not reviewers are chosen and whoever its reviewer is, and the deal judges who is able. So no open application is left outside every share
-while an able reviewer exists, whichever order a change of reviewers and the move land in.
+**Every move into open, every undo back into a follow-up, and every hand-on of a follow-up, waits
+for the deal**: an arrival, an undo (into open or back into a follow-up), a rule's return, a
+re-import's or an applicant's back to review and a follow-up's hand-on each mark their
+application (``arriving``, ``ReviewState.Arrival``) in their own write, whether or not reviewers
+are chosen and whoever its reviewer is, and the deal judges who is able. So no open application
+is left outside every share while an able reviewer exists, whichever order a change of reviewers
+and the move land in.
 
 **Every deal holds the market** (``reviewTeam.dealing``, a short lease, ``_hold``): a change of
 reviewers from writing its team to writing its turn, and a deal of what waits from reading the turn
@@ -27,10 +29,10 @@ application so marked if it can hold the market; if it cannot, the deal holding 
 it lets go (``_settle``), since every holder looks for marked ones after letting go. A holder the
 host ended never lets go: its lease runs out, and the next deal deals what it left, which a
 reviewer's next card starts (``deal_waiting``), so a quiet spell after it leaves no reviewer's share
-short. With nobody chosen able, the marks are left for the next deal once someone is. Every write a deal makes to the market names its lease and
-reads whether it matched: one that did not finds another deal holding the market, its own lease
-lapsed, so a change of reviewers is refused (``DEALING_BUSY``) and a deal of arrivals says so in
-the log.
+short. With nobody chosen able, the marks are left for the next deal once someone is. Every write a
+deal makes to the market names its lease and reads whether it matched: one that did not finds
+another deal holding the market, its own lease lapsed, so a change of reviewers is refused
+(``DEALING_BUSY``) and a deal of arrivals says so in the log.
 """
 import logging
 import time

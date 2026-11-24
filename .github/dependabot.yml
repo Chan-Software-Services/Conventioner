@@ -4,6 +4,7 @@
 # their gate (docs/implementation/testing/ci-and-the-gate.md#dependabot).
 # No pip entry: the back end's locks are written by uv through scripts/lock-backend-requirements.sh,
 # with hashes, and Dependabot is not known to write them as that script does; bump them by hand.
+# CI's python-advisories job catches a known advisory against them instead.
 version: 2
 updates:
   - package-ecosystem: "npm"

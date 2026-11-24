@@ -212,7 +212,8 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
   - `fields` gives its form its own questions
   - its review setup decided before it opens, the drafts' too, unless `reviewSetupUndecided: true`
   - it creates no application
-  - `seedApplicationDoc()` and `createApplicantLoginChallenge()` write one and a known sign-in code into Mongo, the code planted after the request it stands in for, with none of its five tries used unless `attempts` says how many
+  - `seedApplicationDoc()` and `createApplicantLoginChallenge()` write one for the address they are given and a known sign-in code into Mongo, the code planted after the request it stands in for, with none of its five tries used unless `attempts` says how many
+  - `anApplicantEmail()` makes an address no other test signs in on, under the per-address sign-in limits ([E2E patterns](e2e-patterns.md#sharp-edges))
 
 **`seedExampleMarket()`** ([file](../../../front-end/e2e/helpers/exampleCollegeMarket.ts))
 
