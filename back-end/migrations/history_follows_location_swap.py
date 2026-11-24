@@ -6,7 +6,7 @@ market's history keeps a location's name as text, as it was called when each ent
 so after the swap a layout's save (``floorplan``) recorded before it names its location by the name
 that now means the other place. This script renames those lines, so each names the place it was
 about, by its name now: Manage market reads ``subject.location`` into the line's sentence ("...
-saved the North Wing's layout").
+started North Wing's layout").
 
 **A line's place is read by id, from its layout.** A ``floorplan`` line names its layout by
 ``subject.floorplan_id``, and a layout keeps the location it was started on (its ``locationId``)
