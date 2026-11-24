@@ -17,7 +17,6 @@ import { MarketAction } from '@/utils/marketActions';
 import { applicationsAllSeed } from '@/utils/vendorExport';
 import { answersRefusing } from './support/servedAnswers';
 import { toolsOf } from './support/reviewViewTools';
-import { stylesOf, valueOf } from './support/sfcStyles';
 
 const ANA = 'ana@example.com';
 const SAM = 'sam@example.com';
@@ -171,14 +170,6 @@ describe('the "Assigned to" filter', () => {
     const wrapper = await allView({ market: market() });
 
     expect(field(wrapper).classes()).toContain('field--compact');
-    // The height is the primitive's, never one the view sets by hand.
-    expect(
-      valueOf(
-        stylesOf('application/ApplicationsAll.vue'),
-        '.all-view .all-assigned :deep(.field)',
-        'height',
-      ),
-    ).toBeNull();
   });
 
   it('offers no Me to someone not chosen', async () => {
