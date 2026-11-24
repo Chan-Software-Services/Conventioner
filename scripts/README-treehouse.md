@@ -48,7 +48,7 @@ scripts/th-return.sh "$path"
 
 ### When the teardown fails
 
-`th-return.sh` never hands a slot back with its stack still on it without saying so.
+A return run by hand never hands a slot back with its stack still on it without saying so (a `team-close` return leaves the stack to `team-stack down`, as [After team-stack down](#after-team-stack-down) says).
 When the slot's `down -v --remove-orphans` fails, it prints the teardown's own error output and
 `th-return: teardown failed for <path>; the lease is kept (use --force to return it anyway)`,
 and exits 1 without calling `treehouse return`, so the slot stays leased to you.
@@ -65,13 +65,9 @@ when it leaves a dirty worktree leased (commit its changes first; `--force` disc
 
 ### After team-stack down
 
-The agent team's `team-close` takes a slot's stack down with `team-stack down`, then runs
-`th-return.sh` from the primary checkout with `TEAM_STACK_DOWN=1` in its environment.
-With `TEAM_STACK_DOWN=1`, `th-return.sh` runs no teardown of its own and goes straight to
-`treehouse return`.
-While a heavy run (an end-to-end run) holds the machine, `team-stack down` removes the stack's
-containers and volumes but leaves its network for its sweep, since removing a network fails
-every request a running browser has in flight; a `down` here would remove that network at once.
+The agent team's `team-close` takes a slot's stack down with `team-stack down`, then runs `th-return.sh` from the primary checkout with `TEAM_STACK_DOWN=1` in its environment.
+With `TEAM_STACK_DOWN=1`, `th-return.sh` runs no teardown of its own and goes straight to `treehouse return`.
+While a heavy run (an end-to-end run) holds the machine, `team-stack down` removes the stack's containers and volumes but leaves its network for its sweep, since removing a network fails every request a running browser has in flight; a `down` here would remove that network at once.
 Only `1` skips the teardown, and a return run by hand, which does not set it, tears down as before.
 
 ## Port map (per worktree slot)
@@ -183,9 +179,8 @@ docker ps -a --filter name=conventioner- --format '{{.ID}}\t{{.Names}}' \
   down -v`, which removes the worktree's isolated mongodb and backend sessions
   volumes. A re-leased worktree always starts with a fresh DB - this
   is intentional for per-slot isolation. If that teardown fails, the lease is kept
-  (see [When the teardown fails](#when-the-teardown-fails)). A `team-close` return
-  leaves this to its `team-stack down`, which ran first and removes the volumes too (see
-  [After team-stack down](#after-team-stack-down)).
+  (see [When the teardown fails](#when-the-teardown-fails)).
+  A `team-close` return leaves this to its `team-stack down`, which ran first and removes the volumes too (see [After team-stack down](#after-team-stack-down)).
 - **Use `th-lease.sh`, not raw `treehouse get`.** treehouse v3 runs hooks only from
   the user's `~/.config/treehouse/config.toml`, never from this repository's
   `treehouse.toml`, so a raw worktree would be missing `.env` and `node_modules`.
