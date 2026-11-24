@@ -282,7 +282,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
   - seven vendors seated by hand today on an allocation (`allocateThenFreeEverySeat()`), two of them sharing Aisle A 3 as its left and right halves, and two seated tomorrow
   - the first vendor checked in today at the door, and an organizer's note on the second
   - the form's three short text questions, a business name, a website and an Instagram handle, answered by most vendors in the shapes the map cleans, one answering none and one giving an email address as their business name
-- Reckons today and tomorrow from one instant, tomorrow as the next day on the calendar after it, and answers that instant as `seededAt`, at which a spec holds its pages' clock so they open on today (T533); it once read the clock twice, so a seed that ran across midnight got days two apart
+- Reckons today and tomorrow from one instant, tomorrow as the next day on the calendar after it, and answers that instant as `seededAt`, at which a spec holds its pages' clock so they open on today; it once read the clock twice, so a seed that ran across midnight got days two apart
 - With `publicMap: true`, the map turned on through the Public map card's own write, its three questions chosen
 - With `inAssignment: true`, it stops in `assignment` once today's and tomorrow's seats are given: no location laid out, its sections' counts as Section Setup typed them, its results not out and nobody checked in, so a spec starts a layout past Draft and publishes itself (the phase's journey, `a-market-past-draft-gets-a-public-map.spec.ts`)
 - Notes:
