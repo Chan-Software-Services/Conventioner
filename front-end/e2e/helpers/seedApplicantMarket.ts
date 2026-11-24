@@ -12,7 +12,7 @@ import { saveApplicationForm } from './saveApplicationForm';
  *
  * The market is published past `draft` and in the `applications` phase with a
  * configured application form. No applicant is seeded on it: a test that needs a known address
- * seeds one (`seedApplicationDoc`), on an address of its own (`anApplicantEmail`).
+ * seeds one (`seedApplicationDoc`, or `seedApprovedVendor`).
  */
 export interface ApplicantMarketSeed {
   marketId: string;
