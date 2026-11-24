@@ -1,11 +1,13 @@
-"""seed_walk_market.sh seeds the walk's market only on a stack it was told, as seed_fixture.sh does.
+"""seed_walk_market.sh seeds the walk's market only on a stack it was told, as seed_fixture.sh does, and names its vendors from the common-name pools.
 
 It takes the stack exactly as seed_fixture.sh does (the exported stack, the treehouse slot, or
 `--primary`) and refuses anything else, and it never starts a stack: Daniel's own stack and another
 task's must never receive a walk's market by a guess.
 
-The script is run for real, with the stub `docker` and `th-compose.sh` of `stacks.py`, which log
-every call; each case here stops before the script dials a back end.
+The stack cases run the script for real, with the stub `docker` and `th-compose.sh` of `stacks.py`,
+which log every call; each stops before the script dials a back end. The vendor cases load the
+seed's Python from the script without running it or any stack, make its vendors and hold their
+names to the synthetic Google Form exports' pools and each run to the next.
 """
 
 import importlib.util
