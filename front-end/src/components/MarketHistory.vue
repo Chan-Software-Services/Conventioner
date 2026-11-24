@@ -222,10 +222,10 @@ const {
   load: readFirst,
 } = useHistoryPages<MarketHistoryPage>({
   read,
-  // What the market's vendors and people are holds whatever the filters narrowed the page by, so a
-  // page asked for before a filter changed still tells the filter who it may name: a vendor typed
-  // while the first page was on its way is found once it lands. A vendor's own history's names are
-  // only those its entries hold.
+  // What the market's vendors and people are holds whatever the filters on screen narrowed the page
+  // by (a vendor's own history, asked by `own`, names only the vendors its entries hold), so a page
+  // asked for before a filter changed still tells the filter who it may name: a vendor typed while
+  // the first page was on its way is found once it lands.
   firstPage(page) {
     see(page.entries ?? []);
     vendorNames.value = page.vendorNames ?? {};

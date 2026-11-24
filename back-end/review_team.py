@@ -13,10 +13,12 @@ never moves.
 With no reviewers chosen, everything is first come, first served, as before this existed.
 
 **Every move into open, every undo back into a follow-up, and every hand-on of a follow-up, waits
-for the deal**: an arrival, an undo (into open or back into a follow-up), a rule's return, a re-import's or an applicant's back to review and a follow-up's hand-on
-each mark their application (``arriving``, ``ReviewState.Arrival``) in their own write, whether
-or not reviewers are chosen and whoever its reviewer is, and the deal judges who is able. So no open application is left outside every share
-while an able reviewer exists, whichever order a change of reviewers and the move land in.
+for the deal**: an arrival, an undo (into open or back into a follow-up), a rule's return, a
+re-import's or an applicant's back to review and a follow-up's hand-on each mark their
+application (``arriving``, ``ReviewState.Arrival``) in their own write, whether or not reviewers
+are chosen and whoever its reviewer is, and the deal judges who is able. So no open application
+is left outside every share while an able reviewer exists, whichever order a change of reviewers
+and the move land in.
 
 **Every deal holds the market** (``reviewTeam.dealing``, a short lease, ``_hold``): a change of
 reviewers from writing its team to writing its turn, and a deal of what waits from reading the turn
