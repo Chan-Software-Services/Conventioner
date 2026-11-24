@@ -397,15 +397,21 @@ test.describe('Draft this market from a Google Form', () => {
     // A question read as words turned into one choice gains the checks its options earn, and turned
     // back, loses them.
     const portfolio = flow.row('Please share a link to your portfolio');
+    // The yellow edge is a painted border, so only a browser can say it shows.
+    const edge = portfolio.locator('td').first();
+    const NO_EDGE = 'rgba(0, 0, 0, 0)';
     await expect(portfolio.getByTestId('proposal-check')).toHaveCount(0);
+    await expect(edge).toHaveCSS('border-left-color', NO_EDGE);
     await portfolio.getByTestId('proposal-row-type').selectOption('select');
     await expect(portfolio.getByTestId('proposal-check')).toHaveText([
       'Has options few applicants chose',
       'Has an option that names someone',
     ]);
+    await expect(edge).not.toHaveCSS('border-left-color', NO_EDGE);
     await expect(flow.toCheck).toHaveText(String(toCheck - 1));
     await portfolio.getByTestId('proposal-row-type').selectOption('text');
     await expect(portfolio.getByTestId('proposal-check')).toHaveCount(0);
+    await expect(edge).toHaveCSS('border-left-color', NO_EDGE);
     await expect(flow.toCheck).toHaveText(String(toCheck - 2));
   });
 
