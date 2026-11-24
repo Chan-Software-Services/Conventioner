@@ -319,6 +319,12 @@ One block per action, in the order of [the actions table](../modules/market-acti
 - `role_given`, `role_changed`, `role_taken`: Manage market's people
   - Subject: `user_id`, `email`
   - Detail: `role`
+- `invited`: an address invited to a role ([invitations](../modules/invitations.md)), under the row that gives the role
+  - Subject: `email`, the address alone, whether or not it has an account
+  - Detail: `role`, the role it offers; inviting the address again records again, with the new role
+- `invitation_withdrawn`: a waiting invitation withdrawn, under the row that gives its role
+  - Subject: `email`
+  - Detail: `role`
 
 **`hand-on-market`**
 

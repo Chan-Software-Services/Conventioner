@@ -47,6 +47,7 @@ import discord_client as Discord  # noqa: E402
 import db_config  # noqa: E402
 import guards  # noqa: E402
 import history as History  # noqa: E402
+import invitations as Invitations  # noqa: E402
 import layout as Layout  # noqa: E402
 import payments as Payments  # noqa: E402
 import review_team as ReviewTeam  # noqa: E402
@@ -700,6 +701,22 @@ def _give_role(client, world):
     return client.post(f"/markets/{MARKET}/roles", json={"user_email": SAM, "role": "editor"})
 
 
+def _invite(client, world):
+    world.market(MarketPhase.APPLICATIONS)
+    return client.post(f"/markets/{MARKET}/invitations", json={"email": SAM, "role": "editor"})
+
+
+def _withdraw_invitation(client, world):
+    world.market(MarketPhase.APPLICATIONS)
+    sent = datetime.now(timezone.utc)
+    Invitations.invitations_collection.insert_one({
+        "id": "invitation-1", "target_kind": Invitations.MARKET, "target_id": MARKET,
+        "email": SAM, "role": "editor", "invited_by": "user-owner", "invited_by_email": OWNER,
+        "sent_at": sent, "expires_at": sent + Invitations.LIFETIME, "counted_at": sent,
+    })
+    return client.delete(f"/markets/{MARKET}/invitations/invitation-1")
+
+
 def _change_role(client, world):
     world.market(MarketPhase.APPLICATIONS, roles={"user-1": "owner", "user-sam": "editor"})
     return client.put(f"/markets/{MARKET}/roles/user-sam", json={"role": "admin"})
@@ -892,6 +909,12 @@ WRITES = [
           History.DISCORD_DISCONNECTED, _disconnect_discord),
     Write("a role given", "POST", f"{M}/roles", Actions.MANAGE_EDITORS_AND_VIEWERS,
           History.ROLE_GIVEN, _give_role, subject=SAM_BY_ID),
+    Write("an address invited", "POST", f"{M}/invitations", Actions.MANAGE_EDITORS_AND_VIEWERS,
+          History.INVITED, _invite, subject={"email": SAM}, before_after=False,
+          detail_keys=("role",)),
+    Write("an invitation withdrawn", "DELETE", f"{M}/invitations/<invitation_id>",
+          Actions.MANAGE_EDITORS_AND_VIEWERS, History.INVITATION_WITHDRAWN, _withdraw_invitation,
+          subject={"email": SAM}, before_after=False, detail_keys=("role",)),
     Write("a role changed", "PUT", f"{M}/roles/<user_id>", Actions.MANAGE_ADMINS,
           History.ROLE_CHANGED, _change_role, subject=SAM_BY_ID),
     Write("a role taken", "DELETE", f"{M}/roles/<user_id>", Actions.MANAGE_EDITORS_AND_VIEWERS,

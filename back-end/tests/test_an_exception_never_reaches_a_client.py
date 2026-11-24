@@ -425,6 +425,11 @@ ORGANIZATION_AND_ROLE_ROUTES = [
     ("delete", "/markets/market-123/roles/user-2", None, MarketsApi, "remove_market_role"),
     ("put", "/markets/market-123/roles/user-2", {"role": "viewer"},
      MarketsApi, "update_market_role"),
+    ("post", "/markets/market-123/invitations", {"email": "editor@example.com", "role": "editor"},
+     MarketsApi, "invite_to_market"),
+    ("get", "/markets/market-123/invitations", None, MarketsApi, "market_invitations"),
+    ("delete", "/markets/market-123/invitations/invitation-1", None,
+     MarketsApi, "withdraw_market_invitation"),
 ]
 
 
@@ -514,6 +519,9 @@ class TestTheOrganizationAndRoleRoutes:
         ("post", "/markets/market-missing/roles", {"user_email": OWNER_EMAIL, "role": "editor"}),
         ("delete", "/markets/market-missing/roles/user-2", None),
         ("put", "/markets/market-missing/roles/user-2", {"role": "viewer"}),
+        ("post", "/markets/market-missing/invitations", {"email": OWNER_EMAIL, "role": "editor"}),
+        ("get", "/markets/market-missing/invitations", None),
+        ("delete", "/markets/market-missing/invitations/invitation-1", None),
     ])
     def test_a_role_on_a_market_that_does_not_exist_is_not_found(self, client, method, path, body):
         response = call(client, method, path, body)
@@ -1338,6 +1346,7 @@ REQUIRED_BODIES = [
     ("post", "/organizations/<org_id>/transfer", None),
     ("post", "/markets/<market_id>/roles", None),
     ("put", "/markets/<market_id>/roles/<user_id>", None),
+    ("post", "/markets/<market_id>/invitations", None),
     ("post", "/markets", None),
     ("put", "/markets/<market_id>/plan", None),
     ("post", "/markets/<market_id>/discord/connection", None),
@@ -1405,6 +1414,8 @@ READS_NO_BODY = [
     ("delete", "/organizations/<org_id>", [(OrgsApi, "delete_organization", DELETED)]),
     ("delete", "/organizations/<org_id>/users/<user_id>", [(OrgsApi, "remove_org_user", True)]),
     ("delete", "/markets/<market_id>/roles/<user_id>", [(MarketsApi, "remove_market_role", True)]),
+    ("delete", "/markets/<market_id>/invitations/<invitation_id>",
+     [(MarketsApi, "withdraw_market_invitation", None)]),
     ("delete", "/markets/<market_id>/permissions/<action_id>",
      [(MarketsApi, "reset_permission", [])]),
     ("delete", "/markets/<market_id>/permissions", [(MarketsApi, "reset_permissions", [])]),

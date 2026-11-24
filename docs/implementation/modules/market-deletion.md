@@ -13,6 +13,8 @@ describes:
   - back-end/api/applicants.py#save_applicant_application
   - back-end/api/applicants.py#_gone_under_the_save
   - back-end/api/added_vendors.py#add_vendor
+  - back-end/api/markets.py#invite_to_market
+  - back-end/invitations.py#delete_for_market
   - front-end/e2e/market-records-go-with-it.spec.ts
   - back-end/history.py#delete_for_market
   - back-end/history.py#record_for_organization
@@ -30,6 +32,7 @@ sources:
   - T263
   - T277
   - T307
+  - T538
 ---
 
 # Market deletion, and the deletion trail
@@ -38,18 +41,18 @@ sources:
 
 ## Its interface
 
-| Name                                                                         | What it does                                                                                                                                                                                                                                             |
-| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mark_deleting(markets, document, tombstone, holding_phase=False)`           | sets the tombstone on the market by one write held on its being live, and on its stored phase as read when `holding_phase`; answers the tombstone it carries now, this one or one another deletion set first, or None when it is gone or its phase moved |
-| `delete_records(market_id)`                                                  | deletes the market's applications, check-ins, applicant sign-in codes and remembered sign-ins, history, vendor notes, its vendors' payments and amounts owed, and its floorplan images; each step deletes what is there, so it may run again             |
-| `delete_market_and_records(markets, market_id)`                              | `delete_records`, then the market; returns the market's `DeleteResult`                                                                                                                                                                                   |
-| `kept_only_while_live(markets, market_id)`                                   | after a request's last write beside a market: when `deletion_decided`, deletes its records again and raises `MarketGoneUnderWrite`, a 404 "Market not found"                                                                                             |
-| `deletion_decided(markets, market_id)`                                       | whether the market is gone, or carries a tombstone nothing takes back: its own Delete's, or its organization's once that deletion's trail entry is written                                                                                               |
-| `organization_taken(organization_id)`                                        | whether the organization is gone, or its deletion's trail entry is written, after which it deletes the organization's history and takes no tombstone back                                                                                                |
-| `record_organization_deletion(organization, markets, actor_email, trail_id)` | writes one `organization_deleted` entry to `deletion_trail` under the trail id, its `_id` too, so a second write of it adds nothing; raises rather than swallow any other failure                                                                        |
-| `is_recorded(trail_id)`                                                      | whether a deletion's entry is written                                                                                                                                                                                                                    |
-| `entries_for_organization(org_id)`                                           | every entry naming an organization; read-only, and nothing removes one; no caller yet                                                                                                                                                                    |
-| `live(query)`, `tombstone_of(document)`, `new_tombstone(by)`                 | in `tombstone.py`: a filter narrowed to live targets, the tombstone a stored document carries, and a new one with a trail id of its own                                                                                                                  |
+| Name                                                                         | What it does                                                                                                                                                                                                                                                      |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mark_deleting(markets, document, tombstone, holding_phase=False)`           | sets the tombstone on the market by one write held on its being live, and on its stored phase as read when `holding_phase`; answers the tombstone it carries now, this one or one another deletion set first, or None when it is gone or its phase moved          |
+| `delete_records(market_id)`                                                  | deletes the market's applications, check-ins, applicant sign-in codes and remembered sign-ins, history, waiting invitations, vendor notes, its vendors' payments and amounts owed, and its floorplan images; each step deletes what is there, so it may run again |
+| `delete_market_and_records(markets, market_id)`                              | `delete_records`, then the market; returns the market's `DeleteResult`                                                                                                                                                                                            |
+| `kept_only_while_live(markets, market_id)`                                   | after a request's last write beside a market: when `deletion_decided`, deletes its records again and raises `MarketGoneUnderWrite`, a 404 "Market not found"                                                                                                      |
+| `deletion_decided(markets, market_id)`                                       | whether the market is gone, or carries a tombstone nothing takes back: its own Delete's, or its organization's once that deletion's trail entry is written                                                                                                        |
+| `organization_taken(organization_id)`                                        | whether the organization is gone, or its deletion's trail entry is written, after which it deletes the organization's history and takes no tombstone back                                                                                                         |
+| `record_organization_deletion(organization, markets, actor_email, trail_id)` | writes one `organization_deleted` entry to `deletion_trail` under the trail id, its `_id` too, so a second write of it adds nothing; raises rather than swallow any other failure                                                                                 |
+| `is_recorded(trail_id)`                                                      | whether a deletion's entry is written                                                                                                                                                                                                                             |
+| `entries_for_organization(org_id)`                                           | every entry naming an organization; read-only, and nothing removes one; no caller yet                                                                                                                                                                             |
+| `live(query)`, `tombstone_of(document)`, `new_tombstone(by)`                 | in `tombstone.py`: a filter narrowed to live targets, the tombstone a stored document carries, and a new one with a trail id of its own                                                                                                                           |
 
 ## The tombstone
 
@@ -75,7 +78,7 @@ A call on a receiver the walk cannot name is not judged: `market_by_slug` in [`b
 
 **A record written beside a market as it is deleted is taken back.**
 A request that read its market live before the tombstone can write after the deletion swept: the application an applicant's save or an import creates, its answers, its history.
-The applicant's save (`save_applicant_application` in [`back-end/api/applicants.py`](../../../back-end/api/applicants.py), through `_gone_under_the_save`), the import route (`import_applications` in [`back-end/app.py`](../../../back-end/app.py)) and an added vendor (`add_vendor` in [`back-end/api/added_vendors.py`](../../../back-end/api/added_vendors.py)) call `kept_only_while_live` after their last write: seeing the market live, they came before the tombstone, so the sweep comes after every write they made; seeing it gone, or going by a deletion now certain, they delete its records again and answer 404.
+The applicant's save (`save_applicant_application` in [`back-end/api/applicants.py`](../../../back-end/api/applicants.py), through `_gone_under_the_save`), the import route (`import_applications` in [`back-end/app.py`](../../../back-end/app.py)), an added vendor (`add_vendor` in [`back-end/api/added_vendors.py`](../../../back-end/api/added_vendors.py)) and an invitation (`invite_to_market` in [`back-end/api/markets.py`](../../../back-end/api/markets.py), before its entry and its email) call `kept_only_while_live` after their last write: seeing the market live, they came before the tombstone, so the sweep comes after every write they made; seeing it gone, or going by a deletion now certain, they delete its records again and answer 404.
 **A tombstone its organization's deletion may still take back leaves the records alone**: that deletion takes every tombstone back when its second judgment finds a market under way, so a sweep then would empty a market that lives on.
 `deletion_decided` reads the market, then the deletion trail, then the organization, then the market again: a tombstone is certain once its trail id's entry is written, or when the market carries it and its organization does not, which is a market's own Delete, since an organization's deletion takes its markets' tombstones back before its own.
 An organization's tombstone with no trail entry yet leaves the request to answer as it would have: if that deletion goes on, it sweeps only after writing its trail, after this read, so it takes what the request wrote.
@@ -105,6 +108,7 @@ A record keyed by the market another way belongs here too, as the floorplan imag
 | its history, the placement trail among it | `history`                                                                                                | `delete_for_market` in [`back-end/history.py`](../../../back-end/history.py) ([the market's history](../data/history.md))                                           |
 | the organizer's vendor notes              | `vendor_notes`                                                                                           | `delete_for_market` in `back-end/vendor_notes.py`                                                                                                                   |
 | its vendors' payments and amounts owed    | `payments`, `amounts_owed`                                                                               | `delete_for_market` in `back-end/payments.py` ([payments](../data/payments.md))                                                                                     |
+| its waiting invitations                   | `invitations`                                                                                            | `delete_for_market` in [`back-end/invitations.py`](../../../back-end/invitations.py) ([invitations](invitations.md))                                                |
 | its floorplan images                      | the GridFS bucket `floorplan_images`: each file naming the market in `metadata.marketId`, and its chunks | `delete_images_for_market` in [`back-end/services/gridfs_service.py`](../../../back-end/services/gridfs_service.py) ([a location's layout](floorplan-placement.md)) |
 
 **A market's own Delete: its tombstone, its records, then it.**

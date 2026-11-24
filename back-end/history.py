@@ -160,6 +160,13 @@ PERMISSION_TABLE_COPIED = "permission_table_copied"
 #: The market's ownership transferred by its Owner to someone with access, who becomes its Owner
 #: while the old Owner stays on it as an Admin (T283).
 HANDED_ON = "handed_on"
+#: An address invited to a role (T538, ``invitations``), recorded under the row that gives the role;
+#: its subject is the address alone, whether or not it has an account.
+INVITED = "invited"
+#: An invitation withdrawn while it waited, under the row that gives its role.
+INVITATION_WITHDRAWN = "invitation_withdrawn"
+#: An invitation declined by the person it was sent to, its actor their address.
+INVITATION_DECLINED = "invitation_declined"
 
 # The organization's own: its verbs and its template kinds are with its changes, below.
 

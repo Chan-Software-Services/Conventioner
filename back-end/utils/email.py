@@ -11,9 +11,11 @@ it had to know to patch a module attribute instead, which is a test passing for 
 to what it claims. ``utils.secret_key`` and ``utils.captcha`` read on call for the same reason.
 """
 
+import html
 import os
 import logging
 import unicodedata
+from datetime import datetime
 from urllib.parse import urlsplit
 
 import resend
@@ -405,6 +407,82 @@ def send_account_exists_email(email: str) -> bool:
     """
 
     return send_mail("existing account", email, subject, html_content, text_content)
+
+
+#: What an invitation offers, by what it is to and its role, in the sentence its email says.
+_INVITED_AS = {
+    "market": {"admin": "as an Admin", "editor": "as an Editor", "viewer": "as a Viewer"},
+    "organization": {"admin": "as an admin", "member": "as a member"},
+}
+
+
+def send_invitation_email(
+    email: str, inviter_email: str, target_name: str, kind: str, role: str, ends_at: datetime,
+) -> bool:
+    """Tell an address who invited it, to which market or organization, as what and until when.
+
+    Every invitation sends it, whether or not the address has an account, with the same words: the
+    invitation is answered on the Invitations page, signed in with that address, and a person with
+    no account is told to create one first. It carries no token and no one-click link (ADR 0047):
+    only a person signed in with the address accepts. The market's or the organization's name, and
+    the inviter's address, are typed by someone else, so the HTML escapes them, and the subject and
+    the text part read them on one line (``one_line``).
+
+    Args:
+        email: The invited address
+        inviter_email: The inviter's address
+        target_name: The market's or the organization's name
+        kind: ``"market"`` or ``"organization"``
+        role: The role or place it offers
+        ends_at: When the invitation ends
+
+    Returns:
+        True if email sent successfully, False otherwise
+    """
+    inviter = one_line(inviter_email)
+    name = one_line(target_name)
+    joining = name if kind == "market" else f"the organization {name}"
+    invited = f"{inviter} invited you to join {joining} {_INVITED_AS[kind][role]} on Conventioner."
+    invitations_url = f"{frontend_url()}/invitations"
+    ends = f"It ends on {ends_at.day} {ends_at:%B %Y}."
+    subject = f"{inviter} invited you to {name}"
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{html.escape(subject)}</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h1 style="color: #36826f;">{html.escape(subject)}</h1>
+        <p>{html.escape(invited)}</p>
+        <p>To accept or decline, sign in with this email address: <a href="{invitations_url}" style="color: #36826f; word-break: break-all;">{invitations_url}</a></p>
+        <p>No account yet? Create one with this email address first, and the invitation will be waiting.</p>
+        <p>{ends}</p>
+        <p style="color: #777474; font-size: 12px; margin-top: 30px;">If you weren't expecting it, you can ignore this email: nothing happens unless you accept.</p>
+    </body>
+    </html>
+    """
+
+    # The bare link below has no full stop after it on purpose: a mail client can read a full stop
+    # as part of the link.
+    text_content = f"""
+    {subject}
+
+    {invited}
+
+    To accept or decline, sign in with this email address: {invitations_url}
+
+    No account yet? Create one with this email address first, and the invitation will be waiting.
+
+    {ends}
+
+    If you weren't expecting it, you can ignore this email: nothing happens unless you accept.
+    """
+
+    return send_mail("invitation", email, subject, html_content, text_content)
 
 
 def send_password_reset_email(email: str, token: str) -> bool:

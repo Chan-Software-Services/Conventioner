@@ -77,6 +77,8 @@ import api.market_actions as Actions
 import api.permissions as PermissionsApi
 import market_deletion as MarketDeletion
 import history as History
+import invitations as Invitations
+import utils.email as Email
 import floorplan_limits as FloorplanLimits
 import layout as Layout
 import pricing as Pricing
@@ -2267,6 +2269,13 @@ ALREADY_HAS_AN_OWNER = (
     "This market already has an Owner. To make someone else its Owner, transfer ownership to them.")
 
 
+def _already_has_a_role(address: str) -> str:
+    """Said of adding or inviting someone who already has a role here: the inviter reads them in
+    "Users with access", so it tells nothing they cannot see."""
+    return (f"{address} already has a role on this market. Change it in their row under Users "
+            "with access.")
+
+
 def add_market_role(market_id: str, user_email: str, role: MarketRole, requesting_user: str) -> None:
     """Add a user role to a market. Asks the row that gives the role (``Actions.roles_row``).
 
@@ -2301,13 +2310,115 @@ def add_market_role(market_id: str, user_email: str, role: MarketRole, requestin
     # Adding never changes a role: overwriting one here would skip update_market_role's guards and
     # let an Admin demote the Owner.
     if user.id in roles:
-        raise BadRequestError(
-            f"{user.email} already has a role on this market. Change it in their row under Users with access."
-        )
+        raise BadRequestError(_already_has_a_role(user.email))
 
     _write_role(market, {"$set": {_role_key(user.id): role.value}}, user.id, requesting_user,
                 owner_count_read=role == MarketRole.OWNER)
     _record_role([asked], History.ROLE_GIVEN, user.id, None, role)
+
+
+def _people_context(market_id: str) -> MarketContext:
+    """The live market and its organization, for a change to who has access to it."""
+    context = load_market_context(market_id)
+    if context is None:
+        raise MarketNotFoundError("Market not found")
+    if context.market is None:
+        raise BadRequestError("Invalid market data")
+    return context
+
+
+def _refused_every_role(requesting_user: str, context: MarketContext) -> Optional[str]:
+    """The Editor and Viewer row's refusal when neither roles row lets this person through, so
+    one who may give no role is refused in one sentence, before anything else is read."""
+    refusals = [Actions.refusal(row, requesting_user, context.market, context.organization)
+                for row in (Actions.MANAGE_EDITORS_AND_VIEWERS, Actions.MANAGE_ADMINS)]
+    return refusals[0] if all(refusals) else None
+
+
+def invite_to_market(
+    market_id: str, address: str, role: MarketRole, requesting_user: str,
+) -> Tuple[Dict[str, Any], bool]:
+    """Invite ``address``, a normalized address, to ``role`` on the market (T538, ADR 0047):
+    the invitation as its organizers read it, and whether its email was sent.
+
+    Asks the row that gives the role (``Actions.roles_row``), which an archived market still takes.
+    The answer depends only on the address typed, the role, the inviter and the time: both limits
+    are counted before the account is looked up, and an address with an account and one without
+    are sent the same email and recorded alike, the entry's subject the address alone. Only an
+    address whose account already has a role here is refused, pointing at their row.
+
+    Gives nothing: the market's roles are not written, and the invitation waits in
+    ``invitations`` until someone signed in with the address accepts it.
+
+    Raises:
+        Invitations.TooManyInvitations: either limit refused it.
+    """
+    context = _people_context(market_id)
+    market = context.market
+
+    asked = Actions.ask(Actions.roles_row(role), requesting_user, market, context.organization)
+    if asked.refused:
+        raise ForbiddenError(asked.refused)
+
+    inviter = UsersApi.get_user(requesting_user)
+    at = Invitations.now()
+    Invitations.count(inviter.id, address, at)
+
+    person = UsersApi.get_user(address)
+    if person is not None and person.id in (context.document.get('roles') or {}):
+        raise BadRequestError(_already_has_a_role(address))
+
+    invitation = Invitations.invite(
+        Invitations.MARKET, market.id, address, role.value, inviter.id, inviter.email, at)
+    MarketDeletion.kept_only_while_live(markets_collection, market.id)
+    asked.record(kind=History.INVITED, subject={"email": address}, detail={"role": role.value})
+    emailed = Email.send_invitation_email(
+        address, inviter.email, market.name, Invitations.MARKET, role.value,
+        Invitations.ends_at(invitation))
+    return Invitations.served(invitation), emailed
+
+
+def market_invitations(market_id: str, requesting_user: str) -> List[Dict[str, Any]]:
+    """The invitations waiting on the market, newest first, for a reader whom either roles row lets
+    through: whoever may give some role sees every invitation, as they see everyone with access."""
+    context = _people_context(market_id)
+    refused = _refused_every_role(requesting_user, context)
+    if refused:
+        raise ForbiddenError(refused)
+    return [Invitations.served(invitation)
+            for invitation in Invitations.waiting_for(Invitations.MARKET, context.market.id)]
+
+
+def withdraw_market_invitation(market_id: str, invitation_id: str, requesting_user: str) -> None:
+    """Withdraw a waiting invitation, as whoever may give its role (``Actions.roles_row``).
+
+    One that has already ended - withdrawn, accepted, declined or past its 14 days - is a 404
+    saying so, written and recorded as nothing, which Manage market reads as done. A requester
+    whom neither roles row lets through is refused first, in one sentence, so they learn nothing of
+    which invitations wait. One sent again to another role between the read and the delete is
+    left, and answers 409: the withdrawal asked the row of the role it read.
+    """
+    context = _people_context(market_id)
+    market = context.market
+    refused = _refused_every_role(requesting_user, context)
+    if refused:
+        raise ForbiddenError(refused)
+
+    invitation = Invitations.waiting(Invitations.MARKET, market.id, invitation_id)
+    if invitation is None:
+        raise NotFoundError(Invitations.ALREADY_ENDED)
+
+    role = MarketRole(invitation["role"])
+    asked = Actions.ask(Actions.roles_row(role), requesting_user, market, context.organization)
+    if asked.refused:
+        raise ForbiddenError(asked.refused)
+
+    if not Invitations.withdraw(invitation):
+        if Invitations.waiting(Invitations.MARKET, market.id, invitation_id) is None:
+            raise NotFoundError(Invitations.ALREADY_ENDED)
+        raise ConflictError(Invitations.CHANGED_MEANWHILE)
+    asked.record(kind=History.INVITATION_WITHDRAWN, subject={"email": invitation["email"]},
+                 detail={"role": role.value})
 
 
 NO_LONGER_ON_THE_MARKET = "They no longer have a role on this market."
