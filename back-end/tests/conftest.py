@@ -1430,6 +1430,33 @@ def sign_in_attempts(monkeypatch):
     return fake
 
 
+class HumanCheck:
+    """The human check as the local stack runs it: any non-empty token passes, an absent one is
+    refused. ``actions`` is every check asked, by its action, in order; ``refuse`` set True makes
+    every token fail, as a token Cloudflare refused does."""
+
+    def __init__(self):
+        self.actions: list = []
+        self.refuse = False
+
+    def __call__(self, token, action):
+        self.actions.append(action)
+        return bool(token) and not self.refuse
+
+
+@pytest.fixture(autouse=True)
+def human_check(request, monkeypatch):
+    """The human check (``utils.captcha.captcha_passes``), stood in for in every test but those of a
+    module marked ``real_human_check``, which meet the real one."""
+    if STUBBED_MODULES or request.node.get_closest_marker("real_human_check"):
+        return None
+    import utils.captcha
+
+    stand_in = HumanCheck()
+    monkeypatch.setattr(utils.captcha, "captcha_passes", stand_in)
+    return stand_in
+
+
 @pytest.fixture(autouse=True)
 def organizer_sessions(monkeypatch):
     """Every organizer's sign-ins kept on the server (``organizer_sessions``), empty for every test,

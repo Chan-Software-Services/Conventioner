@@ -662,23 +662,10 @@ def outbox(monkeypatch):
 
 
 @pytest.fixture
-def captcha_checks(monkeypatch):
-    """Every captcha check a sign-up makes; each passes."""
-    checked = []
-
-    def check(token, _ip_address=None):
-        checked.append(token)
-        return True, 0.9
-
-    monkeypatch.setattr(UsersApi, "verify_recaptcha", check)
-    return checked
-
-
-@pytest.fixture
-def mail(mailing_users, outbox, captcha_checks, clock, monkeypatch):
+def mail(mailing_users, outbox, human_check, clock, monkeypatch):
     # A sign-up hashes at bcrypt's lowest cost, as the accounts here are hashed.
     monkeypatch.setattr(app_module.bcrypt, "_log_rounds", FAST_ROUNDS)
-    return SimpleNamespace(users=mailing_users, outbox=outbox, captcha_checks=captcha_checks)
+    return SimpleNamespace(users=mailing_users, outbox=outbox, human_checks=human_check.actions)
 
 
 @pytest.mark.parametrize("asked", MAIL_REQUESTS, ids=repr)
@@ -717,10 +704,12 @@ class TestTheMailRequestsAreBounded:
             asked.ask(client, asked.sends_to, f"198.51.100.{n}")
         mail.users.reads.clear()
         mail.outbox.clear()
-        mail.captcha_checks.clear()
+        mail.human_checks.clear()
 
         assert _answer(asked.ask(client, asked.sends_to)) == ASKED_REFUSED
-        assert (mail.users.reads, mail.outbox, mail.captcha_checks) == ([], [], [])
+        # A sign-up asks the human check before it counts the address.
+        checked = ["sign-up"] if asked.path == "/register" else []
+        assert (mail.users.reads, mail.outbox, mail.human_checks) == ([], [], checked)
 
     def test_a_request_refused_at_its_caller_reads_no_account_and_sends_nothing(
         self, client, mail, asked,
@@ -729,10 +718,10 @@ class TestTheMailRequestsAreBounded:
             asked.ask(client, f"fixture-guess-{n % 10}@example.com")
         mail.users.reads.clear()
         mail.outbox.clear()
-        mail.captcha_checks.clear()
+        mail.human_checks.clear()
 
         assert _answer(asked.ask(client, asked.sends_to)) == ASKED_REFUSED
-        assert (mail.users.reads, mail.outbox, mail.captcha_checks) == ([], [], [])
+        assert (mail.users.reads, mail.outbox, mail.human_checks) == ([], [], [])
 
     def test_below_the_limits_the_request_sends_its_mail(self, client, mail, asked):
         assert asked.ask(client, asked.sends_to).status_code in (200, 201)
@@ -764,6 +753,40 @@ class TestTheMailRequestsAreBounded:
                   for other in MAIL_REQUESTS if other is not asked]
 
         assert ASKED_REFUSED not in others
+
+
+HUMAN_CHECK_NEEDED = (403, {"msg": "Confirm you're a person, then try again.",
+                            "captcha": "required"}, None)
+SIGN_UP = next(asked for asked in MAIL_REQUESTS if asked.path == "/register")
+
+
+class TestASignUpAsksTheHumanCheckBetweenItsCounts:
+    """A sign-up counts its caller, then asks the human check, then counts its address."""
+
+    def test_a_sign_up_that_fails_the_check_is_not_counted_on_its_address(
+        self, client, mail, human_check,
+    ):
+        human_check.refuse = True
+        for n in range(SIGN_UP.per_address.attempts + 1):
+            assert _answer(SIGN_UP.ask(client, NO_ACCOUNT_EMAIL, f"198.51.100.{n}")) == (
+                HUMAN_CHECK_NEEDED)
+        assert mail.outbox == []
+
+        human_check.refuse = False
+        assert SIGN_UP.ask(client, NO_ACCOUNT_EMAIL, "198.51.100.99").status_code == 201
+        assert human_check.actions == ["sign-up"] * (SIGN_UP.per_address.attempts + 2)
+
+    def test_a_sign_up_that_fails_the_check_still_counts_against_its_caller(
+        self, client, mail, human_check,
+    ):
+        human_check.refuse = True
+        for n in range(SIGN_UP.per_caller.attempts):
+            assert _answer(SIGN_UP.ask(client, f"fixture-guess-{n}@example.com")) == (
+                HUMAN_CHECK_NEEDED)
+        human_check.actions.clear()
+
+        assert _answer(SIGN_UP.ask(client, NO_ACCOUNT_EMAIL)) == ASKED_REFUSED
+        assert human_check.actions == []
 
 
 # A password longer than bcrypt reads, at sign-up and at a reset.

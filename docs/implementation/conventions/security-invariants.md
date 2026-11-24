@@ -53,6 +53,7 @@ sources:
   - T338
   - T318
   - T422
+  - T539
 ---
 
 # Security invariants
@@ -73,15 +74,22 @@ Keep them apart: flask-cors installs an `after_request` handler per call, so a c
 
 **A boot requirement defends something the product serves.**
 A requirement with nothing behind it teaches operators to work around the check.
-`TRUSTED_PROXY_HOPS` ([`utils/proxy.py`](../../../back-end/utils/proxy.py)) is required because `request.remote_addr` is what organizer signup hands Google as reCAPTCHA's `remoteip` (`api/users.py`), and it became load-bearing the moment `RECAPTCHA_SECRET_KEY` ([`utils/captcha.py`](../../../back-end/utils/captcha.py)) did: before, a deployment with no secret took the bypass and no token reached Google.
-The applicant's and the organizer's sign-in limits count each caller by the same address (`sign_in_limits.caller()`, [a vendor signs in before applying](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)), so a wrong hop count would put every applicant, and every organizer, behind one caller's limit.
+`TRUSTED_PROXY_HOPS` ([`utils/proxy.py`](../../../back-end/utils/proxy.py)) is required because `request.remote_addr` is the address the applicant's and the organizer's sign-in limits count each caller by, and the one the human check hands Cloudflare as Turnstile's `remoteip` ([`utils/captcha.py`](../../../back-end/utils/captcha.py)).
+The sign-in limits count each caller by the same address (`sign_in_limits.caller()`, [a vendor signs in before applying](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)), so a wrong hop count would put every applicant, and every organizer, behind one caller's limit.
 Make a requirement follow its caller, not the module it was first written for.
+
+**The human check is one function, and it lets a request through only when Cloudflare cannot answer.**
+`captcha_passes(token, action)` ([`utils/captcha.py`](../../../back-end/utils/captcha.py)) posts the token to Turnstile's siteverify with `TURNSTILE_SECRET_KEY` and passes only on `success` with the action the route asks (`sign-up`, `sign-in` or `vendor-sign-in`), so a token made on one form is refused on another.
+A route answers a failed check with `human_check_needed(key)`: one 403, `{"<key>": "Confirm you're a person, then try again.", "captcha": "required"}`, for an absent token, a refused one and a mismatched action alike.
+When Cloudflare cannot be reached (a timeout, a connection error, a 5xx, a body that is not JSON, or its own `internal-error`) the request is let through under the sign-in limits, and one warning names the kind of outage, never the token, the address or Cloudflare's words.
+A request with no token is refused everywhere, the local stack included, so a screen that forgets the token fails in E2E rather than in production.
+Cloudflare's published test secrets (`1x0000...AA` and its kin, which pass or fail every token) are refused at boot, hatch or not, by a shape in [`configured_secret`](../../../back-end/utils/configured_secret.py).
 The converse holds too: a value that turns on a feature and defends nothing is optional, read through `configured_secret` when asked for, and never a boot requirement: `TYPESAFE_API_KEY`, and the three Discord values, without which the Discord card says Discord is not set up ([the Discord connection](../modules/discord.md)).
 
 ## The one escape hatch
 
 **`ALLOW_INSECURE_LOCAL_DEV` is the only escape hatch for the boot requirements** ([`back-end/utils/deployment.py`](../../../back-end/utils/deployment.py)), and it defaults to off.
-Under it a missing value boots: a random signing key for the process's lifetime, loopback origins, sessions on disk, zero hops, no captcha secret, no mail key, and links to `http://127.0.0.1:5173` from `onboarding@resend.dev`; each is logged as a defense turned off.
+Under it a missing value boots: a random signing key for the process's lifetime, loopback origins, sessions on disk, zero hops, no Turnstile secret, no mail key, and links to `http://127.0.0.1:5173` from `onboarding@resend.dev`; each is logged as a defense turned off.
 `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` are honoured only under the hatch, so a deployment that inherited any of them from a copied env file is not silently unprotected, nor answered by a fake Discord ([a fake Discord](../../TESTING.md#a-fake-discord)).
 The hatch never excuses a published secret ([ADR 0010](../../adr/0010-no-secret-has-a-fallback.md)).
 `docker-compose.yml` and `back-end/.env.example` set it; it must never be set on a deployed environment.

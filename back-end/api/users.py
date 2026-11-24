@@ -11,7 +11,7 @@ from db_config import get_database
 from utils.email import (
     send_account_exists_email, send_verification_email, send_password_reset_email, send_otp_email
 )
-from utils.captcha import verify_recaptcha
+from utils import captcha
 from datetime import datetime, timezone
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from utils.email_address import normalized_email
@@ -534,8 +534,10 @@ def check_session(current_user):
 
 
 def register_user_with_captcha(bcrypt):
-    """Register a new user with CAPTCHA verification, bounded per caller and per address
-    (``_Bounds``) before the captcha is checked, so a refused sign-up spends no check.
+    """Register a new user who passed the human check (``utils.captcha``), in one order: the
+    caller is counted, then the check is asked (action ``sign-up``), then the address is counted
+    (``_Bounds``), so a caller past its limit spends no check and a sign-up that fails the check
+    counts against the caller only.
 
     A sign-up answers alike whether or not its address has an account: the address's format and
     the password's rules are checked before the account is looked up, the password is hashed
@@ -556,18 +558,12 @@ def register_user_with_captcha(bcrypt):
     if not email or not password:
         return jsonify({"msg": "Email and password required"}), 400
 
-    if not captcha_token:
-        return jsonify({"msg": "CAPTCHA verification required"}), 400
+    if not captcha.captcha_passes(captcha_token, captcha.SIGN_UP):
+        return captcha.human_check_needed("msg")
 
     refused = _SIGN_UP.address_refusal(email, now)
     if refused:
         return refused
-
-    # Verify CAPTCHA
-    ip_address = request.remote_addr
-    captcha_success, captcha_score = verify_recaptcha(captcha_token, ip_address)
-    if not captcha_success:
-        return jsonify({"msg": "CAPTCHA verification failed"}), 400
 
     # Validate email format
     if "@" not in email or "." not in email.split("@")[1]:

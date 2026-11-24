@@ -46,7 +46,7 @@ services:
       # every deployment built from this image. See back-end/Dockerfile.
       #
       # This compose file IS the local development stack, so it is where the escape hatch belongs:
-      # the back end otherwise refuses to boot without a reCAPTCHA secret and a signing secret,
+      # the back end otherwise refuses to boot without a Turnstile secret and a signing secret,
       # which a developer has no reason to hold. Nothing else in the repo sets this, so a deployment
       # built from the same image fails closed instead of silently serving the public signup
       # endpoint undefended.
@@ -66,8 +66,8 @@ services:
       - SESSION_TYPE=${SESSION_TYPE:-filesystem}
       # Stated for the same reason: nothing of ours sits in front of this container, so the peer
       # address IS the caller's and no forwarded header may be believed. A deployment behind an
-      # ingress must say how many hops it owns (Vercel: 1), because that address is what organizer
-      # signup reports to reCAPTCHA, and reCAPTCHA v3 scores on it.
+      # ingress must say how many hops it owns (Vercel: 1), because that address is what the sign-in
+      # limits count each caller by.
       - TRUSTED_PROXY_HOPS=${TRUSTED_PROXY_HOPS:-0}
       - MONGODB_HOST=mongodb
       - MONGODB_PORT=27017
@@ -77,7 +77,7 @@ services:
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - FRONTEND_URL=${FRONTEND_URL:-http://127.0.0.1:5173}
       - FROM_EMAIL=${FROM_EMAIL:-onboarding@resend.dev}
-      - RECAPTCHA_SECRET_KEY=${RECAPTCHA_SECRET_KEY:-}
+      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-}
       - DISABLE_CAPTCHA=${DISABLE_CAPTCHA:-}
       - DISABLE_EMAIL=${DISABLE_EMAIL:-}
       # Optional: hosted TypeSafe helps read a Google Form's CSV. Unset means the rules alone.
@@ -117,9 +117,9 @@ services:
     environment:
       - VITE_FLASK_HOST=/api
       - VITE_BACKEND_URL=https://backend:5001
-      - VITE_RECAPTCHA_SITE_KEY=${RECAPTCHA_SITE_KEY:-}
+      - VITE_TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY:-}
       # This stack is a local development one, and it says so - the same declaration the back end
-      # makes with ALLOW_INSECURE_LOCAL_DEV. It is what lets the front end run with no reCAPTCHA
+      # makes with ALLOW_INSECURE_LOCAL_DEV. It is what lets the front end run with no Turnstile
       # site key, sending a placeholder token that only a back end with DISABLE_CAPTCHA accepts.
       - VITE_ALLOW_INSECURE_LOCAL_DEV=true
     ports:

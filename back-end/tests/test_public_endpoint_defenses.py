@@ -12,8 +12,8 @@ everywhere and diagnosed nowhere: with no mail key, every registration, reset an
 and none of them names the variable; with no mail addresses, mail links to a laptop from a sender
 that delivers to nobody; and with no session backend a serverless deployment goes looking for a disk
 it does not have and fails at import, naming nothing either. The trusted-hop count is reported
-nowhere at all - it decides which address organizer signup reports to reCAPTCHA, and behind a proxy
-an unset one reports the ingress for every caller in the world. All three kinds belong in the same
+nowhere at all - it decides which address the sign-in limits count each caller by, and behind a
+proxy an unset one counts the ingress for every caller in the world. All three kinds belong in the same
 refusal, for opposite reasons.
 
 Asking the question must not answer it: the check reads configuration, and installing what it found
@@ -39,7 +39,7 @@ from dotenv import dotenv_values
 from flask import Flask
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from utils.captcha import RECAPTCHA_SECRET_KEY_VAR
+from utils.captcha import TURNSTILE_SECRET_KEY_VAR
 from utils.cors import CORS_ALLOWED_ORIGINS_VAR, LOOPBACK_ORIGINS
 from utils.deployment import INSECURE_LOCAL_DEV_VAR, LOCAL_SWITCHES, PLATFORM_SIGNALS
 from utils.email import (
@@ -64,7 +64,7 @@ A_REAL_SECRET = "SGDdxXn4YCG4M5pDeUjXTt8g0MSTXNKAtePMxo96b3s"
 A_REAL_MAIL_KEY = "re_QYt3bK9wLm2ZpR7vX4nHs6Ja"
 
 ALL_VARS = (
-    RECAPTCHA_SECRET_KEY_VAR,
+    TURNSTILE_SECRET_KEY_VAR,
     RESEND_API_KEY_VAR,
     SECRET_KEY_VAR,
     CORS_ALLOWED_ORIGINS_VAR,
@@ -90,7 +90,7 @@ def deployed(monkeypatch):
 @pytest.fixture
 def configured(deployed, monkeypatch):
     """A deployment that has been told everything the check asks for."""
-    monkeypatch.setenv(RECAPTCHA_SECRET_KEY_VAR, "prod-secret")
+    monkeypatch.setenv(TURNSTILE_SECRET_KEY_VAR, "prod-secret")
     monkeypatch.setenv(RESEND_API_KEY_VAR, A_REAL_MAIL_KEY)
     monkeypatch.setenv(SECRET_KEY_VAR, A_REAL_SECRET)
     monkeypatch.setenv(CORS_ALLOWED_ORIGINS_VAR, "https://app.example.com")
@@ -125,7 +125,7 @@ def test_one_missing_variable_is_still_a_refusal(configured, monkeypatch):
 
     message = str(exc.value)
     assert CORS_ALLOWED_ORIGINS_VAR in message
-    assert RECAPTCHA_SECRET_KEY_VAR not in message
+    assert TURNSTILE_SECRET_KEY_VAR not in message
     assert RESEND_API_KEY_VAR not in message
     assert SECRET_KEY_VAR not in message
     assert SESSION_TYPE_VAR not in message
@@ -151,12 +151,12 @@ def test_a_deployment_that_cannot_send_mail_does_not_serve(configured, monkeypat
 def test_a_deployment_that_never_says_what_is_in_front_of_it_does_not_serve(
     configured, monkeypatch,
 ):
-    """Organizer signup reports the caller's address to Google, and reCAPTCHA v3 scores on it.
+    """The sign-in limits count each caller by its address, and the human check reports it to
+    Cloudflare.
 
     Behind an ingress this app has not been told about, that address is the ingress - the same one
-    for every signup in the world - and the only place it ever shows is a reCAPTCHA score. Making
-    the secret a boot requirement is what puts every deployment on that path, so the hop count is
-    named at boot beside it.
+    for every caller in the world - so every caller would share one caller's limit. The hop count
+    is named at boot beside the other defenses.
     """
     monkeypatch.delenv(TRUSTED_PROXY_HOPS_VAR, raising=False)
 
@@ -295,7 +295,7 @@ def test_configuring_is_what_installs_the_policy(configured):
     assert type(app.session_interface).__name__ == "CacheLibSessionInterface"
     assert isinstance(app.wsgi_app, ProxyFix), (
         "the declared proxy hop is what makes remote_addr the caller's, which is the address "
-        "organizer signup reports to reCAPTCHA"
+        "the sign-in limits count each caller by"
     )
 
 

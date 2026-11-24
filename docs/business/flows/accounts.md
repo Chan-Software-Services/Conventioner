@@ -27,6 +27,7 @@ sources:
   - T338
   - T318
   - T411
+  - T539
 ---
 
 # Accounts
@@ -41,7 +42,7 @@ An account is one email address: an address differing only in case or spacing is
 ## A1. Register and verify an organizer account
 
 **Status:** Works; a signed-out person sees the confirmation at step 4 since bug 22 was fixed (`auth.spec.ts`, `account-links.spec.ts`), and since E32/F03/S04 a double click makes one account and one email, and two sign-ups racing for one address make one account (`a-signup-is-sent-once.spec.ts`).
-Steps 1 to 3 walked live as far as reCAPTCHA allows (the slot-1 stack has real keys and refuses automated browsers).
+Steps 1 to 3 were walked live as far as reCAPTCHA, the human check before Turnstile, allowed (the slot-1 stack had real keys and refused automated browsers).
 **Task:** "Create an account for yourself."
 
 1. Go to `/login` and choose the Register tab.
@@ -60,9 +61,11 @@ Branches: mismatched passwords ("Passwords do not match"), short password, a pas
 
 - A password longer than 72 bytes, which may be fewer than 72 characters since an accented letter or an emoji takes more than one, says "That password is too long. Use 72 characters or fewer; an accented letter or an emoji counts as more than one." and makes no account ([a password longer than 72 bytes](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
 
-- Past five sign-ups for one address in 15 minutes, or thirty from one caller, the next says "You have asked several times. Try again in N minutes.", the same for every address, before the reCAPTCHA check ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
+- Past thirty sign-ups from one caller in 15 minutes, the next says "You have asked several times. Try again in N minutes." before the human check is asked; past five for one address, the same, after it, the same for every address ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
 
-Depends on: reCAPTCHA (bypassed locally), Resend.
+- A sign-up whose human check does not pass (Cloudflare Turnstile, shown only when Cloudflare needs the person to tick a box) is answered "Confirm you're a person, then try again." and makes no account and sends no mail; when the server cannot reach Cloudflare, the sign-up goes on under its limits.
+
+Depends on: Cloudflare Turnstile (bypassed locally), Resend.
 Covered by:
 
 - `a-signup-is-sent-once.spec.ts`

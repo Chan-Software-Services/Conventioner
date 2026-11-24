@@ -81,13 +81,12 @@ How each part of the code works is in the implementation layer of the [knowledge
   - HTML and plain text email templates
   - API key configured via `RESEND_API_KEY` environment variable
 
-### CAPTCHA Service
+### The human check
 
-- **Google reCAPTCHA v3** - Bot protection
-  - Invisible CAPTCHA verification
-  - Score-based verification (minimum 0.5)
-  - Used on registration endpoint
-  - Secret key configured via `RECAPTCHA_SECRET_KEY` environment variable, which the app refuses to boot without
+- **Cloudflare Turnstile** (managed mode) - whether a person, not a script, is asking
+  - Checked on the server by `captcha_passes(token, action)` (`back-end/utils/captcha.py`), through Turnstile's siteverify, with a 3-second timeout
+  - A token passes only for the action its form asks (`sign-up` on registration); when Cloudflare cannot be reached, the request is let through under the sign-in limits and the outage is logged by its kind
+  - Secret key configured via `TURNSTILE_SECRET_KEY` environment variable, which the app refuses to boot without; Cloudflare's published test secrets are refused
   - Test-only bypass via `DISABLE_CAPTCHA`, honored only under `ALLOW_INSECURE_LOCAL_DEV` (see Environment Variables)
 
 ### Utilities
@@ -96,7 +95,7 @@ How each part of the code works is in the implementation layer of the [knowledge
 - **PyJWT 2.15** - The applicant's sign-in token, signed with `SECRET_KEY`
 - **Cryptography 50** - Lets the local stack's `flask run --cert=adhoc` make its certificate; no module imports it
 - **Requests 2.34** - HTTP library
-  - Used for reCAPTCHA verification API calls
+  - Used for the human check's siteverify calls, and Discord's REST API
 - **python-dotenv 1.2** - Reads `back-end/.env` on the first line `app.py` runs
   - The real environment wins over the file, so nothing exported by hand is shadowed by it
 
@@ -282,8 +281,8 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 
 ### User Registration
 
-1. User submits registration form with CAPTCHA verification
-2. Backend validates CAPTCHA token
+1. User submits registration form with the human check's token
+2. Backend checks the token with Cloudflare Turnstile
 3. Password is hashed with bcrypt; one longer than 72 bytes, which bcrypt does not read, is refused (400) and makes no account
 4. User account created with `email_verified: false`, holding its verification link's SHA-256, never the link; the link expires in 1 hour, and asking again replaces it at once
 5. Verification email sent via Resend
@@ -320,7 +319,7 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 
 - **Password Hashing**: Bcrypt with secure salt generation
 - **Email Verification**: Required before account activation
-- **CAPTCHA Protection**: reCAPTCHA v3 on registration
+- **Human check**: Cloudflare Turnstile on registration
 - **Rate Limiting**: every sign-in, code, reset-link, verification-link and sign-up request, counted per address and per caller in the database (`back-end/sign_in_limits.py`), before the account is looked up; a try that signs in is taken back; OTP and password reset requests also wait on the last
 - **Token Expiration**: Time-limited tokens for verification and reset
 - **Secure Sessions**: HTTP-only, `Secure`, `SameSite=Lax` cookies, signed with a `SECRET_KEY` that has no fallback
@@ -335,12 +334,12 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 - `RESEND_API_KEY` - Resend email service API key. **Required**: the app refuses to boot without it (see [RELEASING.md](./RELEASING.md#pre-deploy-required-production-environment))
 - `FRONTEND_URL` - The address organizers sign in at: email links, and Discord's OAuth2 redirect (this plus `/discord/connected`) (e.g., `http://127.0.0.1:5173`). Has no say in CORS. **Required**: outside the hatch the app refuses to boot unless it is an `https://` origin with no path
 - `FROM_EMAIL` - Email address to send from. **Required**: outside the hatch the app refuses to boot without it or with Resend's shared `onboarding@resend.dev`, the default under the hatch
-- `RECAPTCHA_SECRET_KEY` - Google reCAPTCHA v3 secret key. **Required**: the app refuses to boot without it
+- `TURNSTILE_SECRET_KEY` - The secret of the Cloudflare Turnstile widget the human check uses. **Required**: the app refuses to boot without it, and refuses Cloudflare's published test secrets
 - `CORS_ALLOWED_ORIGINS` - Comma-separated browser origins allowed to make credentialed requests (e.g., `https://app.example.com`). **Required**: the app refuses to boot without it, and `*` is refused
 - `SECRET_KEY` - Signs the Flask session cookie. **Required**: there is no fallback, and the app refuses to boot without it. Must be at least 32 characters, and every value this repository has published (the old `TEMP_KEY_CHANGE_IN_PRODUCTION` fallback, the env-template and deploy-guide placeholders) is refused by name - it is readable by anyone who can read the repo. Rotating it ends every session signed with the old key
-- `TRUSTED_PROXY_HOPS` - How many proxies of this deployment's own a request passes through before it reaches Flask (Vercel: `1`; Flask exposed directly: `0`). **Required**: there is no default, because unset is not zero but unknown. It decides whose address organizer signup reports to reCAPTCHA, which scores on it - behind an unnamed ingress that is the ingress's address, for every caller in the world
+- `TRUSTED_PROXY_HOPS` - How many proxies of this deployment's own a request passes through before it reaches Flask (Vercel: `1`; Flask exposed directly: `0`). **Required**: there is no default, because unset is not zero but unknown. It decides whose address the sign-in limits count each caller by - behind an unnamed ingress that is the ingress's address, for every caller in the world
 - `ALLOW_INSECURE_LOCAL_DEV` - Local-development escape hatch for the [boot requirements](./RELEASING.md#pre-deploy-required-production-environment) (default OFF; set `true`/`1`). Never set it on a deployment: a back end that sees a platform variable (`VERCEL`, `VERCEL_ENV`, `VERCEL_REGION`, `AWS_LAMBDA_FUNCTION_NAME`) refuses to boot with it, or with any of the three test flags below, on
-- `DISABLE_CAPTCHA` - Test-only flag to skip reCAPTCHA verification (default OFF; set `true`/`1`). Honored only when `ALLOW_INSECURE_LOCAL_DEV` is also set
+- `DISABLE_CAPTCHA` - Test-only flag to pass any non-empty human check token without asking Cloudflare (default OFF; set `true`/`1`); a request with no token is still refused. Honored only when `ALLOW_INSECURE_LOCAL_DEV` is also set
 - `DISABLE_EMAIL` - Test-only flag to skip sending verification, password reset, and OTP emails via Resend, treating them as sent (default OFF; set `true`/`1`). Honored only when `ALLOW_INSECURE_LOCAL_DEV` is also set
 - `DISCORD_FAKE` - Test-only flag to answer the Discord bot's requests from the fake servers in the database instead of Discord (`back-end/discord_fake.py`; default OFF; set `true`/`1`). Honored only when `ALLOW_INSECURE_LOCAL_DEV` is also set
 - `MONGODB_URI` - A full MongoDB connection string (production's Atlas cluster); when set, the five below are not read
@@ -378,7 +377,7 @@ Conventioner/
 │   ├── utils/            # Utility modules
 │   │   ├── tokens.py     # Token/OTP generation
 │   │   ├── email.py      # Email service integration
-│   │   ├── captcha.py    # CAPTCHA verification
+│   │   ├── captcha.py    # the human check (Turnstile)
 │   │   └── configured_secret.py  # Whether a variable holds a secret
 │   ├── migrations/       # Database migration scripts
 │   ├── assignment/       # Assignment algorithm logic
@@ -441,12 +440,12 @@ Conventioner/
 - **Configuration**: API key required
 - **Documentation**: https://resend.com/docs
 
-### Google reCAPTCHA v3
+### Cloudflare Turnstile
 
-- **Purpose**: Bot protection and spam prevention
+- **Purpose**: The human check, whether a person, not a script, is asking
 - **Use Cases**: Registration form protection
-- **Configuration**: Site key (frontend) and secret key (backend)
-- **Documentation**: https://developers.google.com/recaptcha/docs/v3
+- **Configuration**: Site key (frontend) and secret key (backend), of one widget in Managed mode
+- **Documentation**: https://developers.cloudflare.com/turnstile/
 
 ### Discord
 
@@ -469,4 +468,4 @@ Conventioner/
 - [MongoDB Documentation](https://docs.mongodb.com/)
 - [Vite Documentation](https://vitejs.dev/)
 - [Resend Documentation](https://resend.com/docs)
-- [reCAPTCHA v3 Documentation](https://developers.google.com/recaptcha/docs/v3)
+- [Turnstile Documentation](https://developers.cloudflare.com/turnstile/)

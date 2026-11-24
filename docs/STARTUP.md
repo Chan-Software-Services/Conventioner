@@ -407,11 +407,12 @@ docker compose build --no-cache
 docker compose up
 ```
 
-**Backend crash-loops with "`SECRET_KEY` / `RESEND_API_KEY` / `RECAPTCHA_SECRET_KEY` is set to a placeholder this repository has printed"**:
+**Backend crash-loops with "`SECRET_KEY` / `RESEND_API_KEY` / `TURNSTILE_SECRET_KEY` is set to a placeholder this repository has printed"**:
 
 An `.env` you already have was copied from an older template that printed `SECRET_KEY=your-secret-key-here-change-in-production`, `RESEND_API_KEY=re_xxxxxxxx...` and `RECAPTCHA_SECRET_KEY=6Lcxxxxx...` as if they were fill-in values.
 They never worked - Resend rejects that key, Google never issued that secret, and the signing key is one `git log` away from anybody - but they are _truthy_, so the app took them for configured secrets and the failure landed at request time (a 500 per signup, a captcha verified against a key that cannot verify anything) or, for the signing key, never at all.
 They are refused by name at boot now, on a laptop as on a deployment, escape hatch or not, so the failure lands where it can be read.
+`RECAPTCHA_SECRET_KEY` is no longer read at all: the human check is Cloudflare Turnstile, and its secret is `TURNSTILE_SECRET_KEY`, whose published test secrets (`1x0000...AA` and its kin) are refused the same way.
 
 **Two files can carry them, and the message does not say which one it read.** Check both:
 
@@ -423,7 +424,7 @@ In whichever file holds them, blank the secrets and leave the bypasses beside th
 ```bash
 SECRET_KEY=
 RESEND_API_KEY=
-RECAPTCHA_SECRET_KEY=
+TURNSTILE_SECRET_KEY=
 DISABLE_EMAIL=true
 DISABLE_CAPTCHA=true
 ```

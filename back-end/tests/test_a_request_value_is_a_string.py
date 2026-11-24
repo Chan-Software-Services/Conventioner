@@ -293,7 +293,6 @@ class TestRegistration:
         self, client, users, monkeypatch, field, value,
     ):
         collection = users()
-        monkeypatch.setattr(UsersApi, "verify_recaptcha", lambda *_a: (True, 0.9))
         monkeypatch.setattr(UsersApi, "send_verification_email", lambda *_a: True)
         body = {
             "email": "someone-new@example.com", "password": NEW_PASSWORD,

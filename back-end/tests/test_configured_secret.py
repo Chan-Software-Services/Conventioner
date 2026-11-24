@@ -50,6 +50,31 @@ class TestAValueThisRepositoryHasPrinted:
         assert is_published(placeholder)
 
 
+class TestACloudflareTestKeyIsNotASecret:
+    """Cloudflare publishes Turnstile keys that pass, or fail, every token whoever sent it: anyone
+    can read them in Cloudflare's docs, so none of them is a secret wherever it is typed in."""
+
+    @pytest.mark.parametrize("published", [
+        "1x0000000000000000000000000000000AA",
+        "2x0000000000000000000000000000000AA",
+        "3x0000000000000000000000000000000AA",
+        "1x00000000000000000000AA",
+        "3x00000000000000000000FF",
+        "2x00000000000000000000AB",
+    ])
+    def test_is_not_a_secret(self, published):
+        assert is_published(published)
+        assert configured_secret(f"  {published}\n") == ""
+
+    @pytest.mark.parametrize("real", [
+        "0x4AAAAAAAB2cDeFgHiJkLmN",
+        "0x4AAAAAAAB2cDeFgHiJkLmNoPqRsTuVwXyZ01",
+        "1x000000000000000000AA",
+    ], ids=["a site key", "a secret", "too few zeros"])
+    def test_a_key_of_another_shape_is_not_mistaken_for_one(self, real):
+        assert not is_published(real)
+
+
 class TestARealSecret:
     def test_is_not_mistaken_for_a_placeholder(self):
         assert not is_published(A_GENERATED_KEY)
@@ -98,7 +123,7 @@ class TestEverySecretAsksThisModule:
 
     @pytest.mark.parametrize("variable, reads_the_secret", [
         (secret_key_mod.SECRET_KEY_VAR, secret_key_mod.signing_secret),
-        (captcha_mod.RECAPTCHA_SECRET_KEY_VAR, captcha_mod.verifiable_secret),
+        (captcha_mod.TURNSTILE_SECRET_KEY_VAR, captcha_mod.verifiable_secret),
         (email_mod.RESEND_API_KEY_VAR, email_mod.sendable_key),
     ])
     def test_each_one_reads_its_variable_when_it_is_asked(

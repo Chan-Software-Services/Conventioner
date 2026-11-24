@@ -7,7 +7,7 @@ could be minted at will and spent against the organizer API - every market, vend
 that organizer can reach - with no password and no login.
 
 So there is no fallback. ``SECRET_KEY`` is required, it is checked at boot alongside the other
-public-endpoint defenses, and the refusal names the variable -- the same shape as the reCAPTCHA
+public-endpoint defenses, and the refusal names the variable -- the same shape as the Turnstile
 secret and the origin list, and for the same reason: a security control keyed on a variable whose
 default is the insecure value is not a control.
 

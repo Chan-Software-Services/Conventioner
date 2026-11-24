@@ -97,7 +97,7 @@ describes:
   - back-end/tests/test_account_emails_log_no_address.py
   - back-end/api/applicant_auth.py#request_login_code
   - back-end/api/markets.py#take_move
-  - back-end/utils/captcha.py#verify_recaptcha
+  - back-end/utils/captcha.py#captcha_passes
   - back-end/tests/test_captcha.py
   - front-end/e2e/a-request-too-large-to-carry.spec.ts
   - back-end/host_limits.py
@@ -123,6 +123,7 @@ sources:
   - T318
   - T335
   - T422
+  - T539
 ---
 
 # An exception never reaches a client
@@ -249,7 +250,7 @@ A failed send logs the exception's type and never its text, and the provider's s
 Three places catch an exception and answer as though it had not happened, and each logs it once with `logger.error`, the market and `traceback_without_messages(error)`, with no `exc_info`, whose formatter would print the message under the frames.
 An applicant's code send that raises (`request_login_code` in [`back-end/api/applicant_auth.py`](../../../back-end/api/applicant_auth.py)) is named by the market's slug and answered as a sent one, and the offers sweep that fails once a move from offers to market days is written (`take_move` in [`back-end/api/markets.py`](../../../back-end/api/markets.py)) is named by the market's id and the move still answers 200.
 An owed day the tidy after a write of the assignment could not move (`assignment_written` in [`back-end/api/payments.py`](../../../back-end/api/payments.py), its record kept changing or the event refused) is named by the market's id and the date, never the vendor's address, and the write, which has landed, still answers as it did ([payments](../data/payments.md#the-one-writer)).
-reCAPTCHA's verification (`verify_recaptcha` in [`back-end/utils/captcha.py`](../../../back-end/utils/captcha.py)) prints nothing and logs its three failures: no secret it can use, outside the escape hatch, as an error naming `RECAPTCHA_SECRET_KEY`, a failed verification as a warning with Google's `success` and `score` and nothing the caller sent, and an exception as an error by its type's name alone.
+The human check (`captcha_passes` in [`back-end/utils/captcha.py`](../../../back-end/utils/captcha.py)) prints nothing and logs four things: no secret it can use, outside the escape hatch, as an error naming `TURNSTILE_SECRET_KEY`; Cloudflare out of reach, as one warning naming only the kind of outage (an exception's type, the HTTP status, "not JSON" or `internal-error`), and the request let through; a refused token as an info line with none of Cloudflare's codes or words; and an exception that is not the network's as an error by its type's name alone.
 Two lines keep a message on purpose: `healthz`'s `logger.exception`, since the database driver's message is how an operator reads an outage and holds no request's value, and the CSV import's parse warning, since the `csv` module's messages name a limit or a character class, never a cell.
 
 No route in `app.py` answers what it caught: `healthz` alone catches, to answer 503 with `"status": "unavailable"` and its build's commit, when the database does not answer, and the floorplan blueprints keep their own catches, which answer the generic 500 and log, until they are rewritten.
@@ -289,7 +290,7 @@ Before that it refuses a database the environment does not name, or the primary 
   Each refused parse above answers its own copy with nothing of the parser's message or the input in it, and its log holds the field but not the input; so does a stored organization that cannot be read.
   An unknown URL, a wrong method and a signed-out call still answer Flask's 404, 405 and Flask-Login's 401.
 - [`test_the_hosts_request_limit.py`](../../../back-end/tests/test_the_hosts_request_limit.py) holds `MAX_CONTENT_LENGTH` to the host's 4,500,000 bytes, sends each import route a body one byte over it and finds 413 with the sentence and the file never inspected, and sends the inspect a body at it and finds it read.
-- [`test_captcha.py`](../../../back-end/tests/test_captcha.py) meets each of reCAPTCHA's three failures and finds one log record, the exception's by its type alone, nothing of the caller, the secret or a library's message in the log, and nothing printed.
+- [`test_captcha.py`](../../../back-end/tests/test_captcha.py) meets each of the human check's outages and refusals and finds one warning naming the kind, nothing of the token, the caller, the secret, Cloudflare's words or a library's message in the log, and nothing printed.
 - [`test_account_emails_log_no_address.py`](../../../back-end/tests/test_account_emails_log_no_address.py) sends each of the five mails with email disabled, accepted, answered with no message id and refused by an error whose message holds the address, and finds the address, the error's text and the provider's response body in no log record.
 - CodeQL's `py/stack-trace-exposure` is the automated backstop: it is in the default suite CodeQL's workflow runs on every pull request to `dev`, every push and trial commit there and weekly ([CI and the gate](../testing/ci-and-the-gate.md#codeql)), and it flags a route that catches an exception and answers its text.
   It stops following a flow at a `raise`, so the client copy rule and these route tests hold the rest: a library's message carried into a client error's copy is invisible to it.
