@@ -94,8 +94,8 @@ A spec is chosen by five rules:
 1. **The change edits it, or a file it imports**, transitively: a helper two levels down counts, and so does a `front-end/src/` file a spec imports itself.
 2. **Its pages loaded a changed file under `front-end/src/`.**
    A `.ts` or `.vue` file there whose change is to its comments alone, a `//` or `/* */` in a script or a `<!-- -->` in a template, runs nothing new, so it reaches no spec by any rule.
-   Comments alone means the file reads the same at both sides of the diff with its comments taken out, white space aside; strings, templates, regexes, a tag's values and an interpolation `{{ }}` are kept whole, so a `//` inside one is code.
-   A file the scanner cannot read for sure (an unclosed string or comment, a script in a language other than TypeScript, a template in another language) counts whole.
+   Comments alone means the file reads the same at both sides of the diff with its comments taken out, each run of white space, or a comment, read as one space, or as one line break when it holds one; strings, templates, regexes, a tag's values and an interpolation `{{ }}` are kept whole, so a `//` inside one is code.
+   A file the scanner cannot read for sure (an unclosed string or comment, a script whose `lang` is not `ts`, a template with a `lang`) counts whole.
 3. **It called an endpoint whose requests ran a changed back-end function.**
    The function is the one holding a changed line on either side of the hunk, so a deleted function is found by its old name.
    A line that runs nothing names none: a blank line, a comment, or the text of a docstring, the string that opens a module, class or function body.

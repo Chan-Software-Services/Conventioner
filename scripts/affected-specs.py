@@ -15,7 +15,8 @@ run's shard results (`--map` and `--results` name files instead). A spec is chos
 
 1. when the change edits it, or a file it imports, transitively (scores 1);
 2. when its pages loaded a changed file under `front-end/src/` (scores 1 / the specs that did); a
-   `.ts` or `.vue` file there whose change is to its comments alone reaches no spec by any rule;
+   `.ts` or `.vue` file there that reads the same at both sides with its comments out, by `Words`,
+   reaches no spec by any rule;
 3. when it called an endpoint whose requests ran a changed back-end function, found by the
    hunk's lines on either side, so a deleted function by its old name (scores 1 / the specs that
    reach it); a line that runs nothing (blank, a comment, a docstring's text) names none, and a
@@ -303,8 +304,9 @@ TAG = re.compile(r"</?([A-Za-z][\w-]*)")
 
 class Words:
     """What runs of a script or a Vue file: its text with every comment out and each run of white
-    space outside a string, a template, a regex or a tag as one space, or one line break when it
-    held one (on which a statement may end), so two whose comments alone differ read the same.
+    space outside a string, a template, a regex or a tag, a comment counting as such a run, as one
+    space, or one line break when it held one (on which a statement may end), so two whose comments
+    alone differ, in the same white space, read the same.
 
     A `/` after a value (a word, a literal, `)`, `]` or `}`) is read as a division, and after
     anything else, or a word such as `return`, as opening a regex: a regex just after a `)` or a
