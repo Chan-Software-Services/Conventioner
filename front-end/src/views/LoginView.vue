@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import axios from 'axios';
-import { computed, ref, nextTick, useTemplateRef } from 'vue';
+import { computed, ref, nextTick, useTemplateRef, type Ref, type ShallowRef } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AuthCard from '@/components/AuthCard.vue';
 import CodeInput from '@/components/CodeInput.vue';
 import HumanCheck from '@/components/HumanCheck.vue';
 import SignInMessage from '@/components/SignInMessage.vue';
 import { SESSION_ENDED_MESSAGE } from '@/utils/api';
-import { withHumanCheck, type HumanCheckHandle } from '@/utils/captcha';
+import {
+  HumanCheckUnavailable,
+  withHumanCheck,
+  withHumanCheckWhenAsked,
+  type HumanCheckHandle,
+} from '@/utils/captcha';
 import { refusedSignIn, resentLink, type SignInNotice } from '@/utils/signInNotice';
 import { SIGNED_OUT_EVERYWHERE_MESSAGE, safeNext } from '@/utils/signInNext';
 import { refusalSentence, useSubmit } from '@/utils/useSubmit';
@@ -74,6 +79,12 @@ const password = ref('');
 /** The password form's one line (E38/F14/S02): a newer one replaces it. */
 const loginNotice = ref<SignInNotice | null>(null);
 const showPassword = ref(false);
+/**
+ * The password sign-in's human check, on the form only once the server asked for it (T539), so an
+ * everyday sign-in loads no script of Cloudflare's. Once asked, it stays for the page.
+ */
+const passwordCheckAsked = ref(false);
+const passwordCheck = useTemplateRef<HumanCheckHandle>('passwordCheck');
 
 // Registration fields
 const registerEmail = ref('');
@@ -91,6 +102,21 @@ const otpCode = ref('');
 const otpRequested = ref(false);
 /** The code form's one line: "code sent", then a wrong code's in its place, never both. */
 const otpNotice = ref<SignInNotice | null>(null);
+/** The code sign-in's human check, on its code step once the server asked for it, as above. */
+const codeCheckAsked = ref(false);
+const codeCheck = useTemplateRef<HumanCheckHandle>('codeCheck');
+
+/** Put a sign-in's human check on its form, for `withHumanCheckWhenAsked` to take a token from. */
+async function askTheCheck(
+  asked: Ref<boolean>,
+  check: Readonly<ShallowRef<HumanCheckHandle | null>>,
+): Promise<HumanCheckHandle> {
+  asked.value = true;
+  await nextTick();
+  // Gone only when the person left the form meanwhile, whose answer the submit drops.
+  if (!check.value) throw new HumanCheckUnavailable();
+  return check.value;
+}
 
 /*
  * Each form's request goes through its own submit (T277 ticket 08): a second press while one is
@@ -177,19 +203,25 @@ const submitLogin = () => {
   return submitSignIn(
     () => {
       loginNotice.value = null;
-      return axios.post(
-        `${hostname}/login`,
-        {
-          email: email.value,
-          password: password.value,
-          remember: remember.value,
-        },
-        {
-          withCredentials: true,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        },
+      return withHumanCheckWhenAsked(
+        passwordCheck.value,
+        () => askTheCheck(passwordCheckAsked, passwordCheck),
+        (captchaToken) =>
+          axios.post(
+            `${hostname}/login`,
+            {
+              email: email.value,
+              password: password.value,
+              remember: remember.value,
+              captcha_token: captchaToken,
+            },
+            {
+              withCredentials: true,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            },
+          ),
       );
     },
     {
@@ -339,19 +371,25 @@ const submitOTPLogin = () => {
 
   return submitCodeForm(
     () =>
-      axios.post(
-        `${hostname}/login-otp`,
-        {
-          email: address,
-          otp: otpCode.value,
-          remember: remember.value,
-        },
-        {
-          withCredentials: true,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        },
+      withHumanCheckWhenAsked(
+        codeCheck.value,
+        () => askTheCheck(codeCheckAsked, codeCheck),
+        (captchaToken) =>
+          axios.post(
+            `${hostname}/login-otp`,
+            {
+              email: address,
+              otp: otpCode.value,
+              remember: remember.value,
+              captcha_token: captchaToken,
+            },
+            {
+              withCredentials: true,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            },
+          ),
       ),
     {
       done: signedIn,
@@ -472,14 +510,17 @@ const submitOTPLogin = () => {
           Remember me
         </label>
         <p id="remember-me-help" class="field-help remember-me-help">{{ REMEMBER_ME_HELP }}</p>
-        <button
-          type="submit"
-          class="btn btn--primary submit-button"
-          :disabled="signingIn"
-          data-testid="login-submit-button"
-        >
-          {{ signingIn ? 'Signing in…' : 'Sign in' }}
-        </button>
+        <div class="form-actions">
+          <HumanCheck v-if="passwordCheckAsked" ref="passwordCheck" action="sign-in" />
+          <button
+            type="submit"
+            class="btn btn--primary submit-button"
+            :disabled="signingIn"
+            data-testid="login-submit-button"
+          >
+            {{ signingIn ? 'Signing in…' : 'Sign in' }}
+          </button>
+        </div>
         <div class="form-links">
           <RouterLink
             to="/reset-password-request"
@@ -648,15 +689,18 @@ const submitOTPLogin = () => {
             {{ REMEMBER_ME_HELP }}
           </p>
         </template>
-        <button
-          type="submit"
-          class="btn btn--primary submit-button"
-          :disabled="sendingCode"
-          data-testid="login-otp-submit-button"
-        >
-          <template v-if="otpRequested">{{ sendingCode ? 'Signing in…' : 'Sign in' }}</template>
-          <template v-else>{{ sendingCode ? 'Sending…' : 'Send code' }}</template>
-        </button>
+        <div class="form-actions">
+          <HumanCheck v-if="otpRequested && codeCheckAsked" ref="codeCheck" action="sign-in" />
+          <button
+            type="submit"
+            class="btn btn--primary submit-button"
+            :disabled="sendingCode"
+            data-testid="login-otp-submit-button"
+          >
+            <template v-if="otpRequested">{{ sendingCode ? 'Signing in…' : 'Sign in' }}</template>
+            <template v-else>{{ sendingCode ? 'Sending…' : 'Send code' }}</template>
+          </button>
+        </div>
         <div v-if="otpRequested" class="form-links">
           <button
             type="button"

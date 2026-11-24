@@ -4,7 +4,8 @@
  *
  * This module loads Cloudflare's script, once a page, and holds the words a person sees of the
  * check, each in one place. `HumanCheck.vue` is the only code that renders the widget; a form
- * holds one and sends its token through `withHumanCheck`.
+ * holds one and sends its token through `withHumanCheck`, or, when it shows the check only once
+ * the server asks for it, through `withHumanCheckWhenAsked`.
  */
 import { Refusal } from '@/utils/useSubmit';
 
@@ -138,6 +139,7 @@ export async function withHumanCheck<T>(
   check: HumanCheckHandle,
   send: (token: string) => Promise<T>,
   required: (error: unknown) => boolean = isHumanCheckRequired,
+  sends = 2,
 ): Promise<T> {
   for (let attempt = 1; ; attempt += 1) {
     const token = await check.token();
@@ -145,9 +147,33 @@ export async function withHumanCheck<T>(
       return await send(token);
     } catch (error) {
       if (!required(error)) throw error;
-      if (attempt === 2) throw new Refusal(HUMAN_CHECK_NOT_CONFIRMED);
+      if (attempt === sends) throw new Refusal(HUMAN_CHECK_NOT_CONFIRMED);
     } finally {
       check.reset();
     }
   }
+}
+
+/**
+ * Send a request of a form that puts its check on the page only once the server asks for it, as
+ * the organizer's sign-ins do, so an everyday sign-in loads no script of Cloudflare's.
+ *
+ * With no check on the page (`held` is null) the request goes with no token. When the server asks
+ * for the check, `ask` puts it on the page and resolves with it, and the request is sent once more
+ * with its token, within the same submit; a second "required" refuses with
+ * `HUMAN_CHECK_NOT_CONFIRMED`. Once the check is on the page, every request goes through
+ * `withHumanCheck`.
+ */
+export async function withHumanCheckWhenAsked<T>(
+  held: HumanCheckHandle | null,
+  ask: () => Promise<HumanCheckHandle>,
+  send: (token?: string) => Promise<T>,
+): Promise<T> {
+  if (held) return withHumanCheck(held, send);
+  try {
+    return await send();
+  } catch (error) {
+    if (!isHumanCheckRequired(error)) throw error;
+  }
+  return withHumanCheck(await ask(), send, isHumanCheckRequired, 1);
 }
