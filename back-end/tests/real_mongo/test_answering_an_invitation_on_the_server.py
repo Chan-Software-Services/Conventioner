@@ -1,16 +1,18 @@
 """Accepting an invitation on a real server (T538): two accepts at once give one role and one
 entry, and an accept landing on a market whose roles moved since its read writes nothing and keeps
-the invitation.
+the invitation; the same for an organization's place.
 
 Accepting reads the market, judges the inviter's right and the invitee's role, and writes the role
-holding both as read (``_write_role``). The hermetic suite lands the change through a fake that
-applies the holds; these run them where the conditional write is the server's.
+holding both as read (``_write_role``); an organization's place is written holding the inviter's
+key and the invitee's as read (``organization_people._write``). The hermetic suite lands the change
+through a fake that applies the holds; these run them where the conditional write is the server's.
 """
 from datetime import datetime
 
 import pytest
 
 import api.markets as MarketsApi
+import organization_people as OrganizationPeople
 import sign_in_limits
 from datatypes import MarketPhase, MarketRole
 from market_write import MARKET_CHANGED
@@ -102,3 +104,62 @@ def test_the_invitee_lists_it_by_name_and_accepting_takes_its_counts_back(invite
         (sign_in_limits.INVITATION_PER_ADDRESS, INVITED))]
     assert [sign_in_limits.attempts_collection.find_one({"_id": key})["count"]
             for key in keys] == [0, 0]
+
+
+ORGANIZATION_READ = "organization_people.organization_people_of"
+
+
+@pytest.fixture
+def invited_to_an_organization(boot_indexes, signed_in, real_db, mail):
+    """An organization with its owner and an admin, and an account the admin invited as a member,
+    each signed in; the organization's id and the invitation's."""
+    owner, admin, invitee = signed_in(OWNER), signed_in(ADMIN), signed_in(INVITED)
+    org_id = "org-invited"
+    people = {owner.account_id: "owner", admin.account_id: "admin"}
+    real_db["organizations"].insert_one({
+        "id": org_id, "name": "Invited Markets", "people": people, "owner": owner.account_id,
+        "admins": [admin.account_id], "members": [], "markets": [], "theme": None})
+    response = admin.post(f"/organizations/{org_id}/invitations",
+                          json={"email": INVITED, "place": "member"})
+    assert response.status_code == 200, response.get_json()
+    return org_id, owner, admin, invitee, response.get_json()["invitation"]["id"]
+
+
+def _organization(real_db, org_id):
+    return real_db["organizations"].find_one({"id": org_id}, {"_id": 0})
+
+
+def _placed(market_records, org_id):
+    return [entry for entry in market_records.history.find({"organization_id": org_id})
+            if entry["kind"] == "role_given"]
+
+
+def test_two_accepts_of_an_organizations_invitation_give_one_place_and_one_entry(
+        invited_to_an_organization, race, real_db, market_records):
+    org_id, _owner, _admin, invitee, invitation = invited_to_an_organization
+
+    answers = race(2, lambda _i: invitee.post(f"/invitations/{invitation}/accept"))
+
+    statuses = sorted(answer.status_code for answer in answers)
+    assert statuses[0] == 200 and statuses[1] in (400, 404, 409), statuses
+    stored = _organization(real_db, org_id)
+    assert stored["people"][invitee.account_id] == "member"
+    assert stored["members"] == [invitee.account_id]
+    assert len(_placed(market_records, org_id)) == 1
+    assert list(market_records.invitations.find({"id": invitation})) == []
+
+
+def test_an_accept_landing_after_the_inviters_place_changed_keeps_the_invitation(
+        invited_to_an_organization, interleave, real_db, market_records):
+    org_id, owner, admin, invitee, invitation = invited_to_an_organization
+    interleave(ORGANIZATION_READ, lambda: OrganizationPeople.change_place(
+        org_id, admin.account_id, "member", owner.email))
+
+    response = invitee.post(f"/invitations/{invitation}/accept")
+
+    assert (response.status_code, response.get_json()["code"]) == (409, "organization_changed")
+    stored = _organization(real_db, org_id)
+    assert invitee.account_id not in stored["people"]
+    assert stored["people"][admin.account_id] == "member"
+    assert _placed(market_records, org_id) == []
+    assert len(list(market_records.invitations.find({"id": invitation}))) == 1

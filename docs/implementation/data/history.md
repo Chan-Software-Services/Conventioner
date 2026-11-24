@@ -378,12 +378,18 @@ One block per action, in the order its constants stand in `history.py`; a new ki
 - `role_given`, `role_changed`, `role_taken`: an admin added, a member made an admin, an admin removed
   - Subject: `user_id`, `email`
   - Detail: `role`: `admin`, `member`, or null
+- `invited`, `invitation_withdrawn`, `invitation_declined`: an invitation to be an admin sent, withdrawn, or declined by the person it was sent to, its actor their address ([invitations](../modules/invitations.md#inviting-to-an-organization))
+  - Subject: `email`, the address alone, whether or not it has an account
+  - Detail: `role`: `admin`
+- `role_given` or `role_changed` by an invitation accepted: its actor the inviter, at the moment it was accepted; `role_changed` for a member made an admin
+  - Detail: `role` before and after, and `by_invitation: true`
 
 **`manage-organization-members`**
 
 - `role_given`, `role_taken`: a member added or removed
   - Subject: `user_id`, `email`
   - Detail: `role`: `member`, or null
+- `invited`, `invitation_withdrawn`, `invitation_declined`, and `role_given` by an invitation accepted: as for an admin, its `role` `member`
 
 **`transfer-organization`**
 

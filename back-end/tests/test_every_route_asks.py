@@ -160,6 +160,8 @@ BODIES = {
     ("POST", "/markets/<market_id>/applications-stopped"): {"json": {"stopped": True}},
     ("POST", "/markets/<market_id>/hand-on"): {"json": {"userId": "user-someone"}},
     ("PUT", "/organizations/<org_id>/users/<user_id>"): {"json": {"place": "member"}},
+    ("POST", "/organizations/<org_id>/invitations"): {
+        "json": {"email": "nobody@example.com", "place": "member"}},
     ("PUT", "/markets/<market_id>/plan"): {"json": {"setupObject": {}}},
     ("PUT", "/markets/<market_id>/table-types"): {"json": {"tableTypes": []}},
     ("PUT", "/markets/<market_id>/rejection-rules"): {"json": {"rules": []}},

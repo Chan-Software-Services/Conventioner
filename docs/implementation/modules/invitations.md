@@ -17,6 +17,15 @@ describes:
   - back-end/api/markets.py#live_market_names
   - back-end/api/markets.py#give_role_by_invitation
   - back-end/api/markets.py#decline_market_invitation
+  - back-end/app.py#invite_to_organization
+  - back-end/app.py#get_organization_invitations
+  - back-end/app.py#withdraw_organization_invitation
+  - back-end/api/organizations.py#invite_to_organization
+  - back-end/api/organizations.py#organization_invitations
+  - back-end/api/organizations.py#withdraw_organization_invitation
+  - back-end/api/organizations.py#live_organization_names
+  - back-end/api/organizations.py#decline_organization_invitation
+  - back-end/organization_people.py#place_by_invitation
   - back-end/utils/email.py#send_invitation_email
   - back-end/sign_in_limits.py#INVITATION_PER_INVITER
   - back-end/sign_in_limits.py#INVITATION_PER_ADDRESS
@@ -24,6 +33,8 @@ describes:
   - back-end/tests/real_mongo/test_invitations_on_the_server.py
   - back-end/tests/test_answering_a_market_invitation.py
   - back-end/tests/real_mongo/test_answering_an_invitation_on_the_server.py
+  - back-end/tests/test_inviting_someone_to_an_organization.py
+  - back-end/tests/test_answering_an_organization_invitation.py
 verified: 2026-11-24
 sources:
   - T538
@@ -70,6 +81,7 @@ An accepted one's two limit counts are taken back (`take_back`) in the window of
 **A withdrawal holds the role it read**: `withdraw` deletes by id, target and role, so an invitation sent again to another role between the read and the delete is left, and the withdrawal answers 409 `CHANGED_MEANWHILE`; one gone meanwhile answers 404 `ALREADY_ENDED`, "That invitation has already ended.", which Manage market reads as done.
 
 **A market's invitations go with it**: `delete_for_market`, in `market_deletion.delete_records` ([market deletion](market-deletion.md#sharp-edges)).
+**An organization's go with it**: `delete_for_organization`, in `api/organizations.delete_organization` beside its own history, and each of its markets' with the market ([when an organization may be deleted](../../business/rules/when-an-organization-may-be-deleted.md)).
 
 ## Inviting to a market
 
@@ -101,6 +113,31 @@ Nothing writes the market's `roles`.
 The list is for a reader whom either roles row lets through, else 403 with the Editor and Viewer row's sentence.
 The withdrawal refuses such a reader first in the same sentence, whether or not the invitation waits, then finds it, then asks the row of its role, and records `invitation_withdrawn` through that asking.
 
+## Inviting to an organization
+
+The routes, in [`back-end/app.py`](../../../back-end/app.py), each `@login_required`, answer as the market's do:
+
+| Route                                                        | Answers                                                                    |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `POST /organizations/<org_id>/invitations`                   | body `{"email", "place"}`; `200 {"invitation": <served>, "emailed": bool}` |
+| `GET /organizations/<org_id>/invitations`                    | `200 {"invitations": [<served>, ...]}`, both places, newest first          |
+| `DELETE /organizations/<org_id>/invitations/<invitation_id>` | `200 {"message": "Invitation withdrawn"}`                                  |
+
+The invite refuses, in this order, before anything is written:
+
+1. An `email` or a `place` that is not text: 400 "email and place required"; an address that is not one, as for a market.
+2. A place but `admin` or `member`: 400 "A place is admin or member." (`NOT_A_PLACE`).
+3. No live organization: 404 "Organization not found".
+4. The inviter's place not one that may add to that place (`organization_people.AUTHORITY`, by `INVITED_TO`): 403 with its sentence, "Only organization owner can add admins" or "Only organization owner or admin can add members".
+5. Either limit: 429, as for a market.
+6. Only now the account: one already holding a place is 400 "<address> owns this organization.", "<address> is already an admin of this organization.", "<address> is already a member of this organization." (a member invited as a member), or "<address> is already a member of this organization. Make them an admin from their row." (a member invited as an admin) (`already_placed`).
+
+Then `invite_to_organization` in [`back-end/api/organizations.py`](../../../back-end/api/organizations.py) writes the invitation, reads the organization again (`_kept_only_while_live`), so one landing after its deletion swept is taken back and answers 404, records `invited` under the place's action (`manage-organization-admins` or `manage-organization-members`; subject `{email}`, detail `{role}`), and sends the email.
+Nothing writes the organization's `people`.
+
+The list is its owner's and its admins'; anyone else is 403 "Only the organization's owner and its admins see its invitations.".
+The withdrawal refuses anyone else first in that sentence, whether or not the invitation waits, then finds it, then asks the place's authority of the requester (an admin may not withdraw an invitation to be an admin), and records `invitation_withdrawn`; it holds the place it read, as a market's holds its role.
+
 ## Answering an invitation
 
 The invitee's routes, in [`back-end/app.py`](../../../back-end/app.py), each `@login_required`, for the signed-in account; [`back-end/api/invitees.py`](../../../back-end/api/invitees.py) answers them and hands each kind to the module that writes its target:
@@ -112,7 +149,7 @@ The invitee's routes, in [`back-end/app.py`](../../../back-end/app.py), each `@l
 | `POST /invitations/<invitation_id>/decline` | `200 {"message": "Invitation declined"}`                       |
 
 The list holds every invitation waiting for the account's address in its one spelling ([users and email](../data/users-and-email.md)), served as `{id, kind, targetId, targetName, role, invitedBy, sentAt, endsAt}` (`invitee_served`).
-The targets' names come from one read of the live markets among them (`live_market_names`, an `$in` on `id`), never one read per invitation, and an invitation whose market is gone or being deleted is left out.
+The targets' names come from one read of the live markets among them (`live_market_names`, an `$in` on `id`) and one of the live organizations (`live_organization_names` in `api/organizations.py`), never one read per invitation, and an invitation whose target is gone or being deleted is left out.
 
 An invitation is the account's only when it was sent to the account's address.
 Any other id, one past its end, withdrawn, declined, accepted, or whose market is gone answers one 404, `{"error": INVITATION_ENDED, "code": "invitation_ended"}`: "This invitation has ended: it was withdrawn, it ran out, or whoever sent it can no longer give it. Ask them to invite you again.", so a forwarded email lets nobody else answer it.
@@ -134,12 +171,23 @@ Of two accepts at once, one writes and the other meets the role written, or the 
 **Declining** (`decline_market_invitation`) ends the invitation, writing nothing on the market, and records `invitation_declined` through the unasked door `AN_INVITEE_ANSWERS`, under the row that gives its role, its actor the invitee's address: the invitee holds no role, and their sign-in with the invited address is the check.
 A declined invitation keeps its limit counts.
 
-**Nobody gains a role by being invited**: no read of a market's `roles`, its people with access or a permission check reads this collection, so an invited person who has not accepted reads the market as before they were invited.
+**Accepting a place in an organization** is `place_by_invitation` in [`back-end/organization_people.py`](../../../back-end/organization_people.py), the one writer of a person's place ([organization people](organization-people.md)), judged in this order:
+
+1. The organization, live, and the inviter's account, as for a market; either gone ends the invitation and answers it ended.
+2. The inviter's place asked again through `may` with the place's event (`INVITED_TO`: `admin` asks `ADD_ADMIN`, `member` `ADD_MEMBER`): refused ends it, 404.
+3. The invitee's place as `next_people` judges adding them: the owner, an admin, or a member invited as a member ends it, 400 "You are already in this organization, so this invitation has ended." (`ALREADY_IN_IT`); a member invited as an admin becomes one, as "Add admin" of a member does.
+4. `_change`'s write, holding the inviter's key and the invitee's as read; an `OrganizationChanged` answers its 409 and keeps the invitation.
+   `_record_role` records it with the inviter as actor and `"by_invitation": true` in its detail: `role_given`, or `role_changed` for a member made an admin.
+5. The invitation ended, and its limit counts taken back.
+
+Declining (`decline_organization_invitation` in `api/organizations.py`) ends it, writing nothing on the organization, and records `invitation_declined` under the place's action, its actor the invitee's address.
+
+**Nobody gains a role or a place by being invited**: no read of a market's `roles`, an organization's `people`, its people with access or a permission check reads this collection, so an invited person who has not accepted reads the market or the organization as before they were invited.
 
 ## The email
 
 `send_invitation_email` in [`back-end/utils/email.py`](../../../back-end/utils/email.py) sends kind `invitation` through `send_mail`, whose log names the kind and never the address.
-Its subject is "<inviter> invited you to <market name>"; its body says who invited them to join what as what ("as an Editor on Conventioner."), to sign in with this address at `<FRONTEND_URL>/invitations` to accept or decline, to create an account with this address first when they have none, when it ends ("It ends on 8 December 2026."), and that nothing happens unless they accept.
+Its subject is "<inviter> invited you to <market or organization name>"; its body says who invited them to join what as what ("<market> as an Editor on Conventioner.", "the organization <name> as an admin on Conventioner."), to sign in with this address at `<FRONTEND_URL>/invitations` to accept or decline, to create an account with this address first when they have none, when it ends ("It ends on 8 December 2026."), and that nothing happens unless they accept.
 The HTML escapes every name and address (`html.escape`), the subject and the text read them on one line (`one_line`), and the bare link has no full stop after it.
 A send that fails keeps the invitation and answers `"emailed": false`.
 
@@ -154,4 +202,6 @@ A send that fails keeps the invitation and answers `"emailed": false`.
 - [`back-end/tests/real_mongo/test_invitations_on_the_server.py`](../../../back-end/tests/real_mongo/test_invitations_on_the_server.py) builds the indexes on a real server and races invitations of one address, which leave one document.
 - [`back-end/tests/test_answering_a_market_invitation.py`](../../../back-end/tests/test_answering_a_market_invitation.py) sends the invitee's routes: the list and its one read of names, accepting and its entry, the take-back, every invitation that has ended and why, the inviter deleted or no longer able, the invitee already on the market, a cut between the write and the delete, an accept and a withdrawal in each order, a market changed meanwhile, declining, and an invited person reading the market as before.
 - [`back-end/tests/real_mongo/test_answering_an_invitation_on_the_server.py`](../../../back-end/tests/real_mongo/test_answering_an_invitation_on_the_server.py) races two accepts, which give one role and one entry, lands a role change between an accept's read and its write, which answers 409 and keeps the invitation, and reads the list and the take-back on a real server.
-- The guard lists name the routes: `test_an_exception_never_reaches_a_client.py`, `test_a_request_value_is_a_string.py`, `test_every_route_asks.py` (the invitee's three, `CALLERS_OWN`) and `test_every_write_records.py`, which sends the accept and the decline and lists the decline among `UNASKED`; `test_only_an_asking_writes_a_markets_history.py` lists its door in `DOORS`.
+- [`back-end/tests/test_inviting_someone_to_an_organization.py`](../../../back-end/tests/test_inviting_someone_to_an_organization.py) and [`back-end/tests/test_answering_an_organization_invitation.py`](../../../back-end/tests/test_answering_an_organization_invitation.py) do the same for an organization: the one answer, nobody placed, each refusal and the "already" sentences after the limits, the email, the list and the withdrawal, an invite landing on a deletion, the list beside a market's, accepting each place and a member made an admin, every way it ends, a change meanwhile, and declining.
+  `test_organization_deletion.py` proves an organization's invitations, and its markets', go with it; the real-MongoDB file above also races two accepts of an organization's invitation and lands a place change between an accept's read and its write.
+- The guard lists name the routes: `test_an_exception_never_reaches_a_client.py`, `test_a_request_value_is_a_string.py`, `test_every_route_asks.py` (the invitee's three, `CALLERS_OWN`), `test_the_organizations_history.py` (`RECORDED`), `test_every_read_of_a_target_asks_for_a_live_one.py` (`_kept_only_while_live`) and `test_every_write_records.py`, which sends the accept and the decline and lists the decline among `UNASKED`; `test_only_an_asking_writes_a_markets_history.py` lists its door in `DOORS`.

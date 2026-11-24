@@ -16,7 +16,7 @@ refused is sent once more, finding the other's document.
 **It waits 14 days.** ``expires_at`` is 14 days after it was sent, and a TTL index removes it then;
 the TTL monitor runs about once a minute, so every read also asks for ``expires_at`` after now.
 An invitation also ends on a decline, a withdrawal, or once its inviter can no longer give it, and
-with its market or its organization (``market_deletion``).
+with its market or its organization (``market_deletion``, ``api.organizations``).
 
 **What a request sends counts.** Each invitation sends an email, so it is counted against two
 limits of ``sign_in_limits`` before the account is looked up, by the inviter and by the address,
@@ -249,6 +249,13 @@ def delete_for_market(market_id: str) -> int:
     """Take a market's invitations with the market. Returns how many went."""
     return invitations_collection.delete_many(
         {"target_kind": MARKET, "target_id": market_id}).deleted_count
+
+
+def delete_for_organization(organization_id: str) -> int:
+    """Take an organization's invitations with the organization. Returns how many went; its
+    markets' go with each market (``delete_for_market``)."""
+    return invitations_collection.delete_many(
+        {"target_kind": ORGANIZATION, "target_id": organization_id}).deleted_count
 
 
 def _utc(value: datetime) -> datetime:

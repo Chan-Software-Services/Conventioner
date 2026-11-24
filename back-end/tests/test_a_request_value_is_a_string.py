@@ -252,6 +252,8 @@ class TestNamingSomeoneForARole:
          MarketsApi, "add_market_role"),
         ("/markets/a-market-id/invitations", "email", {"role": "editor"},
          MarketsApi, "invite_to_market"),
+        ("/organizations/an-org-id/invitations", "email", {"place": "member"},
+         OrgsApi, "invite_to_organization"),
     ]
 
     @pytest.fixture
@@ -284,12 +286,18 @@ class TestNamingSomeoneForARole:
         invited = signed_in.post(
             "/markets/a-market-id/invitations", json={"email": FIXTURE_EMAIL, "role": role},
         )
+        to_a_place = signed_in.post(
+            "/organizations/an-org-id/invitations", json={"email": FIXTURE_EMAIL, "place": role},
+        )
 
         assert (added.status_code, added.get_json()) == (
             400, {"error": "user_email and role required"},
         )
         assert (invited.status_code, invited.get_json()) == (
             400, {"error": "email and role required"},
+        )
+        assert (to_a_place.status_code, to_a_place.get_json()) == (
+            400, {"error": "email and place required"},
         )
         assert (changed.status_code, changed.get_json()) == (400, {"error": "role required"})
         assert asked == []

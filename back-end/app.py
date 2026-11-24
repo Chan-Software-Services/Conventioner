@@ -35,6 +35,7 @@ import api.invitees as InviteesApi
 import api.market_actions as Actions
 import history as History
 import invitations as Invitations
+import organization_people as OrganizationPeople
 import review_team as ReviewTeam
 import sign_in_limits
 from api.floorplans import floorplans_bp
@@ -1023,6 +1024,51 @@ def get_market_invitations(market_id: str) -> Response:
 def withdraw_market_invitation(market_id: str, invitation_id: str) -> Response:
     """Withdraw a waiting invitation, as whoever may give its role."""
     MarketsApi.withdraw_market_invitation(market_id, invitation_id, authenticated_email())
+    return jsonify({"message": "Invitation withdrawn"}), 200
+
+#: Said of an invitation to an organization that names no address or no place, or names either as
+#: anything but text.
+EMAIL_AND_PLACE_REQUIRED = "email and place required"
+
+
+@app.route('/organizations/<org_id>/invitations', methods=['POST'])
+@login_required
+def invite_to_organization(org_id: str) -> Response:
+    """Invite an address to a place in an organization (T538): body ``{"email", "place"}``, the
+    place ``"admin"`` or ``"member"``. Answers the invitation and whether its email was sent,
+    alike for every address (``api.organizations``)."""
+    data = json_object(required=True)
+
+    email = string_field(data, 'email')
+    place = string_field(data, 'place')
+    if not email or not place:
+        return jsonify({"error": EMAIL_AND_PLACE_REQUIRED}), 400
+    address = normalized_email(email)
+    if not _an_address(address):
+        return jsonify({"error": TYPE_AN_ADDRESS}), 400
+    if place not in OrganizationPeople.INVITED_TO:
+        return jsonify({"error": OrganizationPeople.NOT_A_PLACE}), 400
+
+    try:
+        invitation, emailed = OrgsApi.invite_to_organization(
+            org_id, address, place, authenticated_email())
+    except Invitations.TooManyInvitations as refused:
+        return sign_in_limits.too_many(refused.retry_after, Invitations.TOO_MANY, key="error")
+    return jsonify({"invitation": invitation, "emailed": emailed}), 200
+
+@app.route('/organizations/<org_id>/invitations', methods=['GET'])
+@login_required
+def get_organization_invitations(org_id: str) -> Response:
+    """The invitations waiting on an organization, newest first, for its owner and its admins."""
+    return jsonify({
+        "invitations": OrgsApi.organization_invitations(org_id, authenticated_email()),
+    }), 200
+
+@app.route('/organizations/<org_id>/invitations/<invitation_id>', methods=['DELETE'])
+@login_required
+def withdraw_organization_invitation(org_id: str, invitation_id: str) -> Response:
+    """Withdraw a waiting invitation, as whoever may invite to its place."""
+    OrgsApi.withdraw_organization_invitation(org_id, invitation_id, authenticated_email())
     return jsonify({"message": "Invitation withdrawn"}), 200
 
 # The invitee's side (T538): the invitations waiting for the signed-in address, and their answers.
