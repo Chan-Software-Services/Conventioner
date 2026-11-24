@@ -9,13 +9,17 @@
  * list in source order.
  *
  * Run it after changing either CSS file: `npm run design-md`, then commit `DESIGN.md`.
+ * `npm run design-md:check` (`--check`), which CI's frontend-lint-and-types job and
+ * scripts/nm-test.sh run, fails when the committed file is not what this script writes, and when the
+ * pinned `@google/design.md` linter finds an error or any warning but `orphaned-tokens`.
  * When a guard refuses (a token declared twice, a family no face loads, words naming a token or a
  * class the CSS no longer has, a component selector no rule lists, a class of primitives.css the
  * file never names, a component font size off the type scale) it says why and writes nothing.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { lint, type Finding } from '@google/design.md/linter';
 import postcss, { type ChildNode, type Declaration, type Root, type Rule } from 'postcss';
 
 import { CONTENT, type Component, type Content } from './design-md-content.ts';
@@ -511,10 +515,105 @@ export function writeDesignMd(
   return countsLine(counts);
 }
 
+/**
+ * What is wrong with the committed file against the generated one: nothing (`[]`) when they are
+ * equal byte for byte, else what to run and the first line that differs.
+ */
+export function drift(committed: string | undefined, generated: string): string[] {
+  if (committed === generated) return [];
+  // Each line keeps its newline, so a missing or an extra last newline is a difference too.
+  const lines = (text: string) => text.split(/(?<=\n)/);
+  const want = lines(generated);
+  const have = committed === undefined ? [] : lines(committed);
+  let index = 0;
+  while (index < want.length && index < have.length && want[index] === have[index]) index += 1;
+  const shown = (all: string[]) => {
+    const line = all[index];
+    if (line === undefined) return '(end of file)';
+    return line.endsWith('\n') ? line.slice(0, -1) : `${line} (no newline at the end of the file)`;
+  };
+  return [
+    'DESIGN.md is not what front-end/scripts/design-md.ts writes from base.css and primitives.css: ' +
+      'run `npm run design-md` in front-end/ and commit it.',
+    `First difference at line ${index + 1}:`,
+    `committed: ${committed === undefined ? '(no DESIGN.md)' : shown(have)}`,
+    `generated: ${shown(want)}`,
+  ];
+}
+
+/** The lint rule whose warnings the check lets by: most colours draw no primitive (ADR, T582). */
+const ALLOWED_WARNING = 'orphaned-tokens';
+
+/**
+ * Which of the linter's findings fail the check: every error, and every warning but an
+ * `orphaned-tokens` one (a warning with no rule is the parser's, and fails); info never fails.
+ * The summary line always says how many warnings it let by.
+ */
+export function lintPolicy(findings: Finding[]): { failing: string[]; summary: string } {
+  const failing: Finding[] = [];
+  let allowed = 0;
+  for (const finding of findings) {
+    if (finding.severity === 'info') continue;
+    if (finding.severity === 'warning' && finding.rule === ALLOWED_WARNING) allowed += 1;
+    else failing.push(finding);
+  }
+  const errors = failing.filter(({ severity }) => severity === 'error').length;
+  return {
+    failing: failing.map(
+      ({ severity, rule, path, message }) =>
+        `${severity} ${rule ?? 'parser'} ${path ?? '-'}: ${message}`,
+    ),
+    summary:
+      `DESIGN.md lint: ${errors} errors, ${failing.length - errors} warnings; ` +
+      `${allowed} ${ALLOWED_WARNING} warnings allowed (colours no component uses).`,
+  };
+}
+
+/**
+ * `npm run design-md:check`: compares the file at `target` with what the generator writes from
+ * `frontEnd`'s CSS, then lints it with the pinned linter, running both halves every time.
+ */
+export function checkDesignMd(
+  frontEnd: string,
+  target: string,
+  content: Content = CONTENT,
+): { ok: boolean; lines: string[] } {
+  const lines: string[] = [];
+  const committed = existsSync(target) ? readFileSync(target, 'utf8') : undefined;
+  let ok = true;
+  try {
+    const stale = drift(committed, render(readSources(frontEnd), content).text);
+    if (stale.length) ok = false;
+    lines.push(...stale);
+  } catch (error) {
+    if (!(error instanceof Refusal)) throw error;
+    ok = false;
+    lines.push(`DESIGN.md cannot be generated: ${error.message}`);
+  }
+  if (committed !== undefined) {
+    let findings: Finding[];
+    try {
+      findings = lint(committed).findings;
+    } catch (error) {
+      findings = [{ severity: 'error', message: `the linter could not read it: ${String(error)}` }];
+    }
+    const { failing, summary } = lintPolicy(findings);
+    if (failing.length) ok = false;
+    lines.push(...failing, summary);
+  }
+  return { ok, lines };
+}
+
 if (import.meta.main) {
   const frontEnd = fileURLToPath(new URL('..', import.meta.url));
+  const target = join(frontEnd, '..', 'DESIGN.md');
+  if (process.argv.includes('--check')) {
+    const { ok, lines } = checkDesignMd(frontEnd, target);
+    for (const line of lines) console.log(line);
+    process.exit(ok ? 0 : 1);
+  }
   try {
-    console.log(writeDesignMd(frontEnd, join(frontEnd, '..', 'DESIGN.md')));
+    console.log(writeDesignMd(frontEnd, target));
   } catch (error) {
     if (!(error instanceof Refusal)) throw error;
     console.error(`DESIGN.md not written: ${error.message}`);

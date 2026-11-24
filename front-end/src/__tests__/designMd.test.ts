@@ -12,7 +12,16 @@ import { lint } from '@google/design.md/linter';
 import postcss from 'postcss';
 
 import { CONTENT, type Content } from '../../scripts/design-md-content';
-import { readSources, render, Refusal, writeDesignMd, type Sources } from '../../scripts/design-md';
+import {
+  checkDesignMd,
+  drift,
+  lintPolicy,
+  readSources,
+  render,
+  Refusal,
+  writeDesignMd,
+  type Sources,
+} from '../../scripts/design-md';
 
 /**
  * Words naming nothing, so a fixture's few tokens pass the hand-kept guard, and one component for the
@@ -661,5 +670,202 @@ describe('the real files', () => {
     expect(
       report.findings.every((f) => f.rule !== 'orphaned-tokens' || f.severity === 'warning'),
     ).toBe(true);
+  });
+});
+
+describe('the check', () => {
+  const sources = readSources(process.cwd());
+  const generated = render(sources).text;
+  const STALE =
+    'DESIGN.md is not what front-end/scripts/design-md.ts writes from base.css and ' +
+    'primitives.css: run `npm run design-md` in front-end/ and commit it.';
+
+  /** The line of `text` (1-based) that holds `needle`. */
+  const lineOf = (text: string, needle: string) =>
+    text.split('\n').findIndex((line) => line.includes(needle)) + 1;
+
+  it('finds no drift in what the generator writes', () => {
+    expect(drift(generated, generated)).toEqual([]);
+  });
+
+  it('reports a hand edit as drift, at its line', () => {
+    const edited = generated.replace('The look is quiet', 'The look is loud');
+    const line = lineOf(generated, 'The look is quiet');
+    expect(drift(edited, generated)).toEqual([
+      STALE,
+      `First difference at line ${line}:`,
+      `committed: ${edited.split('\n')[line - 1]}`,
+      `generated: ${generated.split('\n')[line - 1]}`,
+    ]);
+  });
+
+  it('reports a changed token as drift, at its line', () => {
+    const moved = render({
+      ...sources,
+      base: sources.base.replace('--space-1: 4px;', '--space-1: 5px;'),
+    }).text;
+    const line = lineOf(generated, '  space-1: "4px"');
+    expect(line).toBeGreaterThan(0);
+    expect(drift(generated, moved)).toEqual([
+      STALE,
+      `First difference at line ${line}:`,
+      'committed:   space-1: "4px"',
+      'generated:   space-1: "5px"',
+    ]);
+  });
+
+  it('reports a missing file as drift', () => {
+    expect(drift(undefined, generated)).toEqual([
+      STALE,
+      'First difference at line 1:',
+      'committed: (no DESIGN.md)',
+      `generated: ${generated.split('\n')[0]}`,
+    ]);
+  });
+
+  it('reports an extra or a missing last newline as drift, at its line', () => {
+    const last = generated.split('\n').length - 1;
+    expect(drift(generated + '\n', generated).slice(1)).toEqual([
+      `First difference at line ${last + 1}:`,
+      'committed: ',
+      'generated: (end of file)',
+    ]);
+    const end = generated.split('\n')[last - 1];
+    expect(drift(generated.slice(0, -1), generated).slice(1)).toEqual([
+      `First difference at line ${last}:`,
+      `committed: ${end} (no newline at the end of the file)`,
+      `generated: ${end}`,
+    ]);
+  });
+
+  describe('the lint policy', () => {
+    const orphan = (name: string) => ({
+      severity: 'warning' as const,
+      rule: 'orphaned-tokens',
+      path: `colors.${name}`,
+      message: `'${name}' is defined but never referenced by any component.`,
+    });
+
+    it('allows orphaned-tokens warnings and ignores info, and counts them', () => {
+      expect(
+        lintPolicy([
+          orphan('mm-beige'),
+          orphan('mm-border'),
+          { severity: 'info', rule: 'token-summary', message: 'Design system defines 2 colors.' },
+        ]),
+      ).toEqual({
+        failing: [],
+        summary:
+          'DESIGN.md lint: 0 errors, 0 warnings; 2 orphaned-tokens warnings allowed ' +
+          '(colours no component uses).',
+      });
+    });
+
+    it('fails an error, a contrast warning and a warning with no rule', () => {
+      expect(
+        lintPolicy([
+          orphan('mm-beige'),
+          {
+            severity: 'error',
+            rule: 'broken-ref',
+            path: 'components.btn.textColor',
+            message: 'Reference {colors.gone} does not resolve.',
+          },
+          {
+            severity: 'warning',
+            rule: 'contrast-ratio',
+            path: 'components.btn',
+            message: 'textColor on backgroundColor is 2.1:1.',
+          },
+          { severity: 'warning', message: 'Unexpected key in the front matter.' },
+          { severity: 'error', message: 'The YAML does not parse.' },
+        ]),
+      ).toEqual({
+        failing: [
+          'error broken-ref components.btn.textColor: Reference {colors.gone} does not resolve.',
+          'warning contrast-ratio components.btn: textColor on backgroundColor is 2.1:1.',
+          'warning parser -: Unexpected key in the front matter.',
+          'error parser -: The YAML does not parse.',
+        ],
+        summary:
+          'DESIGN.md lint: 2 errors, 2 warnings; 1 orphaned-tokens warnings allowed ' +
+          '(colours no component uses).',
+      });
+    });
+
+    it('fails an orphaned-tokens finding raised to an error', () => {
+      const raised = { ...orphan('mm-beige'), severity: 'error' as const };
+      expect(lintPolicy([raised]).failing).toEqual([
+        "error orphaned-tokens colors.mm-beige: 'mm-beige' is defined but never referenced by any component.",
+      ]);
+    });
+  });
+
+  describe('on a file', () => {
+    let dir: string | undefined;
+
+    afterEach(() => {
+      if (dir) rmSync(dir, { recursive: true });
+      dir = undefined;
+    });
+
+    function target(text?: string): string {
+      dir = mkdtempSync(join(tmpdir(), 'design-md-check-'));
+      const file = join(dir, 'DESIGN.md');
+      if (text !== undefined) writeFileSync(file, text);
+      return file;
+    }
+
+    const summary = (lines: string[]) => lines.filter((line) => line.startsWith('DESIGN.md lint:'));
+
+    it('passes the generated file, saying how many orphans it allowed', () => {
+      const { ok, lines } = checkDesignMd(process.cwd(), target(generated));
+      expect(ok).toBe(true);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatch(
+        /^DESIGN\.md lint: 0 errors, 0 warnings; [1-9]\d* orphaned-tokens warnings allowed \(colours no component uses\)\.$/,
+      );
+    });
+
+    it('fails a hand edit, and still lints it', () => {
+      const edited = generated.replace('The look is quiet', 'The look is loud');
+      const { ok, lines } = checkDesignMd(process.cwd(), target(edited));
+      expect(ok).toBe(false);
+      expect(lines.slice(0, 4)).toEqual(drift(edited, generated));
+      expect(summary(lines)).toHaveLength(1);
+    });
+
+    it('fails a file that lints unclean, saying each finding', () => {
+      const unclean = generated
+        .replace('    backgroundColor: "{colors.mm-green}"', '    backgroundColor: "{colors.gone}"')
+        .replace(/^ {2}primary: .*\n/m, '');
+      const { ok, lines } = checkDesignMd(process.cwd(), target(unclean));
+      expect(ok).toBe(false);
+      expect(lines.filter((line) => /^(?:error|warning) /.test(line))).toEqual([
+        'error broken-ref components.btn-primary: Reference {colors.gone} does not resolve to ' +
+          'any defined token.',
+        "warning missing-primary colors: No 'primary' color defined. The agent will " +
+          'auto-generate key colors, reducing your control over the palette.',
+      ]);
+      expect(summary(lines)[0]).toMatch(/^DESIGN\.md lint: 1 errors, 1 warnings; [1-9]\d* /);
+    });
+
+    it('fails a missing file, with nothing to lint', () => {
+      const { ok, lines } = checkDesignMd(process.cwd(), target());
+      expect(ok).toBe(false);
+      expect(lines[0]).toBe(STALE);
+      expect(summary(lines)).toEqual([]);
+    });
+
+    it('says why a refused render cannot be generated, and still lints the file', () => {
+      const words = { ...CONTENT, shapes: ['Use `--radius-gone`.'] };
+      const { ok, lines } = checkDesignMd(process.cwd(), target(generated), words);
+      expect(ok).toBe(false);
+      expect(lines[0]).toBe(
+        'DESIGN.md cannot be generated: the words of Shapes name --radius-gone, which base.css ' +
+          'does not have',
+      );
+      expect(summary(lines)).toHaveLength(1);
+    });
   });
 });

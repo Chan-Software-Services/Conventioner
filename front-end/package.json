@@ -16,6 +16,7 @@
     "bundle-budget": "node scripts/bundle-budget.ts",
     "no-eval": "node scripts/no-eval.ts",
     "design-md": "node scripts/design-md.ts",
+    "design-md:check": "node scripts/design-md.ts --check",
     "type-check": "vue-tsc --build",
     "lint": "eslint . --fix",
     "lint:check": "eslint . --max-warnings 0",
