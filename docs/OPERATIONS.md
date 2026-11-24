@@ -246,8 +246,10 @@ It prints the market's id, the two locations' names, their sections' names and c
 
 ### Renaming the older layout lines after a swap
 
-Right after each run of the swap above, [`history_follows_location_swap.py`](../back-end/migrations/history_follows_location_swap.py) renames the market's older layout lines, so that each names the place it was about: each layout's save (`floorplan`) and each layout removed with its location (`floorplan_removed`) recorded before the swap, naming one of the two locations, takes the name that place has now, and Manage market reads it so.
-A change on Market Setup (`plan`) is left as written, since it is the record of what the plan said when it was saved; so is every other kind of entry, every line of another location, and every line recorded after the swap.
+Right after each run of the swap above, [`history_follows_location_swap.py`](../back-end/migrations/history_follows_location_swap.py) renames the market's older layout lines, so that each names the place it was about: each layout's save (`floorplan`) of either location takes the name that location has now, and Manage market reads it so.
+It reads a line's place by id, from its layout: the line names its layout (`subject.floorplan_id`), and a layout stays on the location it was started on until it is removed with it.
+So a line is right after any number of swaps, of the two or with a third location, and a line of either location recorded before an ordinary rename of it, by [`rename_location.py`](#giving-a-location-a-new-name) or on Market Setup in draft, now shows the name it has now too.
+Left as written: a change on Market Setup (`plan`), the record of what the plan said when it was saved; a layout removed with its location (`floorplan_removed`), which is about a location no longer in the plan, so never either of the two; a line whose layout is no longer in the plan, or on another location; and every other kind of entry.
 It needs no deploy; of the market's document it reads the plan alone, and it writes the history alone, so an organizer working on the market meanwhile is not in its way.
 Run it from `back-end/` in the checkout the swap ran from:
 
@@ -257,11 +259,10 @@ MONGODB_URI='<URI>' .venv/bin/python migrations/history_follows_location_swap.py
 ```
 
 Each location is named by its id or its exact name as it is now.
-The dry run prints the market's id, the two locations' ids, how many trades of their names the history records, and for each of the two kinds how many lines it would rename and how many a run before renamed: counts only, never a name.
-**A second run changes nothing**: each line is computed afresh from the name it was recorded under, which the first rename keeps beside it as `subject.location_as_recorded`.
-So it is run again after any later swap of the same two locations, and after a swap back each line reads as it was recorded.
-It follows every trade of the two names the history records, an organizer's on Market Setup in draft too, and keeps a line's name through any other change, a rename by [`rename_location.py`](#giving-a-location-a-new-name) among them, unless that change gives the line's name to one of the two, which it refuses.
-It refuses, exiting 1 with nothing written: a market it does not find, a location it does not find or that has no stored id, one location named twice, a history that records no trade of the two names, a history whose last change of the two names leaves them otherwise than the plan names them (a swap whose own entry failed to write: put the history right by hand first), and a line whose name another change, not a trade, gave to one of the two locations; its docstring lists each.
+The dry run prints the market's id, the two locations' ids, how many trades of their names the history records, and how many of their layouts' lines it would rename and how many a run before renamed: counts only, never a name.
+**A second run changes nothing**: each line keeps the name it was recorded under beside it, as `subject.location_as_recorded`, and is given the name its location has now.
+So it is run again after any later swap, and after a swap back each line reads as it was recorded.
+It refuses, exiting 1 with nothing written: a market it does not find, a location it does not find or that has no stored id, one location named twice, and a history that records no trade of the two names, by the swap or on Market Setup; its docstring lists each.
 Each line is its own write, held to the name it was read under; if one changed between the read and the write, it says how many it renamed of how many it meant to and exits 1, and running it again renames the rest.
 It records nothing in the history: the name as recorded stays on the line.
 
