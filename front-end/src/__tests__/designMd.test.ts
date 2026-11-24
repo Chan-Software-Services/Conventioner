@@ -9,11 +9,15 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { lint } from '@google/design.md/linter';
+import postcss from 'postcss';
 
 import { CONTENT, type Content } from '../../scripts/design-md-content';
 import { readSources, render, Refusal, writeDesignMd, type Sources } from '../../scripts/design-md';
 
-/** Words naming nothing, so a fixture's few tokens pass the hand-kept guard. */
+/**
+ * Words naming nothing, so a fixture's few tokens pass the hand-kept guard, and one component for the
+ * fixture's one primitive, so the completeness guard passes too.
+ */
 const PLAIN: Content = {
   ...CONTENT,
   overview: ['The overview.'],
@@ -23,6 +27,8 @@ const PLAIN: Content = {
   elevation: ['The elevation.'],
   shapes: ['The shapes.'],
   components: ['The components.'],
+  componentGroups: [{ name: 'Buttons', words: ['The buttons.'] }],
+  componentEntries: [{ key: 'btn', group: 'Buttons', selectors: ['.btn'] }],
   dosAndDonts: ['- Do one thing.'],
 };
 
@@ -131,7 +137,7 @@ describe('the tokens, on fixture CSS', () => {
         '  edge-shade-depth: "{spacing.space-3}"\n' +
         '  control-height: "36px"\n' +
         '  target-min: "24px"\n' +
-        '---\n',
+        'components:\n',
     );
   });
 
@@ -208,7 +214,7 @@ describe('the tokens, on fixture CSS', () => {
       typography: 6,
       rounded: 1,
       spacing: 5,
-      components: 0,
+      components: 1,
     });
   });
 });
@@ -275,7 +281,7 @@ describe('the guards', () => {
       const root = frontEnd(FIXTURE);
       const target = join(root, 'DESIGN.md');
       expect(writeDesignMd(root, target, PLAIN)).toBe(
-        'Wrote DESIGN.md: 6 colours, 6 typography levels, 1 rounded, 5 spacing, 0 components.',
+        'Wrote DESIGN.md: 6 colours, 6 typography levels, 1 rounded, 5 spacing, 1 components.',
       );
       expect(readFileSync(target, 'utf8')).toBe(render(FIXTURE, PLAIN).text);
     });
@@ -289,6 +295,239 @@ describe('the guards', () => {
       );
       expect(readFileSync(target, 'utf8')).toBe('the old file\n');
     });
+  });
+});
+
+/** The primitives of the components' fixture: a button, its intent, a state of it, a title. */
+const COMPONENT_PRIMITIVES = `.btn {
+  display: inline-flex;
+  height: var(--control-height);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-control);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.btn--primary {
+  --focus-border: var(--focus-border);
+  background: var(--mm-green);
+  color: white;
+  font-weight: 600;
+}
+
+.btn--primary:hover:not(:disabled),
+.btn--quiet:hover {
+  background: var(--color-text);
+}
+
+.btn--quiet {
+  background: none;
+}
+
+.title {
+  font-family: 'Merge One', serif;
+  font-size: var(--text-xs);
+  width: 100%;
+}
+
+@media print {
+  .title {
+    color: black;
+  }
+}
+`;
+
+const COMPONENTS: Content = {
+  ...PLAIN,
+  componentGroups: [
+    { name: 'Buttons', words: ['The buttons.'] },
+    { name: 'Titles', words: ['The titles.'] },
+  ],
+  componentEntries: [
+    { key: 'btn', group: 'Buttons', selectors: ['.btn'] },
+    { key: 'btn-primary', group: 'Buttons', selectors: ['.btn', '.btn--primary'] },
+    {
+      key: 'btn-primary-hover',
+      group: 'Buttons',
+      selectors: ['.btn', '.btn--primary', '.btn--primary:hover:not(:disabled)'],
+    },
+    { key: 'btn-quiet', group: 'Buttons', selectors: ['.btn', '.btn--quiet'] },
+    { key: 'title', group: 'Titles', selectors: ['.title'] },
+  ],
+};
+
+const COMPONENT_FIXTURE: Sources = { ...FIXTURE, primitives: COMPONENT_PRIMITIVES };
+
+describe('the components, on fixture CSS', () => {
+  const { text, counts } = render(COMPONENT_FIXTURE, COMPONENTS);
+  const yaml = frontMatter(text);
+  const components = text.slice(text.indexOf('## Components'), text.indexOf("## Do's and Don'ts"));
+
+  it("gives a state its own fill and its base's ink, the type and the box", () => {
+    expect(yaml).toContain(
+      '  btn-primary-hover:\n' +
+        '    backgroundColor: "{colors.color-text}"\n' +
+        '    textColor: "white"\n' +
+        '    typography: "{typography.text-sm-strong}"\n' +
+        '    rounded: "{rounded.radius-control}"\n' +
+        '    padding: "0 var(--space-3)"\n' +
+        '    height: "{spacing.control-height}"\n',
+    );
+  });
+
+  it('references the -strong level at weight 600, the heading level in Merge One, else the plain one', () => {
+    expect(yaml).toContain('  btn:\n    typography: "{typography.text-sm}"\n');
+    expect(yaml).toContain('  btn-primary:\n    backgroundColor: "{colors.mm-green}"\n');
+    expect(yaml).toMatch(
+      / {2}btn-primary:\n(?: {4}.*\n)*? {4}typography: "\{typography\.text-sm-strong\}"\n/,
+    );
+    expect(yaml).toContain(
+      '  title:\n    typography: "{typography.heading-xs}"\n    width: "100%"\n---\n',
+    );
+  });
+
+  it('takes the fill away on `background: none`, and leaves @media rules out', () => {
+    expect(yaml).toContain('  btn-quiet:\n    typography: "{typography.text-sm}"\n');
+    expect(yaml).not.toMatch(/ {2}btn-quiet:\n(?: {4}.*\n)*? {4}backgroundColor/);
+    expect(yaml).not.toContain('"black"');
+  });
+
+  it("lists the last selector's declarations no sub-token carries, under its group", () => {
+    expect(components).toContain(
+      '### Buttons\n\nThe buttons.\n\n' +
+        '- **`btn`** (`.btn`): `display: inline-flex`, `cursor: pointer`.\n' +
+        '- **`btn-primary`** (`.btn`, `.btn--primary`): `--focus-border: var(--focus-border)`.\n' +
+        '- **`btn-primary-hover`** (`.btn`, `.btn--primary`, `.btn--primary:hover:not(:disabled)`).\n' +
+        '- **`btn-quiet`** (`.btn`, `.btn--quiet`): `background: none`.\n' +
+        '\n### Titles\n\nThe titles.\n\n' +
+        // Merge One is carried by the heading level the entry references.
+        '- **`title`** (`.title`).\n' +
+        '\n### Tokens the format has no group for\n',
+    );
+  });
+
+  it('writes an entry with no sub-token as an empty map', () => {
+    const quiet: Content = {
+      ...COMPONENTS,
+      componentEntries: [
+        ...COMPONENTS.componentEntries,
+        { key: 'btn-quiet-hover', group: 'Buttons', selectors: ['.btn--quiet:hover'] },
+      ],
+    };
+    expect(render(COMPONENT_FIXTURE, quiet).text).toContain(
+      '  btn-quiet-hover:\n    backgroundColor: "{colors.color-text}"\n',
+    );
+    const bare = `${COMPONENT_PRIMITIVES}\n.bare {\n  display: grid;\n}\n`;
+    const withBare: Content = {
+      ...COMPONENTS,
+      componentEntries: [
+        ...COMPONENTS.componentEntries,
+        { key: 'bare', group: 'Titles', selectors: ['.bare'] },
+      ],
+    };
+    expect(
+      frontMatter(render({ ...COMPONENT_FIXTURE, primitives: bare }, withBare).text),
+    ).toContain('  bare: {}\n---\n');
+  });
+
+  it('counts the components', () => {
+    expect(counts.components).toBe(5);
+  });
+
+  it('guards the words of each group as it guards a section', () => {
+    const words: Content = {
+      ...COMPONENTS,
+      componentGroups: [
+        { name: 'Buttons', words: ['`.btn--ghost`.'] },
+        COMPONENTS.componentGroups[1]!,
+      ],
+    };
+    expect(refusal(() => render(COMPONENT_FIXTURE, words))).toBe(
+      'the words of Components name .btn--ghost, which primitives.css does not have',
+    );
+  });
+
+  it('refuses an entry of a group that has no words', () => {
+    const lost: Content = { ...COMPONENTS, componentGroups: [COMPONENTS.componentGroups[0]!] };
+    expect(refusal(() => render(COMPONENT_FIXTURE, lost))).toBe(
+      "title's group Titles has no words in scripts/design-md-content.ts",
+    );
+  });
+
+  describe('its refusals write nothing', () => {
+    let dir: string | undefined;
+
+    afterEach(() => {
+      if (dir) rmSync(dir, { recursive: true });
+      dir = undefined;
+    });
+
+    const cases: [string, Sources, Content, string][] = [
+      [
+        'an unknown selector',
+        COMPONENT_FIXTURE,
+        {
+          ...COMPONENTS,
+          componentEntries: [
+            ...COMPONENTS.componentEntries,
+            { key: 'btn-ghost', group: 'Buttons', selectors: ['.btn', '.btn--ghost'] },
+          ],
+        },
+        '.btn--ghost (component btn-ghost in scripts/design-md-content.ts) is in no rule of primitives.css',
+      ],
+      [
+        'an unnamed class',
+        COMPONENT_FIXTURE,
+        {
+          ...COMPONENTS,
+          componentEntries: COMPONENTS.componentEntries.filter(({ key }) => key !== 'btn-quiet'),
+        },
+        "primitives.css has .btn--quiet, which DESIGN.md never names: give it a component in scripts/design-md-content.ts, or name it in that file's prose",
+      ],
+      [
+        'a raw font size',
+        {
+          ...COMPONENT_FIXTURE,
+          primitives: COMPONENT_PRIMITIVES.replace('var(--text-xs)', '13px'),
+        },
+        COMPONENTS,
+        "title's font-size is not a --text-* token",
+      ],
+      [
+        'a font size of a token off the type scale',
+        {
+          ...COMPONENT_FIXTURE,
+          primitives: COMPONENT_PRIMITIVES.replace('var(--text-xs)', 'var(--space-3)'),
+        },
+        COMPONENTS,
+        "title's font-size is not a --text-* token",
+      ],
+    ];
+
+    it.each(cases)('refuses %s', (_, sources, content, message) => {
+      dir = mkdtempSync(join(tmpdir(), 'design-md-'));
+      mkdirSync(join(dir, 'src/assets'), { recursive: true });
+      writeFileSync(join(dir, 'src/assets/base.css'), sources.base);
+      writeFileSync(join(dir, 'src/assets/primitives.css'), sources.primitives);
+      writeFileSync(join(dir, 'src/assets/main.css'), sources.main);
+      const target = join(dir, 'DESIGN.md');
+      writeFileSync(target, 'the old file\n');
+      expect(refusal(() => writeDesignMd(dir!, target, content))).toBe(message);
+      expect(readFileSync(target, 'utf8')).toBe('the old file\n');
+    });
+  });
+
+  it('names a class through the prose as well as through a selector', () => {
+    const named: Content = {
+      ...COMPONENTS,
+      componentGroups: [
+        { name: 'Buttons', words: ['A quiet button is `.btn--quiet`.'] },
+        COMPONENTS.componentGroups[1]!,
+      ],
+      componentEntries: COMPONENTS.componentEntries.filter(({ key }) => key !== 'btn-quiet'),
+    };
+    expect(() => render(COMPONENT_FIXTURE, named)).not.toThrow();
   });
 });
 
@@ -357,7 +596,70 @@ describe('the real files', () => {
     expect(colours.size).toBeGreaterThan(70);
   });
 
-  it('lints with no error and no warning', () => {
-    expect(report.findings.filter((finding) => finding.severity !== 'info')).toEqual([]);
+  it('names every class primitives.css names, as a selector or in the words', () => {
+    const classes = new Set<string>();
+    postcss.parse(sources.primitives).walkRules((rule) => {
+      for (const [, name] of rule.selector.matchAll(/\.([a-zA-Z_][\w-]*)/g)) classes.add(name!);
+    });
+    const named = new Set([...text.matchAll(/\.([a-zA-Z_][\w-]*)/g)].map(([, name]) => name!));
+    expect(classes.size).toBeGreaterThan(25);
+    expect([...classes].filter((name) => !named.has(name))).toEqual([]);
+  });
+
+  it('writes every component of the content, in its order', () => {
+    const keys = [...frontMatter(text).matchAll(/^ {2}([a-z0-9-]+):(?: \{\})?$/gm)]
+      .map(([, key]) => key!)
+      .filter((key) => !/^(?:text|heading)-/.test(key));
+    expect(keys).toEqual(CONTENT.componentEntries.map(({ key }) => key));
+  });
+
+  it('lints with no error, and no warning but orphaned-tokens', () => {
+    const findings = report.findings.filter(
+      (finding) => finding.severity !== 'info' && finding.rule !== 'orphaned-tokens',
+    );
+    expect(findings).toEqual([]);
+    expect(report.findings.filter((finding) => finding.severity === 'error')).toEqual([]);
+  });
+
+  it('allows as orphans exactly the colours no component uses', () => {
+    const yaml = frontMatter(text);
+    const colours = yaml.slice(yaml.indexOf('\ncolors:\n'), yaml.indexOf('\ntypography:\n'));
+    const aliases = new Map<string, string | undefined>(
+      [...colours.matchAll(/^ {2}([a-z0-9-]+): "(.*?)"/gm)].map(([, name, value]) => [
+        name!,
+        /^\{colors\.([a-z0-9-]+)\}$/.exec(value!)?.[1],
+      ]),
+    );
+    const block = yaml.slice(yaml.indexOf('\ncomponents:\n'));
+    const used = new Set(
+      [...block.matchAll(/"\{colors\.([a-z0-9-]+)\}"/g)].map(([, name]) => name!),
+    );
+    // A colour is used when a component references it, when it names a used colour, or when a used
+    // colour names it: the linter resolves an alias to the colour it names.
+    for (let grown = true; grown;) {
+      grown = false;
+      for (const [name, target] of aliases) {
+        if (!target) continue;
+        for (const [from, to] of [
+          [name, target],
+          [target, name],
+        ] as const) {
+          if (used.has(from) && !used.has(to)) {
+            used.add(to);
+            grown = true;
+          }
+        }
+      }
+    }
+    const unused = [...aliases.keys()].filter((name) => !used.has(name)).sort();
+    const allowed = report.findings
+      .filter((finding) => finding.rule === 'orphaned-tokens')
+      .map((finding) => finding.path!.replace(/^colors\./, ''))
+      .sort();
+    expect(allowed).toEqual(unused);
+    expect(allowed.length).toBeGreaterThan(0);
+    expect(
+      report.findings.every((f) => f.rule !== 'orphaned-tokens' || f.severity === 'warning'),
+    ).toBe(true);
   });
 });

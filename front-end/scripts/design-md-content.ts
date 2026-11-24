@@ -7,6 +7,9 @@
  * name one `base.css` or `primitives.css` has, or the generator refuses, so a rename cannot leave
  * the words behind. The generator holds no prose, and this file no parsing.
  *
+ * `COMPONENTS` names the primitives' entries and the selectors each merges; every class
+ * `primitives.css` names must be one of their selectors or named in these words, or it refuses.
+ *
  * Change a word here, then run `npm run design-md` in `front-end/` and commit `DESIGN.md` with it.
  */
 
@@ -75,6 +78,255 @@ export const COMPONENTS_INTRO = [
   '[The primitive layer](docs/design-system.md#the-primitive-layer) says why, and the component library draws every variant at `/dev/components` in a development build.',
 ];
 
+/** A group of the Components section: its `###` heading, and the words under it. */
+export interface ComponentGroup {
+  name: string;
+  words: readonly string[];
+}
+
+export const COMPONENT_GROUPS: readonly ComponentGroup[] = [
+  {
+    name: 'Buttons',
+    words: [
+      '`.btn` and one intent: `.btn--primary`, `.btn--secondary` or `.btn--destructive`, and `.btn--compact` in a toolbar.',
+      "A row's destructive action is `.btn--secondary.btn--destructive`, red ink on the secondary button, which asks before it acts.",
+      'A toggle that is on is a `.btn` with `aria-pressed="true"`, tinted rather than filled.',
+      'There is one disabled look for every intent.',
+    ],
+  },
+  {
+    name: 'Fields',
+    words: [
+      '`.field` for every text field, select and textarea, left-aligned, with a `.field-label` above it.',
+      "`.field--select` draws the app's own chevron, and a select's own class may size or place it, never draw it.",
+      '`.field--compact` stands beside a `.btn--compact`.',
+    ],
+  },
+  {
+    name: 'Chips',
+    words: [
+      '`.chip` and one tone: `.chip--neutral`, `.chip--positive`, `.chip--attention`, `.chip--informational` or `.chip--destructive`, a tinted ground with its own ink, in sentence case.',
+      '`.chip--small` sits beside small type.',
+    ],
+  },
+  {
+    name: 'Tables',
+    words: [
+      "`.data-table` is a table whose columns are the screen's own; when it may be wider than its place it scrolls inside a sideways scroll box with `.data-table-scroll` on its root, and never moves the page.",
+    ],
+  },
+  {
+    name: 'Rows',
+    words: [
+      '`.add-row` is a button that adds a row to a plan card, and `.drag-handle` is the control grabbed to reorder one.',
+    ],
+  },
+  {
+    name: 'Links and notes',
+    words: [
+      '`.link-alone` is a link on a line of its own, at least `--target-min` tall; a link inside a sentence is not one.',
+      '`.note` is a fact the page states about itself, quietly, with a rule down its edge.',
+    ],
+  },
+  {
+    name: 'Card grid',
+    words: [
+      "`.card-grid` lays a screen's cards in two tracks, each card ending at its own content.",
+    ],
+  },
+  {
+    name: 'Choice cards',
+    words: [
+      '`.choice-card` is one of a few ways of doing something, with its label and a line of help.',
+      '`.chosen` marks the chosen card, and `.disabled` freezes them all: the chosen one keeps its white ground, a green ring and a bold label, and the others go beige.',
+    ],
+  },
+  {
+    name: 'Focus',
+    words: [
+      'A button shows a green outline inside its edge on `:focus-visible`, `--focus-border`, or `--focus-border-on-fill` on a fill of its own green or red.',
+      "`.add-row`, `.drag-handle` and the step header's `.step-button` wear the same outline.",
+      'A link or any other stop shows the soft `--focus-halo`, and `--focus-halo-on-dark` on the dark bar.',
+      'A field shows no focus at all, only its caret: that was decided knowing a keyboard user loses the ring too, so do not add one.',
+    ],
+  },
+];
+
+/**
+ * One entry under the format's `components`: its group's name, and the selectors whose rules in
+ * `primitives.css` are merged in this order, each written exactly as a top-level rule lists it. A
+ * state carries its base's selectors first, so the linter checks its ink on its own fill.
+ */
+export interface Component {
+  key: string;
+  group: string;
+  selectors: readonly string[];
+}
+
+const ROW_DESTRUCTIVE = [
+  '.btn',
+  '.btn--secondary',
+  '.btn--destructive',
+  '.btn--secondary.btn--destructive',
+];
+const ON = ['.btn', '.btn--secondary', ".btn[aria-pressed='true']"];
+
+export const COMPONENTS: readonly Component[] = [
+  { key: 'btn', group: 'Buttons', selectors: ['.btn'] },
+  { key: 'btn-compact', group: 'Buttons', selectors: ['.btn', '.btn--compact'] },
+  { key: 'btn-primary', group: 'Buttons', selectors: ['.btn', '.btn--primary'] },
+  {
+    key: 'btn-primary-hover',
+    group: 'Buttons',
+    selectors: ['.btn', '.btn--primary', '.btn--primary:hover:not(:disabled)'],
+  },
+  {
+    key: 'btn-primary-pressed',
+    group: 'Buttons',
+    selectors: ['.btn', '.btn--primary', '.btn--primary:active:not(:disabled)'],
+  },
+  { key: 'btn-secondary', group: 'Buttons', selectors: ['.btn', '.btn--secondary'] },
+  {
+    key: 'btn-secondary-hover',
+    group: 'Buttons',
+    selectors: ['.btn', '.btn--secondary', '.btn--secondary:hover:not(:disabled)'],
+  },
+  {
+    key: 'btn-secondary-pressed',
+    group: 'Buttons',
+    selectors: ['.btn', '.btn--secondary', '.btn--secondary:active:not(:disabled)'],
+  },
+  { key: 'btn-destructive', group: 'Buttons', selectors: ['.btn', '.btn--destructive'] },
+  {
+    key: 'btn-destructive-hover',
+    group: 'Buttons',
+    selectors: ['.btn', '.btn--destructive', '.btn--destructive:hover:not(:disabled)'],
+  },
+  {
+    key: 'btn-destructive-pressed',
+    group: 'Buttons',
+    selectors: ['.btn', '.btn--destructive', '.btn--destructive:active:not(:disabled)'],
+  },
+  { key: 'btn-row-destructive', group: 'Buttons', selectors: ROW_DESTRUCTIVE },
+  {
+    key: 'btn-row-destructive-hover',
+    group: 'Buttons',
+    selectors: [...ROW_DESTRUCTIVE, '.btn--secondary.btn--destructive:hover:not(:disabled)'],
+  },
+  {
+    key: 'btn-row-destructive-pressed',
+    group: 'Buttons',
+    selectors: [...ROW_DESTRUCTIVE, '.btn--secondary.btn--destructive:active:not(:disabled)'],
+  },
+  { key: 'btn-on', group: 'Buttons', selectors: ON },
+  {
+    key: 'btn-on-hover',
+    group: 'Buttons',
+    selectors: [...ON, ".btn[aria-pressed='true']:hover:not(:disabled)"],
+  },
+  {
+    key: 'btn-on-pressed',
+    group: 'Buttons',
+    selectors: [...ON, ".btn[aria-pressed='true']:active:not(:disabled)"],
+  },
+  { key: 'btn-disabled', group: 'Buttons', selectors: ['.btn', '.btn:disabled'] },
+  { key: 'field', group: 'Fields', selectors: ['.field'] },
+  { key: 'field-placeholder', group: 'Fields', selectors: ['.field', '.field::placeholder'] },
+  { key: 'field-compact', group: 'Fields', selectors: ['.field', '.field--compact'] },
+  { key: 'field-select', group: 'Fields', selectors: ['.field', '.field--select'] },
+  { key: 'field-textarea', group: 'Fields', selectors: ['.field', '.field--textarea'] },
+  { key: 'field-disabled', group: 'Fields', selectors: ['.field', '.field:disabled'] },
+  {
+    key: 'field-select-disabled',
+    group: 'Fields',
+    selectors: ['.field', '.field--select', '.field:disabled', '.field--select:disabled'],
+  },
+  { key: 'field-label', group: 'Fields', selectors: ['.field-label'] },
+  { key: 'chip-neutral', group: 'Chips', selectors: ['.chip', '.chip--neutral'] },
+  { key: 'chip-positive', group: 'Chips', selectors: ['.chip', '.chip--positive'] },
+  { key: 'chip-attention', group: 'Chips', selectors: ['.chip', '.chip--attention'] },
+  { key: 'chip-informational', group: 'Chips', selectors: ['.chip', '.chip--informational'] },
+  { key: 'chip-destructive', group: 'Chips', selectors: ['.chip', '.chip--destructive'] },
+  { key: 'chip-small', group: 'Chips', selectors: ['.chip', '.chip--small'] },
+  { key: 'data-table-scroll', group: 'Tables', selectors: ['.data-table-scroll'] },
+  { key: 'data-table', group: 'Tables', selectors: ['.data-table'] },
+  {
+    key: 'data-table-cell',
+    group: 'Tables',
+    selectors: ['.data-table', '.data-table :is(th, td)', '.data-table tbody :is(th, td)'],
+  },
+  {
+    key: 'data-table-column-heading',
+    group: 'Tables',
+    selectors: ['.data-table', '.data-table :is(th, td)', '.data-table thead th'],
+  },
+  {
+    key: 'data-table-row-heading',
+    group: 'Tables',
+    selectors: [
+      '.data-table',
+      '.data-table :is(th, td)',
+      '.data-table tbody :is(th, td)',
+      '.data-table tbody th',
+    ],
+  },
+  { key: 'data-table-one-line', group: 'Tables', selectors: ['.data-table--one-line :is(th, td)'] },
+  { key: 'add-row', group: 'Rows', selectors: ['.add-row'] },
+  { key: 'add-row-icon', group: 'Rows', selectors: ['.add-row__icon'] },
+  { key: 'drag-handle', group: 'Rows', selectors: ['.drag-handle'] },
+  { key: 'drag-handle-hover', group: 'Rows', selectors: ['.drag-handle', '.drag-handle:hover'] },
+  { key: 'drag-handle-grabbed', group: 'Rows', selectors: ['.drag-handle', '.drag-handle:active'] },
+  { key: 'drag-handle-icon', group: 'Rows', selectors: ['.drag-handle__icon'] },
+  { key: 'link-alone', group: 'Links and notes', selectors: ['.link-alone'] },
+  {
+    key: 'link-alone-hover',
+    group: 'Links and notes',
+    selectors: ['.link-alone', '.link-alone:hover'],
+  },
+  { key: 'note', group: 'Links and notes', selectors: ['.note'] },
+  { key: 'note-link', group: 'Links and notes', selectors: ['.note', '.note a'] },
+  { key: 'card-grid', group: 'Card grid', selectors: ['.card-grid'] },
+  { key: 'card-grid-wide', group: 'Card grid', selectors: ['.card-grid > .card-grid__wide'] },
+  { key: 'choice-card', group: 'Choice cards', selectors: ['.choice-card'] },
+  {
+    key: 'choice-card-chosen',
+    group: 'Choice cards',
+    selectors: ['.choice-card', '.choice-card.chosen'],
+  },
+  {
+    key: 'choice-card-frozen',
+    group: 'Choice cards',
+    selectors: ['.choice-card', '.choice-card.disabled'],
+  },
+  {
+    key: 'choice-card-frozen-chosen',
+    group: 'Choice cards',
+    selectors: [
+      '.choice-card',
+      '.choice-card.disabled',
+      '.choice-card.chosen',
+      '.choice-card.disabled.chosen',
+    ],
+  },
+  { key: 'choice-card-input', group: 'Choice cards', selectors: ['.choice-card input'] },
+  { key: 'choice-card-text', group: 'Choice cards', selectors: ['.choice-card-text'] },
+  { key: 'choice-card-label', group: 'Choice cards', selectors: ['.choice-card-label'] },
+  {
+    key: 'choice-card-label-frozen',
+    group: 'Choice cards',
+    selectors: ['.choice-card-label', '.choice-card.disabled:not(.chosen) .choice-card-label'],
+  },
+  {
+    key: 'choice-card-label-frozen-chosen',
+    group: 'Choice cards',
+    selectors: ['.choice-card-label', '.choice-card.disabled.chosen .choice-card-label'],
+  },
+  { key: 'choice-card-help', group: 'Choice cards', selectors: ['.choice-card-help'] },
+  { key: 'btn-focus', group: 'Focus', selectors: ['.btn', '.btn:focus-visible'] },
+  { key: 'link-focus', group: 'Focus', selectors: ['a:not(.btn):focus-visible'] },
+  { key: 'field-focus', group: 'Focus', selectors: ['input:focus'] },
+];
+
 export const DOS_AND_DONTS = [
   "- Do reach for a primitive (`.btn`, `.field`, `.chip`, `.data-table`) before writing a control's own look.",
   '- Do write a token (`var(--space-4)`), never its value: a value not in this file does not belong in a component.',
@@ -101,6 +353,8 @@ export interface Content {
   elevation: readonly string[];
   shapes: readonly string[];
   components: readonly string[];
+  componentGroups: readonly ComponentGroup[];
+  componentEntries: readonly Component[];
   dosAndDonts: readonly string[];
 }
 
@@ -114,5 +368,7 @@ export const CONTENT: Content = {
   elevation: ELEVATION,
   shapes: SHAPES,
   components: COMPONENTS_INTRO,
+  componentGroups: COMPONENT_GROUPS,
+  componentEntries: COMPONENTS,
   dosAndDonts: DOS_AND_DONTS,
 };

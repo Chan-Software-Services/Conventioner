@@ -10,14 +10,15 @@
  *
  * Run it after changing either CSS file: `npm run design-md`, then commit `DESIGN.md`.
  * When a guard refuses (a token declared twice, a family no face loads, words naming a token or a
- * class the CSS no longer has) it says why and writes nothing.
+ * class the CSS no longer has, a component selector no rule lists, a class of primitives.css the
+ * file never names, a component font size off the type scale) it says why and writes nothing.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postcss, { type ChildNode, type Declaration, type Root, type Rule } from 'postcss';
 
-import { CONTENT, type Content } from './design-md-content.ts';
+import { CONTENT, type Component, type Content } from './design-md-content.ts';
 
 /** The three files the contract is read from, as text. */
 export interface Sources {
@@ -178,8 +179,15 @@ function primitiveClasses(primitives: Root): Set<string> {
 
 /** Refuses when a section's words name a token base.css or a class primitives.css lacks. */
 function guardWords(content: Content, tokens: Set<string>, classes: Set<string>): void {
-  for (const [section, key] of SECTIONS) {
-    for (const line of content[key]) {
+  const words: [Section, readonly string[]][] = [
+    ...SECTIONS.map(([section, key]): [Section, readonly string[]] => [section, content[key]]),
+    ...content.componentGroups.map((group): [Section, readonly string[]] => [
+      'Components',
+      group.words,
+    ]),
+  ];
+  for (const [section, lines] of words) {
+    for (const line of lines) {
       for (const [, span] of line.matchAll(/`([^`]+)`/g)) {
         const named: [string, 'base.css' | 'primitives.css'][] = [];
         if (TOKEN_SPAN.test(span!)) named.push([span!, 'base.css']);
@@ -223,6 +231,28 @@ function overrides(base: Root): { params: string; decls: Declaration[] }[] {
   return found;
 }
 
+/** Each top-level rule of primitives.css under every selector its list names, in source order. */
+function rulesBySelector(primitives: Root): Map<string, Rule[]> {
+  const found = new Map<string, Rule[]>();
+  primitives.each((node) => {
+    if (node.type !== 'rule') return;
+    for (const selector of node.selectors) {
+      found.set(selector, [...(found.get(selector) ?? []), node]);
+    }
+  });
+  return found;
+}
+
+/** A declaration's value as an entry's line writes it: whitespace collapsed, none inside brackets. */
+const tidy = (value: string) => collapse(value).replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
+
+interface Entry {
+  /** The format's sub-tokens, in the format's order, each as the YAML writes its value. */
+  subTokens: [string, string][];
+  /** The last selector's own declarations no sub-token carries. */
+  rest: Declaration[];
+}
+
 /** Renders the whole file, or refuses with the reason; nothing is written here. */
 export function render(sources: Sources, content: Content = CONTENT): Rendered {
   const base = postcss.parse(sources.base, { from: 'base.css' });
@@ -252,6 +282,96 @@ export function render(sources: Sources, content: Content = CONTENT): Rendered {
   };
   const inGroup = (group: Group) => tokens.filter((token) => groups.get(token.name) === group);
   const counts: Counts = { colors: 0, typography: 0, rounded: 0, spacing: 0, components: 0 };
+
+  const isColour = (value: string) =>
+    HEX.test(value) ||
+    COLOUR_FUNCTION.test(value) ||
+    COLOUR_KEYWORDS.has(value) ||
+    groups.get(LONE_VAR.exec(value)?.[1] ?? '') === 'colors';
+  const isFill = (decl: Declaration) =>
+    (decl.prop === 'background-color' || decl.prop === 'background') &&
+    isColour(collapse(decl.value));
+  const rules = rulesBySelector(primitives);
+
+  /** A component's merged declarations as the format's sub-tokens, and what they leave out. */
+  function entryOf(component: Component): Entry {
+    const merged = new Map<string, string>();
+    let fill: string | undefined;
+    const ruleSets = component.selectors.map((selector) => {
+      const found = rules.get(selector);
+      if (!found) {
+        throw new Refusal(
+          `${selector} (component ${component.key} in scripts/design-md-content.ts) is in no rule of primitives.css`,
+        );
+      }
+      return found;
+    });
+    for (const rule of ruleSets.flat()) {
+      rule.each((node) => {
+        if (node.type !== 'decl') return;
+        const value = collapse(node.value);
+        merged.set(node.prop, value);
+        // `background: none` takes the fill away; a `background-color` that is no colour leaves it.
+        if (isFill(node)) fill = value;
+        else if (node.prop === 'background') fill = undefined;
+      });
+    }
+
+    const carried = new Set<string>(['color', 'border-radius', 'padding', 'height', 'width']);
+    const subTokens: [string, string][] = [];
+    if (fill !== undefined) subTokens.push(['backgroundColor', valueOf(fill)]);
+    const color = merged.get('color');
+    if (color !== undefined) subTokens.push(['textColor', valueOf(color)]);
+
+    const size = merged.get('font-size');
+    if (size !== undefined) {
+      const step = /^var\(--text-([a-z0-9-]+)\)$/.exec(size)?.[1];
+      if (!step || !values.has(`--text-${step}`)) {
+        throw new Refusal(`${component.key}'s font-size is not a --text-* token`);
+      }
+      const family = merged.get('font-family');
+      const heading = family?.split(',').some((name) => unquote(name) === headingFamily);
+      const weight = merged.get('font-weight');
+      const level = heading
+        ? `heading-${step}`
+        : weight === '600'
+          ? `text-${step}-strong`
+          : `text-${step}`;
+      subTokens.push(['typography', `{typography.${level}}`]);
+      carried.add('font-size');
+      if (heading) carried.add('font-family');
+      if (heading || weight === '600' || weight === '400') carried.add('font-weight');
+    }
+    for (const [prop, subToken] of [
+      ['border-radius', 'rounded'],
+      ['padding', 'padding'],
+      ['height', 'height'],
+      ['width', 'width'],
+    ] as const) {
+      const value = merged.get(prop);
+      if (value !== undefined) subTokens.push([subToken, valueOf(value)]);
+    }
+
+    const rest: Declaration[] = [];
+    for (const rule of ruleSets.at(-1)!) {
+      rule.each((node) => {
+        if (node.type === 'decl' && !carried.has(node.prop) && !isFill(node)) rest.push(node);
+      });
+    }
+    return { subTokens, rest };
+  }
+
+  for (const component of content.componentEntries) {
+    if (!content.componentGroups.some((group) => group.name === component.group)) {
+      throw new Refusal(
+        `${component.key}'s group ${component.group} has no words in scripts/design-md-content.ts`,
+      );
+    }
+  }
+  const entries = content.componentEntries.map((component): [Component, Entry] => [
+    component,
+    entryOf(component),
+  ]);
 
   const yaml = [
     '---',
@@ -300,6 +420,16 @@ export function render(sources: Sources, content: Content = CONTENT): Rendered {
       counts[group]++;
     }
   }
+
+  if (entries.length) yaml.push('components:');
+  for (const [component, { subTokens }] of entries) {
+    if (!subTokens.length) yaml.push(`  ${yamlKey(component.key)}: {}`);
+    else yaml.push(`  ${yamlKey(component.key)}:`);
+    for (const [subToken, value] of subTokens) {
+      yaml.push(`    ${subToken}: ${yamlString(value)}`);
+    }
+    counts.components++;
+  }
   yaml.push('---');
 
   const table = (rows: Token[]) => [
@@ -322,7 +452,19 @@ export function render(sources: Sources, content: Content = CONTENT): Rendered {
       ),
     ]),
     'Elevation & Depth': shadows.length ? [table(shadows)] : [],
-    Components: [['### Tokens the format has no group for', '', ...table(ungrouped)]],
+    Components: [
+      ...content.componentGroups.map((group) => {
+        const lines = entries
+          .filter(([component]) => component.group === group.name)
+          .map(([component, { rest }]) => {
+            const selectors = component.selectors.map((selector) => `\`${selector}\``).join(', ');
+            const extra = rest.map((decl) => `\`${decl.prop}: ${tidy(decl.value)}\``).join(', ');
+            return `- **\`${component.key}\`** (${selectors})${extra ? `: ${extra}` : ''}.`;
+          });
+        return [`### ${group.name}`, '', ...group.words, ...(lines.length ? ['', ...lines] : [])];
+      }),
+      ['### Tokens the format has no group for', '', ...table(ungrouped)],
+    ],
   };
 
   const body = [GENERATED_LINE, '', "# Conventioner's design contract"];
@@ -331,7 +473,17 @@ export function render(sources: Sources, content: Content = CONTENT): Rendered {
     for (const block of generated[section] ?? []) body.push('', ...block);
   }
 
-  return { text: [...yaml, ...body].join('\n') + '\n', counts };
+  const text = [...yaml, ...body].join('\n') + '\n';
+  const named = new Set([...text.matchAll(/\.([a-zA-Z_][\w-]*)/g)].map(([, name]) => name!));
+  for (const name of primitiveClasses(primitives)) {
+    if (!named.has(name)) {
+      throw new Refusal(
+        `primitives.css has .${name}, which DESIGN.md never names: give it a component in ` +
+          "scripts/design-md-content.ts, or name it in that file's prose",
+      );
+    }
+  }
+  return { text, counts };
 }
 
 /** What `npm run design-md` prints once it has written the file. */

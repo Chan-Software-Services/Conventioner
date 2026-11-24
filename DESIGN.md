@@ -198,6 +198,314 @@ spacing:
   applicant-max: "640px" # The applicant's column, and the form's preview of it (E33/F01/S01)
   edge-shade-depth: "{spacing.space-3}"
   focus-border-width: "2px"
+components:
+  btn:
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  btn-compact:
+    typography: "{typography.text-xs}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-3)"
+    height: "{spacing.control-height-compact}"
+  btn-primary:
+    backgroundColor: "{colors.mm-green}"
+    textColor: "white"
+    typography: "{typography.text-sm-strong}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  btn-primary-hover:
+    backgroundColor: "{colors.mm-green-hover}"
+    textColor: "white"
+    typography: "{typography.text-sm-strong}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  btn-primary-pressed:
+    backgroundColor: "{colors.mm-green-pressed}"
+    textColor: "white"
+    typography: "{typography.text-sm-strong}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  btn-secondary:
+    backgroundColor: "white"
+    textColor: "{colors.mm-black}"
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  btn-secondary-hover:
+    backgroundColor: "{colors.mm-white-hover}"
+    textColor: "{colors.mm-black}"
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  btn-secondary-pressed:
+    backgroundColor: "{colors.mm-white-pressed}"
+    textColor: "{colors.mm-black}"
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  btn-destructive:
+    backgroundColor: "{colors.mm-red}"
+    textColor: "white"
+    typography: "{typography.text-sm-strong}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  btn-destructive-hover:
+    backgroundColor: "{colors.mm-red-hover}"
+    textColor: "white"
+    typography: "{typography.text-sm-strong}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  btn-destructive-pressed:
+    backgroundColor: "{colors.mm-red-pressed}"
+    textColor: "white"
+    typography: "{typography.text-sm-strong}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  btn-row-destructive:
+    backgroundColor: "white"
+    textColor: "{colors.mm-red}"
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  btn-row-destructive-hover:
+    backgroundColor: "{colors.mm-white-hover}"
+    textColor: "{colors.mm-red}"
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  btn-row-destructive-pressed:
+    backgroundColor: "{colors.mm-white-pressed}"
+    textColor: "{colors.mm-red}"
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  btn-on:
+    backgroundColor: "{colors.mm-chip-positive}"
+    textColor: "{colors.mm-text-green}"
+    typography: "{typography.text-sm-strong}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  btn-on-hover:
+    backgroundColor: "{colors.mm-chip-positive-hover}"
+    textColor: "{colors.mm-text-green}"
+    typography: "{typography.text-sm-strong}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  btn-on-pressed:
+    backgroundColor: "{colors.mm-chip-positive-pressed}"
+    textColor: "{colors.mm-text-green}"
+    typography: "{typography.text-sm-strong}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  btn-disabled:
+    backgroundColor: "{colors.mm-beige}"
+    textColor: "{colors.mm-text-muted-on-beige}"
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  field:
+    backgroundColor: "white"
+    textColor: "{colors.mm-black}"
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-3)"
+    height: "{spacing.control-height}"
+    width: "100%"
+  field-placeholder:
+    backgroundColor: "white"
+    textColor: "{colors.mm-text-muted}"
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-3)"
+    height: "{spacing.control-height}"
+    width: "100%"
+  field-compact:
+    backgroundColor: "white"
+    textColor: "{colors.mm-black}"
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-3)"
+    height: "{spacing.control-height-compact}"
+    width: "100%"
+  field-select:
+    backgroundColor: "white"
+    textColor: "{colors.mm-black}"
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-3)"
+    height: "{spacing.control-height}"
+    width: "100%"
+  field-textarea:
+    backgroundColor: "white"
+    textColor: "{colors.mm-black}"
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "var(--space-2) var(--space-3)"
+    height: "auto"
+    width: "100%"
+  field-disabled:
+    backgroundColor: "{colors.mm-beige}"
+    textColor: "{colors.mm-text-muted-on-beige}"
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-3)"
+    height: "{spacing.control-height}"
+    width: "100%"
+  field-select-disabled:
+    backgroundColor: "{colors.mm-beige}"
+    textColor: "{colors.mm-text-muted-on-beige}"
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-3)"
+    height: "{spacing.control-height}"
+    width: "100%"
+  field-label:
+    textColor: "{colors.mm-text-muted}"
+    typography: "{typography.text-xs}"
+  chip-neutral:
+    backgroundColor: "{colors.mm-beige}"
+    textColor: "{colors.mm-black}"
+    typography: "{typography.text-xs}"
+    rounded: "{rounded.radius-pill}"
+    padding: "var(--space-hairline) var(--space-2)"
+  chip-positive:
+    backgroundColor: "{colors.mm-chip-positive}"
+    textColor: "{colors.mm-text-green}"
+    typography: "{typography.text-xs}"
+    rounded: "{rounded.radius-pill}"
+    padding: "var(--space-hairline) var(--space-2)"
+  chip-attention:
+    backgroundColor: "{colors.mm-chip-attention}"
+    textColor: "{colors.mm-text-yellow-on-tint}"
+    typography: "{typography.text-xs}"
+    rounded: "{rounded.radius-pill}"
+    padding: "var(--space-hairline) var(--space-2)"
+  chip-informational:
+    backgroundColor: "{colors.mm-chip-informational}"
+    textColor: "{colors.mm-blue}"
+    typography: "{typography.text-xs}"
+    rounded: "{rounded.radius-pill}"
+    padding: "var(--space-hairline) var(--space-2)"
+  chip-destructive:
+    backgroundColor: "{colors.mm-chip-destructive}"
+    textColor: "{colors.mm-text-red-on-tint}"
+    typography: "{typography.text-xs}"
+    rounded: "{rounded.radius-pill}"
+    padding: "var(--space-hairline) var(--space-2)"
+  chip-small:
+    typography: "{typography.text-xs}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-1)"
+  data-table-scroll:
+    rounded: "{rounded.radius-control}"
+  data-table:
+    typography: "{typography.text-sm}"
+    width: "100%"
+  data-table-cell:
+    typography: "{typography.text-sm}"
+    padding: "var(--space-2) var(--space-3)"
+    width: "100%"
+  data-table-column-heading:
+    textColor: "{colors.mm-text-muted}"
+    typography: "{typography.text-xs-strong}"
+    padding: "var(--space-2) var(--space-3)"
+    width: "100%"
+  data-table-row-heading:
+    typography: "{typography.text-sm}"
+    padding: "var(--space-2) var(--space-3)"
+    width: "100%"
+  data-table-one-line: {}
+  add-row:
+    textColor: "{colors.mm-black}"
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-3)"
+    height: "{spacing.control-height}"
+  add-row-icon:
+    height: "2em"
+    width: "2em"
+  drag-handle:
+    textColor: "{colors.mm-text-muted}"
+    padding: "0 var(--space-1)"
+  drag-handle-hover:
+    textColor: "{colors.mm-black}"
+    padding: "0 var(--space-1)"
+  drag-handle-grabbed:
+    textColor: "{colors.mm-text-muted}"
+    padding: "0 var(--space-1)"
+  drag-handle-icon:
+    width: "{spacing.space-2}"
+  link-alone:
+    textColor: "{colors.mm-text-link}"
+    typography: "{typography.text-sm}"
+  link-alone-hover:
+    textColor: "{colors.mm-text-link}"
+    typography: "{typography.text-sm}"
+  note:
+    textColor: "{colors.mm-black}"
+    typography: "{typography.text-sm}"
+    padding: "var(--space-2) var(--space-3)"
+  note-link:
+    textColor: "{colors.mm-text-link}"
+    typography: "{typography.text-sm}"
+    padding: "var(--space-2) var(--space-3)"
+  card-grid: {}
+  card-grid-wide: {}
+  choice-card:
+    backgroundColor: "white"
+    rounded: "{rounded.radius-control}"
+    padding: "{spacing.space-3}"
+  choice-card-chosen:
+    backgroundColor: "white"
+    rounded: "{rounded.radius-control}"
+    padding: "{spacing.space-3}"
+  choice-card-frozen:
+    backgroundColor: "{colors.mm-beige}"
+    rounded: "{rounded.radius-control}"
+    padding: "{spacing.space-3}"
+  choice-card-frozen-chosen:
+    backgroundColor: "white"
+    rounded: "{rounded.radius-control}"
+    padding: "{spacing.space-3}"
+  choice-card-input: {}
+  choice-card-text: {}
+  choice-card-label:
+    textColor: "{colors.mm-black}"
+    typography: "{typography.text-sm}"
+  choice-card-label-frozen:
+    textColor: "{colors.mm-text-muted-on-beige}"
+    typography: "{typography.text-sm}"
+  choice-card-label-frozen-chosen:
+    textColor: "{colors.mm-black}"
+    typography: "{typography.text-sm-strong}"
+  choice-card-help:
+    textColor: "{colors.mm-text-muted-on-beige}"
+    typography: "{typography.text-xs}"
+  btn-focus:
+    typography: "{typography.text-sm}"
+    rounded: "{rounded.radius-control}"
+    padding: "0 var(--space-4)"
+    height: "{spacing.control-height}"
+  link-focus: {}
+  field-focus: {}
 ---
 <!-- Generated by front-end/scripts/design-md.ts from front-end/src/assets/base.css and primitives.css. Never edit it by hand: change the CSS or scripts/design-md-content.ts, then run `npm run design-md` in front-end/. -->
 
@@ -273,6 +581,125 @@ Five radii: `--radius-control` for buttons, fields, selects and small chips; `--
 Reach for a primitive before deciding a control's look again; a component's own rule outranks these, since `main.css` puts them in the `global` cascade layer.
 Each entry below is one under `components` in the tokens: its selectors, then the declarations of its last selector that the format has no sub-token for.
 [The primitive layer](docs/design-system.md#the-primitive-layer) says why, and the component library draws every variant at `/dev/components` in a development build.
+
+### Buttons
+
+`.btn` and one intent: `.btn--primary`, `.btn--secondary` or `.btn--destructive`, and `.btn--compact` in a toolbar.
+A row's destructive action is `.btn--secondary.btn--destructive`, red ink on the secondary button, which asks before it acts.
+A toggle that is on is a `.btn` with `aria-pressed="true"`, tinted rather than filled.
+There is one disabled look for every intent.
+
+- **`btn`** (`.btn`): `display: inline-flex`, `align-items: center`, `justify-content: center`, `gap: var(--space-2)`, `border: 1px solid transparent`, `font-family: inherit`, `line-height: normal`, `white-space: nowrap`, `cursor: pointer`, `transition: background-color 0.15s ease-in-out`.
+- **`btn-compact`** (`.btn`, `.btn--compact`).
+- **`btn-primary`** (`.btn`, `.btn--primary`): `--focus-border: var(--focus-border-on-fill)`.
+- **`btn-primary-hover`** (`.btn`, `.btn--primary`, `.btn--primary:hover:not(:disabled)`).
+- **`btn-primary-pressed`** (`.btn`, `.btn--primary`, `.btn--primary:active:not(:disabled)`).
+- **`btn-secondary`** (`.btn`, `.btn--secondary`): `border-color: var(--mm-border)`.
+- **`btn-secondary-hover`** (`.btn`, `.btn--secondary`, `.btn--secondary:hover:not(:disabled)`).
+- **`btn-secondary-pressed`** (`.btn`, `.btn--secondary`, `.btn--secondary:active:not(:disabled)`).
+- **`btn-destructive`** (`.btn`, `.btn--destructive`): `--focus-border: var(--focus-border-on-fill)`.
+- **`btn-destructive-hover`** (`.btn`, `.btn--destructive`, `.btn--destructive:hover:not(:disabled)`).
+- **`btn-destructive-pressed`** (`.btn`, `.btn--destructive`, `.btn--destructive:active:not(:disabled)`).
+- **`btn-row-destructive`** (`.btn`, `.btn--secondary`, `.btn--destructive`, `.btn--secondary.btn--destructive`): `--focus-border: var(--mm-green)`, `border-color: var(--mm-border)`.
+- **`btn-row-destructive-hover`** (`.btn`, `.btn--secondary`, `.btn--destructive`, `.btn--secondary.btn--destructive`, `.btn--secondary.btn--destructive:hover:not(:disabled)`).
+- **`btn-row-destructive-pressed`** (`.btn`, `.btn--secondary`, `.btn--destructive`, `.btn--secondary.btn--destructive`, `.btn--secondary.btn--destructive:active:not(:disabled)`).
+- **`btn-on`** (`.btn`, `.btn--secondary`, `.btn[aria-pressed='true']`): `--focus-border: var(--focus-border-on-fill)`, `border-color: var(--mm-green)`.
+- **`btn-on-hover`** (`.btn`, `.btn--secondary`, `.btn[aria-pressed='true']`, `.btn[aria-pressed='true']:hover:not(:disabled)`).
+- **`btn-on-pressed`** (`.btn`, `.btn--secondary`, `.btn[aria-pressed='true']`, `.btn[aria-pressed='true']:active:not(:disabled)`).
+- **`btn-disabled`** (`.btn`, `.btn:disabled`): `border-color: var(--mm-border)`, `cursor: not-allowed`.
+
+### Fields
+
+`.field` for every text field, select and textarea, left-aligned, with a `.field-label` above it.
+`.field--select` draws the app's own chevron, and a select's own class may size or place it, never draw it.
+`.field--compact` stands beside a `.btn--compact`.
+
+- **`field`** (`.field`): `display: block`, `border: 1px solid var(--mm-border)`, `font-family: inherit`, `line-height: normal`, `text-align: left`.
+- **`field-placeholder`** (`.field`, `.field::placeholder`).
+- **`field-compact`** (`.field`, `.field--compact`).
+- **`field-select`** (`.field`, `.field--select`): `min-width: 0`, `appearance: none`, `padding-right: calc(var(--space-3) + var(--space-3) + var(--space-3))`, `background-image: url('/icons/select-chevron.svg')`, `background-repeat: no-repeat`, `background-position: right var(--space-3) center`, `background-size: var(--space-3) var(--space-2)`, `text-overflow: ellipsis`.
+- **`field-textarea`** (`.field`, `.field--textarea`): `min-height: 72px`, `line-height: 1.5`, `resize: vertical`.
+- **`field-disabled`** (`.field`, `.field:disabled`): `cursor: not-allowed`.
+- **`field-select-disabled`** (`.field`, `.field--select`, `.field:disabled`, `.field--select:disabled`): `background-image: url('/icons/select-chevron-disabled.svg')`, `opacity: 1`.
+- **`field-label`** (`.field-label`): `display: block`, `margin-bottom: var(--space-1)`, `text-align: left`.
+
+### Chips
+
+`.chip` and one tone: `.chip--neutral`, `.chip--positive`, `.chip--attention`, `.chip--informational` or `.chip--destructive`, a tinted ground with its own ink, in sentence case.
+`.chip--small` sits beside small type.
+
+- **`chip-neutral`** (`.chip`, `.chip--neutral`).
+- **`chip-positive`** (`.chip`, `.chip--positive`).
+- **`chip-attention`** (`.chip`, `.chip--attention`).
+- **`chip-informational`** (`.chip`, `.chip--informational`).
+- **`chip-destructive`** (`.chip`, `.chip--destructive`).
+- **`chip-small`** (`.chip`, `.chip--small`).
+
+### Tables
+
+`.data-table` is a table whose columns are the screen's own; when it may be wider than its place it scrolls inside a sideways scroll box with `.data-table-scroll` on its root, and never moves the page.
+
+- **`data-table-scroll`** (`.data-table-scroll`): `overflow: hidden`, `border: 1px solid var(--mm-border)`.
+- **`data-table`** (`.data-table`): `border-collapse: collapse`.
+- **`data-table-cell`** (`.data-table`, `.data-table :is(th, td)`, `.data-table tbody :is(th, td)`): `border-top: 1px solid var(--mm-border)`.
+- **`data-table-column-heading`** (`.data-table`, `.data-table :is(th, td)`, `.data-table thead th`): `white-space: nowrap`.
+- **`data-table-row-heading`** (`.data-table`, `.data-table :is(th, td)`, `.data-table tbody :is(th, td)`, `.data-table tbody th`).
+- **`data-table-one-line`** (`.data-table--one-line :is(th, td)`): `white-space: nowrap`.
+
+### Rows
+
+`.add-row` is a button that adds a row to a plan card, and `.drag-handle` is the control grabbed to reorder one.
+
+- **`add-row`** (`.add-row`): `display: inline-flex`, `align-items: center`, `justify-content: center`, `gap: var(--space-2)`, `background: none`, `border: none`, `font-family: inherit`, `line-height: normal`, `cursor: pointer`.
+- **`add-row-icon`** (`.add-row__icon`): `flex: 0 0 auto`, `stroke-width: 1.25`.
+- **`drag-handle`** (`.drag-handle`): `display: inline-flex`, `align-items: center`, `justify-content: center`, `min-width: var(--space-6)`, `border: none`, `background: none`, `cursor: grab`.
+- **`drag-handle-hover`** (`.drag-handle`, `.drag-handle:hover`).
+- **`drag-handle-grabbed`** (`.drag-handle`, `.drag-handle:active`): `cursor: grabbing`.
+- **`drag-handle-icon`** (`.drag-handle__icon`): `flex: 0 0 auto`.
+
+### Links and notes
+
+`.link-alone` is a link on a line of its own, at least `--target-min` tall; a link inside a sentence is not one.
+`.note` is a fact the page states about itself, quietly, with a rule down its edge.
+
+- **`link-alone`** (`.link-alone`): `display: inline-flex`, `align-items: center`, `min-height: var(--target-min)`, `text-decoration: none`.
+- **`link-alone-hover`** (`.link-alone`, `.link-alone:hover`): `text-decoration: underline`.
+- **`note`** (`.note`): `margin: 0`, `border-left: var(--space-hairline) solid var(--mm-green)`.
+- **`note-link`** (`.note`, `.note a`): `text-decoration: underline`.
+
+### Card grid
+
+`.card-grid` lays a screen's cards in two tracks, each card ending at its own content.
+
+- **`card-grid`** (`.card-grid`): `display: grid`, `grid-template-columns: repeat(auto-fit, minmax(min(100%, max((var(--card-grid-one-track) - var(--card-grid-gap)) / 2, (100% - var(--card-grid-gap)) / 2)), 1fr))`, `gap: var(--card-grid-gap)`, `align-items: start`.
+- **`card-grid-wide`** (`.card-grid > .card-grid__wide`): `grid-column: 1 / -1`.
+
+### Choice cards
+
+`.choice-card` is one of a few ways of doing something, with its label and a line of help.
+`.chosen` marks the chosen card, and `.disabled` freezes them all: the chosen one keeps its white ground, a green ring and a bold label, and the others go beige.
+
+- **`choice-card`** (`.choice-card`): `display: flex`, `flex-direction: row`, `align-items: flex-start`, `gap: var(--space-2)`, `border: 1px solid var(--mm-border)`, `cursor: pointer`, `text-align: left`.
+- **`choice-card-chosen`** (`.choice-card`, `.choice-card.chosen`): `border-color: var(--mm-green)`.
+- **`choice-card-frozen`** (`.choice-card`, `.choice-card.disabled`): `cursor: not-allowed`.
+- **`choice-card-frozen-chosen`** (`.choice-card`, `.choice-card.disabled`, `.choice-card.chosen`, `.choice-card.disabled.chosen`): `outline: 1px solid var(--mm-green)`, `outline-offset: -2px`.
+- **`choice-card-input`** (`.choice-card input`): `margin-top: var(--space-hairline)`, `flex: 0 0 auto`.
+- **`choice-card-text`** (`.choice-card-text`): `display: flex`, `flex-direction: column`, `gap: var(--space-hairline)`.
+- **`choice-card-label`** (`.choice-card-label`).
+- **`choice-card-label-frozen`** (`.choice-card-label`, `.choice-card.disabled:not(.chosen) .choice-card-label`).
+- **`choice-card-label-frozen-chosen`** (`.choice-card-label`, `.choice-card.disabled.chosen .choice-card-label`).
+- **`choice-card-help`** (`.choice-card-help`): `line-height: 1.4`.
+
+### Focus
+
+A button shows a green outline inside its edge on `:focus-visible`, `--focus-border`, or `--focus-border-on-fill` on a fill of its own green or red.
+`.add-row`, `.drag-handle` and the step header's `.step-button` wear the same outline.
+A link or any other stop shows the soft `--focus-halo`, and `--focus-halo-on-dark` on the dark bar.
+A field shows no focus at all, only its caret: that was decided knowing a keyboard user loses the ring too, so do not add one.
+
+- **`btn-focus`** (`.btn`, `.btn:focus-visible`): `outline: var(--focus-border-width) solid var(--focus-border)`, `outline-offset: var(--focus-border-offset)`.
+- **`link-focus`** (`a:not(.btn):focus-visible`): `outline: none`, `box-shadow: var(--focus-halo)`.
+- **`field-focus`** (`input:focus`): `outline: none`.
 
 ### Tokens the format has no group for
 
