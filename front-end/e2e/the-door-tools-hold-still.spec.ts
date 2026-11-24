@@ -58,7 +58,7 @@ function parts(page: Page) {
   });
 }
 
-/** Two edges a hundredth of a pixel apart or less stand at the same place. */
+/** Two edges less than half a hundredth of a pixel apart stand at the same place. */
 const AT = 2;
 
 /** How far the page can scroll down. */

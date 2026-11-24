@@ -93,7 +93,7 @@ async function scrollTo(page: Page, y: number) {
   await expect.poll(() => page.evaluate(() => Math.round(window.scrollY)), `${y}px`).toBe(y);
 }
 
-/** Two edges a hundredth of a pixel apart or less stand at the same place. */
+/** Two edges less than half a hundredth of a pixel apart stand at the same place. */
 const AT = 2;
 
 /**
