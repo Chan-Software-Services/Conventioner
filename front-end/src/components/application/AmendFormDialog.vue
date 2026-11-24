@@ -199,25 +199,31 @@ const alreadyAsksNothing = computed(() =>
 );
 
 /**
- * The questions the plan offers that would clear it, by the dialog's own names: with any of them
- * asked, the form asks something. The sentence shows only on a plan offering no dates and no
- * tiers, whose questions cannot be turned off, so there these are the rankings alone.
+ * The questions the plan offers that would clear it, by the dialog's own names, leaving out those
+ * `unaskedKeys` turns off: with any of them asked, the form asks something. The sentence shows only
+ * on a plan offering no dates and no tiers, whose questions cannot be turned off, so there these are
+ * the rankings alone.
  */
-const remedyLabels = computed(() =>
-  planDerivedAskedKeys({ ...props.essentialOptions, unasked: [] }).map(
+function remedyLabels(unaskedKeys: readonly string[]): string[] {
+  return planDerivedAskedKeys({ ...props.essentialOptions, unasked: [...unaskedKeys] }).map(
     (key) => UNASKABLE_LABELS[key] ?? key,
-  ),
-);
+  );
+}
 
-/** The sentence, worded for whether the change leaves it so or it was so already. */
+/**
+ * The sentence, worded for whether the change leaves it so or it was so already. A change names
+ * only the questions the stored form asks, the ones it turns off, never one turned off before; a
+ * form that asked nothing already names each ranking the plan offers, all of them turned off then.
+ */
 const asksNothingSentence = computed(() => {
-  const questions = remedyLabels.value.join(' or ');
   if (!alreadyAsksNothing.value) {
+    const kept = remedyLabels(props.applicationForm?.unaskedEssentials ?? []).join(' or ');
     return (
       'That would leave the form asking nothing about what this market offers, so it could not ' +
-      `enter Review. Keep asking ${questions}, or add a question.`
+      `enter Review. Keep asking ${kept}, or add a question.`
     );
   }
+  const questions = remedyLabels([]).join(' or ');
   if (!questions) {
     return (
       'The form asks nothing about what this market offers, so it cannot enter Review until you ' +

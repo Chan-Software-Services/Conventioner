@@ -162,6 +162,26 @@ describe('AmendFormDialog', () => {
       );
     });
 
+    it('never tells it to keep asking a question the form already stopped asking', async () => {
+      const wrapper = mount(AmendFormDialog, {
+        props: {
+          open: true,
+          marketId: 'market-1',
+          applicationForm: { fields: [], unaskedEssentials: ['essential_table_type_ranking'] },
+          formRevision: 0,
+          essentialOptions: { ...TWO_SECTIONS, tableTypes: ['Full', 'Half'] },
+          suggestedUnasked: 'essential_section_ranking',
+        },
+        global: { stubs: { teleport: true } },
+      });
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('[data-testid="amend-form-asks-nothing"]').text()).toBe(
+        'That would leave the form asking nothing about what this market offers, so it could not ' +
+          'enter Review. Keep asking Section preference, or add a question.',
+      );
+    });
+
     it('says nothing once a question is added', async () => {
       const wrapper = mountOnTwoSections();
       await wrapper.vm.$nextTick();
