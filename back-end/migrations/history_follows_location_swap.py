@@ -15,34 +15,37 @@ plan said, its locations' names among it, when it was saved. So is every other k
 every line of a location other than the two.
 
 **Which lines it renames.** It reads the market's ``plan`` entries in which either location's name,
-found by its id, differs before and after. Each that trades the two names is a trade, the swap's
-own entry among them, and an organizer's trade saved on Market Setup in draft too. A line recorded
+found by its id, differs before and after. Each that trades the two names is a trade, the swap's own
+entry among them, and an organizer's trade saved on Market Setup in draft too. A line recorded
 before a trade, naming one of the two names the trade's "before" gives, is about the location that
 held that name then, which the trade gave the other name: so the line takes it, and a later trade
 moves it on again, so a swap and a swap back leave the line as it was recorded. A line naming
-neither name is left. Each line is computed afresh from the name it was recorded under, which the
-first rename keeps beside it as ``subject.location_as_recorded``: so a second run changes nothing,
-and a run after a later swap of the two renames each line once more.
+neither name is left, and a change that is not a trade leaves a line's name as it is, unless that
+change gave the line's name to one of the two locations, which it refuses. Each line is computed
+afresh from the name it was recorded under, which the first rename keeps beside it as
+``subject.location_as_recorded``: so a second run changes nothing, and a run after a later swap of
+the two renames each line once more.
 
 It refuses, writing nothing and exiting 1, when: the market is not found or is being deleted; it
 has no plan; either location is not found by its id or exact name, or has no stored id (run
 ``migrate_layouts.py`` first); both arguments name one location; the history records no trade of
 the two names; the history's last change of the two names leaves them otherwise than the plan
 names them now (a swap whose entry failed to write: put the history right by hand first); or a
-line names a location by a name another change, one that was not a trade, gave the other of the
-two, so no trade says which place the line meant.
+line names a location by a name another change, one that was not a trade, gave to one of the two
+locations that did not hold it, so no trade says which place the line meant.
 
 **Each line is its own write**, held to the name it was read under, so a line changed since the
 read is left; the script then says how many it renamed of how many it meant to and exits 1, and a
 second run renames the rest. Nothing records the rename in the history: the name as recorded is
 kept on the line.
 
-**Run it after each run of the swap** (the dry run first), at any time: it reads only the market's
-plan and writes only the history, so an organizer working on the market meanwhile is not in its
-way. It needs no deploy: Manage market reads a line's ``subject.location`` as it is stored.
+**Run it after each run of the swap** (the dry run first), at any time: of the market's document it
+reads the plan alone, and it writes the history alone, so an organizer working on the market
+meanwhile is not in its way. It needs no deploy: Manage market reads a line's ``subject.location``
+as it is stored.
 
-It prints the market's id, the two locations' ids and counts only: never a location's name, a
-vendor's name or an address.
+Its report prints the market's id, the two locations' ids and counts only, and a refusal no name
+but an argument it was given: never a vendor's name or an address.
 
 Usage (the production database address passed inline, never from back-end/.env):
     MONGODB_URI='<URI>' python migrations/history_follows_location_swap.py \\
@@ -182,8 +185,9 @@ def _followed(
         now = _place(name, change.after)
         if now is not None and now != was:
             raise Refused(
-                f"The history's line {line_id} names a location by a name another change gave the "
-                "other of the two, so no trade says which place it meant. Put it right by hand.")
+                f"The history's line {line_id} names a location by a name another change gave "
+                "to one of the two that did not hold it, so no trade says which place it meant. "
+                "Put it right by hand.")
     return name
 
 

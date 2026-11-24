@@ -297,7 +297,7 @@ def _a_name_that_came_to_mean_the_other(db, history):
     (_a_later_change_unrecorded, ("North Wing", "South Wing"),
      "does not record the last change of the two names"),
     (_a_name_that_came_to_mean_the_other, ("North Wing", "South Wing"),
-     "h-08 names a location by a name another change gave the other"),
+     "h-08 names a location by a name another change gave to one of the two"),
 ])
 def test_it_refuses_and_writes_nothing(database, market_records, change, locations, words):
     db = database(settled_market())
