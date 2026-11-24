@@ -133,7 +133,7 @@ A placeholder that is truthy is worse than a blank, because a check that asks on
 ## The front end's half
 
 **`VITE_TURNSTILE_SITE_KEY` is the other half of `TURNSTILE_SECRET_KEY`, and a build-time requirement.**
-A bundle with no site key renders no human check and sends a placeholder token ([`front-end/src/utils/captcha.ts`](../../../front-end/src/utils/captcha.ts)), which a back end with a real secret checks with Cloudflare, who never issued it, so every sign-up is asked for the check again on a deployment that looks healthy.
+A bundle with no site key renders no human check and sends a placeholder token ([`front-end/src/utils/captcha.ts`](../../../front-end/src/utils/captcha.ts)), which a back end with a real secret checks with Cloudflare, who never issued it, so every sign-up and every vendor code request is asked for the check again on a deployment that looks healthy.
 So `vite build` refuses a bundle without it, and one carrying a Cloudflare test site key (a digit, `x`, twenty zeros and two letters, the shape the back end refuses for a secret), which passes, fails or always asks every person ([`assertHumanCheckSiteKey`](../../../front-end/vite.config.ts)).
 The escape hatch is the one of the same name, `VITE_ALLOW_INSECURE_LOCAL_DEV`, under which the bundle warns and builds with no key, sending the placeholder, or with a test key, whose token only a back end with `DISABLE_CAPTCHA` accepts.
 A keyless bundle built without the hatch throws rather than sending it.
