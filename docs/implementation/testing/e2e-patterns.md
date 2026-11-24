@@ -237,7 +237,7 @@ Note `uptime` before and during each run in the report, and report a run that ra
 
 **A cold stack**, for a flake seen on a stack's first spec: stop the worktree's stack and start it again (a team worker with `team-stack stop` and `team-stack up`), then run the spec as the first thing after it is up.
 
-**The run.** From `front-end/`, `npx playwright test <files> --retries=0 --repeat-each=<k> --output=<a new directory>`, with `<k>` 20 for a single test or file; a fresh `--output` per run keeps each run's traces apart, since a rerun empties the last one's.
+**The run.** From `front-end/`, `npx playwright test <files> --retries=0 --repeat-each=<k> --output=<a new directory>`, with `<k>` 20 for a single test or file; a fresh `--output` per run keeps each run's traces apart, since a rerun empties the last one's, and holds only the failed attempts' output, since a local run removes a passing attempt's ([when a test fails](../../TESTING.md#when-a-test-fails)).
 Before a fix the run must fail at least once; one that does not fail in 20 repeats under load, and 3 cold starts where a cold stack applies, is reported with what was tried, not fixed and not called fixed.
 After the fix the same run passes 30 of 30 under the same load.
 
