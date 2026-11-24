@@ -555,8 +555,14 @@ export function render(sources: Sources, content: Content = CONTENT): Rendered {
           .filter(([component]) => component.group === group.name)
           .map(([component, { rest }]) => {
             const selectors = component.selectors.map((selector) => `\`${selector}\``).join(', ');
+            const others = [
+              ...new Set(rules.get(component.selectors.at(-1)!)!.flatMap((rule) => rule.selectors)),
+            ]
+              .filter((selector) => !component.selectors.includes(selector))
+              .map((selector) => `\`${tidy(selector)}\``);
+            const listed = others.length ? `${selectors} with ${others.join(', ')}` : selectors;
             const extra = rest.map((decl) => `\`${decl.prop}: ${tidy(decl.value)}\``).join(', ');
-            return `- **\`${component.key}\`** (${selectors})${extra ? `: ${extra}` : ''}.`;
+            return `- **\`${component.key}\`** (${listed})${extra ? `: ${extra}` : ''}.`;
           });
         return [`### ${group.name}`, '', ...group.words, ...(lines.length ? ['', ...lines] : [])];
       }),

@@ -693,9 +693,9 @@ A button shows a green outline inside its edge on `:focus-visible`, `--focus-bor
 A link or any other stop shows the soft `--focus-halo`, and `--focus-halo-on-dark` on the dark bar.
 A field shows no focus at all, only its caret: that was decided knowing a keyboard user loses the ring too, so do not add one.
 
-- **`btn-focus`** (`.btn`, `.btn:focus-visible`): `outline: var(--focus-border-width) solid var(--focus-border)`, `outline-offset: var(--focus-border-offset)`.
-- **`link-focus`** (`a:not(.btn):focus-visible`): `outline: none`, `box-shadow: var(--focus-halo)`.
-- **`field-focus`** (`input:focus`): `outline: none`.
+- **`btn-focus`** (`.btn`, `.btn:focus-visible` with `.add-row:focus-visible`, `.drag-handle:focus-visible`, `.step-button:focus-visible`, `button:focus-visible`, `[role='button']:focus-visible`): `outline: var(--focus-border-width) solid var(--focus-border)`, `outline-offset: var(--focus-border-offset)`.
+- **`link-focus`** (`a:not(.btn):focus-visible` with `summary:focus-visible`, `[tabindex='0']:not(.btn, button, [role='button']):focus-visible`): `outline: none`, `box-shadow: var(--focus-halo)`.
+- **`field-focus`** (`input:focus` with `textarea:focus`, `select:focus`): `outline: none`.
 
 ### Tokens the format has no group for
 

@@ -410,7 +410,7 @@ describe('the components, on fixture CSS', () => {
       '### Buttons\n\nThe buttons.\n\n' +
         '- **`btn`** (`.btn`): `display: inline-flex`, `font-weight: 400`, `cursor: pointer`.\n' +
         '- **`btn-primary`** (`.btn`, `.btn--primary`): `--focus-border: var(--focus-border)`.\n' +
-        '- **`btn-primary-hover`** (`.btn`, `.btn--primary`, `.btn--primary:hover:not(:disabled)`).\n' +
+        '- **`btn-primary-hover`** (`.btn`, `.btn--primary`, `.btn--primary:hover:not(:disabled)` with `.btn--quiet:hover`).\n' +
         '- **`btn-quiet`** (`.btn`, `.btn--quiet`): `background: none`.\n' +
         '\n### Titles\n\nThe titles.\n\n' +
         // Merge One is carried by the heading level the entry references.
@@ -601,16 +601,6 @@ describe('the components, on fixture CSS', () => {
           ],
         },
         '.btn--ghost (component btn-ghost in scripts/design-md-content.ts) is in no rule of primitives.css',
-      ],
-      [
-        // Named only beside the selector an entry ends on, in that rule's list.
-        'an unnamed class',
-        { ...COMPONENT_FIXTURE, primitives: WITHOUT_QUIET },
-        {
-          ...COMPONENTS,
-          componentEntries: COMPONENTS.componentEntries.filter(({ key }) => key !== 'btn-quiet'),
-        },
-        "primitives.css has .btn--quiet, which DESIGN.md never names: give it a component in scripts/design-md-content.ts, or name it in that file's prose",
       ],
       [
         'a raw font size',
@@ -880,6 +870,20 @@ describe('the real files', () => {
       if (!ok) missing.push(`${tidy(rule.selector)} { ${decl.prop}: ${value} }`);
     });
     expect(seen).toBeGreaterThan(200);
+    expect(missing).toEqual([]);
+  });
+
+  it('shows every selector of every rule of primitives.css, @media rules too', () => {
+    const tidy = (raw: string) =>
+      raw.replace(/\s+/g, ' ').trim().replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
+    const missing: string[] = [];
+    postcss.parse(sources.primitives).walkRules((rule) => {
+      for (const selector of rule.selectors) {
+        const shown = tidy(selector);
+        const escaped = shown.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (!new RegExp(`(?:\`|, )${escaped}(?:\`|,)`).test(text)) missing.push(shown);
+      }
+    });
     expect(missing).toEqual([]);
   });
 
