@@ -30,10 +30,16 @@ def executable(path, body):
     path.chmod(0o755)
 
 
-def fake_node(directory, version):
-    """A `node` that prints its version, and an `npm` beside it that records how it was called."""
+def fake_node(directory, version, npm_name="npm"):
+    """A `node` that prints its version, and an `npm` beside it that records how it was called,
+    under `npm_name`, and fails when FAIL_NPM is set."""
     executable(directory / "node", f'[[ "$1" == --version ]] && echo v{version}\n')
-    executable(directory / "npm", 'echo "npm $* (in $PWD)" >>"$NM_LINT_LOG"\n')
+    executable(
+        directory / "npm",
+        f'echo "{npm_name} $* (in $PWD)" >>"$NM_LINT_LOG"\n'
+        '[[ -n "${FAIL_NPM:-}" ]] && exit 1\n'
+        "exit 0\n",
+    )
 
 
 @pytest.fixture
@@ -214,13 +220,60 @@ def test_prepare_installs_the_locked_dependencies_from_the_cache(repo, run):
 
 
 def test_a_node_off_the_pin_is_replaced_by_nvms_pinned_one(repo, run, tmp_path):
-    fake_node(tmp_path / "nvm" / "versions" / "node" / f"v{PINNED}" / "bin", PINNED)
+    fake_node(tmp_path / "nvm" / "versions" / "node" / f"v{PINNED}" / "bin", PINNED, "nvm-npm")
 
     result, log = run(repo, "--prepare", node_version="22.1.0")
 
     assert result.returncode == 0, result.stderr
     assert f"nm-lint: Node on PATH is v22.1.0; using nvm's v{PINNED}" in result.stdout
-    assert len(log) == 1
+    assert log == [
+        "nvm-npm ci --engine-strict --prefer-offline --no-audit --no-fund "
+        f"(in {repo / 'front-end'})"
+    ]
+
+
+def test_the_tools_run_on_nvms_pinned_node_when_the_one_on_path_is_off_the_pin(repo, run, tmp_path):
+    nvm_bin = tmp_path / "nvm" / "versions" / "node" / f"v{PINNED}" / "bin"
+    fake_node(nvm_bin, PINNED)
+    executable(
+        repo / "front-end" / "node_modules" / ".bin" / "prettier",
+        'echo "prettier on $(command -v node)" >>"$NM_LINT_LOG"\n',
+    )
+    change(repo, {"docs/old.md": "# Changed\n"})
+
+    result, log = run(repo, node_version="22.1.0")
+
+    assert result.returncode == 0, result.stderr
+    assert log == [f"prettier on {nvm_bin / 'node'}"]
+
+
+def test_a_branch_changing_docs_alone_runs_prettier_alone(repo, run):
+    change(repo, {"docs/old.md": "# Changed\n", "docs/new.md": "# New\n"})
+
+    result, log = run(repo)
+
+    assert result.returncode == 0, result.stderr
+    assert log == [
+        "prettier --config .prettierrc.json --check --ignore-unknown ../docs/new.md ../docs/old.md "
+        f"(in {repo / 'front-end'})"
+    ]
+
+
+def test_a_failing_whole_script_fails_the_run(repo, run):
+    change(repo, {"front-end/eslint.config.ts": "export default [{}];\n"})
+
+    result, log = run(repo, env={"FAIL_NPM": "1"})
+
+    assert result.returncode == 1
+    assert f"npm run lint:check (in {repo / 'front-end'})" in log
+    assert "nm-lint: FAILED: eslint" in result.stderr
+
+
+def test_a_failing_install_fails_prepare(repo, run):
+    result, log = run(repo, "--prepare", env={"FAIL_NPM": "1"})
+
+    assert result.returncode != 0
+    assert len(log) == 1 and log[0].startswith("npm ci ")
 
 
 def test_a_node_off_the_pin_with_no_pinned_one_in_nvm_fails_loud(repo, run):
