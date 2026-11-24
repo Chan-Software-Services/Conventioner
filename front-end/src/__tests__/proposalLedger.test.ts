@@ -38,7 +38,7 @@ function column(index: number, overrides: Partial<ProposedColumn> = {}): Propose
       required: false,
       options: OPTIONS,
       upload: false,
-      optionsByType: { select: { options: OPTIONS, answers: [] } },
+      optionsByType: { select: { options: OPTIONS, answers: [], check: [] } },
     },
     ...overrides,
   };
@@ -114,8 +114,8 @@ function proposalOf(options: ProposedOption[], second: ProposedOption[] = []): P
         ...made.field!,
         options: read,
         optionsByType: {
-          select: { options: read, answers: [] },
-          multi_select: { options: [read[0]], answers: [] },
+          select: { options: read, answers: [], check: [] },
+          multi_select: { options: [read[0]], answers: [], check: [] },
         },
       },
     };

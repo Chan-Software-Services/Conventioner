@@ -758,3 +758,39 @@ def test_a_plain_common_answer_is_kept_and_its_question_unchecked():
     assert _option(column, "In person") == {
         "value": "In person", "count": 6, "rare": False, "namesSomeone": False, "keep": True}
     assert CsvProposal.CHECK_NAMES_SOMEONE not in column["check"]
+
+
+# --- Each reading carries the option checks its options earn ---------------------------------------
+
+LINK = "See https://example.com/shop"
+# 13 different answers are too many for one choice, so the rules propose Text; read as a choice, the
+# link names someone and each one-off is rare.
+SELLS = (["Pottery"] * 15 + ["Prints"] * 10 + [LINK] * 3
+         + [f"Oneoff item {letter}" for letter in "ABCDEFGHIJ"])
+
+
+def test_a_question_proposed_as_text_checks_nothing_but_its_choice_readings_check_their_options():
+    column = _question_answering(SELLS)
+    by_type = column["field"]["optionsByType"]
+
+    assert column["field"]["type"] == "text"
+    assert column["check"] == []
+    assert by_type["select"]["check"] == [
+        CsvProposal.CHECK_RARE_OPTIONS, CsvProposal.CHECK_NAMES_SOMEONE]
+    assert by_type["multi_select"]["check"] == [
+        CsvProposal.CHECK_RARE_OPTIONS, CsvProposal.CHECK_NAMES_SOMEONE]
+
+
+def test_a_question_proposed_as_a_choice_checks_its_readings_option_checks():
+    column = _question_answering(["In person"] * 24 + ["Instagram"] * 12 + [LINK] * 3 + ["Etsy"])
+    field = column["field"]
+
+    assert field["type"] == "select"
+    assert column["check"] == field["optionsByType"]["select"]["check"] == [
+        CsvProposal.CHECK_RARE_OPTIONS, CsvProposal.CHECK_NAMES_SOMEONE]
+
+
+def test_a_reading_of_plain_common_answers_checks_nothing():
+    column = _question_answering(["In person"] * 6 + ["Instagram"] * 4)
+
+    assert column["field"]["optionsByType"]["select"]["check"] == []

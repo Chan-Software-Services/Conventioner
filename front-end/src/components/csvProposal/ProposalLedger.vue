@@ -669,7 +669,8 @@ function onSettle(kind: string, value: string, choice: string) {
   border-left: 3px solid transparent;
 }
 
-.checking td:first-child {
+/* More specific than the rule above, or the edge stays transparent. */
+.ledger tbody .checking td:first-child {
   border-left-color: var(--mm-yellow);
 }
 
