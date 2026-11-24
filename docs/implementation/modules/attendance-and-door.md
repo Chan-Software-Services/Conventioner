@@ -32,7 +32,8 @@ describes:
   - front-end/src/components/attendance/AttendanceMap.vue
   - front-end/src/utils/useUpdatedWords.ts
   - front-end/src/components/attendance/laidOutLocations.ts
-verified: 2026-11-19
+  - back-end/migrations/add_check_outs_from_sheet.py
+verified: 2026-11-24
 sources:
   - wayfinding/real-market-readiness/map
   - wayfinding/claims-and-room/map
@@ -63,6 +64,7 @@ sources:
   - T469
   - T496
   - T501
+  - T504
 ---
 
 # Attendance and the door
@@ -78,7 +80,7 @@ Checking in again updates the table with the time, so a vendor checked in again 
 A check-in made on the public check-in page before it was removed has `checked_in_by` None and no `checked_in_via`, and one made before T318 has no `table_code`: it is read as made at the seat the vendor holds now, which is the answer a stored table would give, so nothing was migrated.
 The vendor's address is normalised (`utils/email_address.normalized_email`) on every write and lookup.
 Undoing a check-in deletes its document: nothing else was changed by it.
-A check-out is three more fields on that document (`CHECK_OUT_FIELDS`, T496): `checked_out_at` (ISO 8601 UTC), `checked_out_by` (the organizer's address, or None for the vendor's own) and `checked_out_via` (`door_code` for the vendor's own, else None), set by `record_check_out` and unset by `undo_check_out`.
+A check-out is three more fields on that document (`CHECK_OUT_FIELDS`, T496): `checked_out_at` (ISO 8601 UTC), `checked_out_by` (the organizer's address, or None for the vendor's own) and `checked_out_via` (`door_code` for the vendor's own, else None), set by `record_check_out` (or, on a day that has begun, by the operator's [`add_check_outs_from_sheet.py`](../../../back-end/migrations/add_check_outs_from_sheet.py), below) and unset by `undo_check_out`.
 A document with no `checked_out_at` is a vendor not checked out, which is every document stored before check-outs, so nothing was migrated.
 The collection goes with the market when it is deleted.
 
@@ -188,6 +190,9 @@ It is one `find_one_and_update` filtered to the vendor's day with `checked_out_a
 `undo_check_out` unsets the three fields, leaving the check-in as it is, with one `find_one_and_update` filtered to a day that is checked out: 200 `{"message": "Check-out undone"}` and a `check_out_undone` entry, or 404, "No check-out found for this vendor on this date".
 `undo_attendance` refuses a checked-out day: its delete is filtered to `checked_out_at: None`, and when nothing was deleted and the day has a record it answers 409, "Undo the check-out first.", so a check-out is never dropped without its own entry.
 `record_attendance` leaves a check-out's fields as they are: checking in again is a new time, never a second arrival.
+A day's check-outs, once the day has begun, may be added from the organizers' sheet by an operator's script, [`add_check_outs_from_sheet.py`](../../../back-end/migrations/add_check_outs_from_sheet.py) (T504, [how to run it](../../OPERATIONS.md#adding-a-market-days-check-outs-from-the-organizers-sheet)), on a market in its days or archived.
+Each is stored and recorded as an organizer's: the three fields as `record_check_out` sets them, with the time the operator gives and the organizer address they give as `checked_out_by`, through one update held to `checked_out_at: None`, and one `checked_out` entry through `_record_door` and that organizer's asking of Check vendors in.
+It writes the attendance collection itself, since `record_check_out` stamps now and refuses an archived market, and it never writes a check-in, removes a record or changes a check-out it finds.
 [`test_an_organizer_checks_a_vendor_out.py`](../../../back-end/tests/test_an_organizer_checks_a_vendor_out.py) holds the record, a second check-out, the refused undo of a check-in, and each reader above answering the same before and after a check-out; [`test_the_public_map.py`](../../../back-end/tests/test_the_public_map.py) holds the map's answer to the same bytes; [the real-MongoDB suite](../testing/real-mongo-suite.md#one-record-per-vendors-day) races 20 check-outs and 20 undos over a record stored with no check-out fields.
 
 **A check-in, a check-out or the undo of either holds the market's phase** (T318, T496).

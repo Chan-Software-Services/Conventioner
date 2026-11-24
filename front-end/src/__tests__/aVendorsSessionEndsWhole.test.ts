@@ -112,6 +112,8 @@ function expectNobodySignedIn(store: ReturnType<typeof useApplicationStore>) {
   expect(store.application).toBeNull();
   expect(store.error).toBeNull();
   expect(store.draft).toBeNull();
+  expect(store.formVersion).toBeNull();
+  expect(store.formChanged).toBe(false);
   expect(sessionStorage.getItem(SESSION_KEY)).toBeNull();
   expect(sessionStorage.getItem(DRAFT_KEY)).toBeNull();
 }
@@ -177,6 +179,7 @@ describe('a request answering after the vendor signed out', () => {
       essentialOptions: EMPTY_ESSENTIAL_OPTIONS,
       failed: false,
       notFound: false,
+      formVersion: 'version-1',
     });
 
     const reading = store.loadVendorRead();
@@ -185,6 +188,53 @@ describe('a request answering after the vendor signed out', () => {
 
     expect(await reading).toEqual({ failed: false, notFound: false });
     expect(store.formFields).toEqual([]);
+    expectNobodySignedIn(store);
+  });
+
+  it('keeps neither the form version it read nor a refusal for a changed form', async () => {
+    const store = anaSignedIn();
+    store.page = {
+      marketName: 'Spring Market',
+      intakeMode: IntakeMode.Form,
+      phase: MarketPhase.Applications,
+      takesApplications: true,
+      resultsPublished: false,
+      marketDates: ['2099-08-01'],
+      ended: false,
+      rememberUntil: '2099-08-01',
+      mapOpen: false,
+    };
+    applicantApi.fetchApplicantApplication.mockResolvedValue(null);
+    fetchPublicApplicationForm.mockResolvedValue({
+      fields: [],
+      essentialOptions: EMPTY_ESSENTIAL_OPTIONS,
+      failed: false,
+      notFound: false,
+      formVersion: 'version-1',
+    });
+    const config = { headers: {} } as InternalAxiosRequestConfig;
+    applicantApi.saveApplicantApplication.mockRejectedValue(
+      new AxiosError(
+        'Request failed',
+        'ERR_BAD_REQUEST',
+        config,
+        {},
+        {
+          data: { error: 'This form changed since you opened it.', code: 'form_changed' },
+          status: 409,
+          statusText: 'CONFLICT',
+          headers: {},
+          config,
+        },
+      ),
+    );
+
+    await store.loadVendorRead();
+    expect(store.formVersion).toBe('version-1');
+    expect(await store.saveApplication({ business_name: 'Fixture Goods' })).toBeNull();
+    expect(store.formChanged).toBe(true);
+    await anaSignsOut(store);
+
     expectNobodySignedIn(store);
   });
 
@@ -330,11 +380,9 @@ describe('a sign-in renewed from a remembered device', () => {
     expect(await store.saveApplication({ business_name: "Ana's answers" })).toBeNull();
 
     expect(applicantApi.saveApplicantApplication).toHaveBeenCalledTimes(1);
-    expect(applicantApi.saveApplicantApplication).not.toHaveBeenCalledWith(
-      'spring-market',
-      'ben-remembered',
-      expect.anything(),
-    );
+    // Read by the token alone, so the assertion holds whatever else the save carries.
+    const tokensSent = applicantApi.saveApplicantApplication.mock.calls.map((call) => call[1]);
+    expect(tokensSent).not.toContain('ben-remembered');
     expect(store.token).toBeNull();
     expect(store.applicantEmail).toBeNull();
     expect(sessionStorage.getItem(SESSION_KEY)).toBeNull();
