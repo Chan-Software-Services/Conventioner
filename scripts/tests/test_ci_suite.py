@@ -670,6 +670,7 @@ E2E_STACK = ROOT / ".github" / "actions" / "e2e-stack" / "action.yml"
 JOBS = [
     "suite",
     "backend",
+    "python-advisories",
     "knowledge-graph",
     "real-data-and-workflows",
     "frontend-unit",
