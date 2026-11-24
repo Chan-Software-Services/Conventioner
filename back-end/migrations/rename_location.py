@@ -49,8 +49,10 @@ either order.
 leaves it. Three kinds of entry in the ``history`` collection name a location as it was called when
 they were recorded: ``floorplan``, each save of a layout; ``floorplan_removed``, a layout removed
 with its location; and ``plan``, a change on Market Setup. So after the rename an entry of a
-layout's save still names its location by the old name. The script counts the market's
-``floorplan`` and ``floorplan_removed`` entries naming the location and prints the two counts.
+layout's save still names its location by the old name, which, unlike a swap's, names no other
+location: ``history_follows_location_swap.py``, which renames the lines after a swap, keeps a
+line's name through a rename. The script counts the market's ``floorplan`` and
+``floorplan_removed`` entries naming the location and prints the two counts.
 
 It refuses, writing nothing and exiting 1, when: the market is not found, is being deleted, does
 not parse, has no plan or is a draft (rename it on Market Setup); the location is not found, or

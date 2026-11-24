@@ -29,9 +29,9 @@ them, and every section's row when a section's copy changed. Manage market reads
 Market Setup: locations and sections" when either location holds a section, and "locations" alone
 when neither does. A dry run records none, and a second run records a second entry.
 
-**The market's earlier history also holds the names, as text, and is left as written**, by the
-owner's choice, for a later fix. Three kinds of entry in the ``history`` collection name a location
-as it was called when they were recorded:
+**The market's earlier history also holds the names, as text, and this script leaves it as
+written.** Three kinds of entry in the ``history`` collection name a location as it was called
+when they were recorded:
 
 - ``floorplan``, each save of a layout, whose ``subject.location`` Manage market reads into its
   sentence;
@@ -40,8 +40,11 @@ as it was called when they were recorded:
   after.
 
 So after the swap an entry of a layout's save still names its location by the old name, which now
-means the other place. The script counts the market's ``floorplan`` and ``floorplan_removed``
-entries naming either location and prints the two counts, so the operator knows they are there.
+means the other place, until ``history_follows_location_swap.py``, beside this script, is run
+after it: that one renames the first two kinds, so each names the place it was about, and leaves
+the ``plan`` entries as written. This script counts the market's ``floorplan`` and
+``floorplan_removed`` entries naming either location and prints the two counts, so the operator
+knows they are there.
 
 It refuses, writing nothing and exiting 1, when: the market is not found, is being deleted, does
 not parse, has no plan or is a draft (rename it on Market Setup); either location is not found, or
@@ -347,7 +350,8 @@ def swap(market_id: str, first: str, second: str, db=None, dry_run: bool = False
     saved, removed = _history_entries_naming(
         db[HISTORY_COLLECTION], market_id, {before for _id, before, _after in judgment.locations})
     print(f"  - the market's history: {saved} layout save(s) and {removed} layout removal(s) name "
-          "either location as it was called then, and stay as written")
+          "either location as it was called then: history_follows_location_swap.py renames them "
+          "after a run")
     print(f"  - the market's history: {_runs_recorded(db[HISTORY_COLLECTION], market_id)} run(s) "
           "of this script recorded so far")
 
