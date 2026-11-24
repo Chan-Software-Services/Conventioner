@@ -189,7 +189,12 @@ beforeEach(() => {
   endRememberedSignIn.mockReset();
   endRememberedSignIn.mockResolvedValue(undefined);
   fetchPublicApplicationForm.mockReset();
-  fetchPublicApplicationForm.mockResolvedValue({
+  fetchPublicApplicationForm.mockResolvedValue(formRead('version-1'));
+});
+
+/** The form read as the server answers it: the one question, and the version it was drawn at. */
+function formRead(formVersion: string | null) {
+  return {
     marketName: 'Spring Market',
     fields: [BUSINESS_NAME],
     essentialOptions: EMPTY_ESSENTIAL_OPTIONS,
@@ -197,8 +202,9 @@ beforeEach(() => {
     isOpen: true,
     failed: false,
     notFound: false,
-  });
-});
+    formVersion,
+  };
+}
 
 describe('what the application section shows (ADR 0022)', () => {
   const form = { intakeMode: IntakeMode.Form };
@@ -648,9 +654,10 @@ describe('the page, signed in', () => {
 });
 
 /** A refusal as the server sends one: a status and its sentence. */
-function refusal(status: number, error: string): AxiosError {
+function refusal(status: number, error: string, code?: string): AxiosError {
   const config = { headers: {} } as InternalAxiosRequestConfig;
-  const response = { data: { error }, status, statusText: '', headers: {}, config };
+  const data = code === undefined ? { error } : { error, code };
+  const response = { data, status, statusText: '', headers: {}, config };
   return new AxiosError('Request failed', 'ERR_BAD_REQUEST', config, {}, response);
 }
 
@@ -772,6 +779,7 @@ describe('applying and editing on the page', () => {
         essential_full_name: 'Ada Newcomer',
         business_name: 'Newcomer Prints',
       }),
+      'version-1',
     );
     expect(has(wrapper, 'apply-form')).toBe(false);
     expect(wrapper.get('[data-testid="vendor-page-status"]').text()).toContain('Submitted');
@@ -823,6 +831,7 @@ describe('applying and editing on the page', () => {
       'spring-market',
       'a-token',
       expect.objectContaining({ business_name: 'Fixture Pottery' }),
+      'version-1',
     );
     expect(wrapper.get('[data-testid="vendor-page-answer-business_name"]').text()).toContain(
       'Fixture Pottery',
@@ -994,6 +1003,7 @@ describe('applying and editing on the page', () => {
         essential_full_name: 'Ada Newcomer',
         business_name: 'Newcomer Prints',
       }),
+      'version-1',
     );
     expect(has(wrapper, 'apply-form')).toBe(false);
     expect(wrapper.get('[data-testid="vendor-page-answers"]').text()).toContain('Newcomer Prints');
@@ -1037,11 +1047,12 @@ function keepDraftFor(
     marketSlug = 'spring-market',
     applicantEmail = 'vendor@example.com',
     saveAfterSignIn = false,
+    formVersion = undefined as string | null | undefined,
   } = {},
 ) {
   sessionStorage.setItem(
     DRAFT_KEY,
-    JSON.stringify({ marketSlug, applicantEmail, formData, saveAfterSignIn }),
+    JSON.stringify({ marketSlug, applicantEmail, formData, saveAfterSignIn, formVersion }),
   );
 }
 
@@ -1070,6 +1081,7 @@ describe('answers typed and not saved survive a reload (T271)', () => {
         business_name: 'Newcomer Prints',
       }),
       saveAfterSignIn: false,
+      formVersion: null,
     });
 
     await wrapper.get('[data-testid="apply-essential-full-name-input"]').setValue('');
@@ -1326,6 +1338,7 @@ describe('a save that met an ended sign-in is sent after the next sign-in (T271)
       applicantEmail: 'vendor@example.com',
       formData: expect.objectContaining(ANSWERS),
       saveAfterSignIn: true,
+      formVersion: 'version-1',
     });
     expect(wrapper.get('[data-testid="vendor-sign-in-error"]').text()).toBe(AFTER_SIGN_IN);
   });
@@ -1369,6 +1382,7 @@ describe('a save that met an ended sign-in is sent after the next sign-in (T271)
       'spring-market',
       'a-renewed-token',
       expect.objectContaining(ANSWERS),
+      'version-1',
     );
     expect(has(wrapper, 'apply-form')).toBe(false);
     expect(keptDraft()).toBeNull();
@@ -1376,7 +1390,7 @@ describe('a save that met an ended sign-in is sent after the next sign-in (T271)
 
   it('opens the form on them after the sign-in and sends the save once by itself', async () => {
     sessionStorage.removeItem(SESSION_KEY);
-    keepDraftFor(ANSWERS, { saveAfterSignIn: true });
+    keepDraftFor(ANSWERS, { saveAfterSignIn: true, formVersion: 'version-1' });
     fetchVendorPage.mockResolvedValue(pageOf());
     fetchApplicantApplication.mockResolvedValue(null);
     saveApplicantApplication.mockImplementation(
@@ -1400,6 +1414,7 @@ describe('a save that met an ended sign-in is sent after the next sign-in (T271)
       'spring-market',
       'a-token',
       expect.objectContaining(ANSWERS),
+      'version-1',
     );
     expect(has(wrapper, 'apply-form')).toBe(false);
     expect(wrapper.get('[data-testid="vendor-page-answers"]').text()).toContain('Newcomer Prints');
@@ -1470,6 +1485,143 @@ describe('a save that met an ended sign-in is sent after the next sign-in (T271)
     expect(wrapper.get('[data-testid="vendor-page-info"]').text()).toContain(
       'You have not applied to this market yet.',
     );
+  });
+});
+
+describe('a save from a form that changed since the page read it (T507)', () => {
+  beforeEach(signIn);
+
+  const FORM_CHANGED = 'This form changed since you opened it. Reload to continue.';
+  const ANSWERS = { essential_full_name: 'Ada Newcomer', business_name: 'Newcomer Prints' };
+
+  async function saveRefused(...refusals: AxiosError[]) {
+    fetchVendorPage.mockResolvedValue(pageOf());
+    fetchApplicantApplication.mockResolvedValue(null);
+    for (const refused of refusals) saveApplicantApplication.mockRejectedValueOnce(refused);
+    keepDraftFor(ANSWERS);
+    const wrapper = await mountPage();
+    for (let i = 0; i < refusals.length; i += 1) {
+      await wrapper.get('[data-testid="apply-form"]').trigger('submit');
+      await flushPromises();
+    }
+    return wrapper;
+  }
+
+  it('sends the version of the form the page read with the answers', async () => {
+    fetchPublicApplicationForm.mockResolvedValue(formRead('version-7'));
+    const wrapper = await saveRefused(refusal(403, 'Applications are closed for this market.'));
+
+    expect(has(wrapper, 'apply-form')).toBe(true);
+    expect(saveApplicantApplication).toHaveBeenCalledWith(
+      'spring-market',
+      'a-token',
+      expect.objectContaining(ANSWERS),
+      'version-7',
+    );
+  });
+
+  it('says the form changed, with Reload beside it, which reloads the page', async () => {
+    const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => {});
+    try {
+      const wrapper = await saveRefused(refusal(409, FORM_CHANGED, 'form_changed'));
+
+      const box = wrapper.get('[data-testid="apply-error"]');
+      expect(box.attributes('role')).toBe('alert');
+      expect(box.text()).toContain(FORM_CHANGED);
+      const button = box.get<HTMLButtonElement>('[data-testid="apply-reload-button"]');
+      expect(button.text()).toBe('Reload');
+      expect(button.attributes('type')).toBe('button');
+      // Every answer typed stays kept for the reload to open the form on.
+      expect(keptDraft()).toMatchObject({ formData: ANSWERS });
+      expect(valueOf(wrapper, 'apply-input-business_name')).toBe('Newcomer Prints');
+
+      await button.trigger('click');
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(saveApplicantApplication).toHaveBeenCalledTimes(1);
+    } finally {
+      reload.mockRestore();
+    }
+  });
+
+  it.each([
+    ['a closed market', refusal(403, 'Applications are closed for this market.')],
+    ['another 409', refusal(409, 'Something else changed.', 'market_changed')],
+    ['a 409 with no code', refusal(409, FORM_CHANGED)],
+  ])('offers no Reload for %s', async (_name, refused) => {
+    const wrapper = await saveRefused(refused);
+
+    expect(has(wrapper, 'apply-error')).toBe(true);
+    expect(has(wrapper, 'apply-reload-button')).toBe(false);
+  });
+
+  it('takes Reload away once the next save is refused for another reason', async () => {
+    const wrapper = await saveRefused(
+      refusal(409, FORM_CHANGED, 'form_changed'),
+      refusal(403, 'Applications are closed for this market.'),
+    );
+
+    expect(wrapper.get('[data-testid="apply-error"]').text()).toBe(
+      'Applications are closed for this market.',
+    );
+    expect(has(wrapper, 'apply-reload-button')).toBe(false);
+  });
+
+  it('takes Reload away with the sentence, whatever else replaces it', async () => {
+    const wrapper = await saveRefused(refusal(409, FORM_CHANGED, 'form_changed'));
+    expect(has(wrapper, 'apply-reload-button')).toBe(true);
+
+    // A read of the vendor's application that fails says so in the same box, without Reload.
+    fetchApplicantApplication.mockRejectedValue(new Error('Network Error'));
+    await useApplicationStore().fetchApplication();
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="apply-error"]').text()).not.toContain(FORM_CHANGED);
+    expect(has(wrapper, 'apply-reload-button')).toBe(false);
+  });
+
+  it('sends the save after a sign-in with the version its answers were first sent with', async () => {
+    fetchVendorPage.mockResolvedValue(pageOf());
+    fetchApplicantApplication.mockResolvedValue(null);
+    saveApplicantApplication.mockRejectedValueOnce(refusal(401, ''));
+    saveApplicantApplication.mockRejectedValueOnce(refusal(409, FORM_CHANGED, 'form_changed'));
+    requestLoginCode.mockResolvedValue({ message: "We've sent a code to this address." });
+    verifyLoginCode.mockResolvedValue({
+      success: true,
+      marketId: 'market-1',
+      applicantEmail: 'vendor@example.com',
+      token: 'a-new-token',
+    });
+    keepDraftFor(ANSWERS);
+    const wrapper = await mountPage();
+
+    await wrapper.get('[data-testid="apply-form"]').trigger('submit');
+    await flushPromises();
+    // The form changed while the vendor signed in again: the page reads the new one.
+    fetchPublicApplicationForm.mockResolvedValue(formRead('version-2'));
+    await signInWithACode(wrapper);
+
+    expect(saveApplicantApplication).toHaveBeenCalledTimes(2);
+    expect(saveApplicantApplication).toHaveBeenLastCalledWith(
+      'spring-market',
+      'a-new-token',
+      expect.objectContaining(ANSWERS),
+      'version-1',
+    );
+    expect(wrapper.get('[data-testid="apply-error"]').text()).toContain(FORM_CHANGED);
+    expect(has(wrapper, 'apply-reload-button')).toBe(true);
+    expect(keptDraft()).toMatchObject({ formData: ANSWERS, saveAfterSignIn: false });
+  });
+
+  it('sends a save kept before the version existed with none, for the server to refuse', async () => {
+    keepDraftFor(ANSWERS, { saveAfterSignIn: true });
+    fetchVendorPage.mockResolvedValue(pageOf());
+    fetchApplicantApplication.mockResolvedValue(null);
+    saveApplicantApplication.mockRejectedValue(refusal(409, FORM_CHANGED, 'form_changed'));
+    const wrapper = await mountPage();
+
+    expect(saveApplicantApplication).toHaveBeenCalledTimes(1);
+    expect(saveApplicantApplication.mock.calls[0][3]).toBeNull();
+    expect(has(wrapper, 'apply-reload-button')).toBe(true);
   });
 });
 

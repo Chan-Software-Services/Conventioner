@@ -10,7 +10,9 @@ once take different turns.
 
 import pytest
 
-from conftest import let_in, sessions_load_through_get_user, stored_market
+from conftest import (
+    applicant_form_version_now, let_in, sessions_load_through_get_user, stored_market,
+)
 from test_choosing_reviewers_deals_the_open_applications import (
     ADMIN, ANA, BEN, CAT, EMAILS, MARKET, PEOPLE, ROLES, Markets, _account, _application, _choose,
     _client, _reviewers,
@@ -76,7 +78,8 @@ def _submit(world, vendor, **answers):
     world.vendor = vendor
     response = app_module.app.test_client().put(
         "/public/markets/test-market/applicant/application",
-        json={"formData": {**VALID_ANSWERS, "business_name": vendor, **answers}})
+        json={"formData": {**VALID_ANSWERS, "business_name": vendor, **answers},
+              "formVersion": applicant_form_version_now("test-market")})
     assert response.status_code == 200, response.get_json()
     return response
 

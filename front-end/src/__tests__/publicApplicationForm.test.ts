@@ -28,6 +28,28 @@ describe('fetchPublicApplicationForm', () => {
     expect(form.marketName).toBe('Spring Market');
   });
 
+  it('answers the form version the read served', async () => {
+    get.mockResolvedValue({
+      data: { application_form: { fields: [] }, is_open: true, formVersion: 'version-1' },
+    });
+
+    expect((await fetchPublicApplicationForm('spring-market')).formVersion).toBe('version-1');
+  });
+
+  it('answers no form version when the read served none, or one that is not a string', async () => {
+    get.mockResolvedValueOnce({ data: { application_form: { fields: [] }, is_open: true } });
+    get.mockResolvedValueOnce({ data: { application_form: { fields: [] }, formVersion: 7 } });
+
+    expect((await fetchPublicApplicationForm('spring-market')).formVersion).toBeNull();
+    expect((await fetchPublicApplicationForm('spring-market')).formVersion).toBeNull();
+  });
+
+  it('answers no form version when the read failed', async () => {
+    get.mockRejectedValue(new Error('Network Error'));
+
+    expect((await fetchPublicApplicationForm('spring-market')).formVersion).toBeNull();
+  });
+
   it('reports a 404 as missing', async () => {
     // What both an unknown slug and a market whose vendors are imported answer.
     get.mockRejectedValue(httpError(404));

@@ -123,6 +123,7 @@ sources:
   - T318
   - T335
   - T422
+  - T507
 ---
 
 # An exception never reaches a client
@@ -238,7 +239,7 @@ A builtin `PermissionError` is no longer answered 403 with its text: nothing of 
 So do the vendor export's download and its preview: neither catches anything, and a filter value it cannot read or a column the market does not offer answers its `ExportInvalid`, 400, while a filter key it does not know is ignored.
 
 So do the applicant, review, import and door routes: every public route an applicant or a vendor at the door calls, the application list, the review's verdicts, selections and their undo, next card, claims and follow-up owners, updating a vendor's info, the [CSV start](../modules/csv-proposal-and-start.md)'s proposal and confirm, the [application import](../modules/csv-import.md)'s inspect, preview and import, Publish results, and [attendance and the door](../modules/attendance-and-door.md).
-None catches anything, and each keeps its literal answers: the applicant's expired session 401, a gated market's answer as absent (decided in the applicants API, unchanged), `Invalid status: <status>`, `csvContent is required`, the import's phase 409 with its `phase`, and the permission 403s the routes ask themselves; a review write once the review is closed answers 403 with why it closed and what to do instead ([what a closed review says](../../business/rules/verdicts-settle-on-entering-assignment.md#what-a-closed-review-says)).
+None catches anything, and each keeps its literal answers: the applicant's expired session 401, a gated market's answer as absent (decided in the applicants API, unchanged), a vendor's save from a page drawn from an older form, 409 with `code: "form_changed"` (`save_applicant_application`), `Invalid status: <status>`, `csvContent is required`, the import's phase 409 with its `phase`, and the permission 403s the routes ask themselves; a review write once the review is closed answers 403 with why it closed and what to do instead ([what a closed review says](../../business/rules/verdicts-settle-on-entering-assignment.md#what-a-closed-review-says)).
 A status a request names is read by `_named_status`, which names none for anything but a status's own string, as `_named_phase` does for a phase.
 A follow-up owner the market does not offer answers its `BadRequestError`, 400; `confirm` in [`back-end/csv_start.py`](../../../back-end/csv_start.py) lets a `ConfirmRefused`, a locked form and a refused plan or form reach the handler as raised; a door write on a market that does not exist, is archived or cannot be read answers what the change loader raises.
 Two lines these routes reach are kept free of an applicant's address for the 500 log: an application that keeps losing its upsert race (`_upsert`, under `arrive` and `add`, in [`back-end/application_status.py`](../../../back-end/application_status.py)) is named by its market, and an application document that cannot be parsed (`list_market_applications` in [`back-end/api/applicants.py`](../../../back-end/api/applicants.py)) logs `parse_failure_detail`, never its answers.
@@ -337,6 +338,9 @@ Sign out everywhere (`signOutEverywhere`, [the app bar](../modules/app-bar.md#si
 
 **A write over a market that changed** answers `MarketChanged`'s 409, which `isMarketChanged` in `api.ts` tells apart by its `code`.
 A second response interceptor, `installMarketChanged` in [`front-end/src/stores/market.ts`](../../../front-end/src/stores/market.ts), installed from `main.ts` beside the session's, re-reads the open market on it, and the screen's own catch shows the server's sentence through `getApiErrorMessage`, as any refusal's ([the market write](../modules/market-write.md#on-the-screen)).
+
+**A vendor's save from a page drawn from an older form** answers 409 with `code: "form_changed"`, which `isFormChanged` in `api.ts` tells apart by its `code`; no interceptor reads it, since it is never `market_changed` and re-reads nothing.
+The vendor page's store marks it (`formChanged`), and the form shows the server's sentence where any refused save's shows, with Reload beside it ([a vendor's save is held to the form they saw](../../business/rules/a-vendors-save-is-held-to-the-form-they-saw.md#on-the-page)).
 
 **The shell's session probe at load ends a session only on an answer that says so.**
 No answer, or a 5xx, says nothing of the session, so `keepsTheSession` keeps the stored user and the page, whose own read says what went wrong; any other failure goes to sign in carrying the page, with `ended=1` on a 401.
