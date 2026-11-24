@@ -112,9 +112,11 @@ def test_the_table_holds_every_limit_in_use_once():
         "resume:caller": (300, QUARTER),
         "check-in:address": (10, QUARTER),
         "password:caller": (50, QUARTER),
-        "password:address": (10, QUARTER),
+        "password:caller-address": (10, QUARTER),
+        "password:address-ceiling": (50, QUARTER),
         "organizer-code:caller": (60, QUARTER),
-        "organizer-code:address": (10, QUARTER),
+        "organizer-code:caller-address": (10, QUARTER),
+        "organizer-code:address-ceiling": (50, QUARTER),
         "organizer-code-request:caller": (30, QUARTER),
         "organizer-code-request:caller-address": (5, QUARTER),
         "organizer-code-request:address-hour": (20, HOUR),
@@ -204,22 +206,22 @@ def test_the_applicants_and_the_check_ins_refusals_keep_their_words(retry_after,
             {"error": f"Too many check-in attempts. Please try again in {wait}."}).get_data()
 
 
-def test_the_organizers_password_sign_in_is_limited_per_address_and_per_caller():
-    assert sign_in_limits.PASSWORD_PER_ADDRESS == SignInLimit(
-        "password:address", attempts=10, window=timedelta(minutes=15))
-    assert sign_in_limits.PASSWORD_PER_CALLER == SignInLimit(
-        "password:caller", attempts=50, window=timedelta(minutes=15))
-    assert {sign_in_limits.PASSWORD_PER_ADDRESS, sign_in_limits.PASSWORD_PER_CALLER} <= set(
-        sign_in_limits.LIMITS)
-
-
-def test_the_organizers_code_sign_in_is_limited_per_address_and_per_caller():
-    assert sign_in_limits.ORGANIZER_CODE_PER_ADDRESS == SignInLimit(
-        "organizer-code:address", attempts=10, window=timedelta(minutes=15))
-    assert sign_in_limits.ORGANIZER_CODE_PER_CALLER == SignInLimit(
-        "organizer-code:caller", attempts=60, window=timedelta(minutes=15))
-    assert {sign_in_limits.ORGANIZER_CODE_PER_ADDRESS,
-            sign_in_limits.ORGANIZER_CODE_PER_CALLER} <= set(sign_in_limits.LIMITS)
+@pytest.mark.parametrize("prefix, name, per_caller", [
+    ("PASSWORD", "password", 50),
+    ("ORGANIZER_CODE", "organizer-code", 60),
+])
+def test_each_organizer_sign_in_is_limited_per_caller_and_address_and_per_address(
+    prefix, name, per_caller,
+):
+    limits = [getattr(sign_in_limits, f"{prefix}_{suffix}") for suffix in (
+        "PER_CALLER", "PER_CALLER_AND_ADDRESS", "PER_ADDRESS_CEILING")]
+    assert limits == [
+        SignInLimit(f"{name}:caller", attempts=per_caller, window=QUARTER),
+        SignInLimit(f"{name}:caller-address", attempts=10, window=QUARTER),
+        SignInLimit(f"{name}:address-ceiling", attempts=50, window=QUARTER),
+    ]
+    assert set(limits) <= set(sign_in_limits.LIMITS)
+    assert not hasattr(sign_in_limits, f"{prefix}_PER_ADDRESS")
 
 
 @pytest.mark.parametrize("prefix, name", [

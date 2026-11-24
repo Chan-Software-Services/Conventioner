@@ -1,7 +1,6 @@
 import secrets
 import time
 import uuid
-from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Optional, Tuple
 from flask import request, jsonify, session
 from flask_login import UserMixin
@@ -186,50 +185,29 @@ def _now() -> float:
     return time.time()
 
 
-@dataclass(frozen=True)
-class _Bounds:
-    """How a sign-in that checks a secret is bounded (``sign_in_limits``): a limit per caller and
-    per address, and the sentence its refusal says under the key the route's other answers use.
-
-    Every bounded route keeps one order: the caller is counted before the body is read, and the
-    normalized address before any account is looked up, so a refusal is the same for every address
-    and never depends on whether a password or a code was right. A route whose try signed in takes
-    both counts back with the ``now`` it counted them with.
-    """
-
-    per_caller: sign_in_limits.SignInLimit
-    per_address: sign_in_limits.SignInLimit
-    sentence: str
-    key: str
-
-    def caller_refusal(self, now: datetime) -> Optional[Tuple[Any, int]]:
-        """The 429 when this caller is past its limit, else None; counts the try either way."""
-        return self._refusal(self.per_caller, sign_in_limits.caller(), now)
-
-    def address_refusal(self, email: str, now: datetime) -> Optional[Tuple[Any, int]]:
-        """The 429 when this address is past its limit, else None; counts the try either way."""
-        return self._refusal(self.per_address, email, now)
-
-    def take_back(self, email: str, now: datetime) -> None:
-        """Take back a try that signed in, from the caller's count and the address's."""
-        sign_in_limits.take_back_attempt(self.per_caller, sign_in_limits.caller(), now)
-        sign_in_limits.take_back_attempt(self.per_address, email, now)
-
-    def _refusal(self, limit, subject: str, now: datetime):
-        retry_after = sign_in_limits.count_attempt(limit, subject, now)
-        return sign_in_limits.too_many(retry_after, self.sentence, key=self.key)
-
-
-_PASSWORD_SIGN_IN = _Bounds(
-    sign_in_limits.PASSWORD_PER_CALLER, sign_in_limits.PASSWORD_PER_ADDRESS,
-    SIGN_IN_TOO_MANY, "message",
+# The sign-ins that check a secret (``sign_in_limits.SecretBounds``): each counted per caller, per
+# caller and address, and per address alone, past which it asks the human check (action
+# ``sign-in``), with limits of its own.
+_PASSWORD_SIGN_IN = sign_in_limits.SecretBounds(
+    sign_in_limits.PASSWORD_PER_CALLER,
+    sign_in_limits.PASSWORD_PER_CALLER_AND_ADDRESS,
+    sign_in_limits.PASSWORD_PER_ADDRESS_CEILING,
+    captcha.SIGN_IN,
+)
+_CODE_SIGN_IN = sign_in_limits.SecretBounds(
+    sign_in_limits.ORGANIZER_CODE_PER_CALLER,
+    sign_in_limits.ORGANIZER_CODE_PER_CALLER_AND_ADDRESS,
+    sign_in_limits.ORGANIZER_CODE_PER_ADDRESS_CEILING,
+    captcha.SIGN_IN,
 )
 
 
-_CODE_SIGN_IN = _Bounds(
-    sign_in_limits.ORGANIZER_CODE_PER_CALLER, sign_in_limits.ORGANIZER_CODE_PER_ADDRESS,
-    SIGN_IN_TOO_MANY, "msg",
-)
+def _sign_in_refused(
+    refusal: Optional[sign_in_limits.Refusal], key: str,
+) -> Optional[Tuple[Any, int]]:
+    """A sign-in's answer for a refusal, ``SIGN_IN_TOO_MANY`` or the human check's 403 under the
+    route's ``key``, or None."""
+    return sign_in_limits.answer(refusal, SIGN_IN_TOO_MANY, key=key)
 
 
 # The requests that mail a code or a link (``sign_in_limits.MailBounds``): each counted per caller,
@@ -487,13 +465,14 @@ def _insert_unless_taken(user_doc: dict):
 
 
 def login(bcrypt, login_user):
-    """The password sign-in, bounded per caller and per address (``_Bounds``).
+    """The password sign-in, bounded per caller, per caller and address, and per address alone,
+    past which it asks the human check (``_PASSWORD_SIGN_IN``), all before the account is looked up.
 
     A right password takes its try back, whether it signs in or answers that the address needs
     verifying first, so only wrong passwords pile up.
     """
     now = _limit_clock()
-    refused = _PASSWORD_SIGN_IN.caller_refusal(now)
+    refused = _sign_in_refused(_PASSWORD_SIGN_IN.caller_refusal(now), "message")
     if refused:
         return refused
 
@@ -504,13 +483,14 @@ def login(bcrypt, login_user):
     if not email or not password:
         return jsonify({"message": "Email and password required"}), 400
 
-    refused = _PASSWORD_SIGN_IN.address_refusal(email, now)
+    refused = _sign_in_refused(_PASSWORD_SIGN_IN.before_the_secret(
+        email, string_field(data, "captcha_token"), now), "message")
     if refused:
         return refused
 
     user_doc = users_collection.find_one({"email": email})
     if _password_matches(bcrypt, user_doc, password):
-        _PASSWORD_SIGN_IN.take_back(email, now)
+        _PASSWORD_SIGN_IN.signed_in(email, now)
         if not user_doc.get("email_verified", False):
             return jsonify({"message": SIGN_IN_VERIFY_FIRST}), 403
 
@@ -826,7 +806,7 @@ def request_otp():
 
 
 def login_with_otp(login_user):
-    """The code sign-in, bounded per caller and per address (``_Bounds``) as the password is.
+    """The code sign-in, bounded as the password is (``_CODE_SIGN_IN``).
 
     A try is counted on the code in the same write that finds it (``account_secrets.try_code``),
     so no more than ``account_secrets.CODE_TRIES`` tries ever reach one code, even when they arrive
@@ -834,7 +814,7 @@ def login_with_otp(login_user):
     verifying first.
     """
     now = _limit_clock()
-    refused = _CODE_SIGN_IN.caller_refusal(now)
+    refused = _sign_in_refused(_CODE_SIGN_IN.caller_refusal(now), "msg")
     if refused:
         return refused
 
@@ -845,7 +825,8 @@ def login_with_otp(login_user):
     if not email or not otp:
         return jsonify({"msg": "Enter your email address and the code."}), 400
 
-    refused = _CODE_SIGN_IN.address_refusal(email, now)
+    refused = _sign_in_refused(_CODE_SIGN_IN.before_the_secret(
+        email, string_field(data, "captcha_token"), now), "msg")
     if refused:
         return refused
 
@@ -858,14 +839,14 @@ def login_with_otp(login_user):
 
     user_doc = tried.account
     if not user_doc.get("email_verified", False):
-        _CODE_SIGN_IN.take_back(email, now)
+        _CODE_SIGN_IN.signed_in(email, now)
         return jsonify({"msg": SIGN_IN_VERIFY_FIRST}), 403
 
     # Used only if it is still this code: of two right tries, one signs in.
     if not account_secrets.use_code(users_collection, user_doc):
         return jsonify({"msg": SIGN_IN_WRONG_CODE}), 401
 
-    _CODE_SIGN_IN.take_back(email, now)
+    _CODE_SIGN_IN.signed_in(email, now)
     return _sign_in(login_user, user_doc, flag_field(data, "remember"))
 
 

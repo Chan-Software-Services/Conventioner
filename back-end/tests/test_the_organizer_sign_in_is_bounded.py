@@ -1,9 +1,11 @@
 """The organizer's sign-in is bounded like the applicant's (``sign_in_limits``).
 
-Every try is counted per address and per caller before the account is looked up, so a refusal is
-the same for an address with an account and without, and whether the password was right. A try
-that signs in takes its count back, so an organizer who signs in all day is never held back and
-only wrong tries pile up. A request that mails a code or a link is counted per caller and address
+Every try is counted per caller, per caller and address, and per address alone before the account
+is looked up, so a refusal is the same for an address with an account and without, and whether the
+password was right. Only a caller's own tries at an address refuse it with a wait; past the
+address's own count the sign-in asks the human check instead
+(``test_a_strangers_tries_shut_no_one_out.py``). A try that signs in takes its count back, so an
+organizer who signs in all day is never held back and only wrong tries pile up. A request that mails a code or a link is counted per caller and address
 and per address by the hour instead (``test_a_strangers_requests_use_up_no_ones.py``). A refusal
 answers 429 with a sentence that says the wait, under the key the route's other answers use, and
 ``Retry-After``.
@@ -180,25 +182,27 @@ REFUSED = (429, {"message": TOO_MANY_SIGN_INS}, "900")
 
 
 class TestThePasswordSignInIsBounded:
-    def test_past_ten_tries_at_an_address_the_sign_in_waits_alike_for_every_address(
+    def test_past_ten_tries_from_a_caller_at_an_address_it_waits_alike_for_every_address(
         self, client, users, clock,
     ):
         for email, caller in ((ACCOUNT_EMAIL, "198.51.100.1"), (NO_ACCOUNT_EMAIL, "198.51.100.2")):
             tries = [_sign_in(client, email, WRONG_PASSWORD, caller).status_code
-                     for _ in range(sign_in_limits.PASSWORD_PER_ADDRESS.attempts)]
+                     for _ in range(sign_in_limits.PASSWORD_PER_CALLER_AND_ADDRESS.attempts)]
             assert set(tries) == {401}
 
         refusals = [
             _answer(_sign_in(client, ACCOUNT_EMAIL, PASSWORD, "198.51.100.1")),
-            _answer(_sign_in(client, ACCOUNT_EMAIL, WRONG_PASSWORD, "198.51.100.3")),
+            _answer(_sign_in(client, ACCOUNT_EMAIL, WRONG_PASSWORD, "198.51.100.1")),
             _answer(_sign_in(client, NO_ACCOUNT_EMAIL, PASSWORD, "198.51.100.2")),
-            _answer(_sign_in(client, NO_ACCOUNT_EMAIL, WRONG_PASSWORD, "198.51.100.4")),
+            _answer(_sign_in(client, NO_ACCOUNT_EMAIL, WRONG_PASSWORD, "198.51.100.2")),
         ]
 
         assert refusals == [REFUSED] * 4
+        # Another caller's tries at the address are its own.
+        assert _sign_in(client, ACCOUNT_EMAIL, PASSWORD, "198.51.100.3").status_code == 200
 
     def test_the_address_is_counted_as_typed_or_not(self, client, users, clock):
-        for _ in range(sign_in_limits.PASSWORD_PER_ADDRESS.attempts):
+        for _ in range(sign_in_limits.PASSWORD_PER_CALLER_AND_ADDRESS.attempts):
             _sign_in(client, ACCOUNT_EMAIL.upper(), WRONG_PASSWORD)
 
         assert _answer(_sign_in(client, f" {ACCOUNT_EMAIL} ", PASSWORD)) == REFUSED
@@ -226,7 +230,7 @@ class TestThePasswordSignInIsBounded:
     def test_a_refused_sign_in_reads_no_account_and_checks_no_password(
         self, client, users, clock, password_checks,
     ):
-        for _ in range(sign_in_limits.PASSWORD_PER_ADDRESS.attempts):
+        for _ in range(sign_in_limits.PASSWORD_PER_CALLER_AND_ADDRESS.attempts):
             _sign_in(client, ACCOUNT_EMAIL, WRONG_PASSWORD)
         users.reads.clear()
         password_checks.clear()
@@ -236,7 +240,7 @@ class TestThePasswordSignInIsBounded:
         assert password_checks == []
 
     def test_the_next_window_starts_from_nothing(self, client, users, clock):
-        for _ in range(sign_in_limits.PASSWORD_PER_ADDRESS.attempts + 1):
+        for _ in range(sign_in_limits.PASSWORD_PER_CALLER_AND_ADDRESS.attempts + 1):
             _sign_in(client, ACCOUNT_EMAIL, WRONG_PASSWORD)
 
         clock["at"] = WINDOW_STARTS + timedelta(minutes=15)
@@ -244,7 +248,7 @@ class TestThePasswordSignInIsBounded:
         assert _sign_in(client, ACCOUNT_EMAIL, PASSWORD).status_code == 200
 
     def test_the_wait_is_what_is_left_of_the_window(self, client, users, clock):
-        for _ in range(sign_in_limits.PASSWORD_PER_ADDRESS.attempts):
+        for _ in range(sign_in_limits.PASSWORD_PER_CALLER_AND_ADDRESS.attempts):
             _sign_in(client, ACCOUNT_EMAIL, WRONG_PASSWORD)
 
         clock["at"] = WINDOW_STARTS + timedelta(minutes=14, seconds=1)
@@ -384,22 +388,24 @@ def code_comparisons(monkeypatch):
 
 
 class TestTheCodeSignInIsBounded:
-    def test_past_ten_tries_at_an_address_the_code_sign_in_waits_alike_for_every_address(
+    def test_past_ten_tries_from_a_caller_at_an_address_it_waits_alike_for_every_address(
         self, client, coded, clock,
     ):
         for email, caller in ((ACCOUNT_EMAIL, "198.51.100.1"), (NO_ACCOUNT_EMAIL, "198.51.100.2")):
-            for _ in range(sign_in_limits.ORGANIZER_CODE_PER_ADDRESS.attempts):
+            for _ in range(sign_in_limits.ORGANIZER_CODE_PER_CALLER_AND_ADDRESS.attempts):
                 _enter_code(client, email, WRONG_CODE, caller)
         _issue_code(coded, ACCOUNT_EMAIL)
 
         refusals = [
             _answer(_enter_code(client, ACCOUNT_EMAIL, CODE, "198.51.100.1")),
-            _answer(_enter_code(client, ACCOUNT_EMAIL, WRONG_CODE, "198.51.100.3")),
+            _answer(_enter_code(client, ACCOUNT_EMAIL, WRONG_CODE, "198.51.100.1")),
             _answer(_enter_code(client, NO_ACCOUNT_EMAIL, CODE, "198.51.100.2")),
-            _answer(_enter_code(client, NO_ACCOUNT_EMAIL, WRONG_CODE, "198.51.100.4")),
+            _answer(_enter_code(client, NO_ACCOUNT_EMAIL, WRONG_CODE, "198.51.100.2")),
         ]
 
         assert refusals == [CODE_REFUSED] * 4
+        # Another caller's tries at the address are its own.
+        assert _enter_code(client, ACCOUNT_EMAIL, CODE, "198.51.100.3").status_code == 200
 
     def test_past_sixty_tries_from_a_caller_every_address_waits_alike(self, client, coded, clock):
         # Six tries at each of ten addresses with no account: every address within its own limit.
@@ -422,7 +428,7 @@ class TestTheCodeSignInIsBounded:
     def test_a_refused_code_reads_no_account_and_compares_no_code(
         self, client, coded, clock, code_comparisons,
     ):
-        for _ in range(sign_in_limits.ORGANIZER_CODE_PER_ADDRESS.attempts):
+        for _ in range(sign_in_limits.ORGANIZER_CODE_PER_CALLER_AND_ADDRESS.attempts):
             _enter_code(client, NO_ACCOUNT_EMAIL, WRONG_CODE)
         coded.reads.clear()
 
@@ -431,7 +437,7 @@ class TestTheCodeSignInIsBounded:
         assert code_comparisons == []
 
     def test_the_next_window_starts_from_nothing(self, client, coded, clock):
-        for _ in range(sign_in_limits.ORGANIZER_CODE_PER_ADDRESS.attempts + 1):
+        for _ in range(sign_in_limits.ORGANIZER_CODE_PER_CALLER_AND_ADDRESS.attempts + 1):
             _enter_code(client, NO_ACCOUNT_EMAIL, WRONG_CODE)
 
         clock["at"] = WINDOW_STARTS + timedelta(minutes=15)

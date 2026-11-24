@@ -83,8 +83,9 @@ REQUEST_CODE_PER_ADDRESS_HOUR = SignInLimit(
 # together, ten a quarter of an hour, which bounds one caller's guesses at one address and leaves
 # every other caller's tries at it as they were. Per address alone it counts fifty, which only many
 # callers together reach, and past them it asks the human check rather than refusing, so the person
-# the address belongs to still signs in. The vendor's code is tried this way; a code's own five
-# tries are counted on the code, which these limits do not replace.
+# the address belongs to still signs in. The vendor's code, the organizer's password and the
+# organizer's code are each tried this way; a code's own five tries are counted on the code, which
+# these limits do not replace.
 VERIFY_CODE_PER_CALLER = SignInLimit("verify-code:caller", attempts=300, window=timedelta(minutes=15))
 VERIFY_CODE_PER_CALLER_AND_ADDRESS = SignInLimit(
     "verify-code:caller-address", attempts=10, window=timedelta(minutes=15))
@@ -99,20 +100,25 @@ RESUME_PER_CALLER = SignInLimit("resume:caller", attempts=300, window=timedelta(
 # it was dropped (T318); the counters it left under ``check-in:caller`` are never read and expire.
 # The sign-in for the market and a seat on a day in reach bound a guess with this limit.
 CHECK_IN_PER_ADDRESS = SignInLimit("check-in:address", attempts=10, window=timedelta(minutes=15))
-# An organizer's password sign-in (``api/users.py``, ``/login``): every try is counted before the
-# account is looked up, and a try that signs in, or proves the password of an account not yet
-# verified, is taken back, so an organizer who signs in all day is never held back and only wrong
-# passwords pile up. Organizers on a venue's shared address share the caller's count, so it is
-# far above what a few of them mistyping reach.
-PASSWORD_PER_ADDRESS = SignInLimit("password:address", attempts=10, window=timedelta(minutes=15))
+# An organizer's password sign-in (``api/users.py``, ``/login``) is a ``SecretBounds`` as the
+# vendor's code is: a try that signs in, or proves the password of an account not yet verified, is
+# taken back, so an organizer who signs in all day is never held back and only wrong passwords pile
+# up. Organizers on a venue's shared address share the caller's count, so it is far above what a few
+# of them mistyping reach.
 PASSWORD_PER_CALLER = SignInLimit("password:caller", attempts=50, window=timedelta(minutes=15))
+PASSWORD_PER_CALLER_AND_ADDRESS = SignInLimit(
+    "password:caller-address", attempts=10, window=timedelta(minutes=15))
+PASSWORD_PER_ADDRESS_CEILING = SignInLimit(
+    "password:address-ceiling", attempts=50, window=timedelta(minutes=15))
 # An organizer's code sign-in (``/login-otp``) is bounded as the password is, with a right code
-# taken back; its numbers are the applicant's verify-code's, with the caller's set as the door's.
-# A code's own five tries are counted on the account, which this limit does not replace.
-ORGANIZER_CODE_PER_ADDRESS = SignInLimit(
-    "organizer-code:address", attempts=10, window=timedelta(minutes=15))
+# taken back, and the caller's count set as the door's. A code's own five tries are counted on the
+# account, which these limits do not replace.
 ORGANIZER_CODE_PER_CALLER = SignInLimit(
     "organizer-code:caller", attempts=60, window=timedelta(minutes=15))
+ORGANIZER_CODE_PER_CALLER_AND_ADDRESS = SignInLimit(
+    "organizer-code:caller-address", attempts=10, window=timedelta(minutes=15))
+ORGANIZER_CODE_PER_ADDRESS_CEILING = SignInLimit(
+    "organizer-code:address-ceiling", attempts=50, window=timedelta(minutes=15))
 # The organizer's requests that send a mail (``api/users.py``): a sign-in code (``/request-otp``),
 # a reset link, a verification link, and the sign-up's own link. Every request counts and none is
 # taken back. A caller is allowed thirty for organizers who share a venue's address; the pair and
@@ -149,10 +155,12 @@ LIMITS = (
     VERIFY_CODE_PER_ADDRESS_CEILING,
     RESUME_PER_CALLER,
     CHECK_IN_PER_ADDRESS,
-    PASSWORD_PER_ADDRESS,
     PASSWORD_PER_CALLER,
-    ORGANIZER_CODE_PER_ADDRESS,
+    PASSWORD_PER_CALLER_AND_ADDRESS,
+    PASSWORD_PER_ADDRESS_CEILING,
     ORGANIZER_CODE_PER_CALLER,
+    ORGANIZER_CODE_PER_CALLER_AND_ADDRESS,
+    ORGANIZER_CODE_PER_ADDRESS_CEILING,
     ORGANIZER_CODE_REQUEST_PER_CALLER,
     ORGANIZER_CODE_REQUEST_PER_CALLER_AND_ADDRESS,
     ORGANIZER_CODE_REQUEST_PER_ADDRESS_HOUR,
