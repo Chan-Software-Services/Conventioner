@@ -78,7 +78,6 @@ export class ManageMarketPage {
   readonly historyWho: PersonChooser;
   readonly historyKind: Locator;
   readonly historyVendor: PersonChooser;
-  readonly historyVendorHint: Locator;
   /** The box the History's entries scroll in (T224). */
   readonly historyBox: Locator;
   readonly historyBoxShadeBottom: Locator;
@@ -164,7 +163,6 @@ export class ManageMarketPage {
     this.historyWho = new PersonChooser(page, 'market-history-who');
     this.historyKind = page.getByTestId('market-history-kind');
     this.historyVendor = new PersonChooser(page, 'market-history-vendor');
-    this.historyVendorHint = page.getByTestId('market-history-vendor-hint');
     this.historyBox = page.getByTestId('market-history-box');
     this.historyBoxShadeBottom = page.getByTestId('market-history-box-shade-bottom');
     this.historyBoxShadeTop = page.getByTestId('market-history-box-shade-top');
