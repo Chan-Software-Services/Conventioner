@@ -848,7 +848,7 @@ Prettier leaves the file alone (`front-end/.prettierignore`), so the formatter a
 
 **The lint fails on every error and every warning but `orphaned-tokens`, and prints how many of those it allowed.**
 That rule takes every colour to be a component's fill or ink, while most of Conventioner's colours draw a layout, a chart, a line or a shade, which no primitive uses; the contract keeps every token rather than dropping those to quiet it.
-[`front-end/src/__tests__/designMd.test.ts`](../front-end/src/__tests__/designMd.test.ts) holds the allowance to exactly the colours no component uses, so it cannot hide another finding, and a bump of the pinned linter that finds something new fails its own pull request ([ADR 0047](adr/0047-the-design-contract-is-generated-from-the-css.md)).
+[`front-end/src/__tests__/designMd.test.ts`](../front-end/src/__tests__/designMd.test.ts) holds the allowance to exactly the colours no component uses, so it cannot hide another finding, and a bump of the pinned linter that finds something new fails its own pull request ([ADR 0048](adr/0048-the-design-contract-is-generated-from-the-css.md)).
 
 **The generator refuses, and writes nothing, rather than write a contract that is wrong.**
 It refuses a token declared twice, a family `main.css` does not load, a component's font size that is not a `--text-*` token, a component selector no rule of `primitives.css` has, a component whose group has no words, a class `primitives.css` names that the file never does, and words that name a token or class the CSS no longer has; each refusal names what to change and where.
