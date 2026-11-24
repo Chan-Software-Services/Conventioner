@@ -212,3 +212,47 @@ def test_the_caller_is_the_address_the_request_came_from():
         assert caller() == "203.0.113.7"
     with app.test_request_context("/", environ_base={"REMOTE_ADDR": ""}):
         assert caller() == "unknown"
+
+
+def _caller_from(remote_addr):
+    app = Flask(__name__)
+    with app.test_request_context("/", environ_base={"REMOTE_ADDR": remote_addr}):
+        return caller()
+
+
+@pytest.mark.parametrize("remote_addr, expected", [
+    ("2001:db8:1:2:aaaa:bbbb:cccc:dddd", "2001:db8:1:2::/64"),
+    ("2001:db8:1:2::1", "2001:db8:1:2::/64"),
+    ("2001:DB8:0001:0002:0:0:0:9", "2001:db8:1:2::/64"),
+    ("::ffff:192.0.2.1", "192.0.2.1"),
+    ("192.0.2.1", "192.0.2.1"),
+    ("unknown", "unknown"),
+    ("not an address", "not an address"),
+])
+def test_a_caller_is_counted_by_its_network(remote_addr, expected):
+    """An IPv6 caller is its /64 network, the block one line or one machine is handed, so one
+    machine counts as one caller on IPv6 as on IPv4; a mapped IPv4 address is that IPv4 address,
+    and anything that is not an address is counted as given."""
+    assert _caller_from(remote_addr) == expected
+
+
+def test_two_addresses_of_one_ipv6_network_share_a_count(sign_in_attempts):
+    one = _caller_from("2001:db8:1:2::1")
+    other = _caller_from("2001:db8:1:2:ffff:ffff:ffff:ffff")
+    for _ in range(3):
+        assert count_attempt(THREE_A_MINUTE, one, NOW) is None
+    assert count_attempt(THREE_A_MINUTE, other, NOW) == 30
+
+
+def test_two_ipv6_networks_are_counted_apart(sign_in_attempts):
+    one = _caller_from("2001:db8:1:2::1")
+    neighbour = _caller_from("2001:db8:1:3::1")
+    for _ in range(3):
+        assert count_attempt(THREE_A_MINUTE, one, NOW) is None
+    assert count_attempt(THREE_A_MINUTE, neighbour, NOW) is None
+
+
+def test_a_mapped_ipv4_caller_shares_the_ipv4_callers_count(sign_in_attempts):
+    for _ in range(3):
+        assert count_attempt(THREE_A_MINUTE, _caller_from("192.0.2.1"), NOW) is None
+    assert count_attempt(THREE_A_MINUTE, _caller_from("::ffff:192.0.2.1"), NOW) == 30
