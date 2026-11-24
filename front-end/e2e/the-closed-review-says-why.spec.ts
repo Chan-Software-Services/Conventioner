@@ -66,7 +66,7 @@ test('once results are published, the tab says no closed line and the rules say 
   await expect(await rulesLine(page, seed.marketId)).toHaveText(PUBLISHED);
 });
 
-test('a Google Form market that went live before it could publish: the tab says no closed line and the rules say it closed then', async ({
+test('on a Google Form market that went live before it could publish, the tab says no closed line and the rules say they closed then', async ({
   authenticatedPage: page,
   request,
 }) => {
