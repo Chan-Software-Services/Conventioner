@@ -327,7 +327,7 @@ class TestTheBootCheck:
 
         assert TURNSTILE_SECRET_KEY_VAR in str(exc.value)
         assert INSECURE_LOCAL_DEV_VAR in str(exc.value)
-        assert "dash.cloudflare.com" in str(exc.value)
+        assert "https://dash.cloudflare.com/?to=/:account/turnstile" in str(exc.value)
 
     @pytest.mark.parametrize("flask_env", ["development", "production", ""])
     def test_the_refusal_does_not_depend_on_flask_env(self, monkeypatch, deployed, flask_env):
