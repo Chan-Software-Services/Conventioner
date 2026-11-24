@@ -23,7 +23,7 @@ import api.users as UsersApi
 from sign_in_secrets import live_verification_link, stored_verification_link
 from test_a_failed_mail_leaves_no_wait_armed import outbox  # noqa: F401
 from test_the_organizer_sign_in_is_bounded import (  # noqa: F401
-    ACCOUNT_EMAIL, CALLER, UNVERIFIED_EMAIL, WINDOW_STARTS, client, clock, fast_stand_in_hash,
+    ACCOUNT_EMAIL, CALLER, UNVERIFIED_EMAIL, WINDOW_STARTS, client, clock,
 )
 from test_the_sign_in_secrets_hold_one_state import users  # noqa: F401
 
