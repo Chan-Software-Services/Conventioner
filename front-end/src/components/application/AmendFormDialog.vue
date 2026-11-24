@@ -11,9 +11,9 @@
  * a column with nowhere to go needs a custom field, and a question the form never asked needs
  * that question turned off. Either way the answer is an edit to the form.
  *
- * It mirrors the one refusal an organizer can cause - a form that would ask nothing, which would
- * keep the market from entering Review - so it is immediate; the server is the authority on the
- * rest, and its answer is the one shown.
+ * It mirrors the one refusal an organizer can cause - a form that asks nothing, which keeps the
+ * market from entering Review - so it is immediate; the server is the authority on the rest, and
+ * its answer is the one shown.
  *
  * Its save belongs to its opening on this market (T411): nothing closes it while it saves, and a
  * save answered after it was closed and opened again leaves the new opening alone.
@@ -179,11 +179,56 @@ const proposed = computed<ApplicationForm>(() => {
  * would make this never true - and what it holds is the last thing stopping a market collecting
  * applications it cannot place.
  */
-const wouldAskNothing = computed(
-  () =>
-    proposed.value.fields.length === 0 &&
-    planDerivedAskedKeys({ ...props.essentialOptions, unasked: [...unasked.value] }).length === 0,
+function asksNothing(fields: readonly FormField[], unaskedKeys: readonly string[]): boolean {
+  return (
+    fields.length === 0 &&
+    planDerivedAskedKeys({ ...props.essentialOptions, unasked: [...unaskedKeys] }).length === 0
+  );
+}
+
+const wouldAskNothing = computed(() => asksNothing(proposed.value.fields, unasked.value));
+
+/**
+ * The form as stored asks nothing already: a plan with no dates, no tiers and fewer than two
+ * sections, or one whose questions were turned off before. The sentence then says what is true
+ * before any change, and Save takes a change that leaves it so, as the server does: only the move
+ * into Review refuses such a form, and such a save leaves the import no worse than it found it.
+ */
+const alreadyAsksNothing = computed(() =>
+  asksNothing(existingFields.value, props.applicationForm?.unaskedEssentials ?? []),
 );
+
+/**
+ * The questions the plan offers that would clear it, by the dialog's own names: with any of them
+ * asked, the form asks something. The sentence shows only on a plan offering no dates and no
+ * tiers, whose questions cannot be turned off, so there these are the rankings alone.
+ */
+const remedyLabels = computed(() =>
+  planDerivedAskedKeys({ ...props.essentialOptions, unasked: [] }).map(
+    (key) => UNASKABLE_LABELS[key] ?? key,
+  ),
+);
+
+/** The sentence, worded for whether the change leaves it so or it was so already. */
+const asksNothingSentence = computed(() => {
+  const questions = remedyLabels.value.join(' or ');
+  if (!alreadyAsksNothing.value) {
+    return (
+      'That would leave the form asking nothing about what this market offers, so it could not ' +
+      `enter Review. Keep asking ${questions}, or add a question.`
+    );
+  }
+  if (!questions) {
+    return (
+      'The form asks nothing about what this market offers, so it cannot enter Review until you ' +
+      'add a question.'
+    );
+  }
+  return (
+    'The form asks nothing about what this market offers, so it cannot enter Review. ' +
+    `Ask ${questions} again, or add a question.`
+  );
+});
 
 const changesNothing = computed(
   () =>
@@ -191,8 +236,16 @@ const changesNothing = computed(
     unasked.value.length === (props.applicationForm?.unaskedEssentials ?? []).length,
 );
 
+/**
+ * A change that makes a form asking something ask nothing is held back: the server would take
+ * it, but the import would then refuse every row (`NO_FORM_ERROR`), a dead end this stops short
+ * of. A form that asked nothing already may still save a change, as the server takes it.
+ */
 const cannotSave = computed(
-  () => Boolean(keyError.value) || wouldAskNothing.value || changesNothing.value,
+  () =>
+    Boolean(keyError.value) ||
+    (wouldAskNothing.value && !alreadyAsksNothing.value) ||
+    changesNothing.value,
 );
 
 async function save() {
@@ -282,8 +335,7 @@ async function save() {
     </section>
 
     <p v-if="wouldAskNothing" class="amend-error" data-testid="amend-form-asks-nothing">
-      That would leave the form asking nothing at all, so this market could not enter Review. Keep
-      one question, or add a field.
+      {{ asksNothingSentence }}
     </p>
 
     <p v-if="errorMessage" class="amend-error" data-testid="amend-form-error">

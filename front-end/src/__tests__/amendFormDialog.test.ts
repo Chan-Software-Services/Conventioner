@@ -101,7 +101,10 @@ describe('AmendFormDialog', () => {
         .setValue(true);
       await wrapper.get('[data-testid="amend-form-unask-essential_request"] input').setValue(true);
 
-      expect(wrapper.find('[data-testid="amend-form-asks-nothing"]').exists()).toBe(true);
+      expect(wrapper.get('[data-testid="amend-form-asks-nothing"]').text()).toBe(
+        'That would leave the form asking nothing about what this market offers, so it could not ' +
+          'enter Review. Keep asking Section preference, or add a question.',
+      );
       expect(
         wrapper.get('[data-testid="amend-form-submit-button"]').attributes('disabled'),
       ).toBeDefined();
@@ -122,10 +125,37 @@ describe('AmendFormDialog', () => {
         ).checked,
       ).toBe(false);
 
-      expect(wrapper.find('[data-testid="amend-form-asks-nothing"]').exists()).toBe(true);
+      // So the remedy is the question the plan offers, never "keep one" while one is kept.
+      expect(wrapper.get('[data-testid="amend-form-asks-nothing"]').text()).toBe(
+        'That would leave the form asking nothing about what this market offers, so it could not ' +
+          'enter Review. Keep asking Section preference, or add a question.',
+      );
       expect(
         wrapper.get('[data-testid="amend-form-submit-button"]').attributes('disabled'),
       ).toBeDefined();
+    });
+
+    it('names every question the plan offers that would clear it', async () => {
+      const wrapper = mount(AmendFormDialog, {
+        props: {
+          open: true,
+          marketId: 'market-1',
+          applicationForm: { fields: [] },
+          formRevision: 0,
+          essentialOptions: { ...TWO_SECTIONS, tableTypes: ['Full', 'Half'] },
+          suggestedUnasked: 'essential_section_ranking',
+        },
+        global: { stubs: { teleport: true } },
+      });
+      await wrapper.vm.$nextTick();
+      await wrapper
+        .get('[data-testid="amend-form-unask-essential_table_type_ranking"] input')
+        .setValue(true);
+
+      expect(wrapper.get('[data-testid="amend-form-asks-nothing"]').text()).toBe(
+        'That would leave the form asking nothing about what this market offers, so it could not ' +
+          'enter Review. Keep asking Section preference or Table type preference, or add a question.',
+      );
     });
 
     it('says nothing once a question is added', async () => {
@@ -141,6 +171,72 @@ describe('AmendFormDialog', () => {
       expect(
         wrapper.get('[data-testid="amend-form-submit-button"]').attributes('disabled'),
       ).toBeUndefined();
+    });
+  });
+
+  describe('a form that already asks nothing', () => {
+    /** A plan that offers nothing to ask about: no dates, no tiers, one section. */
+    const NOTHING_OFFERED = { ...EMPTY_ESSENTIAL_OPTIONS, sections: ['Hall A'] };
+
+    function mountOnNothingOffered() {
+      return mount(AmendFormDialog, {
+        props: {
+          open: true,
+          marketId: 'market-1',
+          applicationForm: { fields: [] },
+          formRevision: 0,
+          essentialOptions: NOTHING_OFFERED,
+        },
+        global: { stubs: { teleport: true } },
+      });
+    }
+
+    it('says what is already true as it opens, and that only a question clears it', async () => {
+      const wrapper = mountOnNothingOffered();
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('[data-testid="amend-form-asks-nothing"]').text()).toBe(
+        'The form asks nothing about what this market offers, so it cannot enter Review until ' +
+          'you add a question.',
+      );
+    });
+
+    it('saves a change that only stops asking the request, as the server takes it', async () => {
+      api.put.mockResolvedValue({ data: { application_form: { fields: [] }, formRevision: 1 } });
+      const wrapper = mountOnNothingOffered();
+      await wrapper.vm.$nextTick();
+
+      await wrapper.get('[data-testid="amend-form-unask-essential_request"] input').setValue(true);
+
+      // Still a warning: the move to Review refuses the form, the save does not.
+      expect(wrapper.find('[data-testid="amend-form-asks-nothing"]').exists()).toBe(true);
+      expect(
+        wrapper.get('[data-testid="amend-form-submit-button"]').attributes('disabled'),
+      ).toBeUndefined();
+      await wrapper.get('form').trigger('submit');
+      await flushPromises();
+      expect(api.put).toHaveBeenCalledTimes(1);
+      expect(api.put.mock.calls[0]![1].unaskedEssentials).toEqual(['essential_request']);
+      expect(wrapper.emitted('close')).toHaveLength(1);
+    });
+
+    it('names the question it stopped asking as the way back', async () => {
+      const wrapper = mount(AmendFormDialog, {
+        props: {
+          open: true,
+          marketId: 'market-1',
+          applicationForm: { fields: [], unaskedEssentials: ['essential_section_ranking'] },
+          formRevision: 0,
+          essentialOptions: { ...EMPTY_ESSENTIAL_OPTIONS, sections: ['Hall A', 'Hall B'] },
+        },
+        global: { stubs: { teleport: true } },
+      });
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('[data-testid="amend-form-asks-nothing"]').text()).toBe(
+        'The form asks nothing about what this market offers, so it cannot enter Review. Ask ' +
+          'Section preference again, or add a question.',
+      );
     });
   });
 
