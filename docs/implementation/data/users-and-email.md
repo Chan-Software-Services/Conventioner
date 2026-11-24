@@ -12,7 +12,7 @@ describes:
   - back-end/api/users.py#request_otp
   - back-end/api/users.py#request_password_reset
   - back-end/api/users.py#resend_verification_email
-  - back-end/api/users.py#_Bounds
+  - back-end/api/users.py#_sign_in_refused
   - back-end/api/users.py#_password_matches
   - back-end/api/users.py#get_user_by_login_id
   - back-end/api/users.py#signed_in_account
@@ -28,6 +28,7 @@ describes:
   - back-end/tests/test_one_account_per_address.py
   - back-end/tests/test_a_failed_mail_leaves_no_wait_armed.py
   - back-end/tests/test_a_strangers_requests_use_up_no_ones.py
+  - back-end/tests/test_a_strangers_tries_shut_no_one_out.py
   - back-end/tests/test_delete_user_authorization.py
   - back-end/account_secrets.py
   - back-end/api/users.py#verify_email
@@ -152,14 +153,16 @@ The sign-up's per-address bound caps how many of these emails one address is sen
 ## The sign-in is bounded
 
 **The organizer's password and code sign-ins, and the requests that mail an organizer a code or a link, are counted as the applicant's sign-in is**, in the one list of limits, `LIMITS` in [`back-end/sign_in_limits.py`](../../../back-end/sign_in_limits.py), in fixed clock-aligned windows, in `sign_in_attempts`, whose counters name nobody ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)).
-A sign-in is counted per address and per caller; a request that mails, per caller, per caller and address, and per address in the hour.
+A sign-in is counted per caller, per caller and address, and per address alone; a request that mails, per caller, per caller and address, and per address in the hour.
 
 | Limit                                           | Name                                    | Tries                                                                     |
 | ----------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------- |
-| `PASSWORD_PER_ADDRESS`                          | `password:address`                      | 10 for one address in 15 minutes                                          |
 | `PASSWORD_PER_CALLER`                           | `password:caller`                       | 50 from one caller in 15 minutes                                          |
-| `ORGANIZER_CODE_PER_ADDRESS`                    | `organizer-code:address`                | 10 for one address in 15 minutes                                          |
+| `PASSWORD_PER_CALLER_AND_ADDRESS`               | `password:caller-address`               | 10 wrong from one caller for one address in 15 minutes                    |
+| `PASSWORD_PER_ADDRESS_CEILING`                  | `password:address-ceiling`              | 50 wrong for one address in 15 minutes, then the human check              |
 | `ORGANIZER_CODE_PER_CALLER`                     | `organizer-code:caller`                 | 60 from one caller in 15 minutes                                          |
+| `ORGANIZER_CODE_PER_CALLER_AND_ADDRESS`         | `organizer-code:caller-address`         | 10 wrong from one caller for one address in 15 minutes                    |
+| `ORGANIZER_CODE_PER_ADDRESS_CEILING`            | `organizer-code:address-ceiling`        | 50 wrong for one address in 15 minutes, then the human check              |
 | `ORGANIZER_CODE_REQUEST_PER_CALLER`             | `organizer-code-request:caller`         | 30 `/request-otp` from one caller in 15 minutes                           |
 | `ORGANIZER_CODE_REQUEST_PER_CALLER_AND_ADDRESS` | `organizer-code-request:caller-address` | 5 `/request-otp` from one caller for one address in 15 minutes            |
 | `ORGANIZER_CODE_REQUEST_PER_ADDRESS_HOUR`       | `organizer-code-request:address-hour`   | 20 `/request-otp` for one address in an hour                              |
@@ -173,22 +176,30 @@ A sign-in is counted per address and per caller; a request that mails, per calle
 | `SIGN_UP_PER_CALLER_AND_ADDRESS`                | `sign-up:caller-address`                | 5 `/register` from one caller for one address in 15 minutes               |
 | `SIGN_UP_PER_ADDRESS_HOUR`                      | `sign-up:address-hour`                  | 20 `/register` for one address in an hour                                 |
 
-Each request has its own three counts, so one request's use holds back no other.
+Each sign-in and each request has its own three counts, so one's use holds back no other.
 
-**Every bounded route keeps one order** (`_Bounds` in `users.py` for a sign-in, `sign_in_limits.MailBounds` for a request that mails).
+**Every bounded route keeps one order** (`sign_in_limits.SecretBounds` for a sign-in, `_PASSWORD_SIGN_IN` and `_CODE_SIGN_IN` in `users.py`, and `sign_in_limits.MailBounds` for a request that mails).
 The caller (`sign_in_limits.caller()`, the address `ProxyFix` settled by `TRUSTED_PROXY_HOPS`) is counted before the body is read, so a request that names no address still counts against its caller.
 A caller is a network: an IPv4 address, an IPv6 address's /64 network, or an IPv4-mapped address's IPv4 address, so one machine is one caller on either protocol ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)).
-For a sign-in the address, normalized, is counted next, before any account is looked up, password checked or code compared.
+For a sign-in the caller and the normalized address together are counted next, then the address alone (`before_the_secret`), before any account is looked up, password checked or code compared.
+A try the pair refused is not counted on the address, so one caller adds at most ten to an address's count in a window.
 For a request that mails, the caller and the normalized address together are counted next (`before_the_mail`), then the address alone in the hour, before any account is looked up; a sign-up asks the human check between the caller and the pair, so a sign-up refused at its caller spends no check and one that fails the check counts against its caller only.
 A request the pair refused is not counted on the address, so one caller adds at most five to an address's hour ([`test_a_strangers_requests_use_up_no_ones.py`](../../../back-end/tests/test_a_strangers_requests_use_up_no_ones.py)).
 So a refused request reads no account and sends no mail, and a refusal is the same for an address with an account and without, and whether the password or the code was right.
 
-**A right password or code takes its try back** (`take_back_attempt`), from both counts, in the window it was counted in, whether it signs in or answers `SIGN_IN_VERIFY_FIRST`.
+**A right password or code takes its try back** (`signed_in`), from the caller, the pair and the address, in the window it was counted in, whether it signs in or answers `SIGN_IN_VERIFY_FIRST`.
 Only wrong tries pile up, so an organizer who signs in all day is never held back, and the E2E suite's hundreds of fixture sign-ins from one caller cost nothing.
 
-**Past a limit `/login` and `/login-otp` answer 429** with `SIGN_IN_TOO_MANY`, "Too many sign-in attempts. Try again in {wait}, or reset your password.", under `message` on `/login` and `msg` on `/login-otp`, and the seconds left of the window in `Retry-After`.
+**Past the caller's or the pair's limit `/login` and `/login-otp` answer 429** with `SIGN_IN_TOO_MANY`, "Too many sign-in attempts. Try again in {wait}, or reset your password.", under `message` on `/login` and `msg` on `/login-otp`, and the seconds left of the window in `Retry-After`.
 `{wait}` is those seconds in whole minutes, rounded up (`wait_in_words`).
 The password form puts "Forgot password?" beside it, as it does beside `SIGN_IN_DOES_NOT_MATCH` (`refusedSignIn` in `front-end/src/utils/signInNotice.ts`); the code form shows it alone.
+Only a caller's own tries at an address meet it, so no one else's wrong tries refuse an organizer's right password or code.
+
+**Past the address's own fifty a try asks the human check** (action `sign-in`) rather than refusing: with no token, or one that does not pass, `/login` and `/login-otp` answer 403 "Confirm you're a person, then try again." with `captcha: required`, under `message` and `msg`, the same for every address, and the try is taken back from the pair and the address; with a passing token the try goes on to the password or the code.
+Only many callers together reach fifty, and a person passes the check, so the organizer still signs in ([ADR 0046](../../adr/0046-a-sign-in-limit-never-shuts-out-the-person-it-protects.md)).
+The sign-in forms send no token until the server asks, so an everyday sign-in loads no script of Cloudflare's; on the 403 the form puts `HumanCheck` above its Sign in and sends once more with its token (`withHumanCheckWhenAsked` in `front-end/src/utils/captcha.ts`), and keeps it there for the page.
+A second 403 says "We couldn't confirm you're a person. Try again.", and a check that cannot load says so, each in the form's line with nothing beside it.
+[`back-end/tests/test_a_strangers_tries_shut_no_one_out.py`](../../../back-end/tests/test_a_strangers_tries_shut_no_one_out.py) holds each.
 
 **The mail requests take nothing back**: every `/request-otp`, `/request-password-reset`, `/resend-verification` and `/register` counts.
 One caller's requests for an address leave every other caller's requests for it as they were, so nobody can use up an organizer's requests, while the hour's twenty per address, four callers' fives, bound one inbox's mail whoever asks.
@@ -206,6 +217,10 @@ The try is checked against the stored hash in constant time (`code_matches`).
 - A right code that has expired answers 400 "That code has expired. You can ask for a new code in {wait}.", and is left live, its try counted.
 - A right code on an account not yet verified answers `SIGN_IN_VERIFY_FIRST` and is left live.
 - A right code otherwise is used (`state: "used"`, `next_allowed_at` cleared) by a write conditional on its hash and `live`; of two right tries only the one whose write changed the account signs in, and the other answers `SIGN_IN_WRONG_CODE`.
+
+**The organizer's one code an hour stays** ([ADR 0028](../../adr/0028-an-accounts-sign-in-secrets-are-one-machine.md), [ADR 0046](../../adr/0046-a-sign-in-limit-never-shuts-out-the-person-it-protects.md)).
+Anyone may ask for an organizer's code, which mails it to the organizer, and use up its five tries.
+The code sign-in then waits out the hour, while the password and the reset link stay open; the wait bounds guesses at a six-digit code to five an hour.
 
 `{wait}` in the expired code's sentence and in `/request-otp`'s refusal, "You can ask for a new code in {wait}.", is what is left of the code's `next_allowed_at`, an hour after it expired (`CODE_WAIT`); once it is over, the expired code's sentence ends "Ask for a new one." instead, and `/request-otp` sends a code.
 `/request-password-reset` keeps one link at a time the same way, by the reset link's `next_allowed_at`: until an hour after the last mailed link expired (`RESET_WAIT`), unless that link was used, which clears it, it answers 429 `NEXT_RESET_LATER`, "You can ask for another reset link in {wait}.", under `msg`, with no `Retry-After`.

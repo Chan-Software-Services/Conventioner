@@ -123,14 +123,18 @@ Every sign-in by password or by code starts a fresh session, so no session cooki
 Each form says one line at a time, the newer replacing the older, and says what to do next (E38/F14/S02):
 
 - A wrong password and an address with no account say the same, "That email and password do not match.", with "Forgot password?" in it (A4); so does a password longer than 72 bytes.
-- Past ten tries at one address in 15 minutes, or fifty from one caller, the next says "Too many sign-in attempts. Try again in N minutes, or reset your password.", with "Forgot password?" in it, the same for every address.
+- Past ten tries from one caller at one address in 15 minutes, or fifty from one caller, the next says "Too many sign-in attempts. Try again in N minutes, or reset your password.", with "Forgot password?" in it, the same for every address.
   A right password takes its own try back, so only wrong ones count, and a few mistyped passwords cost nothing ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
+  No one else's tries count against the organizer: past fifty wrong tries at one address from every caller, Sign in asks the human check, which shows above Sign in, often with nothing to tick, and sends once more; a person passes it and is signed in.
+  Asked a second time it says "We couldn't confirm you're a person. Try again.", and a check that cannot load says "The check that you're a person didn't load. Check your connection, then reload the page.".
+  Until the server asks, the sign-in loads no script of the check's.
 - A right password on an account not yet verified says "Verify your email address first: we sent you a link when you registered.", with "Send the link again" (A1a).
 
 Covered by:
 
 - `a-changed-network-keeps-the-organizer-signed-in.spec.ts`
 - `a-failure-says-what-to-do.spec.ts`
+- `an-organizer-signs-in-past-others-wrong-tries.spec.ts`, which fills the address's count as fifty others' wrong tries would, for the password and the code
 - `auth.spec.ts`
 - `remember-me.spec.ts`
 - `sign-in-fits-a-phone.spec.ts`
@@ -159,7 +163,9 @@ Branches: a wrong code ("That code is not right."), which replaces the line sayi
 - Two requests for a code at once mail one code, the one that signs in, and the other is answered "You can ask for a new code in N minutes.".
 - A code that could not be mailed says "Something went wrong on our side. Try again in a moment.", as any fault of the server does, and asking again sends one at once.
 - Past five codes asked from one caller for one address in 15 minutes, twenty for one address in an hour whoever asks, or thirty from one caller, the next says "You have asked several times. Try again in N minutes.", the same for every address.
-- Past ten tries at one address in 15 minutes, or sixty from one caller, the next says "Too many sign-in attempts. Try again in N minutes, or reset your password.", the same for every address; a right code takes its own try back, as a right password does ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
+- Past ten tries from one caller at one address in 15 minutes, or sixty from one caller, the next says "Too many sign-in attempts. Try again in N minutes, or reset your password.", the same for every address; a right code takes its own try back, as a right password does ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
+- Past fifty wrong codes at one address from every caller, Sign in asks the human check, as the password's does (A2), and sends once more.
+- Anyone may ask for an organizer's code and use up its five tries; the code sign-in then waits out the hour, while the password and "Forgot password?" stay open (A2, A4).
 
 Covered by:
 
