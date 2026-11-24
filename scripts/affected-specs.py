@@ -28,8 +28,8 @@ run's shard results (`--map` and `--results` name files instead). A spec is chos
    no endpoint's files (a stylesheet Vite inlines, a module no endpoint ran, a config no rule
    reads); docs, Markdown, the suites that are not E2E and their configs, the lint and format
    configs, the scripts that deal, repeat or measure the specs, the back end's deploy config,
-   `back-end/vercel.json`, and the advisory scan's lock, `back-end/requirements-audit.in` and its
-   `.txt` (`DRIVES_NO_SPEC`), choose nothing.
+   `back-end/vercel.json`, the advisory scan's lock, `back-end/requirements-audit.in` and its
+   `.txt`, and the migrations, `back-end/migrations/` (`DRIVES_NO_SPEC`), choose nothing.
 
 The chosen specs run by score, the shorter first on a tie, until the next would pass the cap
 (`--minutes`, 30 by default) of CI minutes, by the map's run's shard results, then
@@ -84,11 +84,12 @@ RUN_EVERY_SPEC = re.compile(
 
 # The changed files that drive no spec, wherever the map places them: the docs, Markdown, the
 # suites the E2E run does not run and their configs, the lint and format configs, the scripts that
-# deal, repeat or measure the specs (or that nothing runs), the back end's deploy config, and the
-# advisory scan's lock, which only CI's python-advisories job installs, none of which the stack or a
-# page reads.
+# deal, repeat or measure the specs (or that nothing runs), the back end's deploy config, the
+# advisory scan's lock, which only CI's python-advisories job installs, and the migrations, which an
+# operator runs by hand, none of which the stack or a page reads.
 DRIVES_NO_SPEC = re.compile(
-    r"^(?:docs/|back-end/tests/|front-end/src/__tests__/|scripts/tests/)|\.md$|\.test\.ts$"
+    r"^(?:docs/|back-end/tests/|back-end/migrations/|front-end/src/__tests__/|scripts/tests/)"
+    r"|\.md$|\.test\.ts$"
     r"|^front-end/src/.*\.(?:test|spec)\.tsx?$"
     r"|^front-end/(?:vitest\.config\.ts|tsconfig\.vitest\.json|eslint\.config\.ts"
     r"|stylelint\.config\.js|\.prettierrc\.json|\.prettierignore|\.editorconfig"
