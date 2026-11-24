@@ -54,7 +54,7 @@ Conventioner runs a vendor market from applications to the door, in production a
 - **Before delivering, run only the tests your change reaches** ([what a builder runs](docs/TESTING.md#what-a-builder-runs)): the whole suites above are CI's, which runs them on every pull request and every push to `dev` and `main`, or a person's.
 - **Run `npm run format` in `front-end/` before committing**: CI's `format:check` fails unformatted front-end code and `docs/`.
 - `scripts/nm-test.sh --skip-e2e` runs every suite but Playwright; without the flag it adds Playwright, on an isolated stack of its own.
-  The no-mistakes gate runs only its real-data checks (`--real-data-only`), and leaves the suites to CI, where alone Playwright runs before a merge ([CI and the gate](docs/implementation/testing/ci-and-the-gate.md#the-no-mistakes-gate)).
+  The no-mistakes gate runs only its real-data checks (`--real-data-only`) and a lint of the changed front-end and docs files, and leaves the suites to CI, where alone Playwright runs before a merge ([CI and the gate](docs/implementation/testing/ci-and-the-gate.md#the-no-mistakes-gate)).
 - [Setting up a machine](docs/STARTUP.md); [every suite and its gotchas](docs/TESTING.md).
 
 ## Knowledge graph
