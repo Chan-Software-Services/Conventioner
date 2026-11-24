@@ -7,7 +7,7 @@ describes:
   - back-end/tests/test_the_review_state_table.py
   - back-end/tests/test_changed_answers_are_one_event.py
   - back-end/datatypes.py#ApplicationOrigin
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - T277
   - T429
