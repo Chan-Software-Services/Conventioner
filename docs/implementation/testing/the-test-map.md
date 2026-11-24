@@ -94,7 +94,7 @@ A spec is chosen by five rules:
 1. **The change edits it, or a file it imports**, transitively: a helper two levels down counts, and so does a `front-end/src/` file a spec imports itself.
 2. **Its pages loaded a changed file under `front-end/src/`.**
    A `.ts` or `.vue` file there whose change is to its comments alone, a `//` or `/* */` in a script or a `<!-- -->` in a template, runs nothing new, so it reaches no spec by any rule.
-   Comments alone means the file reads the same at both sides of the diff with its comments taken out, each run of white space, or a script's comment, read as one space, or as one line break when it holds one, and a template's comment read as nothing; strings, templates, regexes, a tag's values and an interpolation `{{ }}` are kept whole, so a `//` inside one is code.
+   Comments alone means the file reads the same at both sides of the diff with its comments taken out, each run of white space, or a script's comment, read as one space, or as one line break when it holds one, and a template's comment read as nothing; strings, templates, regexes, a tag's values, an interpolation `{{ }}` and the text of a `<style>`, `<pre>`, `<textarea>` or `<title>` are kept whole, so a `//` inside one is code.
    So is a template comment with white space beside it on its line and no line break there, as in `<b>x</b> <!-- c --> <i>y</i>`: Vue's dev build, which the E2E stack runs, keeps the comment and drops the white space between it and an element, so taking it out changes the page.
    A file the scanner cannot read for sure (an unclosed string or comment, a script whose `lang` is not `ts`, a template with a `lang`) counts whole.
 3. **It called an endpoint whose requests ran a changed back-end function.**

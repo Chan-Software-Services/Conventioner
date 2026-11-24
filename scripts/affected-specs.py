@@ -304,10 +304,11 @@ TAG = re.compile(r"</?([A-Za-z][\w-]*)")
 
 class Words:
     """What runs of a script or a Vue file: its text with its comments out and each run of white
-    space outside a string, a template, a regex or a tag as one space, or one line break when it
-    held one (on which a statement may end), a script's comment counting as such a run and a
-    template's as nothing (`vue`), so two whose comments alone differ, in the same white space,
-    read the same.
+    space outside a string, a template, a regex, a tag, an interpolation or the text of a `<style>`,
+    `<pre>`, `<textarea>` or `<title>` as one space, or one line break when it held one (on which a
+    statement may end), a script's comment counting as such a run and a template's, but an inline
+    one, as nothing (`vue`), so two whose comments alone differ, in the same white space, read the
+    same.
 
     A `/` after a value (a word, a literal, `)`, `]` or `}`) is read as a division, and after
     anything else, or a word such as `return`, as opening a regex: a regex just after a `)` or a

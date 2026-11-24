@@ -446,8 +446,12 @@ class TestWordsOnly:
         write(scripted, {"front-end/src/door.ts": text})
         assert set(chosen(choose(scripted))) == {"a.spec.ts"}
 
-    def test_a_script_that_does_not_scan_counts_its_comments(self, scripted):
-        broken = self.SCRIPT_TS + "export const open = 'unclosed\n"
+    @pytest.mark.parametrize(
+        "unclosed",
+        ["'a string", "`a template", "/* a comment", "/a regex"],
+    )
+    def test_a_script_that_does_not_scan_counts_its_comments(self, scripted, unclosed):
+        broken = self.SCRIPT_TS + f"export const open = {unclosed}\n"
         base(scripted, {"front-end/src/door.ts": broken})
         write(scripted, {"front-end/src/door.ts": broken.replace("// trimmed", "// trimmed rows")})
         assert set(chosen(choose(scripted))) == {"a.spec.ts"}
@@ -493,10 +497,18 @@ class TestWordsOnly:
         write(scripted, {"front-end/src/views/Door.vue": inline.replace(between, "<b>x</b> <i>y</i>")})
         assert set(chosen(choose(scripted))) == {"a.spec.ts"}
 
-    def test_a_vue_file_in_another_language_counts_its_comments(self, scripted):
-        tsx = self.DOOR_VUE.replace('lang="ts"', 'lang="tsx"')
-        base(scripted, {"front-end/src/views/Door.vue": tsx})
-        write(scripted, {"front-end/src/views/Door.vue": tsx.replace("// The door.", "// The door's rows.")})
+    @pytest.mark.parametrize(
+        "old, new",
+        [
+            ('<script setup lang="ts">', '<script setup lang="tsx">'),
+            ("<template>", '<template lang="pug">'),
+            ("</template>\n", '</template>\n<p title="an unclosed tag"\n'),
+        ],
+    )
+    def test_a_vue_file_it_cannot_read_counts_its_comments(self, scripted, old, new):
+        unread = self.DOOR_VUE.replace(old, new)
+        base(scripted, {"front-end/src/views/Door.vue": unread})
+        write(scripted, {"front-end/src/views/Door.vue": unread.replace("// The door.", "// The door's rows.")})
         assert set(chosen(choose(scripted))) == {"a.spec.ts"}
 
     def test_a_comment_in_an_e2e_helper_still_chooses_its_specs(self, repo):
