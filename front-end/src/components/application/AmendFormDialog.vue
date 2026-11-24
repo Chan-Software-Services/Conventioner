@@ -334,7 +334,12 @@ async function save() {
       </label>
     </section>
 
-    <p v-if="wouldAskNothing" class="amend-error" data-testid="amend-form-asks-nothing">
+    <!-- A refusal reads red; where Save takes the change it is a warning, which reads yellow. -->
+    <p
+      v-if="wouldAskNothing"
+      :class="alreadyAsksNothing ? 'amend-warning' : 'amend-error'"
+      data-testid="amend-form-asks-nothing"
+    >
       {{ asksNothingSentence }}
     </p>
 
@@ -388,5 +393,11 @@ async function save() {
   margin: 0;
   font-size: var(--text-xs);
   color: var(--mm-red);
+}
+
+.amend-warning {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--mm-text-yellow);
 }
 </style>

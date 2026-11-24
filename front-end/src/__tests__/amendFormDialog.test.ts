@@ -105,6 +105,10 @@ describe('AmendFormDialog', () => {
         'That would leave the form asking nothing about what this market offers, so it could not ' +
           'enter Review. Keep asking Section preference, or add a question.',
       );
+      // A refusal of the save, so it reads red.
+      expect(wrapper.get('[data-testid="amend-form-asks-nothing"]').classes()).toEqual([
+        'amend-error',
+      ]);
       expect(
         wrapper.get('[data-testid="amend-form-submit-button"]').attributes('disabled'),
       ).toBeDefined();
@@ -208,8 +212,11 @@ describe('AmendFormDialog', () => {
 
       await wrapper.get('[data-testid="amend-form-unask-essential_request"] input').setValue(true);
 
-      // Still a warning: the move to Review refuses the form, the save does not.
-      expect(wrapper.find('[data-testid="amend-form-asks-nothing"]').exists()).toBe(true);
+      // Still a warning: the move to Review refuses the form, the save does not. So it reads in
+      // the warning's yellow, never the refusal's red.
+      expect(wrapper.get('[data-testid="amend-form-asks-nothing"]').classes()).toEqual([
+        'amend-warning',
+      ]);
       expect(
         wrapper.get('[data-testid="amend-form-submit-button"]').attributes('disabled'),
       ).toBeUndefined();
