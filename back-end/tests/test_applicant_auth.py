@@ -1135,29 +1135,44 @@ class TestSignInIsBounded:
         caller_count = next(e for e in events if e.startswith("count") and e.endswith(":caller"))
         assert events.index(caller_count) < events.index("read body")
 
-    def test_verifying_past_the_limit_for_an_address_is_refused_and_consumes_nothing(
+    def test_verifying_past_the_limit_for_a_caller_and_address_is_refused_and_consumes_nothing(
         self, applicant_auth_module, test_db, monkeypatch
     ):
         monkeypatch.setattr(applicant_auth_module, "_generate_code", lambda: "135790")
-        allowed = sign_in_limits.VERIFY_CODE_PER_ADDRESS.attempts
-        for i in range(allowed):
-            assert self._verify(applicant_auth_module, caller=f"198.51.100.{i}")[1] == 401
+        allowed = sign_in_limits.VERIFY_CODE_PER_CALLER_AND_ADDRESS.attempts
+        for _ in range(allowed):
+            assert self._verify(applicant_auth_module)[1] == 401
         self._request(applicant_auth_module)
 
-        body = self._refused(
-            self._verify(applicant_auth_module, code="135790", caller="198.51.100.99")
-        )
+        body = self._refused(self._verify(applicant_auth_module, code="135790"))
 
         assert "Too many sign-in attempts" in body["message"]
         challenge = test_db.challenges.find_one({"email": "applicant@example.com"})
         assert challenge["consumed"] is False
+        # Another caller's try at the address is not held back by these.
+        assert self._verify(applicant_auth_module, code="135790", caller="198.51.100.99")[1] == 200
+
+    def test_a_right_code_takes_its_try_back(self, applicant_auth_module, monkeypatch):
+        """Only wrong codes pile up, so a vendor who signs in again and again is never refused."""
+        monkeypatch.setattr(applicant_auth_module, "_generate_code", lambda: "135790")
+        for i in range(sign_in_limits.VERIFY_CODE_PER_CALLER_AND_ADDRESS.attempts + 1):
+            # Each code asked from a caller of its own, within the code request's own limits.
+            assert self._request(applicant_auth_module, caller=f"198.51.100.{i}")[1] == 200
+            assert self._verify(applicant_auth_module, code="135790")[1] == 200
 
     def test_a_venues_shared_address_may_enter_300_codes_in_15_minutes(self):
-        """Per caller only: an address may still try ten, which is what bounds a guess at a code."""
+        """Per caller only: a caller may still try ten at one address, which is what bounds a
+        guess at a code, and an address fifty from every caller before the human check is asked."""
         assert sign_in_limits.VERIFY_CODE_PER_CALLER == sign_in_limits.SignInLimit(
             "verify-code:caller", attempts=300, window=timedelta(minutes=15),
         )
-        assert sign_in_limits.VERIFY_CODE_PER_ADDRESS.attempts == 10
+        assert sign_in_limits.VERIFY_CODE_PER_CALLER_AND_ADDRESS == sign_in_limits.SignInLimit(
+            "verify-code:caller-address", attempts=10, window=timedelta(minutes=15),
+        )
+        assert sign_in_limits.VERIFY_CODE_PER_ADDRESS_CEILING == sign_in_limits.SignInLimit(
+            "verify-code:address-ceiling", attempts=50, window=timedelta(minutes=15),
+        )
+        assert not hasattr(sign_in_limits, "VERIFY_CODE_PER_ADDRESS")
 
     def test_guessing_codes_for_many_addresses_from_one_caller_is_refused(
         self, applicant_auth_module

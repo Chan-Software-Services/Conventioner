@@ -107,7 +107,8 @@ def test_the_table_holds_every_limit_in_use_once():
         "request-code:caller-address": (5, QUARTER),
         "request-code:address-hour": (20, HOUR),
         "verify-code:caller": (300, QUARTER),
-        "verify-code:address": (10, QUARTER),
+        "verify-code:caller-address": (10, QUARTER),
+        "verify-code:address-ceiling": (50, QUARTER),
         "resume:caller": (300, QUARTER),
         "check-in:address": (10, QUARTER),
         "password:caller": (50, QUARTER),
@@ -392,3 +393,119 @@ def test_a_refusal_is_said_in_the_routes_words_under_its_key():
 
 def test_no_refusal_is_no_answer():
     assert sign_in_limits.answer(None, "Try again in {wait}.") is None
+
+
+# A sign-in that checks a secret: ``SecretBounds``.
+
+SECRET_PER_CALLER = SignInLimit("test-secret:caller", attempts=6, window=timedelta(minutes=1))
+SECRET_PER_PAIR = SignInLimit("test-secret:caller-address", attempts=2, window=timedelta(minutes=1))
+SECRET_PER_ADDRESS = SignInLimit("test-secret:address-ceiling", attempts=3,
+                                 window=timedelta(minutes=1))
+SECRET = sign_in_limits.SecretBounds(SECRET_PER_CALLER, SECRET_PER_PAIR, SECRET_PER_ADDRESS,
+                                     "test-action")
+PAIR_A = "198.51.100.1\0a@example.com"
+
+
+def _try(remote_addr, token=None, address="a@example.com"):
+    return _as(remote_addr, lambda: SECRET.before_the_secret(address, token, MAIL_NOW))
+
+
+def _fill_the_address(callers=("198.51.100.1", "198.51.100.2", "198.51.100.3")):
+    """Three tries from three callers, which fill the address's count of three."""
+    for caller_address in callers:
+        assert _try(caller_address) is None
+
+
+def test_a_secret_try_counts_its_caller(sign_in_attempts):
+    answers = [_as("203.0.113.7", lambda: SECRET.caller_refusal(MAIL_NOW)) for _ in range(7)]
+
+    assert answers == [None] * 6 + [sign_in_limits.TooMany(30)]
+
+
+def test_a_secret_try_counts_its_caller_and_address_then_its_address(sign_in_attempts):
+    assert [_try("198.51.100.1") for _ in range(2)] == [None, None]
+
+    assert _count(sign_in_attempts, SECRET_PER_PAIR, PAIR_A) == 2
+    assert _count(sign_in_attempts, SECRET_PER_ADDRESS, "a@example.com") == 2
+
+
+def test_past_its_pair_a_try_waits_for_the_pairs_window(sign_in_attempts, human_check):
+    _try("198.51.100.1")
+    _try("198.51.100.1")
+
+    assert _try("198.51.100.1", token="a-token") == sign_in_limits.TooMany(30)
+    assert human_check.actions == []
+
+
+def test_a_try_the_pair_refused_is_not_counted_on_the_address(sign_in_attempts):
+    for _ in range(10):
+        _try("198.51.100.1")
+
+    assert _count(sign_in_attempts, SECRET_PER_ADDRESS, "a@example.com") == 2
+    assert _try("198.51.100.2") is None
+
+
+def test_under_its_address_count_a_try_asks_no_human_check(sign_in_attempts, human_check):
+    _fill_the_address()
+
+    assert human_check.actions == []
+
+
+def test_past_its_address_count_a_try_with_no_token_needs_the_human_check(
+    sign_in_attempts, human_check,
+):
+    _fill_the_address()
+
+    assert _try("198.51.100.4") == sign_in_limits.HumanCheckNeeded()
+    assert human_check.actions == ["test-action"]
+
+
+def test_past_its_address_count_a_try_that_passes_the_check_goes_on(sign_in_attempts, human_check):
+    _fill_the_address()
+
+    assert _try("198.51.100.4", token="a-token") is None
+    assert _count(sign_in_attempts, SECRET_PER_ADDRESS, "a@example.com") == 4
+
+
+def test_a_try_refused_for_want_of_the_check_is_taken_back_from_the_pair_and_the_address(
+    sign_in_attempts, human_check,
+):
+    _fill_the_address()
+    human_check.refuse = True
+
+    assert _try("198.51.100.4", token="a-token") == sign_in_limits.HumanCheckNeeded()
+    assert _try("198.51.100.4", token="a-token") == sign_in_limits.HumanCheckNeeded()
+
+    assert _count(sign_in_attempts, SECRET_PER_PAIR, "198.51.100.4\0a@example.com") == 0
+    assert _count(sign_in_attempts, SECRET_PER_ADDRESS, "a@example.com") == 3
+
+
+def test_no_ones_tries_ever_refuse_another_caller_with_a_wait(sign_in_attempts):
+    """Past the address's count a try only ever needs the check: the pair alone says to wait."""
+    for caller_address in ("198.51.100.1", "198.51.100.2", "198.51.100.3", "198.51.100.4"):
+        for _ in range(5):
+            _try(caller_address)
+
+    assert _try("198.51.100.5", token="a-token") is None
+
+
+def test_a_right_secret_is_taken_back_from_the_caller_the_pair_and_the_address(sign_in_attempts):
+    _as("198.51.100.1", lambda: SECRET.caller_refusal(MAIL_NOW))
+    _try("198.51.100.1")
+
+    _as("198.51.100.1", lambda: SECRET.signed_in("a@example.com", MAIL_NOW))
+
+    assert _count(sign_in_attempts, SECRET_PER_CALLER, "198.51.100.1") == 0
+    assert _count(sign_in_attempts, SECRET_PER_PAIR, PAIR_A) == 0
+    assert _count(sign_in_attempts, SECRET_PER_ADDRESS, "a@example.com") == 0
+
+
+def test_the_human_check_needed_is_said_under_the_routes_key():
+    with Flask(__name__).app_context():
+        response, status = sign_in_limits.answer(
+            sign_in_limits.HumanCheckNeeded(), "Try again in {wait}.", key="msg")
+
+    assert status == 403
+    assert response.get_json() == {"msg": "Confirm you're a person, then try again.",
+                                   "captcha": "required"}
+    assert "Retry-After" not in response.headers

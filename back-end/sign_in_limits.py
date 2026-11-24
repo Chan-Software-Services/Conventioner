@@ -20,6 +20,11 @@ again.
 in, since one line or machine is handed a whole /64. So a per-caller limit counts one machine
 once, on IPv6 as on IPv4, and the addresses of its own network add nothing to its allowance.
 
+**No one else's tries refuse a person.** A sign-in that checks a secret (``SecretBounds``) says to
+wait only for the caller's own tries at an address; past the address's own count, which only many
+callers together reach, it asks the human check, which the person passes. A request that mails
+(``MailBounds``) is counted per caller and address too, and per address by the hour.
+
 **A counter names nobody.** Its key is a hash of the limit, the subject and the window: the
 collection holds how many times someone knocked in a window, not who.
 
@@ -34,12 +39,13 @@ import ipaddress
 import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, Union
 
 from flask import jsonify, request
 from pymongo import ReturnDocument
 
 from db_config import get_database
+from utils import captcha
 
 SIGN_IN_ATTEMPTS_COLLECTION = "sign_in_attempts"
 COUNT_FIELD = "count"
@@ -60,7 +66,8 @@ class SignInLimit:
 
 # Every limit, in one place. A vendor asks for a code, perhaps once more, and enters it; vendors on
 # one venue's wifi share an address, so a caller is allowed far more than an address is. What bounds
-# a guess at a code stays the per-address limit.
+# a guess at a code is the count per caller and address, and past the address's own count the human
+# check.
 #
 # A request that mails a code or a link (``MailBounds``) is counted three ways: per caller, per
 # caller and address together, and per address alone by the hour. The pair's five a quarter of an
@@ -72,8 +79,17 @@ REQUEST_CODE_PER_CALLER_AND_ADDRESS = SignInLimit(
     "request-code:caller-address", attempts=5, window=timedelta(minutes=15))
 REQUEST_CODE_PER_ADDRESS_HOUR = SignInLimit(
     "request-code:address-hour", attempts=20, window=timedelta(hours=1))
-VERIFY_CODE_PER_ADDRESS = SignInLimit("verify-code:address", attempts=10, window=timedelta(minutes=15))
+# A sign-in that checks a secret (``SecretBounds``) counts its wrong tries per caller and address
+# together, ten a quarter of an hour, which bounds one caller's guesses at one address and leaves
+# every other caller's tries at it as they were. Per address alone it counts fifty, which only many
+# callers together reach, and past them it asks the human check rather than refusing, so the person
+# the address belongs to still signs in. The vendor's code is tried this way; a code's own five
+# tries are counted on the code, which these limits do not replace.
 VERIFY_CODE_PER_CALLER = SignInLimit("verify-code:caller", attempts=300, window=timedelta(minutes=15))
+VERIFY_CODE_PER_CALLER_AND_ADDRESS = SignInLimit(
+    "verify-code:caller-address", attempts=10, window=timedelta(minutes=15))
+VERIFY_CODE_PER_ADDRESS_CEILING = SignInLimit(
+    "verify-code:address-ceiling", attempts=50, window=timedelta(minutes=15))
 # A remembered vendor's page asks once per visit (``applicant-login/resume``). Its secret is not to
 # be guessed, so this bounds the work a caller makes the database do, not a guess.
 RESUME_PER_CALLER = SignInLimit("resume:caller", attempts=300, window=timedelta(minutes=15))
@@ -128,8 +144,9 @@ LIMITS = (
     REQUEST_CODE_PER_CALLER,
     REQUEST_CODE_PER_CALLER_AND_ADDRESS,
     REQUEST_CODE_PER_ADDRESS_HOUR,
-    VERIFY_CODE_PER_ADDRESS,
     VERIFY_CODE_PER_CALLER,
+    VERIFY_CODE_PER_CALLER_AND_ADDRESS,
+    VERIFY_CODE_PER_ADDRESS_CEILING,
     RESUME_PER_CALLER,
     CHECK_IN_PER_ADDRESS,
     PASSWORD_PER_ADDRESS,
@@ -265,18 +282,25 @@ class TooMany:
     seconds: int
 
 
+@dataclass(frozen=True)
+class HumanCheckNeeded:
+    """The address is past its own count, and the try did not pass the human check."""
+
+
 #: What a bounds shape answers when it refuses; the route says it in its own words (``answer``).
-Refusal = TooMany
+Refusal = Union[TooMany, HumanCheckNeeded]
 
 
 def answer(
     refusal: Optional[Refusal], sentence: str, key: str = "message",
 ) -> Optional[Tuple[Any, int]]:
     """The route's answer for a refusal, or None when there was none: the 429 of ``too_many`` with
-    the route's ``sentence`` under its ``key``, so the vendor's and the organizer's words stay their
-    own."""
+    the route's ``sentence`` under its ``key``, or the human check's 403 under that ``key``
+    (``captcha.human_check_needed``), so the vendor's and the organizer's words stay their own."""
     if refusal is None:
         return None
+    if isinstance(refusal, HumanCheckNeeded):
+        return captcha.human_check_needed(key)
     return too_many(refusal.seconds, sentence, key=key)
 
 
@@ -313,3 +337,55 @@ class MailBounds:
         if refused is not None:
             return refused
         return _refused(self.per_address, address, now)
+
+
+@dataclass(frozen=True)
+class SecretBounds:
+    """How a sign-in that checks a secret (a code or a password) is bounded: per caller, per caller
+    and address, and per address alone, past which it asks the human check for ``action``.
+
+    A route keeps one order: ``caller_refusal`` before the body is read, then ``before_the_secret``
+    before any account, application or market is looked up, so a refusal and the check's answer
+    are the same for every address and every market; then the secret, and ``signed_in`` for a
+    right one.
+
+    The pair bounds one caller's guesses at one address, and is the only count that refuses with a
+    wait, so no one else's tries ever refuse a person's right secret. A try the pair refused is not
+    counted on the address, so one caller adds at most the pair's limit to it in a window. Past the
+    address's own count the try must pass the human check, which a person does; one that does not is
+    taken back from the pair and the address, so only tries whose secret was checked stay counted.
+    """
+
+    per_caller: SignInLimit
+    per_caller_and_address: SignInLimit
+    per_address: SignInLimit
+    action: str
+
+    def caller_refusal(self, now: datetime) -> Optional[TooMany]:
+        """The refusal when this caller is past its limit, else None; counts the try either way."""
+        return _refused(self.per_caller, caller(), now)
+
+    def before_the_secret(
+        self, address: str, captcha_token: Optional[str], now: datetime,
+    ) -> Optional[Refusal]:
+        """The refusal when this caller and ``address`` together are past their limit, or when
+        ``address`` alone is past its own and ``captcha_token`` does not pass the human check; else
+        None. Counts the pair, then the address unless the pair refused."""
+        pair = caller_and_address(address)
+        refused = _refused(self.per_caller_and_address, pair, now)
+        if refused is not None:
+            return refused
+        if count_attempt(self.per_address, address, now) is None:
+            return None
+        if captcha.captcha_passes(captcha_token, self.action):
+            return None
+        take_back_attempt(self.per_caller_and_address, pair, now)
+        take_back_attempt(self.per_address, address, now)
+        return HumanCheckNeeded()
+
+    def signed_in(self, address: str, now: datetime) -> None:
+        """Take back a try whose secret was right, from the caller, the pair and the address, in the
+        window ``now`` counted it in, so only wrong tries pile up."""
+        take_back_attempt(self.per_caller, caller(), now)
+        take_back_attempt(self.per_caller_and_address, caller_and_address(address), now)
+        take_back_attempt(self.per_address, address, now)

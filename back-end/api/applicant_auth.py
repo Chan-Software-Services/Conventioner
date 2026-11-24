@@ -14,8 +14,11 @@ constraints:
    no "attempts remaining", and nothing counted only for addresses that applied,
    since such a counter answers whether they had. The rate limits
    (``sign_in_limits``) count every address and every caller alike, before the
-   market is looked up, so their refusal leaks nothing, and they bound the guesses
-   at a six-digit code to 10 per address per 15 minutes.
+   market is looked up, so their refusal leaks nothing. They bound one caller's
+   guesses at a six-digit code to 10 per address per 15 minutes, so no one else's
+   wrong tries refuse the vendor's right one; past 50 wrong tries at an address from
+   every caller together, a try asks the human check, one 403 for every address and
+   market. A right code takes its try back.
 
 2. **Requesting a code is indistinguishable, always.** Same HTTP status, shape
    and body whether or not the address is known. Every request asks the human
@@ -226,16 +229,6 @@ def _caller_refusal(limit: sign_in_limits.SignInLimit):
     return _too_many(sign_in_limits.count_attempt(limit, sign_in_limits.caller()))
 
 
-def _address_refusal(limit: sign_in_limits.SignInLimit, email: Optional[str]):
-    """A 429 when this address is past its limit; None otherwise, and for a request naming none.
-
-    Asked only once the caller is within its limit.
-    """
-    if not email:
-        return None
-    return _too_many(sign_in_limits.count_attempt(limit, email))
-
-
 #: What the sign-in says past a limit, ``{wait}`` being the time left of the limit's window.
 _TOO_MANY = "Too many sign-in attempts. Please try again in {wait}."
 
@@ -254,13 +247,24 @@ _CODE_REQUEST = sign_in_limits.MailBounds(
 )
 
 
+#: How the code sign-in is bounded (``sign_in_limits.SecretBounds``): per caller, per caller and
+#: address, and per address alone, past which a try asks the human check.
+_CODE_SIGN_IN = sign_in_limits.SecretBounds(
+    sign_in_limits.VERIFY_CODE_PER_CALLER,
+    sign_in_limits.VERIFY_CODE_PER_CALLER_AND_ADDRESS,
+    sign_in_limits.VERIFY_CODE_PER_ADDRESS_CEILING,
+    captcha.VENDOR_SIGN_IN,
+)
+
+
 def _too_many_requests(refusal: Optional[sign_in_limits.Refusal]):
-    """The code request's answer for a refusal, in the sign-in's words, or None."""
+    """The answer for a bounds shape's refusal, in the sign-in's words under ``message``, or None:
+    a 429 with its wait, or the human check's 403."""
     return sign_in_limits.answer(refusal, _TOO_MANY)
 
 
 def _limit_clock() -> datetime:
-    """The moment a code request is counted at."""
+    """The moment a code request or a try at a code is counted at, which its take-back is too."""
     return datetime.now(timezone.utc)
 
 
@@ -505,17 +509,23 @@ def verify_login_code(market_slug: str) -> tuple:
     or code, and a gated or unknown market. Neither says whether the address applied.
 
     On success, returns the market ID and applicant email so the front end
-    can proceed with authenticated applicant operations. Past the caller's or the
-    address's rate limit it answers 429 and counts no try.
+    can proceed with authenticated applicant operations, and takes the try back
+    from every count. Past the caller's limit, or the caller's and the address's
+    together, it answers 429 and tries no code. Past the address's own count, which
+    only many callers together reach, a try without a passing ``captcha_token``
+    answers the human check's 403 and tries no code (``_CODE_SIGN_IN``).
     """
-    refused = _caller_refusal(sign_in_limits.VERIFY_CODE_PER_CALLER)
+    now = _limit_clock()
+    refused = _too_many_requests(_CODE_SIGN_IN.caller_refusal(now))
     if refused:
         return refused
     data = request.get_json(silent=True)
     email = _email_from(data)
-    refused = _address_refusal(sign_in_limits.VERIFY_CODE_PER_ADDRESS, email)
-    if refused:
-        return refused
+    if email:
+        refused = _too_many_requests(_CODE_SIGN_IN.before_the_secret(
+            email, string_field(data, "captcha_token"), now))
+        if refused:
+            return refused
 
     code = (string_field(data, "code") or "").strip()
 
@@ -542,6 +552,7 @@ def verify_login_code(market_slug: str) -> tuple:
         # with no token and was sent back to "Sign In" without a word (bug 6). Telling the person
         # who just read the code whether they have applied leaks nothing; the ruling is about
         # strangers, and no failure says it.
+        _CODE_SIGN_IN.signed_in(email, now)
         response = _signed_in(market_id, email)
         _remember_on_this_device(
             response, market_id, email, market_dates_of(market_doc),
