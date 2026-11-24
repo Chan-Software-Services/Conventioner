@@ -302,7 +302,7 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
    - 6-digit code sent via Resend
    - Code expires in 5 minutes
    - Its tries are counted in the update that reads it; the fifth wrong code discards it and keeps its wait
-   - Rate limited on asking for a code and on trying one, with the human check past an address's own count: the limits are in [the sign-in is bounded](implementation/data/users-and-email.md#the-sign-in-is-bounded)
+   - Rate limited on asking for a code and on trying one, and a try past an address's own count asks the human check: the limits are in [the sign-in is bounded](implementation/data/users-and-email.md#the-sign-in-is-bounded)
    - Another code is refused (429 with the wait) until an hour after the last one expired, unless it was used
 
 ### Password Reset
