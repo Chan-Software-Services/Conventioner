@@ -16,6 +16,7 @@ sources:
   - T316
   - T421
   - T474
+  - T578
   - wayfinding/the-market-frame/map
   - wayfinding/the-market-frame/01
   - wayfinding/the-order-of-the-work/map
@@ -98,6 +99,7 @@ A page inside the card insets its content `--space-6`, the rail's inset, so what
 From 1024px the bar, the rail and everything the rail grows (a refused move's blockers, an error, the archived note) stick together at `top: var(--banner-h)`, the app bar's height as a token, a fixed 44px.
 Never give a frame screen an `overflow` scroller of its own: a sticky element inside an `overflow` ancestor silently stops sticking.
 The height of what is pinned under the app bar is measured (a `ResizeObserver`) and published as `--market-frame-h` on the card, so a screen's own sticky column sits at `top: calc(var(--banner-h) + var(--market-frame-h))`: the frame's block from 1024px, the bar up to 1023px.
+The height is the unrounded one, `getBoundingClientRect().height`, as [`PinnedTools`](../../../front-end/src/components/PinnedTools.vue)' is: on Attendance at 1100 and 1440 the frame is 173.375px tall, and the rounded `offsetHeight` of 173 it published until T578 let the door's tools stand at 217.375px at rest and rise to 217 as they pinned.
 
 **Up to 1023px only the bar pins, as on a phone.**
 At 1023px and below the frame's wrapper gives up its box (`display: contents`) and the bar takes `position: sticky` at `top: var(--banner-h)` itself, since a sticky element sticks only inside its parent and the bar must stick against the card.

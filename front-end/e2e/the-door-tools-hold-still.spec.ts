@@ -42,14 +42,14 @@ async function aLongDoor(request: APIRequestContext): Promise<string> {
   return marketId;
 }
 
-/** In px from the window's top: the frame's bottom, the pinned block's top, and the scroll. */
+/**
+ * In px from the window's top, unrounded, so a fraction of a pixel shows: the frame's bottom, the
+ * pinned block's top, and the scroll.
+ */
 function parts(page: Page) {
   return page.evaluate(() => {
     const edge = (testid: string, side: 'top' | 'bottom') =>
-      // `|| 0`: a box scrolled up by a fraction rounds to -0, which `toBe` tells from 0.
-      Math.round(
-        document.querySelector(`[data-testid="${testid}"]`)!.getBoundingClientRect()[side],
-      ) || 0;
+      document.querySelector(`[data-testid="${testid}"]`)!.getBoundingClientRect()[side];
     return {
       frame: edge('market-frame', 'bottom'),
       tools: edge('attendance-tools', 'top'),
@@ -57,6 +57,9 @@ function parts(page: Page) {
     };
   });
 }
+
+/** Two edges a hundredth of a pixel apart or less stand at the same place. */
+const AT = 2;
 
 /** How far the page can scroll down. */
 const furthest = (page: Page) =>
@@ -70,15 +73,22 @@ async function scrollTo(page: Page, y: number) {
 }
 
 /**
- * At every scroll the block's top is the frame's bottom: pinned from the start, never moving. A
- * page shorter than a scroll is scrolled as far as it goes.
+ * At every scroll the block's top is the frame's bottom and where it stood at rest: pinned from the
+ * start, never moving, not by a fraction of a pixel. A page shorter than a scroll is scrolled as far
+ * as it goes.
  */
 async function expectHeldStill(page: Page, at: string) {
   const most = await furthest(page);
+  await scrollTo(page, 0);
+  const rest = await parts(page);
   for (const y of SCROLLS.map((y) => Math.min(y, most))) {
     await scrollTo(page, y);
     const now = await parts(page);
-    expect(now.tools, `${at}, ${y}px: the tools stand under the frame`).toBe(now.frame);
+    expect(now.tools, `${at}, ${y}px: the tools stand under the frame`).toBeCloseTo(now.frame, AT);
+    expect(now.tools, `${at}, ${y}px: the tools stand where they did at rest`).toBeCloseTo(
+      rest.tools,
+      AT,
+    );
   }
   await scrollTo(page, 0);
 }
@@ -203,7 +213,7 @@ test.describe('on a phone', () => {
     for (const y of SCROLLS) {
       await scrollTo(page, y);
       const now = await parts(page);
-      expect(now.tools, `${y}px: the tools went with the page`).toBe(rest.tools - y);
+      expect(now.tools, `${y}px: the tools went with the page`).toBeCloseTo(rest.tools - y, AT);
     }
   });
 });
