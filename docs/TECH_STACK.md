@@ -9,6 +9,7 @@ describes:
   - .nvmrc
   - docker-compose.yml
   - front-end/vite.config.ts
+  - back-end/requirements-audit.in
 verified: 2026-11-16
 sources:
   - T254
@@ -30,7 +31,8 @@ How each part of the code works is in the implementation layer of the [knowledge
 
 - Each back-end requirements file that Vercel, Docker, CI or the gate installs is a lock: every package, direct or not, at one exact version with its hashes, so a redeploy of unchanged code installs exactly what was tested
   - The redeploy of 2026-10-23 re-resolved six packages left unpinned, openai 3.35.1 to 3.37.0 among them; the first locks hold what that deploy installed
-- People edit the `.in` file beside each lock (`requirements.in`, `requirements-floorplan-solver.in`, `requirements-dev.in`), never the `.txt`
+- People edit the `.in` file beside each lock (`requirements.in`, `requirements-floorplan-solver.in`, `requirements-dev.in`, `requirements-audit.in`), never the `.txt`
+- [`requirements-audit.in`](../back-end/requirements-audit.in) is pip-audit alone, for [CI's `python-advisories` job](implementation/testing/ci-and-the-gate.md#ci), which checks every lock against known advisories; it is its own lock so no test run installs the scanner
 - [`scripts/lock-backend-requirements.sh`](../scripts/lock-backend-requirements.sh) (needs any [uv](https://docs.astral.sh/uv/); it runs the uv pinned in `requirements-dev.in`, so every machine writes the same locks) is the one way to change a lock: with no options it keeps every pin and adds or drops only what an `.in` changed; `--upgrade-package <name>` moves one package on purpose, `--upgrade` everything
 - Two checks hold the locks to that command:
   - `tests/test_requirements_are_locked.py` fails on a lock line that is not a hashed pin, a lock whose direct requirements are not exactly its `.in`'s or whose pins no longer satisfy it, and a package pinned differently in two locks
@@ -211,8 +213,8 @@ How each part of the code works is in the implementation layer of the [knowledge
   - Each of them still asks for minimatch 10, so the override holds every copy at `^11.0.8`, the line that has upstream's hardening
   - Drop the entry once ESLint, `@eslint/config-array`, `@typescript-eslint/typescript-estree` and js-beautify's `editorconfig` and `glob` all ask for 11
 - **Prettier 3.9.10** - Code formatter, configured in `front-end/.prettierrc.json` (semicolons, single quotes, a 100-character line, trailing commas everywhere)
-  - `npm run format` fixes and `npm run format:check` verifies; both cover `front-end/` and `docs/` with that config, leaving out the generated `docs/schema.d.ts`, which its test compares byte for byte (`front-end/.prettierignore`); CI runs the check in `frontend-lint-and-types`, so unformatted front-end code or docs fail the build: run `npm run format` before committing
-  - The one-time reformat commits, of the front end and of `docs/`, are listed in `.git-blame-ignore-revs`, which `git blame` skips once `git config blame.ignoreRevsFile .git-blame-ignore-revs` is set
+  - `npm run format` fixes and `npm run format:check` verifies; both cover `front-end/`, `docs/` and the Markdown files at the repository's root (`"../*.md"`) with that config, leaving out the generated `docs/schema.d.ts`, which its test compares byte for byte, and `CHANGELOG.md`, which release-please writes (`front-end/.prettierignore`); the root glob is quoted so Prettier expands it, passing over the `CLAUDE.md` link to `AGENTS.md`, which it refuses when the shell names it; CI runs the check in `frontend-lint-and-types`, so unformatted front-end code or docs fail the build: run `npm run format` before committing
+  - The one-time reformat commits, of the front end, of `docs/` and of the root Markdown, are listed in `.git-blame-ignore-revs`, which `git blame` skips once `git config blame.ignoreRevsFile .git-blame-ignore-revs` is set
 - **Stylelint 17** - The design language's gate (`npm run lint:css`, which refuses a warning as it does an error), configured in `stylelint.config.js`
 - **Vue TSC 3.3.14** - TypeScript type checker for Vue
   - Type checking for Vue components

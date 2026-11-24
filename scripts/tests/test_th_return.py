@@ -184,3 +184,31 @@ def test_a_slot_with_no_wrapper_of_its_own_is_torn_down_by_the_callers_and_says_
     ) in result.stderr
     assert teardowns(bin_dir) == ["down -v --remove-orphans | project=conventioner-3"]
     assert treehouse_calls(bin_dir) == [f"return {slot}"]
+
+
+def test_a_return_after_team_stack_down_leaves_the_teardown_to_it(slot, bin_dir):
+    # team-close runs team-stack down, which leaves a network for its sweep while a heavy run holds
+    # the machine, then this return with TEAM_STACK_DOWN=1: a down here would remove that network.
+    result = run_return(bin_dir, slot, TEAM_STACK_DOWN="1", DOWN_FAILS="1")
+
+    assert result.returncode == 0, result.stderr
+    assert docker_calls(bin_dir) == []
+    assert treehouse_calls(bin_dir) == [f"return {slot}"]
+    assert result.stderr == ""
+
+
+def test_a_return_after_team_stack_down_passes_on_treehouse_returns_exit_status(slot, bin_dir):
+    result = run_return(bin_dir, slot, TEAM_STACK_DOWN="1", TREEHOUSE_STATUS="3")
+
+    assert result.returncode == 3
+    assert docker_calls(bin_dir) == []
+    assert treehouse_calls(bin_dir) == [f"return {slot}"]
+
+
+@pytest.mark.parametrize("value", ["", "0", "true"])
+def test_only_team_stack_down_1_skips_the_teardown(slot, bin_dir, value):
+    result = run_return(bin_dir, slot, TEAM_STACK_DOWN=value)
+
+    assert result.returncode == 0, result.stderr
+    assert teardowns(bin_dir) == ["down -v --remove-orphans | project=conventioner-3"]
+    assert treehouse_calls(bin_dir) == [f"return {slot}"]

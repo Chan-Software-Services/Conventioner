@@ -110,8 +110,20 @@ class TestARightCodeChecksThemOut:
         again = check_out(client)
 
         assert again.status_code == 200
-        assert again.get_json()["checkedOutAt"] == first
+        assert again.get_json() == {"message": "Checked out", "checkedOutAt": first}
         assert [entry["kind"] for entry in here.history.documents] == [History.CHECKED_OUT]
+
+    def test_after_an_organizers_check_out_it_answers_the_time_alone(self, client, here):
+        """The organizer's door answers who made a stored check-out; the vendor's never gives an
+        organizer's address to a vendor."""
+        stored_out, _status = AttendanceApi.record_check_out(
+            at_the_door(MARKET, "door@example.com"), VENDOR, TODAY)
+
+        again = check_out(client)
+
+        assert again.status_code == 200
+        assert again.get_json() == {
+            "message": "Checked out", "checkedOutAt": stored_out["checkedOutAt"]}
 
 
 class TestEveryOtherWayWritesNothing:

@@ -7,3 +7,6 @@
 
 # docs: one-time Prettier reformat of docs/, by npm run format (T263)
 9185d0fee72c4b1b82595febf1bcfa0bdc8a9d1e
+
+# style: one-time Prettier reformat of the root Markdown (AGENTS.md, README.md)
+98b20187f755586bbd2c80a6608613bea4c005a6

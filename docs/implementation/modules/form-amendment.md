@@ -5,7 +5,7 @@ describes:
   - front-end/src/components/application/AmendFormDialog.vue
   - front-end/src/views/CsvImportView.vue#amendAvailability
   - front-end/src/views/CsvImportView.vue#readAmendForm
-verified: 2026-11-23
+verified: 2026-11-24
 sources:
   - wayfinding/the-order-of-the-work/07
   - wayfinding/the-order-of-the-work/map
@@ -37,7 +37,9 @@ On that refusal the dialog stays open on the server's sentence and emits `change
 Nothing closes it while it saves, and a save answered after it was closed and opened again, on another market, leaves the new opening alone: its write belongs to its opening, the market's id with `open` ([dialogs](../conventions/dialogs.md), T411).
 The questions turned off follow the form read again too, with the one the import suggested turning off, so the next save never sends the refused copy's list over a colleague's change; the question being added is kept.
 
-**It mirrors the one refusal an organizer can cause**: turning off every question the plan offers something for while adding none leaves a form that asks nothing, which could not enter Review (`FormHasFieldsGuard`), so the dialog says so before Save.
+**It mirrors the one refusal an organizer can cause**: turning off every question the plan offers something for while adding none leaves a form that asks nothing, which could not enter Review (`FormHasFieldsGuard`), so the dialog says so before Save, naming the plan's questions that change turns off, never one the stored form turned off before ("Keep asking Section preference, or add a question.").
+Save stays disabled for that change: the form write takes it, but the import would then refuse every row (`_asks_nothing` in [`application_write.py`](../../../back-end/application_write.py)), a dead end the dialog stops short of.
+A form that asked nothing already, as stored (`alreadyAsksNothing`), is told so in the present tense while the change adds no question, in the warning's yellow rather than a refusal's red ([colour](../../design-system.md#colour)), and Save takes a change that leaves it so, as the form write does, since only the move into Review refuses such a form and the save leaves the import no worse.
 It counts what the guard counts, `planDerivedAskedKeys` in [`essentialFields.ts`](../../../front-end/src/utils/essentialFields.ts), the mirror of `plan_derived_asked_keys`: the names and the business name, asked on every form, and the free request ask nothing, so counting them would keep the sentence from ever showing.
 
 **It offers no key the save refuses**: it asks the builder's own key check (`fieldKeyError` in [`applicationForm.ts`](../../../front-end/src/utils/applicationForm.ts)), so a column headed "Submitted at" is told that `submitted_at` is the import's, before anything is sent (E38/F02).

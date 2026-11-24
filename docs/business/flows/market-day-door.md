@@ -192,6 +192,7 @@ Covered by:
 
 1. On Attendance's list, in Market Days, a checked-in vendor's row offers "Check out", its one button, for someone who may check vendors in, on any day with a check-in, a vendor here with no table that day included.
 2. Expect the row to keep its status and gain a second chip, "Checked out 4:05 PM", then "by you", with one "Undo?" just left of that chip, which undoes the check-out and brings "Check out" back, with the check-in's "Undo?" left of its status.
+   Where someone checked the vendor out first, while the row still showed them here, the row says theirs at once: "by" the other organizer's address, or "Scanned out at 4:05 PM" for the vendor's own.
 3. A check-in is not undone while the vendor is checked out: the row has no "Undo?" by its status, only the check-out's "Undo?" by the departure chip, and a check-in's undo sent anyway is answered "Undo the check-out first."
 
 **Task (vendor), at a market that lets vendors check themselves in and out:** "You are leaving. Check out."
