@@ -3,8 +3,8 @@ import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescri
 import skipFormatting from '@vue/eslint-config-prettier/skip-formatting';
 
 // `npm run lint:check` runs this config on the whole front end, as CI does. The no-mistakes gate
-// runs ESLint with it on the files a branch changes, and the whole `lint:check` when a branch
-// changes this file (`scripts/nm-lint.sh`).
+// runs ESLint with it on the files a branch changes, or the whole `lint:check` when a branch
+// changes this file, since that may reach any file (docs/implementation/testing/ci-and-the-gate.md).
 
 // To allow more languages other than `ts` in `.vue` files, uncomment the following lines:
 // import { configureVueProject } from '@vue/eslint-config-typescript'
