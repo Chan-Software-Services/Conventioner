@@ -173,6 +173,10 @@ test.describe('Phase state machine - full walk', () => {
     await expect(page.getByTestId('phase-rail-current')).toHaveText('Market Days', {
       timeout: 10000,
     });
+    // The rail reads the new phase before the move lands on the door: a menu opened in between is
+    // gone once the landing draws its page, so open it once the door has drawn what it read.
+    await expect(page).toHaveURL(/\/attendance$/, { timeout: 15000 });
+    await expect(page.getByTestId('attendance-summary')).toBeVisible({ timeout: 15000 });
     await page.screenshot({ path: `${SCREENSHOT_DIR}/07-market-days.png`, fullPage: true });
 
     // Archiving is behind the overflow menu, never presented as the way onward (E10/F01/S01).

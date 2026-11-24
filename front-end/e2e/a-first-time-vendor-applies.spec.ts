@@ -1,6 +1,7 @@
 import { test, expect, TEST_USER, BACKEND_URL, VendorPage } from './fixtures';
 import { vendorPagePath } from './helpers/marketScreens';
 import {
+  anApplicantEmail,
   createApplicantLoginChallenge,
   planSetupObject,
   seedApplicantMarket,
@@ -16,7 +17,6 @@ import { mongoEval } from './helpers/mongo';
  * In" with no word. Every other spec seeds the application before signing in, so none met this.
  */
 const DATE = '2099-08-01';
-const NEW_VENDOR = 'first-time-vendor@example.com';
 const CODE = '246810';
 
 test('a brand-new address requests a code, signs in, applies and sees it submitted', async ({
@@ -31,14 +31,16 @@ test('a brand-new address requests a code, signs in, applies and sees it submitt
     { setupObject: planSetupObject([DATE]) },
   );
 
+  const newVendor = anApplicantEmail('first-time-vendor');
+
   // The real request, through the page.
   const login = new VendorPage(page);
   await page.goto(vendorPagePath(market.marketSlug));
-  await login.requestCode(NEW_VENDOR);
+  await login.requestCode(newVendor);
   await expect(login.codeInput).toBeVisible();
 
   // Email is off on this stack, so the code the vendor would read is planted in its place.
-  createApplicantLoginChallenge(market.marketId, NEW_VENDOR, CODE);
+  createApplicantLoginChallenge(market.marketId, newVendor, CODE);
   await login.enterCode(CODE);
 
   // Signed in with nothing to load: "Apply", not "Sign In" again, then the empty form, on the
@@ -47,7 +49,7 @@ test('a brand-new address requests a code, signs in, applies and sees it submitt
   await login.applyButton.click();
   await expect(login.form).toBeVisible({ timeout: 30000 });
   await expect(page).toHaveURL(new RegExp(`${vendorPagePath(market.marketSlug)}$`));
-  await expect(login.essentialEmail).toContainText(NEW_VENDOR);
+  await expect(login.essentialEmail).toContainText(newVendor);
 
   await login.fullNameInput.fill('Ada Newcomer');
   await login.tierCheckbox(DATE, 'Gold').check();
@@ -83,7 +85,7 @@ test('a vendor a rule rejects as they apply reads "Submitted", as anyone would',
   });
   expect(rule.ok(), await rule.text()).toBeTruthy();
 
-  const vendor = 'turned-away-vendor@example.com';
+  const vendor = anApplicantEmail('turned-away-vendor');
   const login = new VendorPage(page);
   await page.goto(vendorPagePath(market.marketSlug));
   await login.requestCode(vendor);
@@ -118,13 +120,14 @@ test('signing in does not assume the vendor has applied', async ({ page, request
     TEST_USER.email,
     TEST_USER.password,
   );
+  const newVendor = anApplicantEmail('first-time-vendor');
   const login = new VendorPage(page);
   await page.goto(vendorPagePath(market.marketSlug));
 
   await expect(page.getByTestId('vendor-sign-in-email-step')).not.toContainText('used to apply');
-  await login.requestCode(NEW_VENDOR);
+  await login.requestCode(newVendor);
   // The same words for every address - and true for every address, since every one is sent a code.
   await expect(page.getByTestId('vendor-sign-in-code-step')).toContainText(
-    "We've sent a code to first-time-vendor@example.com.",
+    `We've sent a code to ${newVendor}.`,
   );
 });

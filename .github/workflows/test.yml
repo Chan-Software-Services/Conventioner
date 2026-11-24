@@ -78,6 +78,55 @@ jobs:
           }
       - run: python -m pytest tests/ -v
 
+  # Every back-end lock against the advisories PyPI publishes (pip-audit, from its own lock), read as
+  # locked: each pinned version with its hashes, resolving and installing nothing. Any known
+  # advisory fails the job, whose summary names each finding and the version that fixes it. Not a
+  # required check, so an advisory published overnight never holds an unrelated pull request: the
+  # red job on a push to dev is the alert. It waits for real-data-and-workflows, which ends in under
+  # a minute, so a pull request's run never asks for more than the account's 20 jobs at once
+  # (docs/implementation/testing/ci-and-the-gate.md#the-e2e-shards). A trial commit skips it, as it
+  # skips e2e-repeat and test-map.
+  python-advisories:
+    name: python-advisories
+    needs: real-data-and-workflows
+    if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: back-end
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-audit.txt
+      # One lock a run: pip-audit refuses a package listed in two of the files it is given, and the
+      # locks share their pins. --strict fails on a package it could not look up.
+      - name: No known advisory in a back-end lock
+        run: |
+          status=0
+          for lock in requirements*.txt; do
+            echo "::group::$lock"
+            report="$RUNNER_TEMP/advisories.md"
+            if pip-audit --disable-pip --strict --progress-spinner off -r "$lock" -f markdown -o "$report"; then
+              echo "- \`$lock\`: no known advisory" >>"$GITHUB_STEP_SUMMARY"
+            elif [ -s "$report" ]; then
+              status=1
+              cat "$report"
+              echo "::error::$lock pins a version with a known advisory; move it with scripts/lock-backend-requirements.sh --upgrade-package <name>"
+              { echo "### \`$lock\`"; cat "$report"; echo; } >>"$GITHUB_STEP_SUMMARY"
+            else
+              status=1
+              echo "::error::pip-audit could not read $lock; its log says why"
+              echo "- \`$lock\`: not audited, see the log" >>"$GITHUB_STEP_SUMMARY"
+            fi
+            rm -f "$report"
+            echo "::endgroup::"
+          done
+          exit "$status"
+
   # The docs are a graph of nodes that describe the code (scripts/knowledge_graph.py). This job
   # checks the graph itself and is a required check on dev. On a pull request it also fails on
   # drift: a changed file a node describes, with that node neither touched nor its `verified`
@@ -114,7 +163,9 @@ jobs:
   # branch is published before any job runs. The protection is the same checker in the git hooks
   # and the gate, before anything leaves the PC
   # (docs/implementation/conventions/security-invariants.md). These steps only keep a PR that got
-  # past them from merging.
+  # past them from merging. gitleaks also reads each push to dev and main, so a secret that reached
+  # one other than through a pull request's scan (a Release PR, merged with --admin, gets no CI)
+  # fails a run there.
   # zizmor reads the repository's workflows and Dependabot config, offline, so it needs no token.
   # Every finding fails the job; an accepted one is ignored on the line zizmor reports, with its
   # audit and the reason after it.
@@ -141,13 +192,34 @@ jobs:
       - name: No real data anywhere in the tree
         if: github.event_name == 'pull_request'
         run: python scripts/real_data_check.py tree
-      - name: No secret in the PR's commits (gitleaks)
-        if: github.event_name == 'pull_request'
+      # A pull request's commits since its base, or a push's own range (before..after): the commits
+      # the push added, never the history before it, which holds fixture values gitleaks takes for
+      # keys. A push whose before is not a commit in the clone fails the step rather than scanning
+      # nothing, since gitleaks passes an unreadable range: one that created the branch (before is
+      # all zeros), an empty before, or a forced push, whose before no ref still reaches. The rules
+      # of dev and main allow none of them.
+      - name: No secret in the new commits (gitleaks)
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        env:
+          EVENT: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
         run: |
+          if [ "$EVENT" = pull_request ]; then
+            range="origin/$BASE_REF..$HEAD_SHA"
+          elif [ "$PUSH_BEFORE" = 0000000000000000000000000000000000000000 ]; then
+            echo "::error::This push created the branch, so it has no range to scan for secrets"
+            exit 1
+          elif ! [[ "$PUSH_BEFORE" =~ ^[0-9a-f]{40}$ ]] || ! git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
+            echo "::error::The push's before, '$PUSH_BEFORE', is not a commit in this clone (a forced push?), so its range cannot be scanned for secrets"
+            exit 1
+          else
+            range="$PUSH_BEFORE..$PUSH_AFTER"
+          fi
           curl -fsSL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.28.0/gitleaks_8.28.0_linux_x64.tar.gz
           echo "a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb  gitleaks.tar.gz" | sha256sum -c -
           tar -xzf gitleaks.tar.gz -C "$RUNNER_TEMP" gitleaks
-          "$RUNNER_TEMP/gitleaks" git --redact=100 --no-banner --verbose --log-opts="origin/$BASE_REF..$HEAD_SHA" .
+          "$RUNNER_TEMP/gitleaks" git --redact=100 --no-banner --verbose --log-opts="$range" .
       - name: Install zizmor ${{ env.ZIZMOR_VERSION }}
         run: |
           archive=zizmor-x86_64-unknown-linux-gnu.tar.gz
