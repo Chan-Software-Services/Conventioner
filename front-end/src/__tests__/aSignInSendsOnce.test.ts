@@ -20,8 +20,6 @@ vi.mock('axios', async (importOriginal) => {
   return { ...actual, default: { ...actual.default, post: (...a: unknown[]) => post(...a) } };
 });
 
-vi.mock('@/utils/captcha', () => ({ executeRecaptcha: async () => 'a-captcha-token' }));
-
 import LoginView from '@/views/LoginView.vue';
 import VendorSignIn from '@/components/vendorPage/VendorSignIn.vue';
 import { useApplicationStore, type CodeAnswer } from '@/stores/application';
@@ -288,5 +286,151 @@ describe('the vendor sign-in reads its own answer', () => {
     expect(w.find('[data-testid="vendor-sign-in-code-step"]').exists()).toBe(true);
     expect(w.get('[data-testid="vendor-sign-in-error"]').text()).toBe('That code is not right.');
     expect((back.element as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
+describe('sign-up asks the human check (T539)', () => {
+  const PLACEHOLDER = 'e2e-test-captcha-token';
+  const required = {
+    isAxiosError: true,
+    response: {
+      status: 403,
+      data: { msg: "Confirm you're a person, then try again.", captcha: 'required' },
+    },
+  };
+  const created = { status: 201, data: { msg: 'Check your email.' } };
+
+  async function fillSignUp(w: VueWrapper) {
+    await w.get('[data-testid="login-tab-register"]').trigger('click');
+    await w.get('[data-testid="login-register-email-input"]').setValue('new@example.com');
+    await w.get('[data-testid="login-register-password-input"]').setValue('a-long-password');
+    await w
+      .get('[data-testid="login-register-password-confirm-input"]')
+      .setValue('a-long-password');
+  }
+
+  const sentTokens = () =>
+    post.mock.calls.map((call) => (call[1] as { captcha_token?: string }).captcha_token);
+
+  it("sends the widget's token as captcha_token, and resets the check after the answer", async () => {
+    vi.stubEnv('VITE_TURNSTILE_SITE_KEY', 'a-site-key');
+    vi.resetModules();
+    let callback: (token: string) => void = () => {};
+    const turnstile = {
+      render: vi.fn((_box: HTMLElement, options: { callback: (token: string) => void }) => {
+        callback = options.callback;
+        return 'widget-1';
+      }),
+      reset: vi.fn(),
+      remove: vi.fn(),
+    };
+    window.turnstile = turnstile;
+    try {
+      const { default: FreshLoginView } = await import('@/views/LoginView.vue');
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [{ path: '/login', component: FreshLoginView }],
+      });
+      await router.push('/login');
+      wrapper = mount(FreshLoginView, { global: { plugins: [router] }, attachTo: document.body });
+      await fillSignUp(wrapper);
+      await flushPromises();
+
+      expect(turnstile.render).toHaveBeenCalledTimes(1);
+      expect(turnstile.render.mock.calls[0]![1]).toMatchObject({ action: 'sign-up' });
+      // The check sits directly above the form's button.
+      const check = wrapper.get('[data-testid="human-check"]').element;
+      expect(check.nextElementSibling?.getAttribute('data-testid')).toBe(
+        'login-register-submit-button',
+      );
+
+      callback('a-widget-token');
+      post.mockResolvedValueOnce(created);
+      await wrapper.get('[data-testid="login-register-form"]').trigger('submit');
+      await flushPromises();
+
+      expect(sentTokens()).toEqual(['a-widget-token']);
+      expect(turnstile.reset).toHaveBeenCalledWith('widget-1');
+    } finally {
+      delete window.turnstile;
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('with no site key sends the placeholder token, and loads no script', async () => {
+    const { w } = await atLogin();
+    await fillSignUp(w);
+    expect(w.find('[data-testid="human-check"]').exists()).toBe(false);
+    post.mockResolvedValueOnce(created);
+
+    await w.get('[data-testid="login-register-form"]').trigger('submit');
+    await flushPromises();
+
+    expect(sentTokens()).toEqual([PLACEHOLDER]);
+    expect(document.querySelector('script[src*="challenges.cloudflare.com"]')).toBeNull();
+  });
+
+  it("sends once more after a 'captcha: required' answer, and signs up", async () => {
+    const { w } = await atLogin();
+    await fillSignUp(w);
+    post.mockRejectedValueOnce(required).mockResolvedValueOnce(created);
+
+    await w.get('[data-testid="login-register-form"]').trigger('submit');
+    await flushPromises();
+
+    expect(sentTokens()).toEqual([PLACEHOLDER, PLACEHOLDER]);
+    expect(w.get('[data-testid="login-register-success-message"]').text()).toBe(
+      'Check your email.',
+    );
+    expect(shown(w, 'login-register-error-message')).toBe(false);
+  });
+
+  it("says it couldn't confirm a person when the retry is answered the same", async () => {
+    const { w } = await atLogin();
+    await fillSignUp(w);
+    post.mockRejectedValue(required);
+
+    await w.get('[data-testid="login-register-form"]').trigger('submit');
+    await flushPromises();
+
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(w.get('[data-testid="login-register-error-message"]').text()).toBe(
+      "We couldn't confirm you're a person. Try again.",
+    );
+  });
+
+  it("says the check didn't load, and sends nothing, when the check cannot give a token", async () => {
+    vi.stubEnv('VITE_TURNSTILE_SITE_KEY', 'a-site-key');
+    vi.resetModules();
+    window.turnstile = {
+      render: (_box: HTMLElement, options: { 'unsupported-callback': () => void }) => {
+        queueMicrotask(options['unsupported-callback']);
+        return 'widget-1';
+      },
+      reset: vi.fn(),
+      remove: vi.fn(),
+    } as never;
+    try {
+      const { default: FreshLoginView } = await import('@/views/LoginView.vue');
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [{ path: '/login', component: FreshLoginView }],
+      });
+      await router.push('/login');
+      wrapper = mount(FreshLoginView, { global: { plugins: [router] }, attachTo: document.body });
+      await fillSignUp(wrapper);
+      await flushPromises();
+
+      await wrapper.get('[data-testid="login-register-form"]').trigger('submit');
+      await flushPromises();
+
+      expect(post).not.toHaveBeenCalled();
+      expect(wrapper.get('[data-testid="login-register-error-message"]').text()).toBe(
+        "The check that you're a person didn't load. Check your connection, then reload the page.",
+      );
+    } finally {
+      delete window.turnstile;
+      vi.unstubAllEnvs();
+    }
   });
 });

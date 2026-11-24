@@ -22,7 +22,7 @@ const LUCIDE = ['IconCheck', 'IconKeyboard'];
 let bundled: Record<string, string>;
 
 beforeAll(async () => {
-  // The config refuses a production build with no reCAPTCHA site key; this bundle is never served.
+  // The config refuses a production build with no Turnstile site key; this bundle is never served.
   const allowInsecure = process.env.VITE_ALLOW_INSECURE_LOCAL_DEV;
   process.env.VITE_ALLOW_INSECURE_LOCAL_DEV = 'true';
   try {

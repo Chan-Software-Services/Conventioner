@@ -27,6 +27,7 @@ sources:
   - T411
   - T446
   - T422
+  - T539
 ---
 
 # The component library
@@ -81,6 +82,10 @@ The `components` entry draws each reusable component that exists today, the real
 Its [`RowMenu`](../../../front-end/src/components/RowMenu.vue) is drawn as the Payments tab's two menus and the app bar's account menu, and as the layout map's Floorplan menu, choices that stay chosen opening above their button, the second and third disabled while the first is unticked (T422).
 
 The `toolbars` entry draws the parts Attendance's and Applications' toolbars are built from (T466): a [`ToolRow`](../../../front-end/src/components/ToolRow.vue) with the fixture's market days in a `.field--compact` select at its start and, at its end, three [`ToolGroup`](../../../front-end/src/components/ToolGroup.vue)s, a [`SegmentedControl`](../../../front-end/src/components/SegmentedControl.vue) of List and Map, Print roster with Door code, and a `ListFreshness` with no time; a second row whose search takes the room its count leaves; the All view's five statuses as a segmented control that wraps on a phone; and a [`PinnedTools`](../../../front-end/src/components/PinnedTools.vue) over the fixture's first 60 applicants in a `ScrollBox`, which gives the box no banner or frame height so the block pins at its top from 1024px wide; each panel spans its section, as a toolbar spans its card, and every press is read out.
+
+The `human-check` entry draws [`HumanCheck`](../../../front-end/src/components/HumanCheck.vue), the one renderer of Cloudflare Turnstile ([ADR 0045](../../adr/0045-turnstile-is-the-one-human-check.md)), above a form's Create account button with Cloudflare's published test site keys, which work on any host: `1x00000000000000000000AA` passes unseen and `3x00000000000000000000FF` always asks for the tick, each in a form a desk's sign-in card wide (536px, `flexible`) and a 320-pixel phone's (224px, `compact`); the button asks the check for a token through `withHumanCheck`, as a form does, and a `ReadOut` says what it got.
+Below them, the two sentences a person is told, in `SignInMessage`'s line: the check did not load, and it could not confirm a person after the automatic retry (T539).
+Its spec plays Cloudflare's script with a stand-in served at its address, so it measures the app's layout (no room above the button while the check is unseen, 12px once it draws) and never depends on Cloudflare; the entry with Cloudflare's own script is judged by eye.
 
 The page uses only the design tokens, the primitives and the app's components; Stylelint holds its files as it holds every file, so a raw colour, size or spacing is an error there.
 A state the pointer or the keyboard makes (hover, held down, focus) is drawn held beside the live control by a class of the entry's own that copies what `primitives.css`, or the component it mounts, draws for it (`FileDropZone`'s focus halo); the live control is the one to trust.

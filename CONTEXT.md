@@ -308,6 +308,12 @@ See [The public map page](docs/implementation/modules/public-map-page.md#the-ven
 
 ### Accounts
 
+**Human check**:
+The check that a person, not a script, is asking (Cloudflare Turnstile), asked on every vendor code request and organizer sign-up, and on a sign-in past its per-address limit.
+Most people never see it; a person Cloudflare is unsure of ticks one box.
+_Avoid_: captcha, Turnstile, in what a person reads (the request field `captcha_token` and the `captcha` modules keep their names)
+See [ADR 0045](docs/adr/0045-turnstile-is-the-one-human-check.md).
+
 **Sign-in secret**:
 What a mail carries to an organizer's account so they can sign in or settle the account: its sign-in code, reset link or verification link.
 The server keeps one record of a sign-in secret, never the secret itself but its hash, in one of four states: being mailed, live, used or discarded.

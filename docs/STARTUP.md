@@ -248,7 +248,8 @@ docker run -d \
    ```bash
    cp .env.example .env
    ```
-   The template builds as it stands, and without it `npm run build` refuses: `vite build` will not produce a bundle with no `VITE_FLASK_HOST`, which would call its own origin, or with no `VITE_RECAPTCHA_SITE_KEY`, because such a bundle sends a placeholder captcha token that a deployed back end verifies against Google and Google rejects - every organizer signup a 400, on a front end that looks fine.
+   The template builds as it stands, and without it `npm run build` refuses: `vite build` will not produce a bundle with no `VITE_FLASK_HOST`, which would call its own origin, or with no `VITE_TURNSTILE_SITE_KEY`, because such a bundle sends a placeholder token for the human check that a deployed back end checks with Cloudflare and Cloudflare refuses - every organizer sign-up asked for the check again, on a front end that looks fine.
+   It refuses Cloudflare's test site keys too, unless the hatch below is on.
    The template sets `VITE_FLASK_HOST=/api`, and works with no site key because it sets `VITE_ALLOW_INSECURE_LOCAL_DEV=true`, the front-end half of the back end's `ALLOW_INSECURE_LOCAL_DEV`, and each build it lets through says so in a warning.
    A bundle built that way only works against a back end that has also been told it is a local development one (`DISABLE_CAPTCHA=true`); never deploy one.
    Vite reads `front-end/.env` only - it never reads `.env.example` - so a checkout that has not copied it has nothing set.

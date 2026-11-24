@@ -19,7 +19,7 @@ describes:
   - back-end/tests/test_the_remember_cookie.py
   - back-end/tests/test_the_request_origin_check.py
   - back-end/tests/test_security_headers.py
-  - front-end/vite.config.ts#assertCaptchaSiteKey
+  - front-end/vite.config.ts#assertHumanCheckSiteKey
   - front-end/vite.config.ts#deployedHeaders
   - front-end/vercel.json
   - front-end/src/__tests__/securityHeaders.test.ts
@@ -132,11 +132,12 @@ A placeholder that is truthy is worse than a blank, because a check that asks on
 
 ## The front end's half
 
-**`VITE_RECAPTCHA_SITE_KEY` is the other half of `RECAPTCHA_SECRET_KEY`, and a build-time requirement.**
-A bundle with no site key sends a placeholder token ([`front-end/src/utils/captcha.ts`](../../../front-end/src/utils/captcha.ts)), which a back end with a real secret hands to Google, who never issued it, so every signup answers 400 on a deployment that looks healthy.
-So `vite build` refuses a bundle without it ([`assertCaptchaSiteKey`](../../../front-end/vite.config.ts)), with the escape hatch of the same name, `VITE_ALLOW_INSECURE_LOCAL_DEV`, under which the bundle warns and sends the placeholder, which only a back end with `DISABLE_CAPTCHA` accepts.
+**`VITE_TURNSTILE_SITE_KEY` is the other half of `TURNSTILE_SECRET_KEY`, and a build-time requirement.**
+A bundle with no site key renders no human check and sends a placeholder token ([`front-end/src/utils/captcha.ts`](../../../front-end/src/utils/captcha.ts)), which a back end with a real secret checks with Cloudflare, who never issued it, so every sign-up is asked for the check again on a deployment that looks healthy.
+So `vite build` refuses a bundle without it, and one carrying a Cloudflare test site key (a digit, `x`, twenty zeros and two letters, the shape the back end refuses for a secret), which passes, fails or always asks every person ([`assertHumanCheckSiteKey`](../../../front-end/vite.config.ts)).
+The escape hatch is the one of the same name, `VITE_ALLOW_INSECURE_LOCAL_DEV`, under which the bundle warns and builds with no key, sending the placeholder, or with a test key, whose token only a back end with `DISABLE_CAPTCHA` accepts.
 A keyless bundle built without the hatch throws rather than sending it.
-**A Vercel build refuses the hatch outright** ([`assertNoLocalHatchOnVercel`](../../../front-end/vite.config.ts)): when Vercel's `VERCEL` is set non-blank in the build's process environment and `VITE_ALLOW_INSECURE_LOCAL_DEV` is `true`, `vite build` fails, whatever else is set, since the hatch also lets a bundle build with no API address ([`docs/RELEASING.md`](../../RELEASING.md#the-front-end-has-two-requirements-the-back-ends-address-and-the-other-half-of-the-recaptcha-pair)).
+**A Vercel build refuses the hatch outright** ([`assertNoLocalHatchOnVercel`](../../../front-end/vite.config.ts)): when Vercel's `VERCEL` is set non-blank in the build's process environment and `VITE_ALLOW_INSECURE_LOCAL_DEV` is `true`, `vite build` fails, whatever else is set, since the hatch also lets a bundle build with no API address ([`docs/RELEASING.md`](../../RELEASING.md#the-front-end-has-two-requirements-the-back-ends-address-and-the-other-half-of-the-human-checks-pair)).
 `VERCEL` is read from the process, not through `loadEnv`, so no `.env` file can set it; the dev server never checks it.
 Vercel sets it in a build only while the project's "Enable access to System Environment Variables" setting is ticked, as the back end's [deployed-host signals](#the-one-escape-hatch) need at runtime, so the front end's refusal is armed only with that box ticked on the front-end project.
 A defense on only one side of the wire is not one.
@@ -290,7 +291,8 @@ They are `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when
 The policy limits what script can run in the tab, the applicant's session included.
 
 **The policy names every source the app loads from, and lets no inline code or eval run.**
-`default-src 'self'`, with `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` and `frame-ancestors 'none'`; scripts from the app and reCAPTCHA, styles and fonts from the app, images from the app and `blob:` (a floorplan's image is fetched and drawn from an object URL), connections to the app, `https://api.conventioner.io` and reCAPTCHA, and frames only reCAPTCHA's, its hosts as [Google's allowlist](https://developers.google.com/recaptcha/docs/faq) names them.
+`default-src 'self'`, with `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` and `frame-ancestors 'none'`; scripts from the app and the human check's `https://challenges.cloudflare.com`, styles and fonts from the app, images from the app and `blob:` (a floorplan's image is fetched and drawn from an object URL), connections to the app and `https://api.conventioner.io`, and frames only the human check's `https://challenges.cloudflare.com`, as [Cloudflare's CSP reference](https://developers.cloudflare.com/turnstile/reference/content-security-policy/) lists Turnstile's sources (read 2026-11-24), which ask nothing of `connect-src`.
+A production build served under this policy by `vite preview` loaded the widget, made its token and signed up with no violation reported (T539).
 There is no `'unsafe-inline'` and no `'unsafe-eval'`: the built `index.html` has no inline script, Vue sets a bound style through the CSSOM (which the policy does not govern), and a build that calls `eval` or `Function` fails CI's [eval check](../testing/ci-and-the-gate.md#no-string-evaluated-as-script).
 A new origin the app loads from (an analytics script, an image host) goes into its directive in the same PR.
 

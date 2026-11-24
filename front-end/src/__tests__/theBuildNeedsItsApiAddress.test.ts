@@ -1,11 +1,13 @@
 // @vitest-environment node
 /**
- * A production build needs the back end's address, and Vercel never builds under the hatch (T273).
+ * A production build needs the back end's address and a real human check site key, and Vercel
+ * never builds under the hatch (T273, T539).
  *
  * `VITE_FLASK_HOST` is baked into the bundle at build time, and with none every API request goes to
  * the front end's own origin, which answers every path with `index.html` and 200: a bundle that
  * looks deployed and does nothing. `VITE_ALLOW_INSECURE_LOCAL_DEV` lets a local or CI build go
- * without it (and without the reCAPTCHA site key), so a Vercel build refuses that hatch outright.
+ * without it (and without the Turnstile site key, or with one of Cloudflare's test keys), so a Vercel
+ * build refuses that hatch outright.
  * This loads the project's own `vite.config.ts` as a build or the dev server loads it, after the
  * case has set the environment, and reads whether it loads, refuses or warns.
  */
@@ -27,12 +29,13 @@ const NO_API_HOST_WARNING =
 
 const HATCH_ON_VERCEL =
   'VITE_ALLOW_INSECURE_LOCAL_DEV is set on a Vercel build. It lets a bundle build with no ' +
-  'reCAPTCHA site key or API address, which a deployed front end must never ship. Remove it from ' +
+  'Turnstile site key or API address, which a deployed front end must never ship. Remove it from ' +
   "the front-end project's environment on Vercel.";
 
 /** What each case may set; every one is restored after it. */
 const NAMES = [
   'VITE_FLASK_HOST',
+  'VITE_TURNSTILE_SITE_KEY',
   'VITE_RECAPTCHA_SITE_KEY',
   'VITE_ALLOW_INSECURE_LOCAL_DEV',
   'VERCEL',
@@ -86,24 +89,45 @@ function warnings(): string[] {
 }
 
 const SITE_KEY = 'fixture-site-key';
+/** Cloudflare's published test site keys: pass unseen, fail, pass invisibly, ask for the tick. */
+const TEST_SITE_KEYS = [
+  '1x00000000000000000000AA',
+  '2x00000000000000000000AB',
+  '1x00000000000000000000BB',
+  '2x00000000000000000000BB',
+  '3x00000000000000000000FF',
+];
+
+const NO_SITE_KEY = 'VITE_TURNSTILE_SITE_KEY is not set, so this bundle would carry no Turnstile';
+const A_TEST_SITE_KEY =
+  "VITE_TURNSTILE_SITE_KEY is one of Cloudflare's published test site keys, which pass, fail or " +
+  'always ask every person whatever the back end checks.';
+const NO_SITE_KEY_WARNING =
+  '[human check] VITE_ALLOW_INSECURE_LOCAL_DEV is set: building a bundle with no Turnstile site ' +
+  'key. It sends a placeholder token, which only a back end running with DISABLE_CAPTCHA ' +
+  'accepts. Never deploy this bundle.';
+const TEST_SITE_KEY_WARNING =
+  "[human check] VITE_ALLOW_INSECURE_LOCAL_DEV is set: building a bundle with Cloudflare's test " +
+  'site key. Only a back end running with DISABLE_CAPTCHA accepts its token. Never deploy this ' +
+  'bundle.';
 const API_HOST = 'https://api.example.com';
 
 describe('a production build', () => {
   it('refuses a bundle with a site key and no VITE_FLASK_HOST', async () => {
-    await expect(loadConfig('build', { VITE_RECAPTCHA_SITE_KEY: SITE_KEY })).rejects.toThrow(
+    await expect(loadConfig('build', { VITE_TURNSTILE_SITE_KEY: SITE_KEY })).rejects.toThrow(
       NO_API_HOST,
     );
   });
 
   it.each([['   '], ['\t\n']])('refuses a blank VITE_FLASK_HOST (%j)', async (blank) => {
     await expect(
-      loadConfig('build', { VITE_RECAPTCHA_SITE_KEY: SITE_KEY, VITE_FLASK_HOST: blank }),
+      loadConfig('build', { VITE_TURNSTILE_SITE_KEY: SITE_KEY, VITE_FLASK_HOST: blank }),
     ).rejects.toThrow(NO_API_HOST);
   });
 
   it('loads with both the API address and the site key, and warns of nothing', async () => {
     await expect(
-      loadConfig('build', { VITE_RECAPTCHA_SITE_KEY: SITE_KEY, VITE_FLASK_HOST: API_HOST }),
+      loadConfig('build', { VITE_TURNSTILE_SITE_KEY: SITE_KEY, VITE_FLASK_HOST: API_HOST }),
     ).resolves.toBeDefined();
     expect(warnings()).toEqual([]);
   });
@@ -111,7 +135,7 @@ describe('a production build', () => {
   it('builds under the hatch with no VITE_FLASK_HOST, and warns in so many words', async () => {
     await expect(
       loadConfig('build', {
-        VITE_RECAPTCHA_SITE_KEY: SITE_KEY,
+        VITE_TURNSTILE_SITE_KEY: SITE_KEY,
         VITE_ALLOW_INSECURE_LOCAL_DEV: 'true',
       }),
     ).resolves.toBeDefined();
@@ -130,7 +154,7 @@ describe('a production build', () => {
     async (hatch) => {
       await expect(
         loadConfig('build', {
-          VITE_RECAPTCHA_SITE_KEY: SITE_KEY,
+          VITE_TURNSTILE_SITE_KEY: SITE_KEY,
           VITE_ALLOW_INSECURE_LOCAL_DEV: hatch,
         }),
       ).rejects.toThrow(NO_API_HOST);
@@ -138,11 +162,59 @@ describe('a production build', () => {
   );
 });
 
+describe("a production build's human check site key", () => {
+  it.each([[''], ['   ']])('is required (%j)', async (blank) => {
+    await expect(
+      loadConfig('build', { VITE_TURNSTILE_SITE_KEY: blank, VITE_FLASK_HOST: API_HOST }),
+    ).rejects.toThrow(NO_SITE_KEY);
+  });
+
+  it.each(TEST_SITE_KEYS)("refuses Cloudflare's test site key %s", async (testKey) => {
+    await expect(
+      loadConfig('build', { VITE_TURNSTILE_SITE_KEY: testKey, VITE_FLASK_HOST: API_HOST }),
+    ).rejects.toThrow(A_TEST_SITE_KEY);
+  });
+
+  it("no longer reads reCAPTCHA's site key", async () => {
+    await expect(
+      loadConfig('build', { VITE_RECAPTCHA_SITE_KEY: SITE_KEY, VITE_FLASK_HOST: API_HOST }),
+    ).rejects.toThrow(NO_SITE_KEY);
+  });
+
+  it('takes a key that only looks like a test key', async () => {
+    await expect(
+      loadConfig('build', {
+        VITE_TURNSTILE_SITE_KEY: '0x4AAAAAAA00000000000000',
+        VITE_FLASK_HOST: API_HOST,
+      }),
+    ).resolves.toBeDefined();
+    expect(warnings()).toEqual([]);
+  });
+
+  it('builds under the hatch with no site key, and warns in so many words', async () => {
+    await expect(
+      loadConfig('build', { VITE_FLASK_HOST: API_HOST, VITE_ALLOW_INSECURE_LOCAL_DEV: 'true' }),
+    ).resolves.toBeDefined();
+    expect(warnings()).toEqual([NO_SITE_KEY_WARNING]);
+  });
+
+  it("builds under the hatch with Cloudflare's test site key, and warns in so many words", async () => {
+    await expect(
+      loadConfig('build', {
+        VITE_TURNSTILE_SITE_KEY: '3x00000000000000000000FF',
+        VITE_FLASK_HOST: API_HOST,
+        VITE_ALLOW_INSECURE_LOCAL_DEV: 'true',
+      }),
+    ).resolves.toBeDefined();
+    expect(warnings()).toEqual([TEST_SITE_KEY_WARNING]);
+  });
+});
+
 describe('a Vercel build', () => {
   it.each([
     ['with neither variable', {}],
-    ['with both variables', { VITE_RECAPTCHA_SITE_KEY: SITE_KEY, VITE_FLASK_HOST: API_HOST }],
-    ['with the site key alone', { VITE_RECAPTCHA_SITE_KEY: SITE_KEY }],
+    ['with both variables', { VITE_TURNSTILE_SITE_KEY: SITE_KEY, VITE_FLASK_HOST: API_HOST }],
+    ['with the site key alone', { VITE_TURNSTILE_SITE_KEY: SITE_KEY }],
   ])('refuses the hatch %s', async (_case, set) => {
     await expect(
       loadConfig('build', { ...set, VERCEL: '1', VITE_ALLOW_INSECURE_LOCAL_DEV: 'true' }),
@@ -154,7 +226,7 @@ describe('a Vercel build', () => {
     await expect(
       loadConfig('build', {
         VERCEL: '1',
-        VITE_RECAPTCHA_SITE_KEY: SITE_KEY,
+        VITE_TURNSTILE_SITE_KEY: SITE_KEY,
         VITE_FLASK_HOST: API_HOST,
       }),
     ).resolves.toBeDefined();
@@ -163,7 +235,7 @@ describe('a Vercel build', () => {
 
   it('refuses no VITE_FLASK_HOST by the API address check', async () => {
     await expect(
-      loadConfig('build', { VERCEL: '1', VITE_RECAPTCHA_SITE_KEY: SITE_KEY }),
+      loadConfig('build', { VERCEL: '1', VITE_TURNSTILE_SITE_KEY: SITE_KEY }),
     ).rejects.toThrow(NO_API_HOST);
   });
 

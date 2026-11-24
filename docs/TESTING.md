@@ -414,8 +414,8 @@ it does nothing, so a deployment that inherited it from a copied env file is not
 silently unprotected. The CI e2e job sets
 `DISABLE_CAPTCHA=true`, and `docker-compose.yml` forwards the variable to the
 back-end so `./scripts/seed_fixture.sh` and Playwright can register users without a
-real Turnstile token. On the front-end, `executeRecaptcha()` returns a placeholder
-token when `VITE_RECAPTCHA_SITE_KEY` is unset (as in test/dev builds), so the flow
+real Turnstile token. On the front-end, `HumanCheck` renders nothing and gives a placeholder
+token when `VITE_TURNSTILE_SITE_KEY` is unset (as in test/dev builds), so the flow
 still reaches the back-end where the `DISABLE_CAPTCHA` bypass applies.
 
 In the back-end suite, every test runs with the autouse `human_check` fixture

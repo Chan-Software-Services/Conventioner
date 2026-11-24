@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import axios from 'axios';
-import { computed, ref, nextTick } from 'vue';
+import { computed, ref, nextTick, useTemplateRef } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AuthCard from '@/components/AuthCard.vue';
 import CodeInput from '@/components/CodeInput.vue';
+import HumanCheck from '@/components/HumanCheck.vue';
 import SignInMessage from '@/components/SignInMessage.vue';
 import { SESSION_ENDED_MESSAGE } from '@/utils/api';
-import { executeRecaptcha } from '@/utils/captcha';
+import { withHumanCheck, type HumanCheckHandle } from '@/utils/captcha';
 import { refusedSignIn, resentLink, type SignInNotice } from '@/utils/signInNotice';
 import { SIGNED_OUT_EVERYWHERE_MESSAGE, safeNext } from '@/utils/signInNext';
-import { useSubmit } from '@/utils/useSubmit';
+import { refusalSentence, useSubmit } from '@/utils/useSubmit';
 
 const hostname = import.meta.env.VITE_FLASK_HOST;
 
@@ -81,6 +82,8 @@ const registerPasswordConfirm = ref('');
 const registerErrorMessage = ref('');
 const registerSuccessMessage = ref('');
 const showRegisterPassword = ref(false);
+/** Sign-up's human check, mounted while the form shows (T539). */
+const signUpCheck = useTemplateRef<HumanCheckHandle>('signUpCheck');
 
 // OTP fields
 const otpEmail = ref('');
@@ -202,8 +205,13 @@ const submitLogin = () => {
   );
 };
 
-/** Why a registration did not go through, in the form's words. */
+/**
+ * Why a registration did not go through, in the form's words: the human check's own sentence when
+ * it could not load or the server asked for it again (T539), else the server's.
+ */
 function registrationRefusal(_e: unknown): string {
+  const own = refusalSentence(_e);
+  if (own) return own;
   const error = _e as {
     response?: { data?: { msg?: string; message?: string }; status?: number };
     request?: unknown;
@@ -241,25 +249,23 @@ const submitRegister = () => {
   }
 
   return submitRegistration(
-    async () => {
-      // Get CAPTCHA token
-      const captchaToken = await executeRecaptcha('register');
-
-      return axios.post(
-        `${hostname}/register`,
-        {
-          email: registerEmail.value,
-          password: registerPassword.value,
-          captcha_token: captchaToken,
-        },
-        {
-          withCredentials: true,
-          headers: {
-            'Content-Type': 'application/json',
+    () =>
+      withHumanCheck(signUpCheck.value!, (captchaToken) =>
+        axios.post(
+          `${hostname}/register`,
+          {
+            email: registerEmail.value,
+            password: registerPassword.value,
+            captcha_token: captchaToken,
           },
-        },
-      );
-    },
+          {
+            withCredentials: true,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      ),
     {
       done: (response) => {
         if (response.status !== 201) return;
@@ -564,14 +570,17 @@ const submitOTPLogin = () => {
         >
           {{ registerSuccessMessage }}
         </p>
-        <button
-          type="submit"
-          class="btn btn--primary submit-button"
-          :disabled="creatingAccount"
-          data-testid="login-register-submit-button"
-        >
-          {{ creatingAccount ? 'Creating account…' : 'Create account' }}
-        </button>
+        <div class="form-actions">
+          <HumanCheck ref="signUpCheck" action="sign-up" />
+          <button
+            type="submit"
+            class="btn btn--primary submit-button"
+            :disabled="creatingAccount"
+            data-testid="login-register-submit-button"
+          >
+            {{ creatingAccount ? 'Creating account…' : 'Create account' }}
+          </button>
+        </div>
         <p class="field-help">
           We will email you a link to verify this address. You cannot sign in until you have
           followed it.
@@ -846,6 +855,18 @@ const submitOTPLogin = () => {
 .submit-button {
   width: 100%;
   margin-top: var(--space-6);
+}
+
+/* A form whose button has the human check above it: the room above the button is above the two,
+   and the check, once Cloudflare draws into it, keeps its own room to the button. */
+.form-actions {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--space-6);
+}
+
+.form-actions .submit-button {
+  margin-top: 0;
 }
 
 .form-links {
