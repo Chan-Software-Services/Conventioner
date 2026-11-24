@@ -285,8 +285,9 @@ async function expectInsideTheRow(
  * with a long address, so the outcome is the same at whatever minute the spec runs: the pill, its
  * "Undo?" and the line after it, "by <who>, at table <code>", stay inside the row's content box on
  * the narrowest phone, on 390 and at a desk, the table's run on one line. Then a check-out at that
- * time by that organizer is served too, and the departure pill, its "Undo?" and the line after it,
- * "by <who>", stay inside the row as well.
+ * time, made by whoever made the check-in (the owner, then the organizer with a long address), is
+ * served too, and the departure pill, its "Undo?" and the line after it, "by <who>", stay inside
+ * the row as well.
  *
  * The pill held "at table <code>" until T501's review: on a phone it left the row at about one
  * minute in ten at 390, and at every minute at 320.
