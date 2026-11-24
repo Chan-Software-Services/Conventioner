@@ -10,7 +10,8 @@ import {
 } from './helpers/layoutDetectors';
 import { inTheWindow, PHONE_AND_DESK } from './helpers/phoneWindow';
 import { seedPublishedMarketWithAssignments } from './helpers/seeds';
-import { calendarToday } from './helpers/vendorSignIn';
+import { letVendorsCheckThemselvesIn } from './helpers/selfCheckIn';
+import { calendarToday, forgetSignInAttempts, vendorToken } from './helpers/vendorSignIn';
 import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
 import { ManageMarketPage } from './pages/ManageMarketPage';
 
@@ -293,3 +294,66 @@ for (const size of PHONE_AND_DESK) {
     });
   });
 }
+
+/**
+ * The vendor scanned out on their own phone while the organizer's roster still showed them here:
+ * the organizer's Check out answers the stored check-out, and the row says it was the vendor's
+ * own at once, never "by you". The roster's re-reads are held, so only the write's answer can say
+ * it (T550).
+ */
+test('a check-out after the vendor scanned out shows theirs at once', async ({
+  authenticatedPage: page,
+  request,
+}) => {
+  forgetSignInAttempts();
+  const vendor = `scans-out-first-${at}@example.com`;
+  const seed = await seedPublishedMarketWithAssignments(
+    request,
+    BACKEND_URL,
+    TEST_USER.email,
+    TEST_USER.password,
+    { marketDate: TODAY, vendors: [vendor], namePrefix: 'E2E Door Scanned Out' },
+  );
+  const attendance = `${BACKEND_URL}/markets/${seed.marketId}/attendance`;
+  await ok(request.post(attendance, { data: { vendorEmail: vendor, date: TODAY } }), 'check in');
+  const door = new AttendanceStatusPage(page);
+  await door.goto(seed.marketId);
+  await expect(door.action(vendor, 'check-out')).toBeVisible();
+
+  await letVendorsCheckThemselvesIn(request, seed.marketId);
+  const made = await request.post(`${BACKEND_URL}/markets/${seed.marketId}/door-code`);
+  expect(made.ok(), await made.text()).toBeTruthy();
+  const { code } = (await made.json()) as { code: string };
+  const token = await vendorToken(request, BACKEND_URL, seed.marketSlug, seed.marketId, vendor);
+  await ok(
+    request.post(`${BACKEND_URL}/public/markets/${seed.marketSlug}/vendor/check-out`, {
+      data: { date: TODAY, doorCode: code },
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    "the vendor's own check-out",
+  );
+
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const roster = (url: URL) => url.pathname.endsWith(`/markets/${seed.marketId}/attendance`);
+  await page.route(roster, async (route) => {
+    if (route.request().method() === 'GET') await held;
+    await route.continue();
+  });
+  const checkedOut = doorWrite(page, seed.marketId, 'POST', '/check-out');
+  await door.action(vendor, 'check-out').click();
+  expect((await checkedOut).ok()).toBeTruthy();
+  await expect(door.out(vendor)).toHaveText(new RegExp(`^Scanned out at ${TIME}$`));
+  await expect(door.outBy(vendor)).toHaveCount(0);
+  const reread = page.waitForResponse(
+    (res) => res.request().method() === 'GET' && roster(new URL(res.url())),
+  );
+  release();
+  await reread;
+  await page.unroute(roster);
+
+  // The record says the same.
+  await page.reload();
+  await expect(door.out(vendor)).toHaveText(new RegExp(`^Scanned out at ${TIME}$`));
+  await expect(door.outBy(vendor)).toHaveCount(0);
+});
