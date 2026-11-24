@@ -10,7 +10,7 @@ describes:
   - back-end/api/applicant_auth.py#_send_code_email
   - back-end/api/applicants.py#save_applicant_application
   - back-end/sign_in_limits.py
-verified: 2026-11-17
+verified: 2026-11-24
 sources:
   - E26/F07/S01
   - E32/F03/S02
@@ -66,7 +66,7 @@ Telling the person who just read the code whether they have applied leaks nothin
   Every way one cannot pass answers one 401, "Sign in with a code.": no cookie, a tampered or ended one, one signed out, another market's secret under this market's name, a market [the gate](a-gated-market-answers-as-absent.md) no longer serves, and an unknown slug; a cookie the browser sent is forgotten on the server and cleared, so it stays refused.
   `sign_out` ends it on the server and the device, 204 whether or not there was one.
   A right code without the tick ends the one the device held at that market, so a shared device signed in by someone else remembers nobody.
-- **The first valid save creates the application** (`save_applicant_application` in [`back-end/api/applicants.py`](../../../back-end/api/applicants.py)): the answers are checked before anything is made, so a refused first try leaves nothing behind for the organizer to review as an empty application, and the application is created through the identity index of [the application document](../../implementation/data/application-document.md#indexes).
+- **The first valid save creates the application** (`save_applicant_application` in [`back-end/api/applicants.py`](../../../back-end/api/applicants.py)): the answers are checked before anything is made, and a save from a page drawn from an older form is refused before them ([a vendor's save is held to the form they saw](a-vendors-save-is-held-to-the-form-they-saw.md)), so a refused first try leaves nothing behind for the organizer to review as an empty application, and the application is created through the identity index of [the application document](../../implementation/data/application-document.md#indexes).
 - **A save that leaves the application open is its arrival**: with reviewers chosen, it is dealt to the next reviewer in turn, after the rules judge it, and the market's history records that under the applicant's own address ([the review is dealt among chosen reviewers](the-review-is-dealt-among-chosen-reviewers.md)).
   The save is open only while the market is in `applications` and taking applications ([an applicant never reads a verdict early](an-applicant-never-reads-a-verdict-early.md)).
   Their first save, and each edit that changes an answer, is recorded in [the market's history](../../implementation/data/history.md) with their address as the actor.

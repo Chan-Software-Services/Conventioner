@@ -16,7 +16,7 @@ Driven through the routes, as an applicant and an organizer reach them.
 """
 import pytest
 
-from conftest import seen_as_stored
+from conftest import applicant_form_version_now, seen_as_stored
 from test_choosing_reviewers_deals_the_open_applications import ADMIN, MARKET, _client
 from test_csv_import import GOOD_ROW, MAPPING, _csv
 from test_csv_import import _market_doc as _import_market_doc
@@ -59,7 +59,8 @@ def _save(world, **answers):
 
     return app_module.app.test_client().put(
         "/public/markets/test-market/applicant/application",
-        json={"formData": {**VALID_ANSWERS, "business_name": VENDOR, **answers}})
+        json={"formData": {**VALID_ANSWERS, "business_name": VENDOR, **answers},
+              "formVersion": applicant_form_version_now("test-market")})
 
 
 def _edits(world, app_id):

@@ -15,8 +15,14 @@
  *
  * A save that meets an ended sign-in (a 401 the device could not renew) keeps the answers it sent
  * in the tab too, and the page asks for sign-in again, saying they will be saved. Signed in again
- * as the same address, the form opens on them and sends the save once by itself; a refusal then
- * says why here, as any refused save does, with every answer kept.
+ * as the same address, the form opens on them and sends the save once by itself, with the form
+ * version they were first sent with; a refusal then says why here, as any refused save does, with
+ * every answer kept.
+ *
+ * A save from a form that changed since the page read it is refused (T507), and the sentence comes
+ * with Reload, which reloads the page: it opens the form again by itself on the answers kept in the
+ * tab, drawn as the form now asks, so nothing typed is lost and nothing is saved against a form
+ * the vendor never saw.
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import type { FormField } from '@/assets/types/datatypes';
@@ -73,10 +79,12 @@ onMounted(async () => {
   opened = answersKey(formData.value);
   if (restored) formData.value = { ...formData.value, ...restored.formData };
   heading.value?.focus();
-  // The save that met an ended sign-in, sent now that they are signed in again, once.
-  if (store.takeSaveAfterSignIn()) {
+  // The save that met an ended sign-in, sent now that they are signed in again, once, with the
+  // version of the form its answers were first sent against.
+  const kept = store.takeSaveAfterSignIn();
+  if (kept) {
     await nextTick();
-    await submitForm();
+    await send(kept.formVersion);
   }
 });
 
@@ -123,17 +131,30 @@ function clearErrorFor(key: string) {
   }
 }
 
-async function submitForm() {
+function submitForm() {
+  return send();
+}
+
+/** Send the answers, carrying `version`, or the form on screen's when none is named. */
+async function send(version?: string | null) {
   if (!validateAll()) return;
 
   saving.value = true;
-  const app = await store.saveApplication(answersToSend(sortedFields.value, formData.value));
+  const app = await store.saveApplication(
+    answersToSend(sortedFields.value, formData.value),
+    version,
+  );
   saving.value = false;
 
   if (app) {
     if (ownDraft()) store.dropDraft();
     emit('saved');
   }
+}
+
+/** The form changed under the page: a reload opens it as it now asks, on the answers kept. */
+function reload() {
+  window.location.reload();
 }
 
 function cancel() {
@@ -188,7 +209,16 @@ function cancel() {
       />
 
       <div v-if="store.error" class="vendor-form-error" role="alert" data-testid="apply-error">
-        {{ store.error }}
+        <span>{{ store.error }}</span>
+        <button
+          v-if="store.formChanged"
+          type="button"
+          class="btn btn--secondary btn--compact"
+          data-testid="apply-reload-button"
+          @click="reload"
+        >
+          Reload
+        </button>
       </div>
 
       <div class="vendor-form-actions">
@@ -275,7 +305,12 @@ function cancel() {
   color: var(--mm-blue);
 }
 
+/* A refusal's sentence, and Reload after it when the form changed: one row that wraps. */
 .vendor-form-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
   background: var(--mm-chip-destructive);
   border: 1px solid var(--mm-red);
   border-radius: var(--radius-control);

@@ -24,7 +24,8 @@ import pytest
 
 from conftest import (
     COMPLETE_PLAN, REVIEW_SETUP_DECIDED, FakeApplicationsCollection, a_solver_vendor, mongo_matches,
-    mongo_project, reject_malformed_update, accounts_by_id, seen_as_stored,
+    mongo_project, reject_malformed_update, accounts_by_id, applicant_form_version_now,
+    seen_as_stored,
     sessions_load_through_get_user, skip_without_real_dependencies, stored_market,
 )
 
@@ -358,7 +359,8 @@ def _start_from_a_csv(client, world):
 def _applicant(first: bool):
     def apply(client, business_name: str):
         return client.put("/public/markets/test-market/applicant/application", json={
-            "formData": {**VALID_ANSWERS, "business_name": business_name}})
+            "formData": {**VALID_ANSWERS, "business_name": business_name},
+            "formVersion": applicant_form_version_now("test-market")})
 
     def send(client, world):
         world.markets.doc = copy.deepcopy(_applicant_market_doc())
@@ -1508,7 +1510,8 @@ class TestWhatAnEntryHolds:
                     lambda _header: {"market_id": MARKET, "email": VENDOR})
 
         response = client.put("/public/markets/test-market/applicant/application", json={
-            "formData": {**VALID_ANSWERS, "business_name": "Ember Ceramics", "student": "No"}})
+            "formData": {**VALID_ANSWERS, "business_name": "Ember Ceramics", "student": "No"},
+            "formVersion": applicant_form_version_now("test-market")})
 
         assert response.status_code == 200, response.get_json()
 
@@ -1544,7 +1547,8 @@ class TestWhatAnEntryHolds:
         def apply(student):
             return client.put("/public/markets/test-market/applicant/application", json={
                 "formData": {**VALID_ANSWERS, "business_name": "Ember Ceramics",
-                             "student": student}})
+                             "student": student},
+                "formVersion": applicant_form_version_now("test-market")})
 
         assert apply("No").status_code == 200
         world.history.documents.clear()
