@@ -50,7 +50,11 @@ describes:
   - front-end/src/components/ToolRow.vue
   - front-end/src/components/ToolGroup.vue
   - front-end/src/components/PinnedTools.vue
-verified: 2026-11-19
+  - front-end/scripts/design-md.ts
+  - front-end/scripts/design-md-content.ts
+  - front-end/src/__tests__/designMd.test.ts
+  - DESIGN.md
+verified: 2026-11-25
 sources:
   - wayfinding/claims-and-room/map
   - wayfinding/claims-and-room/01
@@ -114,11 +118,13 @@ sources:
   - T469
   - T466
   - T501
+  - T582
 ---
 
 # Conventioner's design language
 
 This file is the single statement of what Conventioner looks like.
+[`DESIGN.md`](../DESIGN.md) is the short contract it stands behind, generated from the CSS for agents to read first ([below](#the-contract-agents-read-designmd)).
 It exists because the product did not have one: 12,211 lines of CSS across 71 scoped `<style>` blocks, each re-deciding radius, spacing, type and colour from scratch.
 The evidence is `.lavish/aesthetics-2026-09-20.html`; the decisions were taken on 2026-09-20.
 
@@ -824,6 +830,29 @@ Neighbouring fills are set apart by a 2px white gap, so they need no contrast wi
 **The shade is never the only carrier.**
 Every chart's figures are text a screen reader hears, as the table above says, and a sighted reader can read them too: a meter's words, the legend's counts, the table's cells, and the numbers behind a column chart.
 A figure is in `tabular-nums`, so a column of them lines up.
+
+## The contract agents read: DESIGN.md
+
+[`DESIGN.md`](../DESIGN.md), at the repository's root, is the design contract: the tokens and primitives of this file in [Google's DESIGN.md format](https://github.com/google-labs-code/design.md), short enough for an agent to read before it builds or reviews a screen (T582).
+Its YAML front matter holds every token of `base.css` in the format's groups, colours, typography, rounded and spacing, each named as its custom property without the `--` and carrying the note written beside it in the CSS, with `primary`, the format's name for `--mm-green`, and every primitive of `primitives.css` with each of its states as one of the format's components.
+Its body holds a few hand-kept lines for each of the format's sections, the tables the format has no group for (the phone's values, the shadows, the focus halos), each primitive's selectors and the declarations the format has no sub-token for, the Do's and Don'ts, and a link from each section to the section of this file that says why.
+It repeats no reason: this file stays the long source, and `DESIGN.md` states only the rules.
+
+**It is generated, and never edited by hand.**
+[`front-end/scripts/design-md.ts`](../front-end/scripts/design-md.ts) writes it from `base.css` and `primitives.css`, and reads `main.css` only to check that each family it names is a face the app loads.
+Its words, the sections' lines, the Do's and Don'ts, the component groups and their entries' selectors, live in [`front-end/scripts/design-md-content.ts`](../front-end/scripts/design-md-content.ts), and the generator holds none; no line of them states a token's value, so a changed value never makes the words false.
+`npm run design-md` in `front-end/` rewrites the file; run it after changing either sheet or the words, and commit the file with them.
+`npm run design-md:check` renders it again and fails when the committed file differs by a byte, naming the first line that differs and the command to run, and lints the committed file with the linter of `@google/design.md`, pinned exactly in `front-end/package.json`, since the format is alpha and its rules change between versions.
+CI's required `frontend-lint-and-types` job runs the check right after Stylelint ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)), and `scripts/nm-test.sh` runs it in the same place.
+Prettier leaves the file alone (`front-end/.prettierignore`), so the formatter and the check never disagree over it.
+
+**The lint fails on every error and every warning but `orphaned-tokens`, and prints how many of those it allowed.**
+That rule takes every colour to be a component's fill or ink, while most of Conventioner's colours draw a layout, a chart, a line or a shade, which no primitive uses; the contract keeps every token rather than dropping those to quiet it.
+[`front-end/src/__tests__/designMd.test.ts`](../front-end/src/__tests__/designMd.test.ts) holds the allowance to exactly the colours no component uses, so it cannot hide another finding, and a bump of the pinned linter that finds something new fails its own pull request ([ADR 0047](adr/0047-the-design-contract-is-generated-from-the-css.md)).
+
+**The generator refuses, and writes nothing, rather than write a contract that is wrong.**
+It refuses a token declared twice, a family `main.css` does not load, a component's font size that is not a `--text-*` token, a component selector no rule of `primitives.css` has, a component whose group has no words, a class `primitives.css` names that the file never does, and words that name a token or class the CSS no longer has; each refusal names what to change and where.
+The same test proves each refusal, and that every token and every class of the two sheets reaches the file.
 
 ## What keeps this true
 

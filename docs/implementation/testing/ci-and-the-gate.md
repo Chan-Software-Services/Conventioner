@@ -21,7 +21,7 @@ describes:
   - .github/actions/front-end-deps/action.yml
   - front-end/scripts/e2e-repeat.ts
   - scripts/chromium-packages.sh
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - T47
   - T53
@@ -43,6 +43,7 @@ sources:
   - T508
   - T528
   - T527
+  - T582
 ---
 
 # CI and the gate
@@ -81,7 +82,7 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 **`frontend-lint-and-types`**
 
-- a check that the Node is `.nvmrc`'s, `npm ci --engine-strict` (the npm is `engines.npm`), and a check that npm writes the committed lockfile unchanged ([Node and npm are pinned](../../TECH_STACK.md#node-and-npm-are-pinned)), then Prettier's `format:check` over `front-end/`, `docs/` and the root Markdown files, ESLint (`lint:check`, which never fixes, since a fix on the runner is thrown away, and refuses a warning as it does an error), Stylelint (`lint:css`, the [design language](../../design-system.md) gate, which refuses a warning as it does an error), the type-check (`vue-tsc --build` over the app, its unit tests, the E2E specs and the Node-run config files and scripts), and a `vite build`, which fails on [a development page](#no-development-page-in-the-build), measured against [the bundle budget](#the-bundle-budget) and checked for [no string evaluated as script](#no-string-evaluated-as-script)
+- a check that the Node is `.nvmrc`'s, `npm ci --engine-strict` (the npm is `engines.npm`), and a check that npm writes the committed lockfile unchanged ([Node and npm are pinned](../../TECH_STACK.md#node-and-npm-are-pinned)), then Prettier's `format:check` over `front-end/`, `docs/` and the root Markdown files, ESLint (`lint:check`, which never fixes, since a fix on the runner is thrown away, and refuses a warning as it does an error), Stylelint (`lint:css`, the [design language](../../design-system.md) gate, which refuses a warning as it does an error), "DESIGN.md is what its generator writes, and lints clean" (`design-md:check`, which fails when the committed [design contract](../../design-system.md#the-contract-agents-read-designmd) is not what its generator writes from the CSS, or when the pinned `@google/design.md` finds an error or any warning but `orphaned-tokens`), the type-check (`vue-tsc --build` over the app, its unit tests, the E2E specs and the Node-run config files and scripts), and a `vite build`, which fails on [a development page](#no-development-page-in-the-build), measured against [the bundle budget](#the-bundle-budget) and checked for [no string evaluated as script](#no-string-evaluated-as-script)
 
 **`knowledge-graph`**
 
@@ -361,7 +362,7 @@ So a pull request opens before any suite has passed on it; nothing merges red, b
 [`scripts/nm-test.sh`](../../../scripts/nm-test.sh) is the runner the gate invokes, and anyone may run it.
 With `--real-data-only`, as the gate runs it, it runs the two real-data checks, ends with `nm-test: --real-data-only: no suite run; CI runs them.` and makes no virtual environment, installs nothing and starts no stack.
 With `--skip-e2e` it stops after Vitest, the build (which refuses [a development page](#no-development-page-in-the-build)), the [bundle budget](#the-bundle-budget) and [the eval check](#no-string-evaluated-as-script) with one line, `nm-test: --skip-e2e: Playwright is left to CI's e2e shards; no stack started.`, and starts no stack, sets no teardown trap and takes no heavy-run lock; without it, it runs everything below.
-It runs, in order, the real-data check on the branch's commits since `origin/dev` and then on every file of the tree at `HEAD` (before anything else, and failing the run on a finding, since the gate pushes the branch), the scripts' tests and the knowledge graph's `check`, back-end pytest (installing `requirements.txt`, the floorplan solver's and the dev requirements, then re-locking them as CI does), the steps of `frontend-lint-and-types` before its build, in its order (a check that the Node is `.nvmrc`'s, which fails with `nm-test: ERROR: Node is <found>, not <pinned> (.nvmrc); run nvm use`, `npm ci --engine-strict`, the lockfile check, which leaves what npm wrote in the worktree to read, `format:check`, `lint:check`, `lint:css` and `type-check`, then `Frontend lint and types: OK`), front-end Vitest, a `vite build` held to the bundle budget and checked for no string evaluated as script, and Playwright against a Docker stack of its own, with `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` set.
+It runs, in order, the real-data check on the branch's commits since `origin/dev` and then on every file of the tree at `HEAD` (before anything else, and failing the run on a finding, since the gate pushes the branch), the scripts' tests and the knowledge graph's `check`, back-end pytest (installing `requirements.txt`, the floorplan solver's and the dev requirements, then re-locking them as CI does), the steps of `frontend-lint-and-types` before its build, in its order (a check that the Node is `.nvmrc`'s, which fails with `nm-test: ERROR: Node is <found>, not <pinned> (.nvmrc); run nvm use`, `npm ci --engine-strict`, the lockfile check, which leaves what npm wrote in the worktree to read, `format:check`, `lint:check`, `lint:css`, `design-md:check` and `type-check`, then `Frontend lint and types: OK`), front-end Vitest, a `vite build` held to the bundle budget and checked for no string evaluated as script, and Playwright against a Docker stack of its own, with `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` set.
 Its Python is `PYTHON_CMD`, else `python3.12` (`back-end/.python-version`), else `python3`, and it installs nothing into that Python: it makes a virtual environment of its own from it, installs there, and a guard deletes it once the run is gone, since a uv- or distro-managed Python refuses `pip install` outright (PEP 668).
 Its stack is isolated: a unique `COMPOSE_PROJECT_NAME` (`nmtest-<pid>`), and host ports Docker assigns as the stack starts (`TH_PORTS=auto`, [below](#stack-identity)), so two runs started together can never race for one port, as runs that each probed for a free port before starting could.
 Once the stack is up, the run reads its ports back with `th-compose.sh ports` and exports them for `seed_fixture.sh` and Playwright.
