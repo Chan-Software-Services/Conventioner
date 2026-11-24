@@ -133,6 +133,7 @@ One promotion runs at a time, and none is cancelled part-way.
 A check-only run (`-f check-only=true`, or the box in the Actions tab) makes every check and mints the App's token but moves nothing, which proves the App's setup before a real promotion.
 It cannot prove that `main`'s rulesets let the App's move through, since it pushes nothing: a rule on a push shows only when `main` really moves, as Require linear history did, which no check-only run showed.
 So try a change to "main is tested" with a real push first, the same kind of move Promote makes: make a scratch branch at `main`'s commit, aim a copy of the changed ruleset at it, then push a `dev` commit onto it as a fast-forward, as an admin, whom the copy, like the ruleset, lets bypass it only through a pull request, so the push meets its rules as the App's does.
+Then remove the ruleset's copy, and only then delete the scratch branch, since the copy blocks its deletion as "main is tested" blocks `main`'s.
 A change to "main is promoted or merged" cannot be tried so, since the App always bypasses its pull-request rule and a person's push meets that rule as a person.
 Name a change unproven until a promotion has moved `main` under it whenever it was not tried with such a push.
 
