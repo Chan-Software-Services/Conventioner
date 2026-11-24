@@ -261,7 +261,7 @@ MONGODB_URI='<URI>' .venv/bin/python migrations/history_follows_location_swap.py
 Each location is named by its id or its exact name as it is now.
 The dry run prints the market's id, the two locations' ids, how many trades of their names the history records, and how many of their layouts' lines it would rename and how many a run before renamed: counts only, never a name.
 **A second run changes nothing**: each line keeps the name it was recorded under beside it, as `subject.location_as_recorded`, and is given the name its location has now.
-So it is run again after any later swap, and after a swap back each line reads as it was recorded.
+So it is run again after any later swap, and after a swap back each line recorded before the first swap reads as it was recorded.
 It refuses, exiting 1 with nothing written: a market it does not find, a location it does not find or that has no stored id, one location named twice, and a history that records no trade of the two names, by the swap or on Market Setup; its docstring lists each.
 Each line is its own write, held to the name it was read under; if one changed between the read and the write, it says how many it renamed of how many it meant to and exits 1, and running it again renames the rest.
 It records nothing in the history: the name as recorded stays on the line.
