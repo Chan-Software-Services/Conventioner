@@ -8,6 +8,7 @@ import {
   seedApplicantMarket,
   seedApplicationDoc,
   createApplicantLoginChallenge,
+  anApplicantEmail,
   planSetupObject,
   PLAN_DATES,
 } from './helpers/seedApplicantMarket';
@@ -27,7 +28,6 @@ import type { APIRequestContext, Page } from '@playwright/test';
  *      the form (the D9 principle extended to the offering).
  */
 
-const APPLICANT_EMAIL = 'applicant-e2e@example.com';
 const KNOWN_CODE = '123456';
 
 /** Create a market via the API with the given plan, and land on the setup view. */
@@ -75,9 +75,10 @@ async function signInApplicant(
   page: Page,
   marketId: string,
   marketSlug: string,
+  email: string,
 ): Promise<VendorPage> {
-  seedApplicationDoc(marketId, APPLICANT_EMAIL);
-  createApplicantLoginChallenge(marketId, APPLICANT_EMAIL, KNOWN_CODE);
+  seedApplicationDoc(marketId, email);
+  createApplicantLoginChallenge(marketId, email, KNOWN_CODE);
 
   // The real request-code call would overwrite the seeded known-code challenge, so it is
   // fulfilled without reaching the back end (same pattern as applicant.spec.ts).
@@ -91,7 +92,7 @@ async function signInApplicant(
 
   const vendor = new VendorPage(page);
   await page.goto(vendorPagePath(marketSlug));
-  await vendor.requestCode(APPLICANT_EMAIL);
+  await vendor.requestCode(email);
   await expect(vendor.codeInput).toBeVisible({ timeout: 5000 });
   await vendor.enterCode(KNOWN_CODE);
   await page.unroute('**/applicant-login/request-code');
@@ -126,16 +127,30 @@ async function applicantToken(
   request: APIRequestContext,
   marketId: string,
   marketSlug: string,
+  email: string,
 ): Promise<string> {
-  createApplicantLoginChallenge(marketId, APPLICANT_EMAIL, KNOWN_CODE);
+  createApplicantLoginChallenge(marketId, email, KNOWN_CODE);
   const verifyRes = await request.post(
     `${BACKEND_URL}/public/markets/${marketSlug}/applicant-login/verify-code`,
-    { data: { email: APPLICANT_EMAIL, code: KNOWN_CODE } },
+    { data: { email, code: KNOWN_CODE } },
   );
   expect(verifyRes.ok()).toBeTruthy();
   const { token } = (await verifyRes.json()) as { token: string };
   expect(token).toBeTruthy();
   return token;
+}
+
+/**
+ * The market's form as a vendor's page reads it: what its essential questions offer, and the form
+ * version every save carries (T507), so an API-level save is judged on its answers.
+ */
+async function readPublicForm(
+  request: APIRequestContext,
+  marketSlug: string,
+): Promise<{ essential_options: { dates: string[] }; formVersion: string }> {
+  const read = await request.get(`${BACKEND_URL}/public/markets/${marketSlug}/application-form`);
+  expect(read.ok(), await read.text()).toBe(true);
+  return read.json();
 }
 
 test.describe('Essential form fields', () => {
@@ -260,11 +275,12 @@ test.describe('Essential form fields', () => {
       TEST_USER.password,
       { setupObject: planSetupObject() },
     );
-    const apply = await signInApplicant(page, market.marketId, market.marketSlug);
+    const email = anApplicantEmail();
+    const apply = await signInApplicant(page, market.marketId, market.marketSlug, email);
     await expect(apply.form).toBeVisible();
 
     // Identity is settled before the form: the email rides along read-only.
-    await expect(apply.essentialEmail).toContainText(APPLICANT_EMAIL);
+    await expect(apply.essentialEmail).toContainText(email);
 
     // Identity: asked whatever the plan offers, and never split (E13/F01/S01). The full name is the
     // official one; how they like to be called is the preferred name's question, not this one's.
@@ -370,7 +386,7 @@ test.describe('Essential form fields', () => {
     const { applications } = (await appsRes.json()) as {
       applications: Array<{ applicantEmail: string; formData: Record<string, unknown> }>;
     };
-    const app = applications.find((a) => a.applicantEmail === APPLICANT_EMAIL);
+    const app = applications.find((a) => a.applicantEmail === email);
     expect(app).toBeTruthy();
     expect(app!.formData).toEqual({
       business_name: 'Vermilion Ceramics',
@@ -413,10 +429,12 @@ test.describe('Essential form fields', () => {
       TEST_USER.password,
       { setupObject: planSetupObject() },
     );
-    seedApplicationDoc(market.marketId, APPLICANT_EMAIL);
-    const token = await applicantToken(request, market.marketId, market.marketSlug);
+    const email = anApplicantEmail();
+    seedApplicationDoc(market.marketId, email);
+    const token = await applicantToken(request, market.marketId, market.marketSlug, email);
 
     // The applicant records answers against the three offered dates.
+    const opened = await readPublicForm(request, market.marketSlug);
     const saveRes = await request.put(
       `${BACKEND_URL}/public/markets/${market.marketSlug}/applicant/application`,
       {
@@ -434,6 +452,7 @@ test.describe('Essential form fields', () => {
             essential_table_choice: 'half',
             essential_section_ranking: ['Main Hall', 'Garden'],
           },
+          formVersion: opened.formVersion,
         },
       },
     );
@@ -456,13 +475,11 @@ test.describe('Essential form fields', () => {
     changeASettledPlan(market.marketId, marketDoc.setupObject);
 
     // ...but the form's offering is frozen: the public form still offers the original three.
-    const publicForm = await (
-      await request.get(`${BACKEND_URL}/public/markets/${market.marketSlug}/application-form`)
-    ).json();
+    const publicForm = await readPublicForm(request, market.marketSlug);
     expect(publicForm.essential_options.dates).toEqual(PLAN_DATES);
 
     // An answer naming the new date is refused - it was never offered.
-    const staleToken = await applicantToken(request, market.marketId, market.marketSlug);
+    const staleToken = await applicantToken(request, market.marketId, market.marketSlug, email);
     const sneakyRes = await request.put(
       `${BACKEND_URL}/public/markets/${market.marketSlug}/applicant/application`,
       {
@@ -478,6 +495,7 @@ test.describe('Essential form fields', () => {
             essential_table_choice: 'half',
             essential_section_ranking: ['Main Hall', 'Garden'],
           },
+          formVersion: publicForm.formVersion,
         },
       },
     );

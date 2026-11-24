@@ -23,6 +23,13 @@ export interface PublicApplicationForm {
    * away from a page that would have loaded on the next try.
    */
   notFound: boolean;
+  /**
+   * The form version the read answered: a fingerprint of the form as the page draws it, its own
+   * questions and what the essential ones offer. Every save carries it, and the server refuses one
+   * from a page drawn from another version (T507). Null when the answer carries none, or the read
+   * failed.
+   */
+  formVersion: string | null;
 }
 
 /** Fetch the market's public information for applicant screens. */
@@ -48,6 +55,7 @@ export async function fetchPublicApplicationForm(
       isOpen: data.is_open === true || data.isOpen === true,
       failed: false,
       notFound: false,
+      formVersion: typeof data.formVersion === 'string' ? data.formVersion : null,
     };
   } catch (err: unknown) {
     const status =
@@ -62,6 +70,7 @@ export async function fetchPublicApplicationForm(
       isOpen: false,
       failed: true,
       notFound: status === 404,
+      formVersion: null,
     };
   }
 }

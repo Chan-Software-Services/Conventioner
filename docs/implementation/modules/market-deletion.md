@@ -13,8 +13,6 @@ describes:
   - back-end/api/applicants.py#save_applicant_application
   - back-end/api/applicants.py#_gone_under_the_save
   - back-end/api/added_vendors.py#add_vendor
-  - back-end/api/markets.py#invite_to_market
-  - back-end/invitations.py#delete_for_market
   - front-end/e2e/market-records-go-with-it.spec.ts
   - back-end/history.py#delete_for_market
   - back-end/history.py#record_for_organization
@@ -22,7 +20,9 @@ describes:
   - back-end/tests/test_a_deleted_market_takes_its_floorplan_images.py
   - back-end/tests/test_every_read_of_a_target_asks_for_a_live_one.py
   - back-end/tests/real_mongo/test_a_deletion_leaves_a_tombstone.py
-verified: 2026-11-17
+  - back-end/api/markets.py#invite_to_market
+  - back-end/invitations.py#delete_for_market
+verified: 2026-11-24
 sources:
   - E20/F04/S01
   - bug/47

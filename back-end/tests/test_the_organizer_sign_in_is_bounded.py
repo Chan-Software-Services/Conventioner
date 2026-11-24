@@ -98,29 +98,11 @@ class Users:
         return next(doc for doc in self.docs if doc["email"] == email)
 
 
-# Hashed at bcrypt's lowest cost, so the many tries here check quickly; the cost is not what is
-# under test (``test_the_sign_in_answers.py`` holds the stand-in hash to the app's).
-FAST_ROUNDS = 4
-_hashes = {}
-
-
-def _hash(password):
-    if password not in _hashes:
-        _hashes[password] = app_module.bcrypt.generate_password_hash(
-            password, rounds=FAST_ROUNDS).decode("utf-8")
-    return _hashes[password]
-
-
-@pytest.fixture(autouse=True)
-def fast_stand_in_hash(monkeypatch):
-    monkeypatch.setattr(UsersApi, "_no_account_hash", _hash("fixture-stand-in"))
-
-
 def _account(email, verified=True, password=PASSWORD):
     return {
         "id": f"id-{email}",
         "email": email,
-        "password": _hash(password),
+        "password": app_module.bcrypt.generate_password_hash(password).decode("utf-8"),
         "organizations": [],
         "email_verified": verified,
         "login_id": f"login-{email}",
@@ -675,9 +657,7 @@ def captcha_checks(monkeypatch):
 
 
 @pytest.fixture
-def mail(mailing_users, outbox, captcha_checks, clock, monkeypatch):
-    # A sign-up hashes at bcrypt's lowest cost, as the accounts here are hashed.
-    monkeypatch.setattr(app_module.bcrypt, "_log_rounds", FAST_ROUNDS)
+def mail(mailing_users, outbox, captcha_checks, clock):
     return SimpleNamespace(users=mailing_users, outbox=outbox, captcha_checks=captcha_checks)
 
 
@@ -786,7 +766,7 @@ def hashes_made(monkeypatch):
 
     def spy(password, rounds=None):
         hashed.append(password)
-        return generate(password, rounds=FAST_ROUNDS)
+        return generate(password, rounds)
 
     monkeypatch.setattr(app_module.bcrypt, "generate_password_hash", spy)
     return hashed

@@ -18,6 +18,7 @@ import pytest
 
 from conftest import (
     COMPLETE_PLAN,
+    applicant_form_version_now,
     FakeMarketsCollection,
     FakeOrganizations,
     FakeSlugMarketsCollection,
@@ -1007,6 +1008,9 @@ CSV = "Timestamp,Email Address,Full Name\n1/5/2026 9:00:00,p1@mail.test,Wren Oka
 APPLICANT_SESSION_EXPIRED = (
     "Authentication required. Your session may have expired. Please sign in again."
 )
+# A save as the vendor's page sends it, carrying the form version it read (T507), so a refusal
+# pinned before the version's own is that refusal and not the version's.
+APPLICANT_SAVE = {"formData": {}, "formVersion": "the version the page read"}
 
 # Each applicant, review, import and door route, with a body it accepts, the function it answers
 # through, and the view argument its failure is logged with.
@@ -1032,7 +1036,7 @@ APPLICANT_REVIEW_IMPORT_AND_DOOR_ROUTES = [
      ApplicantsApi, "get_public_application_form", SLUG),
     ("get", f"/public/markets/{SLUG}/applicant/application", None,
      ApplicantsApi, "authenticate_request", SLUG),
-    ("put", f"/public/markets/{SLUG}/applicant/application", {"formData": {}},
+    ("put", f"/public/markets/{SLUG}/applicant/application", APPLICANT_SAVE,
      ApplicantsApi, "authenticate_request", SLUG),
     ("get", "/markets/market-123/applications", None,
      ApplicantsApi, "list_market_applications", "market-123"),
@@ -1101,7 +1105,7 @@ class TestTheApplicantReviewImportAndDoorRoutes:
     def test_an_applicant_whose_session_expired_is_asked_to_sign_in_again(self, method):
         response = call(
             app_module.app.test_client(), method,
-            f"/public/markets/{SLUG}/applicant/application", {"formData": {}},
+            f"/public/markets/{SLUG}/applicant/application", APPLICANT_SAVE,
         )
 
         assert response.status_code == 401
@@ -1934,10 +1938,12 @@ class TestTheCopyIsOurs:
             lambda _header: {"market_id": "market-123", "email": "vendor@example.com"},
         )
 
+        version = applicant_form_version_now(market_name_slug("Test Market"))
+
         with caplog.at_level(logging.DEBUG):
             response = app_module.app.test_client().put(
                 f"/public/markets/{market_name_slug('Test Market')}/applicant/application",
-                json={"formData": {"booths": "a dozen or so"}},
+                json={"formData": {"booths": "a dozen or so"}, "formVersion": version},
                 headers={"Authorization": "Bearer token"},
             )
 

@@ -562,6 +562,11 @@ An icon is added when a screen uses it, and [`everyIconIsUsed.test.ts`](../front
 Tokens alone cannot fix what is actually wrong. A `--radius-control` does not stop a file writing `height: 45px`, and the concentrated damage is exactly there: five control heights on the login screen, ten on Market Setup, four disabled treatments, sixty button-ish class names, two designs for the same `Manage` button.
 
 Three primitives own height, padding, radius, type and the disabled state, and `primitives.css` holds the one focus border every button draws and the one focus halo every other control wears. They live in `front-end/src/assets/primitives.css`, and `src/__tests__/primitives.test.ts` is the reference a migration checks against.
+
+**Every global rule is in one cascade layer, `global`**: `main.css` imports `base.css` and `primitives.css` into it and holds its own rules in it, so a component's own rule, which is in no layer, outranks every global one whatever its specificity or the order the sheets arrive in.
+The order is not the same everywhere: the dev server injects `main.css` before each component's style, while a production build links a shared chunk's CSS before the entry's.
+Without the layer a component rule in a shared chunk that tied a global one on specificity won on the dev server and lost in production, as every `ScrollBox` scroller that is a Tab stop did: it drew the outer halo of the `[tabindex='0']` rule, which the dialog or panel around it cut off, in place of its own inset one.
+A global sheet names no layer of its own, and `primitives.test.ts` fails on a rule of `main.css` outside `global`.
 Every primitive and reusable component is drawn in its variants and states on the [component library](implementation/modules/component-library.md)'s page, `/dev/components` in a development build, which is where one is looked at and critiqued; the test, not the page, holds the contract.
 Reach for a primitive rather than deciding again.
 They and `AppDialog` are the app's components: it installs no component library, and a widget too hard to own starts from a headless one styled with these tokens ([ADR 0015](adr/0015-the-app-owns-its-components.md)).
