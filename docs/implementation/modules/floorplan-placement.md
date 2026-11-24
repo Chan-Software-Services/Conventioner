@@ -63,7 +63,7 @@ describes:
   - front-end/src/components/daymap/DayMap.vue
   - front-end/src/components/daymap/dayMap.ts
   - front-end/src/components/daymap/freeParts.ts
-verified: 2026-11-17
+verified: 2026-11-24
 sources:
   - bug/38
   - E26/F09/S01
@@ -101,7 +101,7 @@ So every layout spec runs end to end in CI with no API keys and no stubbing ([th
 ## The layout page
 
 [`LayoutView.vue`](../../../front-end/src/components/layout/LayoutView.vue) is `/markets/:marketId/layout/:locationId`, under the Market Setup tab, in the market's frame ([every market page has an address](../conventions/every-market-page-has-an-address.md)); with no location it opens the market's first named one.
-Its head is a bar across the whole page, ruled off by a line under it from the work below (T422, the QC walk of 2026-11-16): "Layout", the switch between the market's named locations (each a link to its own address, the one open marked `aria-current`), the save state ("Saved", "Saving…", or the failure with Retry, or the revision's refusal with Reload), the scale ("36.0 m across", or "Not calibrated"), ["Export PNG"](#export-png) once the layout has a scale, "Layout settings" while the layout is edited, and "Back to Market Setup"; below it the map column and a 320px side panel, which goes under the map with less than 1100px of room (a container query on the page).
+Its head is a bar across the whole page, ruled off by a line under it from the work below (T422, the QC walk of 2026-11-16): "Layout", the switch between the market's named locations (each a link to its own address, the one open marked `aria-current` and raised on a card's shadow, with the focus halo over it while the link has the focus), the save state ("Saved", "Saving…", or the failure with Retry, or the revision's refusal with Reload), the scale ("36.0 m across", or "Not calibrated"), ["Export PNG"](#export-png) once the layout has a scale, "Layout settings" while the layout is edited, and "Back to Market Setup"; below it the map column and a 320px side panel, which goes under the map with less than 1100px of room (a container query on the page).
 Before an image the map column is the upload's drop zone and the panel says "Upload the venue's floorplan for Upper Hall to start."; the first save, made as the image is chosen, starts the layout.
 Before a scale it is [`LayoutCalibration.vue`](../../../front-end/src/components/layout/LayoutCalibration.vue): the image in an SVG whose units are its pixels, a line drawn by drag (its ends draggable after) or by keyboard (a crosshair from the centre, the arrows, Enter for each end, a polite live region saying each step), a length in m, cm, mm, ft or in, and "Set the scale", whose arithmetic is [`calibration.ts`](../../../front-end/src/components/layout/calibration.ts): `scalePxPerUnit` is the line's pixels over its millimetres, from a line of at least 10 px.
 Recalibrate draws the line again from the stored one; a table keeps its millimetres, so the image is what moves under it.

@@ -8,6 +8,7 @@ import {
   seedApplicantMarket,
   seedApplicationDoc,
   createApplicantLoginChallenge,
+  anApplicantEmail,
   planSetupObject,
   PLAN_DATES,
 } from './helpers/seedApplicantMarket';
@@ -27,13 +28,6 @@ import type { APIRequestContext, Page } from '@playwright/test';
  *      the form (the D9 principle extended to the offering).
  */
 
-/**
- * An applicant address of the test's own: the server takes at most ten code checks an address in
- * fifteen minutes, so one address shared by every test, run again and again, would be refused.
- */
-function anApplicantEmail(): string {
-  return `applicant-e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-}
 const KNOWN_CODE = '123456';
 
 /** Create a market via the API with the given plan, and land on the setup view. */
