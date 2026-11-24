@@ -852,7 +852,8 @@ That rule takes every colour to be a component's fill or ink, while most of Conv
 
 **The generator refuses, and writes nothing, rather than write a contract that is wrong.**
 It refuses a token declared twice, a family `main.css` does not load, a component's font size that is not a `--text-*` token, a component selector no rule of `primitives.css` has, a component whose group has no words, a class `primitives.css` names that the file never does, and words that name a token or class the CSS no longer has; each refusal says what is wrong.
-The same test proves each refusal, and that every token and every class of the two sheets, and every declaration and selector of `primitives.css`, reaches the file.
+The same test proves each refusal but the class guard's, and that every token and every class of the two sheets, and every declaration and selector of `primitives.css`, reaches the file.
+The class guard is kept as a safety net: since every selector of `primitives.css` is written, no edit of the CSS reaches it.
 An entry merges its selectors' rules as a state merges with its base, except that a selector inside an earlier one (`.note a` after `.note`) takes from it only what CSS inherits, its ink and type, never its box or fill.
 
 ## What keeps this true
