@@ -15,9 +15,8 @@ The rule it keeps: [a person accepts before they join](../business/rules/a-perso
 
 ## Context
 
-An organizer gave someone a role on a market, or a place in an organization, by typing their address.
-An address with an account was placed at once, unasked, and one without was answered "User not found".
-So adding someone said which addresses had accounts, which nothing else in the product says: the sign-up, the sign-in and the reset already answer alike for every address.
+An organizer gave someone a role on a market, or a place in an organization, by typing their address, and the person was placed at once, unasked.
+The add's answer also depended on the address typed, where the sign-up, the sign-in and the reset already give one answer for every address.
 
 ## Decision
 
