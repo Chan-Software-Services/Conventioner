@@ -40,12 +40,7 @@ export const BACKEND_URL = process.env.BACKEND_URL || stack().backendURL;
 export const APP_API = '/api';
 
 async function login(page: Page, email: string, password: string) {
-  const loginPage = new LoginPage(page);
-  await loginPage.goto();
-  await loginPage.fillEmail(email);
-  await loginPage.fillPassword(password);
-  await loginPage.clickSubmit();
-  await loginPage.waitForMarkets();
+  await new LoginPage(page).signInToMarkets(email, password);
 }
 
 /**

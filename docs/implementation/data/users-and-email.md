@@ -125,6 +125,7 @@ A route test that signs in by writing the session with an address points the use
 
 **A refused sign-in says what to do next, in three named sentences in `users.py`** (E38/F14/S02, [the sign-in's messages](../../business/flows/accounts.md#a2-sign-in-and-sign-out)).
 `SIGN_IN_DOES_NOT_MATCH` answers a wrong password and an address with no account alike, the same status and body, and the password is checked either way: against one stand-in hash, made once at the app's cost factor, when the address has no account (`_password_matches`).
+That cost is bcrypt's 12, flask-bcrypt's default, which the app's config leaves alone, and [`test_the_app_hashes_at_bcrypts_full_cost.py`](../../../back-end/tests/test_the_app_hashes_at_bcrypts_full_cost.py) holds; the back-end tests and the E2E suite's fixture accounts hash at 4 ([testing](../../TESTING.md#back-end-tests)).
 A password longer than bcrypt reads answers it too, checked against nothing ([the sign-in is bounded](#the-sign-in-is-bounded)).
 `SIGN_IN_VERIFY_FIRST` answers a right password, a right code or a code asked for on an account not yet verified.
 `SIGN_IN_WRONG_CODE` answers a wrong code and a code for an address with no account alike at every try, an account's fifth wrong code included, which discards its code without saying so ([a code's tries](#a-codes-tries-are-counted-in-one-update)); the sign-in limits count both alike.

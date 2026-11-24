@@ -23,9 +23,7 @@ export async function withUser<T>(
     const page = await context.newPage();
     const said = watchTheBrowser(page);
     try {
-      const loginPage = new LoginPage(page);
-      await loginPage.login(email, password);
-      await loginPage.waitForMarkets();
+      await new LoginPage(page).signInToMarkets(email, password);
       return await body(page);
     } catch (error) {
       const lines = said();
