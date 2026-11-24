@@ -6,6 +6,7 @@ import { PHONE_AND_DESK } from './helpers/phoneWindow';
 import { savePlan } from './helpers/savePlan';
 import { seedApprovedVendor } from './helpers/seedApplication';
 import {
+  anApplicantEmail,
   createApplicantLoginChallenge,
   planSetupObject,
   seedApplicantMarket,
@@ -161,12 +162,13 @@ const VENDOR = 'e2e-select-vendor@example.com';
 const CODE = '246810';
 const EDITOR = { email: 'e2e-select-editor@example.com', password: 'e2epassword123' };
 
-/** Sign a new vendor in on the market's page, as the vendor would, and land on the form. */
+/** Sign a new vendor in on the market's page, on an address of its own, and land on the form. */
 async function applyAsAVendor(page: Page, marketId: string, marketSlug: string) {
+  const vendor = anApplicantEmail('e2e-select-vendor');
   const vendorPage = new VendorPage(page);
   await vendorPage.goto(marketSlug);
-  await vendorPage.requestCode(VENDOR);
-  createApplicantLoginChallenge(marketId, VENDOR, CODE);
+  await vendorPage.requestCode(vendor);
+  createApplicantLoginChallenge(marketId, vendor, CODE);
   await vendorPage.enterCode(CODE);
   await vendorPage.applyButton.click();
   await expect(vendorPage.form).toBeVisible({ timeout: 30000 });

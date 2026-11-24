@@ -20,7 +20,8 @@ describes:
   - .github/actions/e2e-stack/action.yml
   - .github/actions/front-end-deps/action.yml
   - front-end/scripts/e2e-repeat.ts
-verified: 2026-11-23
+  - scripts/chromium-packages.sh
+verified: 2026-11-24
 sources:
   - T47
   - T53
@@ -40,6 +41,8 @@ sources:
   - T424
   - T464
   - T508
+  - T528
+  - T527
 ---
 
 # CI and the gate
@@ -61,7 +64,16 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 **`backend`**
 
-- Python 3.12, the locks `requirements.txt`, `requirements-floorplan-solver.txt` and `requirements-dev.txt`, a re-lock that fails on any difference ([the locks](../../TECH_STACK.md#python-dependencies-are-locked)), then pytest, with a `mongo:7` service ([why not 8.0](real-mongo-suite.md#the-mongodb-version)) on runner port 27117, allowed [64000 open files](real-mongo-suite.md#the-mongodb-version), for [the real-MongoDB suite](real-mongo-suite.md), which `REAL_MONGODB_REQUIRED=true` makes fail rather than skip without it
+- Python 3.12, the locks `requirements.txt`, `requirements-floorplan-solver.txt` and `requirements-dev.txt`, a re-lock of every lock, `requirements-audit.txt` among them, that fails on any difference ([the locks](../../TECH_STACK.md#python-dependencies-are-locked)), then pytest, with a `mongo:7` service ([why not 8.0](real-mongo-suite.md#the-mongodb-version)) on runner port 27117, allowed [64000 open files](real-mongo-suite.md#the-mongodb-version), for [the real-MongoDB suite](real-mongo-suite.md), which `REAL_MONGODB_REQUIRED=true` makes fail rather than skip without it
+
+**`python-advisories`**
+
+- [pip-audit](https://github.com/pypa/pip-audit) 2.10.1, from its own lock, `back-end/requirements-audit.txt`, over every back-end lock (`requirements*.txt`, its own among them), one lock a run, since pip-audit refuses a package listed in two of the files it is given
+- each lock is read as locked (`--disable-pip`): every pinned version with its hashes, against the advisories PyPI publishes, resolving and installing nothing, and `--strict` fails on a package it could not look up
+- any known advisory fails the job, and its summary names, for each lock, each advisory, its version and the version that fixes it; move the package with `scripts/lock-backend-requirements.sh --upgrade-package <name>` ([the locks](../../TECH_STACK.md#python-dependencies-are-locked))
+- on every pull request and every push to `dev` and `main`, but not on a [trial commit](#a-merge-queues-trial-commit)
+- it starts once `real-data-and-workflows` has ended, whatever its result, so a run never asks for more than [the account's 20 jobs](#the-e2e-shards) at once
+- not a required check, so an advisory published overnight never holds an unrelated pull request: the red job on a push to `dev` is the alert
 
 **`frontend-unit`**
 
@@ -78,7 +90,8 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 **`real-data-and-workflows`**
 
-- four short checks in one job, so [one run fits the account's 20 jobs](#the-e2e-shards): on a pull request only, [`real_data_check.py`](../../../scripts/real_data_check.py) on the PR's commits since the base branch ("No real data in the PR's commits") and then on every file of the merge it checks out ("No real data anywhere in the tree"), then gitleaks 8.28.0 (checksum-verified, fully redacted) on the same commits, which lets by only the fingerprints in the root `.gitleaksignore` (a fixture value gitleaks takes for a key, in a commit already pushed, which only a force-push could take out of the range), the backstop to the git hooks and the gate, which run the checker before anything is pushed ([real data never leaves the PC](../conventions/security-invariants.md#real-data-never-leaves-the-pc))
+- four short checks in one job, so [one run fits the account's 20 jobs](#the-e2e-shards): on a pull request only, [`real_data_check.py`](../../../scripts/real_data_check.py) on the PR's commits since the base branch ("No real data in the PR's commits") and then on every file of the merge it checks out ("No real data anywhere in the tree"), the backstop to the git hooks and the gate, which run the checker before anything is pushed ([real data never leaves the PC](../conventions/security-invariants.md#real-data-never-leaves-the-pc))
+- then gitleaks 8.28.0 (checksum-verified, fully redacted), "No secret in the new commits": on a pull request, on the same commits; on a push to `dev` or `main`, on the commits the push added (`<before>..<after>`, the push event's two commits), never the history before them, so a secret that reached either branch other than through a pull request's scan (a Release PR, merged with `--admin`, gets no CI) fails the push's run; a push whose `before` is not a commit in the clone fails the step rather than scanning nothing, since gitleaks passes a range git cannot read: one that created the branch (an all-zero `before`), an empty `before`, or a forced push, whose `before` no ref still reaches, none of which the rules of `dev` and `main` allow; it lets by only the fingerprints in the root `.gitleaksignore` (a fixture value gitleaks takes for a key, in a commit already pushed, which only a force-push could take out of the range)
 - on every run, [zizmor](https://docs.zizmor.sh/) 1.31.1 (checksum-verified) with `--offline` over the repository, which audits the five workflows (Test, CodeQL, Deploy, Release Please and Promote), the [shared e2e actions](#the-e2e-stack-and-its-caches) and `dependabot.yml` without a token, where any finding fails the job and its log names the audit, file and line, an accepted finding is ignored on the line zizmor reports, with its audit and the reason after it (`# zizmor: ignore[<audit>] <reason>`), and there is no zizmor config file, so nothing is ignored wholesale
 - then [actionlint](https://github.com/rhysd/actionlint) 1.7.12 (checksum-verified) over the five workflows: their syntax, expressions, job references and action inputs (a local action's against its `action.yml`), and each `run:` script through the runner's shellcheck, which zizmor's security audits do not read, but not a composite action's own scripts, where any finding fails the job and its log names the file, line and rule
 - last, on a pull request only, zizmor without `--offline`, given the run's read-only token, for the audits that look actions up on GitHub (an impostor commit, a known-vulnerable action or a confused ref behind a pin), with `--format github`, so each finding is an annotation on the pull request, and `continue-on-error`, so a finding or an outage of GitHub's API never fails the job
@@ -142,7 +155,8 @@ On it `github.base_ref` and `github.event.pull_request` are empty, since they be
 | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-build` | every step, as on a push: none has an `if:`                                                                                                                                                                        |
 | `knowledge-graph`                                                     | the scripts' tests and `knowledge_graph.py check`; the drift step, which reads `github.base_ref`, is skipped, as on a push, since it judges a pull request against its base, which the pull request's own run does |
-| `real-data-and-workflows`                                             | zizmor offline and actionlint; the real-data scans, gitleaks and zizmor online, each `if: github.event_name == 'pull_request'`, are skipped, as on a push                                                          |
+| `real-data-and-workflows`                                             | zizmor offline and actionlint; the real-data scans and zizmor online (`if:` a pull request), and gitleaks (`if:` a pull request or a push), are skipped                                                            |
+| `python-advisories`                                                   | skipped (`if:` not a `merge_group`); not a required check                                                                                                                                                          |
 | `e2e-shard`                                                           | every step, as on a push, but shard 1 saves no cache ([why](#the-e2e-stack-and-its-caches)) and no shard records [the test map](the-test-map.md), which only a push to `dev` records (`RECORD_TEST_MAP`)           |
 | `e2e`                                                                 | its `if: ${{ !cancelled() }}`, which reads no event, and the deal's check; it publishes the next timings, as on a push to `dev`; the selection audit, `if: github.event_name == 'pull_request'`, is skipped        |
 | `e2e-repeat`                                                          | skipped (`if: github.event_name == 'pull_request'`), as on a push; not a required check                                                                                                                            |
@@ -199,8 +213,10 @@ The refresh lists the suite and refuses, naming each file, when a spec file it l
 **Ten shards, since the suite is the run's critical path.**
 With six, the slowest shard ended a median 21.5 minutes into a run, while every other job was done by 2.7; a shard is about 3 minutes of setup and its share of the suite, so ten bring a shard to about 12 minutes at about 13 more runner-minutes of setup a run.
 That holds while runners are free: the account is on GitHub Free, which runs 20 jobs at once across the repository.
-One pull request's run asks for 20, so it fits alone: 17 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, the ten shards and `e2e-repeat`), `e2e` only once the shards are done, and CodeQL's three; a push to `dev` or a trial commit starts 16 Test jobs, with no `e2e-repeat`, and CodeQL's three, 19 in all, as does a push to `main`; on `dev` `test-map` starts once the shards are done, beside `e2e`.
+One pull request's run asks for 20 at once, so it fits alone: 17 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, the ten shards and `e2e-repeat`), `python-advisories` only once `real-data-and-workflows`, under a minute, is done, `e2e` only once the shards are done, and CodeQL's three; a push to `dev` or `main` starts 16 Test jobs, with no `e2e-repeat`, and CodeQL's three, 19 in all, then `python-advisories` once `real-data-and-workflows` is done, as on a pull request, and on a push to `dev` `test-map` once the shards are done, beside `e2e`.
+A trial commit starts the same 16 and CodeQL's three, 19 in all, with no `python-advisories`.
 That is why the five short checks (drift, the real-data scan with gitleaks, zizmor offline, zizmor online and actionlint) are steps of `knowledge-graph` and `real-data-and-workflows`: as five jobs of their own they made one run ask for 24, more than the account runs at once.
+`python-advisories` is a job of its own, since a step's failure would fail a required check, so it waits for `real-data-and-workflows` instead, and takes the runner that job leaves.
 With another run going, shards still wait: on one such run four shards queued 9 to 12 minutes, and the run ended at 23 minutes while each shard's own time was 10.5 to 12.5.
 The matrix lists the shards and their `total`, which move together.
 
@@ -208,16 +224,17 @@ The matrix lists the shards and their `total`, which move together.
 
 Two composite actions set a runner up for Playwright, shared by `e2e-shard` and `e2e-repeat`.
 [`.github/actions/front-end-deps/action.yml`](../../../.github/actions/front-end-deps/action.yml) sets up the Node `.nvmrc` pins and fills `front-end/node_modules`; it runs first, since with no `front-end/node_modules` on the host Docker (as root) creates the anonymous volume's mountpoint there root-owned, and a later `npm ci` fails with `EACCES`.
-[`.github/actions/e2e-stack/action.yml`](../../../.github/actions/e2e-stack/action.yml) installs Chromium, gets the stack's two images, pulls `mongo:7` and `mongo-express:latest` from Docker Hub, retrying only that pull a handful of times, because a transient registry 500 once failed a shard outright, so a stack that genuinely fails to start fails the job at once, then starts the stack and seeds it.
+[`.github/actions/e2e-stack/action.yml`](../../../.github/actions/e2e-stack/action.yml) installs Chromium and [the system packages it needs](#chromiums-system-packages), gets the stack's two images, pulls `mongo:7` and `mongo-express:latest` from Docker Hub, retrying only that pull a handful of times, because a transient registry 500 once failed a shard outright, so a stack that genuinely fails to start fails the job at once, then starts the stack and seeds it.
 Each `uses:` line calls an action by its path (`./.github/actions/...`) with a `zizmor: ignore[self-repository]`: zizmor asks for GitHub's newer `$/` form, which actionlint 1.7.12, the latest, refuses.
 
-**Dependencies, browsers and images come from GitHub's Actions cache, keyed on the files that decide them.**
+**Dependencies, browsers, system packages and images come from GitHub's Actions cache, keyed on what decides them.**
 
-| Cache                                                               | Key                                                                                                                                                                            | On a hit                                                           | On a miss                                     |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ | --------------------------------------------- |
-| `front-end/node_modules`                                            | `front-end-node-modules-<os>-<arch>-<hash>`, the hash of `.nvmrc` and `package-lock.json`                                                                                      | nothing more                                                       | `npm ci`                                      |
-| Playwright's browsers, `~/.cache/ms-playwright`                     | `playwright-chromium-<os>-<arch>-<version>`, the version `npx playwright --version` prints, which `package-lock.json` decides                                                  | `npx playwright install-deps chromium`, the system libraries alone | `npx playwright install chromium --with-deps` |
-| the back end's and front end's images, as one `docker save` archive | `e2e-images-<os>-<arch>-<backend tag>-<frontend tag>`, the tags [`scripts/image-tags.sh`](../../../scripts/image-tags.sh) prints, a hash of the files each image is built from | `docker load`                                                      | `docker compose build`                        |
+| Cache                                                                                                          | Key                                                                                                                                                                            | On a hit                          | On a miss                                                       |
+| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- | --------------------------------------------------------------- |
+| `front-end/node_modules`                                                                                       | `front-end-node-modules-<os>-<arch>-<hash>`, the hash of `.nvmrc` and `package-lock.json`                                                                                      | nothing more                      | `npm ci`                                                        |
+| Playwright's browsers, `~/.cache/ms-playwright`                                                                | `playwright-chromium-<os>-<arch>-<version>`, the version `npx playwright --version` prints, which `package-lock.json` decides                                                  | nothing more                      | `npx playwright install chromium`                               |
+| the `.deb` files of the system packages Chromium needs that the runner lacks, `$RUNNER_TEMP/chromium-packages` | `chromium-packages-<os>-<arch>-<hash>`, the hash of the runner's Ubuntu release and of each package with the version the runner's package lists would install                  | installed from the files, offline | downloaded from Ubuntu's mirrors, then installed from the files |
+| the back end's and front end's images, as one `docker save` archive                                            | `e2e-images-<os>-<arch>-<backend tag>-<frontend tag>`, the tags [`scripts/image-tags.sh`](../../../scripts/image-tags.sh) prints, a hash of the files each image is built from | `docker load`                     | `docker compose build`                                          |
 
 The source is not in the images' key: an image's `COPY` of the source is stale on a hit, and the compose file's bind mounts of `back-end/` and `front-end/` put the checked-out source over it, while the front end's `node_modules` volume is filled from the image, whose `package-lock.json` is in the key.
 That is the rule by which every worktree and `nm-test.sh` stack shares its images ([below](#the-no-mistakes-gate)).
@@ -225,7 +242,18 @@ Only shard 1 saves (`save-cache` and `save-caches`), and only what it did not re
 `docker-build` never uses the cache: it builds both images from nothing on every run, so a base image or a dependency that no longer builds still fails it.
 A cache written on `dev` is read by every pull request; one written on a pull request's run only by that pull request's later runs.
 A trial commit's shards read `dev`'s, the default branch's, and save none: a cache written on its queue branch would be read by no other run.
-The three caches are about 660 MB together (the images' archive about 340, the browsers about 280, `node_modules` about 40), saved once by each pull request that changes a key's files, against the repository's 10 GB of Actions cache, which GitHub evicts least recently used first and after 7 days unread.
+The four caches are about 680 MB together (the images' archive about 340, the browsers about 280, `node_modules` about 40, the packages about 22), the first three saved once by each pull request that changes a key's files and the packages once for each runner image that moves their versions, against the repository's 10 GB of Actions cache, which GitHub evicts least recently used first and after 7 days unread.
+
+### Chromium's system packages
+
+**A shard installs Chromium's system packages without Ubuntu's apt mirrors whenever the cache has them and they install**, so an outage of the mirrors, of minutes or of hours, fails no such shard.
+GitHub's Ubuntu runner has most of the packages Playwright's Chromium needs; on `ubuntu-26.04` it lacks only nine, fonts and their tools, about 22 MB.
+[`scripts/chromium-packages.sh`](../../../scripts/chromium-packages.sh) `missing` asks Playwright which are missing (`npx playwright install-deps --dry-run chromium`, which simulates the install with `apt-get` against the runner's own package lists, offline), and its `install` puts their `.deb` files from the cache in apt's own archive directory and installs them with `apt-get install --no-download`, which checks each against the package lists and fails before it changes anything if a file it needs is not there, then asks Playwright again and fails the job if any is still missing.
+The key is the runner's release and each package it lacks with the version its package lists would install, read by a second simulation, and only on a new key, such as a runner image whose lists move a font to a new version, are the files downloaded: at those versions, or, when the mirrors no longer have them, at those of lists refreshed from the mirrors (`apt-get update`), which are then not saved, since they are not the key's.
+That download, with its refresh, is tried 6 times, a minute apart, and each call to the mirrors is cut at 2 minutes (`timeout 120`), so on a new key's run a shard waits out an outage of at least 5 minutes, its pauses, and the download gives up within 41: 6 tries of at most 3 calls, and the pauses; [`scripts/tests/test_chromium_packages.py`](../../../scripts/tests/test_chromium_packages.py) holds those bounds, and that a hit reaches no mirror, with fakes of `npx`, `sudo`, `apt-get`, `apt-config`, `dpkg-deb`, `timeout` and `sleep`.
+Cached files that do not install are passed over for an install from the mirrors, under the same retry, and are not saved: its download (`apt-get update`, then `apt-get install --download-only`) gives up within 29 minutes, 6 tries of 2 calls and the pauses, and dpkg's part, which runs offline (`--no-download`), is never cut, since a cut there could leave dpkg interrupted.
+When Playwright cannot say which packages are missing, as with no package lists, `missing` refreshes the lists under the same retry first, which gives up within 17 minutes, 6 calls and the pauses, so a shard's worst case is about 87 minutes.
+No shard runs `npx playwright install-deps chromium` or `--with-deps`: each refreshes the package lists and fetches the packages from the mirrors on every run, with no retry.
 
 ## The e2e repeat
 
@@ -285,6 +313,7 @@ The workflow analyses `main` too, on every pull request and push to it, though `
 
 [`.github/dependabot.yml`](../../../.github/dependabot.yml) has Dependabot open version-update pull requests weekly, for `npm` in `front-end/` and for the `github-actions` of the workflows and of the composite actions under `.github/actions/` (`directories`).
 It has no `pip` entry: the back end's hashed locks are written by `uv` through `scripts/lock-backend-requirements.sh` ([the locks](../../TECH_STACK.md#python-dependencies-are-locked)), and that Dependabot writes them as the script does is unverified, so a back-end version bump is made by hand with the script.
+A known advisory against a back-end lock is caught by [`python-advisories`](#ci) instead, on every pull request and every push to `dev` and `main`.
 Dependabot alerts, and the security-update toggle, are repository settings, not this file: they follow the dependency graph, so a `pip` security update can still arrive as a pull request; make it with the script rather than merging Dependabot's lock edits.
 
 **Its pull requests target `dev`**, the default branch, and their titles are Conventional Commits that release-please reads:
@@ -368,8 +397,8 @@ Under a `team-heavy` run, which sets `TEAM_HEAVY_HELD` for its command and holds
 To see who holds it and who waits: `cat ~/.local/state/agent-team/heavy.lock` names the last run to take it, and `lsof ~/.local/state/agent-team/heavy.lock` lists every process with it open, the holder and its guard, and each waiting run with its `flock`.
 The lock is the one place T19's `team-capacity run --kind gate:conventioner` is to take over, keeping the lock as the fallback where `team-capacity` is absent; `nm-test.sh` does not call it yet, and the lock can go once the browser is isolated from the host's network changes.
 `nm-test.sh` never calls `sudo`: it installs Chromium with `npx playwright install chromium`, never `--with-deps` or `install-deps`, because those run `sudo` with no terminal and each failed attempt counts toward the account's `pam_faillock` lockout; the machine's own package manager provides the system libraries.
-CI's [e2e action](#the-e2e-stack-and-its-caches) keeps `--with-deps`, and `install-deps` when the browser comes from its cache, which is correct on GitHub's Ubuntu runners.
-What it does not run is CI's alone: `docker compose build`, gitleaks, zizmor, actionlint, the knowledge graph's drift check and CodeQL.
+CI's [e2e action](#chromiums-system-packages) installs them with `sudo` through `scripts/chromium-packages.sh`, which is correct on GitHub's Ubuntu runners.
+What it does not run is CI's alone: `docker compose build`, gitleaks, pip-audit, zizmor, actionlint, the knowledge graph's drift check and CodeQL.
 
 ## Stack identity
 

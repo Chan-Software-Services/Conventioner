@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from conftest import applicant_form_version_now
 from datatypes import (
     Application, ApplicationOrigin, ApplicationStatus, ApplicationType, MarketPerson, MarketPhase,
     VerdictGiver,
@@ -102,7 +103,7 @@ class TestAVerdictLandingInsideAnApplicantsSave:
 
         return app_module.app.test_client().put(
             f"/public/markets/{market['slug']}/applicant/application",
-            json={"formData": answers})
+            json={"formData": answers, "formVersion": applicant_form_version_now(market["slug"])})
 
     def test_the_save_lands_on_the_verdict_and_sends_it_back_to_open(
             self, applied, applications, interleave):

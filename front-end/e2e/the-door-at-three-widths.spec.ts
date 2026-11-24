@@ -243,12 +243,51 @@ for (const size of THREE_WINDOWS) {
 }
 
 /**
+ * Each part named, by its test id, inside the row's content box, its border and padding taken off:
+ * the parts' heights, by name.
+ */
+async function expectInsideTheRow(
+  row: Locator,
+  parts: Record<string, string>,
+  what: string,
+): Promise<Record<string, number>> {
+  const boxes = await row.evaluate((el, testids) => {
+    const style = getComputedStyle(el);
+    const box = el.getBoundingClientRect();
+    return {
+      row: {
+        left: box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft),
+        right: box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight),
+      },
+      parts: Object.fromEntries(
+        Object.entries(testids).map(([part, testid]) => {
+          const rect = el.querySelector(`[data-testid="${testid}"]`)!.getBoundingClientRect();
+          return [part, { left: rect.left, right: rect.right, height: rect.height }];
+        }),
+      ),
+    };
+  }, parts);
+  for (const [part, edges] of Object.entries(boxes.parts)) {
+    expect(edges.left, `${what}, the ${part} starts inside the row`).toBeGreaterThanOrEqual(
+      boxes.row.left - 0.5,
+    );
+    expect(edges.right, `${what}, the ${part} ends inside the row`).toBeLessThanOrEqual(
+      boxes.row.right + 0.5,
+    );
+  }
+  return Object.fromEntries(Object.entries(boxes.parts).map(([part, e]) => [part, e.height]));
+}
+
+/**
  * The moved vendor's status at any time of day (T501): its time is the check-in's, so a time whose
  * digits are wider ("10:00 AM") or narrower ("1:11 PM") makes a wider or narrower pill. Each time
  * is served for the check-in in turn, made by the signed-in owner ("by you") and by an organizer
  * with a long address, so the outcome is the same at whatever minute the spec runs: the pill, its
  * "Undo?" and the line after it, "by <who>, at table <code>", stay inside the row's content box on
- * the narrowest phone, on 390 and at a desk, the table's run on one line.
+ * the narrowest phone, on 390 and at a desk, the table's run on one line. Then a check-out at that
+ * time, made by whoever made the check-in (the owner, then the organizer with a long address), is
+ * served too, and the departure pill, its "Undo?" and the line after it, "by <who>", stay inside
+ * the row as well.
  *
  * The pill held "at table <code>" until T501's review: on a phone it left the row at about one
  * minute in ten at 390, and at every minute at 320.
@@ -260,7 +299,7 @@ const TIMES_OF_DAY = [
   [12, 58],
 ] as const;
 
-/** An organizer whose address is long, as served for the check-in: no account is needed for it. */
+/** An organizer whose address is long, as served for the check-in and the check-out: no account is needed for it. */
 const LONG_ORGANIZER = 'e2e-the-door-organizer-of-long@example.com';
 
 const STATUS_WINDOWS = [
@@ -295,20 +334,31 @@ for (const size of STATUS_WINDOWS) {
     test.use(size.use);
     const { expectFits, press } = inTheWindow(size);
 
-    test("keeps a vendor's status at another table inside their row, at any time of day", async ({
+    test("keeps a vendor's status at another table, and their departure, inside their row, at any time of day", async ({
       authenticatedPage: page,
       request,
     }) => {
       const { marketId, movedFrom } = await seedTheDoor(request);
       const [year, month, day] = TODAY.split('-').map(Number) as [number, number, number];
-      let served: { checkedInAt: string; checkedInBy: string } | null = null;
+      let served: {
+        checkedInAt: string;
+        checkedInBy: string;
+        checkedOutAt?: string;
+        checkedOutBy?: string;
+      } | null = null;
       await page.route(
         (url) => url.pathname.endsWith(`/markets/${marketId}/attendance`),
         async (route) => {
           if (route.request().method() !== 'GET' || !served) return route.fallback();
           const response = await route.fetch();
           const body = (await response.json()) as {
-            roster: { vendorEmail: string; checkedInAt?: string; checkedInBy?: string }[];
+            roster: {
+              vendorEmail: string;
+              checkedInAt?: string;
+              checkedInBy?: string;
+              checkedOutAt?: string;
+              checkedOutBy?: string;
+            }[];
           };
           for (const row of body.roster) {
             if (row.vendorEmail === MOVED) Object.assign(row, served);
@@ -320,6 +370,16 @@ for (const size of STATUS_WINDOWS) {
       await door.goto(marketId);
       await expect(door.rows).toHaveCount(4);
       const table = `at\\stable\\s${movedFrom.replaceAll(' ', '\\s')}`;
+      /** Refresh, and the roster read again, as served. */
+      const reread = async () => {
+        const read = page.waitForResponse(
+          (res) =>
+            res.request().method() === 'GET' &&
+            res.url().endsWith(`/markets/${marketId}/attendance`),
+        );
+        await press(door.refresh);
+        await read;
+      };
 
       for (const [hour, minute] of TIMES_OF_DAY) {
         for (const [by, said] of [
@@ -332,13 +392,7 @@ for (const size of STATUS_WINDOWS) {
             .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
             .replace(/\s+(?=[AP]M$)/, ' ');
           const what = `at ${time}, by ${said}`;
-          const reread = page.waitForResponse(
-            (res) =>
-              res.request().method() === 'GET' &&
-              res.url().endsWith(`/markets/${marketId}/attendance`),
-          );
-          await press(door.refresh);
-          await reread;
+          await reread();
           // The pill is the state and the time alone, in the attention tone; where they checked in
           // follows who made it on the plain line after it.
           await expect(door.status(MOVED)).toHaveText(`Checked in ${time}`);
@@ -348,43 +402,25 @@ for (const size of STATUS_WINDOWS) {
           );
           await toTheMiddle(door.row(MOVED));
           await settle(page);
-          const boxes = await door.row(MOVED).evaluate((row) => {
-            const style = getComputedStyle(row);
-            const box = row.getBoundingClientRect();
-            const edges = (selector: string) => {
-              const rect = row.querySelector(selector)!.getBoundingClientRect();
-              return { left: rect.left, right: rect.right, height: rect.height };
-            };
+          const heights = await expectInsideTheRow(
+            door.row(MOVED),
+            {
+              pill: 'attendance-row-status',
+              'line after it': 'attendance-row-status-by',
+              'Undo?': 'attendance-undo',
+            },
+            what,
+          );
+          expect(heights.pill, `${what}, the pill is one line`).toBeLessThan(30);
+          const tableLines = await door.row(MOVED).evaluate((row) => {
             // From "at": the space before it stays on the line above where the line breaks.
             const run = row.querySelector('.door-chip-where')!.firstChild!;
             const where = document.createRange();
             where.setStart(run, run.textContent!.indexOf('at'));
             where.setEnd(run, run.textContent!.length);
-            return {
-              row: {
-                left: box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft),
-                right:
-                  box.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight),
-              },
-              parts: {
-                pill: edges('[data-testid="attendance-row-status"]'),
-                'line after it': edges('[data-testid="attendance-row-status-by"]'),
-                'Undo?': edges('[data-testid="attendance-undo"]'),
-              },
-              tableLines: new Set([...where.getClientRects()].map((rect) => Math.round(rect.top)))
-                .size,
-            };
+            return new Set([...where.getClientRects()].map((rect) => Math.round(rect.top))).size;
           });
-          for (const [part, edges] of Object.entries(boxes.parts)) {
-            expect(edges.left, `${what}, the ${part} starts inside the row`).toBeGreaterThanOrEqual(
-              boxes.row.left - 0.5,
-            );
-            expect(edges.right, `${what}, the ${part} ends inside the row`).toBeLessThanOrEqual(
-              boxes.row.right + 0.5,
-            );
-          }
-          expect(boxes.parts.pill.height, `${what}, the pill is one line`).toBeLessThan(30);
-          expect(boxes.tableLines, `${what}, "at table <code>" is on one line`).toBe(1);
+          expect(tableLines, `${what}, "at table <code>" is on one line`).toBe(1);
           await expectWholeAddress(door.vendor(MOVED), MOVED);
           if (!size.phone) {
             // At a desk the vendor's name and address are one line each, as in the rows beside it:
@@ -407,6 +443,36 @@ for (const size of STATUS_WINDOWS) {
             await expectWholeAddress(door.statusBy(MOVED), LONG_ORGANIZER);
           }
           await expectFits(page, `the door, ${what}`);
+
+          // Checked out at the same time by the same organizer: the departure pill, its "Undo?",
+          // the row's one, and who made it on the line after it stay inside the row too.
+          served = { ...served, checkedOutAt: at.toISOString(), checkedOutBy: by };
+          const left = `${what}, checked out`;
+          await reread();
+          await expect(door.out(MOVED)).toHaveText(`Checked out ${time}`);
+          await expect(door.outBy(MOVED)).toHaveText(`by ${said}`);
+          await expect(door.action(MOVED, 'undo')).toHaveCount(0);
+          await toTheMiddle(door.row(MOVED));
+          await settle(page);
+          const outHeights = await expectInsideTheRow(
+            door.row(MOVED),
+            {
+              pill: 'attendance-row-status',
+              'line after it': 'attendance-row-status-by',
+              'departure pill': 'attendance-row-out',
+              'line after the departure': 'attendance-row-out-by',
+              'Undo?': 'attendance-undo-check-out',
+            },
+            left,
+          );
+          expect(
+            outHeights['departure pill'],
+            `${left}, the departure pill is one line`,
+          ).toBeLessThan(30);
+          if (by === LONG_ORGANIZER) {
+            await expectWholeAddress(door.outBy(MOVED), LONG_ORGANIZER);
+          }
+          await expectFits(page, `the door, ${left}`);
         }
       }
     });

@@ -1,6 +1,10 @@
 import type { Page } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL, VendorPage } from './fixtures';
-import { planSetupObject, seedApplicantMarket } from './helpers/seedApplicantMarket';
+import {
+  anApplicantEmail,
+  planSetupObject,
+  seedApplicantMarket,
+} from './helpers/seedApplicantMarket';
 import { seedApprovedVendor } from './helpers/seedApplication';
 import { signInOnThePage } from './helpers/vendorSignIn';
 
@@ -34,7 +38,7 @@ test('answers typed into Apply come back after a reload, with the note, until th
   );
   const vendor = new VendorPage(page);
   await vendor.goto(market.marketSlug);
-  await signInOnThePage(vendor, market.marketId, 'answers-survive-apply@example.com');
+  await signInOnThePage(vendor, market.marketId, anApplicantEmail('answers-survive-apply'));
 
   await vendor.applyButton.click();
   await expect(vendor.form).toBeVisible({ timeout: 30000 });
@@ -78,7 +82,7 @@ test('a change typed into Edit comes back after a reload, and Cancel drops it', 
     TEST_USER.password,
     { setupObject: planSetupObject([DATE]) },
   );
-  const email = 'answers-survive-edit@example.com';
+  const email = anApplicantEmail('answers-survive-edit');
   seedApprovedVendor(market.marketId, email, {
     dates: [DATE],
     tiers: ['Gold'],
@@ -124,7 +128,7 @@ test('Sign out drops the kept answers, so the next sign-in on the tab opens on n
     TEST_USER.password,
     { setupObject: planSetupObject([DATE]) },
   );
-  const email = 'answers-survive-sign-out@example.com';
+  const email = anApplicantEmail('answers-survive-sign-out');
   const vendor = new VendorPage(page);
   await vendor.goto(market.marketSlug);
   await signInOnThePage(vendor, market.marketId, email);
@@ -151,7 +155,7 @@ test('a save that met an ended sign-in is kept, and sent by itself after the nex
     TEST_USER.password,
     { setupObject: planSetupObject([DATE]) },
   );
-  const email = 'answers-survive-expired@example.com';
+  const email = anApplicantEmail('answers-survive-expired');
   const vendor = new VendorPage(page);
   await vendor.goto(market.marketSlug);
   // Not remembered: the device cannot renew the sign-in, so a new code is the only way back.
