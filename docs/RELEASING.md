@@ -217,6 +217,8 @@ Check, in this order:
 2. `https://conventioner.io/markets` opens when loaded directly, not only when navigated to (the SPA fallback in `front-end/vercel.json`).
 3. Sign in as an organizer.
 
+After the deploy that ships the form version, every vendor tab opened before it has its next save refused with "This form changed since you opened it. Reload to continue.", and the vendor must reload ([a vendor's save is held to the form they saw](business/rules/a-vendors-save-is-held-to-the-form-they-saw.md), [ADR 0044](adr/0044-a-vendors-save-is-held-to-the-form-their-page-drew.md)).
+
 ### Hotfixes
 
 `dev` is the hotfix lane, because promotion is a fast-forward: a fix merged to `dev` and promoted ships exactly what CI tested, and nothing else, **as long as nothing else is waiting on `dev`**.

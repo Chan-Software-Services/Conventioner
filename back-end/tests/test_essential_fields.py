@@ -17,6 +17,7 @@ import api.permissions as PermissionsApi
 import db_config as test_db_config
 import essential_fields as EssentialFields
 from api.applicants import (
+    applicant_form_version,
     get_applicant_application,
     get_public_application_form,
     save_applicant_application,
@@ -662,6 +663,7 @@ class TestAFirstTimeVendor:
     def test_their_first_save_creates_their_application(self, applicant_db, applications):
         body, status = save_applicant_application(
             "test-market", _token(), {**VALID_ANSWERS, "business_name": "Acme"},
+            applicant_form_version(applicant_db.docs[0]),
         )
 
         assert status == 200, body
@@ -674,6 +676,7 @@ class TestAFirstTimeVendor:
         """An empty application would sit in the organizer's review queue (the importer's bug 5)."""
         _, status = save_applicant_application(
             "test-market", _token(), {**A_NAME, "business_name": "Acme"},
+            applicant_form_version(applicant_db.docs[0]),
         )
 
         assert status == 422
@@ -720,6 +723,7 @@ class TestAfterApplicationsClose:
 
         body, status = save_applicant_application(
             "test-market", _token(), {**VALID_ANSWERS, "business_name": "Changed"},
+            applicant_form_version(closed.docs[0]),
         )
 
         assert status == 403
@@ -730,6 +734,7 @@ class TestAfterApplicationsClose:
         body, status = save_applicant_application(
             "test-market", _token(email="stranger@example.com"),
             {**VALID_ANSWERS, "business_name": "Late"},
+            applicant_form_version(closed.docs[0]),
         )
 
         assert status == 403
@@ -745,6 +750,7 @@ class TestApplicantSave:
         body, status = save_applicant_application(
             "test-market", _token(),
             {**VALID_ANSWERS, "business_name": "Acme"},
+            applicant_form_version(applicant_db.docs[0]),
         )
 
         assert status == 200, body
@@ -762,6 +768,7 @@ class TestApplicantSave:
 
         body, status = save_applicant_application(
             "test-market", _token(), {**A_NAME, "business_name": "Acme"},
+            applicant_form_version(applicant_db.docs[0]),
         )
 
         assert status == 422
@@ -772,6 +779,7 @@ class TestApplicantSave:
 
         _, status = save_applicant_application(
             "test-market", _token(), {**VALID_ANSWERS, "business_name": "Acme"},
+            applicant_form_version(applicant_db.docs[0]),
         )
 
         assert status == 200
@@ -802,6 +810,7 @@ class TestApplicantSave:
 
         body, status = save_applicant_application(
             "test-market", _token(), {**VALID_ANSWERS, "business_name": "Acme"},
+            applicant_form_version(markets.docs[0]),
         )
 
         assert status == 422
@@ -835,6 +844,7 @@ class TestApplicantSave:
 
         body, status = save_applicant_application(
             "test-market", _token(), {**VALID_ANSWERS, "business_name": "Acme"},
+            applicant_form_version(markets.docs[0]),
         )
 
         assert status == 422

@@ -1342,6 +1342,16 @@ def seen_as_stored(app_id: str) -> dict:
             "updatedAt": doc.get("updated_at")}
 
 
+def applicant_form_version_now(slug: str) -> str:
+    """The form version a vendor's page opened now reads with the form, as every save carries it
+    (T507): read through the public form route, so from whichever database the test configured."""
+    import app as app_module
+
+    response = app_module.app.test_client().get(f"/public/markets/{slug}/application-form")
+    assert response.status_code == 200, response.get_json()
+    return response.get_json()["formVersion"]
+
+
 def seen_as_read(app_id: str) -> dict:
     """``seen_as_stored`` as ``ApplicantsApi.review_application`` takes it, read off the wire."""
     import api.applicants as ApplicantsApi

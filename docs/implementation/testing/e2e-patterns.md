@@ -58,6 +58,7 @@ sources:
   - T501
   - T519
   - T510
+  - T507
 ---
 
 # E2E patterns
@@ -99,7 +100,7 @@ Everything else on the page is found by its `data-testid`.
 `signInToMarkets`, the sign-in of the `authenticatedPage` fixture and of `withUser()`, returns only once Markets has the answers to its two reads, the account's markets and its organizations ([a seed's sign-in ends the page's](#sharp-edges)).
 A new page follows the existing ones (`LoginPage`, `MarketsPage`, `NewMarketPage`, `MarketSetupPage`, `ResultPage`, `OrganizationsPage`, `ManageMarketPage`); TESTING.md lists them all.
 `MarketSetupPage` holds more than the plan: the market's tabs and the phase rail are there too, because every market page stands in the same frame, and `publishResults`, which a walk into market days takes on either path.
-`VendorPage` is the one object for a market's vendor page, `/<slug>/vendor`, signed out and in, the application form on it included; `MarketPage` is the one for the market page, `/<slug>`, its application call and its notice, and `PublicMapPage` for the map it shows while open.
+`VendorPage` is the one object for a market's vendor page, `/<slug>/vendor`, signed out and in, the application form on it included, with a refused save's box (`formError`) and the Reload a changed form offers there (`reloadButton`, T507); `MarketPage` is the one for the market page, `/<slug>`, its application call and its notice, and `PublicMapPage` for the map it shows while open.
 Its `decideOnReviewSetup` follows the rail's "Decide what reviewers read first" to Review setup and chooses "Nothing leads the card" and "No automatic rejections", so a walk that opens Review through the screens decides as an organizer does ([review waits on the review setup](../../business/rules/review-waits-on-the-review-setup.md)).
 On a form of essential questions alone the rail offers the form first (T260), so `decideOnReviewSetupAskingNothingOfTheirOwn` waits for that offer by its name, opens Review setup as the form tab's last step and decides the same way.
 A dialog that more than one screen opens has an object of its own (`FollowUpDialog`, opened from One by one's card and from the All view's drawer), so a test id renamed in it is one line to change for every spec that drives the dialog through the object.

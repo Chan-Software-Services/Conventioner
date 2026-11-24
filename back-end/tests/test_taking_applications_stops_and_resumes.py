@@ -53,6 +53,7 @@ class TestWhileStopped:
         body, status = ApplicantsApi.save_applicant_application(
             "test-market", Essential._token(email="late@example.com"),
             {**Essential.VALID_ANSWERS, "business_name": "Late"},
+            ApplicantsApi.applicant_form_version(stopped.docs[0]),
         )
 
         assert status == 403
@@ -71,11 +72,13 @@ class TestWhileStopped:
         assert body["application"]["id"] == "app-1"
 
     def test_taking_them_again_opens_the_form(self, monkeypatch, applications):
-        _install(monkeypatch, _doc(applicationsStopped=False))
+        doc = _doc(applicationsStopped=False)
+        _install(monkeypatch, doc)
 
         body, status = ApplicantsApi.save_applicant_application(
             "test-market", Essential._token(email="new@example.com"),
             {**Essential.VALID_ANSWERS, "business_name": "New"},
+            ApplicantsApi.applicant_form_version(doc),
         )
 
         assert status == 200, body
