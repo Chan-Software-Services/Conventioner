@@ -372,9 +372,9 @@ def record_check_out(
 
     One update, filtered to a day not yet checked out, so two check-outs at once leave one time
     and one "checked out" entry: the second matches nothing, answers the stored check-out, who and
-    way included, and writes and records nothing. Where the first was undone before the second read that time, the second
-    writes after all, so "Checked out" is never answered with no time. A day with no record is 404
-    ``NO_CHECK_IN``.
+    way included, and writes and records nothing. Where the first was undone before the second
+    read that time, the second writes after all, so "Checked out" is never answered with no time.
+    A day with no record is 404 ``NO_CHECK_IN``.
 
     Only in the market's days, on its own read of the phase, and a market archived between that
     read and the write has the three fields unset again, held to the time this call wrote, with no
