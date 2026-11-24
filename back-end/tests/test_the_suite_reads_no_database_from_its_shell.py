@@ -31,7 +31,7 @@ if not conftest.STUBBED_MODULES:
 print(json.dumps(seen))
 """
 
-#: Fixture values for every variable, each naming a port nothing listens on.
+#: Fixture values for every variable; the address they name, 127.0.0.1:9, is a port nothing listens on.
 _A_SHELLS_DATABASE = {
     "MONGODB_URI": "mongodb://127.0.0.1:9/",
     "MONGODB_HOST": "127.0.0.1",
