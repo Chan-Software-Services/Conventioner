@@ -304,14 +304,14 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
    - Code expires in 5 minutes
    - Its tries are counted in the update that reads it; the fifth wrong code discards it and keeps its wait
    - Rate limited: ten tries per address and sixty per caller in 15 minutes, a try that signs in taken back (429 with the wait); another code is refused (429 with the wait) until an hour after the last one expired, unless it was used
-   - Asking for a code is rate limited too: five requests per address and thirty per caller in 15 minutes (429 with the wait)
+   - Asking for a code is rate limited too: five requests per caller and address and thirty per caller in 15 minutes, and twenty per address in an hour (429 with the wait)
 
 ### Password Reset
 
 1. User requests password reset
 2. Reset link generated, and only its SHA-256 stored
 3. Reset link sent via Resend email
-4. Token expires in 1 hour; another reset is refused (429) until an hour after it expired, and past five requests per address or thirty per caller in 15 minutes every request is refused (429 with the wait)
+4. Token expires in 1 hour; another reset is refused (429) until an hour after it expired, and past five requests per caller and address or thirty per caller in 15 minutes, or twenty per address in an hour, every request is refused (429 with the wait)
 5. User sets new password; the link is used once, the address is marked verified, and a sign-in code asked for before ends
 6. Password hashed and stored; one longer than 72 bytes is refused (400) as at registration
 

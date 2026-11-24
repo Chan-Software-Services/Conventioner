@@ -27,6 +27,7 @@ describes:
   - back-end/tests/test_the_organizer_sign_in_is_bounded.py
   - back-end/tests/test_one_account_per_address.py
   - back-end/tests/test_a_failed_mail_leaves_no_wait_armed.py
+  - back-end/tests/test_a_strangers_requests_use_up_no_ones.py
   - back-end/tests/test_delete_user_authorization.py
   - back-end/account_secrets.py
   - back-end/api/users.py#verify_email
@@ -63,6 +64,7 @@ sources:
   - T311
   - T315
   - T338
+  - T539
 ---
 
 # Users, and the one spelling of an address
@@ -149,30 +151,37 @@ The sign-up's per-address bound caps how many of these emails one address is sen
 
 ## The sign-in is bounded
 
-**The organizer's password and code sign-ins, and the requests that mail an organizer a code or a link, are counted as the applicant's sign-in is**, in the one list of limits, `LIMITS` in [`back-end/sign_in_limits.py`](../../../back-end/sign_in_limits.py): per address and per caller, in fixed 15-minute windows, in `sign_in_attempts`, whose counters name nobody ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)).
+**The organizer's password and code sign-ins, and the requests that mail an organizer a code or a link, are counted as the applicant's sign-in is**, in the one list of limits, `LIMITS` in [`back-end/sign_in_limits.py`](../../../back-end/sign_in_limits.py), in fixed clock-aligned windows, in `sign_in_attempts`, whose counters name nobody ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)).
+A sign-in is counted per address and per caller; a request that mails, per caller, per caller and address, and per address in the hour.
 
-| Limit                                | Name                             | Tries in 15 minutes                          |
-| ------------------------------------ | -------------------------------- | -------------------------------------------- |
-| `PASSWORD_PER_ADDRESS`               | `password:address`               | 10 for one address                           |
-| `PASSWORD_PER_CALLER`                | `password:caller`                | 50 from one caller                           |
-| `ORGANIZER_CODE_PER_ADDRESS`         | `organizer-code:address`         | 10 for one address                           |
-| `ORGANIZER_CODE_PER_CALLER`          | `organizer-code:caller`          | 60 from one caller                           |
-| `ORGANIZER_CODE_REQUEST_PER_ADDRESS` | `organizer-code-request:address` | 5 `/request-otp` for one address             |
-| `ORGANIZER_CODE_REQUEST_PER_CALLER`  | `organizer-code-request:caller`  | 30 `/request-otp` from one caller            |
-| `RESET_LINK_PER_ADDRESS`             | `reset-link:address`             | 5 `/request-password-reset` for one address  |
-| `RESET_LINK_PER_CALLER`              | `reset-link:caller`              | 30 `/request-password-reset` from one caller |
-| `VERIFICATION_LINK_PER_ADDRESS`      | `verification-link:address`      | 5 `/resend-verification` for one address     |
-| `VERIFICATION_LINK_PER_CALLER`       | `verification-link:caller`       | 30 `/resend-verification` from one caller    |
-| `SIGN_UP_PER_ADDRESS`                | `sign-up:address`                | 5 `/register` for one address                |
-| `SIGN_UP_PER_CALLER`                 | `sign-up:caller`                 | 30 `/register` from one caller               |
+| Limit                                           | Name                                    | Tries                                                                     |
+| ----------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------- |
+| `PASSWORD_PER_ADDRESS`                          | `password:address`                      | 10 for one address in 15 minutes                                          |
+| `PASSWORD_PER_CALLER`                           | `password:caller`                       | 50 from one caller in 15 minutes                                          |
+| `ORGANIZER_CODE_PER_ADDRESS`                    | `organizer-code:address`                | 10 for one address in 15 minutes                                          |
+| `ORGANIZER_CODE_PER_CALLER`                     | `organizer-code:caller`                 | 60 from one caller in 15 minutes                                          |
+| `ORGANIZER_CODE_REQUEST_PER_CALLER`             | `organizer-code-request:caller`         | 30 `/request-otp` from one caller in 15 minutes                           |
+| `ORGANIZER_CODE_REQUEST_PER_CALLER_AND_ADDRESS` | `organizer-code-request:caller-address` | 5 `/request-otp` from one caller for one address in 15 minutes            |
+| `ORGANIZER_CODE_REQUEST_PER_ADDRESS_HOUR`       | `organizer-code-request:address-hour`   | 20 `/request-otp` for one address in an hour                              |
+| `RESET_LINK_PER_CALLER`                         | `reset-link:caller`                     | 30 `/request-password-reset` from one caller in 15 minutes                |
+| `RESET_LINK_PER_CALLER_AND_ADDRESS`             | `reset-link:caller-address`             | 5 `/request-password-reset` from one caller for one address in 15 minutes |
+| `RESET_LINK_PER_ADDRESS_HOUR`                   | `reset-link:address-hour`               | 20 `/request-password-reset` for one address in an hour                   |
+| `VERIFICATION_LINK_PER_CALLER`                  | `verification-link:caller`              | 30 `/resend-verification` from one caller in 15 minutes                   |
+| `VERIFICATION_LINK_PER_CALLER_AND_ADDRESS`      | `verification-link:caller-address`      | 5 `/resend-verification` from one caller for one address in 15 minutes    |
+| `VERIFICATION_LINK_PER_ADDRESS_HOUR`            | `verification-link:address-hour`        | 20 `/resend-verification` for one address in an hour                      |
+| `SIGN_UP_PER_CALLER`                            | `sign-up:caller`                        | 30 `/register` from one caller in 15 minutes                              |
+| `SIGN_UP_PER_CALLER_AND_ADDRESS`                | `sign-up:caller-address`                | 5 `/register` from one caller for one address in 15 minutes               |
+| `SIGN_UP_PER_ADDRESS_HOUR`                      | `sign-up:address-hour`                  | 20 `/register` for one address in an hour                                 |
 
-Each request has its own pair, so one request's use holds back no other.
+Each request has its own three counts, so one request's use holds back no other.
 
-**Every bounded route keeps one order** (`_Bounds` in `users.py`).
+**Every bounded route keeps one order** (`_Bounds` in `users.py` for a sign-in, `sign_in_limits.MailBounds` for a request that mails).
 The caller (`sign_in_limits.caller()`, the address `ProxyFix` settled by `TRUSTED_PROXY_HOPS`) is counted before the body is read, so a request that names no address still counts against its caller.
 A caller is a network: an IPv4 address, an IPv6 address's /64 network, or an IPv4-mapped address's IPv4 address, so one machine is one caller on either protocol ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)).
-The address, normalized, is counted next, before any account is looked up, password checked, code compared or captcha checked.
-So a refused request reads no account and sends no mail, a refused sign-up spends no captcha check, and a refusal is the same for an address with an account and without, and whether the password or the code was right.
+For a sign-in the address, normalized, is counted next, before any account is looked up, password checked or code compared.
+For a request that mails, the caller and the normalized address together are counted next (`before_the_mail`), then the address alone in the hour, before any account is looked up; a sign-up asks the human check between the caller and the pair, so a sign-up refused at its caller spends no check and one that fails the check counts against its caller only.
+A request the pair refused is not counted on the address, so one caller adds at most five to an address's hour ([`test_a_strangers_requests_use_up_no_ones.py`](../../../back-end/tests/test_a_strangers_requests_use_up_no_ones.py)).
+So a refused request reads no account and sends no mail, and a refusal is the same for an address with an account and without, and whether the password or the code was right.
 
 **A right password or code takes its try back** (`take_back_attempt`), from both counts, in the window it was counted in, whether it signs in or answers `SIGN_IN_VERIFY_FIRST`.
 Only wrong tries pile up, so an organizer who signs in all day is never held back, and the E2E suite's hundreds of fixture sign-ins from one caller cost nothing.
@@ -182,7 +191,8 @@ Only wrong tries pile up, so an organizer who signs in all day is never held bac
 The password form puts "Forgot password?" beside it, as it does beside `SIGN_IN_DOES_NOT_MATCH` (`refusedSignIn` in `front-end/src/utils/signInNotice.ts`); the code form shows it alone.
 
 **The mail requests take nothing back**: every `/request-otp`, `/request-password-reset`, `/resend-verification` and `/register` counts.
-Past a limit each answers 429 with `ASKED_TOO_OFTEN`, "You have asked several times. Try again in {wait}.", under `msg`, with `Retry-After`.
+One caller's requests for an address leave every other caller's requests for it as they were, so nobody can use up an organizer's requests, while the hour's twenty per address, four callers' fives, bound one inbox's mail whoever asks.
+Past a limit each answers 429 with `ASKED_TOO_OFTEN`, "You have asked several times. Try again in {wait}.", under `msg`, with `Retry-After`; past the hour's count `{wait}` is what is left of the hour, up to 60 minutes.
 Below the limits each answers as it did, `/request-otp`'s and `/request-password-reset`'s per-account waits among them.
 The sign-in page and the verification page say the 429's sentence after "Send the link again" in place of "If that address needs verifying, a new link is on its way.", with nothing beside it (`resentLink`); the reset page and the sign-up form show it as they show any 429's `msg`.
 

@@ -80,8 +80,10 @@ Telling the person who just read the code whether they have applied leaks nothin
 ## Sign-in is bounded
 
 Each code request sends an email and each verify is a guess at a six-digit code, so an unbounded caller could use the product to flood any address with mail or keep guessing.
-**Both endpoints are rate limited per address and per caller**, every limit in one table in [`back-end/sign_in_limits.py`](../../../back-end/sign_in_limits.py): 5 code requests per address and 300 per caller, 10 verifies per address and 300 per caller, each per 15 minutes, since vendors on one venue's wifi share a caller.
+**Both endpoints are rate limited**, every limit in one table in [`back-end/sign_in_limits.py`](../../../back-end/sign_in_limits.py): 300 code requests per caller and 5 per caller and address, each per 15 minutes, and 20 per address in an hour (`request-code:caller`, `request-code:caller-address`, `request-code:address-hour`); 10 verifies per address and 300 per caller per 15 minutes, since vendors on one venue's wifi share a caller.
 A refused attempt still counts.
+A code request is counted per caller and address, so one caller's requests for an address leave every other caller's requests for it as they were, and nobody can use up a vendor's requests; the hour's 20 per address, four callers' fives, bound the codes one inbox is sent, whoever asks.
+A request the pair refused is not counted on the address, so one caller adds at most 5 to it in a quarter of an hour.
 So at most 10 guesses per address per 15 minutes reach a six-digit code, however many codes are asked for, and each code takes at most five of them.
 A resume is counted per caller only, 300 per 15 minutes (`resume:caller`), before the cookie is read: its secret is 32 random bytes, so the limit bounds the work a caller asks of the database, not a guess.
 Past it the page asks for a code, as it does for no cookie.
@@ -91,11 +93,11 @@ A venue's wifi is one caller for every vendor on it, so a per-caller count of wr
 - **The counters live in the database, never in a process**: a serverless deployment forgets memory.
   One document per limit, subject and fixed clock-aligned window in `sign_in_attempts`, counted by an atomic `$inc` upsert and removed by a TTL index ([lookup indexes](../../implementation/data/lookup-indexes.md)).
   Its key is a hash, so the collection names no address and no caller.
-- **The caller is counted before the body or the slug is read**, then, for a code request, the human check is asked, then the address is counted, so a refusal is the same for every address and every market, real or not.
+- **The caller is counted before the body or the slug is read**, then, for a code request, the human check is asked, then the caller and address together, then the address alone in the hour (`MailBounds` in `sign_in_limits.py`), so a refusal is the same for every address and every market, real or not.
   A limit is the same for every address, applicant or not, so it is not the attempt counter the login ruling forbids: that one existed only for addresses that had applied, and so answered whether they had.
   The caller is `request.remote_addr` as [`TRUSTED_PROXY_HOPS`](../../implementation/conventions/security-invariants.md#the-boot-check) resolves it, counted as a network (`sign_in_limits.caller()`): an IPv4 address as it is, an IPv6 address as its /64 network, and an IPv4-mapped IPv6 address as its IPv4 address.
   A line or a machine is handed a whole /64, so one machine is one caller on IPv6 as on IPv4, and vendors on a venue's IPv6 wifi share a caller as they do on IPv4.
   What is not an address is counted as given.
-- **Past a limit the answer is a 429** with `Retry-After` and "Too many sign-in attempts. Please try again in N minutes.", which the sign-in screen shows as it stands, the code field left as it was; nothing is stored, sent or counted against the code.
-- The organizer's password and code sign-ins, and the requests that mail an organizer a code or a link, the sign-up among them, are bounded in the same list, by limits of their own; a sign-in takes back a try that signs in, and a request that sends a mail takes nothing back ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
+- **Past a limit the answer is a 429** with `Retry-After` and "Too many sign-in attempts. Please try again in N minutes.", N being what is left of the limit's window, up to 60 minutes for the hour's count, which the sign-in screen shows as it stands, the code field left as it was; nothing is stored, sent or counted against the code.
+- The organizer's password and code sign-ins, and the requests that mail an organizer a code or a link, the sign-up among them, are bounded in the same list, by limits of their own; a request that mails is counted per caller, per caller and address and per address in the hour, as the vendor's code request is; a sign-in takes back a try that signs in, and a request that sends a mail takes nothing back ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
 - The E2E suite clears the counters at the start of every run ([E2E patterns](../../implementation/testing/e2e-patterns.md#sharp-edges)).
