@@ -53,6 +53,10 @@ SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 TURNSTILE_DASHBOARD = "https://dash.cloudflare.com/?to=/:account/turnstile"
 #: How long a check waits on Cloudflare before it lets the request through.
 SITEVERIFY_TIMEOUT_SECONDS = 3
+#: The longest token Cloudflare issues (its server-side validation docs). A longer one is no
+#: Turnstile token, and is refused unsent, since a post that does not complete lets a request
+#: through.
+MAX_TOKEN_LENGTH = 2048
 
 #: The actions a route asks, each the ``action`` its form's widget is rendered with.
 SIGN_UP = "sign-up"
@@ -160,6 +164,10 @@ def captcha_passes(token: Optional[str], action: str) -> bool:
             return False
         warn_insecure_local_dev("the human check (no secret configured)")
         return True
+
+    if len(token) > MAX_TOKEN_LENGTH:
+        logger.info("The human check refused a token longer than Cloudflare issues")
+        return False
 
     data = {"secret": secret, "response": token}
     caller = _caller_address()

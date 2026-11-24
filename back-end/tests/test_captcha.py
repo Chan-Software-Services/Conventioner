@@ -159,6 +159,18 @@ class TestTheCheckAsksCloudflare:
         assert captcha_passes(token, "sign-up") is False
         assert cloudflare.posts == []
 
+    def test_a_token_longer_than_cloudflares_maximum_is_refused_without_asking(self, cloudflare):
+        # Only a token Cloudflare could have issued is sent, even while it cannot be reached.
+        cloudflare.raises = requests.ConnectionError("connection reset")
+
+        assert captcha_passes("t" * 2049, "sign-up") is False
+        assert cloudflare.posts == []
+
+    def test_a_token_of_cloudflares_maximum_length_is_asked(self, cloudflare):
+        assert captcha_passes("t" * 2048, "sign-up") is True
+        [post] = cloudflare.posts
+        assert post["data"]["response"] == "t" * 2048
+
     def test_a_4xx_answer_is_a_refusal(self, cloudflare):
         cloudflare.answer = FakeAnswer(
             status_code=400, body={"success": False, "error-codes": ["bad-request"]})
