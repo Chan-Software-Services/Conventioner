@@ -83,9 +83,8 @@ How each part of the code works is in the implementation layer of the [knowledge
 
 ### The human check
 
-- **Cloudflare Turnstile** (managed mode) - whether a person, not a script, is asking
-  - Checked on the server by `captcha_passes(token, action)` (`back-end/utils/captcha.py`), through Turnstile's siteverify, with a 3-second timeout
-  - A token passes only for the action its form asks (`sign-up` on registration); when Cloudflare cannot be reached, the request is let through under the sign-in limits and the outage is logged by its kind
+- **Cloudflare Turnstile** (managed mode), the app's one human check ([ADR 0045](adr/0045-turnstile-is-the-one-human-check.md)), checked on the server by `captcha_passes(token, action)` (`back-end/utils/captcha.py`)
+  - The contract (which routes ask it, what a failed check answers, what an outage lets through) is in [security invariants](implementation/conventions/security-invariants.md)
   - Secret key configured via `TURNSTILE_SECRET_KEY` environment variable, which the app refuses to boot without; Cloudflare's published test secrets are refused
   - Test-only bypass via `DISABLE_CAPTCHA`, honored only under `ALLOW_INSECURE_LOCAL_DEV` (see Environment Variables)
 
@@ -295,7 +294,7 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
    - Email and password authentication
    - Requires email verification
    - Session-based authentication
-   - Rate limited: ten tries per caller and address and fifty per caller in 15 minutes (429 with the wait), and past fifty wrong tries at an address in 15 minutes from all callers a try asks the human check (403); a try that signs in taken back from each count
+   - Rate limited, and asks the human check past an address's own count: the limits are in [the sign-in is bounded](implementation/data/users-and-email.md#the-sign-in-is-bounded)
    - A password longer than 72 bytes, which bcrypt does not read, does not match
 
 2. **Passwordless Login (OTP)**
@@ -303,15 +302,15 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
    - 6-digit code sent via Resend
    - Code expires in 5 minutes
    - Its tries are counted in the update that reads it; the fifth wrong code discards it and keeps its wait
-   - Rate limited: ten tries per caller and address and sixty per caller in 15 minutes (429 with the wait), and past fifty wrong tries at an address in 15 minutes from all callers a try asks the human check (403); a try that signs in taken back from each count; another code is refused (429 with the wait) until an hour after the last one expired, unless it was used
-   - Asking for a code is rate limited too: five requests per caller and address and thirty per caller in 15 minutes, and twenty per address in an hour (429 with the wait)
+   - Rate limited on asking for a code and on trying one, with the human check past an address's own count: the limits are in [the sign-in is bounded](implementation/data/users-and-email.md#the-sign-in-is-bounded)
+   - Another code is refused (429 with the wait) until an hour after the last one expired, unless it was used
 
 ### Password Reset
 
 1. User requests password reset
 2. Reset link generated, and only its SHA-256 stored
 3. Reset link sent via Resend email
-4. Token expires in 1 hour; another reset is refused (429) until an hour after it expired, and past five requests per caller and address or thirty per caller in 15 minutes, or twenty per address in an hour, every request is refused (429 with the wait)
+4. Token expires in 1 hour; another reset is refused (429) until an hour after it expired, and past the requests' limits every request is refused (429 with the wait), the limits being in [the sign-in is bounded](implementation/data/users-and-email.md#the-sign-in-is-bounded)
 5. User sets new password; the link is used once, the address is marked verified, and a sign-in code asked for before ends
 6. Password hashed and stored; one longer than 72 bytes is refused (400) as at registration
 
@@ -319,7 +318,7 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 
 - **Password Hashing**: Bcrypt with secure salt generation
 - **Email Verification**: Required before account activation
-- **Human check**: Cloudflare Turnstile on registration
+- **Human check**: Cloudflare Turnstile, the one human check ([ADR 0045](adr/0045-turnstile-is-the-one-human-check.md))
 - **Rate Limiting**: every sign-in, code, reset-link, verification-link and sign-up request, counted per address and per caller in the database (`back-end/sign_in_limits.py`), before the account is looked up; a try that signs in is taken back; OTP and password reset requests also wait on the last
 - **Token Expiration**: Time-limited tokens for verification and reset
 - **Secure Sessions**: HTTP-only, `Secure`, `SameSite=Lax` cookies, signed with a `SECRET_KEY` that has no fallback
