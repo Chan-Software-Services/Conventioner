@@ -6,7 +6,7 @@ describes:
   - scripts/seed_fixture.sh
   - scripts/lib/stack-identity.sh
   - scripts/nm-test.sh
-verified: 2026-11-14
+verified: 2026-11-24
 sources:
   - E34/F03/S02
   - E35/F02/S01

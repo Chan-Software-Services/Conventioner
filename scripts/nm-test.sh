@@ -18,7 +18,8 @@
 # check, the back end's re-lock and pytest, the static checks of CI's frontend-lint-and-types job
 # (the pinned Node and npm, the lockfile, Prettier, ESLint, Stylelint, the type-check), Vitest, that
 # job's build, bundle budget and eval check, and Playwright on a stack of its own. CI alone runs
-# docker compose build, gitleaks, zizmor, actionlint, the knowledge graph's drift check and CodeQL.
+# docker compose build, gitleaks, pip-audit, zizmor, actionlint, the knowledge graph's drift check
+# and CodeQL.
 #
 # --skip-e2e runs every suite but Playwright, and so starts no stack and takes no heavy-run lock,
 # leaving Playwright to CI's required e2e shards.
