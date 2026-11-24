@@ -260,9 +260,10 @@ test.describe("A location's floorplan", () => {
   });
 });
 
-// A file of another type, a PDF over 4 MB and the server's sentence for one of more than 20 pages
-// are proved in `theLayoutTakesTheSameZone.test.ts`, and the server's page count in
-// `test_floorplan_access.py`; here a damaged PDF is the server's refusal reached through the page.
+// A file of another type, a PDF over 4 MB and the page saying a server's refusal as the server
+// words it are proved in `theLayoutTakesTheSameZone.test.ts`, and the server's page count and its
+// sentence for a PDF of more than 20 pages in `test_floorplan_access.py`; here a damaged PDF is the
+// server's refusal reached through the page.
 test.describe("A floorplan is held to the upload's limits", () => {
   let seeded: SeededLayout;
 

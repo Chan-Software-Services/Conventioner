@@ -28,7 +28,7 @@ async function finalPath(page: Page, slug: string, suffix: string): Promise<stri
  * Nothing under them is a page, the old `/applicant-login` and `/applicant/dashboard` among them
  * (ADR 0022): those addresses ask no server, and land on the router's "Page not found" whatever
  * the slug and whoever is signed in, which `theMarketsTwoAddresses.test.ts` proves on the app's
- * router and `every-market-page-has-an-address.spec.ts` renders.
+ * router; `every-market-page-has-an-address.spec.ts` renders that page at a removed market page.
  */
 const PAGE_SUFFIXES = ['', '/vendor'];
 
