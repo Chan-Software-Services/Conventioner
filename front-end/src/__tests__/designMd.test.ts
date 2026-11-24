@@ -452,6 +452,7 @@ describe('the components, on fixture CSS', () => {
   background: var(--mm-black);
   color: var(--mm-black);
   font-size: var(--text-sm);
+  font-weight: 600;
   --focus-border: var(--mm-green);
 }
 
@@ -480,7 +481,8 @@ describe('the components, on fixture CSS', () => {
       ],
     };
     const { text: nestedText } = render({ ...COMPONENT_FIXTURE, primitives: nested }, withNote);
-    // The ink and the type follow the element in; the box, the corners and the fill stay outside.
+    // The ink and the type follow the element in; the box, the corners and the fill stay outside,
+    // and so does the weight, which base.css's reset sets on every element.
     expect(frontMatter(nestedText)).toContain(
       '  note-link:\n' +
         '    textColor: "{colors.mm-green}"\n' +

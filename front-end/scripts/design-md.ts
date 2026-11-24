@@ -258,6 +258,8 @@ function rulesBySelector(primitives: Root): Map<string, Rule[]> {
 /**
  * The properties CSS inherits, which alone pass from an element to one inside it: an entry such as
  * `(.note, .note a)` takes the note's ink and type, never its padding, width, corners or fill.
+ * `font-weight`, and the `font` shorthand that sets one, are left out: base.css's reset gives every
+ * element its own 400, so here a weight never reaches an element inside.
  */
 const INHERITED = new Set([
   'color',
@@ -278,8 +280,7 @@ const INHERITED = new Set([
 const inherits = (prop: string) =>
   INHERITED.has(prop) ||
   prop.startsWith('--') ||
-  prop === 'font' ||
-  prop.startsWith('font-') ||
+  (prop.startsWith('font-') && prop !== 'font-weight') ||
   prop.startsWith('list-style');
 
 /** Whether `inner` matches an element inside what `outer` matches: `outer`, a space or `>`, more. */
