@@ -170,6 +170,7 @@ Each request has its own pair, so one request's use holds back no other.
 
 **Every bounded route keeps one order** (`_Bounds` in `users.py`).
 The caller (`sign_in_limits.caller()`, the address `ProxyFix` settled by `TRUSTED_PROXY_HOPS`) is counted before the body is read, so a request that names no address still counts against its caller.
+A caller is a network: an IPv4 address, an IPv6 address's /64 network, or an IPv4-mapped address's IPv4 address, so one machine is one caller on either protocol ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)).
 The address, normalized, is counted next, before any account is looked up, password checked, code compared or captcha checked.
 So a refused request reads no account and sends no mail, a refused sign-up spends no captcha check, and a refusal is the same for an address with an account and without, and whether the password or the code was right.
 

@@ -15,6 +15,10 @@ its window has ended; nothing in the application cleans up. The window is fixed 
 clock, so a document's key names its window and a counter Mongo has not yet removed is never read
 again.
 
+**A caller is a network** (``caller``): an IPv4 address, or the /64 network an IPv6 address sits
+in, since one line or machine is handed a whole /64. So a per-caller limit counts one machine
+once, on IPv6 as on IPv4, and the addresses of its own network add nothing to its allowance.
+
 **A counter names nobody.** Its key is a hash of the limit, the subject and the window: the
 collection holds how many times someone knocked in the last quarter of an hour, not who.
 
@@ -25,6 +29,7 @@ an account, who has applied or which markets exist (the applicant login ruling,
 existed only for addresses that had applied, and so answered whether they had.
 """
 import hashlib
+import ipaddress
 import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -122,10 +127,30 @@ LIMITS = (
 )
 
 
+# The block of IPv6 addresses one caller is counted as: a line or a machine is handed a /64 network
+# of its own, so its addresses are one caller, as one IPv4 address is.
+IPV6_CALLER_PREFIX = 64
+
+
 def caller() -> str:
-    """Who is asking: the address the request came from, as ``ProxyFix`` settled it by
-    ``TRUSTED_PROXY_HOPS``. Every per-caller limit names its caller this one way."""
-    return request.remote_addr or "unknown"
+    """Who is asking: the network the request came from, from the address ``ProxyFix`` settled by
+    ``TRUSTED_PROXY_HOPS``. Every per-caller limit names its caller this one way.
+
+    A caller is a network, so one machine is one caller whichever of its addresses it asks from: an
+    IPv4 address as it is, an IPv6 address as its /64 network (``2001:db8:1:2::/64``), and an
+    IPv4-mapped IPv6 address as the IPv4 address it maps. What is not an address is kept as given.
+    """
+    remote = request.remote_addr or "unknown"
+    try:
+        address = ipaddress.ip_address(remote)
+    except ValueError:
+        return remote
+    if address.version == 4:
+        return str(address)
+    if address.ipv4_mapped is not None:
+        return str(address.ipv4_mapped)
+    network = ipaddress.IPv6Network((int(address), IPV6_CALLER_PREFIX), strict=False)
+    return str(network)
 
 
 def ensure_expiry_index() -> None:

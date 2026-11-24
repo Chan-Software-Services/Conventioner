@@ -88,7 +88,9 @@ A venue's wifi is one caller for every vendor on it, so a per-caller count of wr
   Its key is a hash, so the collection names no address and no caller.
 - **The caller is counted before the body or the slug is read**, then the address, so a refusal is the same for every address and every market, real or not.
   A limit is the same for every address, applicant or not, so it is not the attempt counter the login ruling forbids: that one existed only for addresses that had applied, and so answered whether they had.
-  The caller is `request.remote_addr` as [`TRUSTED_PROXY_HOPS`](../../implementation/conventions/security-invariants.md#the-boot-check) resolves it.
+  The caller is `request.remote_addr` as [`TRUSTED_PROXY_HOPS`](../../implementation/conventions/security-invariants.md#the-boot-check) resolves it, counted as a network (`sign_in_limits.caller()`): an IPv4 address as it is, an IPv6 address as its /64 network, and an IPv4-mapped IPv6 address as its IPv4 address.
+  A line or a machine is handed a whole /64, so one machine is one caller on IPv6 as on IPv4, and vendors on a venue's IPv6 wifi share a caller as they do on IPv4.
+  What is not an address is counted as given.
 - **Past a limit the answer is a 429** with `Retry-After` and "Too many sign-in attempts. Please try again in N minutes.", which the sign-in screen shows as it stands, the code field left as it was; nothing is stored, sent or counted against the code.
 - The organizer's password and code sign-ins, and the requests that mail an organizer a code or a link, the sign-up among them, are bounded in the same list, by limits of their own; a sign-in takes back a try that signs in, and a request that sends a mail takes nothing back ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
 - The E2E suite clears the counters at the start of every run ([E2E patterns](../../implementation/testing/e2e-patterns.md#sharp-edges)).
