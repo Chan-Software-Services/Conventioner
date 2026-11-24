@@ -137,7 +137,7 @@ MONGODB_URI='<production URI>' .venv/bin/python create_account.py verify someone
 It lowercases the address (login matches the stored address exactly), makes the account in the shape sign-up makes, and never takes the password as an argument.
 Then give the person access in the product as above.
 A forgotten password is reset by its owner from the sign-in page ("Forgot password?"); there is no operator path, and none is needed.
-`create_test_user.py` is the test fixtures' script: it prints the password it was given, so do not use it for real accounts.
+`create_test_user.py` is the test fixtures' script: it prints the password it was given and hashes it at bcrypt's lowest cost, so do not use it for real accounts; it refuses whenever `MONGODB_URI` is set, the way production is reached.
 
 ### The test markets
 
@@ -461,7 +461,7 @@ Never delete such a document by hand: its records would stay behind, with nothin
 
 - `reset_database.py` empties every collection. It refuses whenever `MONGODB_URI` is set, so it cannot reach production by accident.
 - `migrations/cleanup_unverified_users.py` deletes every unverified account (use `--dry-run` first, or `--email` for one).
-- `create_test_user.py` makes a fixture account and prints its password (its `--bulk` form makes many and prints none).
+- `create_test_user.py` makes a fixture account, its password hashed at bcrypt's lowest cost, and prints its password (its `--bulk` form makes many and prints none). It refuses whenever `MONGODB_URI` is set, as `reset_database.py` does.
 
 `reset_database.py`, `create_test_user.py` and `seed_test_markets.py` refuse, too, a database the environment does not name (neither `MONGODB_HOST` nor `MONGODB_URI` set), which would be `127.0.0.1:27017`, and that same target named outright: a loopback or unspecified host (`127.0.0.1`, `localhost`, `::1`, `0.0.0.0`, `::`) on port 27017, or with no port, is on a developer's machine the primary checkout's stack's MongoDB, and a `MONGODB_HOST` left over from running the back end on the host names it as easily as a meant one.
 Every stack's back-end container sets `MONGODB_HOST=mongodb`, so `scripts/th-compose.sh exec backend python /app/<script>` (or `docker compose exec` for the primary stack) passes; a slot's MongoDB on the host is port `27017 + slot * 10`; and `ALLOW_PRIMARY_STACK=true` opts in to the primary stack's MongoDB from the host.

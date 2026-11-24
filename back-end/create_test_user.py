@@ -13,22 +13,44 @@ Example:
 The bulk form makes each address as the one-address form does, in one process with the password
 hashed once, for a seed of many people (T204); an address already made is left as it is. It prints
 one line per address, "created <email> <id>" or "exists <email> <id>", and never the password.
+
+A fixture account's password is hashed at bcrypt's lowest cost, 4, where the app hashes at 12, so
+each of the E2E suite's thousands of sign-ins checks it in about a millisecond: a hash carries its
+own cost, and the sign-in checks it at that cost. Never use it for a real account; an operator
+makes one with ``create_account.py``. So it refuses whenever ``MONGODB_URI`` is set, as
+``reset_database.py`` does: production is reached that way, and every stack by ``MONGODB_HOST``.
 """
 
+import os
 import sys
 from datetime import datetime, timezone
 from flask_bcrypt import Bcrypt
 from db_config import get_database, require_named_database
 from utils.email_address import normalized_email
 
+HOSTED_REFUSAL = (
+    "Refusing to make a fixture account: MONGODB_URI is set, so this would write to a hosted "
+    "database (production is reached that way). A fixture account's password is hashed at "
+    "bcrypt's lowest cost, and every stack names its database by MONGODB_HOST. An operator makes "
+    "a real account with create_account.py."
+)
+
+
 def _users():
-    """The users collection of the database the environment names, refusing any other."""
+    """The users collection of the database the environment names, refusing a hosted one and any
+    the environment does not name."""
+    if os.getenv("MONGODB_URI"):
+        raise SystemExit(HOSTED_REFUSAL)
     require_named_database()
     return get_database()["users"]
 
 
+#: bcrypt's lowest cost; ``test_the_app_hashes_at_bcrypts_full_cost.py`` holds it, and the app at 12.
+FIXTURE_BCRYPT_ROUNDS = 4
+
+
 def _hashed(password: str) -> str:
-    return Bcrypt().generate_password_hash(password).decode('utf-8')
+    return Bcrypt().generate_password_hash(password, rounds=FIXTURE_BCRYPT_ROUNDS).decode('utf-8')
 
 
 def _insert_verified(users_collection, email: str, hashed_password: str, organizations=None,
