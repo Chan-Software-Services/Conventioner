@@ -108,7 +108,9 @@ for (const window of [
           await expect(invitations.sentence(invited.market.name)).toHaveText(
             `${TEST_USER.email} invited you to ${invited.market.name} as an Editor.`,
           );
-          await expect(invitations.until(invited.market.name)).toHaveText(/^Until \d+ \w+\.$/);
+          await expect(invitations.until(invited.market.name)).toHaveText(
+            /^Until \d+ \w+, \d{2}:\d{2}\.$/,
+          );
           await expect(invitations.sentence(invited.organization.name)).toHaveText(
             `${TEST_USER.email} invited you to the organization ${invited.organization.name} as a member.`,
           );

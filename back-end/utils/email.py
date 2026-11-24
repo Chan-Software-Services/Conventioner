@@ -445,7 +445,7 @@ def send_invitation_email(
     invited = f"{inviter} invited you to join {joining} {_INVITED_AS[kind][role]} on Conventioner."
     invitations_url = f"{frontend_url()}/invitations"
     # The moment it ends, with its zone: the server knows no reader's zone, and the Invitations page
-    # names the last whole day before it in the reader's own.
+    # names the same moment in the reader's own.
     ends_utc = ends_at.astimezone(timezone.utc)
     ends = f"It ends on {ends_utc.day} {ends_utc:%B %Y} at {ends_utc:%H:%M} UTC."
     subject = f"{inviter} invited you to {name}"

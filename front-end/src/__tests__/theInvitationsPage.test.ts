@@ -83,6 +83,7 @@ const press = async (wrapper: Page, which: 'accept' | 'decline', index = 0) => {
 };
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   fetchInvitations.mockReset();
   acceptInvitation.mockReset();
   declineInvitation.mockReset();
@@ -136,19 +137,20 @@ describe('the Invitations page, as it reads', () => {
   });
 
   it('words each invitation: who, to what, as what, and until when', async () => {
+    vi.stubEnv('TZ', 'UTC');
     fetchInvitations.mockResolvedValue([TO_A_MARKET, TO_AN_ORGANIZATION]);
     const wrapper = await mountPage();
     expect(row(wrapper, 0).get('[data-testid="invitation-sentence"]').text()).toBe(
       'dana@ember.test invited you to Riverside Spring Market as an Editor.',
     );
     expect(row(wrapper, 0).get('[data-testid="invitation-until"]').text()).toBe(
-      'Until 7 December.',
+      'Until 8 December, 12:00.',
     );
     expect(row(wrapper, 1).get('[data-testid="invitation-sentence"]').text()).toBe(
       'olive@ember.test invited you to the organization Ember Makers as a member.',
     );
     expect(row(wrapper, 1).get('[data-testid="invitation-until"]').text()).toBe(
-      'Until 6 December.',
+      'Until 7 December, 12:00.',
     );
     for (const role of ['admin', 'viewer'] as const) {
       fetchInvitations.mockResolvedValue([{ ...TO_A_MARKET, role }]);
@@ -308,24 +310,40 @@ describe('answering an invitation', () => {
   });
 });
 
-describe('the day an invitation is said to wait until', () => {
-  const zone = process.env.TZ;
+describe('the moment an invitation is said to wait until', () => {
   afterEach(() => {
-    process.env.TZ = zone;
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
   });
 
-  // The last whole day before it ends, in the reader's own zone, so the page never names a day
-  // the invitation does not cover; the email names the moment it ends, in UTC.
+  // The moment it ends, in the reader's own zone, so the page never names a day gone by on its
+  // last day, nor one it does not cover; the email names the same moment in UTC.
   it.each([
-    ['UTC', '2026-12-08T16:44:00Z', '7 December'],
-    ['Asia/Singapore', '2026-12-08T16:44:00Z', '8 December'],
-    ['America/Los_Angeles', '2026-12-08T16:44:00Z', '7 December'],
-    ['Asia/Singapore', '2026-12-08T16:00:00Z', '8 December'],
-    ['UTC', '2027-01-01T05:00:00Z', '31 December'],
-  ])('in %s, one ending at %s waits until %s', async (tz, endsAt, day) => {
-    process.env.TZ = tz;
+    ['UTC', '2026-12-08T16:44:00Z', '8 December, 16:44'],
+    ['Asia/Singapore', '2026-12-08T16:44:00Z', '9 December, 00:44'],
+    ['America/Los_Angeles', '2026-12-08T16:44:00Z', '8 December, 08:44'],
+    ['Asia/Singapore', '2026-12-08T16:00:00Z', '9 December, 00:00'],
+    ['UTC', '2027-01-01T05:07:00Z', '1 January, 05:07'],
+  ])('in %s, one ending at %s waits until %s', async (tz, endsAt, until) => {
+    vi.stubEnv('TZ', tz);
     const { endsOn } =
       await vi.importActual<typeof import('@/utils/invitations')>('@/utils/invitations');
-    expect(endsOn({ endsAt })).toBe(day);
+    expect(endsOn({ endsAt })).toBe(until);
+  });
+
+  it('names the day it ends on that day itself, never one gone by', async () => {
+    vi.stubEnv('TZ', 'UTC');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-12-08T10:00:00Z'));
+    const { endsOn } =
+      await vi.importActual<typeof import('@/utils/invitations')>('@/utils/invitations');
+    expect(endsOn({ endsAt: '2026-12-08T16:44:00Z' })).toBe('8 December, 16:44');
+  });
+
+  it('leaves the zone as it found it', () => {
+    const zone = process.env.TZ;
+    vi.stubEnv('TZ', 'Asia/Singapore');
+    vi.unstubAllEnvs();
+    expect(process.env.TZ).toBe(zone);
   });
 });

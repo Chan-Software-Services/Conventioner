@@ -55,15 +55,15 @@ export function invitationSentence(invitation: Invitation): string {
 }
 
 /**
- * The last whole day an invitation waits, in the reader's own timezone: "8 December" for one that
- * ends during the 9th, or at its first moment. It names no day the invitation does not cover; the
- * email names the moment it ends, in UTC.
+ * The moment an invitation ends, in the reader's own timezone: "8 December, 16:44". It is never a
+ * day gone by while the invitation waits, and covers no more than it gives; the email names the
+ * same moment in UTC.
  */
 export function endsOn(invitation: Pick<Invitation, 'endsAt'>): string {
   const at = new Date(invitation.endsAt);
   if (Number.isNaN(at.getTime())) return '';
-  const day = new Date(at.getFullYear(), at.getMonth(), at.getDate() - 1);
-  return `${day.getDate()} ${MONTH_NAMES[day.getMonth()]}`;
+  const time = [at.getHours(), at.getMinutes()].map((n) => String(n).padStart(2, '0')).join(':');
+  return `${at.getDate()} ${MONTH_NAMES[at.getMonth()]}, ${time}`;
 }
 
 /** "You are now an Editor on Riverside Market.", or "You are now a member of Ember Makers." */
