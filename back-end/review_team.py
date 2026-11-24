@@ -12,8 +12,8 @@ never moves.
 
 With no reviewers chosen, everything is first come, first served, as before this existed.
 
-**Every move into open, and every hand-on of a follow-up, waits for the deal**: an arrival, an
-undo, a rule's return, a re-import's or an applicant's back to review and a follow-up's hand-on
+**Every move into open, every undo back into a follow-up, and every hand-on of a follow-up, waits
+for the deal**: an arrival, an undo (into open or back into a follow-up), a rule's return, a re-import's or an applicant's back to review and a follow-up's hand-on
 each mark their application (``arriving``, ``ReviewState.Arrival``) in their own write, whether
 or not reviewers are chosen and whoever its reviewer is, and the deal judges who is able. So no open application is left outside every share
 while an able reviewer exists, whichever order a change of reviewers and the move land in.
