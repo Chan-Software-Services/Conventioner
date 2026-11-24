@@ -14,11 +14,14 @@ artifact of a push to `dev`, downloaded once a run to `.stack-logs/test-map/<run
 run's shard results (`--map` and `--results` name files instead). A spec is chosen:
 
 1. when the change edits it, or a file it imports, transitively (scores 1);
-2. when its pages loaded a changed file under `front-end/src/` (scores 1 / the specs that did);
+2. when its pages loaded a changed file under `front-end/src/` (scores 1 / the specs that did); a
+   `.ts` or `.vue` file there that reads the same at both sides with its comments out, by `Words`,
+   reaches no spec by any rule;
 3. when it called an endpoint whose requests ran a changed back-end function, found by the
    hunk's lines on either side, so a deleted function by its old name (scores 1 / the specs that
-   reach it); a change outside any function, or in one the map does not know, counts for every
-   function of its file, choosing the specs that reach the file and scoring nothing;
+   reach it); a line that runs nothing (blank, a comment, a docstring's text) names none, and a
+   change outside any function, or in one the map does not know, counts for every function of its
+   file, choosing the specs that reach the file and scoring nothing;
 4. every spec, when the change edits a file the whole suite stands on (`RUN_EVERY_SPEC`);
 5. every spec, scoring nothing, when the change edits a file under `front-end/` or `back-end/` no
    rule places: not a spec, not imported by one at the head or the base, in no spec's modules and
@@ -42,6 +45,8 @@ Exit codes: Playwright's with `--run`, 0 with nothing to run, `--list` or `audit
 finds, or when it cannot audit), 2 a usage error.
 """
 import argparse
+import ast
+import io
 import json
 import os
 import re
@@ -49,6 +54,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+import tokenize
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
@@ -182,22 +188,315 @@ def changed_lines(root: Path, base: str, head: Optional[str]) -> Dict[str, Tuple
     return dict(out)
 
 
+QUIET_TOKENS = {
+    tokenize.COMMENT, tokenize.NL, tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT,
+    tokenize.ENDMARKER, tokenize.ENCODING,
+}  # fmt: skip
+
+
+def python_words(source: str) -> Optional[Tuple[Set[int], List[Tuple[int, int]]]]:
+    """(the lines that hold something that runs, the first and last line of each docstring) of a
+    Python file, or None when it does not parse.
+
+    A docstring is the string that opens a module, class or function body. A line runs nothing
+    when it is blank, a comment, or the text of a docstring alone: a `#` inside any other string,
+    or code on a docstring's own line, such as a `def` or a `;`, runs."""
+    try:
+        tree = ast.parse(source)
+        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
+    except (SyntaxError, ValueError, tokenize.TokenError):
+        return None
+    text = source.split("\n")
+
+    def column(line: int, offset: int) -> int:
+        # ast counts a column in UTF-8 bytes, tokenize in characters.
+        return len(text[line - 1].encode()[:offset].decode(errors="replace"))
+
+    docstrings: List[Tuple[Tuple[int, int], Tuple[int, int]]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            first = node.body[0] if node.body else None
+            if (
+                isinstance(first, ast.Expr)
+                and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)
+                and first.end_lineno is not None
+                and first.end_col_offset is not None
+            ):
+                start = (first.lineno, column(first.lineno, first.col_offset))
+                end = (first.end_lineno, column(first.end_lineno, first.end_col_offset))
+                docstrings.append((start, end))
+    runs: Set[int] = set()
+    for token in tokens:
+        if token.type in QUIET_TOKENS:
+            continue
+        if any(start <= token.start and token.end <= end for start, end in docstrings):
+            continue
+        runs.update(range(token.start[0], token.end[0] + 1))
+    return runs, [(start[0], end[0]) for start, end in docstrings]
+
+
+def line_count(source: str) -> int:
+    return source.count("\n") + (1 if source and not source.endswith("\n") else 0)
+
+
 def changed_functions(path: str, lines: Tuple[Set[int], Set[int]], head: Tree, base: Tree) -> Set[str]:
     """The functions a change to a Python file touches, by the qualified names the map uses, or
     `<module>` for a line outside every function (or a file whose change has no lines, such as a
-    change of mode). A blank or comment-only line changes nothing that runs, so it names none."""
+    change of mode).
+
+    A line that runs nothing (blank, a comment, a docstring's text) names none, unless the change
+    moves a docstring's quotes over a line it leaves that ran on the other side; when either side
+    does not parse, a blank or `#` line on both sides names none, and every other line counts."""
     if not lines[0] and not lines[1]:
         return {"<module>"}
+    sources = (head.read(path) or "", base.read(path) or "")
+    words = [python_words(source) for source in sources]
+    # The lines the change leaves, side by side: the diff keeps them in order.
+    left = [
+        [n for n in range(1, line_count(source) + 1) if n not in side]
+        for source, side in zip(sources, lines)
+    ]
+    same = dict(zip(*left)) if len(left[0]) == len(left[1]) else {}
+    across = (same, {b: h for h, b in same.items()})
     found: Set[str] = set()
-    for tree, side in ((head, lines[0]), (base, lines[1])):
-        source = tree.read(path) or ""
-        text = source.splitlines()
+    for at in (0, 1):
+        source, side, read, other = sources[at], lines[at], words[at], words[1 - at]
         spans = function_spans(source)
+        if read is None or other is None:
+            text = source.splitlines()
+            for line in side:
+                said = text[line - 1].strip() if 0 < line <= len(text) else ""
+                if said and not said.startswith("#"):
+                    found.add(function_at(spans, line))
+            continue
+        runs, docstrings = read
+
+        def ran_across(line: int) -> bool:
+            # A line the change leaves that runs on the other side, or one it cannot match there.
+            match = across[at].get(line)
+            return match is None or match in other[0]
+
         for line in side:
-            words = text[line - 1].strip() if 0 < line <= len(text) else ""
-            if words and not words.startswith("#"):
+            if line in runs or any(
+                first <= line <= last
+                and any(ran_across(n) for n in range(first, last + 1) if n not in side)
+                for first, last in docstrings
+            ):
                 found.add(function_at(spans, line))
     return found
+
+
+class Unread(Exception):
+    """A script or template the scanner cannot be sure of, so its change counts whole."""
+
+
+# The words after which a `/` opens a regex, not a division.
+BEFORE_REGEX = {
+    "return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "throw", "case", "do",
+    "else", "yield", "await",
+}  # fmt: skip
+WORD = re.compile(r"[\w$#@]+")
+SPACE = re.compile(r"\s+")
+TAG = re.compile(r"</?([A-Za-z][\w-]*)")
+
+
+class Words:
+    """What runs of a script or a Vue file: its text with its comments out and each run of white
+    space outside a string, a template, a regex, a tag, an interpolation or the text of a `<style>`,
+    `<pre>`, `<textarea>` or `<title>` as one space, or one line break when it held one (on which a
+    statement may end), a script's comment counting as such a run and a template's, but an inline
+    one, as nothing (`vue`), so two whose comments alone differ, in the same white space, read the
+    same.
+
+    A `/` after a value (a word, a literal, `)`, `]` or `}`) is read as a division, and after
+    anything else, or a word such as `return`, as opening a regex: a regex just after a `)` or a
+    `}` is read wrong, which a formatted file does not hold."""
+
+    def __init__(self, text: str) -> None:
+        self.text, self.at = text, 0
+        self.out: List[str] = []
+        self.space = ""
+        self.value = False  # whether the last piece put was a value, after which `/` divides
+
+    def put(self, piece: str, value: bool) -> None:
+        if self.space and self.out:
+            self.out.append(self.space)
+        self.out.append(piece)
+        self.space, self.value = "", value
+
+    def gap(self, space: str) -> None:
+        self.space = "\n" if "\n" in space or self.space == "\n" else " "
+
+    def till(self, end: str, start: int) -> int:
+        """Where the first `end` from `start` ends."""
+        found = self.text.find(end, start)
+        if found < 0:
+            raise Unread(f"no {end!r}")
+        return found + len(end)
+
+    def script(self, in_template: bool = False) -> None:
+        """Read code to the end, or to the `}` that closes a template's `${`."""
+        text, depth = self.text, 0
+        while self.at < len(text):
+            c, at = text[self.at], self.at
+            if c.isspace():
+                space = SPACE.match(text, at)
+                assert space
+                self.gap(space.group())
+                self.at = space.end()
+            elif text.startswith("//", at):
+                end = text.find("\n", at)
+                self.at = len(text) if end < 0 else end
+            elif text.startswith("/*", at):
+                self.at = self.till("*/", at + 2)
+                self.gap("\n" if "\n" in text[at : self.at] else " ")
+            elif c in "'\"":
+                self.at = self.quoted(c, at + 1)
+                self.put(text[at : self.at], True)
+            elif c == "`":
+                self.template()
+            elif c == "/" and not self.value:
+                self.at = self.regex(at + 1)
+                self.put(text[at : self.at], True)
+            elif c == "}" and in_template and depth == 0:
+                return
+            else:
+                word = WORD.match(text, at)
+                self.at = word.end() if word else at + 1
+                piece = text[at : self.at]
+                depth += {"{": 1, "}": -1}.get(piece, 0)
+                self.put(piece, piece in ")]}" if not word else piece not in BEFORE_REGEX)
+        if in_template:
+            raise Unread("an unclosed template")
+
+    def quoted(self, quote: str, at: int) -> int:
+        """Where a string that opened before `at` ends."""
+        text = self.text
+        while at < len(text) and text[at] != "\n":
+            if text[at] == quote:
+                return at + 1
+            at += 2 if text[at] == "\\" else 1
+        raise Unread("an unclosed string")
+
+    def regex(self, at: int) -> int:
+        """Where a regex that opened before `at` ends, its flags included."""
+        text, in_class = self.text, False
+        while at < len(text) and text[at] != "\n":
+            c = text[at]
+            if c == "/" and not in_class:
+                flags = WORD.match(text, at + 1)
+                return flags.end() if flags else at + 1
+            if c == "[" or c == "]":
+                in_class = c == "["
+            at += 2 if c == "\\" else 1
+        raise Unread("an unclosed regex")
+
+    def template(self) -> None:
+        text, start = self.text, self.at
+        at = start + 1
+        while at < len(text):
+            if text[at] == "`":
+                self.at = at + 1
+                self.put(text[start : self.at], True)
+                return
+            if text.startswith("${", at):
+                self.put(text[start : at + 2], False)
+                self.at = at + 2
+                self.script(in_template=True)
+                self.put("}", False)
+                start = at = self.at = self.at + 1
+                continue
+            at += 2 if text[at] == "\\" else 1
+        raise Unread("an unclosed template")
+
+    def vue(self) -> None:
+        """Read a Vue file: its `<script>` blocks as scripts, the rest as a template, whose
+        `<!-- -->` comments read as nothing, but one with white space beside it on its line and no
+        line break there, which is kept; a tag, an interpolation and the text of a `<style>`,
+        `<pre>`, `<textarea>` or `<title>` are kept as written."""
+        text = self.text
+        while self.at < len(text):
+            c, at = text[self.at], self.at
+            if c.isspace():
+                space = SPACE.match(text, at)
+                assert space
+                self.gap(space.group())
+                self.at = space.end()
+            elif text.startswith("<!--", at):
+                self.at = self.till("-->", at + 4)
+                after = SPACE.match(text, self.at)
+                around = self.space + (after.group() if after else "")
+                if around and "\n" not in around:
+                    # Vue's dev build keeps the comment and drops the white space between it and an
+                    # element, so one with white space beside it and no line break is code.
+                    self.put(text[at : self.at], False)
+            elif text.startswith("{{", at):
+                self.at = self.till("}}", at + 2)
+                self.put(text[at : self.at], False)
+            elif TAG.match(text, at):
+                self.tag()
+            else:
+                self.put(c, False)
+                self.at += 1
+
+    def tag(self) -> None:
+        text, start = self.text, self.at
+        at = start + 1
+        while at < len(text) and text[at] != ">":
+            at = self.till(text[at], at + 1) if text[at] in "'\"" else at + 1
+        if at >= len(text):
+            raise Unread("an unclosed tag")
+        self.at = at + 1
+        opened = text[start : self.at]
+        self.put(opened, False)
+        name = TAG.match(opened)
+        assert name
+        tag = name.group(1).lower()
+        if opened.startswith("</") or opened.endswith("/>"):
+            return
+        if tag == "script":
+            if re.search(r"\blang\s*=\s*['\"](?!ts['\"])", opened):
+                raise Unread("a script in another language")
+            # Vue ends a script at its first `</script`, wherever it stands.
+            end = self.till("</script", self.at) - len("</script")
+            block = Words(text[self.at : end])
+            block.script()
+            self.put("".join(block.out), False)
+            self.at = end
+        elif tag == "template" and re.search(r"\blang\s*=", opened):
+            raise Unread("a template in another language")
+        elif tag in ("style", "pre", "textarea", "title"):
+            end = self.till(f"</{tag}", self.at) - len(tag) - 2
+            self.put(text[self.at : end], False)
+            self.at = end
+
+    def read(self, vue: bool) -> str:
+        if vue:
+            self.vue()
+        else:
+            self.script()
+        return "".join(self.out)
+
+
+def front_end_words(path: str, source: Optional[str]) -> Optional[str]:
+    """What runs of a front-end `.ts` or `.vue` file, by `Words`, or None when there is no file or
+    the scanner cannot be sure of it."""
+    if source is None:
+        return None
+    try:
+        return Words(source).read(path.endswith(".vue"))
+    except Unread:
+        return None
+
+
+def words_only(path: str, head: Tree, base: Tree) -> bool:
+    """Whether a change to a file under `front-end/src/` changes its comments alone, so nothing that
+    runs: its `.ts` or `.vue` file, at both sides, reads the same with its comments out."""
+    if not (path.startswith(SRC) and path.endswith((".ts", ".vue"))):
+        return False
+    after = front_end_words(path, head.read(path))
+    return after is not None and after == front_end_words(path, base.read(path))
 
 
 def resolve(importer: str, target: str, tree: Tree) -> Optional[str]:
@@ -261,6 +560,8 @@ def select(
 ) -> Tuple[Selection, Set[str]]:
     """The specs the change reaches, and the specs at the head; with no map, by rule 1 alone."""
     selection = Selection()
+    # A change to a front-end module's comments alone runs nothing, so it reaches no spec.
+    changes = {p: lines for p, lines in changes.items() if not words_only(p, head, base)}
     at_head = {short(p) for p in head.files(E2E) if p.endswith(".spec.ts")}
     deleted = {short(p) for p in changes if p.startswith(E2E) and short(p) not in at_head}
 
