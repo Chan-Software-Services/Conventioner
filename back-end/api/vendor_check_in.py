@@ -191,6 +191,10 @@ def check_out(market_slug: str) -> Tuple[Any, int]:
         email, day, via=AttendanceApi.VIA_DOOR_CODE)
     if status == 404 and result.get("error") == AttendanceApi.NO_CHECK_IN:
         return _refused(NOT_CHECKED_IN, 404)
+    if status == 200:
+        # The time alone: who made a check-out stored before is an organizer's address, which a
+        # vendor is never given.
+        result = {"message": result["message"], "checkedOutAt": result["checkedOutAt"]}
     return jsonify(result), status
 
 

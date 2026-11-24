@@ -367,11 +367,14 @@ def record_check_out(
     It needs only the record: no seat and no day that has begun, so a vendor here with no table
     that day is checked out too, and the record is the proof they came.
 
+    It answers the check-out the day holds, ``checkedOutAt``, ``checkedOutBy`` and
+    ``checkedOutVia`` (``_checked_out``), which Attendance's row shows at once.
+
     One update, filtered to a day not yet checked out, so two check-outs at once leave one time
-    and one "checked out" entry: the second matches nothing, answers the stored time, and writes
-    and records nothing. Where the first was undone before the second read that time, the second
-    writes after all, so "Checked out" is never answered with no time. A day with no record is 404
-    ``NO_CHECK_IN``.
+    and one "checked out" entry: the second matches nothing, answers the stored check-out, who and
+    way included, and writes and records nothing. Where the first was undone before the second
+    read that time, the second writes after all, so "Checked out" is never answered with no time.
+    A day with no record is 404 ``NO_CHECK_IN``.
 
     Only in the market's days, on its own read of the phase, and a market archived between that
     read and the write has the three fields unset again, held to the time this call wrote, with no
@@ -387,33 +390,45 @@ def record_check_out(
         return closed
 
     vendor_day = _vendor_day(market_id, vendor_email, date)
-    checked_out_at = datetime.now(timezone.utc).isoformat()
+    check_out = {
+        "checked_out_at": datetime.now(timezone.utc).isoformat(),
+        "checked_out_by": recorder.actor,
+        "checked_out_via": via,
+    }
     while True:
         # A null matches a missing field: a record made before check-outs is not checked out.
         written = attendance_collection.find_one_and_update(
-            {**vendor_day, "checked_out_at": None},
-            {"$set": {
-                "checked_out_at": checked_out_at,
-                "checked_out_by": recorder.actor,
-                "checked_out_via": via,
-            }})
+            {**vendor_day, "checked_out_at": None}, {"$set": check_out})
         if written is not None:
             break
         stored = attendance_collection.find_one(vendor_day)
         if stored is None:
             return {"error": NO_CHECK_IN}, 404
         if stored.get("checked_out_at") is not None:
-            return {"message": "Checked out", "checkedOutAt": stored["checked_out_at"]}, 200
+            return _checked_out(stored), 200
         # The check-out that held the record was undone before this read: the vendor is not
         # checked out, so this one writes after all.
 
     closed = _closed_since(market_id)
     if closed:
         attendance_collection.update_one(
-            {**vendor_day, "checked_out_at": checked_out_at}, {"$unset": _NO_CHECK_OUT})
+            {**vendor_day, "checked_out_at": check_out["checked_out_at"]},
+            {"$unset": _NO_CHECK_OUT})
         return closed
     _record_door(recorder, vendor_email, date, via, History.CHECKED_OUT, "checked_out", True)
-    return {"message": "Checked out", "checkedOutAt": checked_out_at}, 200
+    return _checked_out(check_out), 200
+
+
+def _checked_out(record: Dict[str, Any]) -> Dict[str, Any]:
+    """The answer to a check-out: when the day's record says the vendor left, who checked them
+    out (an organizer's address, or None for the vendor's own) and by which way, so a check-out
+    made after another organizer's or the vendor's own shows theirs, never the caller's."""
+    return {
+        "message": "Checked out",
+        "checkedOutAt": record["checked_out_at"],
+        "checkedOutBy": record.get("checked_out_by"),
+        "checkedOutVia": record.get("checked_out_via"),
+    }
 
 
 def undo_check_out(
