@@ -329,6 +329,8 @@ describe('saving', () => {
     submit();
     await flushPromises();
     expect(byId('reviewers-dialog-window')).toBeNull();
+    // The second save writes: the last write read below is its own, not the first save's.
+    expect(api.put).toHaveBeenCalledTimes(2);
     const [, body] = api.put.mock.lastCall as [string, { reviewers: string[] }];
     expect(body.reviewers).toContain(address(13));
     expect(body.reviewers).not.toContain(address(1));

@@ -143,8 +143,8 @@ test.describe('Draft this market from a Google Form', () => {
   // Three of the five exports never asked how many days an applicant wants (bug 24). They used to
   // stop at the mapping with "Still unmapped: Number of dates you want" and no way through. One of
   // them walks the page here, from start to a stored null limit: days-as-one-question, whose
-  // proposal's wording test_csv_proposal.py reads. That the other two import with no limit is
-  // test_csv_import.py's and test_csv_start.py's.
+  // proposal's wording test_csv_proposal.py reads. That each of the three, started and imported,
+  // stores every application with no limit is test_csv_start.py's.
   test('days-as-one-question: a form that never asked how many days is imported with no personal limit', async ({
     authenticatedPage: page,
     request,

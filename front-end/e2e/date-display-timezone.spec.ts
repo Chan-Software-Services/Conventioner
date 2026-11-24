@@ -20,8 +20,10 @@ import type { APIRequestContext } from '@playwright/test';
  *     the day before, the bug that bit here)
  *   - Asia/Tokyo       (UTC+9:  east of UTC - a local midnight sent through
  *     toISOString is stored as the day before)
- * A zone between them fails only as one of these does, so two are enough;
- * `src/__tests__/utils.test.ts` loops more zones over the formatters themselves.
+ * A zone at a fixed offset between them fails only as one of these does, so
+ * two are enough for those; neither changes its offset, so daylight saving is
+ * `src/__tests__/utils.test.ts`'s, which loops its zones, America/Anchorage and
+ * America/Los_Angeles among them, over the formatters themselves.
  */
 
 const MARKET_DATE = '2026-07-31';
