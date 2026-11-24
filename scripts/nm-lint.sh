@@ -19,8 +19,10 @@
 #   - Stylelint, as lint:css, on the .css and .vue files under front-end/src/.
 # A tool whose config, or the front end's package.json or lockfile, the branch changes runs its
 # whole npm script instead, as CI's frontend-lint-and-types does, since the change may reach any
-# file. Every tool runs, and the run fails after the last when any of them failed.
-# CI alone runs the type-check, and every one of these checks again on the whole front end.
+# file. Each tool with files to check runs even after another fails, and the run fails after the
+# last when any of them failed.
+# This script runs no type-check; CI runs it, and every one of these checks again, on the whole
+# front end.
 #
 # Requires: Node.js 24.22.1 (.nvmrc): the one on PATH, else nvm's, else it fails.
 #

@@ -397,9 +397,9 @@ A failed `prepare` fails the step that ran it, the test step as a rule, before i
 
 Without a switch the script takes every file changed since the merge base with `origin/dev` that is still there (committed, staged, edited, or new and not ignored), and from `front-end/` runs Prettier's check on those under `front-end/` and `docs/` (skipping a file it has no parser for or `.prettierignore` names), ESLint with `--max-warnings 0` on those under `front-end/` ending `.js`, `.mjs`, `.cjs`, `.ts`, `.mts`, `.cts`, `.tsx` or `.vue` (skipping a file its config ignores), and Stylelint with `--max-warnings 0` on the `.css` and `.vue` files under `front-end/src/`, each the binary in `front-end/node_modules/.bin`, never an `npx` download.
 A tool whose config the branch changes (`.prettierrc.json` or `.prettierignore`, `eslint.config.ts`, `stylelint.config.js`), or every tool when it changes `front-end/package.json` or its lockfile, runs its whole npm script instead (`format:check`, `lint:check`, `lint:css`), as [`frontend-lint-and-types`](#ci) does, since such a change may reach any file.
-Every tool runs, the run ends `nm-lint: OK` or `nm-lint: FAILED: <the tools that failed>`, and a branch that changes no front-end or docs file lints nothing (`nm-lint: no changed front-end or docs file to lint`).
+Each tool with files to check runs even after another fails, the run ends `nm-lint: OK` or `nm-lint: FAILED: <the tools that failed>`, and a branch that changes no front-end or docs file lints nothing (`nm-lint: no changed front-end or docs file to lint`).
 A failure parks the lint step as auto-fixable, and a fix round has the gate's agent fix the files and run the command again.
-The type-check is CI's alone, and CI runs every one of these checks again on the whole front end, as `nm-test.sh` does without `--real-data-only`.
+The gate's lint step runs no type-check; CI runs it and every one of these checks again on the whole front end, as `nm-test.sh` does without `--real-data-only`.
 
 ## Stack identity
 

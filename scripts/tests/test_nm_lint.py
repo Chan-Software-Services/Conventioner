@@ -38,7 +38,7 @@ def fake_node(directory, version):
 
 @pytest.fixture
 def repo(tmp_path):
-    """A repository holding the script and a front end, whose dev is on GitHub as origin/dev, with
+    """A repository holding the script and a front end, whose dev is recorded as origin/dev, with
     fake tools in front-end/node_modules/.bin that log their arguments and directory."""
     root = tmp_path / "repo"
     (root / "scripts").mkdir(parents=True)
