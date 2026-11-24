@@ -420,13 +420,14 @@ real Turnstile token. On the front-end, `HumanCheck` renders nothing and gives a
 token when `VITE_TURNSTILE_SITE_KEY` is unset (as in test/dev builds), so the flow
 still reaches the back-end where the `DISABLE_CAPTCHA` bypass applies.
 
-In the back-end suite, every test runs with the autouse `human_check` fixture
+In the back-end suite, every test outside `tests/real_mongo/` runs with the autouse `human_check` fixture
 (`back-end/tests/conftest.py`) in place of `captcha_passes`: it passes any non-empty token and
 refuses an absent one, as the local stack does, records each check's action in `actions`, and
 refuses every token once a test sets `refuse = True`. A test whose request needs a token sends
 `"captcha_token": "test-human-check"`. Only a module marked `real_human_check`
 (`test_captcha.py`, `test_a_code_request_asks_the_human_check.py`) meets the real function, with Cloudflare stood in for by a fake
 `requests.post`.
+The real-MongoDB package names `human_check` again with no stand-in, since its harness refuses a test's object left in a back-end module and none of its tests reaches the check.
 
 Similarly, set `DISABLE_EMAIL=true` (or `1`) so the Resend-backed
 `send_verification_email`, `send_account_exists_email`, `send_password_reset_email`,
