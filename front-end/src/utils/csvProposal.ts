@@ -6,7 +6,7 @@
  * organizer confirms (CONTEXT.md). The server decides every row. What lives here is the organizer's
  * working copy of it - which rows they changed, and to what - and how the ledger reads the two
  * together: a grid's columns are one question, so one row, and a corrected row is no longer one
- * to check.
+ * to check, unless its type changed to a reading whose options earn a check.
  */
 import { FIELD_TYPES } from '@/utils/applicationForm';
 import {
