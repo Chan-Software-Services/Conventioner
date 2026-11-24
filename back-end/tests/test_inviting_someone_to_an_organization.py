@@ -368,7 +368,7 @@ class TestTheEmail:
             "http://127.0.0.1:5173/invitations\n",
             "No account yet? Create one with this email address first, and the invitation will "
             "be waiting.",
-            "It ends on 8 December 2026.",
+            "It ends on 8 December 2026 at 09:30 UTC.",
         ):
             assert line in message.text
 

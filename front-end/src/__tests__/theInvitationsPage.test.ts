@@ -142,13 +142,13 @@ describe('the Invitations page, as it reads', () => {
       'dana@ember.test invited you to Riverside Spring Market as an Editor.',
     );
     expect(row(wrapper, 0).get('[data-testid="invitation-until"]').text()).toBe(
-      'Until 8 December.',
+      'Until 7 December.',
     );
     expect(row(wrapper, 1).get('[data-testid="invitation-sentence"]').text()).toBe(
       'olive@ember.test invited you to the organization Ember Makers as a member.',
     );
     expect(row(wrapper, 1).get('[data-testid="invitation-until"]').text()).toBe(
-      'Until 7 December.',
+      'Until 6 December.',
     );
     for (const role of ['admin', 'viewer'] as const) {
       fetchInvitations.mockResolvedValue([{ ...TO_A_MARKET, role }]);
@@ -305,5 +305,27 @@ describe('answering an invitation', () => {
       'You seem to be offline. Check the connection and try again.',
     );
     expect(row(wrapper).find('[data-testid="invitation-decline"]').exists()).toBe(true);
+  });
+});
+
+describe('the day an invitation is said to wait until', () => {
+  const zone = process.env.TZ;
+  afterEach(() => {
+    process.env.TZ = zone;
+  });
+
+  // The last whole day before it ends, in the reader's own zone, so the page never names a day
+  // the invitation does not cover; the email names the moment it ends, in UTC.
+  it.each([
+    ['UTC', '2026-12-08T16:44:00Z', '7 December'],
+    ['Asia/Singapore', '2026-12-08T16:44:00Z', '8 December'],
+    ['America/Los_Angeles', '2026-12-08T16:44:00Z', '7 December'],
+    ['Asia/Singapore', '2026-12-08T16:00:00Z', '8 December'],
+    ['UTC', '2027-01-01T05:00:00Z', '31 December'],
+  ])('in %s, one ending at %s waits until %s', async (tz, endsAt, day) => {
+    process.env.TZ = tz;
+    const { endsOn } =
+      await vi.importActual<typeof import('@/utils/invitations')>('@/utils/invitations');
+    expect(endsOn({ endsAt })).toBe(day);
   });
 });

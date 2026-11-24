@@ -15,7 +15,7 @@ import html
 import os
 import logging
 import unicodedata
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 import resend
@@ -444,7 +444,10 @@ def send_invitation_email(
     joining = name if kind == "market" else f"the organization {name}"
     invited = f"{inviter} invited you to join {joining} {_INVITED_AS[kind][role]} on Conventioner."
     invitations_url = f"{frontend_url()}/invitations"
-    ends = f"It ends on {ends_at.day} {ends_at:%B %Y}."
+    # The moment it ends, with its zone: the server knows no reader's zone, and the Invitations page
+    # names the last whole day before it in the reader's own.
+    ends_utc = ends_at.astimezone(timezone.utc)
+    ends = f"It ends on {ends_utc.day} {ends_utc:%B %Y} at {ends_utc:%H:%M} UTC."
     subject = f"{inviter} invited you to {name}"
 
     html_content = f"""

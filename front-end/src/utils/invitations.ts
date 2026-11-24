@@ -54,11 +54,16 @@ export function invitationSentence(invitation: Invitation): string {
   return `${invitation.invitedBy} invited you to ${to} as ${asA(invitation.kind, invitation.role)}.`;
 }
 
-/** The day an invitation ends, in the reader's own timezone: "8 December". */
+/**
+ * The last whole day an invitation waits, in the reader's own timezone: "8 December" for one that
+ * ends during the 9th, or at its first moment. It names no day the invitation does not cover; the
+ * email names the moment it ends, in UTC.
+ */
 export function endsOn(invitation: Pick<Invitation, 'endsAt'>): string {
   const at = new Date(invitation.endsAt);
   if (Number.isNaN(at.getTime())) return '';
-  return `${at.getDate()} ${MONTH_NAMES[at.getMonth()]}`;
+  const day = new Date(at.getFullYear(), at.getMonth(), at.getDate() - 1);
+  return `${day.getDate()} ${MONTH_NAMES[day.getMonth()]}`;
 }
 
 /** "You are now an Editor on Riverside Market.", or "You are now a member of Ember Makers." */

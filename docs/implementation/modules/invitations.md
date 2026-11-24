@@ -188,7 +188,7 @@ Declining (`decline_organization_invitation` in `api/organizations.py`) ends it,
 ## The email
 
 `send_invitation_email` in [`back-end/utils/email.py`](../../../back-end/utils/email.py) sends kind `invitation` through `send_mail`, whose log names the kind and never the address.
-Its subject is "<inviter> invited you to <market or organization name>"; its body says who invited them to join what as what ("<market> as an Editor on Conventioner.", "the organization <name> as an admin on Conventioner."), to sign in with this address at `<FRONTEND_URL>/invitations` to accept or decline, to create an account with this address first when they have none, when it ends ("It ends on 8 December 2026."), and that nothing happens unless they accept.
+Its subject is "<inviter> invited you to <market or organization name>"; its body says who invited them to join what as what ("<market> as an Editor on Conventioner.", "the organization <name> as an admin on Conventioner."), to sign in with this address at `<FRONTEND_URL>/invitations` to accept or decline, to create an account with this address first when they have none, when it ends, the moment in UTC since the server knows no reader's zone ("It ends on 8 December 2026 at 09:30 UTC.", where the Invitations page names the last whole day before it in the reader's own), and that nothing happens unless they accept.
 The HTML escapes every name and address (`html.escape`), the subject and the text read them on one line (`one_line`), and the bare link has no full stop after it.
 A send that fails keeps the invitation and answers `"emailed": false`.
 
