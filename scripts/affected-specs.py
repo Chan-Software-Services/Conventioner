@@ -246,8 +246,8 @@ def changed_functions(path: str, lines: Tuple[Set[int], Set[int]], head: Tree, b
     change of mode).
 
     A line that runs nothing (blank, a comment, a docstring's text) names none, unless the change
-    moves a docstring's quotes over a line it leaves that ran on the other side; in a file that does
-    not parse, a blank or `#` line names none, and every other line counts."""
+    moves a docstring's quotes over a line it leaves that ran on the other side; when either side
+    does not parse, a blank or `#` line on both sides names none, and every other line counts."""
     if not lines[0] and not lines[1]:
         return {"<module>"}
     sources = (head.read(path) or "", base.read(path) or "")
@@ -261,9 +261,9 @@ def changed_functions(path: str, lines: Tuple[Set[int], Set[int]], head: Tree, b
     across = (same, {b: h for h, b in same.items()})
     found: Set[str] = set()
     for at in (0, 1):
-        source, side, read = sources[at], lines[at], words[at]
+        source, side, read, other = sources[at], lines[at], words[at], words[1 - at]
         spans = function_spans(source)
-        if read is None:
+        if read is None or other is None:
             text = source.splitlines()
             for line in side:
                 said = text[line - 1].strip() if 0 < line <= len(text) else ""
@@ -271,12 +271,11 @@ def changed_functions(path: str, lines: Tuple[Set[int], Set[int]], head: Tree, b
                     found.add(function_at(spans, line))
             continue
         runs, docstrings = read
-        other = words[1 - at]
 
         def ran_across(line: int) -> bool:
             # A line the change leaves that runs on the other side, or one it cannot match there.
             match = across[at].get(line)
-            return other is None or match is None or match in other[0]
+            return match is None or match in other[0]
 
         for line in side:
             if line in runs or any(

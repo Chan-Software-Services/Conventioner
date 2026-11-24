@@ -372,6 +372,13 @@ class TestWordsOnly:
         write(repo, {"back-end/api/door.py": broken.replace("lets vendors", "lets every vendor")})
         assert set(chosen(choose(repo))) == {"a.spec.ts", "b.spec.ts"}
 
+    def test_a_docstring_removed_from_a_file_it_breaks_is_code(self, repo):
+        # The class's only body is its docstring, so the head left without it does not parse.
+        gone = DOOR_PY + '\n\nclass Gone(Exception):\n    """Gone."""\n'
+        base(repo, {"back-end/api/door.py": gone})
+        write(repo, {"back-end/api/door.py": gone.replace('    """Gone."""\n', "")})
+        assert set(chosen(choose(repo))) == {"a.spec.ts", "b.spec.ts"}
+
     SCRIPT_TS = textwrap.dedent(
         """\
         // The door's rows.
