@@ -5,8 +5,8 @@
  *
  * Specs write screenshots of their own into `testInfo.outputPath()` on every pass, and a worker's
  * repeat runs each get an `--output` directory of their own, so a run that kept every passing
- * test's directory left gigabytes behind on the machine. CI uploads `test-results/` whole, so it
- * keeps everything.
+ * test's directory left gigabytes behind on the machine. CI uploads `test-results/` whole when a
+ * shard fails, so it keeps everything.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 

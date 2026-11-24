@@ -19,7 +19,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   failOnFlakyTests: !!process.env.CI,
   workers: 1,
-  // A local run keeps a test's output only when it fails, explicit screenshots included; CI uploads it all.
+  // A local run keeps a test's output only when it fails, explicit screenshots included; CI keeps it all, for a failed shard's upload.
   preserveOutput: process.env.CI ? 'always' : 'failures-only',
   reporter: process.env.CI
     ? ciReporters
