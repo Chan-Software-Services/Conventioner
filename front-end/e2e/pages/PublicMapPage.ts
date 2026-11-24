@@ -49,11 +49,6 @@ export class PublicMapPage {
     return this.page.getByTestId('public-map-heading');
   }
 
-  /** The line under the market's name. */
-  get subtitle(): Locator {
-    return this.page.getByTestId('public-map-subtitle');
-  }
-
   /** "Page not found", for a market whose map is not open. */
   get notFound(): Locator {
     return this.page.getByTestId('public-map-not-found');
@@ -211,11 +206,6 @@ export class PublicMapPage {
   /** Each vendor's row, a button. */
   get vendors(): Locator {
     return this.page.getByTestId('public-map-vendor');
-  }
-
-  /** "No vendors are listed for this day yet." */
-  get vendorsEmpty(): Locator {
-    return this.page.getByTestId('public-map-vendors-empty');
   }
 
   /** The SVG map's view box, in millimetres of the hall. */
