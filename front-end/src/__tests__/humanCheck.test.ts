@@ -345,13 +345,18 @@ describe('HumanCheck', () => {
     expect(box.classes()).not.toContain('human-check--drawn');
   });
 
-  it('removes its widget on unmount', async () => {
-    await mountCheck({ action: 'sign-up', siteKey: 'a-site-key' });
+  it('removes its widget on unmount, and resets nothing after', async () => {
+    const { check } = await mountCheck({ action: 'sign-up', siteKey: 'a-site-key' });
+    const held = check();
 
     wrapper!.unmount();
     wrapper = null;
 
     expect(turnstile.remove).toHaveBeenCalledWith('widget-1');
+
+    // A sign-in that worked swaps the form out before its answer's reset runs.
+    held.reset();
+    expect(turnstile.reset).not.toHaveBeenCalled();
   });
 
   it('with no site key renders nothing, loads nothing and gives the placeholder at once', async () => {

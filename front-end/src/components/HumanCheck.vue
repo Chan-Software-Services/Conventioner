@@ -105,6 +105,8 @@ function token(): Promise<string> {
 }
 
 function reset() {
+  // A form that went away with its answer (a sign-in that worked) still resets after it.
+  if (unmounted) return;
   held = null;
   if (!failed?.lasting) failed = null;
   if (turnstile && widgetId !== undefined) turnstile.reset(widgetId);
