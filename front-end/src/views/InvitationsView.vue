@@ -39,7 +39,7 @@ onMounted(() => {
 <template>
   <div class="invitations-view">
     <div class="header">
-      <h1>Invitations</h1>
+      <h1 data-testid="invitations-heading">Invitations</h1>
     </div>
 
     <div class="content-block">

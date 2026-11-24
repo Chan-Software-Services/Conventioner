@@ -20,7 +20,7 @@ export class InvitationsPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.heading = page.getByRole('heading', { level: 1, name: 'Invitations' });
+    this.heading = page.getByTestId('invitations-heading');
     this.loading = page.getByTestId('invitations-loading');
     this.none = page.getByTestId('invitations-none');
     this.readFailed = page.getByTestId('invitations-read-failed');
