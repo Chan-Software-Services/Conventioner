@@ -720,6 +720,8 @@ def steps_of(lines, indent):
         keys = mapping(body, deeper)
         step = {**keys, "env": {}, "with": {}, "run": ""}
         for i, line in enumerate(body):
+            if line == " " * deeper + "if: >-":
+                step["if"] = " ".join(l.strip() for l in block(body, i, deeper))
             if line == " " * deeper + "env:":
                 step["env"] = mapping(block(body, i, deeper), deeper + 2)
             if line == " " * deeper + "with:":
@@ -982,7 +984,6 @@ def test_a_missing_script_is_the_whole_suite(tmp_path):
 # The e2e-stack action's `start`: by default every step runs as before.
 
 NOT_STARTING = [
-    "Install Chromium's system libraries",
     "Load the images",
     "Pull the stack's registry images",
     "Start the stack",
@@ -1014,23 +1015,42 @@ def test_a_step_that_starts_the_stack_runs_only_when_starting(name):
     assert condition == "inputs.start == 'true'" or condition.startswith("inputs.start == 'true' && ")
 
 
-@pytest.mark.parametrize("name", ["Restore Playwright's browsers", "Restore the images"])
+@pytest.mark.parametrize(
+    "name", ["Restore Playwright's browsers", "Restore Chromium's system packages", "Restore the images"]
+)
 def test_a_restore_only_looks_when_not_starting(name):
     assert action()["steps"][name]["with"]["lookup-only"] == "${{ inputs.start != 'true' }}"
 
 
-def test_chromium_s_system_libraries_come_with_it_only_when_starting():
+def test_chromium_is_installed_on_a_miss_without_its_system_packages():
     install = action()["steps"]["Install Playwright's Chromium"]
 
     assert install["if"] == "steps.browsers.outputs.cache-hit != 'true'"
-    assert install["env"] == {"WITH_DEPS": "${{ inputs.start == 'true' && '--with-deps' || '' }}"}
-    assert "${{" not in install["run"]
-    assert "$WITH_DEPS" in install["run"]
+    assert install["env"] == {}
+    assert install["run"] == "npx playwright install chromium\n"
+
+
+# Not starting, the packages install only on a miss, which is how their files are made and marked
+# cacheable for the save; a hit, only looked up, has no files to install.
+def test_chromium_s_system_packages_install_when_starting_or_on_a_miss():
+    install = action()["steps"]["Install Chromium's system packages"]
+
+    assert install["if"] == (
+        "steps.packages.outputs.packages != '' && "
+        "(inputs.start == 'true' || steps.packages-cache.outputs.cache-hit != 'true')"
+    )
 
 
 @pytest.mark.parametrize(
     "name",
-    ["Build the images", "Write the images for the cache", "Save the images", "Save Playwright's browsers"],
+    [
+        "Build the images",
+        "Write the images for the cache",
+        "Save the images",
+        "Save Playwright's browsers",
+        "The system packages Chromium lacks",
+        "Save Chromium's system packages",
+    ],
 )
 def test_the_builds_and_saves_ignore_start(name):
     assert "inputs.start" not in action()["steps"][name].get("if", "")

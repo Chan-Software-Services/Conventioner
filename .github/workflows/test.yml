@@ -443,10 +443,11 @@ jobs:
   # restores or makes each cache a pull request's run reads, saved in dev's scope as shard 1 of a
   # whole-suite run would, and runs no test. npm's cache is frontend-unit's and
   # frontend-lint-and-types', which `npm ci` fills for the setup-node post step to save on a miss;
-  # front-end/node_modules, Playwright's browser and the stack's images are the shards'. It never
-  # fails the run: the queue's run already proved the commit, and a cache it could not save only
-  # costs the next pull requests a cold start, until the next warm push saves it, or, for
-  # front-end/node_modules, the browser and the images, a nightly run's shard 1.
+  # front-end/node_modules, Playwright's browser, Chromium's system packages and the stack's images
+  # are the shards'. It never fails the run: the queue's run already proved the commit, and a cache
+  # it could not save only costs the next pull requests a cold start, until the next warm push saves
+  # it, or, for front-end/node_modules, the browser, the packages and the images, a nightly run's
+  # shard 1.
   warm-caches:
     name: warm-caches
     needs: suite
