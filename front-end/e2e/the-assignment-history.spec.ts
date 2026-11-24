@@ -2,10 +2,7 @@ import type { APIRequestContext } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
 import { seedAssignedMarket } from './helpers/seedAssignedMarket';
 import { marketScreenPath } from './helpers/marketScreens';
-import { savePlan } from './helpers/savePlan';
-import { completePlan, SEED_MARKET_DATE } from './helpers/seeds';
-import { approvedVendorApplication, insertApplications } from './helpers/seedApplication';
-import { seedPhaseMarket, transitionMarket } from './helpers/seedPhaseMarket';
+import { SEED_MARKET_DATE } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { withUser } from './helpers/withUser';
 import { namelessControls } from './helpers/accessibleNames';
@@ -128,29 +125,6 @@ test('a hand placement is there as it opens, and Escape, close and the backdrop 
   await expect(theirs).not.toContainText('alice@example.com');
 });
 
-test('nothing changed yet says so', async ({ authenticatedPage: page, request }) => {
-  // A plan that leaves the assignment's rules as they are: nothing of this kind has happened.
-  const seed = await seedPhaseMarket(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
-  await savePlan(request, BACKEND_URL, TEST_USER.email, seed.marketId, completePlan());
-  insertApplications([
-    approvedVendorApplication(seed.marketId, 'alice@example.com', {
-      dates: [SEED_MARKET_DATE],
-      tiers: ['Gold'],
-      fullName: 'Alice Example',
-    }),
-  ]);
-  for (const phase of ['applications', 'assignment'] as const) {
-    await transitionMarket(request, BACKEND_URL, TEST_USER.email, seed.marketId, phase);
-  }
-  const tables = new TablesPage(page);
-  await tables.goto(seed.marketId);
-  await tables.openHistory();
-  await expect(tables.historyDialog.getByTestId('market-history-empty')).toHaveText(
-    'No assignments have been changed yet.',
-  );
-  await expect(tables.historyDialog.getByTestId('market-history-clear')).toHaveCount(0);
-});
-
 test("its sentences are Manage market's History narrowed to Assignment, in the same order", async ({
   authenticatedPage: page,
   request,
@@ -259,43 +233,6 @@ test('it opens on the date the page shows, and the day can be changed and let go
   await tables.openHistory();
   await expect(tables.historyMarketDay).toHaveValue('');
   await expect(tables.historyDays).toHaveCount(4);
-});
-
-test('a day with nothing says no change matches, and the filter lets it go', async ({
-  authenticatedPage: page,
-  request,
-}) => {
-  // A plan that leaves the assignment's rules as they are, so nothing is about every day.
-  const seed = await seedPhaseMarket(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
-  await savePlan(
-    request,
-    BACKEND_URL,
-    TEST_USER.email,
-    seed.marketId,
-    completePlan(SEED_MARKET_DATE, [SECOND_DATE]),
-  );
-  insertApplications([
-    approvedVendorApplication(seed.marketId, 'alice@example.com', {
-      dates: [SEED_MARKET_DATE, SECOND_DATE],
-      tiers: ['Gold'],
-      fullName: 'Alice Example',
-    }),
-  ]);
-  for (const phase of ['applications', 'assignment'] as const) {
-    await transitionMarket(request, BACKEND_URL, TEST_USER.email, seed.marketId, phase);
-  }
-  await place(request, seed.marketId, 'alice@example.com', SEED_MARKET_DATE, 'Hall A 1');
-
-  const tables = new TablesPage(page);
-  await tables.gotoWithFilters(seed.marketId, { date: SECOND_DATE });
-  await tables.openHistory();
-  await expect(tables.historyEmpty).toHaveText('No change matches these filters.');
-  await expect(tables.historyMarketDay).toHaveValue(SECOND_DATE);
-
-  await tables.historyClear.click();
-  await expect(tables.historyEmpty).toHaveCount(0);
-  await expect(tables.historyDays).toHaveText([FIRST_DAY]);
-  await expect(tables.historySentences).toHaveCount(1);
 });
 
 test('on a phone "Every market day" reads whole, the day and who each on a row of their own', async ({

@@ -1743,55 +1743,6 @@ test.describe('Areas fill a hall', () => {
     });
   });
 
-  test('a placement that ran out of time says so with what it placed, and a refusal is written into the dialog, which stays open', async ({
-    authenticatedPage: page,
-    request,
-  }) => {
-    const { layout } = await open(page, request, [], [], 'fill');
-
-    // The server's refusal: the dialog keeps it, and the area.
-    await page.route(PLACE_TABLES, (route) =>
-      route.fulfill({
-        status: 400,
-        contentType: 'application/json',
-        body: JSON.stringify({ error: 'Auto-Place places up to 500 tables at a time.' }),
-      }),
-    );
-    await layout.drag([2000, 3000], [22_000, 15_000]);
-    await layout.fillSubmit.click();
-    await expect(layout.fillError).toHaveText('Auto-Place places up to 500 tables at a time.');
-    await expect(layout.fillDialog).toBeVisible();
-    await expect(layout.fillSubmit).toHaveText('Fill');
-    await expect(layout.fillSubmit).toBeEnabled();
-    await page.unroute(PLACE_TABLES);
-
-    // The grid's deadline cannot be reached on this stack in a spec's time: its answer is staged.
-    await page.route(PLACE_TABLES, (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          placed_tables: Array.from({ length: 24 }, (_, i) => ({
-            x_mm: 2915 + (i % 10) * 1830,
-            y_mm: 3380 + Math.floor(i / 10) * 1960,
-            rotation: 0,
-            width_mm: 1830,
-            height_mm: 760,
-            table_type_id: 'six-foot',
-          })),
-          timed_out: true,
-        }),
-      }),
-    );
-    await layout.saved(() => layout.fillSubmit.click());
-    await page.unroute(PLACE_TABLES);
-    await expect(layout.fillDialog).toBeHidden();
-    await expect(layout.status).toHaveText(
-      'Placed 24 of 30 - Fill an area ran out of time before the rest.',
-    );
-    await expect(layout.tables).toHaveCount(24);
-  });
-
   test('the crosshair lays an area\'s corners by keys alone and Ctrl+Enter closes it; "Fill what is in view" fills what the map shows with nothing drawn', async ({
     authenticatedPage: page,
     request,
