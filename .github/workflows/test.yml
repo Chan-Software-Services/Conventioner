@@ -670,7 +670,7 @@ jobs:
     needs: [suite, e2e-select, e2e-shard]
     if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}
     runs-on: ubuntu-latest
-    # The audit reads dev's newest `test-map` artifact, which a nightly run made.
+    # Each audit of the selection reads dev's newest `test-map` artifact, which a nightly run made.
     permissions:
       contents: read
       actions: read
@@ -684,8 +684,9 @@ jobs:
       SCOPE: ${{ needs.e2e-select.outputs.scope }}
       E2E_SPECS: ${{ needs.e2e-select.outputs.specs }}
     steps:
-      # The checkout and the shards' artifacts serve the deal's check below and, on a pull request,
-      # the selection audit. The checkout takes two commits for the audit's diff.
+      # The checkout and the shards' artifacts serve the deal's check below and the selection's
+      # audits, a pull request's and the queue's. The checkout takes two commits for each audit's
+      # diff.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -700,7 +701,7 @@ jobs:
         with:
           pattern: e2e-results-shard-*
           path: ${{ runner.temp }}/e2e-results
-      # The check below and the audit read a folder per shard of this run. The download makes one
+      # The check below and the audits read a folder per shard of this run. The download makes one
       # for each artifact, except that it unpacks a lone one, a one-shard run's, straight into its
       # path. It also takes what an earlier attempt of this run left, so a re-run that asked for
       # fewer shards drops the folders numbered above its own count: the shards `e2e-select` listed,
@@ -767,6 +768,22 @@ jobs:
         run: |
           shopt -s nullglob
           python3 scripts/affected-specs.py audit --github --base HEAD^1 --head HEAD \
+            "$RUNNER_TEMP"/e2e-results/*/results.json
+      # On a merge queue trial commit, each failed spec as the pull request's own E2E run would
+      # treat it for this change, from the trial commit's first parent: it ran it by name, it ran
+      # the whole suite, or it left it out, each spec left out a warning annotation. The audit
+      # decides that again, by the map as it reads it now. It continues on error, so it never
+      # decides the job.
+      - name: Audit the pull request's selection
+        if: github.event_name == 'merge_group'
+        continue-on-error: true
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          shopt -s nullglob
+          python3 scripts/affected-specs.py audit --queue --github --base HEAD^1 --head HEAD \
             "$RUNNER_TEMP"/e2e-results/*/results.json
       # The job's verdict. Skipped shards pass it only where the selection named no spec.
       - name: Every shard passed, or the selection named no spec
