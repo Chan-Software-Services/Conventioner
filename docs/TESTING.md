@@ -250,6 +250,8 @@ happy-dom would send an unstubbed request for real, to its page's address, `http
 Instead the setup ([`noNetwork.ts`](../front-end/src/__tests__/support/noNetwork.ts)) refuses every request sent through XHR, which the app's axios uses, or `fetch`, and fails the test that sent it, naming the request, or the file, for a request sent after its last test.
 Stub the module that sends it (`vi.mock('@/utils/api', ...)`), or `fetch` with `vi.stubGlobal` or `vi.spyOn`, over the refusal.
 A navigation (`location.assign`, a link followed, a form submitted) is not refused, since happy-dom sends it through its own fetch: a test that navigates stubs it, as `aPageThatCouldNotOpen.test.ts` passes a stub `location`.
+
+The same setup ([`setup.ts`](../front-end/src/__tests__/support/setup.ts)) blanks `VITE_SENTRY_DSN` before any test runs, as the back end's conftest clears `SENTRY_DSN`, so a DSN exported in the shell or set in a `.env` changes no result: a test that needs one stubs it (`vi.stubEnv`), and a build test that loads `vite.config.ts` builds with none.
 A test that runs in Node (`@vitest-environment node`) has no window, and nothing refuses its `fetch`.
 
 Configuration: `front-end/vitest.config.ts` with `happy-dom` environment.

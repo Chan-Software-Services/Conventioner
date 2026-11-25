@@ -591,7 +591,7 @@ Without an application of your own, `DISCORD_FAKE=true` answers for Discord from
 ### Error Tracking (Off Locally)
 
 The back end and the front end send their errors to Sentry only with a DSN ([error tracking](implementation/modules/error-tracking.md)).
-`back-end/.env.example` leaves `SENTRY_DSN` blank, `front-end/.env.example` has `VITE_SENTRY_DSN` only as a comment, and the compose file sets neither DSN, so a local stack sends nothing, and the test suite removes an exported `SENTRY_DSN` before any test runs.
+`back-end/.env.example` leaves `SENTRY_DSN` blank, `front-end/.env.example` has `VITE_SENTRY_DSN` only as a comment, and the compose file sets neither DSN, so a local stack sends nothing, and each test suite clears its DSN, an exported `SENTRY_DSN` or `VITE_SENTRY_DSN`, before any test runs.
 Leave both unset locally: a DSN is production's project, and a local error sent there is an error Daniel is emailed about.
 
 ### Backend Structure
