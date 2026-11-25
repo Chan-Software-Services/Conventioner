@@ -101,9 +101,8 @@ def people(monkeypatch):
 @pytest.fixture
 def organization(monkeypatch, people):
     return install_organizations(monkeypatch, FakeOrganizations({
-        "_id": "mongo-org-1", "id": ORG_ID, "name": "Ember Markets", "owner": ORG_OWNER.id,
-        "admins": [],
-        "members": [ORG_MEMBER.id], "markets": [MARKET_ID], "theme": None,
+        "_id": "mongo-org-1", "id": ORG_ID, "name": "Ember Markets",
+        "markets": [MARKET_ID], "theme": None,
         "people": {ORG_OWNER.id: "owner", ORG_MEMBER.id: "member"},
     }))
 

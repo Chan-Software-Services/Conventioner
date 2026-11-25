@@ -17,7 +17,7 @@ describes:
   - back-end/tests/conftest.py#FakeSlugMarketsCollection
   - back-end/db_config.py#uri_targets
   - scripts/real-mongo-test.sh
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - T244
   - T274
@@ -30,6 +30,7 @@ sources:
   - T422
   - T496
   - T452
+  - T583
   - T539
 ---
 
@@ -168,7 +169,7 @@ An organizer's sign-in secrets are run the same way in [`test_the_sign_in_secret
 [`real_mongo/test_a_deletion_leaves_a_tombstone.py`](../../../back-end/tests/real_mongo/test_a_deletion_leaves_a_tombstone.py) cuts a market's and an organization's deletion at each step, a step's function or a collection method raising once, and sends the same request again, and lands a deletion, or its tombstone, between an applicant's save, an import or a market's creation and its read, by `interleave` ([market deletion](../modules/market-deletion.md#the-tombstone)).
 
 The lease tests set `review_team`'s clock rather than wait for a lease to run out.
-[`real_mongo/test_a_persons_organizations_on_the_server.py`](../../../back-end/tests/real_mongo/test_a_persons_organizations_on_the_server.py) runs `organization_people.of_person` over the organizations [`test_a_persons_organizations_in_either_shape.py`](../../../back-end/tests/test_a_persons_organizations_in_either_shape.py) finds through the fakes, those with a people map and those stored before it, and asks the server's plan for it over the boot's indexes: an index scan, never a collection scan ([one map of people](../data/organization-document.md#one-map-of-people)).
+[`real_mongo/test_a_persons_organizations_on_the_server.py`](../../../back-end/tests/real_mongo/test_a_persons_organizations_on_the_server.py) runs `organization_people.of_person` over the organizations [`test_a_persons_organizations_in_either_shape.py`](../../../back-end/tests/test_a_persons_organizations_in_either_shape.py) finds through the fakes, by the person's key in each people map and never by a stale list, and asks the server's plan for it over the boot's indexes: an index scan, never a collection scan ([one map of people](../data/organization-document.md#one-map-of-people)).
 [`real_mongo/test_every_order_of_a_deal_on_the_server.py`](../../../back-end/tests/real_mongo/test_every_order_of_a_deal_on_the_server.py) imports the cases of [`test_every_order_of_a_deal.py`](../../../back-end/tests/test_every_order_of_a_deal.py) ([ADR 0020](../../adr/0020-an-application-is-dealt-to-one-reviewer.md)), every order of a change of reviewers against an arrival, of two arrivals, and of a change against an undo, a rule's return and a re-import that return an application to open, each checking that no open application sits outside every share while an able reviewer exists, and runs them over a world whose markets, applications and history are the real collections, so its `Counted` wrapper steps over the server's own calls.
 Those cases read and write their world through collection calls alone (`find_one`, `find`, `insert_one`, `update_one`, `delete_many`), which is what lets one set of cases run over the fakes and over the server.
 
@@ -189,6 +190,7 @@ MongoDB retries an upsert the unique index refused when its filter is equalities
 An owed day's first record is an insert, whose refusal does come back, and the owner's read again is what lands it; the staged test is what makes every free meet it.
 [`real_mongo/test_the_owed_day_state_migration_on_the_server.py`](../../../back-end/tests/real_mongo/test_the_owed_day_state_migration_on_the_server.py) runs the owed day's migration as an operator does, a dry run then two runs, removes a hidden amount and a cleared record on the server with the entry, and refuses its held write on a change to each held field ([payments](../data/payments.md#the-migration)).
 [`real_mongo/test_the_application_status_migration_on_the_server.py`](../../../back-end/tests/real_mongo/test_the_application_status_migration_on_the_server.py) runs the application status migration the same way: a dry run then two runs, a run stopped after its first write then run again, a write landing between its read and its write read again or listed as skipped, and its held write refused on a change to each held field, absent, null or a whole sub-document ([the migration](../data/application-document.md#the-migration)).
+[`real_mongo/test_the_organization_lists_migration_on_the_server.py`](../../../back-end/tests/real_mongo/test_the_organization_lists_migration_on_the_server.py) runs the organization lists migration over the boot's indexes and the three list indexes built by hand as the release before built them: a run clears every organization's lists, one being deleted among them, drops exactly `owner_1`, `admins_1` and `members_1`, and a second run changes nothing; a run or a dry run refused on organizations with no map changes neither the documents nor the indexes; and the lists and index the release before puts back after a run are cleared by a second ([the migration](../data/organization-document.md#migrations)).
 
 ## One invitation per address and target
 
@@ -204,16 +206,16 @@ An edit or a removal of a payment entry lands only on the entry as its request r
 ## An organization's people
 
 Each change to a person's place in an organization is one write conditional on the places it judged, and transferring the organization's ownership is one write filtered on the giver being owner ([the organization's people](../modules/organization-people.md#every-write-holds-what-it-judged)).
-[`real_mongo/test_an_organizations_people_on_the_server.py`](../../../back-end/tests/real_mongo/test_an_organizations_people_on_the_server.py) runs each losing branch on real threads, over an organization with a people map and over one stored before it.
+[`real_mongo/test_an_organizations_people_on_the_server.py`](../../../back-end/tests/real_mongo/test_an_organizations_people_on_the_server.py) runs each losing branch on real threads, over an organization stored with its people map alone.
 Each thread judges on its own read, through `organization_people.next_people` wrapped to meet the other thread once it has judged, so the writes meet on the server after both reads.
 
-| Guarantee                                                                                | Tests                                                                                                                                                                                                                                  |
-| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| An add member judged before that person is given the organization's ownership is refused | the admin's `add_member` judges; the owner then adds that person as an admin and transfers ownership to them; the add answers `OrganizationChanged`, and the new owner is not in `members`                                             |
-| Two transfers by the owner land one                                                      | two `transfer` calls from one read, to an admin and to a member: one lands, the other answers `OrganizationChanged`, and the old owner is an admin                                                                                     |
-| A transfer to an admin keeps the mirror beside an add admin                              | a `transfer` to an admin and an `add_admin` from one read, each writing first in turn: the second answers `OrganizationChanged`, so an admin added is never dropped from `admins`, which the transfer sets whole from the list as read |
+| Guarantee                                                                                | Tests                                                                                                                                                                                                                                                                                                |
+| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| An add member judged before that person is given the organization's ownership is refused | the admin's `add_member` judges; the owner then adds that person as an admin and transfers ownership to them; the add answers `OrganizationChanged`, and the new owner's place is `owner`                                                                                                            |
+| Two transfers by the owner land one                                                      | two `transfer` calls from one read, to an admin and to a member: one lands, the other answers `OrganizationChanged`, and the old owner is an admin                                                                                                                                                   |
+| A transfer to an admin beside an add admin of another holds one owner                    | a `transfer` to an admin and the owner's `add_admin` of another from one read, each writing first in turn: the add written first, both land, since the transfer holds only its two keys; the transfer written first, the add answers `OrganizationChanged`, since the owner it holds is an admin now |
 
-After each, the organization parses with one owner, and its lists are an exact mirror of its map.
+After each, the organization parses with one owner, and holds no `owner`, `admins` or `members`.
 
 ## The MongoDB version
 

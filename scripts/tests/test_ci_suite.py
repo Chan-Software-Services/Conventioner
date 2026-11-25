@@ -5,8 +5,9 @@ GitHub API, and read what the step reads: the one word on stdout, the sentence o
 summary file, and the exit code. The stub answers each API path with a scripted sequence and records
 every request, in the pattern of test_promote_check.py's, which this file does not import.
 
-The workflow's tests read .github/workflows/test.yml and .github/actions/e2e-stack/action.yml as
-text, and run the `decide` step's shell as the runner runs it (`bash -e`) with a fake `python3`.
+The workflow's tests read .github/workflows/test.yml and the two actions under .github/actions/ as
+text, evaluate the actions' conditions over the cases they decide, and run the `decide` step's shell
+as the runner runs it (`bash -e`) with a fake `python3`.
 """
 import json
 import os
@@ -15,6 +16,7 @@ import subprocess
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from itertools import product
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -666,6 +668,7 @@ def test_it_needs_an_event_and_a_commit(stub, env, given, needed):
 
 WORKFLOW = ROOT / ".github" / "workflows" / "test.yml"
 E2E_STACK = ROOT / ".github" / "actions" / "e2e-stack" / "action.yml"
+FRONT_END_DEPS = ROOT / ".github" / "actions" / "front-end-deps" / "action.yml"
 
 JOBS = [
     "suite",
@@ -679,6 +682,7 @@ JOBS = [
     "e2e-shard",
     "warm-caches",
     "test-map",
+    "e2e-retries",
     "e2e",
 ]
 SIX = ["backend", "knowledge-graph", "real-data-and-workflows", "frontend-unit", "frontend-lint-and-types", "docker-build"]
@@ -851,6 +855,22 @@ def test_the_test_map_is_built_only_on_a_nightly_or_hand_started_run_whose_shard
     assert test_map["continue-on-error"] == "true"
 
 
+def test_the_retry_report_runs_only_nightly_or_by_hand_reading_actions_and_never_fails_the_run():
+    retries = workflow_jobs()["e2e-retries"]
+
+    # It reads GitHub's API alone, so it waits on no job and reads no `suite` word.
+    assert retries["name"] == "e2e-retries"
+    assert retries["if"] == "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
+    assert "needs" not in retries
+    assert retries["continue-on-error"] == "true"
+    assert retries["permissions"] == {"contents": "read", "actions": "read"}
+    checkout, report = retries["steps"]
+    assert checkout["uses"].startswith("actions/checkout@")
+    assert checkout["with"] == {"persist-credentials": "false"}
+    assert report["env"] == {"GITHUB_TOKEN": "${{ github.token }}"}
+    assert report["run"] == "python3 scripts/e2e_retries.py --runs 20\n"
+
+
 def test_only_a_nightly_or_hand_started_run_s_shards_record():
     lines = WORKFLOW.read_text().splitlines()
     jobs_block = block(lines, lines.index("jobs:"), 0)
@@ -885,21 +905,21 @@ def test_the_advisory_scan_reads_no_word_so_a_warm_push_and_every_nightly_run_sc
 
 def test_warm_caches_fills_npm_s_cache_node_modules_and_the_stack_s_caches_and_runs_nothing_else():
     warm = workflow_jobs()["warm-caches"]
-    checkout, node, fill, deps, stack = warm["steps"]
+    checkout, node, deps, stack = warm["steps"]
 
     assert checkout["uses"].startswith("actions/checkout@")
     assert checkout["with"] == {"persist-credentials": "false"}
     assert node["uses"].startswith("actions/setup-node@")
+    assert node["id"] == "node"
     assert node["with"] == {
         "node-version-file": ".nvmrc",
         "cache": "npm",
         "cache-dependency-path": "front-end/package-lock.json",
     }
-    assert fill["name"] == "Fill npm's cache"
-    assert fill["working-directory"] == "front-end"
-    assert fill["run"] == "npm ci\n"
+    # How it installs the front end once at most is the front-end-deps tests' below.
     assert deps["uses"] == "./.github/actions/front-end-deps"
-    assert deps["with"] == {"save-cache": "true"}
+    assert sorted(deps["with"]) == ["fill-npm-cache", "save-cache"]
+    assert value(deps["with"]["save-cache"], {}) == "true"
     assert stack["uses"] == "./.github/actions/e2e-stack"
     assert stack["with"] == {"save-caches": "true", "start": '"false"'}
 
@@ -993,6 +1013,113 @@ def test_a_missing_script_is_the_whole_suite(tmp_path):
     assert outputs.read_text() == "run=full\n"
 
 
+# The two actions' conditions are evaluated, as the runner would, so a test says what a step does,
+# not how its condition is written.
+
+TOKEN = re.compile(r"\s*('[^']*'|==|!=|&&|\|\||[()]|[\w.-]+)")
+
+
+def result_of(expression, context):
+    """The result of an expression of the forms these steps use: references, 'literals', ==, !=, &&,
+    which binds before ||, and brackets. A reference the context lacks, or any other form, raises."""
+    tokens = []
+    rest = expression.strip()
+    if rest.startswith("${{") and rest.endswith("}}"):
+        rest = rest[3:-2]
+    while rest.strip():
+        found = TOKEN.match(rest)
+        assert found, f"cannot read {rest!r}"
+        tokens.append(found.group(1))
+        rest = rest[found.end():]
+
+    def taken(token):
+        if tokens[:1] != [token]:
+            return False
+        del tokens[0]
+        return True
+
+    # && and || result in one of their operands, as Python's `and` and `or` do.
+    def either():
+        result = both()
+        while taken("||"):
+            right = both()
+            result = result or right
+        return result
+
+    def both():
+        result = comparison()
+        while taken("&&"):
+            right = comparison()
+            result = result and right
+        return result
+
+    def comparison():
+        left = operand()
+        for op in ("==", "!="):
+            if taken(op):
+                return (folded(left) == folded(operand())) == (op == "==")
+        return left
+
+    # The runner ignores case when it compares strings.
+    def folded(compared):
+        return compared.casefold() if isinstance(compared, str) else compared
+
+    def operand():
+        token = tokens.pop(0)
+        if token == "(":
+            inner = either()
+            assert taken(")"), f"unclosed bracket in {expression!r}"
+            return inner
+        return token[1:-1] if token.startswith("'") else context[token]
+
+    result = either()
+    assert not tokens, f"cannot read {tokens} in {expression!r}"
+    return result
+
+
+def evaluate(expression, context):
+    """Whether an `if:` with this expression runs its step."""
+    return bool(result_of(expression, context))
+
+
+def value(written, context):
+    """What a `with:` value passes: an expression's result as a string, else the literal."""
+    if written.startswith("${{"):
+        result = result_of(written, context)
+        return str(result).lower() if isinstance(result, bool) else result
+    return written.strip('"')
+
+
+def cache_hit(hit):
+    """A restore's `cache-hit` output on a hit of its key or a miss: actions/cache/restore leaves it
+    unset, so empty, on a miss."""
+    return "true" if hit else ""
+
+
+@pytest.mark.parametrize(
+    ("written", "passed_on"),
+    [
+        ("${{ a == 'x' || a == 'y' && b == 'y' }}", "true"),
+        ("${{ (a == 'x' || a == 'y') && b == 'y' }}", "false"),
+        ("${{ b != 'y' && (a == 'y' || (a == 'x')) }}", "true"),
+        ("${{ a == 'x' && 'false' || 'true' }}", "false"),
+        ("${{ (a) == 'x' }}", "true"),
+        ("${{ a == 'X' }}", "true"),
+        ("${{ a != 'X' }}", "false"),
+    ],
+    ids=["and-before-or", "brackets-first", "nested-brackets", "an-operand-as-the-result", "a-bracketed-reference",
+         "equal-in-another-case", "not-unequal-in-another-case"],
+)
+def test_an_expression_results_as_the_runner_would_read_it(written, passed_on):
+    assert value(written, {"a": "x", "b": "z"}) == passed_on
+
+
+@pytest.mark.parametrize("expression", ["(a == 'x'", "a == 'x')", "a == 'x' b", "!(a == 'x')", "c == 'x'"])
+def test_an_expression_the_evaluator_cannot_read_raises(expression):
+    with pytest.raises((AssertionError, KeyError)):
+        evaluate(expression, {"a": "x", "b": "z"})
+
+
 # The e2e-stack action's `start`: by default every step runs as before.
 
 NOT_STARTING = [
@@ -1003,8 +1130,8 @@ NOT_STARTING = [
 ]
 
 
-def action():
-    lines = E2E_STACK.read_text().splitlines()
+def action(path=E2E_STACK):
+    lines = path.read_text().splitlines()
     inputs = block(lines, lines.index("inputs:"), 0)
     steps = steps_of(block(lines, lines.index("  steps:"), 2), 4)
     return {
@@ -1020,49 +1147,161 @@ def test_start_is_an_input_that_defaults_to_true():
     assert start["default"] == '"true"'
 
 
+# Every case the e2e-stack action's conditions can turn on: each input, each cache's hit or miss,
+# whether the runner lacks packages, and whether their install marks the files cacheable.
+FACTS = ("start", "save_caches", "browsers_hit", "lacks_packages", "packages_hit", "cacheable", "images_hit")
+CASES = [dict(zip(FACTS, values)) for values in product([True, False], repeat=len(FACTS))]
+
+
+def e2e_stack(case):
+    """What the action does in one case: whether each step runs, and whether each restore only looks
+    its key up. A skipped step's outputs are empty."""
+
+    def text(fact):
+        return "true" if case[fact] else "false"
+
+    outputs = {
+        "Restore Playwright's browsers": ("cache-hit", cache_hit(case["browsers_hit"])),
+        "The system packages Chromium lacks": ("packages", "libnss3" if case["lacks_packages"] else ""),
+        "Restore Chromium's system packages": ("cache-hit", cache_hit(case["packages_hit"])),
+        "Install Chromium's system packages": ("cacheable", text("cacheable")),
+        "Restore the images": ("cache-hit", cache_hit(case["images_hit"])),
+    }
+    context = {"inputs.start": text("start"), "inputs.save-caches": text("save_caches")}
+    runs, looks_only = {}, {}
+    for name, step in action()["steps"].items():
+        runs[name] = "if" not in step or evaluate(step["if"], context)
+        if "lookup-only" in step["with"]:
+            looks_only[name] = value(step["with"]["lookup-only"], context) == "true"
+        if name in outputs:
+            output, written = outputs[name]
+            context[f"steps.{step['id']}.outputs.{output}"] = written if runs[name] else ""
+    return {"runs": runs, "looks only": looks_only}
+
+
 @pytest.mark.parametrize("name", NOT_STARTING)
 def test_a_step_that_starts_the_stack_runs_only_when_starting(name):
-    condition = action()["steps"][name]["if"]
-
-    assert condition == "inputs.start == 'true'" or condition.startswith("inputs.start == 'true' && ")
+    for case in CASES:
+        # Only a restored archive can be loaded.
+        expected = case["start"] and (case["images_hit"] or name != "Load the images")
+        assert e2e_stack(case)["runs"][name] == expected, case
 
 
 @pytest.mark.parametrize(
     "name", ["Restore Playwright's browsers", "Restore Chromium's system packages", "Restore the images"]
 )
 def test_a_restore_only_looks_when_not_starting(name):
-    assert action()["steps"][name]["with"]["lookup-only"] == "${{ inputs.start != 'true' }}"
+    for case in CASES:
+        assert e2e_stack(case)["looks only"][name] == (not case["start"]), case
 
 
 def test_chromium_is_installed_on_a_miss_without_its_system_packages():
-    install = action()["steps"]["Install Playwright's Chromium"]
+    name = "Install Playwright's Chromium"
+    for case in CASES:
+        assert e2e_stack(case)["runs"][name] == (not case["browsers_hit"]), case
 
-    assert install["if"] == "steps.browsers.outputs.cache-hit != 'true'"
+    install = action()["steps"][name]
     assert install["env"] == {}
     assert install["run"] == "npx playwright install chromium\n"
+
+
+def test_chromium_s_system_packages_are_restored_only_when_the_runner_lacks_some():
+    for case in CASES:
+        assert e2e_stack(case)["runs"]["Restore Chromium's system packages"] == case["lacks_packages"], case
 
 
 # Not starting, the packages install only on a miss, which is how their files are made and marked
 # cacheable for the save; a hit, only looked up, has no files to install.
 def test_chromium_s_system_packages_install_when_starting_or_on_a_miss():
-    install = action()["steps"]["Install Chromium's system packages"]
-
-    assert install["if"] == (
-        "steps.packages.outputs.packages != '' && "
-        "(inputs.start == 'true' || steps.packages-cache.outputs.cache-hit != 'true')"
-    )
+    for case in CASES:
+        expected = case["lacks_packages"] and (case["start"] or not case["packages_hit"])
+        assert e2e_stack(case)["runs"]["Install Chromium's system packages"] == expected, case
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        "Build the images",
-        "Write the images for the cache",
-        "Save the images",
-        "Save Playwright's browsers",
-        "The system packages Chromium lacks",
-        "Save Chromium's system packages",
-    ],
-)
+# What each of these runs on: never `start`.
+BUILDS_AND_SAVES = {
+    "Build the images": lambda case: not case["images_hit"],
+    "Write the images for the cache": lambda case: case["save_caches"] and not case["images_hit"],
+    "Save the images": lambda case: case["save_caches"] and not case["images_hit"],
+    "Save Playwright's browsers": lambda case: case["save_caches"] and not case["browsers_hit"],
+    "The system packages Chromium lacks": lambda case: True,
+    "Save Chromium's system packages": lambda case: (
+        case["save_caches"] and case["lacks_packages"] and not case["packages_hit"] and case["cacheable"]
+    ),
+}
+
+
+@pytest.mark.parametrize("name", BUILDS_AND_SAVES)
 def test_the_builds_and_saves_ignore_start(name):
-    assert "inputs.start" not in action()["steps"][name].get("if", "")
+    for case in CASES:
+        assert e2e_stack(case)["runs"][name] == BUILDS_AND_SAVES[name](case), case
+
+
+# The front-end-deps action's `fill-npm-cache`: by default it installs only on its own cache's miss.
+# Its conditions are evaluated over each cache's hit or miss.
+
+
+def front_end_deps(given, modules_hit):
+    """What the action does with these inputs, when front-end/node_modules' cache hits or misses."""
+    found = action(FRONT_END_DEPS)
+    steps = found["steps"]
+    restore = steps["Restore front-end/node_modules"]
+    inputs = {name: spec["default"].strip('"') for name, spec in found["inputs"].items()}
+    inputs.update(given)
+    context = {f"inputs.{name}": v for name, v in inputs.items()}
+    looks_only = value(restore["with"]["lookup-only"], context) == "true"
+    context[f"steps.{restore['id']}.outputs.cache-hit"] = cache_hit(modules_hit)
+    return {
+        "looks only": looks_only,
+        "downloads": modules_hit and not looks_only,
+        "installs": evaluate(steps["Install with npm ci"]["if"], context),
+        "saves": evaluate(steps["Save front-end/node_modules"]["if"], context),
+    }
+
+
+def test_fill_npm_cache_is_an_input_that_defaults_to_false():
+    fill = action(FRONT_END_DEPS)["inputs"]["fill-npm-cache"]
+
+    assert fill["required"] == "false"
+    assert fill["default"] == '"false"'
+
+
+@pytest.mark.parametrize("modules_hit", [True, False])
+@pytest.mark.parametrize("npm_hit", [True, False])
+def test_warm_caches_installs_once_at_most_filling_npm_s_cache_on_its_miss(npm_hit, modules_hit):
+    warm = workflow_jobs()["warm-caches"]
+    node, deps = warm["steps"][1], warm["steps"][2]
+    context = {f"steps.{node['id']}.outputs.cache-hit": "true" if npm_hit else "false"}
+    given = {name: value(written, context) for name, written in deps["with"].items()}
+
+    did = front_end_deps(given, modules_hit)
+
+    # One `npm ci` step, so it runs at most once; it runs on either cache's miss, so npm's cache
+    # is full for setup-node's post step to save, and node_modules is whole without it otherwise.
+    assert did["installs"] == (not npm_hit or not modules_hit)
+    assert did["downloads"] == (not did["installs"])
+    assert not did["looks only"] or did["installs"]
+    assert did["saves"] == (not modules_hit)
+
+
+@pytest.mark.parametrize("modules_hit", [True, False])
+def test_by_default_as_the_e2e_shards_use_it_it_installs_only_on_node_modules_miss(modules_hit):
+    shard = next(s for s in workflow_jobs()["e2e-shard"]["steps"] if s.get("uses") == "./.github/actions/front-end-deps")
+    assert "fill-npm-cache" not in shard["with"]
+
+    did = front_end_deps({"save-cache": "true"}, modules_hit)
+
+    assert not did["looks only"]
+    assert did["downloads"] == modules_hit
+    assert did["installs"] == (not modules_hit)
+    assert did["saves"] == (not modules_hit)
+
+
+def test_node_modules_is_saved_from_where_it_was_restored_under_the_restore_s_key():
+    steps = action(FRONT_END_DEPS)["steps"]
+
+    assert steps["Save front-end/node_modules"]["with"] == {
+        "path": "front-end/node_modules",
+        "key": "${{ steps.modules.outputs.cache-primary-key }}",
+    }
+    assert steps["Install with npm ci"]["run"] == "npm ci\n"

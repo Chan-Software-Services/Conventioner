@@ -34,7 +34,7 @@ describes:
   - front-end/e2e/helpers/seeds.ts#allocateThenFreeEverySeat
   - front-end/e2e/helpers/seedMarketDayMap.ts
   - front-end/e2e/helpers/seedAPricedVendor.ts
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - E02
   - E11/F01/S01
@@ -90,7 +90,7 @@ A spec that needs an account not yet verified signs up through the real route, `
 ## Markets require an organization
 
 `POST /markets` answers 400 to a payload with no `organizationId`, an unknown organization, or one the caller is not a member of ([the organization document](../data/organization-document.md)).
-So anything that creates a market attaches one: [`helpers/seeds.ts`](../../../front-end/e2e/helpers/seeds.ts) exports `ensureTestOrgAuthenticated()` (for a request context already logged in by `loginViaApi()`) and `ensureTestOrg()` (which logs in first), both reusing the user's first organization or creating `E2E Test Org`; the seed helpers return it as `orgId`.
+So anything that creates a market attaches one: [`helpers/seeds.ts`](../../../front-end/e2e/helpers/seeds.ts) exports `ensureTestOrgAuthenticated()` (for a request context already signed in, by `loginViaApi()` or, on `page.request`, by the page's own sign-in) and `ensureTestOrg()` (which logs in first), both reusing the user's first organization or creating `E2E Test Org`; the seed helpers return it as `orgId`.
 A spec that creates a market through the UI calls `ensureTestOrg()` in `beforeAll`, or the create dialog's organization list is empty and its submit stays disabled.
 `ensureTestOrgs(count)` is for a spec whose subject is a choice of organization, which a split run (CI shards) no longer guaranteed by accident.
 `ensureOrganizationAdmin(orgId, email)` makes a verified user an admin of that organization, through the owner's session the request carries, and so Admin on every market it holds; it is idempotent across runs.
@@ -195,7 +195,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
 
 - Leaves: the above, in `market_days`, with its slug
 - Notes:
-  - a `form` market publishes its results first
+  - its results published, on either intake path
   - its review setup decided
   - `vendors` seeds others than alice and bob, a table each
   - `namePrefix` starts its name, and so its addresses, with a long one

@@ -4,9 +4,9 @@
 change an organization's people only through
 ``organization_people``: its table (``next_people``) says what each change does to the target's
 place as read and who may ask for it, and each change is one conditional write that lands only
-while the requester's and the target's places still stand as read. On an organization stored before
-the people map, the write holds its three lists as read and folds the map in. Every write keeps
-``owner``, ``admins`` and ``members`` an exact mirror of the map.
+while the requester's and the target's places still stand as read, by their keys in the people
+map. Every write changes the map alone, never the old ``owner``, ``admins`` and ``members``
+lists (T583).
 
 A write that met another change answers 404 when the organization, or the person being removed, is
 gone, and otherwise ``OrganizationChanged``, a 409 in the spec's words: an "Add member" judged
@@ -60,12 +60,11 @@ NEW = SimpleNamespace(id="user-new", email="new@example.com")
 OUTSIDER = SimpleNamespace(id="user-out", email="outsider@example.com")
 PEOPLE = (OWNER, ADMIN, MEMBER, NEW, OUTSIDER)
 
-UNFOLDED = {
-    "id": ORG, "name": "Ember Markets", "owner": OWNER.id, "admins": [ADMIN.id],
-    "members": [MEMBER.id], "markets": [], "theme": None,
+FOLDED = {
+    "id": ORG, "name": "Ember Markets",
+    "people": {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"},
+    "markets": [], "theme": None,
 }
-FOLDED = {**UNFOLDED, "people": {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"}}
-SHAPES = {"folded": FOLDED, "unfolded": UNFOLDED}
 
 
 @pytest.fixture
@@ -93,25 +92,19 @@ def accounts(monkeypatch):
                         lambda ids: {i: by_id[i] for i in ids if i in by_id})
 
 
-@pytest.fixture(params=sorted(SHAPES))
-def shape(request):
-    return request.param
-
-
 @pytest.fixture
-def stored(monkeypatch, accounts, recorded, shape):
-    """The organization, in the shape the test is parametrized over."""
-    return install_organizations(monkeypatch, FakeOrganizations(SHAPES[shape]))
+def stored(monkeypatch, accounts, recorded):
+    """The organization, with its people map."""
+    return install_organizations(monkeypatch, FakeOrganizations(FOLDED))
 
 
 def assert_one_map(doc):
-    """The organization parses, with one owner, and its lists are an exact mirror of its map."""
+    """The organization parses, with one owner, every value a place, and no old list beside its
+    map: the writer created or changed it, and writes the map alone (T583)."""
     people = organization_people_of(doc)
     assert list(people.values()).count("owner") == 1
-    assert doc["owner"] == next(user_id for user_id, place in people.items() if place == "owner")
-    assert sorted(doc["admins"]) == sorted(u for u, place in people.items() if place == "admin")
-    assert sorted(doc["members"]) == sorted(u for u, place in people.items() if place == "member")
-    assert len(set(doc["admins"]) | set(doc["members"])) == len(doc["admins"]) + len(doc["members"])
+    assert set(people.values()) <= {"owner", "admin", "member"}
+    assert not {"owner", "admins", "members"} & set(doc)
     assert MarketsApi._organization_from_document(copy.deepcopy(doc)) is not None
 
 
@@ -138,7 +131,6 @@ def test_an_add_member_judged_before_a_transfer_to_that_person_is_refused(stored
         OrgsApi.add_org_member(ORG, NEW.email, ADMIN.email)
 
     assert places(stored.doc)[NEW.id] == "owner"
-    assert NEW.id not in stored.doc["members"]
     assert_one_map(stored.doc)
     # Only the owner's changes are recorded: the refused add wrote and recorded nothing.
     assert [args[2] for args, _ in recorded] == [
@@ -420,7 +412,7 @@ def test_a_place_set_to_the_place_held_answers_200_and_writes_nothing(
     response = change(client, OWNER, target.id, {"place": place})
 
     assert (response.status_code, response.get_json()) == (200, {"message": "Place changed"})
-    assert stored.writes == [] and stored.accounts.writes == [] and recorded == []
+    assert stored.writes == [] and recorded == []
 
 
 @pytest.mark.parametrize("requester,target", [
@@ -481,7 +473,7 @@ def test_a_transfer_by_anyone_but_the_owner_is_a_403(client, stored, recorded, r
 
     assert (response.status_code, response.get_json()) == (
         403, {"error": "Only current owner can transfer ownership"})
-    assert stored.writes == [] and stored.accounts.writes == [] and recorded == []
+    assert stored.writes == [] and recorded == []
 
 
 @pytest.mark.parametrize("email,sentence", [
@@ -495,7 +487,7 @@ def test_a_transfer_the_table_refuses_says_why_and_writes_nothing(
     response = hand_on(client, OWNER, email)
 
     assert (response.status_code, response.get_json()) == (400, {"error": sentence})
-    assert stored.writes == [] and stored.accounts.writes == [] and recorded == []
+    assert stored.writes == [] and recorded == []
 
 
 # ── What each write holds and writes ─────────────────────────────────────────────────────────
@@ -510,55 +502,45 @@ def the_write(stored):
     return held, update
 
 
-HELD_UNFOLDED = {"id": ORG, "people": {"$exists": False}, "owner": OWNER.id,
-                 "admins": [ADMIN.id], "members": [MEMBER.id]}
-
-#: (what is done, the folded write's filter and update, the map after).
+#: (what is done, the write's filter and update, the map after).
 WRITES = [
     (lambda: OrganizationPeople.add_admin(ORG, NEW.email, OWNER.email),
      {"id": ORG, "people.user-owner": "owner", "people.user-new": {"$exists": False}},
-     {"$set": {"people.user-new": "admin"}, "$addToSet": {"admins": NEW.id}},
+     {"$set": {"people.user-new": "admin"}},
      {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member", NEW.id: "admin"}),
     (lambda: OrganizationPeople.add_member(ORG, NEW.email, ADMIN.email),
      {"id": ORG, "people.user-admin": "admin", "people.user-new": {"$exists": False}},
-     {"$set": {"people.user-new": "member"}, "$addToSet": {"members": NEW.id}},
+     {"$set": {"people.user-new": "member"}},
      {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member", NEW.id: "member"}),
     (lambda: OrganizationPeople.add_admin(ORG, MEMBER.email, OWNER.email),
      {"id": ORG, "people.user-owner": "owner", "people.user-member": "member"},
-     {"$set": {"people.user-member": "admin"}, "$addToSet": {"admins": MEMBER.id},
-      "$pull": {"members": MEMBER.id}},
+     {"$set": {"people.user-member": "admin"}},
      {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "admin"}),
     (lambda: OrganizationPeople.remove(ORG, ADMIN.id, OWNER.email),
      {"id": ORG, "people.user-owner": "owner", "people.user-admin": "admin"},
-     {"$unset": {"people.user-admin": ""}, "$pull": {"admins": ADMIN.id, "members": ADMIN.id}},
+     {"$unset": {"people.user-admin": ""}},
      {OWNER.id: "owner", MEMBER.id: "member"}),
     (lambda: OrganizationPeople.remove(ORG, MEMBER.id, ADMIN.email),
      {"id": ORG, "people.user-admin": "admin", "people.user-member": "member"},
-     {"$unset": {"people.user-member": ""},
-      "$pull": {"admins": MEMBER.id, "members": MEMBER.id}},
+     {"$unset": {"people.user-member": ""}},
      {OWNER.id: "owner", ADMIN.id: "admin"}),
     (lambda: OrganizationPeople.change_place(ORG, ADMIN.id, "member", OWNER.email),
      {"id": ORG, "people.user-owner": "owner", "people.user-admin": "admin"},
-     {"$set": {"people.user-admin": "member"}, "$addToSet": {"members": ADMIN.id},
-      "$pull": {"admins": ADMIN.id}},
+     {"$set": {"people.user-admin": "member"}},
      {OWNER.id: "owner", ADMIN.id: "member", MEMBER.id: "member"}),
     (lambda: OrganizationPeople.change_place(ORG, MEMBER.id, "admin", OWNER.email),
      {"id": ORG, "people.user-owner": "owner", "people.user-member": "member"},
-     {"$set": {"people.user-member": "admin"}, "$addToSet": {"admins": MEMBER.id},
-      "$pull": {"members": MEMBER.id}},
+     {"$set": {"people.user-member": "admin"}},
      {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "admin"}),
-    # Ownership transferred: one write filtered on the giver being owner; to an admin, ``admins``
-    # is set whole with the giver where the new owner stood, so the list as read is held too.
+    # Ownership transferred: one write filtered on the giver being owner and the new owner's
+    # place, holding nothing beyond the two keys, whichever place the new owner held.
     (lambda: OrganizationPeople.transfer(ORG, OWNER.email, MEMBER.email),
      {"id": ORG, "people.user-owner": "owner", "people.user-member": "member"},
-     {"$set": {"people.user-owner": "admin", "people.user-member": "owner", "owner": MEMBER.id},
-      "$pull": {"members": MEMBER.id}, "$addToSet": {"admins": OWNER.id}},
+     {"$set": {"people.user-owner": "admin", "people.user-member": "owner"}},
      {OWNER.id: "admin", ADMIN.id: "admin", MEMBER.id: "owner"}),
     (lambda: OrganizationPeople.transfer(ORG, OWNER.email, ADMIN.email),
-     {"id": ORG, "people.user-owner": "owner", "people.user-admin": "admin",
-      "admins": [ADMIN.id]},
-     {"$set": {"people.user-owner": "admin", "people.user-admin": "owner", "owner": ADMIN.id,
-               "admins": [OWNER.id]}},
+     {"id": ORG, "people.user-owner": "owner", "people.user-admin": "admin"},
+     {"$set": {"people.user-owner": "admin", "people.user-admin": "owner"}},
      {OWNER.id: "admin", ADMIN.id: "owner", MEMBER.id: "member"}),
 ]
 WRITE_IDS = ["add admin of someone new", "add member of someone new",
@@ -579,61 +561,14 @@ def test_a_write_on_a_folded_organization_holds_both_places_and_moves_one_key(
     assert_one_map(stored.doc)
 
 
-@pytest.mark.parametrize("change,_query,_update,after", WRITES, ids=WRITE_IDS)
-def test_a_write_on_an_unfolded_organization_holds_its_lists_and_folds_it(
-        monkeypatch, accounts, recorded, change, _query, _update, after):
-    stored = install_organizations(monkeypatch, FakeOrganizations(UNFOLDED))
-
-    change()
-
-    owner = next(user_id for user_id, place in after.items() if place == "owner")
-    assert the_write(stored) == (HELD_UNFOLDED, {"$set": {
-        "people": after,
-        "admins": [u for u, place in after.items() if place == "admin"],
-        "members": [u for u, place in after.items() if place == "member"],
-        "owner": owner,
-    }})
-    assert stored.doc["people"] == after
-    assert_one_map(stored.doc)
 
 
-def test_an_unfolded_organization_whose_owner_is_also_listed_is_folded_clean(
-        monkeypatch, accounts, recorded):
-    # It did not parse on dev; the first change to it folds it, the owner winning, and the
-    # mirror drops the owner and the admin listed again from the lists.
-    doc = {**UNFOLDED, "admins": [ADMIN.id, OWNER.id], "members": [MEMBER.id, ADMIN.id]}
-    stored = install_organizations(monkeypatch, FakeOrganizations(doc))
+# ── The history ──────────────────────────────────────────────────────────────────────────────
 
+
+def test_an_add_records_it(stored, recorded):
     OrganizationPeople.add_member(ORG, NEW.email, OWNER.email)
 
-    assert stored.doc["people"] == {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member",
-                                    NEW.id: "member"}
-    assert (stored.doc["owner"], stored.doc["admins"], stored.doc["members"]) == (
-        OWNER.id, [ADMIN.id], [MEMBER.id, NEW.id])
-    assert_one_map(stored.doc)
-
-
-def test_a_member_listed_as_an_admin_too_is_listed_once_when_made_an_admin(
-        monkeypatch, accounts, recorded):
-    # A folded organization whose stored lists drifted (a member made an admin before this
-    # release stayed in members): the move pulls them from members as it adds them to admins.
-    doc = {**FOLDED, "people": {**FOLDED["people"], NEW.id: "member"},
-           "admins": [ADMIN.id, NEW.id], "members": [MEMBER.id, NEW.id]}
-    stored = install_organizations(monkeypatch, FakeOrganizations(doc))
-
-    OrganizationPeople.add_admin(ORG, NEW.email, OWNER.email)
-
-    assert (stored.doc["admins"], stored.doc["members"]) == ([ADMIN.id, NEW.id], [MEMBER.id])
-    assert_one_map(stored.doc)
-
-
-# ── The account's copy and the history ───────────────────────────────────────────────────────
-
-
-def test_an_add_copies_the_organization_onto_the_account_and_records_it(stored, recorded):
-    OrganizationPeople.add_member(ORG, NEW.email, OWNER.email)
-
-    assert stored.accounts.writes == [({"id": NEW.id}, {"$addToSet": {"organizations": ORG}})]
     [(args, kwargs)] = recorded
     assert args == (ORG, OWNER.email, History.MANAGE_ORGANIZATION_MEMBERS)
     assert kwargs["kind"] == History.ROLE_GIVEN
@@ -662,14 +597,11 @@ def test_a_place_change_is_recorded_with_the_place_before_and_after(
     assert kwargs["kind"] == History.ROLE_CHANGED
     assert kwargs["subject"]() == {"user_id": target.id, "email": target.email}
     assert kwargs["detail"]() == History.changes({"role": before}, {"role": place})
-    # They were in the organization before and are after: the account's copy has nothing to do.
-    assert stored.accounts.writes == []
 
 
-def test_a_remove_takes_the_organization_off_the_account_and_records_it(stored, recorded):
+def test_a_remove_records_it(stored, recorded):
     OrganizationPeople.remove(ORG, ADMIN.id, OWNER.email)
 
-    assert stored.accounts.writes == [({"id": ADMIN.id}, {"$pull": {"organizations": ORG}})]
     [(args, kwargs)] = recorded
     assert args == (ORG, OWNER.email, History.MANAGE_ORGANIZATION_ADMINS)
     assert kwargs["kind"] == History.ROLE_TAKEN
@@ -695,7 +627,7 @@ def test_a_write_over_an_organization_deleted_meanwhile_is_a_404(stored, recorde
         OrganizationPeople.add_member(ORG, NEW.email, OWNER.email)
 
     assert refused.value.message == "Organization not found"
-    assert recorded == [] and stored.accounts.writes == []
+    assert recorded == []
 
 
 def test_removing_someone_removed_meanwhile_is_the_404_read_as_done(stored, recorded):
@@ -779,24 +711,6 @@ def test_a_place_change_by_an_owner_who_handed_the_organization_on_meanwhile_is_
     assert_one_map(stored.doc)
 
 
-def test_an_admin_handed_the_organization_keeps_the_others_in_admins_where_they_stood(
-        monkeypatch, accounts, recorded):
-    doc = {**FOLDED, "admins": [NEW.id, ADMIN.id, OUTSIDER.id],
-           "people": {OWNER.id: "owner", NEW.id: "admin", ADMIN.id: "admin",
-                      OUTSIDER.id: "admin", MEMBER.id: "member"}}
-    stored = install_organizations(monkeypatch, FakeOrganizations(doc))
-
-    OrganizationPeople.transfer(ORG, OWNER.email, ADMIN.email)
-
-    assert stored.doc["admins"] == [NEW.id, OWNER.id, OUTSIDER.id]
-    assert_one_map(stored.doc)
-
-
-def test_a_transfer_copies_the_organization_onto_the_new_owners_account(stored, recorded):
-    OrganizationPeople.transfer(ORG, OWNER.email, MEMBER.email)
-
-    assert stored.accounts.writes == [
-        ({"id": MEMBER.id}, {"$addToSet": {"organizations": ORG}})]
 
 
 def test_two_transfers_judged_on_one_read_land_once(stored, recorded):
@@ -812,16 +726,16 @@ def test_two_transfers_judged_on_one_read_land_once(stored, recorded):
     assert_one_map(stored.doc)
 
 
-def test_a_transfer_to_an_admin_beside_an_add_admin_keeps_both_in_the_mirror(stored, recorded):
-    # The transfer sets ``admins`` whole from the list as read: an admin added meanwhile would be
-    # dropped from the list while the map kept them, so the transfer meets it and is refused.
+def test_a_transfer_to_an_admin_beside_an_add_admin_of_another_both_land(stored, recorded):
+    # The transfer holds only the giver's and the new owner's keys: an admin added meanwhile
+    # touches neither, so both land, and the map holds one owner.
     stored.before_write = lambda: OrganizationPeople.add_admin(ORG, NEW.email, OWNER.email)
 
-    with pytest.raises(OrganizationChanged):
-        OrganizationPeople.transfer(ORG, OWNER.email, ADMIN.email)
+    OrganizationPeople.transfer(ORG, OWNER.email, ADMIN.email)
 
-    assert places(stored.doc)[NEW.id] == "admin" and NEW.id in stored.doc["admins"]
-    assert places(stored.doc)[OWNER.id] == "owner"
+    assert places(stored.doc) == {OWNER.id: "admin", ADMIN.id: "owner", MEMBER.id: "member",
+                                  NEW.id: "admin"}
+    assert len(recorded) == 2
     assert_one_map(stored.doc)
 
 
@@ -847,13 +761,14 @@ def test_the_409_answers_the_sentence_and_its_code(client, stored, recorded):
 # ── Every writer, one organization's life ────────────────────────────────────────────────────
 
 
-def test_a_new_organizations_map_and_lists_stay_alike_through_every_writer(
+def test_a_new_organizations_map_stays_one_through_every_writer(
         monkeypatch, accounts, recorded):
     stored = install_organizations(monkeypatch, FakeOrganizations())
     monkeypatch.setattr(OrgsApi, "markets_collection", SimpleNamespace(find=lambda *_a: []))
 
     org_id = OrgsApi.create_organization(OWNER.email, "Ember Markets")
     assert stored.doc["people"] == {OWNER.id: "owner"}
+    assert_one_map(stored.doc)
 
     OrgsApi.add_org_member(org_id, ADMIN.email, OWNER.email)
     OrgsApi.add_org_member(org_id, MEMBER.email, OWNER.email)
@@ -880,4 +795,6 @@ def test_a_new_organizations_map_and_lists_stay_alike_through_every_writer(
     assert_one_map(stored.doc)
 
     [listed] = OrgsApi.get_organizations_for_user(OWNER.email)
-    assert (listed["owner"], listed["admins"], listed["members"]) == (ADMIN.id, [OWNER.id], [])
+    assert (listed["ownerEmail"], listed["adminPeople"], listed["memberPeople"]) == (
+        ADMIN.email, [{"userId": OWNER.id, "email": OWNER.email}], [])
+    assert not {"owner", "admins", "members"} & set(listed)

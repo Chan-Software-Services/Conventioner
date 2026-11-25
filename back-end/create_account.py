@@ -58,6 +58,7 @@ def create_account(users: Any, email: str, password: str) -> str:
         "id": account_id,
         "email": address,
         "password": bcrypt.generate_password_hash(password).decode("utf-8"),
+        # No reader; the release before signs in no account without it, until T583's follow-up.
         "organizations": [],
         "email_verified": True,
     })
