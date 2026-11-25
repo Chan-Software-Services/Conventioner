@@ -6,6 +6,7 @@ import {
 } from './helpers/seedPhaseMarket';
 import { marketScreenPath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { ApplicationsAllPage } from './pages/ApplicationsAllPage';
 import { ReviewersPanel } from './pages/ReviewersPanel';
 import { VendorsPage } from './pages/VendorsPage';
@@ -42,8 +43,7 @@ test('a removed reviewer’s follow-up is handed to the reviewer it is dealt to'
   seedApplicationWithStatus(marketId, 'open', 'v2@moss.test');
   const followUp = seedApplicationWithStatus(marketId, 'open', FOLLOW_UP);
   for (const email of [ANA, BEN, CAT]) {
-    const res = await request.post(`${api}/roles`, { data: { user_email: email, role: 'editor' } });
-    expect(res.ok(), await res.text()).toBeTruthy();
+    await grantMarketRole(request, marketId, { email, password: PASSWORD }, 'editor');
   }
   const chosen = await request.put(`${api}/reviewers`, { data: { reviewers: [ANA, BEN, CAT] } });
   expect(chosen.ok(), await chosen.text()).toBeTruthy();

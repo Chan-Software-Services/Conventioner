@@ -8,6 +8,7 @@ import {
 import { oneByOnePath } from './helpers/marketScreens';
 import { mongoEval } from './helpers/mongo';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { ApplicationMonitorPage } from './pages/ApplicationMonitorPage';
 
@@ -44,8 +45,7 @@ async function stranded(request: APIRequestContext, reviewers: string[]): Promis
   await transitionMarket(request, BACKEND_URL, TEST_USER.email, marketId, 'applications');
   const api = `${BACKEND_URL}/markets/${marketId}`;
   for (const email of [ANA, BEN]) {
-    const res = await request.post(`${api}/roles`, { data: { user_email: email, role: 'viewer' } });
-    expect(res.ok(), await res.text()).toBeTruthy();
+    await grantMarketRole(request, marketId, { email, password: PASSWORD }, 'viewer');
   }
   const chosen = await request.put(`${api}/reviewers`, { data: { reviewers } });
   expect(chosen.ok(), await chosen.text()).toBeTruthy();
