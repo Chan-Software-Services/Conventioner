@@ -19,6 +19,7 @@ import {
   undoOwnCheckOut,
 } from '@/utils/applicantApi';
 import { getApiErrorMessage, getApiErrorStatus, isFormChanged } from '@/utils/api';
+import { isHumanCheckRequired } from '@/utils/captcha';
 import {
   IntakeMode,
   type ApplicantApplication,
@@ -201,11 +202,14 @@ export type CheckInResult = { ok: true } | { ok: false; message: string; signedO
 
 /**
  * What asking for a sign-in code, or trying one, came to: done, or refused with the sentence to
- * say and, for a code tried, where the code stands. The sign-in reads its own answer, never the
- * store's shared `error`, which another reader may write while the request is out (T277 ticket 08).
+ * say, for a code tried where the code stands, and whether the server asked for the human check
+ * (`humanCheckRequired`), which the sign-in answers with a new token once. The sign-in reads its
+ * own answer, never the store's shared `error`, which another reader may write while the request
+ * is out (T277 ticket 08).
  */
 export type CodeAnswer =
-  { ok: true } | { ok: false; sentence: string; codeState: CodeState | null };
+  | { ok: true }
+  | { ok: false; sentence: string; codeState: CodeState | null; humanCheckRequired: boolean };
 
 export const useApplicationStore = defineStore('application', () => {
   /**
@@ -336,9 +340,13 @@ export const useApplicationStore = defineStore('application', () => {
     };
   }
 
-  async function requestCode(slug: string, email: string): Promise<CodeAnswer> {
+  async function requestCode(
+    slug: string,
+    email: string,
+    captchaToken: string,
+  ): Promise<CodeAnswer> {
     try {
-      await requestLoginCode(slug, email);
+      await requestLoginCode(slug, email, captchaToken);
       // The first address sent a code after a scan is the scanner's: the code is theirs alone.
       const held = heldDoorCode.value;
       if (held && held.marketSlug === slug && held.applicantEmail === null) {
@@ -346,7 +354,12 @@ export const useApplicationStore = defineStore('application', () => {
       }
       return { ok: true };
     } catch (err: unknown) {
-      return { ok: false, sentence: requestErrorFrom(err), codeState: null };
+      return {
+        ok: false,
+        sentence: requestErrorFrom(err),
+        codeState: null,
+        humanCheckRequired: isHumanCheckRequired(err),
+      };
     }
   }
 
@@ -381,10 +394,11 @@ export const useApplicationStore = defineStore('application', () => {
     slug: string,
     email: string,
     code: string,
-    remember = false,
+    remember: boolean,
+    captchaToken: string,
   ): Promise<CodeAnswer> {
     try {
-      const result = await verifyLoginCode(slug, email, code, remember);
+      const result = await verifyLoginCode(slug, email, code, remember, captchaToken);
       // Every successful sign-in carries a token now, applied or not (E26/F07/S01). Without one
       // this reported success and the page went back to "Sign In" with no word (bug 6), so a
       // reply without one is a failure, said as one.
@@ -393,12 +407,18 @@ export const useApplicationStore = defineStore('application', () => {
           ok: false,
           sentence: 'Sign-in did not complete. Please request a new code and try again.',
           codeState: null,
+          humanCheckRequired: false,
         };
       }
       holdSignIn(slug, { ...result, token: result.token });
       return { ok: true };
     } catch (err: unknown) {
-      return { ok: false, sentence: verifyErrorFrom(err), codeState: codeStateFrom(err) };
+      return {
+        ok: false,
+        sentence: verifyErrorFrom(err),
+        codeState: codeStateFrom(err),
+        humanCheckRequired: isHumanCheckRequired(err),
+      };
     }
   }
 

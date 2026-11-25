@@ -23,6 +23,7 @@ const ENTRIES = [
   'layout-map',
   'day-map',
   'charts',
+  'human-check',
 ];
 
 eachWindow('the component library', (size) => {
