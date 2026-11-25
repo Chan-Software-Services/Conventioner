@@ -299,8 +299,9 @@ function changeableRoles(role: MarketRole): MarketRole[] {
 }
 
 /**
- * The roles this person may grant, in the order they are offered. Empty for a Viewer or an Editor,
- * who were shown "Add user" and refused with a 403 (bug 37), and who see no "Invited".
+ * The roles this person may grant, in the order they are offered. Empty for anyone neither roles
+ * row lets through, a Viewer or an Editor on the built-in table, who were shown "Add user" and
+ * refused with a 403 (bug 37), and who see no "Invited".
  */
 const grantableRoles = computed(() =>
   GIVEN_ROLES.filter((role) => canManageRoles(marketData.value, role)),
