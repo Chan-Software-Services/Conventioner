@@ -19,7 +19,7 @@ sources:
 It is made to tell which E2E specs a change reaches, without running all of them, which `scripts/affected-specs.py` does for a builder ([choosing a builder's specs](#choosing-a-builders-specs)) and for [a pull request's CI run](ci-and-the-gate.md#what-a-pull-requests-e2e-run-runs).
 CI's `test-map` job writes it on the nightly Test run on `dev`'s tip, as the artifact `test-map` of that run, kept 90 days ([CI and the gate](ci-and-the-gate.md#which-suite-a-run-runs)).
 No other run records or has a `test-map` job: not a pull request's, not the merge queue's, not a push's.
-A run of a pull request into `dev` reads the newest map to [choose its E2E specs](ci-and-the-gate.md#what-a-pull-requests-e2e-run-runs), and when a pull request's shard test failed, its `e2e` job reads the newest map, to [name a miss of the selection](#where-a-miss-shows).
+A run of a pull request into `dev` reads the newest map to [choose its E2E specs](ci-and-the-gate.md#what-a-pull-requests-e2e-run-runs), and when a shard test failed on a pull request's run or a trial commit's, its `e2e` job reads the newest map, to [name a miss of the selection](#where-a-miss-shows).
 
 ## What it holds
 
@@ -145,7 +145,7 @@ The E2E run of a pull request into `dev` is the map's selection, or the whole su
 So a spec the cap left out of a builder's run still runs on the pull request, and a spec the map left out still runs before anything merges, on the queue, where its failure drops the pull request from the queue.
 A spec can fail through the data its setup seeds, where no map of the code a spec runs tells it from the other specs seeding the same way; that is the miss the whole run is for.
 
-`scripts/tests/test_affected_specs.py` holds each rule, the order and the cap, the download and the fallback, and [the audit](#where-a-miss-shows), to a small repository, a fixture map and fixture shard reports.
+`scripts/tests/test_affected_specs.py` holds each rule, the order and the cap, the download and the fallback, and [both audits](#where-a-miss-shows), to a small repository, a fixture map and fixture shard reports.
 
 ## Where a miss shows
 
@@ -164,11 +164,28 @@ It takes the pull request's diff from its merge commit's first parent, hence two
 A test failed when it failed every attempt, or passed only on a retry, which under `failOnFlakyTests` fails its shard too.
 The job's summary lists the specs under "E2E selection audit", a chosen one with its rank and reasons, or says "no failure to audit" when no test failed, and "nothing to audit" when it read no shard report, as when the reports' download failed.
 Each miss is also a warning annotation on the run, "A miss of the selection", naming the spec and the changed files, so it shows a map that drifted, or a dependency the rules cannot see.
-A pull request's run into `dev` that is [slimmed](ci-and-the-gate.md#what-a-pull-requests-e2e-run-runs) runs only specs `e2e-select` named, so a spec it left out first fails on the merge queue.
-The audit reads the map again, so it lists a miss on such a run only when it read a newer map than `e2e-select` did, or none.
+A pull request's run into `dev` that is [slimmed](ci-and-the-gate.md#what-a-pull-requests-e2e-run-runs) runs only specs `e2e-select` named, and the audit reads the map again, so it lists a miss on such a run only when it read a newer map than `e2e-select` did, or none.
 With no map, the selection is rule 1 alone: a failure outside it is listed as missed, with no annotation, since there is no map to have drifted.
 
-The audit never fails the job: it exits 0 whatever it finds, or when it cannot audit at all, saying why in the summary, and its steps continue on error, so `e2e` passes or fails on its shards alone.
+**A pull request's run is the selection, so a miss of it first shows on the merge queue**, whose run is whole.
+So on a trial commit `e2e` audits too, judging each failed spec by [what the pull request's own run would have run](ci-and-the-gate.md#what-a-pull-requests-e2e-run-runs):
+
+```sh
+python3 scripts/affected-specs.py audit --queue --github --base HEAD^1 --head HEAD <each shard's results.json>
+```
+
+The trial commit's first parent is the commit the queue built it on, so the diff is the queued pull request's own change.
+The audit decides as `affected-specs.py ci` does, with no cap, and names each failed spec as one of three:
+
+- **ran on the pull request**: the decision names specs, this one among them;
+- **the pull request ran the whole suite**: the decision is the whole suite, for the reason it gives;
+- **left out by the pull request's run**: the decision names specs, and not this one.
+
+The job's summary lists them under "E2E selection audit (merge queue)", with the map and the diff, the decision's reason and the changed files.
+Each spec left out is also a warning annotation on the run, "A spec the pull request's run left out", naming the spec and the changed files.
+It decides again when it runs, so it is no record of what the pull request's run did: a map made since, one grown more than 7 days old or one it cannot read can change a verdict, and an `e2e-select` that could not decide ran the whole suite, whatever the audit says.
+
+Neither audit fails the job: each exits 0 whatever it finds, or when it cannot audit at all, saying why in the summary, and its step continues on error, so `e2e`'s verdict never hangs on an audit.
 
 ## Building one by hand
 
