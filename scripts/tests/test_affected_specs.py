@@ -12,6 +12,7 @@ import stat
 import subprocess
 import sys
 import textwrap
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -603,6 +604,21 @@ class TestAFileNoRulePlaces:
         assert {row["score"] for row in rows.values()} == {0}
         assert rows["a.spec.ts"]["why"] == [f"{path} is not in the map"]
 
+    # Git quotes a name holding a quote even where it leaves other names alone.
+    @pytest.mark.parametrize("committed", [False, True])
+    def test_a_name_git_quotes_is_read_as_it_is(self, repo, committed):
+        path = 'front-end/src/assets/a"quote.css'
+        write(repo, {path: "changed\n"})
+        head = []
+        if committed:
+            git(repo, "add", "-A")
+            git(repo, "commit", "-qm", "the change")
+            head = ["--head", "HEAD"]
+        result = choose(repo, *head)
+        assert result["changed"] == [path]
+        assert set(chosen(result)) == {"a.spec.ts", "b.spec.ts", "c.spec.ts"}
+        assert chosen(result)["a.spec.ts"]["why"] == [f"{path} is not in the map"]
+
     @pytest.mark.parametrize(
         "path",
         [
@@ -1091,3 +1107,388 @@ class TestTheAudit:
         report = pr_report(tmp_path, 1, {"a.spec.ts": ["unexpected"]})
         out = self.audit(repo, "--results", str(results), str(report))
         assert "ran: a.spec.ts: rank 1" in out
+
+    def queue_audit(self, repo, tmp_path, *args, env=None, fixture_map=True):
+        """The merge queue's audit, with `--github`, of the trial commit at HEAD against the commit
+        it was built on, its first parent: its log, and the job summary it wrote."""
+        summary = tmp_path / "summary.md"
+        command = [sys.executable, str(SCRIPT), "audit", "--queue", "--github",
+                   "--base", "HEAD^1", "--head", "HEAD", *args]  # fmt: skip
+        if fixture_map:
+            command += ["--map", str(repo.parent / "test-map.json")]
+        done = subprocess.run(
+            command,
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            env={**os.environ, **(env or {}), "GITHUB_STEP_SUMMARY": str(summary)},
+        )
+        assert done.returncode == 0, done.stdout + done.stderr
+        return done.stdout, summary.read_text()
+
+    def warnings(self, out):
+        return [line for line in out.splitlines() if line.startswith("::warning")]
+
+    def test_on_the_queue_a_spec_the_pull_requests_run_named_ran_there(self, repo, tmp_path):
+        # a.spec (10 minutes) and b.spec (25) together pass a builder's cap of 30, which a pull
+        # request's run does not have, so both ran there. c.spec's report is left out.
+        *args, _ = self.three_failures(repo, tmp_path)
+        out, written = self.queue_audit(repo, tmp_path, *args)
+        door = "back-end/api/door.py:check_in via POST /checkin (1/1)"
+        loads = "loads front-end/src/views/Door.vue (1/1)"
+        lines = [line.strip() for line in out.splitlines()]
+        assert f"ran on the pull request: a.spec.ts: {loads}" in lines, out
+        assert f"ran on the pull request: b.spec.ts: {door}" in lines, out
+        assert f"| `a.spec.ts` | ran on the pull request | {loads} |" in written
+        assert f"| `b.spec.ts` | ran on the pull request | {door} |" in written
+        assert self.warnings(out) == []
+
+    def test_on_the_queue_a_spec_the_pull_requests_run_did_not_name_is_annotated(self, repo, tmp_path):
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n", "docs/a-node.md": "words\n"})
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "the trial commit")
+        report = pr_report(tmp_path, 1, {"a.spec.ts": ["unexpected"], "c.spec.ts": ["flaky"]})
+        out, written = self.queue_audit(repo, tmp_path, str(report))
+        left_out = "left out by the pull request's run"
+        assert f"{left_out}: c.spec.ts: not named for this change" in out
+        assert self.warnings(out) == [
+            "::warning title=A spec the pull request's run left out::c.spec.ts failed, and the "
+            "pull request's own E2E run would not have run it for this change of 2 files: "
+            "docs/a-node.md, front-end/src/views/Door.vue"
+        ]
+        assert f"| `c.spec.ts` | **{left_out}** | not named for this change |" in written
+        assert "| `a.spec.ts` | ran on the pull request |" in written
+
+    def test_on_the_queue_a_change_naming_every_spec_ran_the_whole_suite(self, repo, tmp_path):
+        write(repo, {"front-end/playwright.config.ts": "// edit\n"})
+        git(repo, "commit", "-qam", "the trial commit")
+        report = pr_report(tmp_path, 1, {"c.spec.ts": ["unexpected"]})
+        out, written = self.queue_audit(repo, tmp_path, str(report))
+        verdict = "the pull request ran the whole suite"
+        assert f"{verdict}: c.spec.ts: the change names every spec" in out
+        assert f"| `c.spec.ts` | {verdict} | the change names every spec |" in written
+        assert self.warnings(out) == []
+
+    def test_on_the_queue_with_no_map_the_pull_request_ran_the_whole_suite(self, repo, tmp_path):
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        git(repo, "commit", "-qam", "the trial commit")
+        report = pr_report(tmp_path, 1, {"c.spec.ts": ["unexpected"]})
+        env = TestWhereTheMapComesFrom().fake_gh(tmp_path, "import sys\nsys.exit(1)\n")
+        out, written = self.queue_audit(repo, tmp_path, str(report), env=env, fixture_map=False)
+        verdict = "the pull request ran the whole suite"
+        assert f"{verdict}: c.spec.ts: there is no test map" in out
+        assert f"| `c.spec.ts` | {verdict} | there is no test map |" in written
+        assert self.warnings(out) == []
+        # The choice a builder's run falls back to with no map is not CI's.
+        assert "only-changed" not in out + written
+        assert "1 file changed from " in out
+        assert "1 file changed from " in written
+
+    def test_the_queues_summary_says_what_was_decided_and_from_what(self, repo, tmp_path):
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        git(repo, "commit", "-qam", "the trial commit")
+        report = pr_report(tmp_path, 1, {"c.spec.ts": ["unexpected"]})
+        _, written = self.queue_audit(repo, tmp_path, str(report))
+        assert written.startswith("### E2E selection audit (merge queue)\n")
+        source = f"The test map {repo.parent / 'test-map.json'}, at f00dfeed"
+        assert f"{source}; 1 file changed from " in written
+        assert "The decision for this diff: the test map names 1 spec file for this change." in written
+        assert "| Failed spec | Verdict | Why |\n|---|---|---|\n| `c.spec.ts` |" in written
+        assert "so a failure there met the queue first" in written
+        assert "<details><summary>The 1 changed file</summary>" in written
+        assert "- `front-end/src/views/Door.vue`" in written
+
+    def test_a_queue_audit_that_cannot_run_still_exits_zero(self, repo, tmp_path):
+        report = pr_report(tmp_path, 1, {"a.spec.ts": ["unexpected"]})
+        out, written = self.queue_audit(repo, tmp_path, "--base", "no-such-commit", str(report))
+        assert "could not audit" in out
+        assert written.startswith("### E2E selection audit (merge queue)\n")
+        assert "no-such-commit" in written
+
+    def test_the_queues_audit_takes_no_cap(self, repo):
+        done = subprocess.run(
+            [sys.executable, str(SCRIPT), "audit", "--queue", "--minutes", "30"],
+            cwd=repo, capture_output=True, text=True,
+        )  # fmt: skip
+        assert done.returncode == 2, done.stdout + done.stderr
+        assert "takes no --minutes" in done.stderr
+
+
+class TestTheCiDecision:
+    """CI's pull request run: whether it runs the whole suite or the specs the map names, which
+    ones and on how many shards, as one JSON object on stdout."""
+
+    def command(self, repo, *args, fixture_map=True, max_shards=10):
+        command = [sys.executable, str(SCRIPT), "ci", "--base", "origin/dev", "--head", "HEAD",
+                   "--max-shards", str(max_shards), *args]  # fmt: skip
+        if fixture_map:
+            command += ["--map", str(repo.parent / "test-map.json")]
+        return command
+
+    def decide(self, repo, *args, env=None, **options):
+        """The decision for the branch's commits: exit 0, and stdout holds that one object."""
+        done = subprocess.run(
+            self.command(repo, *args, **options),
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            env={**os.environ, **(env or {})},
+        )
+        assert done.returncode == 0, done.stdout + done.stderr
+        decision = json.loads(done.stdout)
+        assert isinstance(decision, dict), done.stdout
+        return decision
+
+    def commit(self, repo, files):
+        write(repo, files)
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "the change")
+
+    def gh_fails(self, tmp_path):
+        return TestWhereTheMapComesFrom().fake_gh(tmp_path, "import sys\nsys.exit(1)\n")
+
+    def test_with_no_map_the_whole_suite_runs(self, repo, tmp_path):
+        self.commit(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        decision = self.decide(repo, env=self.gh_fails(tmp_path), fixture_map=False, max_shards=7)
+        assert decision["scope"] == "whole"
+        assert decision["why"] == "there is no test map"
+        assert decision["specs"] == []
+        assert decision["shards"] == 7
+        assert decision["map"] is None
+
+    def gh_lists_a_map(self, repo, tmp_path, age):
+        """A fake `gh` that lists one test map on dev, made `age` ago, and downloads it."""
+        made = (datetime.now(timezone.utc) - age).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return TestWhereTheMapComesFrom().fake_gh(
+            tmp_path,
+            f"""\
+            import json, os, sys
+            args = sys.argv[1:]
+            if args[0] == "api":
+                print(json.dumps({{"artifacts": [
+                    {{"name": "test-map", "expired": False, "created_at": {made!r},
+                      "workflow_run": {{"id": 77, "head_branch": "dev"}}}}]}}))
+            elif "-n" in args:
+                out = args[args.index("-D") + 1]
+                open(os.path.join(out, "test-map.json"), "w").write(
+                    open({str(repo.parent / "test-map.json")!r}).read())
+            """,
+        )
+
+    def test_a_map_downloaded_before_cannot_slim_the_run(self, repo, tmp_path):
+        self.commit(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        cached = repo / ".stack-logs" / "test-map" / "77"
+        cached.mkdir(parents=True)
+        (cached / "test-map.json").write_text(json.dumps(MAP))
+        decision = self.decide(repo, env=self.gh_fails(tmp_path), fixture_map=False)
+        assert decision["scope"] == "whole"
+        assert decision["why"] == "the test map could not be read from GitHub"
+        assert decision["map"]["offline"] is True
+
+    @pytest.mark.parametrize("days", [7, 8])
+    def test_a_map_more_than_seven_days_old_cannot_slim_the_run(self, repo, tmp_path, days):
+        self.commit(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        env = self.gh_lists_a_map(repo, tmp_path, timedelta(days=days, hours=1))
+        decision = self.decide(repo, env=env, fixture_map=False)
+        assert decision["scope"] == "whole"
+        assert decision["why"] == f"the newest test map is {days} days old"
+        assert decision["specs"] == []
+        assert decision["shards"] == 10
+
+    def test_a_map_made_six_days_ago_slims_the_run(self, repo, tmp_path):
+        self.commit(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        env = self.gh_lists_a_map(repo, tmp_path, timedelta(days=6, hours=23))
+        decision = self.decide(repo, env=env, fixture_map=False)
+        assert decision["scope"] == "named"
+        assert decision["specs"] == ["a.spec.ts"]
+        assert decision["map"]["run"] == 77
+
+    def test_a_change_to_a_file_every_spec_stands_on_names_every_spec(self, repo):
+        self.commit(repo, {"front-end/playwright.config.ts": "// edit\n"})
+        decision = self.decide(repo)
+        assert decision["scope"] == "whole"
+        assert decision["why"] == "the change names every spec"
+        assert decision["specs"] == []
+        assert decision["shards"] == 10
+
+    def test_a_docs_change_names_no_spec_and_takes_no_shard(self, repo):
+        self.commit(repo, {"docs/a-node.md": "words\n"})
+        decision = self.decide(repo)
+        assert decision["scope"] == "named"
+        assert decision["why"] == "the test map names no spec for this change"
+        assert decision["specs"] == []
+        assert decision["shards"] == 0
+        assert decision["minutes"] == 0
+
+    def test_a_change_one_specs_pages_load_names_that_spec(self, repo, tmp_path):
+        self.commit(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        results = seconds_file(tmp_path, {"a.spec.ts": 300, "b.spec.ts": 120, "c.spec.ts": 60})
+        decision = self.decide(repo, "--results", str(results))
+        assert decision == {
+            "scope": "named",
+            "why": "the test map names 1 spec file for this change",
+            "specs": ["a.spec.ts"],
+            "shards": 1,
+            "minutes": 5.0,
+            "suite_minutes": 8.0,
+            "map": {"file": str(repo.parent / "test-map.json"), "commit": "f00dfeed"},
+        }
+
+    def test_a_spec_the_map_names_that_the_head_lacks_is_not_named(self, repo):
+        test_map = dict(MAP, specs=dict(MAP["specs"]))
+        test_map["specs"]["new-on-dev.spec.ts"] = {
+            "modules": ["front-end/src/views/Door.vue"],
+            "endpoints": [],
+        }
+        (repo.parent / "test-map.json").write_text(json.dumps(test_map))
+        self.commit(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        assert self.decide(repo)["specs"] == ["a.spec.ts"]
+
+    @pytest.mark.parametrize(
+        "seconds, max_shards, shards",
+        [
+            # The three named specs hold 12 of the suite's 60 seconds, two shards' share of ten.
+            ({"a.spec.ts": 6, "b.spec.ts": 5, "c.spec.ts": 1, "d.spec.ts": 48}, 10, 2),
+            # They hold 9 shards' share and part of another, but there are three specs.
+            ({"a.spec.ts": 30, "b.spec.ts": 30, "c.spec.ts": 30, "d.spec.ts": 1}, 10, 3),
+            # A whole run of two shards, or of one, is the most a named run takes.
+            ({"a.spec.ts": 30, "b.spec.ts": 30, "c.spec.ts": 30, "d.spec.ts": 1}, 2, 2),
+            ({"a.spec.ts": 30, "b.spec.ts": 30, "c.spec.ts": 30, "d.spec.ts": 1}, 1, 1),
+            # Next to no minutes still takes a shard.
+            ({"a.spec.ts": 0, "b.spec.ts": 0, "c.spec.ts": 0, "d.spec.ts": 60}, 10, 1),
+        ],
+    )
+    def test_the_shards_scale_with_the_named_specs_minutes(
+        self, repo, tmp_path, seconds, max_shards, shards
+    ):
+        # d.spec.ts loads nothing the change touches: it counts in the suite's minutes alone.
+        base(repo, {"front-end/e2e/d.spec.ts": "import { test } from './fixtures';\n"})
+        self.commit(repo, {"front-end/src/App.vue": "<p />\n"})
+        results = seconds_file(tmp_path, seconds)
+        decision = self.decide(repo, "--results", str(results), max_shards=max_shards)
+        # Sorted by name, whatever the selection ranks first.
+        assert decision["specs"] == ["a.spec.ts", "b.spec.ts", "c.spec.ts"]
+        assert decision["shards"] == shards
+
+    def test_one_long_spec_takes_one_shard(self, repo, tmp_path):
+        self.commit(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        results = seconds_file(tmp_path, {"a.spec.ts": 100, "b.spec.ts": 1, "c.spec.ts": 1})
+        assert self.decide(repo, "--results", str(results))["shards"] == 1
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "with space.spec.ts",
+            "café.spec.ts",
+            'a"quote.spec.ts',
+            "a\\backslash.spec.ts",
+            "a\ttab.spec.ts",
+        ],
+    )
+    def test_a_spec_name_the_run_cannot_pass_on_runs_the_whole_suite(self, repo, name):
+        self.commit(repo, {f"front-end/e2e/{name}": "import { test } from './fixtures';\n"})
+        decision = self.decide(repo)
+        assert decision["scope"] == "whole"
+        assert decision["why"] == f"a spec name the run cannot pass on: {name}"
+        assert decision["specs"] == []
+
+    @pytest.mark.parametrize(
+        "given, named",
+        [
+            ([], "--max-shards"),
+            (["--max-shards", "0"], "--max-shards"),
+            # A pull request's run has no cap of minutes, so it takes none.
+            (["--max-shards", "10", "--minutes", "5"], "--minutes"),
+        ],
+    )
+    def test_a_usage_error_exits_2_and_decides_nothing(self, repo, given, named):
+        done = subprocess.run(
+            [sys.executable, str(SCRIPT), "ci", *given], cwd=repo, capture_output=True, text=True
+        )
+        assert done.returncode == 2, done.stdout + done.stderr
+        assert named in done.stderr
+        assert done.stdout == ""
+
+    def summarize(self, repo, tmp_path, *args, **options):
+        """The decision with `--github`: the job summary it appended, and the log on stderr."""
+        summary = tmp_path / "summary.md"
+        summary.write_text("an earlier step\n")
+        done = subprocess.run(
+            self.command(repo, "--github", *args, **options),
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "GITHUB_STEP_SUMMARY": str(summary)},
+        )
+        assert done.returncode == 0, done.stdout + done.stderr
+        assert json.loads(done.stdout)["scope"]
+        written = summary.read_text()
+        assert written.startswith("an earlier step\n### E2E selection\n")
+        return written, done.stderr
+
+    def test_the_summary_says_what_a_named_run_runs_and_why(self, repo, tmp_path):
+        door_py = DOOR_PY.replace('vendor["here"] = True', 'vendor["here"] = 1')
+        self.commit(
+            repo, {"front-end/src/views/Door.vue": "<p />\n", "back-end/api/door.py": door_py}
+        )
+        results = seconds_file(tmp_path, {"a.spec.ts": 90, "b.spec.ts": 30, "c.spec.ts": 480})
+        written, log = self.summarize(repo, tmp_path, "--results", str(results))
+        sentence = (
+            "Ran the 2 spec files the test map names for this change, 2.0 of 10.0 minutes, "
+            "on 2 shards."
+        )
+        assert sentence in written
+        source = f"The test map {repo.parent / 'test-map.json'}, at f00dfeed"
+        assert f"{source}; 2 files changed from " in written
+        assert "<details><summary>The 2 spec files named</summary>" in written
+        assert "| `a.spec.ts` | 1.5 | loads front-end/src/views/Door.vue (1/1) |" in written
+        door = "back-end/api/door.py:check_in via POST /checkin (1/1)"
+        assert f"| `b.spec.ts` | 0.5 | {door} |" in written
+        assert sentence in log
+        assert "2 files changed from " in log
+
+    def test_the_summary_counts_one_spec_and_one_shard_as_one(self, repo, tmp_path):
+        self.commit(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        results = seconds_file(tmp_path, {"a.spec.ts": 60, "b.spec.ts": 60, "c.spec.ts": 60})
+        written, _ = self.summarize(repo, tmp_path, "--results", str(results))
+        assert (
+            "Ran the 1 spec file the test map names for this change, "
+            "1.0 of 3.0 minutes, on 1 shard."
+        ) in written
+
+    def test_the_summary_says_a_change_that_names_no_spec_ran_none(self, repo, tmp_path):
+        self.commit(repo, {"docs/a-node.md": "words\n"})
+        written, _ = self.summarize(repo, tmp_path)
+        assert "No E2E spec ran: the test map names none for this change." in written
+        assert "1 file changed from " in written
+        assert "<details>" not in written
+
+    def test_the_summary_says_why_the_whole_suite_ran(self, repo, tmp_path):
+        self.commit(repo, {"front-end/playwright.config.ts": "// edit\n"})
+        written, log = self.summarize(repo, tmp_path)
+        assert "Ran the whole suite: the change names every spec." in written
+        assert "Ran the whole suite: the change names every spec." in log
+        assert "<details>" not in written
+
+    def test_the_summary_with_no_map_claims_no_choice_by_rule_one(self, repo, tmp_path):
+        # `--run` and the audit fall back to rule 1 with no map; CI's run does not.
+        self.commit(repo, {"front-end/e2e/c.spec.ts": "// edit\n"})
+        summary = tmp_path / "summary.md"
+        done = subprocess.run(
+            self.command(repo, "--github", fixture_map=False),
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            env={**os.environ, **self.gh_fails(tmp_path), "GITHUB_STEP_SUMMARY": str(summary)},
+        )
+        assert done.returncode == 0, done.stdout + done.stderr
+        written = summary.read_text()
+        assert "Ran the whole suite: there is no test map." in written
+        assert "only-changed" not in written + done.stderr
+        assert "1 file changed from " in written
+
+    def test_without_github_it_writes_no_summary(self, repo, tmp_path):
+        self.commit(repo, {"docs/a-node.md": "words\n"})
+        summary = tmp_path / "summary.md"
+        self.decide(repo, env={"GITHUB_STEP_SUMMARY": str(summary)})
+        assert not summary.exists()

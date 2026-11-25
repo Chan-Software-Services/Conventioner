@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """The E2E spec files a change reaches, by the test map (T349), run in order up to a cap of CI
-minutes; CI's full run on the pull request runs the rest.
+minutes; CI's pull request run is the map's selection, uncapped, and the merge queue's run is
+whole.
 
     python3 scripts/affected-specs.py --run  [options] [-- <playwright arguments>]
     python3 scripts/affected-specs.py --list [options] [--json]
-    python3 scripts/affected-specs.py audit [options] [--github] <playwright json report>...
+    python3 scripts/affected-specs.py ci [options] --max-shards <n> [--github]
+    python3 scripts/affected-specs.py audit [options] [--queue] [--github] <playwright json report>...
 
 From the worktree root, on the worktree's stack (`team-stack up`, `team-stack seed`, and
 `eval "$(~/agent-team/bin/team-stack env)"`, so Playwright reaches it). The change is the diff from
 the merge-base with `origin/dev` to the worktree, uncommitted and untracked files included
-(`--base` and `--head` name two commits instead, for `--list`). The map is the newest `test-map`
-artifact of a run on `dev`, which the nightly Test run makes on `dev`'s tip (or one started by hand,
-`gh workflow run test.yml --ref dev`), so up to a day behind `dev`; it is downloaded once a run to
-`.stack-logs/test-map/<run id>/` beside that run's shard results (`--map` and `--results` name
-files instead). A spec is chosen:
+(`--base` and `--head` name two commits instead, for `--list`, `ci` and `audit`). The map is the
+newest `test-map` artifact of a run on `dev`, which the nightly Test run makes on `dev`'s tip (or
+one started by hand, `gh workflow run test.yml --ref dev`), so up to a day behind `dev`; it is
+downloaded once a run to `.stack-logs/test-map/<run id>/` beside that run's shard results (`--map`
+and `--results` name files instead). A spec is chosen:
 
 1. when the change edits it, or a file it imports, transitively, or deletes a file it imported at
    the base (scores 1);
@@ -45,19 +47,32 @@ The chosen specs run by score, the shorter first on a tie, until the next would 
 `front-end/scripts/e2e-shard-timings.json`, then the median of those; a spec the change edits runs
 whatever the cap. With no map at all (no `gh`, offline, none made yet) it says so and chooses by
 rule 1 alone, which is what Playwright's own `--only-changed` chooses.
+`ci` decides what a pull request's E2E run runs, and prints it as one JSON object on stdout: the
+specs the map names for the diff, with no cap, but for those the head lacks (`scope` `named`,
+their `specs`, and the `shards` they take by their `minutes` of the `suite_minutes`, 0 for none
+and never more than `--max-shards`, a whole run's); or the whole suite (`scope` `whole`, `shards`
+`--max-shards`), when there is no map, GitHub did not answer, the newest map is more than 7 days
+old (`MAP_MAX_AGE_DAYS`), the change names every spec, or a named spec's name holds a character
+the run cannot pass on (`SPEC_NAME`). `why` says which, `map` where the map came from, and
+`--github` also writes the decision to the run's summary.
 `audit`, which CI's `e2e` job runs on a pull request, names each spec that failed in the reports
 as ran (the selection runs it), left to CI (it chose it past the cap) or missed (it did not
 choose it); `--github` also writes them to the run's summary and, when there is a map, each miss
-as a warning annotation.
+as a warning annotation. With `--queue`, for a merge queue's trial commit and the commit it was
+built on (`--base HEAD^1 --head HEAD`), it judges each failed spec instead by what `ci` decides for
+that diff, with no cap (it takes no `--minutes`): ran on the pull request (named), the pull request
+ran the whole suite, or left out by the pull request's run, which `--github` also writes as a
+warning annotation.
 `docs/implementation/testing/the-test-map.md` says what the map holds.
 
-Exit codes: Playwright's with `--run`, 0 with nothing to run, `--list` or `audit` (whatever it
-finds, or when it cannot audit), 2 a usage error.
+Exit codes: Playwright's with `--run`, 0 with nothing to run, `--list`, `ci` (whatever it
+decides) or `audit` (whatever it finds, or when it cannot audit), 2 a usage error.
 """
 import argparse
 import ast
 import io
 import json
+import math
 import os
 import re
 import shutil
@@ -66,8 +81,9 @@ import subprocess
 import sys
 import tokenize
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -80,6 +96,10 @@ CACHE = ".stack-logs/test-map"
 CAP_MINUTES = 30.0
 # A spec with no timing anywhere: a minute.
 UNTIMED_SECONDS = 60.0
+# CI's pull request run reads no older map: a nightly run that made none for a week is a fault.
+MAP_MAX_AGE_DAYS = 7
+# The spec names CI's run passes on, to its shards' filters and its jobs' outputs.
+SPEC_NAME = re.compile(r"[A-Za-z0-9._+/-]+\.spec\.ts")
 
 # What every spec stands on: the fixtures every test is made from, the setup and config of the
 # run, the front end's build and dependencies, and the stack and data every spec runs against:
@@ -125,6 +145,12 @@ def git(root: Path, *args: str) -> str:
     return done.stdout
 
 
+def git_names(root: Path, command: str, *args: str) -> List[str]:
+    """The paths a git command lists, each as it is: without `-z` git quotes a name it finds
+    unusual, such as one outside ASCII or holding a quote."""
+    return git(root, command, "-z", *args).split("\0")[:-1]
+
+
 class Tree:
     """The files at one side of the diff: a commit's, or the worktree's when `rev` is None."""
 
@@ -159,12 +185,20 @@ class Tree:
                 if p.is_file() and "node_modules" not in p.parts
             ]
             return sorted(found)
-        return git(self.root, "ls-tree", "-r", "--name-only", self.rev, "--", under).split("\n")[
-            :-1
-        ]
+        return git_names(self.root, "ls-tree", "-r", "--name-only", self.rev, "--", under)
 
 
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+
+
+def header_path(line: str) -> Optional[str]:
+    """The path on a diff's `---` or `+++` line; None for no file, and for a name git quotes
+    there (one holding a quote, a backslash or a control character), which the listings of names
+    give as it is, so its change has no lines and counts whole."""
+    if line[4:] == "/dev/null" or line[4:].startswith('"'):
+        return None
+    # Git ends a name that holds a space with a tab.
+    return line[6:].removesuffix("\t")
 
 
 def changed_lines(root: Path, base: str, head: Optional[str]) -> Dict[str, Tuple[Set[int], Set[int]]]:
@@ -182,9 +216,9 @@ def changed_lines(root: Path, base: str, head: Optional[str]) -> Dict[str, Tuple
     path: Optional[str] = None
     for line in git(root, *options, *sides, "--").splitlines():
         if line.startswith("--- "):
-            old = line[6:] if line != "--- /dev/null" else None
+            old = header_path(line)
         elif line.startswith("+++ "):
-            path = line[6:] if line != "+++ /dev/null" else old
+            path = header_path(line) if line != "+++ /dev/null" else old
         elif line.startswith("@@") and path:
             m = HUNK.match(line)
             if not m:
@@ -194,13 +228,11 @@ def changed_lines(root: Path, base: str, head: Optional[str]) -> Dict[str, Tuple
             out[path][0].update(range(start, start + count))
             out[path][1].update(range(ostart, ostart + ocount))
     # A change with no hunk (a binary file, a change of mode) is a path with no lines.
-    for name in git(root, "-c", "core.quotePath=false", "diff", "--name-only", "--no-renames",
-                    *sides, "--").splitlines():  # fmt: skip
+    for name in git_names(root, "diff", "--name-only", "--no-renames", *sides, "--"):
         out[name]
     if head is None:
         worktree = Tree(root, None)
-        for name in git(root, "-c", "core.quotePath=false", "ls-files", "--others",
-                        "--exclude-standard").splitlines():  # fmt: skip
+        for name in git_names(root, "ls-files", "--others", "--exclude-standard"):
             text = worktree.read(name) or ""
             out[name][0].update(range(1, len(text.splitlines()) + 1))
     return dict(out)
@@ -764,6 +796,7 @@ def newest_map(root: Path) -> Tuple[Optional[dict], Optional[dict], Optional[Pat
     cache = root / CACHE
     listing = gh(root, "api", "repos/{owner}/{repo}/actions/artifacts?name=test-map&per_page=50")
     run_id: Optional[int] = None
+    made = ""
     if listing is not None:
         try:
             artifacts = json.loads(listing).get("artifacts", [])
@@ -779,6 +812,7 @@ def newest_map(root: Path) -> Tuple[Optional[dict], Optional[dict], Optional[Pat
         on_dev.sort(key=lambda a: a.get("created_at", ""), reverse=True)
         if on_dev:
             run_id = int(on_dev[0]["workflow_run"]["id"])
+            made = on_dev[0].get("created_at", "")
             if not (cache / str(run_id) / "test-map.json").is_file():
                 download(root, cache, run_id)
     if run_id is None or not (cache / str(run_id) / "test-map.json").is_file():
@@ -793,7 +827,7 @@ def newest_map(root: Path) -> Tuple[Optional[dict], Optional[dict], Optional[Pat
         run_id = earlier[-1]
         source = {"run": run_id, "offline": True}
     else:
-        source = {"run": run_id, "offline": False}
+        source = {"run": run_id, "offline": False, "made": made}
     folder = cache / str(run_id)
     test_map = json.loads((folder / "test-map.json").read_text())
     source["commit"] = test_map.get("commit")
@@ -851,8 +885,12 @@ def describe_source(source: Optional[dict]) -> str:
     return f"affected-specs: the test map of dev run {source['run']}, at {commit}, in {source['path']}"
 
 
-def count_specs(count: int) -> str:
-    return f"{count} spec" + ("" if count == 1 else "s")
+def capitalize_first(text: str) -> str:
+    return text[:1].upper() + text[1:]
+
+
+def counted(count: int, noun: str) -> str:
+    return f"{count} {noun}" + ("" if count == 1 else "s")
 
 
 def reasons(row: dict) -> str:
@@ -871,7 +909,8 @@ def print_rows(rows: Sequence[dict], absent: Set[str]) -> None:
 
 
 class Chosen:
-    """What the selection chooses for one diff: the shared work of `--list`, `--run` and `audit`."""
+    """What the selection chooses for one diff: the shared work of `--list`, `--run`, `ci` and
+    `audit`."""
 
     def __init__(self, args: argparse.Namespace, drop_absent: bool):
         self.root = Path(git(Path.cwd(), "rev-parse", "--show-toplevel").strip())
@@ -890,31 +929,48 @@ class Chosen:
         else:
             test_map, self.source, results = newest_map(self.root)
             results = args.results or results
-        seconds = Seconds(results, head.read(TIMINGS))
+        self.seconds = Seconds(results, head.read(TIMINGS))
         self.changes = changed_lines(self.root, self.base, self.head_rev)
-        selection, at_head = select(self.changes, head, base_tree, test_map)
-        self.absent = set(selection.score) - at_head
+        selection, self.at_head = select(self.changes, head, base_tree, test_map)
+        self.absent = set(selection.score) - self.at_head
         if drop_absent:
             for spec in self.absent:
                 del selection.score[spec]
-        self.run, self.left = ranked(selection, seconds, args.minutes)
+        self.run, self.left = ranked(selection, self.seconds, args.minutes)
         self.minutes = args.minutes
         self.base_named = bool(args.base)
 
     def describe_diff(self) -> str:
         return (
-            f"{len(self.changes)} files changed from {self.base[:8]} "
+            f"{counted(len(self.changes), 'file')} changed from {self.base[:8]} "
             f"({'--base' if self.base_named else 'the merge-base with origin/dev'}) "
             f"to {self.head_rev[:8] if self.head_rev else 'the worktree'}"
         )
 
+    def describe_basis(self) -> str:
+        """What the selection was made from, as a sentence: the map, then the diff."""
+        source = describe_source(self.source).replace("affected-specs: ", "", 1)
+        return f"{capitalize_first(source)}; {self.describe_diff()}."
 
-def selection_options(parser: argparse.ArgumentParser) -> None:
+    def describe_ci_basis(self) -> str:
+        """The basis of what `ci` decides: with no map there is none to describe, and
+        `describe_source` then tells of the choice a builder's run falls back to, which CI's run
+        does not make."""
+        return self.describe_basis() if self.source else f"{self.describe_diff()}."
+
+
+def selection_options(parser: argparse.ArgumentParser, capped: bool = True) -> None:
+    """The options that name a selection's diff and map, and its cap unless it has none."""
     parser.add_argument("--base", help="the base of the diff (the merge-base with origin/dev)")
     parser.add_argument("--head", help="the head of the diff, a commit (the worktree)")
     parser.add_argument("--map", type=Path, help="a test-map.json in place of the newest dev's")
     parser.add_argument("--results", type=Path, help="Playwright JSON reports for the minutes")
-    parser.add_argument("--minutes", type=float, default=CAP_MINUTES, help="the cap, in CI minutes")
+    if capped:
+        parser.add_argument(
+            "--minutes", type=float, default=CAP_MINUTES, help="the cap, in CI minutes"
+        )
+    else:
+        parser.set_defaults(minutes=math.inf)
 
 
 # The outcomes of a test that fail a shard.
@@ -971,6 +1027,26 @@ def verdicts(failed: Set[str], chosen: Chosen) -> List[Tuple[str, str, str]]:
     return out
 
 
+# The queue audit's verdict on a spec the pull request's run did not run.
+LEFT_OUT = "left out by the pull request's run"
+
+
+def queue_verdicts(failed: Set[str], chosen: Chosen, decision: dict) -> List[Tuple[str, str, str]]:
+    """(spec, verdict, why) for each failed spec of a merge queue's run, by what `ci` decides for
+    the trial commit's diff: whether the pull request's own E2E run ran it, by name or within the
+    whole suite, or left it out."""
+    rows = {row["spec"]: row for row in chosen.run}
+    out = []
+    for spec in sorted(failed):
+        if decision["scope"] == "whole":
+            out.append((spec, "the pull request ran the whole suite", decision["why"]))
+        elif spec in decision["specs"]:
+            out.append((spec, "ran on the pull request", reasons(rows[spec])))
+        else:
+            out.append((spec, LEFT_OUT, "not named for this change"))
+    return out
+
+
 def annotation(text: str) -> str:
     """Text for a GitHub workflow command's message."""
     return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
@@ -985,27 +1061,74 @@ def some(paths: Sequence[str], at_most: int = 20) -> str:
     return shown + (f" and {len(paths) - at_most} more" if len(paths) > at_most else "")
 
 
-SUMMARY_TITLE = "### E2E selection audit"
-MISS_TITLE = "A miss of the selection"
+class Wording(NamedTuple):
+    """What an audit's report says: the pull request's, or the merge queue's."""
+
+    title: str
+    # The verdict the summary shows bold and `--github` annotates, with the annotation's title and
+    # what it says of the run that did not run the spec.
+    flagged: str
+    warning_title: str
+    warning_clause: str
+    closing: str
+
+
+PULL_REQUEST_AUDIT = Wording(
+    title="### E2E selection audit",
+    flagged="missed",
+    warning_title="A miss of the selection",
+    warning_clause="affected-specs.py would not have chosen it",
+    closing="A spec that ran is one `affected-specs.py --run` runs for this change, so its "
+    "builder could have seen it fail; one left to CI was chosen past the cap; a miss "
+    "is one it would not have chosen at all, from a map that drifted or a dependency "
+    "its rules cannot see (`docs/implementation/testing/the-test-map.md`).",
+)
+QUEUE_AUDIT = Wording(
+    title="### E2E selection audit (merge queue)",
+    flagged=LEFT_OUT,
+    warning_title="A spec the pull request's run left out",
+    warning_clause="the pull request's own E2E run would not have run it",
+    closing="A spec left out is one the pull request's run did not run, so a failure there met "
+    "the queue first. This audit decides again what that run ran, by the test map as it reads it "
+    "now, so a map made since, grown too old or not read can give a verdict that run did not "
+    "(`docs/implementation/testing/the-test-map.md`).",
+)
 
 
 def audit(argv: Sequence[str]) -> int:
     """Each spec that failed in the reports, as ran, left to CI or missed by the selection for the
-    diff; exits 0 whatever it finds, or when it cannot audit at all."""
+    diff, or with `--queue` as the pull request's run ran it or left it out; exits 0 whatever it
+    finds, or when it cannot audit at all."""
     parser = argparse.ArgumentParser(
         prog="affected-specs.py audit",
         description="Each failed spec of Playwright JSON reports, as the selection would have "
-        "treated it: ran, left to CI or missed.",
+        "treated it: ran, left to CI or missed; with --queue, as the pull request's run did.",
     )
     parser.add_argument("reports", nargs="*", type=Path, help="the run's Playwright JSON reports")
     selection_options(parser)
+    # A cap left unsaid is told apart from one given as the default: `--queue` takes none.
+    parser.set_defaults(minutes=None)
+    parser.add_argument(
+        "--queue",
+        action="store_true",
+        help="judge each failed spec by what `ci` decides for the diff, a merge queue trial "
+        "commit's: ran on the pull request, within its whole suite, or left out",
+    )
     parser.add_argument(
         "--github",
         action="store_true",
-        help="also write the verdicts to $GITHUB_STEP_SUMMARY and each miss as a warning annotation",
+        help="also write the verdicts to $GITHUB_STEP_SUMMARY, and each miss (with --queue, each "
+        "spec left out) as a warning annotation",
     )
     args = parser.parse_args(argv)
-    summary: List[str] = [SUMMARY_TITLE, ""]
+    if args.queue and args.minutes is not None:
+        parser.error(
+            "--queue judges the pull request's run, which has no cap: it takes no --minutes"
+        )
+    if args.minutes is None:
+        args.minutes = math.inf if args.queue else CAP_MINUTES
+    wording = QUEUE_AUDIT if args.queue else PULL_REQUEST_AUDIT
+    summary: List[str] = [wording.title, ""]
     failed, unread = failed_specs(args.reports)
     read = len(args.reports) - len(unread)
     try:
@@ -1015,50 +1138,54 @@ def audit(argv: Sequence[str]) -> int:
             line = (
                 "no shard report was read: nothing to audit"
                 if read == 0
-                else f"no test failed in the {count_reports(read)} read: no failure to audit"
+                else f"no test failed in the {counted(read, 'report')} read: no failure to audit"
             )
             print(f"affected-specs audit: {line}")
-            summary.append(f"{line[0].upper()}{line[1:]}.")
+            summary.append(f"{capitalize_first(line)}.")
         else:
             # As `--run` ranks them: a spec the map names that the head lacks takes no minutes.
             chosen = Chosen(args, drop_absent=True)
-            found = verdicts(failed, chosen)
+            if args.queue:
+                decision = ci_decision(chosen, datetime.now(timezone.utc))
+                found = queue_verdicts(failed, chosen, decision)
+                source = chosen.describe_ci_basis()
+                print(f"affected-specs audit: {source}")
+                basis = [source, "", f"The decision for this diff: {decision['why']}."]
+            else:
+                found = verdicts(failed, chosen)
+                basis = [chosen.describe_basis()]
+                print(describe_source(chosen.source))
+                print(f"affected-specs: {chosen.describe_diff()}")
             changed = sorted(chosen.changes)
-            print(describe_source(chosen.source))
-            print(f"affected-specs: {chosen.describe_diff()}")
             print(
-                f"affected-specs audit: {failed_count(len(found))}, "
-                f"in {count_reports(read)}:"
+                f"affected-specs audit: {counted(len(found), 'failed spec')}, "
+                f"in {counted(read, 'report')}:"
             )
             for spec, verdict, why in found:
                 print(f"  {verdict}: {spec}: {why}")
                 # With no map there is no map to have drifted: the summary lists the spec alone.
-                if verdict == "missed" and args.github and chosen.source is not None:
+                if verdict == wording.flagged and args.github and chosen.source is not None:
                     print(
-                        f"::warning title={MISS_TITLE}::"
+                        f"::warning title={wording.warning_title}::"
                         + annotation(
-                            f"{spec} failed, and affected-specs.py would not have chosen it "
-                            f"for this change of {len(changed)} files: {some(changed)}"
+                            f"{spec} failed, and {wording.warning_clause} for this change of "
+                            f"{counted(len(changed), 'file')}: {some(changed)}"
                         )
                     )
-            source = describe_source(chosen.source).replace("affected-specs: ", "", 1)
             summary += [
-                f"{source[0].upper()}{source[1:]}; {chosen.describe_diff()}.",
+                *basis,
                 "",
                 "| Failed spec | Verdict | Why |",
                 "|---|---|---|",
             ]
             for spec, verdict, why in found:
-                shown = f"**{verdict}**" if verdict == "missed" else verdict
+                shown = f"**{verdict}**" if verdict == wording.flagged else verdict
                 summary.append(f"| `{spec}` | {shown} | {cell(why)} |")
             summary += [
                 "",
-                "A spec that ran is one `affected-specs.py --run` runs for this change, so its "
-                "builder could have seen it fail; one left to CI was chosen past the cap; a miss "
-                "is one it would not have chosen at all, from a map that drifted or a dependency "
-                "its rules cannot see (`docs/implementation/testing/the-test-map.md`).",
+                wording.closing,
                 "",
-                f"<details><summary>The {len(changed)} changed files</summary>",
+                f"<details><summary>The {counted(len(changed), 'changed file')}</summary>",
                 "",
                 *[f"- `{path}`" for path in changed],
                 "",
@@ -1071,24 +1198,135 @@ def audit(argv: Sequence[str]) -> int:
     if unread:
         print(f"affected-specs audit: could not read {', '.join(unread)}")
         summary += ["", f"Could not read {', '.join(f'`{path}`' for path in unread)}."]
-    if args.github and os.environ.get("GITHUB_STEP_SUMMARY"):
-        with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as out:
-            out.write("\n".join(summary) + "\n")
+    if args.github:
+        write_summary(summary)
     return 0
 
 
-def count_reports(count: int) -> str:
-    return f"{count} report" + ("" if count == 1 else "s")
+def write_summary(lines: Sequence[str]) -> None:
+    """Append a section to the job's summary, when there is one."""
+    if os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as out:
+            out.write("\n".join(lines) + "\n")
 
 
-def failed_count(count: int) -> str:
-    return f"{count} failed spec" + ("" if count == 1 else "s")
+def ci_decision(chosen: Chosen, now: datetime) -> dict:
+    """Whether a pull request's E2E run runs the whole suite or the specs the map names, which,
+    and why; `chosen` has no cap. Any doubt runs the whole suite."""
+    if chosen.source is None:
+        return whole_suite("there is no test map")
+    if chosen.source.get("offline"):
+        return whole_suite("the test map could not be read from GitHub")
+    # A map given by `--map` carries no date, so it is never too old.
+    if "made" in chosen.source:
+        age = now - datetime.fromisoformat(chosen.source["made"].replace("Z", "+00:00"))
+        if age > timedelta(days=MAP_MAX_AGE_DAYS):
+            return whole_suite(f"the newest test map is {age.days} days old")
+    specs = sorted(row["spec"] for row in chosen.run)
+    if set(specs) == chosen.at_head:
+        return whole_suite("the change names every spec")
+    for spec in specs:
+        if not SPEC_NAME.fullmatch(spec):
+            return whole_suite(f"a spec name the run cannot pass on: {spec}")
+    names = counted(len(specs), "spec file") if specs else "no spec"
+    return {"scope": "named", "why": f"the test map names {names} for this change", "specs": specs}
+
+
+def whole_suite(why: str) -> dict:
+    return {"scope": "whole", "why": why, "specs": []}
+
+
+def named_table(chosen: Chosen, specs: Sequence[str]) -> List[str]:
+    """The named specs, folded in a job summary, each with its minutes and why it was chosen."""
+    if not specs:
+        return []
+    rows = {row["spec"]: row for row in chosen.run}
+    return [
+        "",
+        f"<details><summary>The {counted(len(specs), 'spec file')} named</summary>",
+        "",
+        "| Spec | Minutes | Why |",
+        "|---|---|---|",
+        *[
+            f"| `{spec}` | {rows[spec]['minutes']:.1f} | {cell(reasons(rows[spec]))} |"
+            for spec in specs
+        ],
+        "",
+        "</details>",
+    ]
+
+
+def shard_count(
+    specs: Sequence[str], seconds: Seconds, at_head: Set[str], max_shards: int
+) -> int:
+    """The shards a named run takes, so that each holds about a whole run's share of the suite, by
+    its minutes: never more than the specs or a whole run's `max_shards`, and none for no spec."""
+    if not specs:
+        return 0
+    named = sum(seconds(spec) for spec in specs)
+    suite = sum(seconds(spec) for spec in at_head)
+    return max(1, min(max_shards, len(specs), math.ceil(named / (suite / max_shards))))
+
+
+def summary_sentence(output: dict) -> str:
+    """The sentence a run's summary opens with, from what `ci` prints."""
+    if output["scope"] == "whole":
+        return f"Ran the whole suite: {output['why']}."
+    if not output["specs"]:
+        return "No E2E spec ran: the test map names none for this change."
+    return (
+        f"Ran the {counted(len(output['specs']), 'spec file')} the test map names for this "
+        f"change, {output['minutes']:.1f} of {output['suite_minutes']:.1f} minutes, "
+        f"on {counted(output['shards'], 'shard')}."
+    )
+
+
+def ci(argv: Sequence[str]) -> int:
+    """What a pull request's E2E run runs, as one JSON object on stdout."""
+    parser = argparse.ArgumentParser(
+        prog="affected-specs.py ci",
+        description="What a pull request's E2E run runs, as one JSON object on stdout.",
+    )
+    # A pull request's run runs every spec the map names.
+    selection_options(parser, capped=False)
+    parser.add_argument(
+        "--max-shards", type=int, required=True, help="the shards a whole run takes"
+    )
+    parser.add_argument(
+        "--github",
+        action="store_true",
+        help="also write the decision and its reasons to $GITHUB_STEP_SUMMARY",
+    )
+    args = parser.parse_args(argv)
+    if args.max_shards < 1:
+        parser.error("--max-shards is at least 1")
+    chosen = Chosen(args, drop_absent=True)
+    decision = ci_decision(chosen, datetime.now(timezone.utc))
+    named = decision["specs"]
+    output = {
+        **decision,
+        "shards": shard_count(named, chosen.seconds, chosen.at_head, args.max_shards)
+        if decision["scope"] == "named"
+        else args.max_shards,
+        "minutes": sum(chosen.seconds(spec) for spec in named) / 60,
+        "suite_minutes": sum(chosen.seconds(spec) for spec in chosen.at_head) / 60,
+        "map": chosen.source,
+    }
+    ran = summary_sentence(output)
+    basis = chosen.describe_ci_basis()
+    print(f"affected-specs ci: {ran}\naffected-specs ci: {basis}", file=sys.stderr)
+    if args.github:
+        write_summary(["### E2E selection", "", ran, "", basis, *named_table(chosen, named)])
+    print(json.dumps(output))
+    return 0
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:1] == ["audit"]:
         return audit(argv[1:])
+    if argv[:1] == ["ci"]:
+        return ci(argv[1:])
     playwright_args: List[str] = []
     if "--" in argv:
         at = argv.index("--")
@@ -1126,14 +1364,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     else:
         verb = "runs" if args.run else "would run"
         print(
-            f"{verb} {count_specs(len(run))}, {minutes_run:.1f} CI minutes "
+            f"{verb} {counted(len(run), 'spec')}, {minutes_run:.1f} CI minutes "
             f"(the cap is {args.minutes:g}; a changed spec runs past it):"
         )
         print_rows(run, absent)
     if left:
         print(
-            f"leaves {count_specs(len(left))}, {sum(r['minutes'] for r in left):.1f} CI minutes, "
-            "to CI's full run on the pull request:"
+            f"leaves {counted(len(left), 'spec')}, "
+            f"{sum(r['minutes'] for r in left):.1f} CI minutes, to CI:"
         )
         print_rows(left, absent)
     if args.run and absent:
@@ -1145,7 +1383,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
     e2e = (chosen.root / E2E).resolve()
     filters = ["/^" + escape(f"{e2e}/{row['spec']}") + "$/" for row in run]
-    print(f"affected-specs: npx playwright test <the {count_specs(len(run))} above>", flush=True)
+    above = counted(len(run), "spec")
+    print(f"affected-specs: npx playwright test <the {above} above>", flush=True)
     return subprocess.run(
         ["npx", "playwright", "test", *filters, *playwright_args], cwd=chosen.root / "front-end"
     ).returncode
