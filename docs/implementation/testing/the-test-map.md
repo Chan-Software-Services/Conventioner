@@ -167,7 +167,7 @@ Each miss is also a warning annotation on the run, "A miss of the selection", na
 A pull request's run into `dev` that is [slimmed](ci-and-the-gate.md#what-a-pull-requests-e2e-run-runs) runs only specs `e2e-select` named, and the audit reads the map again, so it lists a miss on such a run only when it read a newer map than `e2e-select` did, or none.
 With no map, the selection is rule 1 alone: a failure outside it is listed as missed, with no annotation, since there is no map to have drifted.
 
-**A pull request's run is the selection, so a miss of it first shows on the merge queue**, whose run is whole.
+**A pull request's run into `dev` is the selection, so a miss of it first shows on the merge queue**, whose run is whole.
 So on a trial commit `e2e` audits too, judging each failed spec by [what the pull request's own run would have run](ci-and-the-gate.md#what-a-pull-requests-e2e-run-runs):
 
 ```sh
@@ -181,9 +181,9 @@ The audit decides as `affected-specs.py ci` does, with no cap, and names each fa
 - **the pull request ran the whole suite**: the decision is the whole suite, for the reason it gives;
 - **left out by the pull request's run**: the decision names specs, and not this one.
 
-The job's summary lists them under "E2E selection audit (merge queue)", with the map and the diff, the decision's reason and the changed files.
+The job's summary lists them under "E2E selection audit (merge queue)", with the diff and any map it read, the decision's reason and the changed files.
 Each spec left out is also a warning annotation on the run, "A spec the pull request's run left out", naming the spec and the changed files.
-It decides again when it runs, so it is no record of what the pull request's run did: a map made since, one grown more than 7 days old or one it cannot read can change a verdict, and an `e2e-select` that could not decide ran the whole suite, whatever the audit says.
+It decides again when it runs, so it is no record of what the pull request's run did: a `dev` that moved since, a map made since, one grown more than 7 days old or one it cannot read can change a verdict, and an `e2e-select` that could not decide ran the whole suite, whatever the audit says.
 
 Neither audit fails the job: each exits 0 whatever it finds, or when it cannot audit at all, saying why in the summary, and its step continues on error, so `e2e`'s verdict never hangs on an audit.
 
