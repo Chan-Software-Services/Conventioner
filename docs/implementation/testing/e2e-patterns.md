@@ -205,7 +205,8 @@ Markets' search is drawn only past 12 markets or while the address holds words, 
 
 **A test reads nothing an earlier test of its file left behind.**
 A failed test ends its worker, so its retry and the tests after it run in a new one, whose `beforeAll` seeds afresh, without what the earlier tests published or moved: a test that read it fails there on every try, as it does when run alone.
-Such a test seeds what it reads itself: the tests of [`phase-rail.spec.ts`](../../../front-end/e2e/phase-rail.spec.ts)'s "The phase rail" that read published results (the two addresses, a CSV market's chips and archiving) each seed a published market with `seedPublishedMarket`.
+Such a test seeds what it reads itself.
+In [`phase-rail.spec.ts`](../../../front-end/e2e/phase-rail.spec.ts)'s "The phase rail", the tests of the two addresses, a CSV market's chips and archiving each seed a published market with `seedPublishedMarket`.
 Prefer that to making the describe `serial`, which chains every test in it: one failure skips those after it, and a retry runs them all again.
 
 **A spec ends an organizer's session on the server**: `mongoEval` unsets the user's `login_id`, so the cookie names a login no account holds and the next request answers 401, as after a password reset; the next sign-in gives the account a new one.
