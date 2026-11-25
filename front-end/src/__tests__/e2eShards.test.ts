@@ -1,9 +1,9 @@
 /**
  * The e2e shards (T234) are dealt by measured minutes, not cut from the alphabetical list by test
  * count: Playwright's own `--shard` put the three people-at-scale files, whose names sort together,
- * on one shard, which ran 24 minutes of tests while another ran 6. Each shard deals the whole list
- * itself and runs its own hand, so the dealing must be the same on every runner and must hand every
- * spec file to exactly one shard.
+ * on one shard, which ran 24 minutes of tests while another ran 6. Each shard deals the list itself,
+ * every spec file or the ones the run names, and runs its own hand, so the dealing must be the same
+ * on every runner and must hand every file it deals to exactly one shard.
  */
 import { spawnSync } from 'node:child_process';
 import {
@@ -304,7 +304,7 @@ if (args.includes('--list')) {
       );
     }
     expect(shard.ran).toEqual([]);
-    // The record is what tells the `e2e` job's check what this shard was asked to deal.
+    // Written all the same, so the shard's artifact says what it was asked to deal.
     expect(shard.record).toMatchObject({
       scope: 'named',
       listed: 4,
