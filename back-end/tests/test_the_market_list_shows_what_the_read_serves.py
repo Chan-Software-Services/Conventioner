@@ -29,8 +29,8 @@ READER_EMAILS = {who: f"{who}@example.com" for who in (OWNER, MEMBER, ORG_ADMIN)
 
 def organization_document(org_id=ORG_ID, **overrides):
     doc = {
-        "_id": f"mongo-{org_id}", "id": org_id, "name": "Test Org", "owner": OWNER,
-        "admins": [ORG_ADMIN], "members": [MEMBER], "markets": [],
+        "_id": f"mongo-{org_id}", "id": org_id, "name": "Test Org",
+        "people": {OWNER: "owner", ORG_ADMIN: "admin", MEMBER: "member"}, "markets": [],
     }
     doc.update(overrides)
     return doc
@@ -102,9 +102,12 @@ def world(monkeypatch):
     organizations = {
         ORG_ID: organization_document(),
         BROKEN_ORG_ID: organization_document(
-            BROKEN_ORG_ID, people={MEMBER: "member"}, owner=None, admins=[], members=[MEMBER]),
-        OWNER_ALSO_ADMIN_ORG_ID: organization_document(
-            OWNER_ALSO_ADMIN_ORG_ID, admins=[ORG_ADMIN, OWNER]),
+            BROKEN_ORG_ID, people={MEMBER: "member"}),
+        OWNER_ALSO_ADMIN_ORG_ID: {
+            **{key: value for key, value in organization_document(OWNER_ALSO_ADMIN_ORG_ID).items()
+               if key != "people"},
+            "owner": OWNER, "admins": [ORG_ADMIN, OWNER], "members": [MEMBER],
+        },
     }
     organization_reads = []
     people_reads = []

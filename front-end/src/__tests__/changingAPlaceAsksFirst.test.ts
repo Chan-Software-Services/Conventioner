@@ -37,9 +37,6 @@ function org(overrides: Partial<Organization> = {}): Organization {
   return {
     id: 'org-1',
     name: 'Seed Test Org',
-    owner: 'u-owner',
-    admins: ['u-admin', 'u-second'],
-    members: ['u-member'],
     ownerEmail: 'owner@example.com',
     adminPeople: [
       { userId: 'u-admin', email: 'admin@example.com' },
@@ -55,8 +52,6 @@ function org(overrides: Partial<Organization> = {}): Organization {
 
 /** The organization once the first admin is a member. */
 const ADMIN_MADE_A_MEMBER: Partial<Organization> = {
-  admins: ['u-second'],
-  members: ['u-admin', 'u-member'],
   adminPeople: [{ userId: 'u-second', email: 'second@example.com' }],
   memberPeople: [
     { userId: 'u-admin', email: 'admin@example.com' },
@@ -66,8 +61,6 @@ const ADMIN_MADE_A_MEMBER: Partial<Organization> = {
 
 /** The organization once the member is an admin. */
 const MEMBER_MADE_AN_ADMIN: Partial<Organization> = {
-  admins: ['u-admin', 'u-second', 'u-member'],
-  members: [],
   adminPeople: [
     { userId: 'u-admin', email: 'admin@example.com' },
     { userId: 'u-second', email: 'second@example.com' },
@@ -317,7 +310,7 @@ describe('Manage organization changes a place from its row', () => {
 
   it('reads someone removed meanwhile as done: re-read, closed, focus on the list they were in', async () => {
     api.put.mockImplementation(async () => {
-      served = { ...served, admins: ['u-second'], adminPeople: [served.adminPeople[1]!] };
+      served = { ...served, adminPeople: [served.adminPeople[1]!] };
       throw failure(404, { error: 'They are no longer in this organization.' });
     });
     const wrapper = mountDialog();

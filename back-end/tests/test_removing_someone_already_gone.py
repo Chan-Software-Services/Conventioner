@@ -98,7 +98,9 @@ def people(monkeypatch):
 def organization(monkeypatch, people, history):
     return install_organizations(monkeypatch, FakeOrganizations({
         "id": ORG_ID, "name": "Ember Markets", "owner": OWNER.id, "admins": [ADMIN.id],
-        "members": [MEMBER.id], "markets": [], "theme": None,
+        "members": [MEMBER.id],
+        "people": {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"},
+        "markets": [], "theme": None,
     }))
 
 
@@ -134,6 +136,7 @@ class TestTheOrganization:
         response = signed_in_as(OWNER).delete(f"/organizations/{ORG_ID}/users/{MEMBER.id}")
 
         assert response.status_code == 200
+        assert organization.doc["people"] == {OWNER.id: "owner", ADMIN.id: "admin"}
         assert organization.doc["members"] == []
         assert len(organization_entries(history)) == 1
 
@@ -158,7 +161,7 @@ class TestTheOrganization:
 
     def test_someone_removed_under_the_removal_is_not_found(self, organization, history):
         # Another organizer removes them between this removal's read and its write.
-        organization.before_write = lambda: organization.doc["members"].remove(MEMBER.id)
+        organization.before_write = lambda: organization.doc["people"].pop(MEMBER.id)
 
         response = signed_in_as(OWNER).delete(f"/organizations/{ORG_ID}/users/{MEMBER.id}")
 
@@ -174,13 +177,13 @@ class TestTheOrganization:
             "error": "They own this organization, so they can't be removed from it."}
 
     def test_an_admin_removing_an_admin_is_still_forbidden(self, organization, history):
-        organization.doc["admins"].append(GONE.id)
+        organization.doc["people"][GONE.id] = "admin"
 
         response = signed_in_as(ADMIN).delete(f"/organizations/{ORG_ID}/users/{GONE.id}")
 
         assert response.status_code == 403
         assert response.get_json() == {"error": "Only owner can remove admins"}
-        assert GONE.id in organization.doc["admins"]
+        assert organization.doc["people"][GONE.id] == "admin"
 
     def test_a_member_is_forbidden_before_learning_who_is_gone(self, organization, history):
         response = signed_in_as(MEMBER).delete(f"/organizations/{ORG_ID}/users/{GONE.id}")
