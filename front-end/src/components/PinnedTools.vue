@@ -12,7 +12,7 @@
  * Put it where it spans the card's whole width with nothing between it and the frame, so at rest it
  * already stands where it pins; the rows inside pad themselves.
  *
- * The block's height, measured rather than guessed as `MarketFrame` measures its own, is
+ * The block's height, measured unrounded rather than guessed as `MarketFrame` measures its own, is
  * `--pinned-tools-h` on the root (`0px` before the first measure, and with no `ResizeObserver`), so a
  * second sticky row in the screen stands under it at `top: calc(var(--banner-h) +
  * var(--market-frame-h) + var(--pinned-tools-h))`, read only inside its own `width >= 1024px` rule.
@@ -33,7 +33,7 @@ function publish(px: number): void {
 onMounted(() => {
   publish(0);
   if (!block.value || typeof ResizeObserver === 'undefined') return;
-  observer = new ResizeObserver(() => publish(block.value?.offsetHeight ?? 0));
+  observer = new ResizeObserver(() => publish(block.value?.getBoundingClientRect().height ?? 0));
   observer.observe(block.value);
 });
 onBeforeUnmount(() => observer?.disconnect());

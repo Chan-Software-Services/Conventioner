@@ -30,6 +30,12 @@ test.beforeAll(async ({ request }) => {
   });
 });
 
+// Held at the seed's instant: a run that passes midnight would open the map on the seed's next
+// day, where other vendors sit at other tables.
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(seeded.seededAt);
+});
+
 const [PHONE, DESK] = PHONE_AND_DESK;
 
 type Box = { x: number; y: number; width: number; height: number };

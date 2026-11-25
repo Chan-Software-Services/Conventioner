@@ -122,7 +122,7 @@ How each part of the code works is in the implementation layer of the [knowledge
 - **pytest 9.1** - Python test framework
   - Runs the back-end test suite (`python -m pytest tests/`), from `back-end/requirements-dev.txt`
   - Configured via `back-end/pytest.ini`
-  - `tests/conftest.py` points PyMongo at a port nothing listens on and the tests use in-memory fakes, so no database connection is required
+  - `tests/conftest.py` points PyMongo at a port nothing listens on, whatever database the shell's `MONGODB_*` variables name, and the tests use in-memory fakes, so no database connection is required
   - The exception is [the real-MongoDB suite](implementation/testing/real-mongo-suite.md), `tests/real_mongo/`, which runs on a MongoDB server in CI's `backend` job and skips where `REAL_MONGODB_URI` is unset
 
 ## Frontend
