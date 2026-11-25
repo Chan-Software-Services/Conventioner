@@ -116,6 +116,9 @@ def start(dsn: Optional[str] = None, transport: Any = None) -> None:
         },
         auto_session_tracking=False,
         send_client_reports=False,
+        # No `sentry-trace` or `baggage` header on a request to Resend, Discord, Google or TypeSafe:
+        # by default every outgoing request carries one, the release and the environment in it.
+        trace_propagation_targets=[],
         environment=_environment,
         # Never None, which has the SDK guess one from git at boot; `_allowed_event` sends ours.
         release=commit,

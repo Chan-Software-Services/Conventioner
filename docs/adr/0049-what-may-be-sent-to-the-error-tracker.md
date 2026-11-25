@@ -44,6 +44,7 @@ The front end may send:
 - for a policy violation: the effective directive, the blocked resource reduced to its origin (or the browser's own keyword, `inline` or `eval`), the violating script's address without its query, and its line and column.
 
 Neither side ever sends a request or response body, a query string, a cookie, a header, the signed-in person or any user field, an IP address, a variable, a frame's source lines, a breadcrumb that is not a log line, a value of a URL variable other than the named ones, or a violation's `sample`, which may hold a script's first characters.
+Nor does a request the back end makes to another service carry anything of the tracker: the SDK's `sentry-trace` and `baggage` headers, which name the release and the environment, are never attached.
 
 **An address** is any run of characters with no space, `@`, `/`, `<`, `>`, quote, comma or semicolon, then `@`, then a host with at least one dot; both sides replace it by the same rule.
 

@@ -5,11 +5,13 @@ records every envelope item it is handed, the real app's test client, and real l
 reads what would have left the process, serialised whole, so a field a later SDK adds is caught too,
 and so would be a Sentry Log or a session item if one were ever sent.
 """
+import http.server
 import json
 import logging
 import os
 import subprocess
 import sys
+import threading
 from types import SimpleNamespace
 
 import pymongo.errors
@@ -25,6 +27,7 @@ from conftest import (
 
 skip_without_real_dependencies()
 
+import requests
 from sentry_sdk.transport import Transport
 
 import app as app_module
@@ -370,6 +373,34 @@ class TestWhereAnEventSaysItCameFrom:
         [event] = transport.events()
         assert event["environment"] == "development"
         assert "release" not in event
+
+
+class TestAnotherService:
+    def test_a_request_the_back_end_makes_carries_nothing_of_the_tracker(self, tracker, monkeypatch):
+        """Resend, Discord, Google and TypeSafe are sent no trace header: the SDK's default attaches
+        `sentry-trace` and `baggage`, the release and the environment in it, to every request."""
+        monkeypatch.setenv("BUILD_COMMIT", "0123abc")
+        received = []
+
+        class Recording(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                received.append({name.lower(): value for name, value in self.headers.items()})
+                self.send_response(204)
+                self.end_headers()
+
+            def log_message(self, *_args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Recording)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            requests.get(f"http://127.0.0.1:{server.server_port}/", timeout=5)
+        finally:
+            server.shutdown()
+            server.server_close()
+
+        [headers] = received
+        assert not {"sentry-trace", "baggage", "traceparent"} & set(headers)
 
 
 class TestStarting:

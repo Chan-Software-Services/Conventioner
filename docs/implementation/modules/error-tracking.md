@@ -47,6 +47,7 @@ The SDK's `LoggingIntegration` is kept for breadcrumbs alone (`event_level=None`
 
 **Every event is built from the allowlist** (`_allowed_event`), never trimmed from the SDK's: the exception's type, module and frames (file, module, function, line, whether in the app), the log line's template and formatted words with every address replaced (`without_addresses`), its level and logger, log breadcrumbs under the same rule, the request's method and the route's rule with only the named variables filled in, those as tags, the rule as the transaction, and the environment (`VERCEL_ENV`, else `development`), the release (`BUILD_COMMIT`, when set) and the SDK's name and version.
 The SDK's own `data_collection` is set to collect nothing as well, and the integrations that switch themselves on for an installed library are off, so pymongo's query breadcrumbs never start.
+`trace_propagation_targets=[]` keeps the SDK's `sentry-trace` and `baggage` headers off every request the back end makes to Resend, Discord, Google or TypeSafe, which by default would carry the release and the environment.
 
 **The suite never sends.**
 `tests/conftest.py` removes `SENTRY_DSN` before anything imports the app, so a developer's exported DSN reaches no test.
