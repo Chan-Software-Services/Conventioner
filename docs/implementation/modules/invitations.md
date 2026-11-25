@@ -35,7 +35,7 @@ describes:
   - back-end/tests/real_mongo/test_answering_an_invitation_on_the_server.py
   - back-end/tests/test_inviting_someone_to_an_organization.py
   - back-end/tests/test_answering_an_organization_invitation.py
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - T538
 ---

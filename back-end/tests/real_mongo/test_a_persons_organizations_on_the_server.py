@@ -1,6 +1,6 @@
-"""``organization_people.of_person`` on a real server (T283): it finds an organization by the
-person's key in its people map and one stored before the map by its lists, never a folded one by a
-stale list, and the boot's indexes serve every branch of it, the ``people.$**`` wildcard the first."""
+"""``organization_people.of_person`` on a real server (T283, T583): it finds an organization by the
+person's key in its people map alone, never by a stale list, and the boot's ``people.$**`` wildcard
+index serves it."""
 import copy
 
 import organization_people as OrganizationPeople
@@ -25,7 +25,7 @@ def test_the_server_finds_the_organizations_the_fakes_find(real_db):
     assert {org["id"] for org in found} == THEIRS
 
 
-def test_every_branch_is_served_by_a_boot_index(boot_indexes):
+def test_the_filter_is_served_by_a_boot_index(boot_indexes):
     boot_indexes["organizations"].insert_many([copy.deepcopy(org) for org in ORGANIZATIONS])
 
     explained = boot_indexes["organizations"].find(

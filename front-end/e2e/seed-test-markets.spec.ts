@@ -51,10 +51,7 @@ test.describe('The test markets', () => {
     removeMarket(GOOGLE_FORM);
     mongoEval(`
       const org = db.organizations.findOne({ name: ${JSON.stringify(ORGANIZATION)} });
-      if (org) {
-        db.users.updateMany({}, { $pull: { organizations: org.id } });
-        db.organizations.deleteOne({ id: org.id });
-      }`);
+      if (org) db.organizations.deleteOne({ id: org.id });`);
   });
 
   test('are made once however often the seeder runs, one of each path', async ({ page }) => {

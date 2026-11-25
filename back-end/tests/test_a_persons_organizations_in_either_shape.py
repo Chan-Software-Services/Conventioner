@@ -1,6 +1,7 @@
-"""The organizations a person is in are found by one filter, ``organization_people.of_person``, in
-either shape an organization is stored in (T283, ADR 0025): by their key in its people map, or, on
-one stored before the map, by its owner, admins or members. Nothing else spells that query.
+"""The organizations a person is in are found by one filter, ``organization_people.of_person``, by
+their key in its people map alone (T283, ADR 0025, T583): never by the old ``owner``, ``admins`` or
+``members`` lists a stored organization may still carry until the migration removes them. Nothing
+else spells that query.
 """
 from types import SimpleNamespace
 
@@ -17,29 +18,21 @@ PERSON = SimpleNamespace(id="user-person", email="person@example.com")
 OWNER = SimpleNamespace(id="user-owner", email="owner@example.com")
 
 
-def folded(org_id, people, **lists):
+def organization(org_id, people, **lists):
     return {"_id": f"mongo-{org_id}", "id": org_id, "name": org_id, "people": people,
             "markets": [], **lists}
 
 
-def unfolded(org_id, owner, admins=(), members=()):
-    return {"_id": f"mongo-{org_id}", "id": org_id, "name": org_id, "owner": owner,
-            "admins": list(admins), "members": list(members), "markets": []}
-
-
 ORGANIZATIONS = (
-    folded("folded-admin", {OWNER.id: "owner", PERSON.id: "admin"},
-           owner=OWNER.id, admins=[PERSON.id], members=[]),
-    folded("folded-owner", {PERSON.id: "owner"}, owner=PERSON.id, admins=[], members=[]),
-    unfolded("unfolded-member", OWNER.id, members=[PERSON.id]),
-    unfolded("unfolded-owner", PERSON.id),
-    unfolded("unfolded-owner-also-admin", PERSON.id, admins=[PERSON.id]),
-    # Not theirs: a folded one whose stale list still names them, and one they were never in.
-    folded("folded-stale-list", {OWNER.id: "owner"}, owner=OWNER.id, admins=[PERSON.id]),
-    unfolded("someone-elses", OWNER.id, admins=["user-other"]),
+    organization("their-admin", {OWNER.id: "owner", PERSON.id: "admin"}),
+    organization("their-member", {OWNER.id: "owner", PERSON.id: "member"}),
+    organization("their-own", {PERSON.id: "owner"}),
+    # Not theirs: one whose stale lists still name them, and one they were never in.
+    organization("a-stale-list", {OWNER.id: "owner"},
+                 owner=PERSON.id, admins=[PERSON.id], members=[PERSON.id]),
+    organization("someone-elses", {OWNER.id: "owner", "user-other": "admin"}),
 )
-THEIRS = {"folded-admin", "folded-owner", "unfolded-member", "unfolded-owner",
-          "unfolded-owner-also-admin"}
+THEIRS = {"their-admin", "their-member", "their-own"}
 
 
 @pytest.mark.parametrize("org", ORGANIZATIONS, ids=lambda org: org["id"])
