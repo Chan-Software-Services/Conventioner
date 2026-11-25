@@ -36,6 +36,7 @@ sources:
   - T263
   - T422
   - T469
+  - T539
 ---
 
 # A gated market answers as absent
@@ -96,7 +97,7 @@ Manage market's Delete names the market page and the vendor page among what stop
 - **`applicant_intake_market_by_slug()`**, beside it, is the gate of applying: the public form and the save, which only a `form` market has.
   Every caller's existing not-found branch serves either's `None`, so the gate needs no message of its own; both are kept with [the market document](../../implementation/data/market-document.md), whose slug and draft rules they read.
   Each is one lookup rather than a check in each endpoint, because a check in each is a chance to forget one.
-  The two sign-in endpoints count their caller against [the sign-in limits](a-vendor-signs-in-before-applying.md#sign-in-is-bounded) before they ask it, so a refusal past a limit is also the same for a gated market as for an absent one.
+  The two sign-in endpoints count their caller against [the sign-in limits](a-vendor-signs-in-before-applying.md#sign-in-is-bounded), and ask the human check when they ask it at all, before they ask it, so a refusal past a limit, and the check's 403, are also the same for a gated market as for an absent one.
 - **It is not the check-in lookup**, because check-in must stay open to every market that runs ([attendance and the door](../../implementation/modules/attendance-and-door.md)); both narrow `market_by_slug`, each with its own phases.
 - What the mode is and when it may change: [intake mode decides how vendors arrive](intake-mode-decides-how-vendors-arrive.md), and why absence is CSV, [ADR 0006](../../adr/0006-intake-mode-fails-closed.md).
 - The intake-mode control exists because this gate is what keeps the address from simply being shown: which mode a market has decides whether the page is real ([intake mode decides how vendors arrive](intake-mode-decides-how-vendors-arrive.md)).

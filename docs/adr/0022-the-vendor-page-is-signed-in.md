@@ -13,6 +13,7 @@ sources:
   - T318
   - T469
   - T496
+  - T539
 status: accepted
 ---
 
@@ -72,6 +73,7 @@ Its rules, each pinned at the HTTP seam (`test_the_door_code.py`, `test_a_vendor
 
 **A sign-in code takes up to five tries within ten minutes.**
 After the fifth wrong try it is cancelled, the page says so, and only "Send a new code" is offered; a wrong try says only that someone asked for a code for that address in the last ten minutes, which anyone can make true by asking, so nothing says whether an address applied.
+Amended 2026-11-24 (T539, [ADR 0046](0046-a-sign-in-limit-never-shuts-out-the-person-it-protects.md)): beside a code's own five, the sign-in counts wrong codes per caller and address, 10 in 15 minutes, and past 50 per address from every caller a try asks the human check, so no one else's tries refuse a vendor's right code.
 
 **Remember me keeps a vendor signed in on one device until the market's last date, never more than 120 days.**
 It is opt-in, kept in a cookie the page's scripts cannot read, its secret stored on the server only as a hash, and ended for good by Sign out on the server too.

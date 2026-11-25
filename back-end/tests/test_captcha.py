@@ -1,34 +1,57 @@
+"""The human check on the server (``utils.captcha``): Cloudflare Turnstile's siteverify, driven as a
+route drives it, with Cloudflare stood in for by a fake ``requests.post``.
+
+Every test but those of a module marked ``real_human_check`` runs with the ``human_check`` stand-in
+from ``conftest.py``; this module is marked, so it meets the real function.
+"""
+
 import logging
 import os
 import sys
-import types
 
 import pytest
 import requests
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from flask import Flask
+
+import utils.captcha as captcha
 from utils.captcha import (
-    RECAPTCHA_SECRET_KEY_VAR,
+    SITEVERIFY_URL,
+    TURNSTILE_SECRET_KEY_VAR,
     CaptchaNotConfiguredError,
     assert_captcha_configured,
-    verify_recaptcha,
+    captcha_passes,
+    human_check_needed,
 )
 from utils.deployment import INSECURE_LOCAL_DEV_VAR
+
+pytestmark = pytest.mark.real_human_check
+
+SECRET = "fixture-turnstile-secret"
+TOKEN = "fixture-turnstile-token-value"
+CALLER = "203.0.113.9"
+ADDRESS = "stranger.vendor@example.com"
+
+#: Cloudflare's published test secrets: always passes, always fails, always "token already spent".
+CLOUDFLARE_TEST_SECRETS = (
+    "1x0000000000000000000000000000000AA",
+    "2x0000000000000000000000000000000AA",
+    "3x0000000000000000000000000000000AA",
+)
 
 
 @pytest.fixture(autouse=True)
 def no_secret(monkeypatch):
-    """A process holding no reCAPTCHA secret, unless the test says otherwise.
+    """A process holding no Turnstile secret and no bypass, unless the test says otherwise.
 
-    The environment, because that is what the module reads - on every call, not once at import. It
-    used to capture the key into a module global, which is why these tests used to patch the
-    attribute and clearing the *variable* said nothing at all: the ones that did passed only because
-    the shell running them happened to hold no key, and in a shell exporting a real one they would
-    have gone to Google instead of testing the bypass. Autouse, so a real key in a developer's shell
-    cannot decide what this file tests.
+    The environment, because that is what the module reads, on every call: a real key in a
+    developer's shell cannot decide what this file tests.
     """
-    monkeypatch.delenv(RECAPTCHA_SECRET_KEY_VAR, raising=False)
+    monkeypatch.delenv(TURNSTILE_SECRET_KEY_VAR, raising=False)
+    monkeypatch.delenv("RECAPTCHA_SECRET_KEY", raising=False)
+    monkeypatch.delenv("DISABLE_CAPTCHA", raising=False)
 
 
 @pytest.fixture
@@ -39,249 +62,343 @@ def local_dev(monkeypatch):
 
 @pytest.fixture
 def deployed(monkeypatch):
-    """Anything that has not said so -- which is every deployment, and the default."""
+    """Anything that has not said so, which is every deployment, and the default."""
     monkeypatch.delenv(INSECURE_LOCAL_DEV_VAR, raising=False)
 
 
-class TestCaptchaBypass:
-    def test_bypass_when_disable_captcha_enabled(self, monkeypatch, local_dev, no_secret):
+class FakeAnswer:
+    def __init__(self, status_code=200, body=None, text=None):
+        self.status_code = status_code
+        self._body = body
+        self._text = text
+
+    def json(self):
+        if self._text is not None:
+            raise requests.JSONDecodeError("Expecting value", self._text, 0)
+        return self._body
+
+
+@pytest.fixture
+def cloudflare(monkeypatch, deployed):
+    """Cloudflare's siteverify, answering what the test sets, and every post it was sent."""
+
+    class Cloudflare:
+        def __init__(self):
+            self.posts = []
+            self.answer = FakeAnswer(body={"success": True, "action": "sign-up"})
+            self.raises = None
+
+        def post(self, url, data=None, timeout=None, **_kwargs):
+            self.posts.append({"url": url, "data": dict(data), "timeout": timeout})
+            if self.raises is not None:
+                raise self.raises
+            return self.answer
+
+    fake = Cloudflare()
+    monkeypatch.setenv(TURNSTILE_SECRET_KEY_VAR, SECRET)
+    monkeypatch.setattr(captcha.requests, "post", fake.post)
+    return fake
+
+
+@pytest.fixture
+def a_request():
+    """A request the caller sent, with its address as ProxyFix settled it."""
+    app = Flask(__name__)
+    with app.test_request_context("/register", environ_base={"REMOTE_ADDR": CALLER}):
+        yield
+
+
+class TestTheCheckAsksCloudflare:
+    def test_it_posts_the_secret_the_token_and_the_callers_address(self, cloudflare, a_request):
+        assert captcha_passes(TOKEN, "sign-up") is True
+
+        [post] = cloudflare.posts
+        assert post == {
+            "url": "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+            "data": {"secret": SECRET, "response": TOKEN, "remoteip": CALLER},
+            "timeout": 3,
+        }
+        assert SITEVERIFY_URL == post["url"]
+
+    def test_outside_a_request_it_sends_no_address(self, cloudflare):
+        assert captcha_passes(TOKEN, "sign-up") is True
+
+        [post] = cloudflare.posts
+        assert "remoteip" not in post["data"]
+
+    @pytest.mark.parametrize("action", ["sign-up", "sign-in", "vendor-sign-in"])
+    def test_it_passes_a_token_carrying_the_action_asked(self, cloudflare, action):
+        cloudflare.answer = FakeAnswer(body={"success": True, "action": action})
+
+        assert captcha_passes(TOKEN, action) is True
+
+    @pytest.mark.parametrize("answered", [
+        {"success": True, "action": "sign-in"},
+        {"success": True, "action": ""},
+        {"success": True},
+    ], ids=["another action", "an empty action", "no action"])
+    def test_a_token_made_for_another_action_is_refused(self, cloudflare, answered):
+        cloudflare.answer = FakeAnswer(body=answered)
+
+        assert captcha_passes(TOKEN, "sign-up") is False
+
+    @pytest.mark.parametrize("codes", [
+        ["invalid-input-response"],
+        ["timeout-or-duplicate"],
+        ["invalid-input-secret"],
+        [],
+    ])
+    def test_a_token_cloudflare_did_not_pass_is_refused(self, cloudflare, codes):
+        cloudflare.answer = FakeAnswer(
+            body={"success": False, "error-codes": codes, "action": "sign-up"})
+
+        assert captcha_passes(TOKEN, "sign-up") is False
+
+    @pytest.mark.parametrize("token", ["", None])
+    def test_no_token_is_refused_without_asking(self, cloudflare, token):
+        assert captcha_passes(token, "sign-up") is False
+        assert cloudflare.posts == []
+
+    def test_a_token_longer_than_cloudflares_maximum_is_refused_without_asking(self, cloudflare):
+        # Only a token Cloudflare could have issued is sent, even while it cannot be reached.
+        cloudflare.raises = requests.ConnectionError("connection reset")
+
+        assert captcha_passes("t" * 2049, "sign-up") is False
+        assert cloudflare.posts == []
+
+    def test_a_token_of_cloudflares_maximum_length_is_asked(self, cloudflare):
+        assert captcha_passes("t" * 2048, "sign-up") is True
+        [post] = cloudflare.posts
+        assert post["data"]["response"] == "t" * 2048
+
+    def test_a_4xx_answer_is_a_refusal(self, cloudflare):
+        cloudflare.answer = FakeAnswer(
+            status_code=400, body={"success": False, "error-codes": ["bad-request"]})
+
+        assert captcha_passes(TOKEN, "sign-up") is False
+
+
+class TestAnUnreachableCheckLetsTheRequestThrough:
+    """When the server cannot reach Cloudflare, the request goes on under the sign-in limits, and
+    one warning names the kind of outage, never the token, the caller or Cloudflare's words."""
+
+    @pytest.mark.parametrize("failure, kind", [
+        (requests.Timeout("timed out reaching for " + TOKEN), "Timeout"),
+        (requests.ConnectTimeout("connect timed out for " + ADDRESS), "ConnectTimeout"),
+        (requests.ConnectionError("no route for " + CALLER), "ConnectionError"),
+    ], ids=["timeout", "connect timeout", "connection error"])
+    def test_a_request_that_does_not_complete(
+        self, cloudflare, a_request, caplog, capsys, failure, kind,
+    ):
+        cloudflare.raises = failure
+
+        with caplog.at_level(logging.DEBUG, logger="utils.captcha"):
+            assert captcha_passes(TOKEN, "sign-up") is True
+
+        self._one_warning_naming(kind, caplog, capsys)
+
+    @pytest.mark.parametrize("status", [500, 502, 503])
+    def test_a_server_error(self, cloudflare, a_request, caplog, capsys, status):
+        cloudflare.answer = FakeAnswer(
+            status_code=status, body={"success": False, "error-codes": ["internal-error"]})
+
+        with caplog.at_level(logging.DEBUG, logger="utils.captcha"):
+            assert captcha_passes(TOKEN, "sign-up") is True
+
+        self._one_warning_naming(f"HTTP {status}", caplog, capsys)
+
+    @pytest.mark.parametrize("answer", [
+        FakeAnswer(text=f"<html>{ADDRESS}</html>"),
+        FakeAnswer(body=["success", True]),
+    ], ids=["not JSON", "not an object"])
+    def test_a_body_that_cannot_be_read(self, cloudflare, a_request, caplog, capsys, answer):
+        cloudflare.answer = answer
+
+        with caplog.at_level(logging.DEBUG, logger="utils.captcha"):
+            assert captcha_passes(TOKEN, "sign-up") is True
+
+        self._one_warning_naming("not JSON", caplog, capsys)
+
+    def test_cloudflares_internal_error(self, cloudflare, a_request, caplog, capsys):
+        cloudflare.answer = FakeAnswer(
+            body={"success": False, "error-codes": ["internal-error"], "messages": [ADDRESS]})
+
+        with caplog.at_level(logging.DEBUG, logger="utils.captcha"):
+            assert captcha_passes(TOKEN, "sign-up") is True
+
+        self._one_warning_naming("internal-error", caplog, capsys)
+
+    def test_an_error_that_is_not_the_network_refuses(self, cloudflare, caplog):
+        cloudflare.raises = RuntimeError(f"a bug holding {TOKEN}")
+
+        with caplog.at_level(logging.DEBUG, logger="utils.captcha"):
+            assert captcha_passes(TOKEN, "sign-up") is False
+
+        [record] = caplog.records
+        assert record.levelno == logging.ERROR
+        assert "RuntimeError" in record.getMessage()
+        assert TOKEN not in caplog.text
+
+    @staticmethod
+    def _one_warning_naming(kind, caplog, capsys):
+        [record] = caplog.records
+        assert record.levelno == logging.WARNING
+        assert record.getMessage() == (
+            f"The human check could not be reached ({kind}); let through under the sign-in limits")
+        assert record.exc_info is None
+        for kept_out in (TOKEN, CALLER, ADDRESS, SECRET):
+            assert kept_out not in caplog.text
+        assert capsys.readouterr() == ("", "")
+
+
+class TestARefusalIsLoggedWithoutTheCaller:
+    def test_a_refused_token_leaves_nothing_of_the_caller_in_the_log(
+        self, cloudflare, a_request, caplog, capsys,
+    ):
+        cloudflare.answer = FakeAnswer(body={
+            "success": False, "error-codes": ["invalid-input-response"],
+            "hostname": "elsewhere.test", "action": ADDRESS,
+        })
+
+        with caplog.at_level(logging.DEBUG, logger="utils.captcha"):
+            assert captcha_passes(TOKEN, "sign-up") is False
+
+        for kept_out in (TOKEN, CALLER, ADDRESS, SECRET, "elsewhere.test"):
+            assert kept_out not in caplog.text
+        assert capsys.readouterr() == ("", "")
+
+    def test_an_unusable_secret_names_the_variable(self, deployed, caplog, capsys):
+        with caplog.at_level(logging.DEBUG, logger="utils.captcha"):
+            assert captcha_passes(TOKEN, "sign-up") is False
+
+        [record] = caplog.records
+        assert record.levelno == logging.ERROR
+        assert TURNSTILE_SECRET_KEY_VAR in record.getMessage()
+        assert TOKEN not in caplog.text
+        assert capsys.readouterr() == ("", "")
+
+
+class TestTheLocalStack:
+    """The local stack signs up with the front end's placeholder token, and a screen that forgets
+    the token fails there as it would in production."""
+
+    @pytest.mark.parametrize("switch", ["true", "1"])
+    def test_disable_captcha_passes_any_token(self, monkeypatch, local_dev, switch):
+        monkeypatch.setenv("DISABLE_CAPTCHA", switch)
+        monkeypatch.setattr(captcha.requests, "post", _never_posted)
+
+        assert captcha_passes("e2e-test-captcha-token", "vendor-sign-in") is True
+
+    @pytest.mark.parametrize("token", ["", None])
+    def test_disable_captcha_still_refuses_no_token(self, monkeypatch, local_dev, token):
         monkeypatch.setenv("DISABLE_CAPTCHA", "true")
+        monkeypatch.setattr(captcha.requests, "post", _never_posted)
 
-        success, score = verify_recaptcha("dummy-token")
+        assert captcha_passes(token, "sign-up") is False
 
-        assert success is True
-        assert score == 1.0
+    def test_a_local_machine_with_no_secret_passes_a_token(self, monkeypatch, local_dev):
+        monkeypatch.setattr(captcha.requests, "post", _never_posted)
 
-    def test_bypass_when_disable_captcha_is_1(self, monkeypatch, local_dev, no_secret):
-        monkeypatch.setenv("DISABLE_CAPTCHA", "1")
-
-        success, score = verify_recaptcha("dummy-token")
-
-        assert success is True
-        assert score == 1.0
+        assert captcha_passes(TOKEN, "sign-up") is True
+        assert captcha_passes("", "sign-up") is False
 
     def test_disable_captcha_is_ignored_by_anything_that_is_not_local_dev(
-        self, monkeypatch, deployed,
+        self, monkeypatch, cloudflare,
     ):
-        """A deployment that inherited DISABLE_CAPTCHA from a copied .env must not have a live
-        bypass on it. The escape hatch is the only thing that can open one, and it is opt-in."""
+        """A deployment that inherited DISABLE_CAPTCHA from a copied .env has no live bypass on it."""
         monkeypatch.setenv("DISABLE_CAPTCHA", "true")
+        cloudflare.answer = FakeAnswer(body={"success": False, "error-codes": []})
 
-        class FakeResponse:
-            def json(self):
-                return {"success": False, "score": 0.1}
+        assert captcha_passes(TOKEN, "sign-up") is False
+        assert len(cloudflare.posts) == 1
 
-        def fake_post(url, data, timeout):
-            return FakeResponse()
+    def test_a_deployment_with_no_secret_refuses(self, monkeypatch, deployed):
+        """Belt and braces for an entrypoint that skipped the boot check."""
+        monkeypatch.setenv("DISABLE_CAPTCHA", "true")
+        monkeypatch.setattr(captcha.requests, "post", _never_posted)
 
-        monkeypatch.setattr("utils.captcha.requests.post", fake_post)
-
-        monkeypatch.setenv(RECAPTCHA_SECRET_KEY_VAR, "prod-secret-key")
-
-        success, score = verify_recaptcha("dummy-token")
-
-        assert success is False
-        assert score == 0.1
-
-    def test_dev_bypass_when_no_secret_key(self, monkeypatch, local_dev, no_secret):
-        monkeypatch.delenv("DISABLE_CAPTCHA", raising=False)
-
-        success, score = verify_recaptcha("dummy-token")
-
-        assert success is True
-        assert score == 1.0
-
-    def test_enforced_when_secret_key_set_and_no_bypass(self, monkeypatch, local_dev):
-        monkeypatch.delenv("DISABLE_CAPTCHA", raising=False)
-
-        class FakeResponse:
-            def json(self):
-                return {"success": False, "score": 0.1}
-
-        def fake_post(url, data, timeout):
-            return FakeResponse()
-
-        monkeypatch.setattr("utils.captcha.requests.post", fake_post)
-
-        monkeypatch.setenv(RECAPTCHA_SECRET_KEY_VAR, "test-secret-key")
-
-        success, score = verify_recaptcha("bad-token")
-
-        assert success is False
-        assert score == 0.1
-
-    def test_enforced_rejects_empty_token_with_secret_key(self, monkeypatch, local_dev):
-        monkeypatch.delenv("DISABLE_CAPTCHA", raising=False)
-
-        monkeypatch.setenv(RECAPTCHA_SECRET_KEY_VAR, "test-secret-key")
-
-        success, score = verify_recaptcha("", ip_address=None)
-
-        assert success is False
-        assert score == 0.0
+        assert captcha_passes(TOKEN, "sign-up") is False
 
 
-class TestAnUnconfiguredCaptchaFailsClosed:
-    """A captcha that disappears when it is not configured is not a control.
-
-    The endpoints it gates are public and unauthenticated, and they write to the database and send
-    mail from the product's domain. An unset secret used to mean "pass everybody, and say so only to
-    stdout", so a deployment could ship with the gate silently off.
-
-    The check used to be gated on ``FLASK_ENV == "production"``, which is how it came to be dead
-    code: the repo's own Dockerfile exported ``FLASK_ENV=development``, so every deployment built from
-    that image was exempt from the very check that existed for it. Nothing here reads ``FLASK_ENV``
-    any more. The refusal is the default, and the exemption is what has to be asked for.
-    """
-
+class TestTheBootCheck:
     def test_boot_refuses_when_the_secret_is_missing(self, deployed):
         with pytest.raises(CaptchaNotConfiguredError) as exc:
             assert_captcha_configured()
 
-        assert RECAPTCHA_SECRET_KEY_VAR in str(exc.value)
+        assert TURNSTILE_SECRET_KEY_VAR in str(exc.value)
         assert INSECURE_LOCAL_DEV_VAR in str(exc.value)
+        assert "https://dash.cloudflare.com/?to=/:account/turnstile" in str(exc.value)
 
     @pytest.mark.parametrize("flask_env", ["development", "production", ""])
     def test_the_refusal_does_not_depend_on_flask_env(self, monkeypatch, deployed, flask_env):
-        """The bug this replaces in one line: the image ships FLASK_ENV=development, so a gate keyed
-        on it protected only the deployments that did not need protecting."""
         monkeypatch.setenv("FLASK_ENV", flask_env)
 
         with pytest.raises(CaptchaNotConfiguredError):
             assert_captcha_configured()
 
     def test_boot_is_allowed_once_the_secret_is_set(self, monkeypatch, deployed):
-        monkeypatch.setenv(RECAPTCHA_SECRET_KEY_VAR, "prod-secret-key")
+        monkeypatch.setenv(TURNSTILE_SECRET_KEY_VAR, SECRET)
 
         assert_captcha_configured()
 
-    def test_an_opted_in_local_dev_machine_still_boots_without_a_secret(self, local_dev):
-        assert_captcha_configured()
-
-    def test_an_unverifiable_token_is_not_a_verified_one(self, monkeypatch, deployed):
-        """Belt and braces for an entrypoint that skipped the boot check: with no secret there is
-        nothing to verify a token against, and that refuses rather than waves through.
-        """
-        monkeypatch.setenv("DISABLE_CAPTCHA", "true")
-
-        success, score = verify_recaptcha("any-token")
-
-        assert success is False
-        assert score == 0.0
-
-    def test_a_blank_secret_is_no_secret(self, monkeypatch, deployed):
-        """`RECAPTCHA_SECRET_KEY=" "` is the shape a half-edited .env line takes. Read raw, it is
-        truthy, so the boot check passed and the 500 it exists to pre-empt arrived at request time
-        instead."""
-        monkeypatch.setenv(RECAPTCHA_SECRET_KEY_VAR, "   ")
-
-        with pytest.raises(CaptchaNotConfiguredError):
-            assert_captcha_configured()
-
-
-class TestAPlaceholderIsNotASecret:
-    """A check that can be satisfied with garbage is not a check.
-
-    The env template used to ship `RECAPTCHA_SECRET_KEY=6Lcxxxxx...`, which is *truthy*: a copied
-    template passed the boot check with a secret Google never issued, and every signup token was then
-    verified against a key that cannot verify anything - a 400 at request time, naming none of this.
-    A truthy placeholder is worse than a blank, so it is refused by name, and the templates ship
-    blanks.
-    """
-
-    PUBLISHED_PLACEHOLDER = "6Lcxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-
-    def test_boot_refuses_the_placeholder_this_repo_published(self, monkeypatch, deployed):
-        monkeypatch.setenv(RECAPTCHA_SECRET_KEY_VAR, self.PUBLISHED_PLACEHOLDER)
+    def test_the_old_recaptcha_secret_is_no_longer_read(self, monkeypatch, deployed):
+        monkeypatch.setenv("RECAPTCHA_SECRET_KEY", "prod-recaptcha-secret")
 
         with pytest.raises(CaptchaNotConfiguredError) as exc:
             assert_captcha_configured()
 
-        assert RECAPTCHA_SECRET_KEY_VAR in str(exc.value)
-        assert "placeholder" in str(exc.value)
+        assert TURNSTILE_SECRET_KEY_VAR in str(exc.value)
 
-    def test_a_local_dev_machine_is_refused_it_too(self, monkeypatch, local_dev):
-        """The escape hatch lets a process boot with *no* secret. It is not a licence to boot with
-        one that cannot verify anything - and the `.env` carrying that placeholder is exactly the
-        file that gets copied onto a deployment."""
-        monkeypatch.setenv(RECAPTCHA_SECRET_KEY_VAR, self.PUBLISHED_PLACEHOLDER)
+    def test_an_opted_in_local_dev_machine_still_boots_without_a_secret(self, local_dev):
+        assert_captcha_configured()
+
+    def test_a_blank_secret_is_no_secret(self, monkeypatch, deployed):
+        monkeypatch.setenv(TURNSTILE_SECRET_KEY_VAR, "   ")
 
         with pytest.raises(CaptchaNotConfiguredError):
             assert_captcha_configured()
 
-    def test_no_token_is_ever_verified_against_it(self, monkeypatch, deployed):
-        """Boot already refused, so this is the entrypoint that skipped the check. The request path
-        has to agree with the boot check about what a usable secret is, or the two disagree about
-        whether this deployment is configured."""
-        posted = []
 
-        def fake_post(url, data, timeout):
-            posted.append(data)
-            raise AssertionError("a placeholder secret must never be sent to Google")
+class TestATestSecretIsNotASecret:
+    """Cloudflare publishes secrets that pass, or fail, every token. A deployment holding one checks
+    nothing, so each is refused at boot, hatch or not, and no token is ever sent against one."""
 
-        monkeypatch.setattr("utils.captcha.requests.post", fake_post)
-        monkeypatch.setenv(RECAPTCHA_SECRET_KEY_VAR, self.PUBLISHED_PLACEHOLDER)
+    @pytest.mark.parametrize("secret", CLOUDFLARE_TEST_SECRETS)
+    def test_boot_refuses_it(self, monkeypatch, deployed, secret):
+        monkeypatch.setenv(TURNSTILE_SECRET_KEY_VAR, secret)
 
-        success, score = verify_recaptcha("any-token")
+        with pytest.raises(CaptchaNotConfiguredError) as exc:
+            assert_captcha_configured()
 
-        assert success is False
-        assert score == 0.0
-        assert posted == []
+        assert TURNSTILE_SECRET_KEY_VAR in str(exc.value)
+        assert "test secret" in str(exc.value)
+
+    @pytest.mark.parametrize("secret", CLOUDFLARE_TEST_SECRETS)
+    def test_a_local_dev_machine_is_refused_it_too(self, monkeypatch, local_dev, secret):
+        monkeypatch.setenv(TURNSTILE_SECRET_KEY_VAR, secret)
+
+        with pytest.raises(CaptchaNotConfiguredError):
+            assert_captcha_configured()
+
+    @pytest.mark.parametrize("secret", CLOUDFLARE_TEST_SECRETS)
+    def test_no_token_is_ever_checked_against_it(self, monkeypatch, deployed, secret):
+        monkeypatch.setenv(TURNSTILE_SECRET_KEY_VAR, secret)
+        monkeypatch.setattr(captcha.requests, "post", _never_posted)
+
+        assert captcha_passes(TOKEN, "sign-up") is False
 
 
-class TestAFailureGoesToTheLogByType:
-    """reCAPTCHA's three failures are logged, never printed, and none of them carries what a caller
-    sent or what a library wrote: the unusable secret names its variable, a failed verification
-    holds Google's ``success`` and ``score``, and an exception its type alone."""
+class TestTheAnswerWhenTheCheckIsNeeded:
+    @pytest.mark.parametrize("key", ["message", "msg"])
+    def test_it_is_one_403_under_the_routes_key(self, key):
+        app = Flask(__name__)
+        with app.test_request_context("/"):
+            body, status = human_check_needed(key)
 
-    ADDRESS = "stranger.vendor@example.com"
+            assert status == 403
+            assert body.get_json() == {
+                key: "Confirm you're a person, then try again.", "captcha": "required"}
 
-    def test_an_unusable_secret_names_the_variable(self, deployed, caplog, capsys):
-        with caplog.at_level(logging.DEBUG, logger="utils.captcha"):
-            assert verify_recaptcha("any-token") == (False, 0.0)
 
-        [record] = caplog.records
-        assert record.levelno == logging.ERROR
-        assert RECAPTCHA_SECRET_KEY_VAR in record.getMessage()
-        assert capsys.readouterr() == ("", "")
-
-    def test_a_failed_verification_holds_googles_answer_and_nothing_of_the_caller(
-        self, monkeypatch, deployed, caplog, capsys,
-    ):
-        class FakeResponse:
-            def json(self):
-                return {"success": False, "score": 0.1, "hostname": "evil.test"}
-
-        monkeypatch.setattr("utils.captcha.requests.post", lambda *_a, **_kw: FakeResponse())
-        monkeypatch.setenv(RECAPTCHA_SECRET_KEY_VAR, "prod-secret-key")
-
-        with caplog.at_level(logging.DEBUG, logger="utils.captcha"):
-            assert verify_recaptcha(self.ADDRESS, ip_address="203.0.113.9") == (False, 0.1)
-
-        [record] = caplog.records
-        assert record.levelno == logging.WARNING
-        assert "success=False" in record.getMessage()
-        assert "score=0.1" in record.getMessage()
-        for kept_out in (self.ADDRESS, "203.0.113.9", "prod-secret-key", "evil.test"):
-            assert kept_out not in caplog.text
-        assert capsys.readouterr() == ("", "")
-
-    def test_an_exception_is_logged_by_its_type_alone(self, monkeypatch, deployed, caplog, capsys):
-        message = f"could not reach Google for {self.ADDRESS} with secret prod-secret-key"
-
-        def failing_post(*_args, **_kwargs):
-            raise requests.ConnectionError(message)
-
-        monkeypatch.setattr("utils.captcha.requests.post", failing_post)
-        monkeypatch.setenv(RECAPTCHA_SECRET_KEY_VAR, "prod-secret-key")
-
-        with caplog.at_level(logging.DEBUG, logger="utils.captcha"):
-            assert verify_recaptcha("any-token") == (False, 0.0)
-
-        [record] = caplog.records
-        assert record.levelno == logging.ERROR
-        assert record.exc_info is None
-        assert "ConnectionError" in record.getMessage()
-        assert self.ADDRESS not in caplog.text
-        assert "prod-secret-key" not in caplog.text
-        assert capsys.readouterr() == ("", "")
+def _never_posted(*_args, **_kwargs):
+    raise AssertionError("no token may be sent to Cloudflare here")

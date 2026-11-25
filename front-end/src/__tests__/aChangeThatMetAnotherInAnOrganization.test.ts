@@ -39,9 +39,6 @@ function org(overrides: Partial<Organization> = {}): Organization {
   return {
     id: 'org-1',
     name: 'Seed Test Org',
-    owner: 'u-owner',
-    admins: ['u-admin'],
-    members: ['u-member'],
     ownerEmail: 'owner@example.com',
     adminPeople: [{ userId: 'u-admin', email: 'admin@example.com' }],
     memberPeople: [{ userId: 'u-member', email: 'member@example.com' }],
@@ -54,8 +51,6 @@ function org(overrides: Partial<Organization> = {}): Organization {
 
 /** The organization as someone else's change left it: the member is now an admin. */
 const AFTER_THE_OTHER_CHANGE = {
-  admins: ['u-admin', 'u-member'],
-  members: [],
   adminPeople: [
     { userId: 'u-admin', email: 'admin@example.com' },
     { userId: 'u-member', email: 'member@example.com' },

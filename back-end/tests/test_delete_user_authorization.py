@@ -239,7 +239,7 @@ class TestOwningAnOrganization:
         self, client, users, organizations, monkeypatch
     ):
         collection = users(_user(ATTACKER, user_id="id-owner"))
-        organizations({"id": "org-1", "name": "Seed Test Org", "owner": "id-owner"})
+        organizations({"id": "org-1", "name": "Seed Test Org", "people": {"id-owner": "owner"}})
         _signed_in_as(client, ATTACKER)
 
         response = _delete(client, ATTACKER)
@@ -251,7 +251,7 @@ class TestOwningAnOrganization:
         self, client, users, organizations
     ):
         users(_user(ATTACKER, user_id="id-owner"))
-        organizations({"id": "org-1", "name": "Seed Test Org", "owner": "id-owner"})
+        organizations({"id": "org-1", "name": "Seed Test Org", "people": {"id-owner": "owner"}})
         _signed_in_as(client, ATTACKER)
 
         response = _delete(client, ATTACKER)
@@ -260,7 +260,8 @@ class TestOwningAnOrganization:
 
     def test_a_member_who_owns_nothing_can_still_delete(self, client, users, organizations):
         collection = users(_user(ATTACKER, user_id="id-member"))
-        organizations({"id": "org-1", "name": "Seed Test Org", "owner": "id-someone-else"})
+        organizations(
+            {"id": "org-1", "name": "Seed Test Org", "people": {"id-someone-else": "owner"}})
         _signed_in_as(client, ATTACKER)
 
         response = _delete(client, ATTACKER)
@@ -316,7 +317,7 @@ class TestOwningAMarket:
         self, client, users, organizations, markets
     ):
         users(_user(ATTACKER, user_id="id-owner"))
-        organizations({"id": "org-1", "name": "Seed Test Org", "owner": "id-owner"})
+        organizations({"id": "org-1", "name": "Seed Test Org", "people": {"id-owner": "owner"}})
         markets(_market("m-1", "Spring Market", {"id-owner": "owner"}))
         _signed_in_as(client, ATTACKER)
 
@@ -336,7 +337,7 @@ class TestOwningAMarket:
         self, client, users, organizations
     ):
         users(_user(ATTACKER, user_id="id-owner"))
-        organizations({"id": "org-1", "name": "Seed Test Org", "owner": "id-owner"})
+        organizations({"id": "org-1", "name": "Seed Test Org", "people": {"id-owner": "owner"}})
         _signed_in_as(client, ATTACKER)
 
         response = _delete(client, ATTACKER)

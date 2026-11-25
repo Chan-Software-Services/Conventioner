@@ -1,4 +1,5 @@
 import { getApiErrorMessage, getApiErrorStatus } from '@/utils/api';
+import { refusalSentence } from '@/utils/useSubmit';
 
 /**
  * The one line a sign-in form says (E38/F14/S02), and what it offers to do next: reset the
@@ -18,15 +19,18 @@ export const LINK_RESENT = 'If that address needs verifying, a new link is on it
  * needs verifying, and on the password sign-in a 401 is an email and password that do not match
  * and a 429 too many tries, both of which offer the reset.
  *
- * An answer that never came and a server's fault say what `api.ts` says of every request. The
- * account endpoints word a refusal as `message` or `msg`, which `api.ts` does not read, so a
- * refusal's sentence is read here.
+ * A refusal of the form's own (`Refusal`: the human check did not load, or the server asked for it
+ * again) says its own sentence and offers nothing. An answer that never came and a server's fault
+ * say what `api.ts` says of every request. The account endpoints word a refusal as `message` or
+ * `msg`, which `api.ts` does not read, so a refusal's sentence is read here.
  */
 export function refusedSignIn(
   err: unknown,
   fallback: string,
   { offersReset = false } = {},
 ): SignInNotice {
+  const own = refusalSentence(err);
+  if (own) return { tone: 'error', text: own };
   const status = getApiErrorStatus(err);
   if (status === null || status >= 500) {
     return { tone: 'error', text: getApiErrorMessage(err, fallback) };

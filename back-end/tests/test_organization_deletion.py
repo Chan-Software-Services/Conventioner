@@ -104,7 +104,7 @@ def org(monkeypatch):
         markets = Markets(list(docs))
         monkeypatch.setattr(OrgsApi, "markets_collection", markets)
         monkeypatch.setattr(OrgsApi, "organizations_collection", FakeOrganizations(
-            {"id": ORG_ID, "name": "Ember Markets", "owner": OWNER_ID}))
+            {"id": ORG_ID, "name": "Ember Markets", "people": {OWNER_ID: "owner"}}))
         monkeypatch.setattr(
             OrgsApi.users_collection, "update_many", lambda *_a, **_k: None, raising=False
         )

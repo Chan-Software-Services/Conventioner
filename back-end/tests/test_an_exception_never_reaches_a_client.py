@@ -200,8 +200,7 @@ def organization(monkeypatch):
     """One organization, owned by whoever ``owner`` names, holding the markets given."""
     def install(owner=OWNER_ID, markets=()):
         install_organizations(monkeypatch, FakeOrganizations({
-            "_id": "org-object-id", "id": ORG_ID, "name": ORG_NAME, "owner": owner,
-            "admins": [], "members": [],
+            "_id": "org-object-id", "id": ORG_ID, "name": ORG_NAME, "people": {owner: "owner"},
         }))
         monkeypatch.setattr(OrgsApi, "markets_collection", FakeOrganizationMarkets(*markets))
     return install
@@ -497,7 +496,7 @@ class TestTheOrganizationAndRoleRoutes:
             id="user-member", email=email) if email == "member@example.com" else owner(email))
         stored = OrgsApi.organizations_collection
         # The owner's own place changes between the read and the write.
-        stored.before_write = lambda: stored.doc.update(owner="someone-else")
+        stored.before_write = lambda: stored.doc.update(people={"someone-else": "owner"})
         raised = refusals_raised_by(monkeypatch, OrgsApi, "add_org_member")
 
         response = client.post(
@@ -1023,7 +1022,8 @@ APPLICANT_REVIEW_IMPORT_AND_DOOR_ROUTES = [
      {"date": "2099-08-01", "doorCode": "K7M4QP"}, VendorCheckInApi, "check_out", SLUG),
     ("delete", f"/public/markets/{SLUG}/vendor/check-out", {"date": "2099-08-01"},
      VendorCheckInApi, "undo_check_out", SLUG),
-    ("post", f"/public/markets/{SLUG}/applicant-login/request-code", {"email": "ana@example.com"},
+    ("post", f"/public/markets/{SLUG}/applicant-login/request-code",
+     {"email": "ana@example.com", "captcha_token": "test-human-check"},
      ApplicantAuthApi, "request_login_code", SLUG),
     ("post", f"/public/markets/{SLUG}/applicant-login/verify-code",
      {"email": "ana@example.com", "code": "123456"},
@@ -2049,7 +2049,7 @@ class TestTheCopyIsOurs:
     ):
         use_market(monkeypatch, stored_market(phase=MarketPhase.APPLICATIONS, organizationId=ORG_ID))
         unreadable = FakeOrganizations({
-            "_id": "mongo-org", "id": ORG_ID, "name": ORG_NAME, "owner": "user-9",
+            "_id": "mongo-org", "id": ORG_ID, "name": ORG_NAME, "people": {"user-9": "owner"},
             "markets": "unreadable-markets",
         })
         monkeypatch.setattr(OrgsApi, "organizations_collection", unreadable)
@@ -2090,7 +2090,7 @@ class TestAFailureARouteSurvivesIsLoggedWithoutItsMessage:
         with caplog.at_level(logging.DEBUG):
             response = app_module.app.test_client().post(
                 f"/public/markets/{SLUG}/applicant-login/request-code",
-                json={"email": STRANGERS_ADDRESS},
+                json={"email": STRANGERS_ADDRESS, "captcha_token": "test-human-check"},
             )
 
         assert response.status_code == 200

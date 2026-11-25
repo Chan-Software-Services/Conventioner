@@ -129,6 +129,14 @@ def run_of(number, status="completed", conclusion="success", head_sha=SHA, branc
     }
 
 
+QUEUE_BRANCH = f"gh-readonly-queue/dev/pr-375-{OLD}"
+
+
+def queued(number, **fields):
+    """A run of dev's merge queue on the commit, as GitHub lists run 44308245312."""
+    return run_of(number, event="merge_group", branch=QUEUE_BRANCH, **fields)
+
+
 def runs(*items):
     return (200, json.dumps({"total_count": len(items), "workflow_runs": list(items)}))
 
@@ -194,7 +202,13 @@ def test_an_upper_case_sha_is_read_as_lower_case(stub, env):
     assert stub.count(FROM_MAIN) == 1
 
 
-# The Test run on a push to dev
+# The Test run on the commit, from dev's merge queue or a push to dev
+
+
+NO_RUN = (
+    f"::error::No Test run on dev at {SHORT}, from the merge queue or a push."
+    " Promote only a commit on dev whose Test run has passed."
+)
 
 
 def test_a_commit_with_no_run_is_refused(stub, env):
@@ -203,8 +217,40 @@ def test_a_commit_with_no_run_is_refused(stub, env):
     code, output = check(env)
 
     assert code == 1
+    assert errors(output) == [NO_RUN]
+
+
+def test_a_commit_only_the_merge_queue_tested_may_be_promoted_naming_its_run(stub, env):
+    promotable(stub, test=runs(queued(41)))
+
+    code, output = check(env)
+
+    assert code == 0
+    assert output.splitlines() == [
+        f"{SHORT} may be promoted: Test passed on dev ({RUN_URL}), and main ({MAIN_SHORT}) is 3 commits behind it."
+    ]
+
+
+@pytest.mark.parametrize("make", [queued, run_of], ids=["the-queue-s", "a-push-s"])
+def test_a_red_run_from_the_queue_or_a_push_is_refused(stub, env, make):
+    promotable(stub, test=runs(make(41, conclusion="failure")))
+
+    code, output = check(env)
+
+    assert code == 1
     assert errors(output) == [
-        f"::error::No Test run on a push to dev at {SHORT}. Promote only a commit on dev whose Test run has passed."
+        f"::error::Test failure on dev at {SHORT} ({RUN_URL}). Promote only a commit whose Test run has passed."
+    ]
+
+
+def test_a_queue_run_still_going_is_refused(stub, env):
+    promotable(stub, test=runs(queued(41, status="in_progress", conclusion=None)))
+
+    code, output = check(env)
+
+    assert code == 1
+    assert errors(output) == [
+        f"::error::Test is still running on dev at {SHORT} ({RUN_URL}). Run Promote again once it has passed."
     ]
 
 
@@ -254,8 +300,12 @@ def test_the_newest_run_decides(stub, env, older, newer, passes, listed_newest_f
         run_of(42, branch="feat/something"),
         run_of(42, event="pull_request"),
         run_of(42, event="workflow_dispatch"),
+        run_of(42, event="schedule"),
+        queued(42, head_sha=OLD),
+        run_of(42, event="merge_group", branch=f"gh-readonly-queue/main/pr-9-{OLD}"),
     ],
-    ids=["another-commit", "main", "a-feature-branch", "a-pull-request", "a-dispatch"],
+    ids=["another-commit", "main", "a-feature-branch", "a-pull-request", "a-dispatch", "a-nightly",
+         "another-commit-s-queue-run", "main-s-queue"],
 )
 def test_a_run_of_another_commit_branch_or_event_is_not_counted(stub, env, other):
     promotable(stub, test=runs(other))
@@ -263,7 +313,57 @@ def test_a_run_of_another_commit_branch_or_event_is_not_counted(stub, env, other
     code, output = check(env)
 
     assert code == 1
-    assert errors(output)[0].startswith(f"::error::No Test run on a push to dev at {SHORT}.")
+    assert errors(output) == [NO_RUN]
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "passes"),
+    [
+        (queued(41), run_of(42, conclusion="failure"), False),
+        (queued(41, conclusion="failure"), run_of(42), True),
+        (run_of(41), queued(42, conclusion="failure"), False),
+        (run_of(41, conclusion="failure"), queued(42), True),
+        (queued(41), queued(42, conclusion="failure"), False),
+        (queued(41, conclusion="failure"), queued(42), True),
+    ],
+    ids=["a-newer-red-push", "a-newer-green-push", "a-newer-red-queue-run", "a-newer-green-queue-run",
+         "a-red-re-queue", "a-green-re-queue"],
+)
+@pytest.mark.parametrize("listed_newest_first", [True, False])
+def test_the_newest_of_the_queue_s_and_the_push_s_runs_decides(stub, env, first, second, passes, listed_newest_first):
+    pair = [first, second]
+    promotable(stub, test=runs(*(reversed(pair) if listed_newest_first else pair)))
+
+    code, output = check(env)
+
+    assert code == (0 if passes else 1)
+    assert "actions/runs/9042" in output
+    assert "actions/runs/9041" not in output
+
+
+@pytest.mark.parametrize(
+    "other",
+    [
+        run_of(42, event="schedule"),
+        run_of(42, event="workflow_dispatch"),
+        run_of(42, event="pull_request", branch="feat/something"),
+        queued(42, head_sha=OLD),
+        run_of(42, event="merge_group", branch=f"gh-readonly-queue/main/pr-9-{OLD}"),
+        run_of(42, event="merge_group", branch="dev"),
+        run_of(42, event="push", branch=QUEUE_BRANCH),
+    ],
+    ids=["a-nightly", "a-dispatch", "a-pull-request", "another-commit-s-queue-run", "main-s-queue",
+         "a-queue-run-not-of-the-queue-s-branch", "a-push-to-the-queue-s-branch"],
+)
+def test_a_newer_green_run_that_does_not_count_never_outvotes_a_red_one(stub, env, other):
+    promotable(stub, test=runs(queued(41, conclusion="failure"), other))
+
+    code, output = check(env)
+
+    assert code == 1
+    assert errors(output) == [
+        f"::error::Test failure on dev at {SHORT} ({RUN_URL}). Promote only a commit whose Test run has passed."
+    ]
 
 
 def test_a_passing_run_elsewhere_does_not_outvote_dev_s_failed_one(stub, env):
@@ -286,7 +386,7 @@ def test_a_refused_run_compares_nothing(stub, env):
     assert stub.count(FROM_MAIN) == 0
 
 
-def test_it_asks_for_this_commit_on_a_push_to_dev_with_the_token(stub, env):
+def test_it_asks_for_this_commit_s_runs_by_its_sha_alone_with_the_token(stub, env):
     promotable(stub)
 
     code, output = check(env)
@@ -294,7 +394,7 @@ def test_it_asks_for_this_commit_on_a_push_to_dev_with_the_token(stub, env):
     assert code == 0
     assert [path for path, _, _ in stub.requests] == [RUNS, ON_DEV, FROM_MAIN]
     _, query, _ = stub.requests[0]
-    assert query == {"head_sha": [SHA], "event": ["push"], "branch": ["dev"], "per_page": ["100"]}
+    assert query == {"head_sha": [SHA], "per_page": ["100"]}
     for _, _, headers in stub.requests:
         assert headers["authorization"] == f"Bearer {GITHUB_TOKEN}"
         assert headers["accept"] == "application/vnd.github+json"
@@ -393,12 +493,17 @@ def test_no_answer_refuses_with_no_retry(stub, env, path, what):
     [
         (RUNS, (200, "not json")),
         (RUNS, (200, json.dumps({"runs": []}))),
+        (RUNS, runs({key: value for key, value in queued(41).items() if key != "run_number"})),
+        (RUNS, runs(queued(41), {**run_of(42), "run_number": "42"})),
+        (RUNS, runs({**queued(41), "head_branch": None})),
         (ON_DEV, (200, json.dumps({"status": "sideways"}))),
         (FROM_MAIN, (200, json.dumps({"status": "unknown", "ahead_by": 1, "base_commit": {"sha": MAIN}}))),
         (FROM_MAIN, (200, json.dumps({"status": "ahead", "base_commit": {"sha": MAIN}}))),
         (FROM_MAIN, (200, json.dumps({"status": "ahead", "ahead_by": 3}))),
     ],
-    ids=["runs-not-json", "runs-unlike-github", "on-dev-unknown-status", "from-main-unknown-status",
+    ids=["runs-not-json", "runs-unlike-github", "a-run-without-its-number", "a-run-whose-number-is-text",
+         "a-queue-run-without-its-branch",
+         "on-dev-unknown-status", "from-main-unknown-status",
          "from-main-without-count", "from-main-without-main"],
 )
 def test_an_answer_unlike_github_s_refuses(stub, env, path, answer):

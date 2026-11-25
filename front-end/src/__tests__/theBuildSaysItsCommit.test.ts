@@ -29,7 +29,7 @@ const SHA = '0123456789abcdef0123456789abcdef01234567';
  * `BUILD_COMMIT`, as `vercel deploy --build-env` sets it before the build reads its config.
  */
 async function projectConfig(): Promise<UserConfig> {
-  // The config refuses a production build with no reCAPTCHA site key; these bundles are never served.
+  // The config refuses a production build with no Turnstile site key; these bundles are never served.
   const allowInsecure = process.env.VITE_ALLOW_INSECURE_LOCAL_DEV;
   process.env.VITE_ALLOW_INSECURE_LOCAL_DEV = 'true';
   try {

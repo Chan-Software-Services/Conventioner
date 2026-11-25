@@ -15,6 +15,7 @@ import { mongoEval } from './mongo';
 import { createApplicantLoginChallenge } from './seedApplicantMarket';
 import { loginViaApi, UPPER_HALL_SECTIONED_TABLES, UPPER_HALL_TABLES } from './seeds';
 import { letVendorsCheckThemselvesIn } from './selfCheckIn';
+import { HUMAN_CHECK_TOKEN } from './humanCheck';
 import { calendarToday } from './vendorSignIn';
 import {
   FIRST_IMPORT,
@@ -2271,7 +2272,7 @@ export async function signIn(page: Page, who: Who, seed: TheScreensSeed): Promis
     createApplicantLoginChallenge(seed.open.marketId, email, '424242');
     const res = await page.request.post(
       `${APP_API}/public/markets/${seed.open.marketSlug}/applicant-login/verify-code`,
-      { data: { email, code: '424242' } },
+      { data: { email, code: '424242', captcha_token: HUMAN_CHECK_TOKEN } },
     );
     expect(res.ok(), `the applicant's sign-in: ${res.status()}`).toBe(true);
     const { token } = (await res.json()) as { token: string };

@@ -98,8 +98,7 @@ def signed_in(monkeypatch):
 
 
 @pytest.fixture
-def captcha_passes(monkeypatch):
-    monkeypatch.setattr(UsersApi, "verify_recaptcha", lambda *_a: (True, 0.9))
+def mail_sends(monkeypatch):
     monkeypatch.setattr(UsersApi, "send_verification_email", lambda *_a: True)
 
 
@@ -117,7 +116,7 @@ class TestANewAccount:
         assert not hasattr(UsersApi, "register_user")
 
     def test_registering_with_a_captcha_starts_the_account_in_no_organization(
-        self, client, users, captcha_passes,
+        self, client, users, mail_sends,
     ):
         response = client.post("/register", json={
             "email": FIXTURE_EMAIL, "password": FIXTURE_PASSWORD, "captcha_token": "t",
@@ -129,7 +128,7 @@ class TestANewAccount:
         assert stored["organizations"] == []
 
     def test_signing_in_reads_back_no_organization_the_registration_named(
-        self, client, users, captcha_passes,
+        self, client, users, mail_sends,
     ):
         client.post("/register", json={
             "email": FIXTURE_EMAIL, "password": FIXTURE_PASSWORD, "captcha_token": "t",
@@ -145,7 +144,7 @@ class TestANewAccount:
         assert response.get_json()["user_data"]["organizations"] == []
 
     @pytest.mark.parametrize("body", NOT_OBJECTS)
-    def test_a_body_that_is_not_an_object_is_refused(self, client, users, captcha_passes, body):
+    def test_a_body_that_is_not_an_object_is_refused(self, client, users, mail_sends, body):
         response = send_json(client, "post", "/register", body)
 
         assert response.status_code == 400
@@ -161,8 +160,8 @@ class TestAnOrganizationUpdate:
     @pytest.fixture
     def organization(self, monkeypatch):
         return install_organizations(monkeypatch, FakeOrganizations({
-            "_id": "org-object-id", "id": ORG_ID, "name": "Night Market Society", "owner": OWNER_ID,
-            "admins": [], "members": [], "markets": ["market-1"], "theme": None,
+            "_id": "org-object-id", "id": ORG_ID, "name": "Night Market Society",
+            "people": {OWNER_ID: "owner"}, "markets": ["market-1"], "theme": None,
         }))
 
     def test_it_changes_only_the_name(self, signed_in, organization):
@@ -171,6 +170,7 @@ class TestAnOrganizationUpdate:
             "owner": "someone-else",
             "admins": ["someone-else"],
             "members": ["someone-else"],
+            "people": {"someone-else": "owner"},
             "markets": [],
             "theme": {"primary_color": "#000000", "secondary_color": "#ffffff"},
             "$where": "1",

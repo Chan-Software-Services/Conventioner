@@ -19,7 +19,6 @@ describes:
   - back-end/tests/test_the_remember_cookie.py
   - back-end/tests/test_the_request_origin_check.py
   - back-end/tests/test_security_headers.py
-  - front-end/vite.config.ts#assertCaptchaSiteKey
   - front-end/vite.config.ts#deployedHeaders
   - front-end/vercel.json
   - front-end/src/__tests__/securityHeaders.test.ts
@@ -37,7 +36,8 @@ describes:
   - back-end/organizer_sessions.py
   - back-end/app.py#browser_identifier
   - back-end/tests/test_a_changed_network_keeps_the_session.py
-verified: 2026-11-19
+  - front-end/vite.config.ts#assertHumanCheckSiteKey
+verified: 2026-11-25
 sources:
   - T74
   - T109
@@ -53,6 +53,7 @@ sources:
   - T338
   - T318
   - T422
+  - T539
 ---
 
 # Security invariants
@@ -73,15 +74,23 @@ Keep them apart: flask-cors installs an `after_request` handler per call, so a c
 
 **A boot requirement defends something the product serves.**
 A requirement with nothing behind it teaches operators to work around the check.
-`TRUSTED_PROXY_HOPS` ([`utils/proxy.py`](../../../back-end/utils/proxy.py)) is required because `request.remote_addr` is what organizer signup hands Google as reCAPTCHA's `remoteip` (`api/users.py`), and it became load-bearing the moment `RECAPTCHA_SECRET_KEY` ([`utils/captcha.py`](../../../back-end/utils/captcha.py)) did: before, a deployment with no secret took the bypass and no token reached Google.
-The applicant's and the organizer's sign-in limits count each caller by the same address (`sign_in_limits.caller()`, [a vendor signs in before applying](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)), so a wrong hop count would put every applicant, and every organizer, behind one caller's limit.
+`TRUSTED_PROXY_HOPS` ([`utils/proxy.py`](../../../back-end/utils/proxy.py)) is required because `request.remote_addr` is the address the applicant's and the organizer's sign-in limits count each caller by, and the one the human check hands Cloudflare as Turnstile's `remoteip` ([`utils/captcha.py`](../../../back-end/utils/captcha.py)).
+The sign-in limits count each caller by the same address (`sign_in_limits.caller()`, [a vendor signs in before applying](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)), so a wrong hop count would put every applicant, and every organizer, behind one caller's limit.
 Make a requirement follow its caller, not the module it was first written for.
+
+**The human check is one function, and it lets a request through only when Cloudflare cannot answer.**
+`captcha_passes(token, action)` ([`utils/captcha.py`](../../../back-end/utils/captcha.py)) posts the token to Turnstile's siteverify with `TURNSTILE_SECRET_KEY` and passes only on `success` with the action the route asks (`sign-up`, `sign-in` or `vendor-sign-in`), so a token made on one form is refused on another.
+A route answers a failed check with `human_check_needed(key)`: one 403, `{"<key>": "Confirm you're a person, then try again.", "captcha": "required"}`, for an absent token, a refused one and a mismatched action alike.
+When Cloudflare cannot be reached (a connection or a read past 3 seconds, `SITEVERIFY_TIMEOUT_SECONDS`, a connection error, a 5xx, a body that is not JSON, or its own `internal-error`) the request is let through under the sign-in limits, and one warning names the kind of outage, never the token, the address or Cloudflare's words.
+A token longer than the 2048 characters Cloudflare issues is no Turnstile token: it is refused and never sent, so only a check that was sent can be let through ([`test_captcha.py`](../../../back-end/tests/test_captcha.py)).
+A request with no token is refused everywhere, the local stack included, so a screen that forgets the token fails in E2E rather than in production.
+Cloudflare's published test secrets (`1x0000...AA` and its kin, which pass or fail every token) are refused at boot, hatch or not, by a shape in [`configured_secret`](../../../back-end/utils/configured_secret.py).
 The converse holds too: a value that turns on a feature and defends nothing is optional, read through `configured_secret` when asked for, and never a boot requirement: `TYPESAFE_API_KEY`, and the three Discord values, without which the Discord card says Discord is not set up ([the Discord connection](../modules/discord.md)).
 
 ## The one escape hatch
 
 **`ALLOW_INSECURE_LOCAL_DEV` is the only escape hatch for the boot requirements** ([`back-end/utils/deployment.py`](../../../back-end/utils/deployment.py)), and it defaults to off.
-Under it a missing value boots: a random signing key for the process's lifetime, loopback origins, sessions on disk, zero hops, no captcha secret, no mail key, and links to `http://127.0.0.1:5173` from `onboarding@resend.dev`; each is logged as a defense turned off.
+Under it a missing value boots: a random signing key for the process's lifetime, loopback origins, sessions on disk, zero hops, no Turnstile secret, no mail key, and links to `http://127.0.0.1:5173` from `onboarding@resend.dev`; each is logged as a defense turned off.
 `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` are honoured only under the hatch, so a deployment that inherited any of them from a copied env file is not silently unprotected, nor answered by a fake Discord ([a fake Discord](../../TESTING.md#a-fake-discord)).
 The hatch never excuses a published secret ([ADR 0010](../../adr/0010-no-secret-has-a-fallback.md)).
 `docker-compose.yml` and `back-end/.env.example` set it; it must never be set on a deployed environment.
@@ -124,11 +133,12 @@ A placeholder that is truthy is worse than a blank, because a check that asks on
 
 ## The front end's half
 
-**`VITE_RECAPTCHA_SITE_KEY` is the other half of `RECAPTCHA_SECRET_KEY`, and a build-time requirement.**
-A bundle with no site key sends a placeholder token ([`front-end/src/utils/captcha.ts`](../../../front-end/src/utils/captcha.ts)), which a back end with a real secret hands to Google, who never issued it, so every signup answers 400 on a deployment that looks healthy.
-So `vite build` refuses a bundle without it ([`assertCaptchaSiteKey`](../../../front-end/vite.config.ts)), with the escape hatch of the same name, `VITE_ALLOW_INSECURE_LOCAL_DEV`, under which the bundle warns and sends the placeholder, which only a back end with `DISABLE_CAPTCHA` accepts.
+**`VITE_TURNSTILE_SITE_KEY` is the other half of `TURNSTILE_SECRET_KEY`, and a build-time requirement.**
+A bundle with no site key renders no human check and sends a placeholder token ([`front-end/src/utils/captcha.ts`](../../../front-end/src/utils/captcha.ts)), which a back end with a real secret checks with Cloudflare, who never issued it, so every sign-up and every vendor code request is asked for the check again on a deployment that looks healthy.
+So `vite build` refuses a bundle without it, and one carrying a Cloudflare test site key (a digit, `x`, twenty zeros and two letters, the shape the back end refuses for a secret), which passes, fails or always asks every person ([`assertHumanCheckSiteKey`](../../../front-end/vite.config.ts)).
+The escape hatch is the one of the same name, `VITE_ALLOW_INSECURE_LOCAL_DEV`, under which the bundle warns and builds with no key, sending the placeholder, or with a test key, whose token only a local development back end accepts.
 A keyless bundle built without the hatch throws rather than sending it.
-**A Vercel build refuses the hatch outright** ([`assertNoLocalHatchOnVercel`](../../../front-end/vite.config.ts)): when Vercel's `VERCEL` is set non-blank in the build's process environment and `VITE_ALLOW_INSECURE_LOCAL_DEV` is `true`, `vite build` fails, whatever else is set, since the hatch also lets a bundle build with no API address ([`docs/RELEASING.md`](../../RELEASING.md#the-front-end-has-two-requirements-the-back-ends-address-and-the-other-half-of-the-recaptcha-pair)).
+**A Vercel build refuses the hatch outright** ([`assertNoLocalHatchOnVercel`](../../../front-end/vite.config.ts)): when Vercel's `VERCEL` is set non-blank in the build's process environment and `VITE_ALLOW_INSECURE_LOCAL_DEV` is `true`, `vite build` fails, whatever else is set, since the hatch also lets a bundle build with no API address ([`docs/RELEASING.md`](../../RELEASING.md#the-front-end-has-two-requirements-the-back-ends-address-and-the-other-half-of-the-human-checks-pair)).
 `VERCEL` is read from the process, not through `loadEnv`, so no `.env` file can set it; the dev server never checks it.
 Vercel sets it in a build only while the project's "Enable access to System Environment Variables" setting is ticked, as the back end's [deployed-host signals](#the-one-escape-hatch) need at runtime, so the front end's refusal is armed only with that box ticked on the front-end project.
 A defense on only one side of the wire is not one.
@@ -140,12 +150,12 @@ Vite's `loadEnv` reads `front-end/.env` and never `.env.example`, so `cp .env.ex
 Conventioner's repository is public, so a branch is published the moment it is pushed: a check on GitHub can stop a merge, never the exposure, and taking applicants' details back out once took a rewrite of the whole history.
 So the check runs on the PC, before anything leaves it, and CI is only the backstop.
 
-| Where                                                   | What it reads                                                                                                                                                                                                                          |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`.githooks/pre-commit`](../../../.githooks/pre-commit) | the staged lines, so an ignored export added with `git add -f`, or its rows pasted next to a tracked file, is refused                                                                                                                  |
-| [`.githooks/pre-push`](../../../.githooks/pre-push)     | each commit the push sends that no remote-tracking branch already has, its lines and its message: the second net, for a commit made with the hooks skipped                                                                             |
-| the gate's [`nm-test.sh`](../../../scripts/nm-test.sh)  | each commit since `origin/dev`, then every file of the tree at `HEAD`, since the gate pushes the branch: the gate's test step runs it with `--real-data-only`, these checks and no suite                                               |
-| the real-data steps of CI's `real-data-and-workflows`   | the pull request's commits, then every file of the merge it checks out, plus gitleaks for secrets, which also reads each push to `dev` and `main`; a branch-protection setting can make it block a merge, and it is not the protection |
+| Where                                                   | What it reads                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`.githooks/pre-commit`](../../../.githooks/pre-commit) | the staged lines, so an ignored export added with `git add -f`, or its rows pasted next to a tracked file, is refused                                                                                                                                                         |
+| [`.githooks/pre-push`](../../../.githooks/pre-push)     | each commit the push sends that no remote-tracking branch already has, its lines and its message: the second net, for a commit made with the hooks skipped                                                                                                                    |
+| the gate's [`nm-test.sh`](../../../scripts/nm-test.sh)  | each commit since `origin/dev`, then every file of the tree at `HEAD`, since the gate pushes the branch: the gate's test step runs it with `--real-data-only`, these checks and no suite                                                                                      |
+| the real-data steps of CI's `real-data-and-workflows`   | the pull request's commits, then every file of the merge it checks out, plus gitleaks for secrets, which also reads each push to `main` and each push to `dev` that runs the whole suite; a branch-protection setting can make it block a merge, and it is not the protection |
 
 **The gate's own commits are CI's to check.**
 Its document, lint and CI-fix steps commit after its test step has run `nm-test.sh`, and the gate pushes them from its own repository under `~/.no-mistakes/`, where `core.hooksPath` is not set, so neither the hooks nor `nm-test.sh` read them: the real-data steps of CI's `real-data-and-workflows` on the pull request are the only check they get.
@@ -287,7 +297,8 @@ They are `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when
 The policy limits what script can run in the tab, the applicant's session included.
 
 **The policy names every source the app loads from, and lets no inline code or eval run.**
-`default-src 'self'`, with `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` and `frame-ancestors 'none'`; scripts from the app and reCAPTCHA, styles and fonts from the app, images from the app and `blob:` (a floorplan's image is fetched and drawn from an object URL), connections to the app, `https://api.conventioner.io` and reCAPTCHA, and frames only reCAPTCHA's, its hosts as [Google's allowlist](https://developers.google.com/recaptcha/docs/faq) names them.
+`default-src 'self'`, with `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` and `frame-ancestors 'none'`; scripts from the app and the human check's `https://challenges.cloudflare.com`, styles and fonts from the app, images from the app and `blob:` (a floorplan's image is fetched and drawn from an object URL), connections to the app and `https://api.conventioner.io`, and frames only the human check's `https://challenges.cloudflare.com`, as [Cloudflare's CSP reference](https://developers.cloudflare.com/turnstile/reference/content-security-policy/) lists Turnstile's sources (read 2026-11-24), which ask nothing of `connect-src`.
+A production build served under this policy by `vite preview` loaded the widget, made its token and signed up with no violation reported (T539).
 There is no `'unsafe-inline'` and no `'unsafe-eval'`: the built `index.html` has no inline script, Vue sets a bound style through the CSSOM (which the policy does not govern), and a build that calls `eval` or `Function` fails CI's [eval check](../testing/ci-and-the-gate.md#no-string-evaluated-as-script).
 A new origin the app loads from (an analytics script, an image host) goes into its directive in the same PR.
 

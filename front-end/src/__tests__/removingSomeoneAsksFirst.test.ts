@@ -42,9 +42,6 @@ function org(overrides: Partial<Organization> = {}): Organization {
   return {
     id: 'org-1',
     name: 'Seed Test Org',
-    owner: 'u-owner',
-    admins: ['u-admin'],
-    members: ['u-walk'],
     ownerEmail: 'owner@example.com',
     adminPeople: [{ userId: 'u-admin', email: 'admin@example.com' }],
     memberPeople: [{ userId: 'u-walk', email: EMAIL }],
@@ -232,7 +229,7 @@ describe('Manage organization asks before it removes', () => {
 
     byTestId('manage-org-remove-member-button')!.click();
     await flushPromises();
-    served = { ...served, members: [], memberPeople: [] };
+    served = { ...served, memberPeople: [] };
     byTestId('manage-org-remove-submit-button')!.click();
     await flushPromises();
 
@@ -255,7 +252,7 @@ describe('Manage organization asks before it removes', () => {
     await flushPromises();
     const record = recordConfirmation('manage-org-remove');
     // The re-read organization no longer counts their own role: they are no longer in it.
-    served = { ...served, members: [], memberPeople: [], marketsWithOwnRole: {} };
+    served = { ...served, memberPeople: [], marketsWithOwnRole: {} };
     byTestId('manage-org-remove-submit-button')!.click();
     await flushPromises();
     record.stop();
@@ -283,7 +280,7 @@ describe('Manage organization asks before it removes', () => {
       if (url === '/organizations') await held;
       return answer(url);
     });
-    served = { ...served, members: [], memberPeople: [] };
+    served = { ...served, memberPeople: [] };
     byTestId('manage-org-remove-submit-button')!.click();
     await flushPromises();
 
@@ -302,14 +299,12 @@ describe('Manage organization asks before it removes', () => {
 
   it('removes the person whose row was pressed, when an account before them is gone', async () => {
     api.delete.mockResolvedValue({ data: {} });
-    // The stored ids still name a deleted account; the read serves each person with their own id.
+    // The stored people still name a deleted account; the read serves each person with their own id.
     const wrapper = mountDialog({
-      admins: ['u-ada', 'u-gone-admin', 'u-admin'],
       adminPeople: [
         { userId: 'u-ada', email: 'ada@example.com' },
         { userId: 'u-admin', email: 'admin@example.com' },
       ],
-      members: ['u-ana', 'u-gone', 'u-walk'],
       memberPeople: [
         { userId: 'u-ana', email: 'ana@example.com' },
         { userId: 'u-walk', email: EMAIL },
@@ -380,7 +375,7 @@ describe('Manage organization asks before it removes', () => {
     byTestId('manage-org-remove-member-button')!.click();
     await flushPromises();
     // Another admin removed them first: the re-read finds them gone.
-    served = { ...served, members: [], memberPeople: [] };
+    served = { ...served, memberPeople: [] };
     api.get.mockClear();
     byTestId('manage-org-remove-submit-button')!.click();
     await flushPromises();
@@ -437,7 +432,7 @@ describe('Manage organization asks before it removes', () => {
     await tryEveryClose('manage-org-remove');
     expect(byTestId('manage-org-remove-window')).not.toBeNull();
 
-    served = { ...served, members: [], memberPeople: [] };
+    served = { ...served, memberPeople: [] };
     answer({ data: {} });
     await flushPromises();
     expect(byTestId('manage-org-remove-window')).toBeNull();

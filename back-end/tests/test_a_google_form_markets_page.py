@@ -131,7 +131,8 @@ def client():
 PUBLIC_VENDOR_ENDPOINTS = [
     ("get", "/public/markets/{slug}/vendor-page", None),
     ("get", "/public/markets/{slug}/application-form", None),
-    ("post", "/public/markets/{slug}/applicant-login/request-code", {"email": VENDOR}),
+    ("post", "/public/markets/{slug}/applicant-login/request-code",
+     {"email": VENDOR, "captcha_token": "test-human-check"}),
     ("post", "/public/markets/{slug}/applicant-login/verify-code", {"email": VENDOR, "code": "123456"}),
     ("post", "/public/markets/{slug}/applicant-login/resume", None),
     ("get", "/public/markets/{slug}/map", None),
@@ -162,7 +163,8 @@ class TestBeforeItsResultsItIsAbsent:
         monkeypatch.setattr(ApplicantAuthApi, "_send_code_email", lambda *_a, **_k: True)
         markets(_csv(MarketPhase.ASSIGNMENT))
 
-        client.post(f"/public/markets/{SLUG}/applicant-login/request-code", json={"email": VENDOR})
+        client.post(f"/public/markets/{SLUG}/applicant-login/request-code",
+                    json={"email": VENDOR, "captcha_token": "test-human-check"})
 
         assert stored == []
 
@@ -191,7 +193,8 @@ class TestOnceItsResultsArePublished:
         monkeypatch.setattr(ApplicantAuthApi, "_send_code_email", lambda *_a, **_k: True)
         markets(_csv(MarketPhase.ASSIGNMENT, resultsPublished=True))
 
-        client.post(f"/public/markets/{SLUG}/applicant-login/request-code", json={"email": VENDOR})
+        client.post(f"/public/markets/{SLUG}/applicant-login/request-code",
+                    json={"email": VENDOR, "captcha_token": "test-human-check"})
 
         assert len(stored) == 1
 
