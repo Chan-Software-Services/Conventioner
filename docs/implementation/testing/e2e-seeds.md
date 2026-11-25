@@ -34,7 +34,7 @@ describes:
   - front-end/e2e/helpers/seeds.ts#allocateThenFreeEverySeat
   - front-end/e2e/helpers/seedMarketDayMap.ts
   - front-end/e2e/helpers/seedAPricedVendor.ts
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - E02
   - E11/F01/S01
@@ -90,7 +90,7 @@ A spec that needs an account not yet verified signs up through the real route, `
 ## Markets require an organization
 
 `POST /markets` answers 400 to a payload with no `organizationId`, an unknown organization, or one the caller is not a member of ([the organization document](../data/organization-document.md)).
-So anything that creates a market attaches one: [`helpers/seeds.ts`](../../../front-end/e2e/helpers/seeds.ts) exports `ensureTestOrgAuthenticated()` (for a request context already logged in by `loginViaApi()`) and `ensureTestOrg()` (which logs in first), both reusing the user's first organization or creating `E2E Test Org`; the seed helpers return it as `orgId`.
+So anything that creates a market attaches one: [`helpers/seeds.ts`](../../../front-end/e2e/helpers/seeds.ts) exports `ensureTestOrgAuthenticated()` (for a request context already signed in, by `loginViaApi()` or, on `page.request`, by the page's own sign-in) and `ensureTestOrg()` (which logs in first), both reusing the user's first organization or creating `E2E Test Org`; the seed helpers return it as `orgId`.
 A spec that creates a market through the UI calls `ensureTestOrg()` in `beforeAll`, or the create dialog's organization list is empty and its submit stays disabled.
 `ensureTestOrgs(count)` is for a spec whose subject is a choice of organization, which a split run (CI shards) no longer guaranteed by accident.
 `ensureOrganizationAdmin(orgId, email)` makes a verified user an admin of that organization, through the owner's session the request carries, and so Admin on every market it holds; it is idempotent across runs.
@@ -251,7 +251,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
     - the organizer always has a second organization, and "the new-market dialog" always draws the organization select rather than naming one (T148)
   - the review market's cards lead with two answers and fold the rest behind "N more answers"
   - a `seedLayout()` draft whose Upper Hall layout has its floorplan and no scale, which the sweeps walk calibrating (T257)
-  - `SCREENS_INVITEE`, in no market and no organization, invited to the 36-vendor market `SCREENS_EDITOR` edits as an Editor and to the organization as a member, neither answered, so a `SCREENS` state signed in as `'invitee'` reads the Invitations page's two rows and the Markets list's line (T538); each invitation is sent only when none of its kind waits, since every sweep file seeds and an address is sent at most five invitations a quarter hour
+  - `SCREENS_INVITEE`, in no market and no organization, invited to the 36-vendor market `SCREENS_EDITOR` edits as an Editor and to the organization as a member, neither answered, so a `SCREENS` state signed in as `'invitee'` reads the Invitations page's two rows and the Markets list's line (T538); each invitation is sent only when none of its kind waits, since every sweep file seeds and an address's invitations are counted (`INVITATION_PER_ADDRESS`, [the one table of limits](../data/users-and-email.md#the-sign-in-is-bounded))
   - a `seedLayout()` draft whose Upper Hall is laid out (`UPPER_HALL_TABLES`, `UPPER_HALL_ZONES`), which the sweeps walk as its map (T257)
   - a `seedSettledLayout()` market taking applications, its Upper Hall laid out in Draft, which the sweeps walk past Draft (T257)
 - Notes:

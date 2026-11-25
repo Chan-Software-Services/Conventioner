@@ -353,8 +353,7 @@ class TestOwningAMarket:
     ):
         collection = users(_user(ATTACKER, user_id="id-attacker"))
         organization = {
-            "id": "org-1", "name": "Seed Test Org", "owner": "id-owner",
-            "admins": ["id-attacker"], "members": [],
+            "id": "org-1", "name": "Seed Test Org",
             "people": {"id-owner": "owner", "id-attacker": "admin"},
         }
         stored = organizations(organization)
@@ -367,46 +366,42 @@ class TestOwningAMarket:
         assert ATTACKER not in collection.docs
         [after] = stored.docs
         assert after["people"] == {"id-owner": "owner"}
-        assert after["admins"] == []
 
 
 class TestTheDeletedAccountsPlaces:
     """Their one place in every organization they were an admin or a member of goes with the
-    account (T283), in an organization folded into the people map and in one stored before it,
-    and every other person's place stays."""
+    account (T283), its key taken from the people map, and every other person's place stays."""
 
     FOLDED = {
-        "id": "org-folded", "name": "Folded", "owner": "id-owner", "admins": ["id-attacker"],
-        "members": ["id-other"],
+        "id": "org-folded", "name": "Folded",
         "people": {"id-owner": "owner", "id-attacker": "admin", "id-other": "member"},
     }
-    UNFOLDED = {
-        "id": "org-unfolded", "name": "Unfolded", "owner": "id-owner", "admins": ["id-other"],
-        "members": ["id-attacker"],
+    A_MEMBER_OF = {
+        "id": "org-member-of", "name": "Member of",
+        "people": {"id-owner": "owner", "id-other": "admin", "id-attacker": "member"},
     }
 
-    def test_their_places_go_from_a_folded_and_an_unfolded_organization(
+    def test_their_places_go_from_an_organization_they_were_an_admin_or_a_member_of(
         self, client, users, organizations
     ):
         users(_user(ATTACKER))
-        stored = organizations(self.FOLDED, self.UNFOLDED)
+        stored = organizations(self.FOLDED, self.A_MEMBER_OF)
         _signed_in_as(client, ATTACKER)
 
         response = _delete(client, ATTACKER)
 
         assert response.status_code == 200
-        folded, unfolded = stored.docs
-        assert folded["people"] == {"id-owner": "owner", "id-other": "member"}
-        assert (folded["admins"], folded["members"]) == ([], ["id-other"])
-        assert "people" not in unfolded
-        assert (unfolded["owner"], unfolded["admins"], unfolded["members"]) == (
-            "id-owner", ["id-other"], [])
+        admin_of, member_of = stored.docs
+        assert admin_of == {**self.FOLDED,
+                            "people": {"id-owner": "owner", "id-other": "member"}}
+        assert member_of == {**self.A_MEMBER_OF,
+                             "people": {"id-owner": "owner", "id-other": "admin"}}
 
     def test_an_organization_they_were_never_in_is_left_alone(
         self, client, users, organizations
     ):
         users(_user(ATTACKER))
-        stranger = {**self.FOLDED, "admins": [],
+        stranger = {**self.FOLDED,
                     "people": {"id-owner": "owner", "id-other": "member"}}
         stored = organizations(stranger)
         _signed_in_as(client, ATTACKER)

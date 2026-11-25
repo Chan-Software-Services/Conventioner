@@ -22,7 +22,7 @@ describes:
   - back-end/tests/real_mongo/test_a_deletion_leaves_a_tombstone.py
   - back-end/api/markets.py#invite_to_market
   - back-end/invitations.py#delete_for_market
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - E20/F04/S01
   - bug/47

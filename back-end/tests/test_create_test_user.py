@@ -66,6 +66,8 @@ def test_the_named_stack_gets_a_verified_account(monkeypatch):
 
     assert Script.create_test_user("e2e@example.com", "e2epassword123")
     assert [(user["email"], user["email_verified"]) for user in users.inserted] == [("e2e@example.com", True)]
+    # Read by nothing, but the release before signs in no account without it (T583).
+    assert users.inserted[0]["organizations"] == []
 
 
 def _named_stack(monkeypatch):

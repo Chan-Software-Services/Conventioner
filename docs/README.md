@@ -46,9 +46,10 @@ A **hub** is a file with no frontmatter that lists nodes: this file, [`CONTEXT.m
 | Worktrees and their stacks               | [scripts/README-treehouse.md](../scripts/README-treehouse.md)                                         |
 | Running the tests                        | [TESTING.md](TESTING.md)                                                                              |
 | The Google Form test corpus              | [back-end/tests/test_data/README.md](../back-end/tests/test_data/README.md)                           |
-| What the product looks like              | [design-system.md](design-system.md)                                                                  |
+| What the product looks like              | [DESIGN.md](../DESIGN.md), then [design-system.md](design-system.md)                                  |
 
 The runbooks, `TESTING.md`, `TECH_STACK.md`, `design-system.md` and the corpus README stay where they are, because code and scripts cite them by path; they are nodes outside the graph folders, and declare their layer.
+The root `DESIGN.md` is neither a node nor a hub: its front matter is the design format's tokens, written by its generator ([the design contract](design-system.md#the-contract-agents-read-designmd)), so the checker never reads it as a node's and checks only the file's links.
 
 ## Adding a node
 

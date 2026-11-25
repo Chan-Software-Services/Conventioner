@@ -6,7 +6,7 @@ GitHub API, and read what the step reads: the one word on stdout, the sentence o
 summary file, and the exit code. The stub answers each API path with a scripted sequence and records
 every request, in the pattern of test_promote_check.py's, which this file does not import.
 
-The workflow's tests read .github/workflows/test.yml and .github/actions/e2e-stack/action.yml as
+The workflow's tests read .github/workflows/test.yml and the two actions under .github/actions/ as
 text, and run steps' shells as the runner runs them (`bash -e`), with a stand-in for the program a
 step runs where the test scripts its answer.
 """
@@ -668,6 +668,7 @@ def test_it_needs_an_event_and_a_commit(stub, env, given, needed):
 
 WORKFLOW = ROOT / ".github" / "workflows" / "test.yml"
 E2E_STACK = ROOT / ".github" / "actions" / "e2e-stack" / "action.yml"
+FRONT_END_DEPS = ROOT / ".github" / "actions" / "front-end-deps" / "action.yml"
 
 JOBS = [
     "suite",
@@ -1328,21 +1329,21 @@ def test_the_advisory_scan_reads_no_word_so_a_warm_push_and_every_nightly_run_sc
 
 def test_warm_caches_fills_npm_s_cache_node_modules_and_the_stack_s_caches_and_runs_nothing_else():
     warm = workflow_jobs()["warm-caches"]
-    checkout, node, fill, deps, stack = warm["steps"]
+    checkout, node, deps, stack = warm["steps"]
 
     assert checkout["uses"].startswith("actions/checkout@")
     assert checkout["with"] == {"persist-credentials": "false"}
     assert node["uses"].startswith("actions/setup-node@")
+    assert node["id"] == "node"
     assert node["with"] == {
         "node-version-file": ".nvmrc",
         "cache": "npm",
         "cache-dependency-path": "front-end/package-lock.json",
     }
-    assert fill["name"] == "Fill npm's cache"
-    assert fill["working-directory"] == "front-end"
-    assert fill["run"] == "npm ci\n"
+    # How it installs the front end once at most is the front-end-deps tests' below.
     assert deps["uses"] == "./.github/actions/front-end-deps"
-    assert deps["with"] == {"save-cache": "true"}
+    assert sorted(deps["with"]) == ["fill-npm-cache", "save-cache"]
+    assert value(deps["with"]["save-cache"], {}) == "true"
     assert stack["uses"] == "./.github/actions/e2e-stack"
     assert stack["with"] == {"save-caches": "true", "start": '"false"'}
 
@@ -1584,8 +1585,8 @@ NOT_STARTING = [
 ]
 
 
-def action():
-    lines = E2E_STACK.read_text().splitlines()
+def action(path=E2E_STACK):
+    lines = path.read_text().splitlines()
     inputs = block(lines, lines.index("inputs:"), 0)
     steps = steps_of(block(lines, lines.index("  steps:"), 2), 4)
     return {
@@ -1647,3 +1648,116 @@ def test_chromium_s_system_packages_install_when_starting_or_on_a_miss():
 )
 def test_the_builds_and_saves_ignore_start(name):
     assert "inputs.start" not in action()["steps"][name].get("if", "")
+
+
+# The front-end-deps action's `fill-npm-cache`: by default it installs only on its own cache's miss.
+# Its conditions are evaluated, as the runner would, over each cache's hit or miss.
+
+TOKEN = re.compile(r"\s*('[^']*'|==|!=|&&|\|\||[\w.-]+)")
+
+
+def evaluate(expression, context):
+    """An expression of the forms these steps use: references, 'literals', ==, !=, && and ||."""
+    tokens = []
+    rest = expression.strip()
+    if rest.startswith("${{") and rest.endswith("}}"):
+        rest = rest[3:-2]
+    while rest.strip():
+        found = TOKEN.match(rest)
+        assert found, f"cannot read {rest!r}"
+        tokens.append(found.group(1))
+        rest = rest[found.end():]
+
+    def operand(token):
+        return token[1:-1] if token.startswith("'") else context[token]
+
+    def comparison(tokens):
+        if len(tokens) == 1:
+            return operand(tokens[0])
+        left, op, right = tokens
+        return (operand(left) == operand(right)) == (op == "==")
+
+    def split(tokens, op):
+        parts, part = [], []
+        for token in tokens:
+            if token == op:
+                parts.append(part)
+                part = []
+            else:
+                part.append(token)
+        return parts + [part]
+
+    return any(all(comparison(c) for c in split(o, "&&")) for o in split(tokens, "||"))
+
+
+def value(written, context):
+    """What a `with:` value passes: an expression's result as a string, else the literal."""
+    if written.startswith("${{"):
+        return "true" if evaluate(written, context) else "false"
+    return written.strip('"')
+
+
+def front_end_deps(given, modules_hit):
+    """What the action does with these inputs, when front-end/node_modules' cache hits or misses."""
+    found = action(FRONT_END_DEPS)
+    steps = found["steps"]
+    restore = steps["Restore front-end/node_modules"]
+    inputs = {name: spec["default"].strip('"') for name, spec in found["inputs"].items()}
+    inputs.update(given)
+    context = {f"inputs.{name}": v for name, v in inputs.items()}
+    looks_only = value(restore["with"]["lookup-only"], context) == "true"
+    context[f"steps.{restore['id']}.outputs.cache-hit"] = "true" if modules_hit else "false"
+    return {
+        "looks only": looks_only,
+        "downloads": modules_hit and not looks_only,
+        "installs": evaluate(steps["Install with npm ci"]["if"], context),
+        "saves": evaluate(steps["Save front-end/node_modules"]["if"], context),
+    }
+
+
+def test_fill_npm_cache_is_an_input_that_defaults_to_false():
+    fill = action(FRONT_END_DEPS)["inputs"]["fill-npm-cache"]
+
+    assert fill["required"] == "false"
+    assert fill["default"] == '"false"'
+
+
+@pytest.mark.parametrize("modules_hit", [True, False])
+@pytest.mark.parametrize("npm_hit", [True, False])
+def test_warm_caches_installs_once_at_most_filling_npm_s_cache_on_its_miss(npm_hit, modules_hit):
+    warm = workflow_jobs()["warm-caches"]
+    node, deps = warm["steps"][1], warm["steps"][2]
+    context = {f"steps.{node['id']}.outputs.cache-hit": "true" if npm_hit else "false"}
+    given = {name: value(written, context) for name, written in deps["with"].items()}
+
+    did = front_end_deps(given, modules_hit)
+
+    # One `npm ci` step, so it runs at most once; it runs on either cache's miss, so npm's cache
+    # is full for setup-node's post step to save, and node_modules is whole without it otherwise.
+    assert did["installs"] == (not npm_hit or not modules_hit)
+    assert did["downloads"] == (not did["installs"])
+    assert not did["looks only"] or did["installs"]
+    assert did["saves"] == (not modules_hit)
+
+
+@pytest.mark.parametrize("modules_hit", [True, False])
+def test_by_default_as_the_e2e_shards_use_it_it_installs_only_on_node_modules_miss(modules_hit):
+    shard = next(s for s in workflow_jobs()["e2e-shard"]["steps"] if s.get("uses") == "./.github/actions/front-end-deps")
+    assert "fill-npm-cache" not in shard["with"]
+
+    did = front_end_deps({"save-cache": "true"}, modules_hit)
+
+    assert not did["looks only"]
+    assert did["downloads"] == modules_hit
+    assert did["installs"] == (not modules_hit)
+    assert did["saves"] == (not modules_hit)
+
+
+def test_node_modules_is_saved_from_where_it_was_restored_under_the_restore_s_key():
+    steps = action(FRONT_END_DEPS)["steps"]
+
+    assert steps["Save front-end/node_modules"]["with"] == {
+        "path": "front-end/node_modules",
+        "key": "${{ steps.modules.outputs.cache-primary-key }}",
+    }
+    assert steps["Install with npm ci"]["run"] == "npm ci\n"

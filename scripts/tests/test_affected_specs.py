@@ -644,6 +644,8 @@ class TestAFileNoRulePlaces:
             "front-end/scripts/bundle-budget.ts",
             "front-end/scripts/no-eval.ts",
             "front-end/scripts/brand-icons.ts",
+            "front-end/scripts/design-md.ts",
+            "front-end/scripts/design-md-content.ts",
             # It decides a push's and the nightly run's suite, never a pull request's E2E.
             "scripts/ci_suite.py",
             # The back end's deploy config, which the stack does not read.

@@ -158,6 +158,24 @@ test.describe('The phase rail', () => {
   test("a CSV market carries the market's chips once its results are out, and a form market from applications", async ({
     authenticatedPage: page,
   }) => {
+    // A market taking applications by form carries it from its first phase after draft. Intake
+    // mode is chosen while a market is a draft and fixed after, so this is a market of its own,
+    // seeded before the test opens a page: the seed signs in on `page.request`, which ends the
+    // sign-in the page held, so a read the page still had out would answer 401 and take it to
+    // sign in.
+    const formMarket = await seedPhaseMarket(
+      page.request,
+      APP_API,
+      TEST_USER.email,
+      TEST_USER.password,
+    );
+    await savePlan(page.request, APP_API, TEST_USER.email, formMarket.marketId, PLAN, 'form');
+    const opened = await page.request.post(`${APP_API}/markets/${formMarket.marketId}/transition`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: { toPhase: 'applications' },
+    });
+    expect(opened.ok(), await opened.text()).toBeTruthy();
+
     // The seeded market takes its vendors by import, and published its results earlier in the
     // file, so its pages answer and the chips point at them (ADR 0022, T469). Before its results
     // it shows none (`a-google-form-markets-vendor-page.spec.ts`).
@@ -172,20 +190,7 @@ test.describe('The phase rail', () => {
       new RegExp(`${vendorPagePath(seed.slug)}$`),
     );
 
-    // A market taking applications by form carries it from its first phase after draft. Intake
-    // mode is chosen while a market is a draft and fixed after, so this is a market of its own.
-    const formMarket = await seedPhaseMarket(
-      page.request,
-      APP_API,
-      TEST_USER.email,
-      TEST_USER.password,
-    );
-    await savePlan(page.request, APP_API, TEST_USER.email, formMarket.marketId, PLAN, 'form');
-    const opened = await page.request.post(`${APP_API}/markets/${formMarket.marketId}/transition`, {
-      headers: { 'Content-Type': 'application/json' },
-      data: { toPhase: 'applications' },
-    });
-    expect(opened.ok(), await opened.text()).toBeTruthy();
+    // The form market, from applications.
     await page.goto(marketSetupPath(formMarket.marketId, 'setup'));
 
     const chip = page.getByTestId('phase-rail-vendor-page');

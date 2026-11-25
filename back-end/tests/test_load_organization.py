@@ -59,25 +59,6 @@ class TestLoadOrganizationContext:
         assert org_dict["name"] == "Test Org"
         assert "_id" not in org_dict
 
-    def test_an_owner_also_listed_as_an_admin_parses_with_the_owner_winning(self, monkeypatch, caplog):
-        """Stored before the people map, its owner also in ``admins`` failed the model, so its
-        admins and members lost every role on its markets; the fold reads it, the owner winning."""
-        monkeypatch.setattr(
-            MarketsApi.OrgsApi, "get_organization",
-            lambda _oid: {
-                **{key: value for key, value in _organization_doc().items() if key != "people"},
-                "owner": "user-9", "admins": ["user-2", "user-9"], "members": ["user-9", "user-1"],
-            },
-        )
-
-        with caplog.at_level("WARNING"):
-            organization, _ = MarketsApi._load_organization_context(ORG_ID)
-
-        assert caplog.text == ""
-        assert organization.people == {"user-9": "owner", "user-2": "admin", "user-1": "member"}
-        assert (organization.owner, organization.admins, organization.members) == (
-            "user-9", ["user-2"], ["user-1"])
-
     def test_missing_organization_returns_nothing_without_warning(self, monkeypatch, caplog):
         monkeypatch.setattr(MarketsApi.OrgsApi, "get_organization", lambda _oid: None)
 

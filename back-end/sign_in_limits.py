@@ -58,7 +58,8 @@ attempts_collection = db[SIGN_IN_ATTEMPTS_COLLECTION]
 
 @dataclass(frozen=True)
 class SignInLimit:
-    """At most ``attempts`` in each ``window``, for each subject (an address, or a caller)."""
+    """At most ``attempts`` in each ``window``, for each subject: an address, a caller, a caller and
+    address together (``caller_and_address``), or an inviter's user id."""
 
     name: str
     attempts: int

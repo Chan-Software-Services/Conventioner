@@ -11,6 +11,7 @@ sources:
   - T349
   - T510
   - T612
+  - T582
 ---
 
 # The test map
@@ -127,6 +128,7 @@ A spec is chosen by five rules:
    - the back end's pytest config, `back-end/pytest.ini`
    - the lint and format configs: `eslint.config.ts`, `stylelint.config.js`, `.prettierrc.json`, `.prettierignore` and `.editorconfig` in `front-end/`
    - the scripts in `front-end/scripts/` that check the build, or that nothing in CI runs: `bundle-budget.ts`, `no-eval.ts` and `brand-icons.ts`
+   - the [design contract](../../design-system.md#the-contract-agents-read-designmd)'s generator, `design-md.ts` and `design-md-content.ts` in `front-end/scripts/`, which write the root `DESIGN.md` and nothing the stack or a page reads
    - the back end's deploy config, `back-end/vercel.json`
    - the advisory scan's lock, `back-end/requirements-audit.in` and `requirements-audit.txt`, which only [CI's `python-advisories` job](ci-and-the-gate.md#ci) installs
    - the migrations, `back-end/migrations/`, which an operator runs by hand and which nothing the app, the seed or a spec imports

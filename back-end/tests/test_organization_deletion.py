@@ -106,9 +106,6 @@ def org(monkeypatch):
         monkeypatch.setattr(OrgsApi, "organizations_collection", FakeOrganizations(
             {"id": ORG_ID, "name": "Ember Markets", "people": {OWNER_ID: "owner"}}))
         monkeypatch.setattr(
-            OrgsApi.users_collection, "update_many", lambda *_a, **_k: None, raising=False
-        )
-        monkeypatch.setattr(
             OrgsApi.UsersApi,
             "get_user",
             lambda _email: SimpleNamespace(id=OWNER_ID, email=OWNER_EMAIL),
@@ -197,20 +194,6 @@ class TestWhatGoesWithIt:
 
         assert markets.docs == []
         assert [write for write in markets.writes if "organizationId" in str(write)] == []
-
-    def test_removing_the_organization_from_each_member_is_unchanged(self, org, monkeypatch):
-        org(_market("m-1", MarketPhase.DRAFT))
-        pulls: list = []
-        monkeypatch.setattr(
-            OrgsApi.users_collection,
-            "update_many",
-            lambda query, update: pulls.append(update),
-            raising=False,
-        )
-
-        OrgsApi.delete_organization(ORG_ID, OWNER_EMAIL)
-
-        assert pulls == [{"$pull": {"organizations": ORG_ID}}]
 
     def test_its_invitations_go_with_it(self, org, market_records):
         """Nobody accepts their way into an organization that is gone (T538)."""

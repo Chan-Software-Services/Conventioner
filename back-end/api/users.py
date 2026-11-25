@@ -265,7 +265,6 @@ class AuthUser(UserMixin):
     def __init__(self, user: User, sign_in: Optional[str] = None):
         self.id = user.id
         self.email = user.email
-        self.organizations = user.organizations
         self.login_id = user.login_id
         self.sign_in = sign_in
 
@@ -414,7 +413,6 @@ def _sign_in(login_user, user_doc, remember: bool):
     user_data = {
         "id": auth_user.id,
         "email": auth_user.email,
-        "organizations": auth_user.organizations
     }
     return jsonify({"message": "Login successful", "user_data": user_data}), 200
 
@@ -579,6 +577,7 @@ def register_user_with_captcha(bcrypt):
         "id": account_id,
         "email": email,
         "password": hashed_password,
+        # No reader; the release before signs in no account without it, until T583's follow-up.
         "organizations": [],
         "email_verified": False,
         **holding_the_link,

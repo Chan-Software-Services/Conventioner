@@ -79,10 +79,10 @@ EXCEPTIONS: Dict[Tuple[str, str], str] = {
         "the operator's seeder of a local database, run outside any request"),
     ("seed_test_markets", "_seeded_market"): (
         "the operator's seeder of a local database, run outside any request"),
+    ("migrations.migrate_drop_organization_lists", "migrate"): (
+        "a migration reads every document, tombstoned ones too"),
     ("migrations.migrate_layouts", "migrate"): _A_MIGRATION,
     ("migrations.migrate_market_keys", "migrate"): _A_MIGRATION,
-    ("migrations.migrate_organization_people", "_reconcile"): _A_MIGRATION,
-    ("migrations.migrate_organization_people", "migrate"): _A_MIGRATION,
     ("migrations.migrate_publishing_to_market_days", "migrate"): _A_MIGRATION,
     ("migrations.migrate_roles", "migrate_market_roles"): _A_MIGRATION,
     ("migrations.migrate_roles", "migrate_organization_structure"): _A_MIGRATION,
