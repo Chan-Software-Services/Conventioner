@@ -5,6 +5,7 @@ import { OrganizationsPage } from './pages/OrganizationsPage';
 import { loginViaApi } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { uniqueMarketName } from './helpers/uniqueName';
+import { grantMarketRole, placeInOrganization } from './helpers/grantMarketRole';
 import { hideDevToolsPanel } from './helpers/hideDevToolsPanel';
 import { expectWholeAddress } from './helpers/addressBreaks';
 
@@ -44,16 +45,10 @@ async function seed(request: APIRequestContext) {
   const org = await request.post(`${BACKEND_URL}/organizations`, { data: { name: orgName } });
   expect(org.ok(), await org.text()).toBeTruthy();
   const orgId = (await org.json()).organization_id as string;
-  for (const [place, email] of [
-    ['admins', ADMIN],
-    ['members', MEMBER],
-    ['members', KEEPER],
-  ]) {
-    const added = await request.post(`${BACKEND_URL}/organizations/${orgId}/${place}`, {
-      data: { user_email: email },
-    });
-    expect(added.ok(), await added.text()).toBeTruthy();
-  }
+  const as = (email: string) => ({ email, password: PASSWORD });
+  await placeInOrganization(request, orgId, as(ADMIN), 'admin');
+  await placeInOrganization(request, orgId, as(MEMBER), 'member');
+  await placeInOrganization(request, orgId, as(KEEPER), 'member');
   const marketNames: string[] = [];
   const marketIds: string[] = [];
   for (let i = 0; i < 3; i++) {
@@ -69,16 +64,9 @@ async function seed(request: APIRequestContext) {
     marketNames.push(name);
     marketIds.push((await market.json()).market_id as string);
   }
-  for (const [email, role] of [
-    [KEEPER, 'editor'],
-    [OUTSIDER, 'viewer'],
-    [ADMIN, 'editor'],
-  ]) {
-    const given = await request.post(`${BACKEND_URL}/markets/${marketIds[0]}/roles`, {
-      data: { user_email: email, role },
-    });
-    expect(given.ok(), await given.text()).toBeTruthy();
-  }
+  await grantMarketRole(request, marketIds[0], as(KEEPER), 'editor');
+  await grantMarketRole(request, marketIds[0], as(OUTSIDER), 'viewer');
+  await grantMarketRole(request, marketIds[0], as(ADMIN), 'editor');
   return { orgId, orgName, marketName: marketNames[0] };
 }
 

@@ -4,6 +4,7 @@ import { marketScreenPath } from './helpers/marketScreens';
 import { transitionMarket } from './helpers/seedPhaseMarket';
 import { SEED_MARKET_DATE, seedPublishedMarketWithAssignments } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { ManageMarketPage } from './pages/ManageMarketPage';
 
@@ -34,10 +35,7 @@ test.beforeAll(async ({ request }) => {
     TEST_USER.password,
   ));
   for (const [role, person] of Object.entries(PEOPLE)) {
-    const res = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-      data: { user_email: person.email, role },
-    });
-    expect(res.ok(), await res.text()).toBeTruthy();
+    await grantMarketRole(request, marketId, person, role as keyof typeof PEOPLE);
   }
 });
 

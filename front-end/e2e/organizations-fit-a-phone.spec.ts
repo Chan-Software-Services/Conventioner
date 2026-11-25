@@ -2,6 +2,7 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { test, expect, BACKEND_URL, LoginPage } from './fixtures';
 import { loginViaApi } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { placeInOrganization } from './helpers/grantMarketRole';
 import { OrganizationsPage } from './pages/OrganizationsPage';
 
 /**
@@ -37,10 +38,12 @@ async function ensureTheOrganization(request: APIRequestContext): Promise<void> 
     org = (await mine())!;
   }
   if (!org.memberPeople?.some((member) => member.email === MEMBER)) {
-    const added = await request.post(`${BACKEND_URL}/organizations/${org.id}/members`, {
-      data: { user_email: MEMBER },
-    });
-    expect(added.ok(), await added.text()).toBe(true);
+    await placeInOrganization(
+      request,
+      org.id,
+      { email: MEMBER, password: OWNER.password },
+      'member',
+    );
   }
 }
 
