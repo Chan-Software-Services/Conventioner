@@ -840,7 +840,7 @@ It keeps a reason to a clause: this file stays the long source, and `DESIGN.md` 
 
 **It is generated, and never edited by hand.**
 [`front-end/scripts/design-md.ts`](../front-end/scripts/design-md.ts) writes it from `base.css` and `primitives.css`, and reads `main.css` only to check that each family it names is a face the app loads.
-Its words, the sections' lines, the Do's and Don'ts, the component groups and their entries' selectors, live in [`front-end/scripts/design-md-content.ts`](../front-end/scripts/design-md-content.ts), and the generator writes only the headings, the table heads, the line that opens each query's rows and the two comments that are its own; no line of them states a token's value, so a changed value never makes the words false, and the test holds each count and range they state to `base.css`.
+Its words, the sections' lines, the Do's and Don'ts, the component groups and their entries' selectors, live in [`front-end/scripts/design-md-content.ts`](../front-end/scripts/design-md-content.ts), and the generator writes only the headings, the table heads, the line that opens each query's rows and the two comments that are its own; the test holds the counts and ranges they state of the radii, shadows, type sizes, section colours, spacing scale and phone tokens to `base.css`.
 `npm run design-md` in `front-end/` rewrites the file; run it after changing either sheet or the words, and commit the file with them.
 `npm run design-md:check` renders it again and fails when the committed file differs by a byte, naming the first line that differs and the command to run, and lints the committed file with the linter of `@google/design.md`, pinned exactly in `front-end/package.json`, since the format is alpha and its rules change between versions.
 CI's required `frontend-lint-and-types` job runs the check right after Stylelint ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)), and `scripts/nm-test.sh` runs it in the same place.
@@ -852,7 +852,7 @@ That rule takes every colour to be a component's fill or ink, while most of Conv
 
 **The generator refuses, and writes nothing, rather than write a contract that is wrong.**
 It refuses a token declared twice, a family `main.css` does not load, a component's font size that is not a `--text-*` token, a component selector no rule of `primitives.css` has, a component whose group has no words, a rule of `primitives.css` that nests a rule or an at-rule, whose declarations no line would write, and words that name a token or class the CSS no longer has; each refusal says what is wrong.
-The same test proves each refusal, and that every token and every class of the two sheets, and every declaration and selector of `primitives.css`, reaches the file.
+The same test proves each refusal, and that every token of `base.css`, and every class, declaration and selector of `primitives.css`, reaches the file.
 An entry merges its selectors' rules as a state merges with its base, except that a selector inside an earlier one (`.note a` after `.note`) takes from it only what CSS inherits, its ink and type, never its box or fill.
 
 ## What keeps this true

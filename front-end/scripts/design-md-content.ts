@@ -1,9 +1,9 @@
 /**
  * The hand-kept words of `DESIGN.md` (T582): what `design-md.ts` cannot read from the CSS.
  *
- * Each string is one line of the file, a whole sentence or a list item, written without a token's
- * value, so a changed value can never make the words false: the YAML and the generated tables carry
- * every value, and the unit test holds each count and range they state to `base.css`. A code span
+ * Each string is one line of the file, a whole sentence or a list item: the YAML and the generated
+ * tables carry every value, and the unit test holds the counts and ranges they state of the radii,
+ * shadows, type sizes, section colours, spacing scale and phone tokens to `base.css`. A code span
  * naming a token (`--space-4`, `var(--space-4)`) or classes (`.btn`) must name one `base.css` or
  * `primitives.css` has, or the generator refuses, so a rename cannot leave the words behind. The
  * generator writes only the file's headings, its table heads, the line that opens each query's
@@ -11,8 +11,8 @@
  * no parsing.
  *
  * `COMPONENTS` names the primitives' entries and the selectors each merges; a rule no entry ends on
- * is written whole under "Rules no entry ends on", and every class `primitives.css` names must reach
- * the file (an entry's selector, such a rule, or these words), or it refuses.
+ * is written whole under "Rules no entry ends on", so every class `primitives.css` names reaches the
+ * file (an entry's selector, such a rule, or these words), which the unit test checks.
  *
  * Change a word here, then run `npm run design-md` in `front-end/` and commit `DESIGN.md` with it.
  */

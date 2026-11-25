@@ -25,7 +25,7 @@ import {
 
 /**
  * Words naming nothing, so a fixture's few tokens pass the hand-kept guard, and one component for the
- * fixture's one primitive, so the completeness guard passes too.
+ * fixture's one primitive, so no entry names a selector the fixture's primitives lack.
  */
 const PLAIN: Content = {
   ...CONTENT,
