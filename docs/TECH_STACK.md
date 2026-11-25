@@ -10,7 +10,7 @@ describes:
   - .nvmrc
   - docker-compose.yml
   - front-end/vite.config.ts
-verified: 2026-11-16
+verified: 2026-11-25
 sources:
   - T254
   - T251
@@ -18,6 +18,7 @@ sources:
   - T273
   - T317
   - T345
+  - T588
 ---
 
 # Technology Stack
@@ -141,14 +142,14 @@ How each part of the code works is in the implementation layer of the [knowledge
 
 ### Core Framework
 
-- **Vue 3.5.44** - Progressive JavaScript framework
+- **Vue 3.5.46** - Progressive JavaScript framework
   - Composition API (`<script setup>`)
   - Reactive data binding
   - Component-based architecture
 
 ### Build Tool
 
-- **Vite 8.3.5** - Next-generation frontend build tool, bundling with Rolldown
+- **Vite 8.3.8** - Next-generation frontend build tool, bundling with Rolldown
   - CI holds the entry JavaScript of a build to a gzipped limit, the [bundle budget](implementation/testing/ci-and-the-gate.md#the-bundle-budget), and fails a build that calls `eval` or `Function`, which the [Content-Security-Policy](implementation/conventions/security-invariants.md#security-headers) refuses ([the eval check](implementation/testing/ci-and-the-gate.md#no-string-evaluated-as-script)), and the build itself fails when it holds any module of the development-only [component library](implementation/modules/component-library.md) ([no development page in the build](implementation/testing/ci-and-the-gate.md#no-development-page-in-the-build))
   - `vite preview` serves `front-end/vercel.json`'s security headers, so a production build runs locally under the policy production sends
   - Minifying keeps legal comments (`/*!` and `@license`, in [`vite.config.ts`](../front-end/vite.config.ts)), so the licence notices of copied icons and bundled libraries reach the shipped bundle ([ADR 0015](adr/0015-the-app-owns-its-components.md))
@@ -184,14 +185,14 @@ How each part of the code works is in the implementation layer of the [knowledge
 
 ### Routing
 
-- **Vue Router 5.4.0** - Official router for Vue.js
+- **Vue Router 5.5.1** - Official router for Vue.js
   - Client-side routing
   - Route guards for authentication
   - Public and protected routes
 
 ### HTTP Client
 
-- **Axios 1.21.0** - Promise-based HTTP client
+- **Axios 1.21.1** - Promise-based HTTP client
   - API communication through one instance, `src/utils/api.ts`
   - Cookie-based authentication support
 
@@ -205,14 +206,14 @@ How each part of the code works is in the implementation layer of the [knowledge
 
 ### Development Tools
 
-- **ESLint 10.13.0** - JavaScript/TypeScript linter
+- **ESLint 10.15.0** - JavaScript/TypeScript linter
   - Code quality enforcement
   - `npm run lint` fixes what it can; `npm run lint:check` verifies without fixing and refuses a warning as it does an error, and CI's `frontend-lint-and-types` and `scripts/nm-test.sh` run it
   - Vue-specific linting rules from `eslint-plugin-vue` 10 (its `flat/essential` set, plus `vue/no-v-html` as an error, so no template renders raw HTML)
 - **minimatch 11, held by `overrides` in `front-end/package.json`** - the glob matcher under ESLint, typescript-eslint and `@vue/test-utils`'s js-beautify, all development-only
-  - Each of them still asks for minimatch 10, so the override holds every copy at `^11.0.8`, the line that has upstream's hardening
-  - Drop the entry once ESLint, `@eslint/config-array`, `@typescript-eslint/typescript-estree` and js-beautify's `editorconfig` and `glob` all ask for 11
-- **Prettier 3.9.10** - Code formatter, configured in `front-end/.prettierrc.json` (semicolons, single quotes, a 100-character line, trailing commas everywhere)
+  - ESLint and `@eslint/config-array` ask for minimatch 11 themselves, but typescript-eslint's `@typescript-eslint/typescript-estree` and js-beautify's `editorconfig` and `glob` still ask for 10, so the override holds every copy at `^11.0.8`, the line that has upstream's hardening
+  - Drop the entry once `@typescript-eslint/typescript-estree` and js-beautify's `editorconfig` and `glob` all ask for 11
+- **Prettier 3.10.1** - Code formatter, configured in `front-end/.prettierrc.json` (semicolons, single quotes, a 100-character line, trailing commas everywhere)
   - `npm run format` fixes and `npm run format:check` verifies; both cover `front-end/`, `docs/` and the Markdown files at the repository's root (`"../*.md"`) with that config, leaving out the generated `docs/schema.d.ts`, which its test compares byte for byte, and `CHANGELOG.md`, which release-please writes (`front-end/.prettierignore`); the root glob is quoted so Prettier expands it, passing over the `CLAUDE.md` link to `AGENTS.md`, which it refuses when the shell names it; CI runs the check in `frontend-lint-and-types`, so unformatted front-end code or docs fail the build: run `npm run format` before committing
   - The one-time reformat commits, of the front end, of `docs/` and of the root Markdown, are listed in `.git-blame-ignore-revs`, which `git blame` skips once `git config blame.ignoreRevsFile .git-blame-ignore-revs` is set
 - **Stylelint 17** - The design language's gate (`npm run lint:css`, which refuses a warning as it does an error), configured in `stylelint.config.js`
@@ -225,8 +226,9 @@ How each part of the code works is in the implementation layer of the [knowledge
   - Runs component and utility unit tests (`npm run test:unit`)
   - Uses the `happy-dom` environment (configured in `vitest.config.ts`)
 - **@vue/test-utils 2** - Vue component testing utilities
+  - Since 2.6 a prop given as a plain object or array is not made deeply reactive, so a test that needs a setup element's in-place edit of the plan to re-render, as `assignmentPriority.test.ts` and `aRowAddedOnSetupHasAnId.test.ts` do, mounts it with the plan wrapped in `reactive()`, as the market screen hands it a reactive plan
 - **PostCSS 8** - Parses the design language's CSS in `src/__tests__/primitives.test.ts`, and the styles of the components `src/__tests__/everySelectWearsThePrimitive.test.ts` reads, which read every rule they check through it and no other way
-- **Playwright 1.64** - End-to-end browser testing
+- **Playwright 1.65** - End-to-end browser testing
   - Drives Chromium against the running Docker stack (`npm run test:e2e`)
   - Configured in `playwright.config.ts`
   - Page Object Model + fixtures under `front-end/e2e/`; selectors use
