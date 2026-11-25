@@ -261,8 +261,9 @@ export function installErrorTracking(
 }
 
 /**
- * Load the client once the page has first painted content. The shell paints nothing until its
- * session probe has answered, well after `mount`, so a frame after `mount` comes before that paint;
+ * Load the client once the page has first painted content. The bar paints before the session probe
+ * answers, but the first paint still comes a few milliseconds after a frame and a task from `mount`,
+ * sometimes after two frames, so waiting for a frame would load the client before that paint;
  * the browser's own `first-contentful-paint` entry says when it came, and `buffered` gives it even
  * if it came first. A browser with no paint timing waits one animation frame, then a task. With no
  * DSN, or before `installErrorTracking`, it does nothing. An error before then loads it at once.
