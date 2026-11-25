@@ -66,11 +66,8 @@ def create_organization(owner_email: str, name: str) -> str:
     org_dict = {
         "id": org_id,
         "name": name,
-        # Its people as one map (T283, ADR 0025), the lists beside it its mirror for one release.
+        # Its people as one map (T283, ADR 0025), and no list beside it (T583).
         "people": {owner_id: OrganizationRole.OWNER.value},
-        "owner": owner_id,
-        "admins": [],
-        "members": [],
         "markets": [],
         "theme": None
     }
@@ -149,9 +146,9 @@ def get_organizations_for_user(user_email: str) -> List[Dict[str, Any]]:
     Every owner, admin and member of all of them is read in one ``get_users_by_ids`` (T204), never
     one account at a time: the Organizations page and Manage organization make this read on open.
 
-    Each is served with ``owner``, ``admins`` and ``members`` derived from its people map alone, in
-    the map's order, whatever lists it still stores (T283, T583): a member made an admin is listed
-    once.
+    Each is served with its people read from its people map alone, in the map's order: its owner's
+    address, ``adminPeople`` and ``memberPeople``, whatever lists it still stores until the lists
+    migration runs (T283, T583), which no screen reads.
     """
     user = UsersApi.get_user(user_email)
     if not user:
@@ -166,19 +163,12 @@ def get_organizations_for_user(user_email: str) -> List[Dict[str, Any]]:
     for org in orgs:
         people = people_of[org["id"]]
         owners = _placed(people, OrganizationRole.OWNER)
-        org["owner"] = owners[0] if owners else None
-        org["admins"] = _placed(people, OrganizationRole.ADMIN)
-        org["members"] = _placed(people, OrganizationRole.MEMBER)
-        owner = accounts.get(org.get("owner"))
+        owner = accounts.get(owners[0]) if owners else None
         if owner:
             org["ownerEmail"] = owner.email
             org["owner_email"] = owner.email
-        org["adminPeople"] = _people(org.get("admins", []), accounts)
-        org["memberPeople"] = _people(org.get("members", []), accounts)
-        # Deprecated (T204): the same people by address alone, for a tab still on the old bundle,
-        # which pairs them with ``admins`` and ``members`` by position. The next release removes them.
-        org["adminEmails"] = org["admin_emails"] = [p["email"] for p in org["adminPeople"]]
-        org["memberEmails"] = org["member_emails"] = [p["email"] for p in org["memberPeople"]]
+        org["adminPeople"] = _people(_placed(people, OrganizationRole.ADMIN), accounts)
+        org["memberPeople"] = _people(_placed(people, OrganizationRole.MEMBER), accounts)
         # The rows it sets for the markets it will hold, each read as the markets copy it.
         org["defaultPermissionTable"] = Actions.default_table(org.get(DEFAULT_PERMISSIONS))
         org.update(_what_removing_takes(org))

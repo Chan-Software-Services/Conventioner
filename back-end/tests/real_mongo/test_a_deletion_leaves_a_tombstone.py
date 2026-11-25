@@ -93,7 +93,7 @@ def organization(real_db, signed_in, market_in, applications, market_records):
     client = signed_in(OWNER)
     real_db["organizations"].insert_one({
         "id": ORG, "name": "Fixture Deleted Markets", "people": {client.account_id: "owner"},
-        "owner": client.account_id, "admins": [], "members": [], "markets": [], "theme": None})
+        "markets": [], "theme": None})
     real_db["users"].update_one({"id": client.account_id}, {"$addToSet": {"organizations": ORG}})
     markets = [
         market_in(MarketPhase.DRAFT, organizationId=ORG, phaseHistory=_history(MarketPhase.DRAFT)),
@@ -575,8 +575,7 @@ class TestAnOwnerOfATargetBeingDeleted:
         client, (draft, _archived) = organization
         _cut(monkeypatch, "api.applications.delete_applications_for_market")
         assert client.delete(f"/markets/{draft['id']}").status_code == 500
-        real_db["organizations"].update_one({"id": ORG}, {"$set": {"owner": "someone-else",
-                                                                     "people": {}}})
+        real_db["organizations"].update_one({"id": ORG}, {"$set": {"people": {}}})
         real_db[MARKETS_COLLECTION].delete_many({"id": {"$ne": draft["id"]}})
 
         refused = client.post("/delete-user", json={"email": OWNER})

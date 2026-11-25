@@ -97,8 +97,7 @@ def people(monkeypatch):
 @pytest.fixture
 def organization(monkeypatch, people, history):
     return install_organizations(monkeypatch, FakeOrganizations({
-        "id": ORG_ID, "name": "Ember Markets", "owner": OWNER.id, "admins": [ADMIN.id],
-        "members": [MEMBER.id],
+        "id": ORG_ID, "name": "Ember Markets",
         "people": {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"},
         "markets": [], "theme": None,
     }))
@@ -137,7 +136,6 @@ class TestTheOrganization:
 
         assert response.status_code == 200
         assert organization.doc["people"] == {OWNER.id: "owner", ADMIN.id: "admin"}
-        assert organization.doc["members"] == []
         assert len(organization_entries(history)) == 1
 
     @pytest.mark.parametrize("remover", [OWNER, ADMIN], ids=["the owner", "an admin"])

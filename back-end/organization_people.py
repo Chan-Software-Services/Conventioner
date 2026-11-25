@@ -17,9 +17,8 @@ each change does to the target's place as read, ``AUTHORITY`` who may ask for it
 ``next_people`` answers the map a change leaves, or its refusal, without a database. Each change is
 then one conditional write (``_write``) that lands only on the places it judged: the requester's
 and the target's keys as read. Transferring its ownership is one such write too, filtered on the
-giver being owner, so no cut and no read finds an organization with two owners, none, or an owner
-in a list. Every write keeps ``owner``, ``admins`` and ``members`` an exact
-mirror of the map, for a rollback to the release before it. A write that meets a change answers 404
+giver being owner, so no cut and no read finds an organization with two owners or none. Every
+write changes the map alone, never the old lists (T583). A write that meets a change answers 404
 when the organization or the removed person is gone, else ``OrganizationChanged``, a 409; the person
 decides again on what is true, as for a market (ADR 0024), and nothing is retried here.
 """
@@ -43,9 +42,6 @@ users_collection = db["users"]
 OWNER = OrganizationRole.OWNER.value
 ADMIN = OrganizationRole.ADMIN.value
 MEMBER = OrganizationRole.MEMBER.value
-
-#: The list each place below the owner is mirrored in.
-_LIST_OF = {ADMIN: "admins", MEMBER: "members"}
 
 NO_LONGER_IN_THE_ORGANIZATION = "They are no longer in this organization."
 ORGANIZATION_CHANGED = (
@@ -266,41 +262,20 @@ def next_people(
 
 def _moved(user_id: str, before: Optional[str], after: Optional[str]) -> Dict[str, Dict[str, Any]]:
     """The update that moves one person from ``before`` to ``after`` (``None``, no place): their
-    key set or unset, and the lists kept in step, no path touched twice. The owner's place is the
-    transfer's, never moved here."""
+    key set or unset, and nothing else. The owner's place is the transfer's, never moved here."""
     key = people_key(user_id)
     if OWNER in (before, after):
         raise RuntimeError(
             "The owner's place moves only when the organization's ownership is transferred")
     if after is None:
-        return {"$unset": {key: ""}, "$pull": {"admins": user_id, "members": user_id}}
-    update: Dict[str, Dict[str, Any]] = {"$set": {key: after},
-                                         "$addToSet": {_LIST_OF[after]: user_id}}
-    if before is not None:
-        update["$pull"] = {_LIST_OF[before]: user_id}
-    return update
+        return {"$unset": {key: ""}}
+    return {"$set": {key: after}}
 
 
-def _handed_on(org: Dict[str, Any], giver: str, taker: str,
-               taker_was: str) -> Tuple[Dict[str, Any], Dict[str, Dict[str, Any]]]:
-    """What the transfer of the giver's organization to ``taker`` holds beyond both keys, and its
-    update: both keys and ``owner`` set, and the lists kept in step, no path touched twice.
-
-    From a member: they are pulled from ``members`` and the giver added to ``admins``. From an
-    admin: ``admins`` is set to the list as read with the taker replaced by the giver where they
-    stood, one path for both, so it is held as read, lest a change to it meanwhile be lost.
-    """
-    update: Dict[str, Dict[str, Any]] = {"$set": {
-        people_key(giver): ADMIN, people_key(taker): OWNER, "owner": taker}}
-    if taker_was == MEMBER:
-        update["$pull"] = {"members": taker}
-        update["$addToSet"] = {"admins": giver}
-        return {}, update
-    admins = org.get("admins")
-    update["$set"]["admins"] = [giver if user_id == taker else user_id
-                                for user_id in (admins if isinstance(admins, list) else [])
-                                if user_id != giver]
-    return {"admins": admins}, update
+def _handed_on(giver: str, taker: str) -> Dict[str, Dict[str, Any]]:
+    """The update that transfers the giver's organization to ``taker``: the taker's key set to
+    owner and the giver's to admin, and nothing else."""
+    return {"$set": {people_key(giver): ADMIN, people_key(taker): OWNER}}
 
 
 def _write(org: Dict[str, Any], people: Dict[str, str], after: Dict[str, str],
@@ -309,16 +284,16 @@ def _write(org: Dict[str, Any], people: Dict[str, str], after: Dict[str, str],
     ``people``), landing only while the places it judged still hold. Answers whether it landed.
 
     The requester's and the target's keys as read are held, ``{"$exists": False}`` where they had
-    none, and, transferring ownership to an admin, ``admins`` as read. An organization with no map
+    none, and nothing beyond them: the write changes no other path. An organization with no map
     reads as nobody, so no change is ever judged allowed on it and none reaches here.
     """
     held = {people_key(user_id): people.get(user_id) or {"$exists": False}
             for user_id in (requester_id, target_id) if user_id is not None}
     if after.get(target_id) == OWNER:
-        lists_held, update = _handed_on(org, requester_id, target_id, people[target_id])
+        update = _handed_on(requester_id, target_id)
     else:
-        lists_held, update = {}, _moved(target_id, people.get(target_id), after.get(target_id))
-    query = {"id": org["id"], **held, **lists_held}
+        update = _moved(target_id, people.get(target_id), after.get(target_id))
+    query = {"id": org["id"], **held}
     return organizations_collection.update_one(live(query), update).matched_count > 0
 
 
@@ -541,7 +516,7 @@ def transfer(org_id: str, requesting_user_email: str, new_owner_email: str) -> N
     written.
 
     One write, filtered on the giver being owner and the new owner's place as read: an
-    organization is never stored with two owners, none, or an owner in a list.
+    organization is never stored with two owners or none.
     """
     org, requester = _requester(org_id, requesting_user_email)
     may(organization_people_of(org), Event.TRANSFER, requester.id)
@@ -573,5 +548,4 @@ def forget(user_id: str) -> None:
     """
     key = people_key(user_id)
     organizations_collection.update_many(
-        {key: {"$in": [ADMIN, MEMBER]}},
-        {"$unset": {key: ""}, "$pull": {"admins": user_id, "members": user_id}})
+        {key: {"$in": [ADMIN, MEMBER]}}, {"$unset": {key: ""}})

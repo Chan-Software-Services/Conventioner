@@ -8,8 +8,9 @@ name in one ``get_users_by_ids``.
 It serves each organization's admins and members as ``{userId, email}`` pairs, ``adminPeople`` and
 ``memberPeople``, in the stored order, an account that is gone left out. Manage organization paired
 ``adminEmails[idx]`` with ``admins[idx]``, so one deleted account shifted every later row onto the
-next person's id, and Remove named one person and removed another. The address lists stay, for a tab
-on the old bundle, built from the same read.
+next person's id, and Remove named one person and removed another. The address lists kept for a
+tab on the old bundle went with the old ``owner``, ``admins`` and ``members`` lists (T583): every
+person is served from the people map alone.
 """
 import copy
 from types import SimpleNamespace
@@ -128,10 +129,10 @@ def test_an_organization_serves_its_people_with_their_ids_in_the_stored_order(re
     assert listed["memberPeople"] == [
         {"userId": CAL.id, "email": CAL.email}, {"userId": BEA.id, "email": BEA.email},
     ]
-    # Deprecated, for a tab on the old bundle: the same people, by address alone.
     assert listed["ownerEmail"] == listed["owner_email"] == OWNER.email
-    assert listed["adminEmails"] == listed["admin_emails"] == [READER.email, ADA.email]
-    assert listed["memberEmails"] == listed["member_emails"] == [CAL.email, BEA.email]
+    # Neither the old lists nor the addresses kept for the old bundle are served (T583).
+    assert not {"owner", "admins", "members", "adminEmails", "admin_emails", "memberEmails",
+                "member_emails"} & set(listed)
 
 
 def test_a_deleted_admin_leaves_every_other_admin_with_their_own_id(reads):
@@ -139,14 +140,13 @@ def test_a_deleted_admin_leaves_every_other_admin_with_their_own_id(reads):
 
     [listed] = OrgsApi.get_organizations_for_user(READER.email)
 
-    # The stored ids still name the gone account; the pairs leave it out and shift no one.
-    assert listed["admins"] == [ADA.id, GONE.id, BEA.id, CAL.id]
+    # The stored map still names the gone account; the pairs leave it out and shift no one.
+    assert listed["people"][GONE.id] == "admin"
     assert listed["adminPeople"] == [
         {"userId": ADA.id, "email": ADA.email},
         {"userId": BEA.id, "email": BEA.email},
         {"userId": CAL.id, "email": CAL.email},
     ]
-    assert listed["adminEmails"] == [ADA.email, BEA.email, CAL.email]
 
 
 def test_a_deleted_owner_serves_no_owner_address(reads):
@@ -166,20 +166,21 @@ def test_a_reader_in_no_organization_reads_no_account_by_id(reads):
     assert not any(counted.batches)
 
 
-def test_a_folded_organization_serves_its_people_from_the_map_in_its_order(reads):
-    """A stale list it still stores until the migration removes it is never served: a member made
-    an admin keeps their place in the map's order and is listed once, among the admins (T283,
-    T583)."""
+def test_an_organization_with_stale_lists_serves_its_people_from_the_map_in_its_order(reads):
+    """Lists it still stores until the migration removes them, which disagree with its map, are
+    never read: its owner, admins and members are served from the map alone, in the map's order,
+    and a member made an admin is listed once, among the admins (T283, T583)."""
+    stale = {"owner": DEV.id, "admins": [ADA.id, DEV.id], "members": [CAL.id, READER.id, BEA.id]}
     reads({
         **folded("org-1", [(CAL, "member"), (OWNER, "owner"), (ADA, "admin"), (READER, "member"),
                            (BEA, "admin")]),
-        "owner": OWNER.id, "admins": [ADA.id], "members": [CAL.id, READER.id, BEA.id],
+        **stale,
     })
 
     [listed] = OrgsApi.get_organizations_for_user(READER.email)
 
-    assert (listed["owner"], listed["admins"], listed["members"]) == (
-        OWNER.id, [ADA.id, BEA.id], [CAL.id, READER.id])
+    # Served as stored until the migration removes them, never derived again; no screen reads them.
+    assert {key: listed[key] for key in stale} == stale
     assert listed["adminPeople"] == [
         {"userId": ADA.id, "email": ADA.email}, {"userId": BEA.id, "email": BEA.email},
     ]

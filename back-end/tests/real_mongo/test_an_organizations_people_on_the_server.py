@@ -42,7 +42,6 @@ def organization(real_db, people):
     reader of it as stored."""
     doc = {"id": ORG, "name": "Race Markets",
            "people": {people[OWNER]: "owner", people[ADMIN]: "admin", people[MEMBER]: "member"},
-           "owner": people[OWNER], "admins": [people[ADMIN]], "members": [people[MEMBER]],
            "markets": [], "theme": None}
     real_db["organizations"].insert_one(doc)
     harness.warm(real_db["organizations"], 2)
@@ -110,7 +109,6 @@ def test_an_add_member_judged_before_the_owner_hands_that_person_the_organizatio
     assert isinstance(answered[0], OrganizationChanged), answered
     stored = organization()
     assert stored["people"][people[NEW]] == "owner"
-    assert people[NEW] not in stored["members"]
     assert_one_map(stored)
 
 
@@ -133,11 +131,13 @@ def test_two_transfers_by_the_owner_to_two_people_land_one(organization, people,
 
 @pytest.mark.parametrize("first", [0, 1], ids=["the transfer writes first",
                                              "the add admin writes first"])
-def test_a_transfer_to_an_admin_beside_an_add_admin_keeps_the_mirror(
+def test_a_transfer_to_an_admin_beside_an_add_admin_of_another(
         organization, people, judged_then, race, first):
-    # The transfer sets ``admins`` whole from the list as read; it holds that list, so an admin
-    # added meanwhile is never dropped from it while the map keeps them. Both judge on one read,
-    # then the one named writes first and the other only once it has returned.
+    # The transfer holds only the giver's and the new owner's keys (T583), so an admin the owner
+    # added meanwhile is no change to it: written first, the add lands and so does the transfer.
+    # Written first, the transfer makes the owner an admin, so their add, which holds their
+    # place as read, meets it and is refused. Either way the map holds one owner. Both judge on
+    # one read, then the one named writes first and the other only once it has returned.
     both_judged = threading.Barrier(2, timeout=MEETING_TIMEOUT_SECONDS)
     written = threading.Event()
 
@@ -160,11 +160,13 @@ def test_a_transfer_to_an_admin_beside_an_add_admin_keeps_the_mirror(
     answered = race(2, lambda i: judged_then.as_thread(i, lambda: change(i)))
 
     landed, refused = _outcomes(answered)
-    assert (landed, refused) == ([first], [1 - first]), answered
     stored = organization()
+    assert stored["people"][people[ADMIN]] == "owner"
+    assert stored["people"][people[OWNER]] == "admin"
     if first == 0:
-        assert stored["people"][people[ADMIN]] == "owner" and people[NEW] not in stored["people"]
+        assert (landed, refused) == ([0], [1]), answered
+        assert people[NEW] not in stored["people"]
     else:
-        assert stored["people"][people[NEW]] == "admin" and people[NEW] in stored["admins"]
-        assert stored["people"][people[OWNER]] == "owner"
+        assert (landed, refused) == ([0, 1], []), answered
+        assert stored["people"][people[NEW]] == "admin"
     assert_one_map(stored)

@@ -85,8 +85,8 @@ def mail(monkeypatch):
 
 def an_organization(**overrides):
     return {
-        "id": ORG_ID, "name": "Ember Markets", "people": dict(PLACES), "owner": OWNER.id,
-        "admins": [ADMIN.id], "members": [MEMBER.id], "markets": [], "theme": None, **overrides,
+        "id": ORG_ID, "name": "Ember Markets", "people": dict(PLACES), "markets": [], "theme": None,
+        **overrides,
     }
 
 
@@ -164,9 +164,7 @@ class TestOneAnswerForEveryAddress:
         for address, place in ((ACCOUNT.email, "admin"), (NO_ACCOUNT, "member")):
             assert invite(OWNER, address, place=place).status_code == 200
 
-        assert organization.doc["people"] == PLACES
-        assert (organization.doc["admins"], organization.doc["members"]) == (
-            [ADMIN.id], [MEMBER.id])
+        assert organization.doc == an_organization()
         assert organization.accounts.writes == []
         assert len(invitations.documents) == 2
 

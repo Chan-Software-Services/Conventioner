@@ -353,8 +353,7 @@ class TestOwningAMarket:
     ):
         collection = users(_user(ATTACKER, user_id="id-attacker"))
         organization = {
-            "id": "org-1", "name": "Seed Test Org", "owner": "id-owner",
-            "admins": ["id-attacker"], "members": [],
+            "id": "org-1", "name": "Seed Test Org",
             "people": {"id-owner": "owner", "id-attacker": "admin"},
         }
         stored = organizations(organization)
@@ -367,7 +366,6 @@ class TestOwningAMarket:
         assert ATTACKER not in collection.docs
         [after] = stored.docs
         assert after["people"] == {"id-owner": "owner"}
-        assert after["admins"] == []
 
 
 class TestTheDeletedAccountsPlaces:
@@ -375,13 +373,11 @@ class TestTheDeletedAccountsPlaces:
     account (T283), its key taken from the people map, and every other person's place stays."""
 
     FOLDED = {
-        "id": "org-folded", "name": "Folded", "owner": "id-owner", "admins": ["id-attacker"],
-        "members": ["id-other"],
+        "id": "org-folded", "name": "Folded",
         "people": {"id-owner": "owner", "id-attacker": "admin", "id-other": "member"},
     }
     A_MEMBER_OF = {
-        "id": "org-member-of", "name": "Member of", "owner": "id-owner", "admins": ["id-other"],
-        "members": ["id-attacker"],
+        "id": "org-member-of", "name": "Member of",
         "people": {"id-owner": "owner", "id-other": "admin", "id-attacker": "member"},
     }
 
@@ -396,16 +392,16 @@ class TestTheDeletedAccountsPlaces:
 
         assert response.status_code == 200
         admin_of, member_of = stored.docs
-        assert admin_of["people"] == {"id-owner": "owner", "id-other": "member"}
-        assert (admin_of["admins"], admin_of["members"]) == ([], ["id-other"])
-        assert member_of["people"] == {"id-owner": "owner", "id-other": "admin"}
-        assert (member_of["admins"], member_of["members"]) == (["id-other"], [])
+        assert admin_of == {**self.FOLDED,
+                            "people": {"id-owner": "owner", "id-other": "member"}}
+        assert member_of == {**self.A_MEMBER_OF,
+                             "people": {"id-owner": "owner", "id-other": "admin"}}
 
     def test_an_organization_they_were_never_in_is_left_alone(
         self, client, users, organizations
     ):
         users(_user(ATTACKER))
-        stranger = {**self.FOLDED, "admins": [],
+        stranger = {**self.FOLDED,
                     "people": {"id-owner": "owner", "id-other": "member"}}
         stored = organizations(stranger)
         _signed_in_as(client, ATTACKER)

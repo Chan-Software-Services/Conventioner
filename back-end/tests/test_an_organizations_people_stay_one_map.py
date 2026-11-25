@@ -2,17 +2,17 @@
 one write (T283).
 
 An organization's people are one map, ``{user_id: "owner" | "admin" | "member"}``, written only by
-``organization_people``, its lists kept as an exact mirror. Transferring the organization's
+``organization_people``, which writes the map alone (T583). Transferring the organization's
 ownership is one conditional write filtered on the giver being owner, so no cut and no read finds
-it with two owners, none, or an owner in a list: on ``dev`` at ``279afc56`` it was four
+it with two owners or none: on ``dev`` at ``279afc56`` it was four
 unconditional writes, and the planner's probes cut between them left an organization that did not
 parse, or a new owner with no place in it at all.
 
 The property test drives random sequences of every change, by random requesters on random targets,
 a third of them with a second change landing between the first's read and its write, through the
 module over the shared organizations fake, which filters and writes as the server does; after each
-change the map holds exactly one owner and one place per person, its lists mirror it, it parses, and
-a change nothing met leaves the map ``next_people`` answers.
+change the map holds exactly one owner and one place per person, no old list stands beside it, it
+parses, and a change nothing met leaves the map ``next_people`` answers.
 """
 import copy
 import random
@@ -52,7 +52,7 @@ PEOPLE = (OWNER, ADMIN, MEMBER, SECOND_ADMIN, SECOND_MEMBER, OUTSIDER)
 FOLDED = {
     "id": ORG, "name": "Ember Markets",
     "people": {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"},
-    "owner": OWNER.id, "admins": [ADMIN.id], "members": [MEMBER.id], "markets": [], "theme": None,
+    "markets": [], "theme": None,
 }
 
 
@@ -73,19 +73,14 @@ def accounts(monkeypatch):
 
 
 def assert_one_map(doc):
-    """Every invariant of an organization's people: one owner, each value a place, the lists an
-    exact mirror of the map with no id twice, and the document parses with the same people."""
+    """Every invariant of an organization's people: one owner, each value a place, no old
+    ``owner``, ``admins`` or ``members`` list beside the map (the writer writes the map alone,
+    T583), and the document parses with the same people."""
     people = organization_people_of(doc)
     assert set(people.values()) <= {"owner", "admin", "member"}, people
     owners = [user_id for user_id, place in people.items() if place == "owner"]
     assert len(owners) == 1, people
-    admins = [user_id for user_id, place in people.items() if place == "admin"]
-    members = [user_id for user_id, place in people.items() if place == "member"]
-    assert doc["owner"] == owners[0]
-    assert len(doc["admins"]) == len(set(doc["admins"])), doc["admins"]
-    assert len(doc["members"]) == len(set(doc["members"])), doc["members"]
-    assert set(doc["admins"]) == set(admins), (doc["admins"], people)
-    assert set(doc["members"]) == set(members), (doc["members"], people)
+    assert not {"owner", "admins", "members"} & set(doc), doc
     parsed = MarketsApi._organization_from_document(copy.deepcopy(doc))
     assert parsed is not None, doc
     assert parsed.people == people
