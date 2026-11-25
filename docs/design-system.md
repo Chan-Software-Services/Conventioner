@@ -50,7 +50,7 @@ describes:
   - front-end/src/components/ToolRow.vue
   - front-end/src/components/ToolGroup.vue
   - front-end/src/components/PinnedTools.vue
-verified: 2026-11-19
+verified: 2026-11-25
 sources:
   - wayfinding/claims-and-room/map
   - wayfinding/claims-and-room/01
