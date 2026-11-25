@@ -7,16 +7,16 @@ import type { ErrorTrackingClient, Transport } from '@/utils/errorTrackingClient
  * allows (docs/implementation/modules/error-tracking.md).
  *
  * This module is in the entry chunk, so it stays small: it catches each error and each policy
- * violation, notes the route it happened on and queues it. The SDK is in `errorTrackingClient.ts`, reached only by the `import()`
- * below, which a build with no DSN drops with the branch around it, so that build has no Sentry
- * chunk at all. The client is loaded after the first paint, or at the first error, whichever comes
- * first.
+ * violation, notes the route it happened on and queues it. The SDK is in `errorTrackingClient.ts`,
+ * reached only by the `import()` below, which a build with no DSN drops with the branch around it,
+ * so that build has no Sentry chunk at all, and `vite.config.ts` fails one that has. The client
+ * is loaded after the first paint, or at the first error, whichever comes first.
  */
 
 /** How an error was caught, which an event names. */
 export type CaughtBy = 'vue' | 'onerror' | 'unhandledrejection' | 'csp';
 
-/** The route an error happened on: its pattern, its name and the two variables an event may fill. */
+/** The route an error happened on: its pattern, its name and the two variables it may fill. */
 export interface TrackedRoute {
   pattern: string | null;
   name: string | null;
@@ -51,7 +51,7 @@ export type TrackedItem =
 /** At most this many errors wait for the client to load; the rest are dropped. */
 export const QUEUE_LIMIT = 10;
 
-/** At most this many events are sent in one page load, so a page failing in a loop spends little. */
+/** At most this many events are sent in a page load, so a page failing in a loop spends little. */
 export const MAX_EVENTS_PER_PAGE = 20;
 
 /**
@@ -62,7 +62,14 @@ const PAGE_CODE_NOT_FETCHED = [
   'Failed to fetch dynamically imported module', // Chromium
   'Importing a module script failed', // Safari
   'error loading dynamically imported module', // Firefox
+  'Unable to preload CSS for', // Vite's preload helper, before a page whose code has its own CSS
 ];
+
+/**
+ * All a browser tells a page of an error in a script from another origin, reCAPTCHA's among them:
+ * no error object, no file, and these words, which say nothing and would spend the month's quota.
+ */
+const CROSS_ORIGIN_SCRIPT_ERROR = /^Script error\.?$/;
 
 /** What a test may give in place of the SDK's transport and the chunk's import. */
 export interface ErrorTrackingForTests {
@@ -210,7 +217,10 @@ export function installErrorTracking(
     load();
   }
 
-  const onError = (event: ErrorEvent) => track(event.error ?? event.message, 'onerror');
+  const onError = (event: ErrorEvent) => {
+    if (!event.error && CROSS_ORIGIN_SCRIPT_ERROR.test(event.message)) return;
+    track(event.error ?? event.message, 'onerror');
+  };
   const onRejection = (event: PromiseRejectionEvent) => track(event.reason, 'unhandledrejection');
   // One event a page load for each directive and blocked origin: a page that loads a refused
   // script on every render would otherwise spend its 20 on one violation.

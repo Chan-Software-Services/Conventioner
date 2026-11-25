@@ -310,6 +310,8 @@ describe('what is never sent', () => {
     ],
     ['Safari', 'Importing a module script failed.'],
     ['Firefox', 'error loading dynamically imported module: https://conventioner.io/assets/a.js'],
+    // Vite's preload helper, before it imports a page whose code has its own CSS.
+    ['Vite, for a page with CSS,', 'Unable to preload CSS for /assets/a.css'],
   ])("%s's failed fetch of a page's code", async (_browser, words) => {
     await install('/');
     dispatchRejection(new TypeError(words));
@@ -318,6 +320,17 @@ describe('what is never sent', () => {
 
     expect(sent).toEqual([]);
   });
+
+  it.each([['Script error.'], ['Script error']])(
+    "a cross-origin script's error, which the browser reads to us only as %j",
+    async (message) => {
+      await install('/');
+      window.dispatchEvent(new ErrorEvent('error', { message }));
+      await installed!.flush();
+
+      expect(sent).toEqual([]);
+    },
+  );
 
   it(`more than ${MAX_EVENTS_PER_PAGE} events in one page load`, async () => {
     await install('/');
