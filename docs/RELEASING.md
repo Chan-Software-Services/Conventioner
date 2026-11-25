@@ -412,7 +412,7 @@ python migrations/migrate_business_name.py --list    # AFTER the deploy, once pe
 ```
 
 Each line runs from `back-end/` against production with the address passed inline and never in `.env`: `MONGODB_URI='<URI>' .venv/bin/python migrations/<script>`.
-The sections below follow the list's order, and each says when its migration runs and what it does; a migration whose list line says all there is to say has none.
+The sections below follow the list's order, and each says what its migration does and, but for `create_applications_collection.py`'s, when it runs; a migration whose list line says all there is to say has none.
 
 ### `migrate_market_keys.py`
 
@@ -496,7 +496,8 @@ Its `--dry-run` prints each organization it would rebuild and whose place would 
 
 ### `migrate_assignment_state.py`
 
-[`migrate_assignment_state.py`](../back-end/migrations/migrate_assignment_state.py) runs **after** the deploy of the release carrying T316, which stores each market's assignment state, and Publish results the revision it stood on, and again after any roll-forward past a rollback.
+The release carrying T316 stores each market's assignment state, and Publish results stores the revision it stood on.
+Run [`migrate_assignment_state.py`](../back-end/migrations/migrate_assignment_state.py) **after** that release is deployed, and again after any roll-forward past a rollback.
 Run it with `--dry-run`, which names each market it would change by id and what it would set, and counts them, then without.
 Until it runs, that release reads each market's state off its rows by the same rule ([the assignment's lifecycle](implementation/modules/assignment-lifecycle.md)), so nothing refuses to boot, and running it changes nothing a market shows.
 A market that changed between the script's read and its write on three tries is listed as skipped, and running it again sets it.
@@ -504,7 +505,8 @@ A market whose stored assignment does not parse is left alone and listed by id; 
 
 ### `migrate_owed_day_state.py`
 
-[`migrate_owed_day_state.py`](../back-end/migrations/migrate_owed_day_state.py) runs right **after** the deploy of the release carrying T335, which stores each owed table-day's state ([payments](implementation/data/payments.md#the-owed-days-state)), and again after any roll-forward past a rollback.
+The release carrying T335 stores each owed table-day's state ([payments](implementation/data/payments.md#the-owed-days-state)).
+Run [`migrate_owed_day_state.py`](../back-end/migrations/migrate_owed_day_state.py) right **after** that release is deployed, and again after any roll-forward past a rollback.
 Run it with `--dry-run`, which names each record it would change by market id, date and record id, never an address, says what it would set, and counts them, then without.
 It also drops each amount an Admin set on a day the vendor no longer holds, which no line shows, and records an `owed_dropped` entry in the market's history for each, naming the amount and who set it (Daniel's choice, T335).
 Until it runs, that release reads each record from the fields the release before wrote, so nothing refuses to boot and nothing a vendor's Payment tab shows changes; until then a hidden amount is dropped, with its entry, only when its day is next seated, which is why it runs right after the deploy.
@@ -512,7 +514,9 @@ A record that changed between the script's read and its write on three tries is 
 
 ### `migrate_application_status.py`
 
-[`migrate_application_status.py`](../back-end/migrations/migrate_application_status.py) runs right **after** the deploy of the release that serves each application's review state (T277 ticket 02), which reads every stored application by the owner's rules ([the application document](implementation/data/application-document.md#the-migration)), before any organizer uses Begin assignment, and on Daniel's word, which their word to merge it gives, and again after any roll-forward past a rollback.
+The release that serves each application's review state (T277 ticket 02) reads every stored application by the owner's rules ([the application document](implementation/data/application-document.md#the-migration)).
+Run [`migrate_application_status.py`](../back-end/migrations/migrate_application_status.py) right **after** that release is deployed and before any organizer uses Begin assignment, on Daniel's word, which their word to merge it gives.
+Run it again after any roll-forward past a rollback.
 Run it with `--dry-run`, then without.
 Its first lines count the applications of the live markets in each stored status, missing ones included: run with `--dry-run`, that is the read-only count of production decision 9.6 of T277's report asks for, before any write.
 It then names each application it would change by market id and application id, never an address, says what it would store (a status, an origin, a mark for the deal), and counts them.
