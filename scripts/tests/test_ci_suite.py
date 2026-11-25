@@ -897,13 +897,10 @@ def test_warm_caches_fills_npm_s_cache_node_modules_and_the_stack_s_caches_and_r
         "cache": "npm",
         "cache-dependency-path": "front-end/package-lock.json",
     }
-    # One install at most: front-end-deps runs `npm ci` itself when npm's cache missed, so the
-    # setup-node post step has it full to save, and otherwise only on its own cache's miss.
+    # How it installs the front end once at most is the front-end-deps tests' below.
     assert deps["uses"] == "./.github/actions/front-end-deps"
-    assert deps["with"] == {
-        "save-cache": "true",
-        "fill-npm-cache": "${{ steps.node.outputs.cache-hit != 'true' }}",
-    }
+    assert sorted(deps["with"]) == ["fill-npm-cache", "save-cache"]
+    assert value(deps["with"]["save-cache"], {}) == "true"
     assert stack["uses"] == "./.github/actions/e2e-stack"
     assert stack["with"] == {"save-caches": "true", "start": '"false"'}
 
@@ -1073,6 +1070,68 @@ def test_the_builds_and_saves_ignore_start(name):
 
 
 # The front-end-deps action's `fill-npm-cache`: by default it installs only on its own cache's miss.
+# Its conditions are evaluated, as the runner would, over each cache's hit or miss.
+
+TOKEN = re.compile(r"\s*('[^']*'|==|!=|&&|\|\||[\w.-]+)")
+
+
+def evaluate(expression, context):
+    """An expression of the forms these steps use: references, 'literals', ==, !=, && and ||."""
+    tokens = []
+    rest = expression.strip()
+    if rest.startswith("${{") and rest.endswith("}}"):
+        rest = rest[3:-2]
+    while rest.strip():
+        found = TOKEN.match(rest)
+        assert found, f"cannot read {rest!r}"
+        tokens.append(found.group(1))
+        rest = rest[found.end():]
+
+    def operand(token):
+        return token[1:-1] if token.startswith("'") else context[token]
+
+    def comparison(tokens):
+        if len(tokens) == 1:
+            return operand(tokens[0])
+        left, op, right = tokens
+        return (operand(left) == operand(right)) == (op == "==")
+
+    def split(tokens, op):
+        parts, part = [], []
+        for token in tokens:
+            if token == op:
+                parts.append(part)
+                part = []
+            else:
+                part.append(token)
+        return parts + [part]
+
+    return any(all(comparison(c) for c in split(o, "&&")) for o in split(tokens, "||"))
+
+
+def value(written, context):
+    """What a `with:` value passes: an expression's result as a string, else the literal."""
+    if written.startswith("${{"):
+        return "true" if evaluate(written, context) else "false"
+    return written.strip('"')
+
+
+def front_end_deps(given, modules_hit):
+    """What the action does with these inputs, when front-end/node_modules' cache hits or misses."""
+    found = action(FRONT_END_DEPS)
+    steps = found["steps"]
+    restore = steps["Restore front-end/node_modules"]
+    inputs = {name: spec["default"].strip('"') for name, spec in found["inputs"].items()}
+    inputs.update(given)
+    context = {f"inputs.{name}": v for name, v in inputs.items()}
+    looks_only = value(restore["with"]["lookup-only"], context) == "true"
+    context[f"steps.{restore['id']}.outputs.cache-hit"] = "true" if modules_hit else "false"
+    return {
+        "looks only": looks_only,
+        "downloads": modules_hit and not looks_only,
+        "installs": evaluate(steps["Install with npm ci"]["if"], context),
+        "saves": evaluate(steps["Save front-end/node_modules"]["if"], context),
+    }
 
 
 def test_fill_npm_cache_is_an_input_that_defaults_to_false():
@@ -1082,21 +1141,42 @@ def test_fill_npm_cache_is_an_input_that_defaults_to_false():
     assert fill["default"] == '"false"'
 
 
-def test_filling_npm_s_cache_installs_whatever_the_restore_found_and_the_restore_only_looks():
+@pytest.mark.parametrize("modules_hit", [True, False])
+@pytest.mark.parametrize("npm_hit", [True, False])
+def test_warm_caches_installs_once_at_most_filling_npm_s_cache_on_its_miss(npm_hit, modules_hit):
+    warm = workflow_jobs()["warm-caches"]
+    node, deps = warm["steps"][1], warm["steps"][2]
+    context = {f"steps.{node['id']}.outputs.cache-hit": "true" if npm_hit else "false"}
+    given = {name: value(written, context) for name, written in deps["with"].items()}
+
+    did = front_end_deps(given, modules_hit)
+
+    # One `npm ci` step, so it runs at most once; it runs on either cache's miss, so npm's cache
+    # is full for setup-node's post step to save, and node_modules is whole without it otherwise.
+    assert did["installs"] == (not npm_hit or not modules_hit)
+    assert did["downloads"] == (not did["installs"])
+    assert not did["looks only"] or did["installs"]
+    assert did["saves"] == (not modules_hit)
+
+
+@pytest.mark.parametrize("modules_hit", [True, False])
+def test_by_default_as_the_e2e_shards_use_it_it_installs_only_on_node_modules_miss(modules_hit):
+    shard = next(s for s in workflow_jobs()["e2e-shard"]["steps"] if s.get("uses") == "./.github/actions/front-end-deps")
+    assert "fill-npm-cache" not in shard["with"]
+
+    did = front_end_deps({"save-cache": "true"}, modules_hit)
+
+    assert not did["looks only"]
+    assert did["downloads"] == modules_hit
+    assert did["installs"] == (not modules_hit)
+    assert did["saves"] == (not modules_hit)
+
+
+def test_node_modules_is_saved_from_where_it_was_restored_under_the_restore_s_key():
     steps = action(FRONT_END_DEPS)["steps"]
 
-    assert steps["Restore front-end/node_modules"]["with"]["lookup-only"] == "${{ inputs.fill-npm-cache == 'true' }}"
-    assert steps["Install with npm ci"]["if"] == (
-        "inputs.fill-npm-cache == 'true' || steps.modules.outputs.cache-hit != 'true'"
-    )
-    assert steps["Install with npm ci"]["run"] == "npm ci\n"
-
-
-def test_node_modules_is_saved_only_on_its_own_cache_s_miss():
-    save = action(FRONT_END_DEPS)["steps"]["Save front-end/node_modules"]
-
-    assert save["if"] == "inputs.save-cache == 'true' && steps.modules.outputs.cache-hit != 'true'"
-    assert save["with"] == {
+    assert steps["Save front-end/node_modules"]["with"] == {
         "path": "front-end/node_modules",
         "key": "${{ steps.modules.outputs.cache-primary-key }}",
     }
+    assert steps["Install with npm ci"]["run"] == "npm ci\n"
