@@ -20,6 +20,7 @@ import {
   type DealRecord,
   defaultSeconds,
   fileFilter,
+  fileWeight,
   type GitHubReads,
   parseShard,
   parseTimings,
@@ -27,6 +28,7 @@ import {
   refreshTimings,
   mergeReports,
   passes,
+  type Phase,
   secondsFromReports,
   SERIAL_PROJECT,
   serialFiles,
@@ -134,6 +136,84 @@ describe('dealShards', () => {
   it('refuses a shard count below one, and a file listed twice', () => {
     expect(() => dealShards(FILES, SECONDS, 0)).toThrow();
     expect(() => dealShards([...FILES, FILES[0]!], SECONDS, 6)).toThrow(/twice/);
+  });
+
+  it('refuses a worker count below one', () => {
+    expect(() => dealShards(FILES, SECONDS, 6, { workers: 0 })).toThrow(/worker/);
+    expect(() => dealShards(FILES, SECONDS, 6, { workers: 1.5 })).toThrow(/worker/);
+  });
+});
+
+/**
+ * A shard runs its serial files at one worker and the rest at the parallel pass's workers, so a
+ * file costs its shard's wall time its seconds when serial and its seconds over the workers when
+ * parallel: the deal weighs each file by that share.
+ */
+describe('dealShards by wall time', () => {
+  it('weighs a parallel file at half its seconds at two workers, and a serial one at its seconds', () => {
+    const seconds = { 'a.spec.ts': 100, 'b.spec.ts': 120, 'c.spec.ts': 90 };
+    const files = Object.keys(seconds);
+    const weight = fileWeight(files, seconds, { serial: ['a.spec.ts'], workers: 2 });
+    expect(files.map(weight)).toEqual([100, 60, 45]);
+    // By seconds alone b leads and a waits on c; by wall time the serial a weighs most.
+    expect(dealShards(files, seconds, 2)).toEqual([['b.spec.ts'], ['a.spec.ts', 'c.spec.ts']]);
+    expect(dealShards(files, seconds, 2, { serial: ['a.spec.ts'], workers: 2 })).toEqual([
+      ['a.spec.ts'],
+      ['b.spec.ts', 'c.spec.ts'],
+    ]);
+  });
+
+  it('deals as by seconds alone with no serial file at one worker', () => {
+    for (const total of [1, 4, 6]) {
+      expect(dealShards(FILES, SECONDS, total, { serial: [], workers: 1 })).toEqual(
+        dealShards(FILES, SECONDS, total),
+      );
+      // At one worker a serial file and a parallel one cost the same, so the list changes nothing.
+      expect(dealShards(FILES, SECONDS, total, { serial: FILES.slice(0, 5), workers: 1 })).toEqual(
+        dealShards(FILES, SECONDS, total),
+      );
+    }
+  });
+
+  it('weighs a file with no timing yet at the median of those measured, divided when parallel', () => {
+    const seconds = { 'a.spec.ts': 10, 'b.spec.ts': 30, 'c.spec.ts': 200 };
+    const files = [...Object.keys(seconds), 'new.spec.ts'];
+    expect(fileWeight(files, seconds, { workers: 2 })('new.spec.ts')).toBe(15);
+    expect(fileWeight(files, seconds, { serial: ['new.spec.ts'], workers: 2 })('new.spec.ts')).toBe(
+      30,
+    );
+    expect(fileWeight(files, seconds)('new.spec.ts')).toBe(30);
+  });
+
+  it("evens the shards' wall time over a hand of serial and parallel files", () => {
+    const seconds = {
+      'a-serial.spec.ts': 120,
+      'b-serial.spec.ts': 100,
+      'c.spec.ts': 200,
+      'd.spec.ts': 160,
+      'e.spec.ts': 120,
+      'f.spec.ts': 80,
+      'g.spec.ts': 60,
+      'h.spec.ts': 40,
+    };
+    const files = Object.keys(seconds);
+    const options = { serial: ['a-serial.spec.ts', 'b-serial.spec.ts'], workers: 2 };
+    const hands = dealShards(files, seconds, 2, options);
+    expect(hands).toEqual([
+      ['a-serial.spec.ts', 'd.spec.ts', 'e.spec.ts', 'h.spec.ts'],
+      ['b-serial.spec.ts', 'c.spec.ts', 'f.spec.ts', 'g.spec.ts'],
+    ]);
+    const weight = fileWeight(files, seconds, options);
+    const wall = hands.map((hand) => hand.reduce((sum, file) => sum + weight(file), 0));
+    expect(wall).toEqual([280, 270]);
+    expect(Math.max(...wall) - Math.min(...wall)).toBeLessThanOrEqual(
+      Math.max(...files.map(weight)),
+    );
+    // Dealt by seconds alone, the same files run 220 and 330 seconds of wall time.
+    const bySeconds = dealShards(files, seconds, 2).map((hand) =>
+      hand.reduce((sum, file) => sum + weight(file), 0),
+    );
+    expect(bySeconds).toEqual([220, 330]);
   });
 });
 
@@ -410,10 +490,23 @@ describe('checkShards', () => {
     'd.spec.ts': 1,
   };
   const SOURCE = "run 5's e2e-shard-timings";
-  function shards(total = 2, source = SOURCE, dealtBy: Record<string, number> = timings) {
-    return dealShards(files, dealtBy, total).map((hand, n) => ({
+  function shards(
+    total = 2,
+    source = SOURCE,
+    dealtBy: Record<string, number> = timings,
+    deal: Pick<DealRecord, 'serial' | 'workers'> = {},
+  ) {
+    return dealShards(files, dealtBy, total, deal).map((hand, n) => ({
       shard: n + 1,
-      deal: { shard: n + 1, total, source, timings: dealtBy, files, hand } satisfies DealRecord,
+      deal: {
+        shard: n + 1,
+        total,
+        source,
+        timings: dealtBy,
+        files,
+        hand,
+        ...deal,
+      } satisfies DealRecord,
       report: report(Object.fromEntries(hand.map((file) => [file, [[timings[file]! * 1000]]]))),
     }));
   }
@@ -466,6 +559,36 @@ describe('checkShards', () => {
       'a.spec.ts ran on more than one shard',
       'c.spec.ts ran on no shard',
     ]);
+  });
+
+  it('names shards that dealt by different serial files', () => {
+    const [one] = shards(2, SOURCE, timings, { serial: ['a.spec.ts'], workers: 2 });
+    const [, two] = shards(2, SOURCE, timings, { serial: ['a.spec.ts', 'b.spec.ts'], workers: 2 });
+    expect(checkShards([one!, two!]).problems[0]).toBe(
+      `the shards dealt by different serial files: shard 1 by ${SOURCE}, 1 serial file; ` +
+        `shard 2 by ${SOURCE}, 2 serial files`,
+    );
+  });
+
+  it('names shards that dealt by different worker counts', () => {
+    const [one] = shards(2, SOURCE, timings, { serial: ['a.spec.ts'], workers: 2 });
+    const [, two] = shards(2, SOURCE, timings, { serial: ['a.spec.ts'], workers: 3 });
+    expect(checkShards([one!, two!]).problems[0]).toBe(
+      `the shards dealt by different worker counts: shard 1 by ${SOURCE}, 2 workers; ` +
+        `shard 2 by ${SOURCE}, 3 workers`,
+    );
+  });
+
+  it('reads a deal record from before the passes as no serial file at one worker', () => {
+    const [oldOne, oldTwo] = shards();
+    expect(checkShards([oldOne!, oldTwo!]).problems).toEqual([]);
+    const [, newTwo] = shards(2, SOURCE, timings, { serial: ['a.spec.ts'], workers: 2 });
+    expect(checkShards([oldOne!, newTwo!]).problems[0]).toBe(
+      'the shards dealt by different serial files and worker counts: ' +
+        `shard 1 by ${SOURCE}, no serial file, 1 worker; shard 2 by ${SOURCE}, 1 serial file, 2 workers`,
+    );
+    const [, sameTwo] = shards(2, SOURCE, timings, { serial: [], workers: 1 });
+    expect(checkShards([oldOne!, sameTwo!]).problems).toEqual([]);
   });
 
   it('refuses with no deal record at all', () => {
@@ -531,6 +654,48 @@ describe('shardSummary', () => {
     expect(shardSummary('x', [1], ['c.spec.ts ran on no shard'])).toContain(
       '- c.spec.ts ran on no shard',
     );
+  });
+
+  const phase = (name: Phase['name'], seconds: number): Phase => ({
+    name,
+    files: 3,
+    seconds,
+    status: 0,
+  });
+
+  it("gives each shard's serial and parallel pass, and the spread over their sum", () => {
+    const text = shardSummary(
+      'x',
+      [600, 750.4, 700],
+      [],
+      [
+        [phase('serial', 120.4), phase('parallel', 500)],
+        [phase('parallel', 800)],
+        [phase('serial', 100), phase('parallel', 650)],
+      ],
+    );
+    expect(text).toContain('| Shard | Seconds of tests | Serial pass | Parallel pass |');
+    expect(text).toContain('| 1/3 | 600 | 120 | 500 |');
+    expect(text).toContain('| 2/3 | 750 | - | 800 |');
+    expect(text).toContain('| 3/3 | 700 | 100 | 650 |');
+    expect(text).toContain(
+      "Spread: 180 seconds between the fastest and the slowest shard's passes (22% of the slowest).",
+    );
+  });
+
+  it('gives a dash for a shard with no phases, and the spread by seconds of tests unless every shard has them', () => {
+    const text = shardSummary(
+      'x',
+      [600, 750.4, 700],
+      [],
+      [[phase('serial', 120), phase('parallel', 500)], undefined, [phase('parallel', 650)]],
+    );
+    expect(text).toContain('| 2/3 | 750 | - | - |');
+    expect(text).toContain('| 3/3 | 700 | - | 650 |');
+    expect(text).toContain(
+      'Spread: 150 seconds between the fastest and the slowest shard (20% of the slowest).',
+    );
+    expect(shardSummary('x', [600, 750], [])).toContain('| 2/2 | 750 | - | - |');
   });
 });
 

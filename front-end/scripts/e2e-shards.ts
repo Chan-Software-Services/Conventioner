@@ -5,10 +5,12 @@
  * Playwright's own `--shard` cuts the alphabetical list of spec files into runs of equal test count,
  * whatever the tests cost: on its first six-shard run the three people-at-scale files, whose names
  * sort together, all landed on one shard, which ran 24 minutes of tests while another ran 6. Here
- * every shard lists the suite itself, deals each spec file to the shard with the least time so far,
- * heaviest first by the timings, and runs its own hand. The dealing depends only on the list and the
- * timings, so every runner given the same timings deals the same hands, and each file is in exactly
- * one. A spec file with no timing yet weighs the median of those measured.
+ * every shard lists the suite itself, deals each spec file to the shard with the least wall time so
+ * far, heaviest first, and runs its own hand. A file weighs its timing when it is on the serial list,
+ * which runs one file at a time, and its timing over the parallel pass's workers when it is not. The
+ * dealing depends only on the list, the timings, the serial list and the workers, so every runner
+ * given the same ones deals the same hands, and each file is in exactly one. A spec file with no
+ * timing yet weighs the median of those measured, divided as any other.
  *
  * The timings refresh themselves, with no hand step. In CI each shard first takes them with
  *
@@ -24,19 +26,21 @@
  *   node scripts/e2e-shards.ts --shard=3/10 --timings=<that file>
  *
  * and writes its deal record (`test-results/e2e-deal.json`: the timings' source, the timings, every
- * listed file and its hand) beside Playwright's report. Without `--timings` it deals by the
- * committed file. It runs its hand in two passes, both whatever the first's result: the files of
- * the serial list (`e2e/serialSpecs.ts`), which need the stack to themselves, at one worker, then
- * the rest at the config's workers (`E2E_WORKERS`). Each pass keeps its own output folder and HTML
- * report (`test-results/<pass>/`, `playwright-report/<pass>/`); `test-results/results.json` is
- * their JSON reports merged, and `test-results/e2e-phases.json` each pass's name, file count, wall
- * seconds and exit status. Once every shard has passed, CI's `e2e` job runs
+ * listed file, its hand, the serial files and the workers) beside Playwright's report. Without
+ * `--timings` it deals by the committed file. It runs its hand in two passes, both whatever the
+ * first's result: the files of the serial list (`e2e/serialSpecs.ts`), which need the stack to
+ * themselves, at one worker, then the rest at the config's workers (`E2E_WORKERS`). Each pass
+ * keeps its own output folder and HTML report (`test-results/<pass>/`, `playwright-report/<pass>/`);
+ * `test-results/results.json` is their JSON reports merged, and `test-results/e2e-phases.json` each
+ * pass's name, file count, wall seconds and exit status. Once every shard has passed, CI's `e2e`
+ * job runs
  *
  *   node scripts/e2e-shards.ts check <dir of the shards' artifacts> [--publish=<out file>]
  *
- * which fails unless every shard dealt by the same timings and their reports hold every listed spec
- * file exactly once, writes each shard's seconds and the spread to the job summary, and with
- * `--publish` writes the next timings: the ones the run dealt by, blended with what it measured.
+ * which fails unless every shard dealt by the same timings, serial files and workers and their
+ * reports hold every listed spec file exactly once, writes each shard's seconds, its passes' wall
+ * seconds and the spread to the job summary, and with `--publish` writes the next timings: the
+ * ones the run dealt by, blended with what it measured.
  *
  * The committed file is only the fallback. Refresh it by hand from CI runs' reports, each run's
  * `e2e-results-shard-*` artifacts in a folder of their own, oldest first, the newest whole:
@@ -76,21 +80,52 @@ export function defaultSeconds(files: readonly string[], seconds: Timings): numb
   return known.length % 2 === 1 ? known[middle]! : (known[middle - 1]! + known[middle]!) / 2;
 }
 
+/** What a shard's passes make of its hand: which files run in the serial pass, and how many
+ * workers run the rest. */
+export interface DealOptions {
+  /** The serial list's files, which run one at a time; none when left out. */
+  serial?: Iterable<string>;
+  /** The parallel pass's workers; one when left out. */
+  workers?: number;
+}
+
 /**
- * The spec files dealt to `total` shards: heaviest first, each to the shard with the least time so
- * far (the lowest-numbered on a tie), ties between files broken by name, so the hands depend on the
- * files and their timings alone, never on the order the files were listed in. Each hand runs in
- * alphabetical order.
+ * Each file's share of its shard's wall time: its seconds when it runs in the serial pass, one at a
+ * time, and its seconds over the workers when it runs in the parallel pass, beside others. A file
+ * with no timing takes the median of those measured before that division.
  */
-export function dealShards(files: readonly string[], seconds: Timings, total: number): string[][] {
+export function fileWeight(
+  files: readonly string[],
+  seconds: Timings,
+  { serial = [], workers = 1 }: DealOptions = {},
+): (file: string) => number {
+  if (!Number.isInteger(workers) || workers < 1) throw new Error(`a worker count of ${workers}`);
+  const isSerial = new Set(serial);
+  const fallback = defaultSeconds(files, seconds);
+  return (file) => (seconds[file] ?? fallback) / (isSerial.has(file) ? 1 : workers);
+}
+
+/**
+ * The spec files dealt to `total` shards: heaviest first by their share of a shard's wall time
+ * (`fileWeight`), each to the shard with the least so far (the lowest-numbered on a tie), ties
+ * between files broken by name, so the hands depend on the files, their timings, the serial list and
+ * the workers alone, never on the order the files were listed in. One deal over both passes' files,
+ * not one per pass, so it evens each shard's two passes summed. Each hand runs in alphabetical
+ * order. With no serial file and one worker it deals by the timings alone.
+ */
+export function dealShards(
+  files: readonly string[],
+  seconds: Timings,
+  total: number,
+  options: DealOptions = {},
+): string[][] {
   if (!Number.isInteger(total) || total < 1) throw new Error(`a shard count of ${total}`);
   const unique = new Set(files);
   if (unique.size !== files.length) {
     const twice = files.find((file, n) => files.indexOf(file) !== n);
     throw new Error(`${twice} is listed twice`);
   }
-  const fallback = defaultSeconds(files, seconds);
-  const weight = (file: string) => seconds[file] ?? fallback;
+  const weight = fileWeight(files, seconds, options);
   const order = [...unique].sort((a, b) => weight(b) - weight(a) || (a < b ? -1 : a > b ? 1 : 0));
   const hands: string[][] = Array.from({ length: total }, () => []);
   const load: number[] = Array.from({ length: total }, () => 0);
@@ -142,7 +177,7 @@ interface ReportStats {
 }
 
 interface Report {
-  config?: { rootDir?: string };
+  config?: { rootDir?: string; workers?: number };
   suites?: ReportSuite[];
   errors?: unknown[];
   stats?: ReportStats;
@@ -198,6 +233,15 @@ export function passes(hand: readonly string[], serial: Iterable<string>): Pass[
       files: hand.filter((f) => !isSerial.has(f)),
     },
   ].filter((pass) => pass.files.length > 0);
+}
+
+/** One pass as a shard ran it, in `test-results/e2e-phases.json`: its file count, wall seconds and
+ * exit status (`null` when a signal ended it). */
+export interface Phase {
+  name: Pass['name'];
+  files: number;
+  seconds: number;
+  status: number | null;
 }
 
 /**
@@ -443,6 +487,10 @@ export interface DealRecord {
   /** Every spec file the suite listed. */
   files: string[];
   hand: string[];
+  /** The listed files of the serial list, sorted; none in a record from before the passes. */
+  serial?: string[];
+  /** The parallel pass's workers; one in a record from before the passes. */
+  workers?: number;
 }
 
 /** One shard's artifact, as the `e2e` job downloads it: either file may be missing. */
@@ -450,6 +498,7 @@ export interface ShardResult {
   shard: number;
   deal?: DealRecord;
   report?: Report;
+  phases?: Phase[];
 }
 
 /**
@@ -469,12 +518,38 @@ export function checkShards(shards: readonly ShardResult[]): {
   const problems: string[] = [];
   const total = Math.max(...deals.map((deal) => deal.total));
   // What decides the hands, not the words of the source: shards that fell back to the committed file
-  // for different reasons dealt alike.
-  const key = (deal: DealRecord) => JSON.stringify([deal.timings, deal.total, deal.files]);
-  if (new Set(deals.map(key)).size > 1) {
+  // for different reasons dealt alike. A record from before the passes dealt by no serial file at
+  // one worker.
+  const serial = (deal: DealRecord) => deal.serial ?? [];
+  const workers = (deal: DealRecord) => deal.workers ?? 1;
+  const plural = (count: number, noun: string) =>
+    count === 0 ? `no ${noun}` : `${count} ${noun}${count === 1 ? '' : 's'}`;
+  const parts = [
+    {
+      what: 'timings',
+      key: (deal: DealRecord) => JSON.stringify([deal.timings, deal.total, deal.files]),
+      says: () => '',
+    },
+    {
+      what: 'serial files',
+      key: (deal: DealRecord) => JSON.stringify(serial(deal)),
+      says: (deal: DealRecord) => `, ${plural(serial(deal).length, 'serial file')}`,
+    },
+    {
+      what: 'worker counts',
+      key: (deal: DealRecord) => String(workers(deal)),
+      says: (deal: DealRecord) => `, ${plural(workers(deal), 'worker')}`,
+    },
+  ].filter((part) => new Set(deals.map(part.key)).size > 1);
+  if (parts.length > 0) {
     problems.push(
-      'the shards dealt by different timings: ' +
-        deals.map((deal) => `shard ${deal.shard} by ${deal.source}`).join('; '),
+      `the shards dealt by different ${parts.map((part) => part.what).join(' and ')}: ` +
+        deals
+          .map(
+            (deal) =>
+              `shard ${deal.shard} by ${deal.source}${parts.map((part) => part.says(deal)).join('')}`,
+          )
+          .join('; '),
     );
   }
   const ranOn = new Map<string, number>();
@@ -530,25 +605,44 @@ export function publishedTimings(shards: readonly ShardResult[]): Record<string,
   return blendTimings(deal.timings, secondsFromReports(reports), deal.files);
 }
 
-/** The `e2e` job's summary of the deal: the timings' source, each shard's seconds, the spread. */
+/**
+ * The `e2e` job's summary of the deal: the timings' source, each shard's seconds of tests and its
+ * passes' wall seconds (`phases`, by shard, a dash for a pass it did not run or a shard with none),
+ * and the spread: over the passes' wall seconds summed when every shard has phases, else over the
+ * seconds of tests.
+ */
 export function shardSummary(
   source: string,
   seconds: readonly number[],
   problems: readonly string[],
+  phases: readonly (readonly Phase[] | undefined)[] = [],
 ): string {
   const lines = ['### E2E shards', '', `Dealt by ${source}.`, ''];
-  lines.push('| Shard | Seconds of tests |', '|-------|------------------|');
+  lines.push(
+    '| Shard | Seconds of tests | Serial pass | Parallel pass |',
+    '|-------|------------------|-------------|---------------|',
+  );
+  const pass = (n: number, name: Phase['name']) =>
+    phases[n]?.find((phase) => phase.name === name)?.seconds;
+  const cell = (value: number | undefined) => (value === undefined ? '-' : `${Math.round(value)}`);
   seconds.forEach((value, n) =>
-    lines.push(`| ${n + 1}/${seconds.length} | ${Math.round(value)} |`),
+    lines.push(
+      `| ${n + 1}/${seconds.length} | ${Math.round(value)} | ${cell(pass(n, 'serial'))} | ` +
+        `${cell(pass(n, 'parallel'))} |`,
+    ),
   );
   if (seconds.length > 0) {
-    const slowest = Math.max(...seconds);
-    const spread = slowest - Math.min(...seconds);
+    const byPasses = seconds.every((_, n) => phases[n] !== undefined);
+    const loads = byPasses
+      ? seconds.map((_, n) => phases[n]!.reduce((sum, phase) => sum + phase.seconds, 0))
+      : seconds;
+    const slowest = Math.max(...loads);
+    const spread = slowest - Math.min(...loads);
     const share = slowest > 0 ? Math.round((spread / slowest) * 100) : 0;
     lines.push(
       '',
-      `Spread: ${Math.round(spread)} seconds between the fastest and the slowest shard ` +
-        `(${share}% of the slowest).`,
+      `Spread: ${Math.round(spread)} seconds between the fastest and the slowest ` +
+        `${byPasses ? "shard's passes" : 'shard'} (${share}% of the slowest).`,
     );
   }
   if (problems.length > 0) {
@@ -768,15 +862,33 @@ function runShard(
   if (!rootDir) throw new Error("Playwright's list names no rootDir");
   const { source, timings } = readChosen(timingsPath);
   const files = specFiles(suite);
-  const hand = dealShards(files, timings, total)[current - 1]!;
-  const fallback = defaultSeconds(files, timings);
-  const minutes = hand.reduce((sum, file) => sum + (timings[file] ?? fallback), 0) / 60;
+  // Both from the one list: a file's project, and the config's workers, are the same in every list.
+  const serial = serialFiles(suite);
+  const workers = Math.max(1, suite.config?.workers ?? 1);
+  const hand = dealShards(files, timings, total, { serial, workers })[current - 1]!;
+  const weight = fileWeight(files, timings, { serial, workers });
+  const minutes = hand.reduce((sum, file) => sum + weight(file), 0) / 60;
+  const isSerial = new Set(serial);
   console.log(
-    `e2e shard ${current}/${total}: ${hand.length} of ${files.length} spec files, ` +
-      `about ${minutes.toFixed(1)} minutes of tests by ${source}`,
+    `e2e shard ${current}/${total}: ${hand.length} of ${files.length} spec files ` +
+      `(${hand.filter((file) => isSerial.has(file)).length} serial), ` +
+      `about ${minutes.toFixed(1)} minutes by ${source}`,
   );
-  for (const file of hand) console.log(`  ${file}${file in timings ? '' : ' (no timing yet)'}`);
-  const record: DealRecord = { shard: current, total, source, timings, files, hand };
+  for (const file of hand) {
+    const notes = [isSerial.has(file) ? 'serial' : '', file in timings ? '' : 'no timing yet'];
+    const said = notes.filter(Boolean).join(', ');
+    console.log(`  ${file}${said ? ` (${said})` : ''}`);
+  }
+  const record: DealRecord = {
+    shard: current,
+    total,
+    source,
+    timings,
+    files,
+    hand,
+    serial: [...serial].sort(),
+    workers,
+  };
   const writeRecord = () => {
     mkdirSync(join(import.meta.dirname, '..', 'test-results'), { recursive: true });
     writeFileSync(dealRecordFile(), `${JSON.stringify(record)}\n`);
@@ -800,8 +912,8 @@ function runShard(
   // the passes' merged, at the path the config names.
   const resultsDir = join(import.meta.dirname, '..', 'test-results');
   const reports: Report[] = [];
-  const phases: { name: string; files: number; seconds: number; status: number | null }[] = [];
-  for (const pass of passes(hand, serialFiles(suite))) {
+  const phases: Phase[] = [];
+  for (const pass of passes(hand, serial)) {
     const json = join(resultsDir, `results-${pass.name}.json`);
     const started = Date.now();
     const run = spawnSync(
@@ -844,7 +956,7 @@ function runShard(
 }
 
 /** Each shard's artifact under `dir`, as `actions/download-artifact` lays them out by pattern:
- * `e2e-results-shard-<n>/`, each with `results.json` and `e2e-deal.json`. */
+ * `e2e-results-shard-<n>/`, each with `results.json`, `e2e-deal.json` and `e2e-phases.json`. */
 function shardResults(dir: string): ShardResult[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
@@ -861,6 +973,7 @@ function shardResults(dir: string): ShardResult[] {
         shard,
         deal: read<DealRecord>('e2e-deal.json'),
         report: read<Report>('results.json'),
+        phases: read<Phase[]>('e2e-phases.json'),
       };
     });
 }
@@ -870,7 +983,8 @@ function checkCommand(dir: string, publish: string | undefined): number {
   const shards = shardResults(dir);
   const { problems, seconds } = checkShards(shards);
   const source = dealtBy(shards.flatMap((shard) => (shard.deal ? [shard.deal] : [])));
-  const summary = shardSummary(source, seconds, problems);
+  const phases = seconds.map((_, n) => shards.find((shard) => shard.shard === n + 1)?.phases);
+  const summary = shardSummary(source, seconds, problems, phases);
   console.log(summary);
   const summaryFile = process.env.GITHUB_STEP_SUMMARY;
   if (summaryFile) appendFileSync(summaryFile, summary);

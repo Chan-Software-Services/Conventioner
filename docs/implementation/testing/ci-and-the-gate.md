@@ -164,9 +164,12 @@ Promotion never reads a trial commit's run: [`promote_check.py`](../../../script
 
 Each `e2e-shard` job runs [`front-end/scripts/e2e-shards.ts`](../../../front-end/scripts/e2e-shards.ts) `--shard=<n>/10`, not Playwright's `--shard`.
 Playwright's `--shard` cuts the alphabetical list of spec files into runs of equal test count, whatever the tests cost (with `fullyParallel: false` a spec file is never split), so on the first six-shard run the three people-at-scale files, whose names sort together, all landed on one shard: 24 minutes of tests on it, 6 on another, and 28 minutes for the workflow.
-The script lists the suite with `playwright test --list`, deals the spec files heaviest first, each to the shard with the fewest seconds so far, by [the timings](#the-timings-refresh-themselves), and runs its own hand in alphabetical order.
-The hands depend only on the list and the timings, so every runner given the same timings deals the same ones and each spec file is in exactly one (`src/__tests__/e2eShards.test.ts`); before it runs, the script lists its hand again through the filters it passes and fails the shard if Playwright selects any other set of files.
-A spec file with no timing yet weighs the median of those measured.
+The script lists the suite with `playwright test --list`, deals the spec files heaviest first, each to the shard with the least wall time so far, by [the timings](#the-timings-refresh-themselves), and runs its own hand in alphabetical order, in the two passes [CI](#ci) describes.
+A file weighs its share of its shard's wall time: a file of the serial list its seconds, since the serial pass runs one file at a time, and any other its seconds over the parallel pass's workers, the list's `config.workers` (`E2E_WORKERS`), since that pass runs that many at once.
+One deal over both passes' files evens each shard's two passes summed, which a deal per pass would not: it would even each pass, but not their sum.
+With no serial file and one worker it deals by the timings alone.
+The hands depend only on the list, the timings, the serial list and the workers, so every runner given the same ones deals the same hands and each spec file is in exactly one (`src/__tests__/e2eShards.test.ts`); before it runs, the script lists its hand again through the filters it passes and fails the shard if Playwright selects any other set of files.
+A spec file with no timing yet weighs the median of those measured, divided as any other file is.
 
 ### The timings refresh themselves
 
@@ -184,12 +187,13 @@ The timings are each spec file's seconds, the summed duration of every attempt o
 - **Never a failed shard.**
   With no such artifact (as before the first one is published, or after 90 days without one), a corrupt one, or GitHub's API failing (after up to three tries), the shard deals by the committed [`front-end/scripts/e2e-shard-timings.json`](../../../front-end/scripts/e2e-shard-timings.json) with a warning annotation, and a corrupt artifact is never passed over for an older one, so every shard falls back alike.
 - **Checked.**
-  Each shard writes its deal record, `test-results/e2e-deal.json` (the timings' source, the timings, every listed file and its hand), uploaded beside its report.
-  Once every shard has passed, `e2e` runs `node scripts/e2e-shards.ts check`, which fails the job unless every shard dealt by the same timings and the reports hold every listed file exactly once, as when one shard fell back on a failed API call while the others took the artifact: a file no shard ran was never tested.
-  Shards that all fell back to the committed file, for different reasons, dealt by the same timings and pass.
+  Each shard writes its deal record, `test-results/e2e-deal.json` (the timings' source, the timings, every listed file, its hand, the listed serial files and the parallel pass's workers), uploaded beside its report.
+  Once every shard has passed, `e2e` runs `node scripts/e2e-shards.ts check`, which fails the job unless every shard dealt by the same timings, serial files and workers and the reports hold every listed file exactly once, as when one shard fell back on a failed API call while the others took the artifact, or read another serial list or worker count: a file no shard ran was never tested.
+  Shards that all fell back to the committed file, for different reasons, dealt by the same timings and pass; a deal record from before the two passes reads as no serial file at one worker.
   A re-run of the whole run then deals again by the same artifact.
 - **Read.**
-  Each shard's log names the timings it dealt by and the minutes they give its hand; the `e2e` job's summary names the source, or each source and its shards when they differ, each shard's seconds of tests and the spread between the fastest and the slowest.
+  Each shard's log names the timings it dealt by, the minutes of wall time the weights give its hand and how many of its files are serial (`e2e shard 3/5: 57 of 284 spec files (3 serial), about 16.4 minutes by <source>`), and marks each serial file of its hand.
+  The `e2e` job's summary names the source, or each source and its shards when they differ, and for each shard its seconds of tests and the wall seconds of its serial pass and its parallel pass, from its `e2e-phases.json` (a dash for a pass it did not run, or a shard with no phases file); the spread between the fastest and the slowest shard is over the two passes summed when every shard has phases, else over the seconds of tests.
 
 The committed file is the fallback, and `scripts/affected-specs.py` and `e2e-repeat.ts` read it.
 It was refreshed last from twelve whole runs on `dev` and the merge queue, 44525439048 to 44721661345, blended oldest first as CI publishes them; to refresh it again, download each run's reports into a folder of its own and give the folders oldest first, the newest a whole run:
