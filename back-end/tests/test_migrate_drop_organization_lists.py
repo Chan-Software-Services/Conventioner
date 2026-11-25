@@ -176,10 +176,42 @@ def test_it_refuses_writing_and_dropping_nothing_while_a_people_field_is_not_a_m
                       "refused": True}
     assert organizations.docs == before and organizations.writes == []
     assert organizations.dropped == [] and sorted(organizations.indexes) == sorted(BOOT_INDEXES)
-    out = capsys.readouterr().out
-    assert "  ! org-old: no people map" in out
-    assert "migrate_organization_people" not in out
-    assert "git worktree" not in out
+    assert capsys.readouterr().out.splitlines() == [
+        "Refused: 1 organization(s) hold no people map, so their lists are the only record of "
+        "their people. Nothing was changed.",
+        "  ! org-old: no people map",
+        "Repair the ones whose people field is not a map by hand, then run this again.",
+    ]
+
+
+@pytest.mark.parametrize("dry_run", [False, True], ids=["run", "dry run"])
+def test_it_says_to_fold_one_and_repair_the_other_when_both_kinds_are_refused(dry_run, capsys):
+    organizations = _organizations()
+    organizations.docs.insert(1, {"id": "org-old", "name": "Fixture Old Co", "markets": [],
+                                  "owner": "u-owner", "admins": ["u-admin"], "members": []})
+    organizations.docs.insert(2, {"id": "org-odd", "name": "Fixture Odd Co", "markets": [],
+                                  "people": ["u-owner"], "owner": "u-owner", "admins": [],
+                                  "members": []})
+    before = copy.deepcopy(organizations.docs)
+
+    counts = migrate(FakeDb(organizations), dry_run=dry_run)
+
+    assert counts == {"no_map": 2, "removed": 0, "already_clear": 0, "indexes": [],
+                      "refused": True}
+    assert organizations.docs == before and organizations.writes == []
+    assert organizations.dropped == [] and sorted(organizations.indexes) == sorted(BOOT_INDEXES)
+    assert capsys.readouterr().out.splitlines() == [
+        "Refused: 2 organization(s) hold no people map, so their lists are the only record of "
+        "their people. Nothing was changed.",
+        "  ! org-old: no people map",
+        "  ! org-odd: no people map",
+        "Fold the ones with no people field first with migrate_organization_people.py from the "
+        "last commit that holds it, then run this again:",
+        '  cd "$(git rev-parse --show-toplevel)"',
+        '  git worktree add ../fold "$(git rev-list -n 1 HEAD -- '
+        'back-end/migrations/migrate_organization_people.py)^"',
+        "Repair the ones whose people field is not a map by hand, then run this again.",
+    ]
 
 
 def test_its_lines_name_each_organization_by_id_never_by_name(capsys):
