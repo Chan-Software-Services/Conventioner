@@ -15,6 +15,7 @@ sources:
   - T315
   - T496
   - T538
+  - T583
 ---
 
 # A request value is a string before it reaches a query
@@ -57,8 +58,8 @@ An address read this way still goes through `normalized_email()` ([users, and th
 ## A write takes only its fields
 
 A handler that writes what a body holds names the fields it takes, and reads each with its type; any other key is ignored.
-A new account starts in no organization, whatever its registration body says, so signing in reads back none it named.
-An organization's update renames it and changes nothing else, since its people and markets change only through writes that keep each user's side in step ([the organization document](../data/organization-document.md)).
+A new account starts in no organization, whatever its registration body says, and signing in answers its `id` and `email` alone.
+An organization's update renames it and changes nothing else, since its people and markets change only through their own writes ([the organization document](../data/organization-document.md)).
 A floorplan template's create and update (`back-end/api/floorplans_templates.py`) take its `name`, a string that is not blank, its `tableTypes`, a list of objects, its `aisles`, an object, and its `organizationId`, and answer 400 for any of them of another type; they read the body with `json_object()`.
 [`test_a_body_sets_only_its_fields.py`](../../../back-end/tests/test_a_body_sets_only_its_fields.py) sends each of these writes keys it does not take, values of the wrong type and bodies that are not an object, a literal `null` among them, and checks nothing beyond its fields is written.
 

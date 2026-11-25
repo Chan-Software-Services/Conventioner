@@ -32,5 +32,5 @@ Adding a person and removing one is each one write that lands only while the pla
 - [The organization's people](../../implementation/modules/organization-people.md): the one writer of an organization's people, what each change may do, and a change that met another.
 - [Users, and the one spelling of an address](../../implementation/data/users-and-email.md): organizer accounts.
 - [Lookup indexes](../../implementation/data/lookup-indexes.md): the wildcards over an organization's people and a market's roles, and the organization's list indexes.
-- [ADR 0025: An organization's people are one map](../../adr/0025-an-organizations-people-are-one-map.md): the map, the fold, and the lists kept beside it for one release.
+- [ADR 0025: An organization's people are one map](../../adr/0025-an-organizations-people-are-one-map.md): the map, the fold, and the lists kept beside it for one release, both removed by T583.
 - [Market deletion, and the deletion trail](../../implementation/modules/market-deletion.md): an organization's deletion recorded before anything is destroyed.
