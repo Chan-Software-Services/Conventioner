@@ -1108,6 +1108,111 @@ class TestTheAudit:
         out = self.audit(repo, "--results", str(results), str(report))
         assert "ran: a.spec.ts: rank 1" in out
 
+    def queue_audit(self, repo, tmp_path, *args, env=None, fixture_map=True):
+        """The merge queue's audit, with `--github`, of the trial commit at HEAD against the commit
+        it was built on, its first parent: its log, and the job summary it wrote."""
+        summary = tmp_path / "summary.md"
+        command = [sys.executable, str(SCRIPT), "audit", "--queue", "--github",
+                   "--base", "HEAD^1", "--head", "HEAD", *args]  # fmt: skip
+        if fixture_map:
+            command += ["--map", str(repo.parent / "test-map.json")]
+        done = subprocess.run(
+            command,
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            env={**os.environ, **(env or {}), "GITHUB_STEP_SUMMARY": str(summary)},
+        )
+        assert done.returncode == 0, done.stdout + done.stderr
+        return done.stdout, summary.read_text()
+
+    def warnings(self, out):
+        return [line for line in out.splitlines() if line.startswith("::warning")]
+
+    def test_on_the_queue_a_spec_the_pull_requests_run_named_ran_there(self, repo, tmp_path):
+        # a.spec (10 minutes) and b.spec (25) together pass a builder's cap of 30, which a pull
+        # request's run does not have, so both ran there. c.spec's report is left out.
+        *args, _ = self.three_failures(repo, tmp_path)
+        out, written = self.queue_audit(repo, tmp_path, *args)
+        door = "back-end/api/door.py:check_in via POST /checkin (1/1)"
+        loads = "loads front-end/src/views/Door.vue (1/1)"
+        lines = [line.strip() for line in out.splitlines()]
+        assert f"ran on the pull request: a.spec.ts: {loads}" in lines, out
+        assert f"ran on the pull request: b.spec.ts: {door}" in lines, out
+        assert f"| `a.spec.ts` | ran on the pull request | {loads} |" in written
+        assert f"| `b.spec.ts` | ran on the pull request | {door} |" in written
+        assert self.warnings(out) == []
+
+    def test_on_the_queue_a_spec_the_pull_requests_run_did_not_name_is_annotated(self, repo, tmp_path):
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n", "docs/a-node.md": "words\n"})
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "the trial commit")
+        report = pr_report(tmp_path, 1, {"a.spec.ts": ["unexpected"], "c.spec.ts": ["flaky"]})
+        out, written = self.queue_audit(repo, tmp_path, str(report))
+        left_out = "left out by the pull request's run"
+        assert f"{left_out}: c.spec.ts: not named for this change" in out
+        assert self.warnings(out) == [
+            "::warning title=A spec the pull request's run left out::c.spec.ts failed, and the "
+            "pull request's own E2E run would not have run it for this change of 2 files: "
+            "docs/a-node.md, front-end/src/views/Door.vue"
+        ]
+        assert f"| `c.spec.ts` | **{left_out}** | not named for this change |" in written
+        assert "| `a.spec.ts` | ran on the pull request |" in written
+
+    def test_on_the_queue_a_change_naming_every_spec_ran_the_whole_suite(self, repo, tmp_path):
+        write(repo, {"front-end/playwright.config.ts": "// edit\n"})
+        git(repo, "commit", "-qam", "the trial commit")
+        report = pr_report(tmp_path, 1, {"c.spec.ts": ["unexpected"]})
+        out, written = self.queue_audit(repo, tmp_path, str(report))
+        verdict = "the pull request ran the whole suite"
+        assert f"{verdict}: c.spec.ts: the change names every spec" in out
+        assert f"| `c.spec.ts` | {verdict} | the change names every spec |" in written
+        assert self.warnings(out) == []
+
+    def test_on_the_queue_with_no_map_the_pull_request_ran_the_whole_suite(self, repo, tmp_path):
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        git(repo, "commit", "-qam", "the trial commit")
+        report = pr_report(tmp_path, 1, {"c.spec.ts": ["unexpected"]})
+        env = TestWhereTheMapComesFrom().fake_gh(tmp_path, "import sys\nsys.exit(1)\n")
+        out, written = self.queue_audit(repo, tmp_path, str(report), env=env, fixture_map=False)
+        verdict = "the pull request ran the whole suite"
+        assert f"{verdict}: c.spec.ts: there is no test map" in out
+        assert f"| `c.spec.ts` | {verdict} | there is no test map |" in written
+        assert self.warnings(out) == []
+        # The choice a builder's run falls back to with no map is not CI's.
+        assert "only-changed" not in out + written
+        assert "1 file changed from " in out
+        assert "1 file changed from " in written
+
+    def test_the_queues_summary_says_what_was_decided_and_from_what(self, repo, tmp_path):
+        write(repo, {"front-end/src/views/Door.vue": "<p />\n"})
+        git(repo, "commit", "-qam", "the trial commit")
+        report = pr_report(tmp_path, 1, {"c.spec.ts": ["unexpected"]})
+        _, written = self.queue_audit(repo, tmp_path, str(report))
+        assert written.startswith("### E2E selection audit (merge queue)\n")
+        source = f"The test map {repo.parent / 'test-map.json'}, at f00dfeed"
+        assert f"{source}; 1 file changed from " in written
+        assert "The decision for this diff: the test map names 1 spec file for this change." in written
+        assert "| Failed spec | Verdict | Why |\n|---|---|---|\n| `c.spec.ts` |" in written
+        assert "so a failure there met the queue first" in written
+        assert "<details><summary>The 1 changed file</summary>" in written
+        assert "- `front-end/src/views/Door.vue`" in written
+
+    def test_a_queue_audit_that_cannot_run_still_exits_zero(self, repo, tmp_path):
+        report = pr_report(tmp_path, 1, {"a.spec.ts": ["unexpected"]})
+        out, written = self.queue_audit(repo, tmp_path, "--base", "no-such-commit", str(report))
+        assert "could not audit" in out
+        assert written.startswith("### E2E selection audit (merge queue)\n")
+        assert "no-such-commit" in written
+
+    def test_the_queues_audit_takes_no_cap(self, repo):
+        done = subprocess.run(
+            [sys.executable, str(SCRIPT), "audit", "--queue", "--minutes", "30"],
+            cwd=repo, capture_output=True, text=True,
+        )  # fmt: skip
+        assert done.returncode == 2, done.stdout + done.stderr
+        assert "takes no --minutes" in done.stderr
+
 
 class TestTheCiDecision:
     """CI's pull request run: whether it runs the whole suite or the specs the map names, which

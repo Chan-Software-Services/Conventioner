@@ -6,7 +6,7 @@ whole.
     python3 scripts/affected-specs.py --run  [options] [-- <playwright arguments>]
     python3 scripts/affected-specs.py --list [options] [--json]
     python3 scripts/affected-specs.py ci [options] --max-shards <n> [--github]
-    python3 scripts/affected-specs.py audit [options] [--github] <playwright json report>...
+    python3 scripts/affected-specs.py audit [options] [--queue] [--github] <playwright json report>...
 
 From the worktree root, on the worktree's stack (`team-stack up`, `team-stack seed`, and
 `eval "$(~/agent-team/bin/team-stack env)"`, so Playwright reaches it). The change is the diff from
@@ -58,7 +58,11 @@ the run cannot pass on (`SPEC_NAME`). `why` says which, `map` where the map came
 `audit`, which CI's `e2e` job runs on a pull request, names each spec that failed in the reports
 as ran (the selection runs it), left to CI (it chose it past the cap) or missed (it did not
 choose it); `--github` also writes them to the run's summary and, when there is a map, each miss
-as a warning annotation.
+as a warning annotation. With `--queue`, for a merge queue's trial commit and the commit it was
+built on (`--base HEAD^1 --head HEAD`), it judges each failed spec instead by what `ci` decides for
+that diff, with no cap (it takes no `--minutes`): ran on the pull request (named), the pull request
+ran the whole suite, or left out by the pull request's run, which `--github` also writes as a
+warning annotation.
 `docs/implementation/testing/the-test-map.md` says what the map holds.
 
 Exit codes: Playwright's with `--run`, 0 with nothing to run, `--list`, `ci` (whatever it
@@ -79,7 +83,7 @@ import tokenize
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -948,6 +952,12 @@ class Chosen:
         source = describe_source(self.source).replace("affected-specs: ", "", 1)
         return f"{capitalize_first(source)}; {self.describe_diff()}."
 
+    def describe_ci_basis(self) -> str:
+        """The basis of what `ci` decides: with no map there is none to describe, and
+        `describe_source` then tells of the choice a builder's run falls back to, which CI's run
+        does not make."""
+        return self.describe_basis() if self.source else f"{self.describe_diff()}."
+
 
 def selection_options(parser: argparse.ArgumentParser, capped: bool = True) -> None:
     """The options that name a selection's diff and map, and its cap unless it has none."""
@@ -1017,6 +1027,26 @@ def verdicts(failed: Set[str], chosen: Chosen) -> List[Tuple[str, str, str]]:
     return out
 
 
+# The queue audit's verdict on a spec the pull request's run did not run.
+LEFT_OUT = "left out by the pull request's run"
+
+
+def queue_verdicts(failed: Set[str], chosen: Chosen, decision: dict) -> List[Tuple[str, str, str]]:
+    """(spec, verdict, why) for each failed spec of a merge queue's run, by what `ci` decides for
+    the trial commit's diff: whether the pull request's own E2E run ran it, by name or within the
+    whole suite, or left it out."""
+    rows = {row["spec"]: row for row in chosen.run}
+    out = []
+    for spec in sorted(failed):
+        if decision["scope"] == "whole":
+            out.append((spec, "the pull request ran the whole suite", decision["why"]))
+        elif spec in decision["specs"]:
+            out.append((spec, "ran on the pull request", reasons(rows[spec])))
+        else:
+            out.append((spec, LEFT_OUT, "not named for this change"))
+    return out
+
+
 def annotation(text: str) -> str:
     """Text for a GitHub workflow command's message."""
     return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
@@ -1031,27 +1061,72 @@ def some(paths: Sequence[str], at_most: int = 20) -> str:
     return shown + (f" and {len(paths) - at_most} more" if len(paths) > at_most else "")
 
 
-SUMMARY_TITLE = "### E2E selection audit"
-MISS_TITLE = "A miss of the selection"
+class Wording(NamedTuple):
+    """What an audit's report says: the pull request's, or the merge queue's."""
+
+    title: str
+    # The verdict the summary shows bold, and `--github` annotates under `warning`, saying `unrun`.
+    flagged: str
+    warning: str
+    unrun: str
+    closing: str
+
+
+PULL_REQUEST_AUDIT = Wording(
+    title="### E2E selection audit",
+    flagged="missed",
+    warning="A miss of the selection",
+    unrun="affected-specs.py would not have chosen it",
+    closing="A spec that ran is one `affected-specs.py --run` runs for this change, so its "
+    "builder could have seen it fail; one left to CI was chosen past the cap; a miss "
+    "is one it would not have chosen at all, from a map that drifted or a dependency "
+    "its rules cannot see (`docs/implementation/testing/the-test-map.md`).",
+)
+QUEUE_AUDIT = Wording(
+    title="### E2E selection audit (merge queue)",
+    flagged=LEFT_OUT,
+    warning="A spec the pull request's run left out",
+    unrun="the pull request's own E2E run would not have run it",
+    closing="A spec left out is one the pull request's run did not run, so a failure there met "
+    "the queue first. This audit decides again what that run ran, by the newest test map, so a "
+    "map made since then can change a verdict (`docs/implementation/testing/the-test-map.md`).",
+)
 
 
 def audit(argv: Sequence[str]) -> int:
     """Each spec that failed in the reports, as ran, left to CI or missed by the selection for the
-    diff; exits 0 whatever it finds, or when it cannot audit at all."""
+    diff, or with `--queue` as the pull request's run ran it or left it out; exits 0 whatever it
+    finds, or when it cannot audit at all."""
     parser = argparse.ArgumentParser(
         prog="affected-specs.py audit",
         description="Each failed spec of Playwright JSON reports, as the selection would have "
-        "treated it: ran, left to CI or missed.",
+        "treated it: ran, left to CI or missed; with --queue, as the pull request's run did.",
     )
     parser.add_argument("reports", nargs="*", type=Path, help="the run's Playwright JSON reports")
     selection_options(parser)
+    # A cap left unsaid is told apart from one given as the default: `--queue` takes none.
+    parser.set_defaults(minutes=None)
+    parser.add_argument(
+        "--queue",
+        action="store_true",
+        help="judge each failed spec by what `ci` decides for the diff, a merge queue trial "
+        "commit's: ran on the pull request, within its whole suite, or left out",
+    )
     parser.add_argument(
         "--github",
         action="store_true",
-        help="also write the verdicts to $GITHUB_STEP_SUMMARY and each miss as a warning annotation",
+        help="also write the verdicts to $GITHUB_STEP_SUMMARY, and each miss (with --queue, each "
+        "spec left out) as a warning annotation",
     )
     args = parser.parse_args(argv)
-    summary: List[str] = [SUMMARY_TITLE, ""]
+    if args.queue and args.minutes is not None:
+        parser.error(
+            "--queue judges the pull request's run, which has no cap: it takes no --minutes"
+        )
+    if args.minutes is None:
+        args.minutes = math.inf if args.queue else CAP_MINUTES
+    wording = QUEUE_AUDIT if args.queue else PULL_REQUEST_AUDIT
+    summary: List[str] = [wording.title, ""]
     failed, unread = failed_specs(args.reports)
     read = len(args.reports) - len(unread)
     try:
@@ -1068,9 +1143,21 @@ def audit(argv: Sequence[str]) -> int:
         else:
             # As `--run` ranks them: a spec the map names that the head lacks takes no minutes.
             chosen = Chosen(args, drop_absent=True)
-            found = verdicts(failed, chosen)
+            if args.queue:
+                decision = ci_decision(chosen, datetime.now(timezone.utc))
+                found = queue_verdicts(failed, chosen, decision)
+                basis = [
+                    chosen.describe_ci_basis(),
+                    "",
+                    f"The decision for this diff: {decision['why']}.",
+                ]
+            else:
+                found = verdicts(failed, chosen)
+                basis = [chosen.describe_basis()]
             changed = sorted(chosen.changes)
-            print(describe_source(chosen.source))
+            # As `describe_ci_basis`: with no map, CI's run makes no choice to describe.
+            if chosen.source or not args.queue:
+                print(describe_source(chosen.source))
             print(f"affected-specs: {chosen.describe_diff()}")
             print(
                 f"affected-specs audit: {counted(len(found), 'failed spec')}, "
@@ -1079,31 +1166,28 @@ def audit(argv: Sequence[str]) -> int:
             for spec, verdict, why in found:
                 print(f"  {verdict}: {spec}: {why}")
                 # With no map there is no map to have drifted: the summary lists the spec alone.
-                if verdict == "missed" and args.github and chosen.source is not None:
+                if verdict == wording.flagged and args.github and chosen.source is not None:
                     print(
-                        f"::warning title={MISS_TITLE}::"
+                        f"::warning title={wording.warning}::"
                         + annotation(
-                            f"{spec} failed, and affected-specs.py would not have chosen it "
-                            f"for this change of {len(changed)} files: {some(changed)}"
+                            f"{spec} failed, and {wording.unrun} for this change of "
+                            f"{counted(len(changed), 'file')}: {some(changed)}"
                         )
                     )
             summary += [
-                chosen.describe_basis(),
+                *basis,
                 "",
                 "| Failed spec | Verdict | Why |",
                 "|---|---|---|",
             ]
             for spec, verdict, why in found:
-                shown = f"**{verdict}**" if verdict == "missed" else verdict
+                shown = f"**{verdict}**" if verdict == wording.flagged else verdict
                 summary.append(f"| `{spec}` | {shown} | {cell(why)} |")
             summary += [
                 "",
-                "A spec that ran is one `affected-specs.py --run` runs for this change, so its "
-                "builder could have seen it fail; one left to CI was chosen past the cap; a miss "
-                "is one it would not have chosen at all, from a map that drifted or a dependency "
-                "its rules cannot see (`docs/implementation/testing/the-test-map.md`).",
+                wording.closing,
                 "",
-                f"<details><summary>The {len(changed)} changed files</summary>",
+                f"<details><summary>The {counted(len(changed), 'changed file')}</summary>",
                 "",
                 *[f"- `{path}`" for path in changed],
                 "",
@@ -1231,9 +1315,7 @@ def ci(argv: Sequence[str]) -> int:
         "map": chosen.source,
     }
     ran = summary_sentence(output)
-    # With no map there is none to describe: `describe_source` then tells of the choice a builder's
-    # run falls back to, which this one does not make.
-    basis = chosen.describe_basis() if chosen.source else f"{chosen.describe_diff()}."
+    basis = chosen.describe_ci_basis()
     print(f"affected-specs ci: {ran}\naffected-specs ci: {basis}", file=sys.stderr)
     if args.github:
         write_summary(["### E2E selection", "", ran, "", basis, *named_table(chosen, named)])
