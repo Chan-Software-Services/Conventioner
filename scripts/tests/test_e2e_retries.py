@@ -425,6 +425,24 @@ def test_it_reads_the_next_page_until_a_page_is_short(stub, storage, env):
     assert f"{header(1)}: 1 test passed only on a retry, in 1 of them.\n" in stdout
 
 
+def test_a_run_that_shifts_from_one_page_to_the_next_is_read_and_counted_once(stub, storage, env):
+    # A run completing while page 1 is read shifts the list by one, so the last run of page 1 comes
+    # back first on page 2.
+    page_1 = [a_run(1000 + n, event="pull_request") for n in range(99)] + [a_run(7)]
+    stub.serve(RUNS, 200, runs_page(*page_1), page=1)
+    stub.serve(RUNS, 200, runs_page(a_run(7), a_run(6)), page=2)
+    shards(stub, storage, 7, FLAKY)
+    shards(stub, storage, 6, CLEAN)
+
+    code, stdout, _, _ = run(env, "--runs", "5")
+
+    assert code == 0
+    assert [path for path, _, _ in stub.requests if path == artifacts_path(7)] == [artifacts_path(7)]
+    assert f"{header(2)}: 1 test passed only on a retry, in 1 of them.\n" in stdout
+    assert "Only 2 of the 5 asked for were found.\n" in stdout
+    assert f"| 1 | [push to dev]({run_url(7)}) |\n" in stdout
+
+
 def test_it_reads_no_more_than_ten_pages(stub, storage, env):
     stub.serve(RUNS, 200, runs_page(*[a_run(1000 + n, event="pull_request") for n in range(100)]))
 

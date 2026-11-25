@@ -93,7 +93,9 @@ def link(run: dict) -> str:
 
 def runs_on_dev(api: str, repository: str, token: str):
     """The completed runs on `dev` and its queue, newest first, page by page, as `(run, None,
-    page)`; yields `(None, reason, page)` once and stops when a page could not be read."""
+    page)`, each once though the list shifts between pages; yields `(None, reason, page)` once and
+    stops when a page could not be read."""
+    seen = set()
     for page in range(1, MAX_PAGES + 1):
 
         def parse(data):
@@ -114,6 +116,9 @@ def runs_on_dev(api: str, repository: str, token: str):
             return
         listed, kept = answer
         for run in kept:
+            if run["id"] in seen:
+                continue
+            seen.add(run["id"])
             yield run, None, page
         if len(listed) < PER_PAGE:
             return
