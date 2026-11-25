@@ -894,10 +894,13 @@ async function closeAddUser() {
             >
               <template #row="{ item: invitation }">
                 <div class="user-card" data-testid="manage-market-invited-row">
-                  <span class="user-email"><EmailAddress :words="invitation.email" /></span>
-                  <span class="invited-as" data-testid="manage-market-invited-as">
-                    {{ invitedAs('market', invitation) }}
-                  </span>
+                  <!-- The address and its line stacked, so a long address keeps the card's width. -->
+                  <div class="invited-who">
+                    <span class="user-email"><EmailAddress :words="invitation.email" /></span>
+                    <span class="invited-as" data-testid="manage-market-invited-as">
+                      {{ invitedAs('market', invitation) }}
+                    </span>
+                  </div>
                   <button
                     v-if="mayWithdraw(invitation)"
                     type="button"
@@ -1295,6 +1298,29 @@ async function closeAddUser() {
   }
 }
 
+/* An invitation's address over its role and when it ends, beside its Withdraw, with the address's
+   floor; on a phone it takes the card's width, with Withdraw beneath, as a person's row does. */
+.invited-who {
+  flex: 1;
+  min-width: min(100%, 12rem);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-hairline);
+}
+
+/* In the stack, the address takes its line's width and no more: its floor and its phone basis are
+   the stack's. */
+.invited-who .user-email {
+  flex: none;
+  min-width: 0;
+}
+
+@media (width <= 640px) {
+  .invited-who {
+    flex-basis: 100%;
+  }
+}
+
 /* An invitation's role and when it ends, in the muted ink that reaches AA on the card's beige. */
 .invited-as {
   font-size: var(--text-xs);
@@ -1366,21 +1392,22 @@ async function closeAddUser() {
   font-size: var(--text-xs);
 }
 
-/* On a phone the email field takes the add row, with the role at the start of a row beneath it
-   and Add and Cancel at that row's end: beside them at 390 the field and the role were squeezed to
-   66px each, reading "User e" and "Edi" (T142). */
+/* On a phone the email field and the role each take a line of the invite row, with Send invitation
+   and Cancel at the end of a line beneath them: beside them at 390 the field and the role were
+   squeezed to 66px each, reading "User e" and "Edi" (T142), and beside the role alone the two
+   buttons left Cancel a line of its own. */
 @media (width <= 640px) {
   .add-user-form .add-org-row {
     flex-wrap: wrap;
   }
 
-  .add-user-form input.field {
+  .add-user-form input.field,
+  .add-user-form .field--select {
     flex-basis: 100%;
   }
 
-  .add-user-form .field--select {
-    width: auto;
-    margin-right: auto;
+  .add-user-form .btn--primary {
+    margin-left: auto;
   }
 }
 
