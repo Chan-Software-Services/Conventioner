@@ -22,7 +22,8 @@ import type { TrackedItem, TrackedRoute, TrackedViolation } from '@/utils/errorT
  * the page reports through it, and turns off every integration but linking a cause to its error and
  * dropping a repeat: no breadcrumbs, no console capture, no handlers of its own, no sessions, no
  * HTTP context. Every event is built from ADR 0049's allowlist by `allowedEvent`, field by field,
- * so a field a later SDK adds is never sent.
+ * so a field a later SDK adds to the event is never sent; only what the SDK adds to `sdk` as it
+ * writes the envelope (its integrations, packages and settings) goes with it, as the ADR allows.
  */
 
 /** The transport `BrowserClient` takes, which a test replaces with one that records. */
