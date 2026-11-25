@@ -257,6 +257,18 @@ class TestRuleThreeBackEndFunctions:
         assert set(rows) == {"a.spec.ts"}
         assert rows["a.spec.ts"]["why"] == ["back-end/api/door.py:door.inner via GET /door (1/1)"]
 
+    def test_a_changed_line_that_reads_as_a_diff_header_keeps_the_later_hunks(self, repo):
+        # Added, `++ one more` reads `+++ one more` in the diff, as a file's header does.
+        noted = DOOR_PY.replace(
+            "    return [inner(r)", '    note = """\n++ one more\n"""\n    return [inner(r)'
+        )
+        write(repo, {"back-end/api/door.py": noted.replace("= True", "= 'yes'")})
+        rows = chosen(choose(repo))
+        assert {spec: row["score"] for spec, row in rows.items()} == {
+            "a.spec.ts": 1,
+            "b.spec.ts": 1,
+        }
+
     def test_a_deleted_function_is_found_by_its_old_name(self, repo):
         without = DOOR_PY[: DOOR_PY.index("\n\ndef check_in")] + "\n"
         write(repo, {"back-end/api/door.py": without})

@@ -215,14 +215,20 @@ def changed_lines(root: Path, base: str, head: Optional[str]) -> Dict[str, Tuple
     out: Dict[str, Tuple[Set[int], Set[int]]] = defaultdict(lambda: (set(), set()))
     old: Optional[str] = None
     path: Optional[str] = None
-    for line in git(root, *options, *sides, "--").splitlines():
-        if line.startswith("--- "):
+    # A file's `---` and `+++` lines stand between its `diff --git` line and its first hunk; further
+    # down, a changed line that starts `-- ` or `++ ` reads like one.
+    in_header = False
+    for line in git(root, *options, *sides, "--").split("\n"):
+        if line.startswith("diff --git "):
+            old, path, in_header = None, None, True
+        elif in_header and line.startswith("--- "):
             old = header_path(line)
-        elif line.startswith("+++ "):
+        elif in_header and line.startswith("+++ "):
             path = header_path(line) if line != "+++ /dev/null" else old
-        elif line.startswith("@@") and path:
+        elif line.startswith("@@"):
+            in_header = False
             m = HUNK.match(line)
-            if not m:
+            if not m or not path:
                 continue
             ostart, ocount = int(m.group(1)), int(m.group(2) or 1)
             start, count = int(m.group(3)), int(m.group(4) or 1)
@@ -1090,8 +1096,9 @@ QUEUE_AUDIT = Wording(
     warning_title="A spec the pull request's run left out",
     warning_clause="the pull request's own E2E run would not have run it",
     closing="A spec left out is one the pull request's run did not run, so a failure there met "
-    "the queue first. This audit decides again what that run ran, by the test map as it reads it "
-    "now, so a map made since, grown too old or not read can give a verdict that run did not "
+    "the queue first. This audit decides again what that run ran, for this diff and by the test "
+    "map as it reads it now, so a `dev` that moved since, a map made since, grown too old or not "
+    "read, or a selection that failed then, can give a verdict that run did not "
     "(`docs/implementation/testing/the-test-map.md`).",
 )
 
@@ -1134,8 +1141,9 @@ def audit(argv: Sequence[str]) -> int:
     read = len(args.reports) - len(unread)
     try:
         if not failed:
-            # No report read is no sign that nothing failed: the results' download failed, or
-            # every shard stopped before Playwright wrote its report.
+            # No report read is no sign that nothing failed: the results' download failed, every
+            # shard stopped before Playwright wrote its report, or the selection named no spec,
+            # so no shard ran.
             line = (
                 "no shard report was read: nothing to audit"
                 if read == 0
