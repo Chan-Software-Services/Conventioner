@@ -106,7 +106,7 @@ No screen places a person on a market or in an organization without their accept
 The accept signs the person in on a request context of its own, disposed after it ([`helpers/invitations.ts`](../../../front-end/e2e/helpers/invitations.ts)), so the person needs a password: the one the spec made them with through `ensureVerifiedUser`.
 A person who already has the role or the place is the spec's mistake, and the invitation's refusal fails the call with the server's words.
 A seed giving many accepts each in turn, never all at once: an accept takes back the inviter's count, so the inviter stays far under its limit of 100 invitations a quarter hour.
-A seed never leaves an invitation to `TEST_USER` waiting: the sweeps' state "the invitations, none waiting" is theirs, and a seed that means an invitation to wait sends it to an account of its own, as `seedTheScreens()` does to `SCREENS_INVITEE`.
+A seed never leaves an invitation to `TEST_USER` waiting: the sweeps' state "the invitations, none waiting" is theirs, and a seed that means an invitation to wait sends it to an address of its own, as `seedTheScreens()` does to `SCREENS_INVITEE` and to the addresses it stamps for Manage market's and Manage organization's "Invited".
 
 ## The seed helpers
 
