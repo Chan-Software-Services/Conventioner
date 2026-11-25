@@ -29,7 +29,7 @@ sources:
 How to run each suite, and what each covers.
 The testing nodes of the [knowledge graph](implementation/testing/README.md) hold the sharp edges of each; the [Google Form corpus](../back-end/tests/test_data/README.md) is the suite's realistic data.
 The sharp edges are in the testing nodes: [E2E patterns](implementation/testing/e2e-patterns.md), [E2E seeds](implementation/testing/e2e-seeds.md), [the market journey spec](implementation/testing/the-market-journey-spec.md), [the layout's E2E](implementation/testing/floorplan-e2e.md), [CI and the gate](implementation/testing/ci-and-the-gate.md), [the assignment behaviour suite](implementation/testing/assignment-behaviour-suite.md) and [the real-MongoDB suite](implementation/testing/real-mongo-suite.md).
-The stack is seeded by [`scripts/seed_fixture.sh`](../scripts/seed_fixture.sh), Playwright is configured in [`front-end/playwright.config.ts`](../front-end/playwright.config.ts), and [`scripts/nm-test.sh`](../scripts/nm-test.sh) runs every suite on a stack of its own; the no-mistakes gate runs only its real-data checks (`--real-data-only`).
+The stack is seeded by [`scripts/seed_fixture.sh`](../scripts/seed_fixture.sh), Playwright is configured in [`front-end/playwright.config.ts`](../front-end/playwright.config.ts), and [`scripts/nm-test.sh`](../scripts/nm-test.sh) runs every suite on a stack of its own; the no-mistakes gate runs only its real-data checks (`--real-data-only`) and [a lint of the front-end, docs and root Markdown files a branch changes](implementation/testing/ci-and-the-gate.md#the-gates-lint-step).
 Before a merge, the suites run only in CI's required jobs: Playwright on the laptop was most of every gate run and the heaviest load the machine saw, and CI ran every suite again anyway ([CI and the gate](implementation/testing/ci-and-the-gate.md#the-no-mistakes-gate)).
 
 ## What a builder runs
@@ -426,7 +426,7 @@ still reaches the back-end where the `DISABLE_CAPTCHA` bypass applies.
 
 Similarly, set `DISABLE_EMAIL=true` (or `1`) so the Resend-backed
 `send_verification_email`, `send_account_exists_email`, `send_password_reset_email`,
-and `send_otp_email` helpers skip the actual send and report success. This is also
+`send_otp_email` and `send_invitation_email` helpers skip the actual send and report success. This is also
 honored only under `ALLOW_INSECURE_LOCAL_DEV`, defaults OFF in the back end, and is forwarded by
 `docker-compose.yml`; the CI e2e job and `scripts/nm-test.sh` set it, and a worktree's
 stack (`scripts/th-compose.sh`) defaults it to `true` (pass `DISABLE_EMAIL=false` to send).

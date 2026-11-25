@@ -31,9 +31,13 @@ import api.vendor_check_in as VendorCheckInApi
 import api.applications as ApplicationsApi
 import api.applicant_auth as ApplicantAuthApi
 import api.applicants as ApplicantsApi
+import api.invitees as InviteesApi
 import api.market_actions as Actions
 import history as History
+import invitations as Invitations
+import organization_people as OrganizationPeople
 import review_team as ReviewTeam
+import sign_in_limits
 from api.floorplans import floorplans_bp
 from api.floorplans_placement import floorplans_placement_bp
 from api.floorplans_templates import floorplans_templates_bp
@@ -115,6 +119,7 @@ from utils.secret_key import (
 )
 from utils.identity import authenticated_email
 from utils.request_body import json_object, string_field
+from utils.email_address import normalized_email
 from utils.session_storage import (
     ON_DISK,
     SESSION_FOLDER,
@@ -276,6 +281,24 @@ def verify_payment_indexes() -> None:
 
 
 verify_payment_indexes()
+
+
+def verify_invitation_indexes() -> None:
+    """Refuse to boot unless one address can hold only one invitation to one target (T538).
+
+    An invitation is an upsert by target and address, and two at once could store two, so one
+    withdrawal left the other to be accepted. The unique index is the referee, built here beside
+    the invitee's index and the TTL that removes an ended invitation; a process that cannot hold
+    them says so before it takes a request (``unique_indexes``).
+    """
+    try:
+        Invitations.ensure_invitation_indexes()
+    except (UniqueIndexError, Invitations.InvitationIndexError) as e:
+        logger.critical("Refusing to start: %s", e)
+        raise
+
+
+verify_invitation_indexes()
 
 
 def build_lookup_indexes() -> None:
@@ -947,6 +970,130 @@ def add_market_role(market_id: str) -> Response:
 
     MarketsApi.add_market_role(market_id, user_email, role, authenticated_email())
     return jsonify({"message": "Role added successfully"}), 200
+
+#: Said of an invitation that names no address or no role, or names either as anything but text.
+EMAIL_AND_ROLE_REQUIRED = "email and role required"
+#: Said of an invitation whose address is not one: the sign-up's check, an "@" and then a domain
+#: holding a ".".
+TYPE_AN_ADDRESS = "Type an email address, such as name@example.com."
+#: Said of an invitation to the Owner role, which is never given: it changes hands only when
+#: ownership is transferred (``hand-on``).
+OWNER_ONLY_BY_TRANSFER = "A market's Owner changes only when ownership is transferred."
+
+
+def _an_address(address: str) -> bool:
+    """Whether a normalized address reads as one, by the sign-up's check (``api/users.py``)."""
+    return "@" in address and "." in address.split("@")[1]
+
+
+@app.route('/markets/<market_id>/invitations', methods=['POST'])
+@login_required
+def invite_to_market(market_id: str) -> Response:
+    """Invite an address to a role on a market (T538): body ``{"email", "role"}``. Answers the
+    invitation and whether its email was sent, alike for every address (``api.markets``)."""
+    data = json_object(required=True)
+
+    email = string_field(data, 'email')
+    role_str = string_field(data, 'role')
+    if not email or not role_str:
+        return jsonify({"error": EMAIL_AND_ROLE_REQUIRED}), 400
+    address = normalized_email(email)
+    if not _an_address(address):
+        return jsonify({"error": TYPE_AN_ADDRESS}), 400
+
+    role = _named_market_role(role_str)
+    if role is None:
+        return jsonify({"error": f"Invalid role: {role_str}"}), 400
+    if role is MarketRole.OWNER:
+        return jsonify({"error": OWNER_ONLY_BY_TRANSFER}), 400
+
+    try:
+        invitation, emailed = MarketsApi.invite_to_market(
+            market_id, address, role, authenticated_email())
+    except Invitations.TooManyInvitations as refused:
+        return sign_in_limits.too_many(refused.retry_after, Invitations.TOO_MANY, key="error")
+    return jsonify({"invitation": invitation, "emailed": emailed}), 200
+
+@app.route('/markets/<market_id>/invitations', methods=['GET'])
+@login_required
+def get_market_invitations(market_id: str) -> Response:
+    """The invitations waiting on a market, newest first, for whoever may give a role on it."""
+    return jsonify({
+        "invitations": MarketsApi.market_invitations(market_id, authenticated_email()),
+    }), 200
+
+@app.route('/markets/<market_id>/invitations/<invitation_id>', methods=['DELETE'])
+@login_required
+def withdraw_market_invitation(market_id: str, invitation_id: str) -> Response:
+    """Withdraw a waiting invitation, as whoever may give its role."""
+    MarketsApi.withdraw_market_invitation(market_id, invitation_id, authenticated_email())
+    return jsonify({"message": "Invitation withdrawn"}), 200
+
+#: Said of an invitation to an organization that names no address or no place, or names either as
+#: anything but text.
+EMAIL_AND_PLACE_REQUIRED = "email and place required"
+
+
+@app.route('/organizations/<org_id>/invitations', methods=['POST'])
+@login_required
+def invite_to_organization(org_id: str) -> Response:
+    """Invite an address to a place in an organization (T538): body ``{"email", "place"}``, the
+    place ``"admin"`` or ``"member"``. Answers the invitation and whether its email was sent,
+    alike for every address (``api.organizations``)."""
+    data = json_object(required=True)
+
+    email = string_field(data, 'email')
+    place = string_field(data, 'place')
+    if not email or not place:
+        return jsonify({"error": EMAIL_AND_PLACE_REQUIRED}), 400
+    address = normalized_email(email)
+    if not _an_address(address):
+        return jsonify({"error": TYPE_AN_ADDRESS}), 400
+    if place not in OrganizationPeople.INVITED_TO:
+        return jsonify({"error": OrganizationPeople.NOT_A_PLACE}), 400
+
+    try:
+        invitation, emailed = OrgsApi.invite_to_organization(
+            org_id, address, place, authenticated_email())
+    except Invitations.TooManyInvitations as refused:
+        return sign_in_limits.too_many(refused.retry_after, Invitations.TOO_MANY, key="error")
+    return jsonify({"invitation": invitation, "emailed": emailed}), 200
+
+@app.route('/organizations/<org_id>/invitations', methods=['GET'])
+@login_required
+def get_organization_invitations(org_id: str) -> Response:
+    """The invitations waiting on an organization, newest first, for its owner and its admins."""
+    return jsonify({
+        "invitations": OrgsApi.organization_invitations(org_id, authenticated_email()),
+    }), 200
+
+@app.route('/organizations/<org_id>/invitations/<invitation_id>', methods=['DELETE'])
+@login_required
+def withdraw_organization_invitation(org_id: str, invitation_id: str) -> Response:
+    """Withdraw a waiting invitation, as whoever may invite to its place."""
+    OrgsApi.withdraw_organization_invitation(org_id, invitation_id, authenticated_email())
+    return jsonify({"message": "Invitation withdrawn"}), 200
+
+# The invitee's side (T538): the invitations waiting for the signed-in address, and their answers.
+
+@app.route('/invitations', methods=['GET'])
+@login_required
+def get_my_invitations() -> Response:
+    """Every invitation waiting for the signed-in address, newest first."""
+    return jsonify({"invitations": InviteesApi.waiting(authenticated_email())}), 200
+
+@app.route('/invitations/<invitation_id>/accept', methods=['POST'])
+@login_required
+def accept_invitation(invitation_id: str) -> Response:
+    """Accept an invitation sent to the signed-in address, judged again as its inviter's act."""
+    return jsonify({"accepted": InviteesApi.accept(invitation_id, authenticated_email())}), 200
+
+@app.route('/invitations/<invitation_id>/decline', methods=['POST'])
+@login_required
+def decline_invitation(invitation_id: str) -> Response:
+    """Decline an invitation sent to the signed-in address: it ends, and gives nothing."""
+    InviteesApi.decline(invitation_id, authenticated_email())
+    return jsonify({"message": "Invitation declined"}), 200
 
 @app.route('/markets/<market_id>/roles/<user_id>', methods=['DELETE'])
 @login_required

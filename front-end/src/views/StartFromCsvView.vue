@@ -246,9 +246,10 @@ function leave() {
         <p class="help" data-testid="start-from-csv-upload-help">
           In Google Sheets, open the form's responses and choose File, Download, Comma-separated
           values. Conventioner reads the columns and answers to propose
-          <strong>{{ market.name }}</strong
-          >'s dates, tiers and questions. No one is imported{{ wayOn }} Nothing is written until you
-          confirm, and the file is not kept.
+          <strong>{{ market.name }}</strong>'s dates, tiers and questions. No one is imported{{
+            wayOn
+          }}
+          Nothing is written until you confirm, and the file is not kept.
         </p>
         <p v-if="typesafe" class="help" data-testid="start-from-csv-typesafe">
           Column headings, and a description of the shape of their answers, are sent to TypeSafe to

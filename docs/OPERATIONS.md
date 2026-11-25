@@ -8,17 +8,13 @@ describes:
   - back-end/migrations/migrate_user_emails.py
   - back-end/api/applications.py#ensure_application_indexes
   - back-end/migrations/create_applications_collection.py
-  - back-end/migrations/migrate_placement_history.py
   - back-end/api/applicant_auth.py#ensure_applicant_login_indexes
-  - back-end/migrations/migrate_organization_people.py
   - back-end/api/attendance.py#ensure_attendance_indexes
   - back-end/payments.py#ensure_payment_indexes
   - back-end/migrations/check_vendor_day_duplicates.py
-  - back-end/migrations/migrate_assignment_state.py
   - back-end/migrations/migrate_owed_day_state.py
   - back-end/host_limits.py
   - back-end/organizer_sessions.py#ensure_organizer_session_indexes
-  - back-end/migrations/migrate_application_status.py
 verified: 2026-11-17
 sources:
   - E32/F03/S03
@@ -146,7 +142,7 @@ A forgotten password is reset by its owner from the sign-in page ("Forgot passwo
 Checking something in production - that an applicant's sign-in code arrives, that a Google Form market's sign-in reads as no market - needs markets that are nobody's real one.
 `seed_test_markets.py` makes them in "Conventioner Test Organization", owned by your own account (make it first, as above), through the product's own writes: it creates and moves each market the way the endpoints do ([the guards and the phase move](implementation/modules/guards.md)).
 Check against those, never against a real organizer's market.
-Run it from `back-end/` in a checkout of what production runs (`main`), so it writes what that build reads; it arrives there with the E32 release, whose migration must have run first (below).
+Run it from `back-end/` in a checkout of what production runs (`main`), so it writes what that build reads; it arrives there with the E32 release, whose migration must have run first ([`migrate_user_emails.py`](RELEASING.md#migrate_user_emailspy)).
 
 ```bash
 MONGODB_URI='<production URI>' .venv/bin/python seed_test_markets.py --owner you@example.com
@@ -194,38 +190,15 @@ A dump holds every vendor's name, email and answers: keep it on your own machine
 ### Starting a database, and migrations
 
 A new database is started once with `MONGODB_URI='<URI>' .venv/bin/python init_database.py`: it creates the collections and indexes and records the markers the back end refuses to boot without.
-Production was started that way on 2026-10-18, so no script in `back-end/migrations/` was needed then; [RELEASING.md](RELEASING.md#pre-deploy-database-migrations) says when one is.
-The first that is: the release carrying E32 refuses to boot until every account address is stored lowercased, so run `MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_user_emails.py --dry-run`, then without `--dry-run`, before promoting it.
-If it names accounts that share an address (by id; it prints no address), keep one of each and run it again.
-The release carrying E40/F01/S01 moves the placement history into the market's history: once it is deployed, whenever is convenient, run `MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_placement_history.py --dry-run` ([`migrate_placement_history.py`](../back-end/migrations/migrate_placement_history.py)), which counts the entries it would move, then without `--dry-run`.
-Until it runs, that release reads the old `placement_history` collection beside the new one, so the older placements still show in the Assignment history and a vendor's History tab, and nothing refuses to boot; a later release removes that fallback ([the market's history](implementation/data/history.md#the-move-from-placement_history)).
-The release that makes a floorplan a location's layout (T257) removes every floorplan the floorplan beta saved, with its image: once it is deployed, take a `mongodump`, then run `MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_layouts.py --dry-run` ([`migrate_layouts.py`](../back-end/migrations/migrate_layouts.py)), which names each market it would change and counts the floorplans and images it would remove, then without `--dry-run`.
-Until it runs, that release reads each market as the script would leave it and ignores the beta's floorplans, so nothing refuses to boot ([RELEASING.md](RELEASING.md#pre-deploy-database-migrations)).
-The release carrying T283 keeps an organization's people in one map: once it is deployed, run `MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_organization_people.py --dry-run` ([`migrate_organization_people.py`](../back-end/migrations/migrate_organization_people.py)), then without `--dry-run`.
-The dry run is the read-only count of how many organizations do not parse on the release before (an owner also an admin or a member), and it writes nothing.
-It prints each organization's id and name; only its counts go into the team's records, never a name or an id.
-The release carrying T316 stores each market's assignment state, and Publish results the revision it stood on: once it is deployed, run `MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_assignment_state.py --dry-run` ([`migrate_assignment_state.py`](../back-end/migrations/migrate_assignment_state.py)), which names each market it would change by id and what it would set, and counts them, then without `--dry-run`, and again after any roll-forward past a rollback.
-Until it runs, that release reads each market's state off its rows by the same rule ([the assignment's lifecycle](implementation/modules/assignment-lifecycle.md)), so nothing refuses to boot, and running it changes nothing a market shows.
-A market that changed between the script's read and its write on three tries is listed as skipped, and running it again sets it.
-A market whose stored assignment does not parse is left alone and listed by id; the app cannot read it either, and the script never changes it.
-The release carrying T335 stores each owed table-day's state ([payments](implementation/data/payments.md#the-owed-days-state)): right after it is deployed, run `MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_owed_day_state.py --dry-run` ([`migrate_owed_day_state.py`](../back-end/migrations/migrate_owed_day_state.py)), which names each record it would change by market id, date and record id, never an address, says what it would set, and counts them, then without `--dry-run`, and again after any roll-forward past a rollback.
-It also drops each amount an Admin set on a day the vendor no longer holds, which no line shows, and records an `owed_dropped` entry in the market's history for each, naming the amount and who set it (Daniel's choice, T335).
-Until it runs, that release reads each record from the fields the release before wrote, so nothing refuses to boot and nothing a vendor's Payment tab shows changes; until then a hidden amount is dropped, with its entry, only when its day is next seated, which is why it runs right after the deploy.
-A record that changed between the script's read and its write on three tries is listed as skipped, and running it again sets it; a record whose fields do not parse is left alone and listed by id.
-The release that serves each application's review state (T277 ticket 02) reads every stored application by the owner's rules ([the application document](implementation/data/application-document.md#the-migration)): right after it is deployed, before any organizer uses Begin assignment, and on Daniel's word, which their word to merge it gives, run `MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_application_status.py --dry-run` ([`migrate_application_status.py`](../back-end/migrations/migrate_application_status.py)), then without `--dry-run`, and again after any roll-forward past a rollback.
-Its first lines count the applications of the live markets in each stored status, missing ones included: run with `--dry-run`, that is the read-only count of production decision 9.6 of T277's report asks for, before any write.
-It then names each application it would change by market id and application id, never an address, says what it would store (a status, an origin, a mark for the deal), and counts them.
-Until it runs, that release reads each application as the migration would store it, so nothing refuses to boot, and a screen shows one thing differently: an application stored with no status (missing, null or empty) counts as open for Begin assignment's guard and for the Stats tab's "open to review", while no list serves it, so the guard holds that market with "Finish deciding" and nobody can decide the application it counts.
-The migration stores `open` on it, which is why it runs before any organizer uses Begin assignment.
-What running it changes is that the next deal on each market deals the applications it found waiting for the deal, which the market's history reads as dealt ", having waited for the deal".
-An application that changed between the script's read and its write on three tries is listed as skipped, and running it again sets it; one whose status no state names, or whose old status would read as another state, is left alone and listed by id.
+Production was started that way on 2026-10-18, so no script in `back-end/migrations/` was needed then.
+Every migration a release has needed since is in [RELEASING.md's one list](RELEASING.md#pre-deploy-database-migrations), in the order to run them, most with a section under it saying when it runs against production; this runbook keeps no list of its own, so a new migration is added to that list.
 
 ### Swapping the names of two locations
 
 A market past Draft whose sections were set up under each other's location name is put right by [`swap_location_names.py`](../back-end/migrations/swap_location_names.py), since the app refuses the rename once [the setup has settled](business/rules/the-setup-settles-on-leaving-draft.md).
 It trades the two locations' names in the plan, in each section's copy of its location and in each stored seat's copy, and keeps every id, so a layout stays on its location under the new name.
 It needs no deploy: it changes one market's document and adds one history entry, of a kind the running release already reads.
-Run it from `back-end/` in a checkout that holds the script and whose `back-end/` otherwise equals production's, so the plan's fingerprint is computed as that release computes it: `git diff <production's commit> HEAD -- back-end ':!back-end/tests'` lists the script alone, or it and [`rename_location.py`](../back-end/migrations/rename_location.py), the operator's script below, which the swap does not read.
+Run it from `back-end/` in a checkout that holds the script and whose `back-end/` otherwise equals production's, so the plan's fingerprint is computed as that release computes it: `git diff <production's commit> HEAD -- back-end ':!back-end/tests'` lists the script alone, or it beside [`rename_location.py`](../back-end/migrations/rename_location.py) and [`history_follows_location_swap.py`](../back-end/migrations/history_follows_location_swap.py), the operator's scripts below, which the swap does not read.
 **Run it while no organizer is working on the market**: a seat assigned, freed or swapped by hand from a read just before the swap is not refused, since the assignment's revision is left unmoved, and puts every seat back under the old names over the swapped plan.
 Take a `mongodump` first ([backups](#backups-and-restoring)), then:
 
@@ -254,8 +227,30 @@ That entry is a second write, after the swap: if it fails, the names stand swapp
 That line counts every Market Setup change with no actor, so it also counts each run of `rename_location.py` ([below](#giving-a-location-a-new-name)).
 Do not run again to repair it, since that swaps back.
 The market's history keeps the names as they were when each entry was recorded, in three kinds of entry: a layout's save (`floorplan`) and a layout removed with its location (`floorplan_removed`), whose sentence in Manage market names the location, and a change on Market Setup (`plan`), whose detail holds the locations and sections before and after.
-None is rewritten, by Daniel's choice, for a later fix: a layout's save recorded before the swap still names its location by the old name, and the script prints how many of the first two kinds name either location.
+The swap rewrites none of them, and prints how many of the first two kinds name either location: a layout's save recorded before the swap still names its location by the old name, which now means the other place, until the step [below](#renaming-the-older-layout-lines-after-a-swap) renames those lines.
 It prints the market's id, the two locations' names, their sections' names and counts, never a vendor's name or address and no other location's name; that is of what it prints, not of the history entry.
+
+### Renaming the older layout lines after a swap
+
+Right after each run of the swap above, [`history_follows_location_swap.py`](../back-end/migrations/history_follows_location_swap.py) renames the market's older layout lines, so that each names the place it was about: each layout's save (`floorplan`) of either location takes the name that location has now, and Manage market reads it so.
+It reads a line's place by id, from its layout: the line names its layout (`subject.floorplan_id`), and a layout stays on the location it was started on until it is removed with it.
+So a line is right after any number of swaps, of the two or with a third location, and a line of either location recorded before an ordinary rename of it, by [`rename_location.py`](#giving-a-location-a-new-name) or on Market Setup in draft, now shows the name it has now too.
+Left as written: a change on Market Setup (`plan`), the record of what the plan said when it was saved; a layout removed with its location (`floorplan_removed`), which is about a location no longer in the plan, so never either of the two; a line whose layout is no longer in the plan, or on another location; and every other kind of entry.
+It needs no deploy; of the market's document it reads the plan alone, and it writes the history alone, so an organizer working on the market meanwhile is not in its way.
+Run it from `back-end/` in the checkout the swap ran from:
+
+```bash
+MONGODB_URI='<URI>' .venv/bin/python migrations/history_follows_location_swap.py <market-id> '<location>' '<location>' --dry-run   # writes nothing
+MONGODB_URI='<URI>' .venv/bin/python migrations/history_follows_location_swap.py <market-id> '<location>' '<location>'
+```
+
+Each location is named by its id or its exact name as it is now.
+The dry run prints the market's id, the two locations' ids, how many trades of their names the history records, and how many of their layouts' lines it would rename and how many a run before renamed: counts only, never a name.
+**A second run changes nothing**: each line keeps the name it was recorded under beside it, as `subject.location_as_recorded`, and is given the name its location has now.
+So it is run again after any later swap, and after a swap back each line recorded before the first swap reads as it was recorded.
+It refuses, exiting 1 with nothing written: a market it does not find, a location it does not find or that has no stored id, one location named twice, and a history that records no trade of the two names, by the swap or on Market Setup; its docstring lists each.
+Each line is its own write, held to the name it was read under; if one changed between the read and the write, it says how many it renamed of how many it meant to and exits 1, and running it again renames the rest.
+It records nothing in the history: the name as recorded stays on the line.
 
 ### Giving a location a new name
 
@@ -409,7 +404,8 @@ The back end checks the database as it starts and refuses to serve one it cannot
 - one account per address, `user_email` ([`api/users.py`](../back-end/api/users.py));
 - one attendance record per vendor's day, `attendance_vendor_day_unique` ([`api/attendance.py`](../back-end/api/attendance.py), through [`unique_indexes.py`](../back-end/unique_indexes.py));
 - one owed record per vendor's day, `amounts_owed_vendor_day_unique` ([`payments.py`](../back-end/payments.py), through [`unique_indexes.py`](../back-end/unique_indexes.py));
-- one payment per press of Record, `payments_request_key_unique` ([`payments.py`](../back-end/payments.py), through [`unique_indexes.py`](../back-end/unique_indexes.py)).
+- one payment per press of Record, `payments_request_key_unique` ([`payments.py`](../back-end/payments.py), through [`unique_indexes.py`](../back-end/unique_indexes.py));
+- one invitation per address and target, `invitation_target_email_unique` ([`invitations.py`](../back-end/invitations.py), through [`unique_indexes.py`](../back-end/unique_indexes.py)).
 
 It refuses too when it cannot build the indexes an organizer's sign-ins rest on, in `organizer_sessions` ([`organizer_sessions.py`](../back-end/organizer_sessions.py)), which carry no unique rule.
 
@@ -440,7 +436,7 @@ Make the database reachable (the `MONGODB_URI`, the database user's password, At
 
 **"N account(s) have an address not stored lowercased (ids: ...)"**.
 `users.email` is unique over the lowercased address, and an account written before every writer lowercased it blocks that index ([users and email](implementation/data/users-and-email.md#one-address-is-one-account)).
-Run [`migrations/migrate_user_emails.py`](../back-end/migrations/migrate_user_emails.py), `--dry-run` first, as under [Starting a database, and migrations](#starting-a-database-and-migrations).
+Run [`migrations/migrate_user_emails.py`](../back-end/migrations/migrate_user_emails.py), `--dry-run` first, as [RELEASING.md](RELEASING.md#migrate_user_emailspy) says.
 When it names accounts that would share an address, it writes nothing: decide with their owners which account stays, delete the others (`db.users.deleteOne({id: '<id>'})`, after any organization they own is transferred), and run it again.
 
 **"Could not build the unique index 'user_email' on users.email ... Accounts sharing an address: ..."**.
@@ -466,13 +462,20 @@ Two writes of what a vendor owes for one day stored two records, which an amount
 The refusal names each group as the attendance one does, and `check_vendor_day_duplicates.py` lists the same groups; the `mongosh` line above, run on `db.amounts_owed`, does too.
 Each record may hold a freed line (`freed`) and an amount set by hand (`set_by_hand`), and the day's one record should hold the latest of each.
 Take a `mongodump` first, then in each group keep one record, holding the `freed` with the latest `freed.at` and the `set_by_hand` with the latest `set_by_hand.at` among the group's, with its stored `state` taken away so it is read from those two fields (`db.amounts_owed.updateOne({_id: ObjectId('<kept id>')}, {$set: {freed: <latest freed>, set_by_hand: <latest set_by_hand>}, $unset: {state: ''}})`), and delete the others by `_id` (`db.amounts_owed.deleteOne({_id: ObjectId('<id>')})`).
-Then redeploy, or restart the local back end, run `migrate_owed_day_state.py` as under [Starting a database, and migrations](#starting-a-database-and-migrations), which stores the kept record's state again, and read the vendor's Payment tab for that day.
+Then redeploy, or restart the local back end, run [`migrate_owed_day_state.py`](../back-end/migrations/migrate_owed_day_state.py) as [RELEASING.md](RELEASING.md#migrate_owed_day_statepy) says, which stores the kept record's state again, and read the vendor's Payment tab for that day.
 "None found" reads as for attendance, the index to drop being `db.amounts_owed.dropIndex('amounts_owed_vendor_day_unique')`.
 
 **"The unique index payments_request_key_unique on payments ... could not be built ... Records sharing one request key, by market_id and record id: ..."**.
 This is not duplicates: the request key is the press of Record payment an entry was recorded by ([payments](implementation/data/payments.md#a-payment-is-recorded-once-per-press)), and the refusal groups only the entries the index covers, those with a key, which no entry recorded before the index has, so it reads "none found".
 Read the database's answer in the refusal, its type and code: code 85 or 86 is an index of that name with other options or keys, to drop (`db.payments.dropIndex('payments_request_key_unique')`) before redeploying; anything else is the database's own trouble (reachability, the user's rights, Atlas's status).
 The index only stops an entry recorded twice by one press, so dropping it loses nothing, and the next boot builds it again.
+
+**"The unique index invitation_target_email_unique on invitations ... could not be built ... Records sharing one address's invitation to one target, by target_kind, target_id and record id: ..."**.
+Two invitations to one address for one target stored two records, so one withdrawal could leave the other to be accepted ([invitations](implementation/modules/invitations.md#the-store)).
+The refusal names each target holding two, never the address.
+Take a `mongodump` first, then in each group keep the record with the latest `sent_at` and delete the others by `_id` (`db.invitations.deleteOne({_id: ObjectId('<id>')})`).
+Then redeploy, or restart the local back end.
+Code 85 or 86 is an index of that name with other options or keys, to drop (`db.invitations.dropIndex('invitation_target_email_unique')`) before redeploying.
 
 **"The indexes on applicant_login_challenges, sign_in_attempts and vendor_remembered_sign_ins could not be built"**.
 The log names Mongo's error by its type and code only, never its words, since a duplicate key error quotes a vendor's address: code 11000 is duplicate challenges, and 85 or 86 an index of the same name with other options or keys.
@@ -482,6 +485,11 @@ The third holds vendors' remembered sign-ins ("Remember me" on the vendor page);
 **"Could not build the indexes on organizer_sessions"**.
 The log names Mongo's error by its type and code only: 85 or 86 is an index of the same name with other options or keys, or another index on `expires_at` without the expiry, which the TTL index cannot stand beside.
 The collection holds organizers' sign-ins ([ADR 0029](adr/0029-an-organizers-sign-in-is-kept-on-the-server.md)), and its indexes are the TTL index `organizer_session_ttl` on `expires_at` and `organizer_session_user` on `user_id`, so drop the conflicting index (`db.organizer_sessions.dropIndex('<name>')`) and keep the documents, then redeploy; anything else is the database's own trouble (reachability, the user's rights, Atlas's status).
+
+**"Could not build the indexes on invitations"**.
+The log names Mongo's error by its type and code only, and the refusal says that without the indexes an ended invitation is never removed and an invitee's list scans every invitation.
+The indexes are `invitation_email` on `email`, which the invitee's list reads by, and the TTL index `invitation_ttl` on `expires_at` ([invitations](implementation/modules/invitations.md#the-store)).
+Code 85 or 86 is an index of the same name with other options or keys, or another index on `expires_at` without the expiry: drop the conflicting index (`db.invitations.dropIndex('<name>')`) and keep the documents, then redeploy; anything else is the database's own trouble.
 
 **"Refusing to start: ... are not as a deployment needs them"**, naming variables.
 A configuration refusal, not a database one: set each variable it names ([RELEASING.md](RELEASING.md#pre-deploy-required-production-environment)), remove each local-development switch it names ([a deployed host refuses local switches](RELEASING.md#a-deployed-host-refuses-local-switches)), and redeploy.

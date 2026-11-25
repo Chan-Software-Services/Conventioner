@@ -976,8 +976,7 @@ watch(marketId, () => {
            Applications tab, but the page itself said nothing about which, and an import is
            232 applications landing somewhere. -->
         <p v-if="market" class="import-help" data-testid="import-target-market">
-          Importing into <strong>{{ market.name }}</strong
-          >. Nothing is written until you confirm.
+          Importing into <strong>{{ market.name }}</strong>. Nothing is written until you confirm.
         </p>
         <!-- What this import does to the market, which differs by where it stands (E38/F04). -->
         <p class="import-help" data-testid="import-what-it-does">
@@ -1296,9 +1295,9 @@ watch(marketId, () => {
             data-testid="import-declare-unasked"
           >
             <p>
-              No column in this file answers <strong>{{ target.label }}</strong
-              >. It is a preference, not a constraint, so this market can stop asking it and treat
-              every applicant equally.
+              No column in this file answers <strong>{{ target.label }}</strong>. It is a
+              preference, not a constraint, so this market can stop asking it and treat every
+              applicant equally.
             </p>
             <button
               v-if="amendAvailability?.available"

@@ -13,6 +13,7 @@ One line per node, sorted by file name.
 
 - [Accounts](accounts.md) - A: registering and verifying, signing in by password or code, resetting a password
 - [Applying online](applying-online.md) - H3: a vendor signs in with a code, applies, edits, and reads their outcome
+- [Answering an invitation](answering-an-invitation.md) - O1 to O4: the Invitations page, accepting, declining, and an invitation that has ended
 - [The assignment and its result](assignment-and-result.md) - I7, J1 to J5, J14: the rules, the run, the result, publishing results
 - [Creating a market](creating-a-market.md) - D: the create-market dialog, how vendors will apply, the organization and the name
 - [Ending and managing a market](ending-and-managing-a-market.md) - P6, L1 to L5: archiving, access, renaming and deleting a market

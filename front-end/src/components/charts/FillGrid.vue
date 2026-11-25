@@ -51,8 +51,7 @@ defineProps<{
             :data-key="row.key"
           >
             <th scope="row" class="fill-grid-section">
-              <span class="fill-grid-name">{{ row.label }}</span
-              ><template v-if="row.tier"
+              <span class="fill-grid-name">{{ row.label }}</span><template v-if="row.tier"
                 ><span class="visually-hidden">, </span
                 ><span class="fill-grid-tier">{{ row.tier }}</span></template
               >
@@ -65,8 +64,9 @@ defineProps<{
               :data-step="cell.step"
               :data-testid="`${testid}-cell`"
             >
-              <span aria-hidden="true" :data-testid="`${testid}-figures`">{{ cell.figures }}</span
-              ><span class="visually-hidden">{{ cell.words }}</span>
+              <span aria-hidden="true" :data-testid="`${testid}-figures`">{{
+                cell.figures
+              }}</span><span class="visually-hidden">{{ cell.words }}</span>
             </td>
           </tr>
         </tbody>
@@ -80,8 +80,9 @@ defineProps<{
               :class="`fill-grid-cell--${cell.step}`"
               :data-step="cell.step"
             >
-              <span aria-hidden="true" :data-testid="`${testid}-figures`">{{ cell.figures }}</span
-              ><span class="visually-hidden">{{ cell.words }}</span>
+              <span aria-hidden="true" :data-testid="`${testid}-figures`">{{
+                cell.figures
+              }}</span><span class="visually-hidden">{{ cell.words }}</span>
             </td>
           </tr>
         </tfoot>

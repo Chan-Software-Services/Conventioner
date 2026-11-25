@@ -316,7 +316,7 @@ It is installed after the [error answers](an-exception-never-reaches-a-client.md
 
 ## A mail carries a stranger's words only as words
 
-**Every mail goes through `send_mail`** in [`back-end/utils/email.py`](../../../back-end/utils/email.py): the four account mails and the vendor's sign-in code (`_send_code_email` in [`back-end/api/applicant_auth.py`](../../../back-end/api/applicant_auth.py)).
+**Every mail goes through `send_mail`** in [`back-end/utils/email.py`](../../../back-end/utils/email.py): the four account mails, an invitation (`send_invitation_email`), and the vendor's sign-in code (`_send_code_email` in [`back-end/api/applicant_auth.py`](../../../back-end/api/applicant_auth.py)).
 So the disabled path, the missing key, the log that names a mail's kind and never its address, and the timeout are one code path.
 Resend's client gives up after `MAIL_TIMEOUT_SECONDS`, 10, set once at import as `resend.default_http_client`, in place of the library's 30; a send that times out returns False like any other failed send.
 

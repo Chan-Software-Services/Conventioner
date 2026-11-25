@@ -12,7 +12,7 @@ describes:
   - front-end/src/utils/market.ts#layoutPath
   - front-end/src/utils/market.ts#marketPagePath
   - front-end/src/utils/market.ts#vendorPagePath
-verified: 2026-11-18
+verified: 2026-11-25
 sources:
   - wayfinding/readable-journey/map
   - wayfinding/the-assignment-tab/01
