@@ -359,6 +359,10 @@ jobs:
       # then landed on whichever later change touched the file.
       - name: Lint styles against the design language
         run: npm run lint:css
+      # Compares the committed DESIGN.md with what scripts/design-md.ts writes from the CSS, then lints
+      # it with the pinned @google/design.md, letting by only orphaned-tokens (T582).
+      - name: DESIGN.md is what its generator writes, and lints clean
+        run: npm run design-md:check
       - name: Type-check (full repo)
         run: npm run type-check
       # The JavaScript a first visit loads before any page paints stays under a gzipped limit,
