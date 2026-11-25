@@ -25,16 +25,20 @@ files instead). A spec is chosen:
    reach it); a line that runs nothing (blank, a comment, a docstring's text) names none, and a
    change outside any function, or in one the map does not know, counts for every function of its
    file, choosing the specs that reach the file and scoring nothing;
-4. every spec, when the change edits a file the whole suite stands on (`RUN_EVERY_SPEC`);
+4. every spec, when the change edits a file the whole suite stands on, or the E2E run's own
+   machinery: the Test workflow, `.github/workflows/test.yml`, a file under `.github/actions/`,
+   the shard dealer, `front-end/scripts/e2e-shards.ts`, and its `e2e-shard-timings.json`, this
+   script and `scripts/test_map.py`, `scripts/chromium-packages.sh` and `scripts/image-tags.sh`
+   (`RUN_EVERY_SPEC`);
 5. every spec, scoring nothing, when the change edits a file under `front-end/` or `back-end/` no
    rule places: not a spec, not imported by one at the head or the base, in no spec's modules and
    no endpoint's files (a stylesheet Vite inlines, a module no endpoint ran, a config no rule
    reads); docs, Markdown, the suites that are not E2E and their configs, the lint and format
-   configs, the scripts that deal or measure the specs, the back end's deploy config,
-   `back-end/vercel.json`, the advisory scan's lock, `back-end/requirements-audit.in` and its
-   `.txt`, and the migrations, `back-end/migrations/` (`DRIVES_NO_SPEC`), choose nothing, and so
-   does a file the change deletes no rule places, since what read it changes with it and is placed
-   on its own.
+   configs, the front end's scripts that check the build or that nothing in CI runs, the back
+   end's deploy config, `back-end/vercel.json`, the advisory scan's lock,
+   `back-end/requirements-audit.in` and its `.txt`, and the migrations, `back-end/migrations/`
+   (`DRIVES_NO_SPEC`), choose nothing, and so does a file the change deletes no rule places, since
+   what read it changes with it and is placed on its own.
 
 The chosen specs run by score, the shorter first on a tie, until the next would pass the cap
 (`--minutes`, 30 by default) of CI minutes, by the map's run's shard results, then
@@ -79,17 +83,23 @@ UNTIMED_SECONDS = 60.0
 
 # What every spec stands on: the fixtures every test is made from, the setup and config of the
 # run, the front end's build and dependencies, and the stack and data every spec runs against:
-# every back-end lock but the advisory scan's, which no stack installs.
+# every back-end lock but the advisory scan's, which no stack installs. And the E2E run's own
+# machinery, so a change to it runs the whole suite: the Test workflow and its shared actions, the
+# shard dealer and its timings, this selection and the map's builder, and the scripts that give a
+# runner its browser's packages and a stack its image tags.
 RUN_EVERY_SPEC = re.compile(
     r"^(?:front-end/(?:e2e/fixtures\.ts|e2e/global-setup\.ts|playwright\.config\.ts"
-    r"|package-lock\.json|vite\.config\.ts|index\.html)"
+    r"|package-lock\.json|vite\.config\.ts|index\.html"
+    r"|scripts/(?:e2e-shards\.ts|e2e-shard-timings\.json))"
     r"|docker-compose[^/]*\.ya?ml|(?:.*/)?Dockerfile[^/]*|back-end/requirements(?!-audit\.)[^/]*\.txt"
-    r"|scripts/seed_fixture\.sh|scripts/lib/stack-identity\.sh)$"
+    r"|scripts/(?:seed_fixture\.sh|lib/stack-identity\.sh|affected-specs\.py|test_map\.py"
+    r"|chromium-packages\.sh|image-tags\.sh)"
+    r"|\.github/(?:workflows/test\.yml|actions/.+))$"
 )
 
 # The changed files that drive no spec, wherever the map places them: the docs, Markdown, the
-# suites the E2E run does not run and their configs, the lint and format configs, the scripts that
-# deal or measure the specs (or that nothing runs), the back end's deploy config, the
+# suites the E2E run does not run and their configs, the lint and format configs, the front end's
+# scripts that check the build (or that nothing in CI runs), the back end's deploy config, the
 # advisory scan's lock, which only CI's python-advisories job installs, and the migrations, which an
 # operator runs by hand, none of which the stack or a page reads.
 DRIVES_NO_SPEC = re.compile(
@@ -98,8 +108,7 @@ DRIVES_NO_SPEC = re.compile(
     r"|^front-end/src/.*\.(?:test|spec)\.tsx?$"
     r"|^front-end/(?:vitest\.config\.ts|tsconfig\.vitest\.json|eslint\.config\.ts"
     r"|stylelint\.config\.js|\.prettierrc\.json|\.prettierignore|\.editorconfig"
-    r"|scripts/(?:e2e-shard-timings\.json|e2e-shards\.ts|bundle-budget\.ts"
-    r"|no-eval\.ts|brand-icons\.ts))$"
+    r"|scripts/(?:bundle-budget\.ts|no-eval\.ts|brand-icons\.ts))$"
     r"|^back-end/(?:pytest\.ini|vercel\.json|requirements-audit\.(?:in|txt))$"
 )
 

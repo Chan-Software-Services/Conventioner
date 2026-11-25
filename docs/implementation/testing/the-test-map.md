@@ -10,6 +10,7 @@ verified: 2026-11-24
 sources:
   - T349
   - T510
+  - T612
 ---
 
 # The test map
@@ -112,6 +113,7 @@ A spec is chosen by five rules:
    A change outside every function, such as an import or a constant, or in a function the map does not list, counts for every function of its file, choosing every spec that reaches the file.
    The back end's own tests reach no spec.
 4. **Every spec, for a file the whole suite stands on**: `e2e/fixtures.ts`, `e2e/global-setup.ts`, `playwright.config.ts`, `package-lock.json`, `vite.config.ts` and `index.html` in `front-end/`, a compose file, a Dockerfile, a back-end lock but the advisory scan's, or `scripts/seed_fixture.sh` or the stack rule it sources, `scripts/lib/stack-identity.sh`.
+   So does the E2E run's own machinery: `.github/workflows/test.yml`, a file under `.github/actions/`, `front-end/scripts/e2e-shards.ts` and its `e2e-shard-timings.json`, `scripts/affected-specs.py`, `scripts/test_map.py`, `scripts/chromium-packages.sh` and `scripts/image-tags.sh`.
 5. **Every spec, for a file under `front-end/` or `back-end/` that no rule places**: not a spec, not imported by one at the head or the base, in no spec's modules and no endpoint's files.
    Such a file can drive any spec: a stylesheet `main.css` pulls in by `@import`, which Vite inlines so no page requests it, a back-end module no endpoint ran in the suite, or a file no rule reads, such as `back-end/docker-entrypoint.sh` or `front-end/tsconfig.app.json`.
    Its reason is "`<path>` is not in the map".
@@ -122,7 +124,7 @@ A spec is chosen by five rules:
    - the unit suite's config: `front-end/vitest.config.ts` and `front-end/tsconfig.vitest.json`
    - the back end's pytest config, `back-end/pytest.ini`
    - the lint and format configs: `eslint.config.ts`, `stylelint.config.js`, `.prettierrc.json`, `.prettierignore` and `.editorconfig` in `front-end/`
-   - the scripts in `front-end/scripts/` that deal or measure the specs, or that nothing runs: `e2e-shard-timings.json`, `e2e-shards.ts`, `bundle-budget.ts`, `no-eval.ts` and `brand-icons.ts`
+   - the scripts in `front-end/scripts/` that check the build, or that nothing in CI runs: `bundle-budget.ts`, `no-eval.ts` and `brand-icons.ts`
    - the back end's deploy config, `back-end/vercel.json`
    - the advisory scan's lock, `back-end/requirements-audit.in` and `requirements-audit.txt`, which only [CI's `python-advisories` job](ci-and-the-gate.md#ci) installs
    - the migrations, `back-end/migrations/`, which an operator runs by hand and which nothing the app, the seed or a spec imports
