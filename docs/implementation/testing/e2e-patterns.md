@@ -24,7 +24,7 @@ describes:
   - front-end/e2e/helpers/mongoScript.ts
   - front-end/e2e/helpers/humanCheck.ts
   - front-end/e2e/helpers/signInLimits.ts
-verified: 2026-11-25
+verified: 2026-11-26
 sources:
   - E21/F02/S02
   - E22/F04/S02
