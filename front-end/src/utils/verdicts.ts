@@ -45,18 +45,23 @@ export function statusChip(status: string): string {
   return `chip chip--${STATUS_TONES[status as ApplicationStatus] ?? 'neutral'}`;
 }
 
-const VERDICTS: readonly string[] = [
-  ApplicationStatus.ReviewerApproved,
-  ApplicationStatus.ReviewerRejected,
-];
+/**
+ * What a verdict's line reads: the stored status for its words, who gave it, and whether the server
+ * reads it as undecided (`review.undecided`), which alone says whether there is a verdict.
+ */
+type Verdicted = Pick<Application, 'status' | 'verdictBy' | 'verdictAt' | 'verdictReason'> & {
+  review: Pick<Application['review'], 'undecided'>;
+};
 
 /**
  * Whether an application carries a verdict, so a verdict on it changes one: the table's row "Change
  * a verdict, or overturn an automatic rejection" (E38/F06/S01). A follow-up is marked, not decided:
  * deciding one is giving a verdict.
  */
-export function isDecided(application: Pick<Application, 'status'>): boolean {
-  return VERDICTS.includes(application.status);
+export function isDecided(application: {
+  review: Pick<Application['review'], 'undecided'>;
+}): boolean {
+  return !application.review.undecided;
 }
 
 /**
@@ -65,11 +70,9 @@ export function isDecided(application: Pick<Application, 'status'>): boolean {
  * rule's (E33/F03/S02). Null when nobody was recorded - an application decided before verdicts
  * recorded their giver, or one with no verdict.
  */
-export function verdictGiverLine(
-  application: Pick<Application, 'status' | 'verdictBy' | 'verdictAt' | 'verdictReason'>,
-): string | null {
+export function verdictGiverLine(application: Verdicted): string | null {
   const by = application.verdictBy;
-  if (!VERDICTS.includes(application.status) || !by) return null;
+  if (!isDecided(application) || !by) return null;
   const verb = statusLabel(application.status);
   // A rule's verdict says why, in the server's words, which a reviewer weighs before overturning
   // it (E33/F03/S02).
@@ -88,10 +91,8 @@ export function verdictGiverLine(
  * has none. A verdict stored before its giver was recorded still reads as itself (E36/F02/S03): the
  * vendor drawer used to show nothing at all for one.
  */
-export function verdictLine(
-  application: Pick<Application, 'status' | 'verdictBy' | 'verdictAt' | 'verdictReason'>,
-): string | null {
-  if (!VERDICTS.includes(application.status)) return null;
+export function verdictLine(application: Verdicted): string | null {
+  if (!isDecided(application)) return null;
   return verdictGiverLine(application) ?? statusLabel(application.status);
 }
 

@@ -297,7 +297,10 @@ describe('PinnedTools', () => {
     });
     const block = wrapper.get('[data-testid="tools"]').element as HTMLElement;
     const setHeight = (px: number) =>
-      Object.defineProperty(block, 'offsetHeight', { configurable: true, value: px });
+      Object.defineProperty(block, 'getBoundingClientRect', {
+        configurable: true,
+        value: () => new DOMRect(0, 0, 800, px),
+      });
     const published = () =>
       (wrapper!.element as HTMLElement).style.getPropertyValue('--pinned-tools-h');
     return { block, setHeight, published };
@@ -314,21 +317,22 @@ describe('PinnedTools', () => {
     expect(rows.parentElement).toBe(root);
   });
 
-  it("publishes the block's measured height, and follows it as it grows", async () => {
+  it("publishes the block's measured height unrounded, and follows it as it grows", async () => {
     const { block, setHeight, published } = mountPinned();
     const [observer] = FakeResizeObserver.live;
     expect(observer!.observed).toEqual([block]);
 
-    setHeight(53);
+    // Rounded to 53px, a second sticky row under the block would rise 0.2px as it pinned.
+    setHeight(53.2);
     observer!.fire();
     await nextTick();
-    expect(published()).toBe('53px');
+    expect(published()).toBe('53.2px');
 
     // A failed refresh's line, or a row wrapping, grows the block.
-    setHeight(71);
+    setHeight(71.4);
     observer!.fire();
     await nextTick();
-    expect(published()).toBe('71px');
+    expect(published()).toBe('71.4px');
   });
 
   it('says 0px before the first measure', async () => {

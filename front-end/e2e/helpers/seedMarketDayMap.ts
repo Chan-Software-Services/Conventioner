@@ -20,9 +20,14 @@ export interface SeededMarketDayMap {
   marketName: string;
   slug: string;
   orgId: string;
-  /** Today and tomorrow, as calendar days where the browser is. */
+  /** Today and tomorrow, as calendar days where the browser is, reckoned from `seededAt`. */
   today: string;
   tomorrow: string;
+  /**
+   * The one instant `today` and `tomorrow` were reckoned from, at which a spec holds its pages'
+   * clock (`page.clock.setFixedTime`) so they open on `today` whatever the clock reads by then.
+   */
+  seededAt: Date;
   north: typeof NORTH_WING;
   south: typeof SOUTH_WING;
   /** Every vendor seeded, in the order of `DAY_MAP_VENDORS`. */
@@ -140,10 +145,6 @@ export const DAY_MAP_VENDORS: DayMapVendor[] = [
 
 const NOTE = 'Notefixture: brings a canopy of their own';
 
-function inDays(days: number): string {
-  return calendarToday(new Date(Date.now() + days * 24 * 60 * 60 * 1000));
-}
-
 async function ok(response: Awaited<ReturnType<APIRequestContext['get']>>, what: string) {
   if (!response.ok())
     throw new Error(`${what} failed: ${response.status()} ${await response.text()}`);
@@ -175,8 +176,13 @@ export async function seedMarketDayMap(
   password: string,
   options: { publicMap?: boolean; name?: string; inAssignment?: boolean } = {},
 ): Promise<SeededMarketDayMap> {
-  const today = calendarToday();
-  const tomorrow = inDays(1);
+  // One read of the clock: two reads straddling midnight would give days D and D+2.
+  const seededAt = new Date();
+  const today = calendarToday(seededAt);
+  // The next day on the calendar, not 24 hours on, which a day of 23 or 25 hours would miss.
+  const tomorrow = calendarToday(
+    new Date(seededAt.getFullYear(), seededAt.getMonth(), seededAt.getDate() + 1),
+  );
   await loginViaApi(request, baseURL, email, password);
   const orgId = await ensureTestOrgAuthenticated(request, baseURL);
   const marketName = options.name ?? uniqueMarketName('Day Map Market');
@@ -307,6 +313,7 @@ export async function seedMarketDayMap(
     orgId,
     today,
     tomorrow,
+    seededAt,
     north: NORTH_WING,
     south: SOUTH_WING,
     vendors: DAY_MAP_VENDORS,

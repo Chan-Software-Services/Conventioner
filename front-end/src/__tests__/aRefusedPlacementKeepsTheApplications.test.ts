@@ -16,6 +16,7 @@ import { createMemoryHistory, createRouter } from 'vue-router';
 import type { Market } from '@/assets/types/datatypes';
 import VendorDrawer from '@/components/VendorDrawer.vue';
 import { useVendorDetails } from '@/utils/vendorDetails';
+import { servedReview } from './support/servedReview';
 
 const api = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('@/utils/api', async (importOriginal) => {
@@ -37,6 +38,7 @@ const BOB = {
   id: 'app-bob',
   applicantEmail: 'bob@example.com',
   status: 'reviewer_approved',
+  ...servedReview('approved'),
   formData: { business_name: 'Bob Prints', essential_full_name: 'Robert Example' },
 };
 

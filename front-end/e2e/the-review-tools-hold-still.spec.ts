@@ -68,15 +68,15 @@ async function aLongReview(request: import('@playwright/test').APIRequestContext
 }
 
 /**
- * In px from the window's top: the frame's bottom, the pinned block's top and bottom, the All view's
- * filters line's top (`null` on One by one), and the scroll.
+ * In px from the window's top, unrounded, so a fraction of a pixel shows: the frame's bottom, the
+ * pinned block's top and bottom, the All view's filters line's top (`null` on One by one), and the
+ * scroll.
  */
 function parts(page: Page) {
   return page.evaluate(() => {
     const edge = (testid: string, side: 'top' | 'bottom') => {
       const box = document.querySelector(`[data-testid="${testid}"]`)?.getBoundingClientRect();
-      // `|| 0`: a box scrolled up by a fraction rounds to -0, which `toBe` tells from 0.
-      return box ? Math.round(box[side]) || 0 : null;
+      return box ? box[side] : null;
     };
     return {
       frame: edge('market-frame', 'bottom')!,
@@ -93,18 +93,33 @@ async function scrollTo(page: Page, y: number) {
   await expect.poll(() => page.evaluate(() => Math.round(window.scrollY)), `${y}px`).toBe(y);
 }
 
+/** Two edges less than half a hundredth of a pixel apart stand at the same place. */
+const AT = 2;
+
 /**
  * At every scroll the block's top is the frame's bottom, and on All the filters line's top is the
- * block's bottom: pinned from the start, flush, never moving.
+ * block's bottom, each where it stood at rest: pinned from the start, flush, never moving, not by a
+ * fraction of a pixel.
  */
 async function expectHeldStill(page: Page, at: string, withFilters: boolean) {
+  await scrollTo(page, 0);
+  const rest = await parts(page);
   for (const y of SCROLLS) {
     await scrollTo(page, y);
     const now = await parts(page);
-    expect(now.tools, `${at}, ${y}px: the tools stand under the frame`).toBe(now.frame);
+    expect(now.tools, `${at}, ${y}px: the tools stand under the frame`).toBeCloseTo(now.frame, AT);
+    expect(now.tools, `${at}, ${y}px: the tools stand where they did at rest`).toBeCloseTo(
+      rest.tools,
+      AT,
+    );
     if (withFilters) {
-      expect(now.filters, `${at}, ${y}px: the filters stand flush under the toolbar`).toBe(
+      expect(now.filters!, `${at}, ${y}px: the filters stand flush under the toolbar`).toBeCloseTo(
         now.toolsEnd,
+        AT,
+      );
+      expect(now.filters!, `${at}, ${y}px: the filters stand where they did at rest`).toBeCloseTo(
+        rest.filters!,
+        AT,
       );
     }
   }
@@ -188,7 +203,10 @@ test('on a phone the toolbar scrolls with the page, on both views', async ({
     for (const y of SCROLLS) {
       await scrollTo(page, y);
       const now = await parts(page);
-      expect(now.tools, `${view}, ${y}px: the tools went with the page`).toBe(rest.tools - y);
+      expect(now.tools, `${view}, ${y}px: the tools went with the page`).toBeCloseTo(
+        rest.tools - y,
+        AT,
+      );
     }
   }
 });

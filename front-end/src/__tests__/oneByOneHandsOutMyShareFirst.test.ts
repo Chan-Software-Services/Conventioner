@@ -15,10 +15,13 @@ import { ApplicationStatus, type Application, type Market } from '@/assets/types
 import { MarketAction } from '@/utils/marketActions';
 import { answersRefusing } from './support/servedAnswers';
 import { pressRefresh } from './support/reviewViewTools';
+import { servedReview } from './support/servedReview';
 
 const ME = 'ana@example.com';
 const FOLLOW_UP = ApplicationStatus.NeedsFollowUp;
 const SAM = 'sam@example.com';
+/** A reviewer taken off the team: what was dealt to them still carries their address. */
+const CARL = 'carl@example.com';
 
 const fetchMarketApplications = vi.fn();
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() }));
@@ -53,7 +56,7 @@ function market(): Market {
     roles: {},
     applicationForm: { fields: [{ key: 'shop', label: 'Shop', type: 'text' }] },
     reviewTeam: {
-      reviewers: team.map((email) => ({ email, able: true })),
+      reviewers: team.map((email) => ({ email, able: !unable.includes(email) })),
     },
     actionRefusals: {
       ...answersRefusing(),
@@ -69,9 +72,40 @@ function market(): Market {
  */
 let stored: Application[] = [];
 let team: string[] = [];
+/** The chosen reviewers who can no longer review here, as the reviewers panel marks them. */
+let unable: string[] = [];
+
+/** The state each status this fake stores is served as. */
+const STATE: Partial<Record<ApplicationStatus, Application['review']['state']>> = {
+  [ApplicationStatus.Open]: 'open',
+  [FOLLOW_UP]: 'follow_up',
+  [ApplicationStatus.ReviewerApproved]: 'approved',
+  [ApplicationStatus.ReviewerRejected]: 'rejected',
+};
+
+/**
+ * A stored application as this fake server answers it, its review read as `review_of` reads it:
+ * an undecided one is its reviewer's while they are chosen and a follow-up its owner's too (every
+ * owner here holds a role), a decided one stays its reviewer's, and an open one whose reviewer is
+ * not chosen waits for the deal.
+ */
+function served(app: Application): Application {
+  const state = STATE[app.status]!;
+  const reviewer = app.reviewer?.email ?? '';
+  const chosen = team.includes(reviewer);
+  const undecided = state === 'open' || state === 'follow_up';
+  const owner = state === 'follow_up' ? app.followUpOwner?.email : undefined;
+  const share = !team.length
+    ? []
+    : !undecided
+      ? [reviewer].filter(Boolean)
+      : [...(chosen ? [reviewer] : []), ...(owner && owner !== reviewer ? [owner] : [])];
+  const waiting = team.length > 0 && state === 'open' && !chosen;
+  return { ...app, ...servedReview(state, { share, waiting }) };
+}
 
 function serve() {
-  fetchMarketApplications.mockImplementation(async () => stored.map((app) => ({ ...app })));
+  fetchMarketApplications.mockImplementation(async () => stored.map(served));
   api.post.mockImplementation(async (url: string, body: Record<string, unknown>) => {
     if (!url.endsWith('/review/next')) return { data: {} };
     const handed = [ApplicationStatus.Open, ...(body.includeFollowUps ? [FOLLOW_UP] : [])];
@@ -86,20 +120,21 @@ function serve() {
         ? mine
         : [...mine, ...order.filter((app) => app.reviewer?.email !== ME)]
       : order;
-    return { data: { application: walk[0] ? { ...walk[0] } : null } };
+    return { data: { application: walk[0] ? served(walk[0]) : null } };
   });
   api.put.mockImplementation(async (url: string, body: { status?: string }) => {
     const id = url.match(/applications\/([^/]+)\/review$/)?.[1];
     if (!id) return { data: { held: true } };
     const app = stored.find((a) => a.id === id) as Application;
     app.status = body.status as ApplicationStatus;
-    return { data: { application: { ...app } } };
+    return { data: { application: served(app) } };
   });
 }
 
 /** Two of five are Ana's: amy and cal. The rest are Sam's. */
 function fiveDealt() {
   team = [ME, SAM];
+  unable = [];
   stored = [
     application('amy', 1, ME),
     application('ben', 2, SAM),
@@ -331,7 +366,7 @@ describe('a chosen reviewer', () => {
     await pressRefresh(wrapper);
     await flushPromises();
 
-    answerNext(application('cal', 3, ME));
+    answerNext(served(application('cal', 3, ME)));
     await flushPromises();
     expect(wrapper.find('[data-testid="app-monitor-card"]').exists()).toBe(false);
     expect(text(wrapper, 'app-monitor-share-done')).toContain('Your share is done.');
@@ -342,7 +377,7 @@ describe('a chosen reviewer', () => {
     stored = [application('amy', 1, ME), application('ben', 2, SAM)];
     serve();
     api.post.mockImplementationOnce(async () => ({
-      data: { application: { ...stored[1] } },
+      data: { application: served(stored[1]) },
     }));
     const wrapper = mount(ApplicationMonitor, {
       props: reactive({ market: market(), visible: true }),
@@ -359,6 +394,36 @@ describe('a chosen reviewer', () => {
     expect(lastAsk()).toMatchObject({ after: 'ben', mineOnly: true });
     expect(shown(wrapper)).toBe('amy@vendor.test');
     expect(text(wrapper, 'app-monitor-progress')).toBe('1 of 1 in your share');
+  });
+
+  it('reads a card in nobody’s share as not dealt yet, warning of no one, and outside their share', async () => {
+    // Dealt to Carl before he was taken off the team: it waits for the next deal.
+    stored = [application('amy', 1, ME), application('cal', 2, CARL)];
+    stored[0].status = ApplicationStatus.ReviewerApproved;
+    const wrapper = await monitor();
+
+    expect(text(wrapper, 'app-monitor-share-done')).toContain('Your share is done.');
+    expect(text(wrapper, 'app-monitor-share-done-others')).toContain(
+      '1 application is left outside your share.',
+    );
+    await wrapper.get('[data-testid="app-monitor-help-others"]').trigger('click');
+    await flushPromises();
+
+    expect(shown(wrapper)).toBe('cal@vendor.test');
+    expect(text(wrapper, 'app-monitor-reviewer')).toBe('Reviewer: not dealt yet');
+    expect(wrapper.find('[data-testid="app-monitor-dealt-warning"]').exists()).toBe(false);
+  });
+
+  it('keeps a reviewer who can no longer review here on their share, by name', async () => {
+    unable = [SAM];
+    stored = [application('ben', 1, SAM)];
+    const wrapper = await monitor();
+    await wrapper.get('[data-testid="app-monitor-help-others"]').trigger('click');
+    await flushPromises();
+
+    expect(shown(wrapper)).toBe('ben@vendor.test');
+    expect(text(wrapper, 'app-monitor-reviewer')).toBe(`Reviewer: ${SAM}`);
+    expect(text(wrapper, 'app-monitor-dealt-warning')).toContain(`dealt to ${SAM}`);
   });
 
   it('has nothing to move on to with the one card of their share up', async () => {
@@ -458,7 +523,7 @@ describe('a next card whose deal moved others (T270)', () => {
     api.post.mockImplementation(async (url: string) => {
       if (!url.endsWith('/review/next')) return { data: {} };
       for (const app of stored) app.reviewer = { userId: ME, email: ME } as Application['reviewer'];
-      return { data: { application: { ...stored[0] }, dealt } };
+      return { data: { application: served(stored[0]), dealt } };
     });
   }
 
@@ -483,7 +548,7 @@ describe('a next card whose deal moved others (T270)', () => {
     fetchMarketApplications.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
-          letGo = () => resolve(stored.map((app) => ({ ...app })));
+          letGo = () => resolve(stored.map(served));
         }),
     );
     const handOut = api.post.getMockImplementation() as (

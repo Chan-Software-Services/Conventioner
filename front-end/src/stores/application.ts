@@ -21,7 +21,7 @@ import {
 import { getApiErrorMessage, getApiErrorStatus, isFormChanged } from '@/utils/api';
 import {
   IntakeMode,
-  type Application,
+  type ApplicantApplication,
   type EssentialFormOptions,
   type FormField,
 } from '@/assets/types/datatypes';
@@ -31,7 +31,7 @@ import { fetchVendorPage, type VendorPageInfo, type VendorPageRead } from '@/uti
 
 /** What reading the vendor's own application found. */
 export interface ApplicationRead {
-  application: Application | null;
+  application: ApplicantApplication | null;
   failed: boolean;
 }
 
@@ -226,7 +226,7 @@ export const useApplicationStore = defineStore('application', () => {
    * request it renews still lands.
    */
   let epoch = 0;
-  const application = ref<Application | null>(null);
+  const application = ref<ApplicantApplication | null>(null);
   const error = ref<string | null>(null);
   /**
    * The vendor page's one state (ADR 0022): the market as the page reads it before sign-in, and,
@@ -496,7 +496,7 @@ export const useApplicationStore = defineStore('application', () => {
   async function saveApplication(
     formData: Record<string, unknown>,
     version: string | null = formVersion.value,
-  ): Promise<Application | null> {
+  ): Promise<ApplicantApplication | null> {
     if (!token.value || !marketSlug.value) return null;
     const slug = marketSlug.value;
     const email = applicantEmail.value;

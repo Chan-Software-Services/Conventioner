@@ -45,6 +45,12 @@ test.beforeAll(async ({ request }) => {
   closed = await seedMarketDayMap(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
 });
 
+// Held at the seed's instant: a run that passes midnight would open the map on the seed's next
+// day, where other vendors sit at other tables.
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(seeded.seededAt);
+});
+
 /** Every request the page makes from here on, by its address. */
 function watchRequests(page: Page): string[] {
   const seen: string[] = [];

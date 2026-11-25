@@ -54,11 +54,14 @@ export interface NotApproved {
   verdictBy: VerdictGiver | null;
   verdictAt: string | null;
   verdictReason: string | null;
+  /** Whether the review left them undecided, as the server reads it: no verdict to name. */
+  undecided: boolean;
 }
 
 /** "Not approved: Rejected by alex@…, Oct 19…", in the review's own words for the verdict. */
 export function notApprovedWarning(why: NotApproved): string {
-  const verdict = verdictGiverLine(why) ?? statusLabel(why.status);
+  const verdict =
+    verdictGiverLine({ ...why, review: { undecided: why.undecided } }) ?? statusLabel(why.status);
   return `Not approved: ${verdict}.`;
 }
 
