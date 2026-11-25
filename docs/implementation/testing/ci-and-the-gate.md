@@ -54,7 +54,7 @@ sources:
 
 # CI and the gate
 
-GitHub Actions runs the suites before code reaches `dev`, on every pull request, whose E2E run into `dev` is [the specs the test map names](#what-a-pull-requests-e2e-run-runs), and every merge queue trial commit, which runs every spec, and again on a push only when [the queue did not test that commit](#which-suite-a-run-runs); the no-mistakes gate, on a branch pushed through it, checks it for real data before it pushes, [lints the front-end, docs and root Markdown files it changes](#the-gates-lint-step) and [leaves the suites to CI](#the-no-mistakes-gate).
+GitHub Actions runs the suites before code reaches `dev`, on every pull request, whose E2E run into `dev` is [the specs the test map names](#what-a-pull-requests-e2e-run-runs), or every spec on any doubt, and every merge queue trial commit, which runs every spec, and again on a push only when [the queue did not test that commit](#which-suite-a-run-runs); the no-mistakes gate, on a branch pushed through it, checks it for real data before it pushes, [lints the front-end, docs and root Markdown files it changes](#the-gates-lint-step) and [leaves the suites to CI](#the-no-mistakes-gate).
 [Dependabot's pull requests](#dependabot) meet only the first.
 What each suite covers is [TESTING.md](../../TESTING.md); how a commit reaches production is [RELEASING.md](../../RELEASING.md).
 
@@ -223,11 +223,11 @@ The step's shell passes a named decision on only from a script that exited 0 hav
 On anything else it writes `scope=whole` alone, and its log says whether the script chose the whole suite or could not decide.
 A job skipped or failed leaves every output empty: the shards' matrix reads an empty `shards` as the whole run's list, their run step reads an empty `specs` as no `--specs`, and `e2e` checks for every spec file unless the event is a pull request and the scope is `named`, so the queue's run, a push's and a whole pull request's demand every spec whatever `e2e-select` printed.
 
-**The run's summary says why.**
+**The run's summary says why, when the script reaches a decision.**
 `decide` writes a section "E2E selection": the decision in one sentence, the map and the diff it was made from, and for named specs a folded table of each one's minutes and the first reasons it was chosen.
 
-**A re-run tests what the first attempt tested.**
-"Re-run failed jobs" keeps the outputs of an `e2e-select` that passed, so the shards deal the same specs, by [the same timings](#the-timings-refresh-themselves).
+**"Re-run failed jobs" tests what the first attempt tested, when its `e2e-select` passed.**
+It keeps that job's outputs, so the shards deal the same specs, by [the same timings](#the-timings-refresh-themselves).
 One that failed runs and decides again, as every job does under "Re-run all jobs", and may then read a newer map.
 
 ## The nightly test map
@@ -316,7 +316,7 @@ The refresh lists the suite and refuses, naming each file, when a spec file it l
 **Ten shards, since the suite is the run's critical path.**
 With six, the slowest shard ended a median 21.5 minutes into a run, while every other job was done by 2.7; a shard is about 3 minutes of setup and its share of the suite, so ten bring a shard to about 12 minutes at about 13 more runner-minutes of setup a run.
 That holds while runners are free: the account is on GitHub Free, which runs 20 jobs at once across the repository.
-A pull request's run into `dev` asks for at most 20 jobs at once, so it fits alone, and fewer when [slimmed](#what-a-pull-requests-e2e-run-runs): at its start the six short jobs (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types` and `docker-build`), `e2e-select` beside them and CodeQL's three; the shards, ten at most, once `e2e-select` is done; `python-advisories` only once `real-data-and-workflows`, under a minute, is done; and `e2e` only once the shards are done.
+A pull request's run into `dev` asks for at most 20 jobs at once, so it fits alone, and fewer when [slimmed](#what-a-pull-requests-e2e-run-runs) to fewer than ten shards: at its start the six short jobs (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types` and `docker-build`), `e2e-select` beside them and CodeQL's three; the shards, ten at most, once `e2e-select` is done; `python-advisories` only once `real-data-and-workflows`, under a minute, is done; and `e2e` only once the shards are done.
 A push to `main` asks for the six short jobs, the ten shards and CodeQL's three at its start, 19, then `python-advisories` and `e2e` as above.
 A trial commit's run asks for the same with no `python-advisories`, 19 in all.
 A [warm push](#which-suite-a-run-runs) to `dev` asks for three, `suite` then `warm-caches` and `python-advisories`, and CodeQL's three; a whole-suite push to `dev` asks for `suite` first, then the six short jobs and the ten shards, then `python-advisories` once `real-data-and-workflows` is done and `e2e` once the shards are done.

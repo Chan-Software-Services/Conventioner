@@ -652,7 +652,8 @@ class TestAFileNoRulePlaces:
             "front-end/.prettierignore",
             "front-end/.editorconfig",
             "back-end/pytest.ini",
-            # The front end's scripts that check the build, or that nothing in CI runs.
+            # The front end's scripts that check the build or write DESIGN.md, or that nothing in
+            # CI runs.
             "front-end/scripts/bundle-budget.ts",
             "front-end/scripts/no-eval.ts",
             "front-end/scripts/brand-icons.ts",

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The E2E spec files a change reaches, by the test map (T349), run in order up to a cap of CI
-minutes; CI's pull request run is the map's selection, uncapped, and the merge queue's run is
-whole.
+minutes; CI's run of a pull request into `dev` is the map's selection, uncapped, or the whole
+suite on any doubt, and the merge queue's run is whole.
 
     python3 scripts/affected-specs.py --run  [options] [-- <playwright arguments>]
     python3 scripts/affected-specs.py --list [options] [--json]
@@ -1105,12 +1105,13 @@ QUEUE_AUDIT = Wording(
 
 def audit(argv: Sequence[str]) -> int:
     """Each spec that failed in the reports, as ran, left to CI or missed by the selection for the
-    diff, or with `--queue` as the pull request's run ran it or left it out; exits 0 whatever it
-    finds, or when it cannot audit at all."""
+    diff, or with `--queue` by what `ci`, deciding again now, says the pull request's run ran or
+    left out; exits 0 whatever it finds, or when it cannot audit at all."""
     parser = argparse.ArgumentParser(
         prog="affected-specs.py audit",
         description="Each failed spec of Playwright JSON reports, as the selection would have "
-        "treated it: ran, left to CI or missed; with --queue, as the pull request's run did.",
+        "treated it: ran, left to CI or missed; with --queue, as `ci` decides now for the pull "
+        "request's run.",
     )
     parser.add_argument("reports", nargs="*", type=Path, help="the run's Playwright JSON reports")
     selection_options(parser)
@@ -1125,8 +1126,8 @@ def audit(argv: Sequence[str]) -> int:
     parser.add_argument(
         "--github",
         action="store_true",
-        help="also write the verdicts to $GITHUB_STEP_SUMMARY, and each miss (with --queue, each "
-        "spec left out) as a warning annotation",
+        help="also write the verdicts to $GITHUB_STEP_SUMMARY and, when there is a map, each miss "
+        "(with --queue, each spec left out) as a warning annotation",
     )
     args = parser.parse_args(argv)
     if args.queue and args.minutes is not None:

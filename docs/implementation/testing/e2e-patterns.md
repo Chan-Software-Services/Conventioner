@@ -73,7 +73,8 @@ How to run the suite is [TESTING.md](../../TESTING.md#end-to-end-e2e-tests); the
 
 ## Every E2E test says why it is one
 
-An E2E test costs CI about a second before it tests anything, on every run that includes it: a pull request's into `dev` when [the test map names its spec](ci-and-the-gate.md#what-a-pull-requests-e2e-run-runs), and every queued merge, pull request into `main`, push to `main` and push to `dev` [the queue did not test](ci-and-the-gate.md#which-suite-a-run-runs), which run every spec.
+An E2E test costs CI about a second before it tests anything, on every run that includes it.
+A pull request's run into `dev` includes it when [the test map names its spec](ci-and-the-gate.md#what-a-pull-requests-e2e-run-runs) or the whole suite runs, and every queued merge, pull request into `main`, push to `main`, push to `dev` [the queue did not test](ci-and-the-gate.md#which-suite-a-run-runs) and nightly or hand-started run that makes the test map runs every spec.
 So a test is E2E only when a cheaper test cannot prove it: a Vitest test in `front-end/src/__tests__/` (happy-dom, `@vue/test-utils`, a real `vue-router` where routing matters), or a pytest in `back-end/tests/`.
 
 A test must be E2E when what it proves needs one of these:

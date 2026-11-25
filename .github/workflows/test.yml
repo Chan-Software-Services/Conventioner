@@ -446,12 +446,13 @@ jobs:
 
   # Split by spec file across runners, each with its own Docker stack: ten for a whole run
   # (`E2E_SHARDS`), so it waits for a tenth of the suite rather than all of it (89 runner-minutes
-  # of tests on 2026-11-11, 1 to 3 more per runner to set up, by what the caches hold). A pull
-  # request's run deals only the specs `e2e-select` named, across the shards it asked for, and
-  # runs no shard when it named none. The tests share one database WITHIN a runner (`workers: 1`),
-  # never across runners. `front-end/scripts/e2e-shards.ts` deals the spec files to the shards by
-  # their measured seconds, not Playwright's `--shard`, which cuts the alphabetical list by test
-  # count and once left one shard at 24 minutes and another at 6. The seconds are the newest
+  # of tests on 2026-11-11, 1 to 3 more per runner to set up, by what the caches hold). When
+  # `e2e-select` named a list, which it does only for a pull request into dev, the run deals only
+  # those specs, across the shards it asked for, and runs no shard when the list is empty. The
+  # tests share one database WITHIN a runner (`workers: 1`), never across runners.
+  # `front-end/scripts/e2e-shards.ts` deals the spec files to the shards by their measured
+  # seconds, not Playwright's `--shard`, which cuts the alphabetical list by test count and once
+  # left one shard at 24 minutes and another at 6. The seconds are the newest
   # `e2e-shard-timings` artifact a push to dev or a merge queue trial commit published, made at
   # least ten minutes before this run was created, so every shard and every re-run picks the same
   # one; with none, or one it cannot read, the committed `e2e-shard-timings.json`.
@@ -709,8 +710,8 @@ jobs:
       # The check below and the audits read a folder per shard of this run. The download makes one
       # for each artifact, except that it unpacks a lone one, a one-shard run's, straight into its
       # path. It also takes what an earlier attempt of this run left, so a re-run that asked for
-      # fewer shards drops the folders numbered above its own count: the shards `e2e-select` listed,
-      # or `E2E_SHARDS` when it listed none, a whole run.
+      # fewer shards drops the folders numbered above its own count: the length of the list
+      # `e2e-select` set, or `E2E_SHARDS` when it set none, a whole run.
       - name: A folder of results for each of this run's shards
         env:
           SELECTED_SHARDS: ${{ needs.e2e-select.outputs.shards }}
