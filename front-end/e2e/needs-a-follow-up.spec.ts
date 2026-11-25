@@ -8,7 +8,8 @@ import {
 } from './helpers/seedPhaseMarket';
 import { oneByOnePath } from './helpers/marketScreens';
 import { mongoEval } from './helpers/mongo';
-import { ensureOrganizationAdmin, loginViaApi, removeFromOrganization } from './helpers/seeds';
+import { ensureOrganizationAdmin } from './helpers/grantMarketRole';
+import { loginViaApi, removeFromOrganization } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
 import { namelessControls } from './helpers/accessibleNames';
 import { withUser } from './helpers/withUser';
@@ -144,7 +145,7 @@ test('an organization admin with no role on the market marks a follow-up and own
     { intakeMode: 'form' },
   );
   orgAdminOn = orgId;
-  await ensureOrganizationAdmin(request, BACKEND_URL, orgId, ORG_ADMIN.email);
+  await ensureOrganizationAdmin(request, BACKEND_URL, orgId, ORG_ADMIN);
   await transitionMarket(request, BACKEND_URL, TEST_USER.email, marketId, 'applications');
   const nadia = seedApplicationWithStatus(marketId, 'open', 'nadia@ember.test');
 
@@ -257,7 +258,7 @@ test('an editor from outside the organization is offered only the people on the 
     { intakeMode: 'form' },
   );
   orgAdminOn = orgId;
-  await ensureOrganizationAdmin(request, BACKEND_URL, orgId, ORG_ADMIN.email);
+  await ensureOrganizationAdmin(request, BACKEND_URL, orgId, ORG_ADMIN);
   await transitionMarket(request, BACKEND_URL, TEST_USER.email, marketId, 'applications');
   seedApplicationWithStatus(marketId, 'open', 'nadia@ember.test');
   const theo = seedApplicationWithStatus(marketId, 'needs_follow_up', 'theo@thistle.test');

@@ -6,8 +6,8 @@ describes:
   - front-end/e2e/helpers/seeds.ts#ensureTestOrgAuthenticated
   - front-end/e2e/helpers/seeds.ts#ensureTestOrgs
   - front-end/e2e/helpers/seeds.ts#ensureTestOrg
-  - front-end/e2e/helpers/seeds.ts#ensureOrganizationAdmin
   - front-end/e2e/helpers/seeds.ts#removeFromOrganization
+  - front-end/e2e/helpers/grantMarketRole.ts
   - front-end/e2e/helpers/seeds.ts#seedMarketWithVendors
   - front-end/e2e/helpers/seeds.ts#seedPublishedMarketWithAssignments
   - front-end/e2e/helpers/seedAssignedMarket.ts
@@ -93,10 +93,20 @@ A spec that needs an account not yet verified signs up through the real route, `
 So anything that creates a market attaches one: [`helpers/seeds.ts`](../../../front-end/e2e/helpers/seeds.ts) exports `ensureTestOrgAuthenticated()` (for a request context already logged in by `loginViaApi()`) and `ensureTestOrg()` (which logs in first), both reusing the user's first organization or creating `E2E Test Org`; the seed helpers return it as `orgId`.
 A spec that creates a market through the UI calls `ensureTestOrg()` in `beforeAll`, or the create dialog's organization list is empty and its submit stays disabled.
 `ensureTestOrgs(count)` is for a spec whose subject is a choice of organization, which a split run (CI shards) no longer guaranteed by accident.
-`ensureOrganizationAdmin(orgId, email)` makes a verified user an admin of that organization, through the owner's session the request carries, and so Admin on every market it holds; it is idempotent across runs.
+`ensureOrganizationAdmin(orgId, person)` ([`helpers/grantMarketRole.ts`](../../../front-end/e2e/helpers/grantMarketRole.ts)) makes a verified user an admin of that organization, through the owner's session the request carries, and so Admin on every market it holds.
+It is idempotent across runs, so it reads the organization first: an admin already is left as they are, a member is made an admin by the place change their row's "Make admin" sends, and anyone else is invited and accepts, as below.
 Every spec using it adds its own account to the shared `E2E Test Org`, so that account is Admin on every market seeded there and no other spec signs in as it.
 Such a spec takes the account off again with `removeFromOrganization(orgId, email)` in a teardown (`afterEach`, or `afterAll` for a grant made in `beforeAll`), which runs however the test ends: the CI shards are [dealt by time](ci-and-the-gate.md#the-e2e-shards), so any spec may run after it on the same database, and Manage market lists the organization's people, so one more of them moves what stands below the list.
 A spec whose subject is a layout under that list seeds its market in an organization of its own, as `the-markets-history.spec.ts` does.
+
+## A role or a place is given by an invitation accepted
+
+No route places a person on a market or in an organization without their acceptance ([invitations](../modules/invitations.md)), so a seed or a spec gives every role and every place by an invitation it accepts, through [`helpers/grantMarketRole.ts`](../../../front-end/e2e/helpers/grantMarketRole.ts).
+`grantMarketRole(request, marketId, { email, password }, role)` invites the person to `admin`, `editor` or `viewer` as the session `request` carries, then accepts as them; `placeInOrganization(request, orgId, { email, password }, place)` does the same for an organization's `admin` or `member`.
+The accept signs the person in on a request context of its own, disposed after it ([`helpers/invitations.ts`](../../../front-end/e2e/helpers/invitations.ts)), so the person needs a password: the one the spec made them with through `ensureVerifiedUser`.
+A person who already has the role or the place is the spec's mistake, and the invitation's refusal fails the call with the server's words.
+A seed giving many accepts each in turn, never all at once: an accept takes back the inviter's count, so the inviter stays far under its limit of 100 invitations a quarter hour.
+A seed never leaves an invitation to `TEST_USER` waiting: the sweeps' state "the invitations, none waiting" is theirs, and a seed that means an invitation to wait sends it to an account of its own, as `seedTheScreens()` does to `SCREENS_INVITEE`.
 
 ## The seed helpers
 
@@ -157,14 +167,14 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
 
 - Leaves: a `form` market in `applications` whose organization has 150 people, the case every people list and chooser must hold (T204):
   - 153 accounts, `person-001@people-at-scale.test` to `person-153@people-at-scale.test`, made by one `create_test_user.py --bulk`
-  - an organization of its own, "Example People Org" and a unique number, owned by the seed owner, persons 001 to 003 its admins and 004 to 153 its members, added one at a time through its endpoints as Manage organization adds them
+  - an organization of its own, "Example People Org" and a unique number, owned by the seed owner, persons 001 to 003 its admins and 004 to 153 its members, each invited and accepting one at a time through `placeInOrganization()`
   - 5 open applications
-  - Editor on the market for the first 20 members, through `grantMarketRole()`
+  - Editor on the market for the first 20 members, invited and accepting through `grantMarketRole()`
   - the first 12 of those its chosen reviewers, through the endpoint Choose reviewers saves to, which deals the applications among them
 - Notes:
   - built on `seedPhaseMarket()` with `orgId`
   - answers every person's id and address, each group, and the counts (154 with access, 3 admins, 150 members, 12 reviewers), which a spec asserts against rather than typing a number twice
-  - makes a new organization and market on every call, some 180 requests, so a spec seeds it only in a test that needs it
+  - makes a new organization and market on every call, some 700 requests, four for each invitation accepted, in about 14 seconds on a developer's stack, so a spec seeds it only in a test that needs it
 
 **`seedMarketWithVendors()`**
 
