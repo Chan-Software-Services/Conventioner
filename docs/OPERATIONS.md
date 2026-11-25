@@ -35,6 +35,7 @@ sources:
   - T335
   - T452
   - T539
+  - T583
 ---
 
 # Operations
@@ -187,6 +188,7 @@ mongorestore --uri '<production URI>' --nsInclude 'conventioner.*' --drop ~/conv
 ```
 
 A dump holds every vendor's name, email and answers: keep it on your own machine, never in this repository, a shared drive or a CI artifact (the repository is public).
+**A backup taken before 2026-11-19 holds organizations with no people map**, which the release carrying T583 reads as holding nobody: fold them right after restoring it, as [a backup older than 2026-11-19](RELEASING.md#a-backup-older-than-2026-11-19) says.
 
 ### Starting a database, and migrations
 

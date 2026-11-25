@@ -114,6 +114,21 @@ test.describe('The create-market dialog is the dialog idiom', () => {
   test('the name field reads as a field, and the error sits under it', async ({
     authenticatedPage: page,
   }) => {
+    // A name the server will refuse, so the error is a real one. Made before the dialog opens, and
+    // through the page's own sign-in: a new sign-in on `page.request` would end that one, and the
+    // dialog's read of the organizations, still out, would answer 401 and take the page to sign in.
+    const taken = `Duplicate Dialog ${Date.now()}`;
+    const orgId = await ensureTestOrgAuthenticated(page.request, APP_API);
+    const made = await page.request.post(`${APP_API}/markets`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: {
+        name: taken,
+        creationDate: new Date().toISOString(),
+        organizationId: orgId,
+      },
+    });
+    expect(made.ok(), await made.text()).toBe(true);
+
     const dialog = await openTheDialog(page);
 
     // It was `all: unset` inside a container declaring a radius with no border and no background,
@@ -129,21 +144,6 @@ test.describe('The create-market dialog is the dialog idiom', () => {
     expect(parseFloat(dressed.border)).toBeGreaterThan(0);
     expect(dressed.background).not.toBe('rgba(0, 0, 0, 0)');
     expect(dressed.height).toBeGreaterThan(24);
-
-    // A name the server will refuse, so the error is a real one.
-    const taken = `Duplicate Dialog ${Date.now()}`;
-    // With the page's own cookies, so at the page's own address for the API (`APP_API`), and
-    // with no sign-in of its own: a sign-in replaces the session, and a read the open dialog had
-    // in flight on the one it replaced answered 401 and sent the page to sign in again.
-    const orgId = await ensureTestOrgAuthenticated(page.request, APP_API);
-    await page.request.post(`${APP_API}/markets`, {
-      headers: { 'Content-Type': 'application/json' },
-      data: {
-        name: taken,
-        creationDate: new Date().toISOString(),
-        organizationId: orgId,
-      },
-    });
 
     await dialog.fillMarketName(taken);
     await dialog.selectFirstOrg();

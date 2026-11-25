@@ -1,14 +1,13 @@
 """An organization's people, one map from user id to place (T283, ADR 0025), and its one writer.
 
 An organization keeps its people as ``people``, ``{user_id: "owner" | "admin" | "member"}``, with
-exactly one ``"owner"``, so a person has one place by construction. Until every stored organization
-is folded into that map, one stored before it still holds only ``owner``, ``admins`` and
-``members``, and is read by ``datatypes.organization_people_of``, its lists folded with the owner
-winning.
+exactly one ``"owner"``, so a person has one place by construction. Every stored organization holds
+that map, and ``datatypes.organization_people_of`` reads it alone: the old ``owner``, ``admins``
+and ``members`` lists are never read (T583).
 
-This module builds the one filter that finds the organizations a person is in, ``of_person``, in
-either shape; nothing else spells that query. ``people_key`` is the one spelling of a person's path
-in the map.
+This module builds the one filter that finds the organizations a person is in, ``of_person``, by
+their key in the map; nothing else spells that query. ``people_key`` is the one spelling of a
+person's path in the map.
 
 It is also the only writer of a person's place: adding an admin or a member, placing someone who
 accepts an invitation (``place_by_invitation``, T538), the owner making an admin a member or a
@@ -16,12 +15,10 @@ member an admin (``change_place``), removing someone, transferring the organizat
 (``transfer``), and forgetting a deleted account. ``TABLE`` says what
 each change does to the target's place as read, ``AUTHORITY`` who may ask for it, and
 ``next_people`` answers the map a change leaves, or its refusal, without a database. Each change is
-then one conditional write (``_write``) that lands only on the places it judged: on an organization
-with a map, the requester's and the target's keys as read; on one stored before the map, its three
-lists as read, the write folding the map in. Transferring its ownership is one such write too,
-filtered on the giver being owner, so no cut and no read finds an organization with two owners,
-none, or an owner in a list. Every write keeps ``owner``, ``admins`` and ``members`` an exact
-mirror of the map, for a rollback to the release before it. A write that meets a change answers 404
+then one conditional write (``_write``) that lands only on the places it judged: the requester's
+and the target's keys as read. Transferring its ownership is one such write too, filtered on the
+giver being owner, so no cut and no read finds an organization with two owners or none. Every
+write changes the map alone, never the old lists (T583). A write that meets a change answers 404
 when the organization or the removed person is gone, else ``OrganizationChanged``, a 409; the person
 decides again on what is true, as for a market (ADR 0024), and nothing is retried here.
 """
@@ -40,14 +37,10 @@ from tombstone import live
 
 db = get_database()
 organizations_collection = db["organizations"]
-users_collection = db["users"]
 
 OWNER = OrganizationRole.OWNER.value
 ADMIN = OrganizationRole.ADMIN.value
 MEMBER = OrganizationRole.MEMBER.value
-
-#: The list each place below the owner is mirrored in.
-_LIST_OF = {ADMIN: "admins", MEMBER: "members"}
 
 NO_LONGER_IN_THE_ORGANIZATION = "They are no longer in this organization."
 ORGANIZATION_CHANGED = (
@@ -97,20 +90,11 @@ def people_key(user_id: str) -> str:
 
 
 def of_person(user_id: str) -> Dict[str, Any]:
-    """The filter for the organizations this person owns, administers or belongs to.
-
-    An organization with ``people`` is found by the person's key in it, served by the
-    ``people.$**`` wildcard index; one stored before the map, by any of its three lists, each
-    indexed. An organization with ``people`` is never found by its lists, which only mirror it.
+    """The filter for the organizations this person owns, administers or belongs to: the person's
+    key in the people map, served by the ``people.$**`` wildcard index. An organization is never
+    found by its old lists (T583).
     """
-    key = people_key(user_id)
-    unfolded = {"people": {"$exists": False}}
-    return {"$or": [
-        {key: {"$exists": True}},
-        {**unfolded, "owner": user_id},
-        {**unfolded, "admins": user_id},
-        {**unfolded, "members": user_id},
-    ]}
+    return {people_key(user_id): {"$exists": True}}
 
 
 # ── The table ────────────────────────────────────────────────────────────────────────────────
@@ -275,57 +259,22 @@ def next_people(
 # ── The writes ───────────────────────────────────────────────────────────────────────────────
 
 
-def _mirror(people: Dict[str, str]) -> Dict[str, Any]:
-    """The old lists as an exact mirror of ``people``, in its order: written whole when the write
-    folds the map in. An organization with no owner keeps the ``owner`` it holds."""
-    lists: Dict[str, Any] = {
-        "admins": [user_id for user_id, place in people.items() if place == ADMIN],
-        "members": [user_id for user_id, place in people.items() if place == MEMBER],
-    }
-    owners = [user_id for user_id, place in people.items() if place == OWNER]
-    if owners:
-        lists["owner"] = owners[0]
-    return lists
-
-
 def _moved(user_id: str, before: Optional[str], after: Optional[str]) -> Dict[str, Dict[str, Any]]:
-    """The update that moves one person from ``before`` to ``after`` (``None``, no place) on a
-    folded organization: their key set or unset, and the lists kept in step, no path touched twice.
-    The owner's place is the transfer's, never moved here."""
+    """The update that moves one person from ``before`` to ``after`` (``None``, no place): their
+    key set or unset, and nothing else. The owner's place is the transfer's, never moved here."""
     key = people_key(user_id)
     if OWNER in (before, after):
         raise RuntimeError(
             "The owner's place moves only when the organization's ownership is transferred")
     if after is None:
-        return {"$unset": {key: ""}, "$pull": {"admins": user_id, "members": user_id}}
-    update: Dict[str, Dict[str, Any]] = {"$set": {key: after},
-                                         "$addToSet": {_LIST_OF[after]: user_id}}
-    if before is not None:
-        update["$pull"] = {_LIST_OF[before]: user_id}
-    return update
+        return {"$unset": {key: ""}}
+    return {"$set": {key: after}}
 
 
-def _handed_on(org: Dict[str, Any], giver: str, taker: str,
-               taker_was: str) -> Tuple[Dict[str, Any], Dict[str, Dict[str, Any]]]:
-    """What the transfer of the giver's organization to ``taker`` holds beyond both keys, and its
-    update on a folded organization: both keys and ``owner`` set, and the lists kept in step, no
-    path touched twice.
-
-    From a member: they are pulled from ``members`` and the giver added to ``admins``. From an
-    admin: ``admins`` is set to the list as read with the taker replaced by the giver where they
-    stood, one path for both, so it is held as read, lest a change to it meanwhile be lost.
-    """
-    update: Dict[str, Dict[str, Any]] = {"$set": {
-        people_key(giver): ADMIN, people_key(taker): OWNER, "owner": taker}}
-    if taker_was == MEMBER:
-        update["$pull"] = {"members": taker}
-        update["$addToSet"] = {"admins": giver}
-        return {}, update
-    admins = org.get("admins")
-    update["$set"]["admins"] = [giver if user_id == taker else user_id
-                                for user_id in (admins if isinstance(admins, list) else [])
-                                if user_id != giver]
-    return {"admins": admins}, update
+def _handed_on(giver: str, taker: str) -> Dict[str, Dict[str, Any]]:
+    """The update that transfers the giver's organization to ``taker``: the taker's key set to
+    owner and the giver's to admin, and nothing else."""
+    return {"$set": {people_key(giver): ADMIN, people_key(taker): OWNER}}
 
 
 def _write(org: Dict[str, Any], people: Dict[str, str], after: Dict[str, str],
@@ -333,52 +282,18 @@ def _write(org: Dict[str, Any], people: Dict[str, str], after: Dict[str, str],
     """One conditional write of ``after`` over the organization read as ``org`` (its map as read,
     ``people``), landing only while the places it judged still hold. Answers whether it landed.
 
-    With a map: the requester's and the target's keys as read are held, ``{"$exists": False}``
-    where they had none, and, transferring ownership to an admin, ``admins`` as read. Stored before
-    the map: ``people`` is held absent and the three lists equal to what was read, and the write sets
-    the map whole beside the lists as its mirror, so the first change to such an organization also
-    folds it.
+    The requester's and the target's keys as read are held, ``{"$exists": False}`` where they had
+    none, and nothing beyond them: the write changes no other path. An organization with no map
+    reads as nobody, so no change is ever judged allowed on it and none reaches here.
     """
-    if "people" in org:
-        held = {people_key(user_id): people.get(user_id) or {"$exists": False}
-                for user_id in (requester_id, target_id) if user_id is not None}
-        if after.get(target_id) == OWNER:
-            lists_held, update = _handed_on(org, requester_id, target_id, people[target_id])
-        else:
-            lists_held, update = {}, _moved(target_id, people.get(target_id), after.get(target_id))
-        query = {"id": org["id"], **held, **lists_held}
+    held = {people_key(user_id): people.get(user_id) or {"$exists": False}
+            for user_id in (requester_id, target_id) if user_id is not None}
+    if after.get(target_id) == OWNER:
+        update = _handed_on(requester_id, target_id)
     else:
-        query, update = folding_write(org, after)
+        update = _moved(target_id, people.get(target_id), after.get(target_id))
+    query = {"id": org["id"], **held}
     return organizations_collection.update_one(live(query), update).matched_count > 0
-
-
-def folding_write(org: Dict[str, Any],
-                  people: Dict[str, str]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """The filter and update that write ``people`` into an organization stored before the map, read
-    as ``org``: held on ``people`` absent and the three lists equal to what was read, setting the
-    map whole beside the lists as its mirror. A change's write and the migration share it, so the
-    first change to such an organization and the migration fold it alike."""
-    for user_id in people:
-        _checked(user_id)
-    query = {"id": org["id"], "people": {"$exists": False},
-             "owner": org.get("owner"), "admins": org.get("admins"),
-             "members": org.get("members")}
-    return query, {"$set": {"people": people, **_mirror(people)}}
-
-
-def reconciling_write(org: Dict[str, Any],
-                      people: Dict[str, str]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """The filter and update that rebuild a folded organization's ``people``, read as ``org``, from
-    the lists the release before the map wrote while it ran after a rollback: held on the map and
-    the three lists equal to what was read (a map equal only in the same key order, as read),
-    setting the map whole beside the lists as its mirror. Only the migration's ``--reconcile``
-    writes it, after a roll forward over such a rollback."""
-    for user_id in people:
-        _checked(user_id)
-    query = {"id": org["id"], "people": org.get("people"),
-             "owner": org.get("owner"), "admins": org.get("admins"),
-             "members": org.get("members")}
-    return query, {"$set": {"people": people, **_mirror(people)}}
 
 
 def _met_a_change(org_id: str, event: Event, target_id: str) -> ClientError:
@@ -446,18 +361,11 @@ def _judged_and_written(org: Dict[str, Any], event: Event, requester: Any,
 
 def _change(org: Dict[str, Any], event: Event, requester: Any, target_id: str,
             requesting_user_email: str, by_invitation: bool = False) -> None:
-    """Judge ``event`` on the organization as read and write it, then keep the account's copy of
-    its organizations and record it. A change that changes nothing writes and records nothing."""
+    """Judge ``event`` on the organization as read, write it and record it. A change that changes
+    nothing writes and records nothing."""
     before_place, after_place = _judged_and_written(org, event, requester, target_id)
     if before_place == after_place:
         return
-    # The account's own copy, best effort after the organization's write: no check reads it. A
-    # place changed, rather than given or taken, leaves the copy as it was.
-    if before_place is None or after_place is None:
-        users_collection.update_one(
-            {"id": target_id},
-            {"$pull" if after_place is None else "$addToSet": {"organizations": org["id"]}},
-        )
     _record_role(org["id"], requesting_user_email, target_id, before_place, after_place,
                  by_invitation)
 
@@ -600,7 +508,7 @@ def transfer(org_id: str, requesting_user_email: str, new_owner_email: str) -> N
     written.
 
     One write, filtered on the giver being owner and the new owner's place as read: an
-    organization is never stored with two owners, none, or an owner in a list.
+    organization is never stored with two owners or none.
     """
     org, requester = _requester(org_id, requesting_user_email)
     may(organization_people_of(org), Event.TRANSFER, requester.id)
@@ -608,8 +516,6 @@ def transfer(org_id: str, requesting_user_email: str, new_owner_email: str) -> N
     if not new_owner:
         raise BadRequestError("New owner user not found")
     _judged_and_written(org, Event.TRANSFER, requester, new_owner.id)
-    # The account's own copy, best effort after the organization's write, as for an add.
-    users_collection.update_one({"id": new_owner.id}, {"$addToSet": {"organizations": org_id}})
     _record_transfer(org_id, requesting_user_email, requester, new_owner)
 
 
@@ -627,13 +533,9 @@ def _record_transfer(org_id: str, requesting_user_email: str, giver: Any, taker:
 def forget(user_id: str) -> None:
     """Take a deleted account's place in every organization it was an admin or a member of.
 
-    Called after the account is deleted, which ``delete_user`` refuses an owner; an owner is
-    matched by neither write, should one have become an owner in between.
+    Called after the account is deleted, which ``delete_user`` refuses an owner; an owner is not
+    matched by the write, should one have become an owner in between.
     """
     key = people_key(user_id)
-    lists = {"admins": user_id, "members": user_id}
     organizations_collection.update_many(
-        {key: {"$in": [ADMIN, MEMBER]}}, {"$unset": {key: ""}, "$pull": lists})
-    organizations_collection.update_many(
-        {"people": {"$exists": False}, "$or": [{"admins": user_id}, {"members": user_id}]},
-        {"$pull": lists})
+        {key: {"$in": [ADMIN, MEMBER]}}, {"$unset": {key: ""}})

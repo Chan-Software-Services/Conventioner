@@ -118,8 +118,7 @@ def invited_to_an_organization(boot_indexes, signed_in, real_db, mail):
     org_id = "org-invited"
     people = {owner.account_id: "owner", admin.account_id: "admin"}
     real_db["organizations"].insert_one({
-        "id": org_id, "name": "Invited Markets", "people": people, "owner": owner.account_id,
-        "admins": [admin.account_id], "members": [], "markets": [], "theme": None})
+        "id": org_id, "name": "Invited Markets", "people": people, "markets": [], "theme": None})
     response = admin.post(f"/organizations/{org_id}/invitations",
                           json={"email": INVITED, "place": "member"})
     assert response.status_code == 200, response.get_json()
@@ -137,15 +136,15 @@ def _placed(market_records, org_id):
 
 def test_two_accepts_of_an_organizations_invitation_give_one_place_and_one_entry(
         invited_to_an_organization, race, real_db, market_records):
-    org_id, _owner, _admin, invitee, invitation = invited_to_an_organization
+    org_id, owner, admin, invitee, invitation = invited_to_an_organization
 
     answers = race(2, lambda _i: invitee.post(f"/invitations/{invitation}/accept"))
 
     statuses = sorted(answer.status_code for answer in answers)
     assert statuses[0] == 200 and statuses[1] in (400, 404), statuses
     stored = _organization(real_db, org_id)
-    assert stored["people"][invitee.account_id] == "member"
-    assert stored["members"] == [invitee.account_id]
+    assert stored["people"] == {owner.account_id: "owner", admin.account_id: "admin",
+                                invitee.account_id: "member"}
     assert len(_placed(market_records, org_id)) == 1
     assert list(market_records.invitations.find({"id": invitation})) == []
 

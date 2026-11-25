@@ -22,6 +22,7 @@ sources:
   - T315
   - T411
   - T538
+  - T583
 ---
 
 # The organization's people
@@ -31,11 +32,10 @@ It also builds the one filter that finds the organizations a person is in, `of_p
 
 ## Its interface
 
-- `add_admin(org_id, email, requester)`, `add_member(org_id, email, requester)` and `remove(org_id, user_id, requester)`: each loads the organization and the account asking, judges the change on the organization as read and writes it in one conditional write, then writes the account's own copy of its organizations and records the change in the organization's history.
+- `add_admin(org_id, email, requester)`, `add_member(org_id, email, requester)` and `remove(org_id, user_id, requester)`: each loads the organization and the account asking, judges the change on the organization as read and writes it in one conditional write, then records the change in the organization's history.
   `api/organizations.py`'s `add_org_admin`, `add_org_member` and `remove_org_user` call them and nothing more, so the routes keep their names.
 - `change_place(org_id, user_id, place, requester)`: the owner makes an admin a member or a member an admin, `place` being the request's `"admin"` or `"member"` and anything else refused before the organization is read, 400 "A place is admin or member.".
   `api/organizations.py`'s `change_org_place` calls it, for `PUT /organizations/<org_id>/users/<user_id>`, which answers `{"message": "Place changed"}`.
-  The account's copy is left alone, since the person was in the organization before and is after.
 - `place_by_invitation(invitation, invitee)` (T538): someone signed in with an invited address accepts an invitation to be an admin or a member ([invitations](invitations.md#answering-an-invitation)).
   It is judged as the inviter's act: the organization live, the inviter's account the one that sent it, `may` with the place's event (`INVITED_TO`: `admin` asks "Add admin", `member` "Add member") of the inviter's place as read, and `next_people` on the invitee's.
   The first three refused end the invitation, 404 `InvitationEnded`; the table refusing the invitee (the owner, an admin, a member invited as a member) ends it, 400 "You are already in this organization, so this invitation has ended."; a member invited as an admin becomes one.
@@ -46,9 +46,9 @@ It also builds the one filter that finds the organizations a person is in, `of_p
 - `transfer(org_id, requester, new_owner_email)`: the owner transfers the organization's ownership to one of its admins or members, and stays on it as an admin.
   `api/organizations.py`'s `transfer_org_ownership` calls it, for `POST /organizations/<org_id>/transfer`, which answers `{"message": "Ownership transferred successfully"}`.
   Anyone but the owner is refused first, 403 "Only current owner can transfer ownership", then an address with no account, 400 "New owner user not found".
-  The new owner's account gains the organization in its copy, and the history records `transfer-organization` with the owner's address before and after, as it always has.
-- `forget(user_id)`: an account's deletion takes its place in every organization it was an admin or a member of, by two `update_many`, one over the organizations with a map (their key, `$in` admin or member, unset and pulled from both lists) and one over those stored before it (pulled from both lists).
-  An owner is matched by neither: `delete_user` refuses an owner before it deletes the account.
+  The history records `transfer-organization` with the owner's address before and after, as it always has.
+- `forget(user_id)`: an account's deletion takes its place in every organization it was an admin or a member of, by one `update_many`, their key unset wherever it is `admin` or `member`.
+  An owner is not matched: `delete_user` refuses an owner before it deletes the account.
   That leaves one window, accepted: `delete_user` reads that the account owns no organization and only then deletes it, so a transfer to that account landing in between leaves an organization owned by an account that is gone, which `forget` does not match and nobody can transfer.
   It needs the person deleting their account and someone handing them an organization in the same moment, no screen deletes an account, and closing it needs a transaction across the users and organizations collections.
   A market has the same window: `delete_user` reads that the account owns no market and only then deletes it, so a market the same person creates in another tab in between, or one whose ownership another market's owner transfers to them then ([transferring a market's ownership](market-actions.md#transfer-ownership-hand-on-market)), is left owned by an account that is gone; it is accepted for the same reasons, a transaction across the users and markets collections closing it.
@@ -75,17 +75,13 @@ A place change is recorded as the admins' `role_changed`, with the place before 
 
 ## Every write holds what it judged
 
-**On an organization with a map, the write's filter holds the requester's and the target's keys at their places as read**, `{"$exists": false}` where the target had none, and its update moves the target's one key: `$set` or `$unset` of `people.<id>`, with `$addToSet` to the list of the place after and `$pull` from the list of the place before, or from both when they leave.
-**On an organization stored before the map, the filter holds `people` absent and `owner`, `admins` and `members` equal to what was read**, and the update sets `people` whole, the fold with the change applied, beside the three lists as its mirror, so the first change to such an organization folds it, the owner winning and every duplicate dropped.
-That filter and update are `folding_write(org, people)`, which the migration that folds every organization stored before the map, [`migrate_organization_people.py`](../../../back-end/migrations/migrate_organization_people.py), writes too ([the organization document](../data/organization-document.md#migrations)), so a change and the migration fold alike.
-`reconciling_write(org, people)` is the migration's alone, for its `--reconcile` after a roll forward over a rollback past the map's release: held on the map as read, whole and in its key order, and the three lists as read, it sets the map rebuilt from the lists beside them as its mirror; no change to a person's place writes it.
-Either way the lists stay an exact mirror of the map, for a rollback to the release before the map, and no write sets the same path twice.
+**The write's filter holds the requester's and the target's keys at their places as read**, `{"$exists": false}` where the target had none, and its update moves the target's one key, `$set` or `$unset` of `people.<id>`, and nothing else: no write touches `owner`, `admins` or `members`, which the organization no longer keeps (T583, [the organization document](../data/organization-document.md#migrations)).
+An organization with no map reads as nobody, so no change is ever judged allowed on it, and no write meets one.
 **A change that changes nothing writes and records nothing.**
 A user id reaches a path only from a stored account or the stored map: `remove`'s and `change_place`'s id comes from the request's address, and is looked up in the map as read before any path is built, so one the map does not hold, dotted or not, is a 404.
 
-**Transferring the organization's ownership is one such write, filtered on the giver being owner** and the new owner at their place as read, so no cut and no read finds the organization with two owners, none, or an owner in a list.
-Its update sets both keys and `owner`; from a member it pulls them from `members` and adds the giver to `admins`; from an admin it sets `admins` to the list as read with the giver where the new owner stood, one path for both, and so also holds `admins` as read, lest an admin added meanwhile be dropped from the list while the map keeps them.
-On an organization stored before the map it is the fold's write, as for every change.
+**Transferring the organization's ownership is one such write, filtered on the giver being owner** and the new owner at their place as read, so no cut and no read finds the organization with two owners or none.
+Its update sets the new owner's key to `owner` and the giver's to `admin`, and holds nothing beyond those two keys, so an admin the owner added meanwhile is no change to it: written after that add, it lands beside it; written before it, it makes the owner an admin, so the add, holding the owner's place as read, is the 409.
 It was four unconditional writes: cut between them, an organization stored its owner in its own `admins` and did not parse, or the person it was transferred to had no place in it at all.
 
 ## A write that met a change
@@ -99,7 +95,7 @@ A place change of someone removed meanwhile is that 409 too, since only a remova
 An invitation writes none of the organization's people: Invite admin and Invite member post an invitation and re-read the invitations alone, a read of their own keyed by the organization Manage organization is open on, and nobody joins Admins or Members until they accept ([inviting an admin or a member](../../business/flows/organizations.md#b2-invite-an-admin-or-a-member)).
 Each re-read runs inside its write and asks the write's submission whether its opening still stands (`isCurrent`), so a re-read for an opening that has gone is not sent, and one that lands after it writes nothing; a change that lands after its opening has gone still tells the list behind, by `changed`.
 
-**The account's copy is written after the organization's write, best effort**, `$addToSet` on an add and on a transfer's new owner and `$pull` on a removal, and nothing on a place change, since no check reads it ([users and email](../data/users-and-email.md)).
+**No change writes the account's `organizations`**, which nothing reads (T583, [users and email](../data/users-and-email.md)).
 
 ## Make member and Make admin
 
@@ -121,9 +117,9 @@ A 404, someone removed meanwhile, is read as done, with focus on the list their 
 
 ## How it is tested
 
-[`test_one_writer_holds_each_place_it_judged.py`](../../../back-end/tests/test_one_writer_holds_each_place_it_judged.py): every cell of the table through `next_people`, every authority and refusal through the routes, each write's filter and update on both shapes with the lists a mirror after, the account's copy and the history, and each way a write meets a change, the add judged before a transfer among them; the transfer's cells, authority and refusals, and its write to a member and to an admin.
-[`test_an_organizations_people_stay_one_map.py`](../../../back-end/tests/test_an_organizations_people_stay_one_map.py): the planner's two transfer-cut probes, asserting the organization reads as it was or with its ownership transferred; a cut at each write a transfer makes (the organization's, the account copy's, the history's), from a member and from an admin, on both shapes, leaving one owner; and the property, 50 seeds of 40 changes each (add admin, add member, change place, remove, transfer) by random requesters on random targets among six accounts, a third with a second change landing between the first's read and its write, asserting after each one owner, every value a place, the lists an exact mirror, the document parsing, and, for a change nothing met, the map `next_people` answers, in its order.
-[`test_an_organizations_people_on_the_server.py`](../../../back-end/tests/real_mongo/test_an_organizations_people_on_the_server.py), in [the real-MongoDB suite](../testing/real-mongo-suite.md): the races on a server, on both shapes.
+[`test_one_writer_holds_each_place_it_judged.py`](../../../back-end/tests/test_one_writer_holds_each_place_it_judged.py): every cell of the table through `next_people`, every authority and refusal through the routes, each write's filter and update with no list on the document after, the history, and each way a write meets a change, the add judged before a transfer among them; the transfer's cells, authority and refusals, and its write to a member and to an admin.
+[`test_an_organizations_people_stay_one_map.py`](../../../back-end/tests/test_an_organizations_people_stay_one_map.py): the planner's two transfer-cut probes, asserting the organization reads as it was or with its ownership transferred; a cut at each write a transfer makes (the organization's and the history's), from a member and from an admin, leaving one owner; and the property, 50 seeds of 40 changes each (add admin, add member, change place, remove, transfer) by random requesters on random targets among six accounts, a third with a second change landing between the first's read and its write, asserting after each one owner, every value a place, no `owner`, `admins` or `members` on the document, the document parsing, and, for a change nothing met, the map `next_people` answers, in its order.
+[`test_an_organizations_people_on_the_server.py`](../../../back-end/tests/real_mongo/test_an_organizations_people_on_the_server.py), in [the real-MongoDB suite](../testing/real-mongo-suite.md): the races on a server.
 [`aChangeThatMetAnotherInAnOrganization.test.ts`](../../../front-end/src/__tests__/aChangeThatMetAnotherInAnOrganization.test.ts): the 409's sentence in the Remove and the place change's confirmation, with the re-read behind it, and no re-read for an invitation's refusal.
 [`changingAPlaceAsksFirst.test.ts`](../../../front-end/src/__tests__/changingAPlaceAsksFirst.test.ts): the two buttons for the owner alone, the confirmations' words, Cancel and Escape, the request, the re-read and where focus goes, the 404 read as done, the 409 and any other refusal in the confirmation, and one request however often the confirm is pressed, the confirmation held by the shell while it writes, and a refusal not in the next change.
 [`manageOrganizationPeople.test.ts`](../../../front-end/src/__tests__/manageOrganizationPeople.test.ts): Rename held and sent once, and an invitation's refusal, a rename's answers and a stale re-read after a removal kept out of Manage organization opened on another organization.
