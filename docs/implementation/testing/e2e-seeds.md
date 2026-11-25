@@ -101,7 +101,7 @@ A spec whose subject is a layout under that list seeds its market in an organiza
 
 ## A role or a place is given by an invitation accepted
 
-No route places a person on a market or in an organization without their acceptance ([invitations](../modules/invitations.md)), so a seed or a spec gives every role and every place by an invitation it accepts, through [`helpers/grantMarketRole.ts`](../../../front-end/e2e/helpers/grantMarketRole.ts).
+No screen places a person on a market or in an organization without their acceptance ([invitations](../modules/invitations.md)), and the direct add routes stay only until they are removed, so a seed or a spec gives every role and every place by an invitation it accepts, through [`helpers/grantMarketRole.ts`](../../../front-end/e2e/helpers/grantMarketRole.ts).
 `grantMarketRole(request, marketId, { email, password }, role)` invites the person to `admin`, `editor` or `viewer` as the session `request` carries, then accepts as them; `placeInOrganization(request, orgId, { email, password }, place)` does the same for an organization's `admin` or `member`.
 The accept signs the person in on a request context of its own, disposed after it ([`helpers/invitations.ts`](../../../front-end/e2e/helpers/invitations.ts)), so the person needs a password: the one the spec made them with through `ensureVerifiedUser`.
 A person who already has the role or the place is the spec's mistake, and the invitation's refusal fails the call with the server's words.

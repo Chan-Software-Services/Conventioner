@@ -339,7 +339,7 @@ smuggle one past it (405). A location's layout's specs, which replaced the floor
 [the layout's E2E](implementation/testing/floorplan-e2e.md)'s.
 The access-control suite (`access-control.spec.ts`) covers who can see a market: an org
 member with no explicit market role, a user granted an explicit role but no org membership,
-membership changes taking effect (adding a user grants visibility, removing revokes it), and
+membership changes taking effect (a member who accepts an invitation gains visibility, removing revokes it), and
 org deletion revoking org-based access while explicit-role access survives. Each test pairs a
 positive assertion with a negative one **against the same market**, so a broken query that
 returns zero rows fails the positive assertion instead of vacuously satisfying an empty-list
