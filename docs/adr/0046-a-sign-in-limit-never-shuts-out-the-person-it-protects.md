@@ -27,7 +27,8 @@ The limits are hardened so that each bounds guesses and mail while a person's ow
 
 ## Decision
 
-**Every limit in [`back-end/sign_in_limits.py`](../../back-end/sign_in_limits.py) counts in a way that no one else's tries can turn against the person whose address it is.**
+**Every limit in [`back-end/sign_in_limits.py`](../../back-end/sign_in_limits.py) on a public sign-in or a public request that mails counts in a way that no one else's tries can turn against the person whose address it is.**
+An organizer's invitation is signed in, and is counted per inviter and per address, an accepted one taken back from both, as [ADR 0047](0047-a-person-joins-only-by-accepting-an-invitation.md) and [invitations](../implementation/modules/invitations.md#the-limits) say.
 
 - **A caller is a network**: an IPv4 address, or the /64 network an IPv6 address sits in, so one machine is one caller on IPv6 as on IPv4.
 - **A sign-in that checks a secret is counted per caller and address together** (`SecretBounds`), 10 wrong tries in 15 minutes, which bounds one caller's guesses at one address and is the only count that says to wait.
