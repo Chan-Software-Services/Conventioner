@@ -262,6 +262,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
   - the review market's cards lead with two answers and fold the rest behind "N more answers"
   - a `seedLayout()` draft whose Upper Hall layout has its floorplan and no scale, which the sweeps walk calibrating (T257)
   - `SCREENS_INVITEE`, in no market and no organization, invited to the 36-vendor market `SCREENS_EDITOR` edits as an Editor and to the organization as a member, neither answered, so a `SCREENS` state signed in as `'invitee'` reads the Invitations page's two rows and the Markets list's line (T538); each invitation is sent only when none of its kind waits, since every sweep file seeds and an address is sent at most five invitations a quarter hour
+  - two invitations waiting on the 70-character draft, an Admin's to a long address and a Viewer's, to addresses each seed makes its own for that same limit, so Manage market draws "Invited" (T538)
   - a `seedLayout()` draft whose Upper Hall is laid out (`UPPER_HALL_TABLES`, `UPPER_HALL_ZONES`), which the sweeps walk as its map (T257)
   - a `seedSettledLayout()` market taking applications, its Upper Hall laid out in Draft, which the sweeps walk past Draft (T257)
 - Notes:

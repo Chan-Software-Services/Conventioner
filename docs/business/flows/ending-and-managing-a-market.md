@@ -16,6 +16,7 @@ describes:
   - front-end/e2e/people-at-scale-market.spec.ts
   - front-end/src/components/HandOnMarketDialog.vue
   - front-end/e2e/handing-a-market-on.spec.ts
+  - front-end/e2e/inviting-someone-to-a-market.spec.ts
 verified: 2026-11-25
 sources:
   - E20/F01/S03
@@ -38,6 +39,7 @@ sources:
   - T142
   - E38/F12/S01
   - E38/F15/S01
+  - T538
   - T181
   - T211
   - T217
@@ -110,12 +112,12 @@ Covered by:
 
 ## L3. Manage who has access
 
-**Status:** Works (the owner's row and the refusals read from the code as of E20/F01/S03 and bug 43's fix; the organization's people as of E38/F12/S01, driven by `everyone-with-access.spec.ts`; a role change's confirmation as of T211, driven by `changing-a-role-asks-first.spec.ts`).
+**Status:** Works (the owner's row and the refusals read from the code as of E20/F01/S03 and bug 43's fix; the organization's people as of E38/F12/S01, driven by `everyone-with-access.spec.ts`; a role change's confirmation as of T211, driven by `changing-a-role-asks-first.spec.ts`; inviting someone as of T538, driven by `inviting-someone-to-a-market.spec.ts`).
 
-1. "Manage" opens "Manage market"; "Users with access" lists everyone with a role on the market, by its own roles or through its organization, each once at the role that counts: the owner first, then Admin, Editor and Viewer, then by address, so someone just added takes their place in that order, never the top.
+1. "Manage" opens "Manage market"; "Users with access" lists everyone with a role on the market, by its own roles or through its organization, each once at the role that counts: the owner first, then Admin, Editor and Viewer, then by address, so someone who has just accepted takes their place in that order, never the top.
    The market read serves the list in that order as `peopleWithAccess` ([one market, from the server](../../implementation/conventions/one-market-from-the-server.md)), and the dialog words each row with [`peopleWithAccess.ts`](../../../front-end/src/utils/peopleWithAccess.ts).
    The organization's people are listed only to a reader who belongs to the organization or may give and take Editor and Viewer roles here; anyone else reads the market's own roles alone ([what each role may do](../rules/what-each-role-may-do.md)).
-   The list is a [list frame](../../design-system.md), so 154 people never push "Add user" and the sections below 4,900px down: it says "Showing 50 of 154", draws 50 rows and "Show 50 more", and past 12 people has a field, "Find in users with access", that finds by any part of an address, capitals aside, since an account holds no name.
+   The list is a [list frame](../../design-system.md), so 154 people never push "Invite someone" and the sections below 4,900px down: it says "Showing 50 of 154", draws 50 rows and "Show 50 more", and past 12 people has a field, "Find in users with access", that finds by any part of an address, capitals aside, since an account holds no name.
    The words last as long as the dialog and never reach the address; a role change, a removal and the re-read after them keep the words and the rows shown, and only new words go back to the first 50.
    An address breaks before its "@" or a dot, never just after a hyphen, drawn by [`EmailAddress.vue`](../../../front-end/src/components/EmailAddress.vue).
 2. A role that comes from the organization says where: "Admin, through <organization>" for its owner and admins, "Viewer, through <organization>" for a member, with no select and no Remove, since only Manage organization changes it.
@@ -133,19 +135,26 @@ Covered by:
    A role another organizer changed meanwhile, or the requester's own, is not taken, nor one whose market moved to another phase: the server answers with [the market write's one sentence](../../implementation/modules/market-write.md#what-it-answers), which the confirmation says, and the list behind it is re-read (T274).
    Each row's Remove is the destructive intent at secondary weight, red ink on white, not a filled red button on every row ([the design language](../../design-system.md#the-primitive-layer)).
 5. Under the list, when a row comes through the organization: "Organization admins and members are managed in Manage organization.", "Manage organization" a link to `/organizations?manage=<id>`, which opens that organization's dialog, for a reader who belongs to it, and plain words for anyone else.
-6. "Add user", for an Admin or the owner only (bug 37): the email, the role, "Add", and "Cancel" on the same row, or on a phone the email above the rest.
-   An address that already has a role on the market is refused beneath the row, brought into view as the row may be the last in the body, pointing to that person's own row: adding once overwrote any role, the owner's too, around the guards a role change keeps (T15).
-   When the roles the add stood on changed meanwhile (the requester's own, or the person's, given by another organizer), or the market moved to another phase, the add is refused with [the market write's one sentence](../../implementation/modules/market-write.md#what-it-answers) beneath the row, the address kept, and the list is re-read (T274).
-   On a list with a find field, or words in it, the field then takes the added address, so their row is the one shown and their role reads at once; clearing the field shows the whole list.
-7. A refused change of role closes the confirmation, re-reads the list and is said beneath that person's row, which states the role the server holds, since someone else may have moved it first.
+6. "Invite someone", for whoever may give some role (bug 37), adds a person by inviting them, since nobody joins a market unasked ([a person accepts before they join](../rules/a-person-accepts-before-they-join.md), T538): the field "Email address", the role (Admin, Editor or Viewer, as far as the reader may give it), "Send invitation" and "Cancel" on one row, or on a phone the field and the role each on a line above the two buttons; under it, "They get an email, and join once they accept it signed in with this address.".
+   Every address is answered alike, whether or not it has an account: the field empties, the role goes back to Editor, the row stays open for the next address, and "Invitation sent to <address>." is said beneath it, as a screen reader hears it; when the email could not be sent, "<address> is invited, but the email could not be sent. Invite them again to send it." is said in its place.
+   Inviting an address already invited replaces its invitation, with the role chosen, a new email and a new 14 days, so inviting again is how it is sent again.
+   An address that already has a role on the market is refused beneath the row in the server's words, brought into view as the row may be the last in the body, pointing to that person's own row: adding once overwrote any role, the owner's too, around the guards a role change keeps (T15); so is an address that does not read as one, and too many invitations in a short time, with how long to wait; the address is kept.
+7. "Invited", after "Users with access" and before "Invite someone", for whoever may give some role and only while an invitation waits, lists each invitation newest first: its address, "Invited as Editor, until 8 December, 16:44" (the role as "Users with access" names it, the moment it ends in the reader's own time), and "Withdraw", where the reader may give that role.
+   It is a list frame too, a page of 50 with "Find in invited" past 12, so 150 invitations never push the dialog down.
+   The invitations are a read of their own, made as the dialog opens and again after each invitation and withdrawal; when it fails, "Could not read the invitations." with "Try again" stands in its place, and the rest of the dialog works.
+   Nobody invited is under "Users with access", among the transfer's choices or in any count until they accept, as [answering an invitation](answering-an-invitation.md) says; the dialog then lists them at their role when it next reads the market.
+   "Withdraw" asks first, in a destructive confirmation that opens on Cancel: "Withdraw the invitation to <address>?", then "They can no longer accept it.".
+   Cancel and Escape change nothing and give focus back to that Withdraw; "Withdraw" ends the invitation, the list re-reads in place with the dialog open, and focus goes to "Invited", or to "Users with access" when none is left.
+   An invitation already accepted, declined, ended or withdrawn is read as withdrawn, closing the confirmation and re-reading the list; one sent again meanwhile, to another role, is not withdrawn: the confirmation says "That invitation was sent again meanwhile. Read the invitations again, and withdraw it if you still mean to." and the list behind it is re-read.
+8. A refused change of role closes the confirmation, re-reads the list and is said beneath that person's row, which states the role the server holds, since someone else may have moved it first.
    When that moved the row past those shown, the find field takes their address, so the refusal is still read.
-   When someone else removed them first, the row is gone and the words stand at the foot of the list, after their address; adding them back brings the row back without the words.
+   When someone else removed them first, the row is gone and the words stand at the foot of the list, after their address; inviting them again takes the words away, and their row is back once they accept.
 
-Each of these writes belongs to the dialog it was sent from (T411): while "Add" and the list's re-read are out nothing closes Manage market, and while a removal or a role change and its re-read are out nothing closes its confirmation, Cancel and the close drawn disabled; a second press sends nothing.
-An answer that lands after Manage market was closed, or opened on another market, writes nothing into the one open, its re-read of the market included.
+Each of these writes belongs to the dialog it was sent from (T411): while "Send invitation" and the invitations' re-read are out nothing closes Manage market, and while a withdrawal, a removal or a role change and its re-read are out nothing closes its confirmation, Cancel and the close drawn disabled; a second press sends nothing.
+An answer that lands after Manage market was closed, or opened on another market, writes nothing into the one open, its re-read of the market or of the invitations included.
 Opened on one market, Manage market shows that market's name with "Loading..." until its read lands, never the last market's people, and every write goes to the market it shows; a re-read asked before a write that answers after the write's own re-read changes nothing, so a rename, a role or a change to who may do what is never put back on screen (T421).
 When its first read failed, Manage market works on the opener's copy of the market, with the failure said: a change to who may do what is taken into that copy, and it stays drawn while a write's re-read is out, never "Loading..." in its place, until a read lands.
-The rename field takes a read's name only when it differs from the last one read, so a re-read after an add, a role change or a refused rename leaves a name being typed alone.
+The rename field takes a read's name only when it differs from the last one read, so a re-read after a role change or a refused rename leaves a name being typed alone.
 
 The organization line says "Belongs to <organization>. Its admins run it; its members can view it."
 Covered by:
@@ -154,14 +163,16 @@ Covered by:
 - [`an-address-breaks-only-before-its-at.spec.ts`](../../../front-end/e2e/an-address-breaks-only-before-its-at.spec.ts) (its rows)
 - [`changing-a-role-asks-first.spec.ts`](../../../front-end/e2e/changing-a-role-asks-first.spec.ts) (the confirmation's words, its closes, one write on confirm and where focus goes, a table whose owner moved a row, a refusal, one after someone else moved or removed them first, the arrow keys, and Viewer to Admin in sight at 1280 and 390)
 - [`everyone-with-access.spec.ts`](../../../front-end/e2e/everyone-with-access.spec.ts) (the walk's case, and at 390 nothing overflowing and each Remove a 44px target, on one edge)
-- `manageMarketMeetsAChangedMarket.test.ts` (a role's add, change and take refused over a changed market)
-- `manageMarketPeople.test.ts` (the shown count kept through a role change and a removal, someone just added shown as the one row until the field is cleared, and an add held, sent once, and its answer kept out of Manage market opened on another market)
+- [`inviting-someone-to-a-market.spec.ts`](../../../front-end/e2e/inviting-someone-to-a-market.spec.ts) (an address with an account and one without each answered "Invitation sent to <address>." and waiting under "Invited", neither under "Users with access"; a withdrawal asked first, Cancel's focus and the row gone; the invitee accepting and listed at their role; at 1440 and 390, each address the run's own and what it left withdrawn after it)
+- `manageMarketInvites.test.ts` (the row's words, the sent and mail lines, a refusal and the limit in the server's words, "Invited" and its rows, its find and pages, who reads it and who may withdraw, its failed read, the transfer's choices without an invited person, and the withdrawal asked first, done, read as done on a 404 and said on a 409, each held and sent once)
+- `manageMarketMeetsAChangedMarket.test.ts` (a role's change and take refused over a changed market, and an invitation's refusal reading nothing again)
+- `manageMarketPeople.test.ts` (the shown count kept through a role change, a removal and an invitation, which adds nobody, and an invitation held, sent once, and its answer kept out of Manage market opened on another market)
 - `manageMarketReadsTheMarketItOpened.test.ts` (opened on another market while the last one's read is out, Loading and its name, a failed read of the last market said nowhere, a failed first read said over the opener's copy, a table change taken into it and it kept drawn through a write's re-read, a name being typed kept over a re-read that brings the same name, and an older re-read never undoing a rename or a table change)
 - [`people-at-scale-market.spec.ts`](../../../front-end/e2e/people-at-scale-market.spec.ts) (the list at 154 people: a page at a time, finding one person, the place kept; on a phone at 390 and 320)
 - [`removing-someone-asks-first.spec.ts`](../../../front-end/e2e/removing-someone-asks-first.spec.ts) (the confirmation's words, Cancel, Escape, confirming and where focus goes, someone removed in another window included, at 1440 and 390; at 390 the address in Remove's and a role change's title broken only before its "@" or a dot)
-- `screen-sweeps-*.spec.ts`, the sweeps' states "the manage-market dialog, an organization's people", "the manage-market dialog, removing a market role" and "the manage-market dialog, changing a market role"
+- `screen-sweeps-*.spec.ts`, the sweeps' states "the manage-market dialog, an organization's people", "the manage-market dialog, inviting someone", "the manage-market dialog, two invitations waiting", "the manage-market dialog, removing a market role" and "the manage-market dialog, changing a market role"
 - `the-manage-market-dialog-holds-together.spec.ts`
-- `tier2.spec.ts` ("add user, change role, and remove user from market")
+- `tier2.spec.ts` ("invite a user who accepts, change their role, and remove them from the market")
 
 ## L3a. Set who may do what
 
@@ -221,7 +232,7 @@ Covered by:
 **Status:** Works (T283; driven by `handing-a-market-on.spec.ts` at 1440 and on a phone at 390).
 
 1. "Transfer ownership", after "Rename market" and before "Delete market", is the owner's alone, the fixed row "Transfer ownership" ([what each role may do](../rules/what-each-role-may-do.md)), in every phase, archived included, since an archived market still needs someone who can delete it.
-   It says "Make someone with access its Owner. You stay on it as an Admin." and offers "Transfer ownership"; with nobody but the owner under "Users with access" it says "Nobody else has access to this market yet. Add someone under Users with access first." and offers nothing.
+   It says "Make someone with access its Owner. You stay on it as an Admin." and offers "Transfer ownership"; with nobody but the owner under "Users with access" it says "Nobody else has access to this market yet. Invite someone under Users with access first." and offers nothing.
 2. Its button opens "Transfer ownership of <market>", a destructive dialog that opens on Cancel, since the owner cannot take it back themselves ([`HandOnMarketDialog.vue`](../../../front-end/src/components/HandOnMarketDialog.vue)).
    Its picker, "New owner", offers everyone under "Users with access" but the owner, each address with the role that counts beside it ("Admin", "Viewer, through <organization>"), found by any part of the address, at most 50 drawn at a time.
 3. Once someone is chosen it says "<address> becomes its Owner: only they can delete it, give and take Admin roles and change who may do what. You stay on it as an Admin, and cannot take it back yourself."; its "Transfer ownership" waits for a choice, and nothing closes the dialog while the request and the re-read after it are in flight, the picker disabled with them; a second press sends nothing (T411).
