@@ -260,10 +260,11 @@ jobs:
           persist-credentials: false
       - run: docker compose build
 
-  # Split by spec file across ten runners, each with its own Docker stack, so a PR waits for a
-  # tenth of the suite rather than all of it (89 runner-minutes of tests on 2026-11-11, 1 to 3
-  # more per runner to set up, by what the caches hold). The tests share one database WITHIN a runner (`workers: 1`),
-  # never across runners. `front-end/scripts/e2e-shards.ts` deals the spec files to the shards by
+  # Split by spec file across five runners, each with its own Docker stack, so a PR waits for a
+  # fifth of the suite rather than all of it (89 runner-minutes of tests at one worker on
+  # 2026-11-11, 1 to 3 more per runner to set up, by what the caches hold), and a run takes five of
+  # the account's 20 jobs, not ten. The tests share one database WITHIN a runner (two workers, the
+  # serial files first at one), never across runners. `front-end/scripts/e2e-shards.ts` deals the spec files to the shards by
   # their measured seconds, not Playwright's `--shard`, which cuts the alphabetical list by test
   # count and once left one shard at 24 minutes and another at 6. The seconds are the newest
   # `e2e-shard-timings` artifact a run on dev or a merge queue trial commit published, made at
@@ -280,12 +281,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        total: [10]
+        shard: [1, 2, 3, 4, 5]
+        total: [5]
     env:
       DISABLE_CAPTCHA: "true"
       DISABLE_EMAIL: "true"
       DISCORD_FAKE: "true"
+      # Two Playwright workers per shard, the serial project's files first at one
+      # (front-end/scripts/e2e-shards.ts).
+      E2E_WORKERS: "2"
       # On a push to dev only, the shards record the test map (front-end/e2e/helpers/testMap.ts),
       # which the test-map job below builds; every other run records nothing.
       RECORD_TEST_MAP: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
@@ -293,7 +297,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Shard 1 alone saves what it built, so ten shards never race to write one key. A merge
+      # Shard 1 alone saves what it built, so five shards never race to write one key. A merge
       # queue's trial commit saves nothing: a cache written on its queue branch no other run reads.
       - uses: ./.github/actions/front-end-deps # zizmor: ignore[self-repository] actionlint 1.7.12, the latest, refuses the $/ form
         with:
@@ -366,7 +370,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 90
       # The report and the deal record, which the `e2e` job checks and blends into the next
-      # timings; the selection audit reads the report too.
+      # timings, and each pass's seconds (`e2e-phases.json`), which its summary shows; the
+      # selection audit reads the report too.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -374,6 +379,7 @@ jobs:
           path: |
             front-end/test-results/results.json
             front-end/test-results/e2e-deal.json
+            front-end/test-results/e2e-phases.json
           if-no-files-found: ignore
           retention-days: 90
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -474,7 +480,7 @@ jobs:
         run: >-
           python scripts/test_map.py build --commit "$COMMIT"
           --endpoints "$RUNNER_TEMP/endpoints.json"
-          --shards "$RUNNER_TEMP/test-map-shards" --shards-expected 10
+          --shards "$RUNNER_TEMP/test-map-shards" --shards-expected 5
           --out "$RUNNER_TEMP/test-map.json"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -517,9 +523,10 @@ jobs:
         with:
           pattern: e2e-results-shard-*
           path: ${{ runner.temp }}/e2e-results
-      # Once every shard passed: every shard dealt by the same timings and their reports hold every
-      # spec file exactly once, or this fails the job, since a file no shard ran was never tested.
-      # The job summary names the timings' source, each shard's seconds and the spread. When this run
+      # Once every shard passed: every shard dealt by the same timings, serial files and worker
+      # count, and their reports hold every spec file exactly once, or this fails the job, since a
+      # file no shard ran was never tested. The job summary names the timings' source, each shard's
+      # seconds and two passes, and the spread. When this run
       # publishes the timings (PUBLISHES_TIMINGS) it also writes the next timings, the ones the run dealt
       # by blended with what it measured, for the step after it to publish.
       - name: Every spec file ran on one shard

@@ -350,7 +350,7 @@ frontend port via `stack().frontendPort`).
 
 The config has two projects: `chromium-serial`, the spec files of the serial list (`front-end/e2e/serialSpecs.ts`), which need the stack to themselves, at one worker, and `chromium`, every other spec file.
 Its `workers` is `E2E_WORKERS`, one when it is unset or not a positive integer.
-`E2E_WORKERS` is for CI's shard script (`front-end/scripts/e2e-shards.ts`), which runs the serial project first and alone, then the other at the config's workers ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)); a plain `npx playwright test` with `E2E_WORKERS` above one would run the serial files beside the rest.
+`E2E_WORKERS` is for CI's shard script (`front-end/scripts/e2e-shards.ts`), which runs the serial project first and alone, then the other at the config's workers, two on CI's shards ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)); a plain `npx playwright test` with `E2E_WORKERS` above one would run the serial files beside the rest.
 A local run, `scripts/nm-test.sh` and CI's `e2e-repeat` set none, so they run at one worker, the serial files among the rest.
 
 **Prerequisite**: Docker stack running with seeded test users.

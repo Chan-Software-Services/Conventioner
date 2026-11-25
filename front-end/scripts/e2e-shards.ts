@@ -23,7 +23,7 @@
  * a corrupt one, or GitHub's API failing, it falls back to the committed `e2e-shard-timings.json`
  * with a warning and never fails. Then it runs its hand, as CI's `e2e-shard` job does:
  *
- *   node scripts/e2e-shards.ts --shard=3/10 --timings=<that file>
+ *   node scripts/e2e-shards.ts --shard=3/5 --timings=<that file>
  *
  * and writes its deal record (`test-results/e2e-deal.json`: the timings' source, the timings, every
  * listed file, its hand, the serial files and the workers) beside Playwright's report. Without
