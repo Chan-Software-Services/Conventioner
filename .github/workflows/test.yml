@@ -392,12 +392,13 @@ jobs:
   # fifth of the suite rather than all of it (89 runner-minutes of tests at one worker on
   # 2026-11-11, 1 to 3 more per runner to set up, by what the caches hold), and a run takes five of
   # the account's 20 jobs, not ten. The tests share one database WITHIN a runner (two workers, the
-  # serial files first at one), never across runners. `front-end/scripts/e2e-shards.ts` deals the spec files to the shards by
-  # their measured seconds, not Playwright's `--shard`, which cuts the alphabetical list by test
-  # count and once left one shard at 24 minutes and another at 6. The seconds are the newest
-  # `e2e-shard-timings` artifact a push to dev or a merge queue trial commit published, made at
-  # least ten minutes before this run was created, so every shard and every re-run picks the same
-  # one; with none, or one it cannot read, the committed `e2e-shard-timings.json`.
+  # serial files first at one), never across runners. `front-end/scripts/e2e-shards.ts` deals the
+  # spec files to the shards by their measured seconds, not Playwright's `--shard`, which cuts the
+  # alphabetical list by test count and once left one shard at 24 minutes and another at 6. The
+  # seconds are the newest `e2e-shard-timings` artifact a push to dev or a merge queue trial commit
+  # published, made at least ten minutes before this run was created, so every shard and every
+  # re-run picks the same one; with none, or one it cannot read, the committed
+  # `e2e-shard-timings.json`.
   # `total` is the length of `shard`'s list: the two move together.
   e2e-shard:
     name: e2e shard ${{ matrix.shard }}/${{ matrix.total }}

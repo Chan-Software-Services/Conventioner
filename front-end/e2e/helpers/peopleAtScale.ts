@@ -132,8 +132,9 @@ export interface ProfiledRead {
 /**
  * The reads of `users` the database makes while `act` runs, by MongoDB's own profiler, on for
  * that collection alone and turned off however `act` ends. Its specs run in the serial pass
- * (`e2e/serialSpecs.ts`), so no other spec reads in between; but a read the page still has out when it starts, such as the one Markets
- * makes on signing in, is counted too, so start it once the page has shown what it read.
+ * (`e2e/serialSpecs.ts`), so no other spec reads in between; but a read the page still has out
+ * when it starts, such as the one Markets makes on signing in, is counted too, so start it once
+ * the page has shown what it read.
  */
 export async function usersReadsWhile(act: () => Promise<void>): Promise<ProfiledRead[]> {
   try {
