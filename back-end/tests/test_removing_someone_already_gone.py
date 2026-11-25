@@ -144,8 +144,7 @@ class TestTheOrganization:
 
         assert response.status_code == 404
         assert response.get_json() == NO_LONGER_IN_THE_ORGANIZATION
-        assert organization.writes == []
-        assert organization.accounts.writes == [], "nothing is written before the refusal"
+        assert organization.writes == [], "nothing is written before the refusal"
         assert organization_entries(history) == []
 
     def test_removing_a_member_twice_answers_the_second_as_gone(self, organization, history):

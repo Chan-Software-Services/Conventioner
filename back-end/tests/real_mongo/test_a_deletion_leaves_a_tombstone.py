@@ -94,7 +94,6 @@ def organization(real_db, signed_in, market_in, applications, market_records):
     real_db["organizations"].insert_one({
         "id": ORG, "name": "Fixture Deleted Markets", "people": {client.account_id: "owner"},
         "markets": [], "theme": None})
-    real_db["users"].update_one({"id": client.account_id}, {"$addToSet": {"organizations": ORG}})
     markets = [
         market_in(MarketPhase.DRAFT, organizationId=ORG, phaseHistory=_history(MarketPhase.DRAFT)),
         market_in(MarketPhase.ARCHIVED, organizationId=ORG,
@@ -133,9 +132,8 @@ class TestAnOrganizationsDeletionCutAndRetried:
         ("api.applications.delete_applications_for_market", 1),
         ("market_deletion.delete_market_and_records", 2),
         ("history.delete_for_organization", 1),
-        ("api.organizations.users_collection.update_many", 1),
     ], ids=["writing the trail", "sweeping the first market", "deleting the second market",
-            "deleting its history", "taking it from its people"])
+            "deleting its history"])
     def test_leaves_one_trail_entry_naming_both_markets_and_nothing_behind(
             self, organization, monkeypatch, real_db, applications, market_records, target,
             on_call):
@@ -152,7 +150,6 @@ class TestAnOrganizationsDeletionCutAndRetried:
         _nothing_left_of(markets, real_db, applications, market_records)
         assert real_db["organizations"].find_one({"id": ORG}) is None
         assert list(market_records.history.find({"organization_id": ORG})) == []
-        assert ORG not in real_db["users"].find_one({"id": client.account_id})["organizations"]
 
 
 class TestADraftEnteringReviewAfterThePreview:

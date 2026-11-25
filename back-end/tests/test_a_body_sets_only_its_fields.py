@@ -142,7 +142,8 @@ class TestANewAccount:
         )
 
         assert response.status_code == 200
-        assert response.get_json()["user_data"]["organizations"] == []
+        # The account's copy of its organizations is read by nothing, the sign-in included (T583).
+        assert set(response.get_json()["user_data"]) == {"id", "email"}
 
     @pytest.mark.parametrize("body", NOT_OBJECTS)
     def test_a_body_that_is_not_an_object_is_refused(self, client, users, captcha_passes, body):

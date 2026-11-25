@@ -232,8 +232,6 @@ class TestAccepting:
         doc = organization.docs[0]
         assert doc["people"] == {**PLACES, INVITEE.id: "member"}
         assert invitations.documents == []
-        assert organization.accounts.writes[-1] == (
-            {"id": INVITEE.id}, {"$addToSet": {"organizations": ORG_ID}})
 
     def test_the_entry_is_the_inviter_giving_the_place_by_an_invitation_accepted(
         self, organization, history,
@@ -605,7 +603,6 @@ class TestDeclining:
         assert response.get_json() == {"message": "Invitation declined"}
         assert invitations.documents == []
         assert organization.docs[0]["people"] == PLACES
-        assert organization.accounts.writes == []
         declined = entries(history)[-1]
         assert (declined["actor"], declined["action"], declined["kind"], declined["subject"],
                 declined["detail"]) == (

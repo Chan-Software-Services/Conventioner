@@ -412,7 +412,7 @@ def test_a_place_set_to_the_place_held_answers_200_and_writes_nothing(
     response = change(client, OWNER, target.id, {"place": place})
 
     assert (response.status_code, response.get_json()) == (200, {"message": "Place changed"})
-    assert stored.writes == [] and stored.accounts.writes == [] and recorded == []
+    assert stored.writes == [] and recorded == []
 
 
 @pytest.mark.parametrize("requester,target", [
@@ -473,7 +473,7 @@ def test_a_transfer_by_anyone_but_the_owner_is_a_403(client, stored, recorded, r
 
     assert (response.status_code, response.get_json()) == (
         403, {"error": "Only current owner can transfer ownership"})
-    assert stored.writes == [] and stored.accounts.writes == [] and recorded == []
+    assert stored.writes == [] and recorded == []
 
 
 @pytest.mark.parametrize("email,sentence", [
@@ -487,7 +487,7 @@ def test_a_transfer_the_table_refuses_says_why_and_writes_nothing(
     response = hand_on(client, OWNER, email)
 
     assert (response.status_code, response.get_json()) == (400, {"error": sentence})
-    assert stored.writes == [] and stored.accounts.writes == [] and recorded == []
+    assert stored.writes == [] and recorded == []
 
 
 # ── What each write holds and writes ─────────────────────────────────────────────────────────
@@ -563,13 +563,12 @@ def test_a_write_on_a_folded_organization_holds_both_places_and_moves_one_key(
 
 
 
-# ── The account's copy and the history ───────────────────────────────────────────────────────
+# ── The history ──────────────────────────────────────────────────────────────────────────────
 
 
-def test_an_add_copies_the_organization_onto_the_account_and_records_it(stored, recorded):
+def test_an_add_records_it(stored, recorded):
     OrganizationPeople.add_member(ORG, NEW.email, OWNER.email)
 
-    assert stored.accounts.writes == [({"id": NEW.id}, {"$addToSet": {"organizations": ORG}})]
     [(args, kwargs)] = recorded
     assert args == (ORG, OWNER.email, History.MANAGE_ORGANIZATION_MEMBERS)
     assert kwargs["kind"] == History.ROLE_GIVEN
@@ -598,14 +597,11 @@ def test_a_place_change_is_recorded_with_the_place_before_and_after(
     assert kwargs["kind"] == History.ROLE_CHANGED
     assert kwargs["subject"]() == {"user_id": target.id, "email": target.email}
     assert kwargs["detail"]() == History.changes({"role": before}, {"role": place})
-    # They were in the organization before and are after: the account's copy has nothing to do.
-    assert stored.accounts.writes == []
 
 
-def test_a_remove_takes_the_organization_off_the_account_and_records_it(stored, recorded):
+def test_a_remove_records_it(stored, recorded):
     OrganizationPeople.remove(ORG, ADMIN.id, OWNER.email)
 
-    assert stored.accounts.writes == [({"id": ADMIN.id}, {"$pull": {"organizations": ORG}})]
     [(args, kwargs)] = recorded
     assert args == (ORG, OWNER.email, History.MANAGE_ORGANIZATION_ADMINS)
     assert kwargs["kind"] == History.ROLE_TAKEN
@@ -631,7 +627,7 @@ def test_a_write_over_an_organization_deleted_meanwhile_is_a_404(stored, recorde
         OrganizationPeople.add_member(ORG, NEW.email, OWNER.email)
 
     assert refused.value.message == "Organization not found"
-    assert recorded == [] and stored.accounts.writes == []
+    assert recorded == []
 
 
 def test_removing_someone_removed_meanwhile_is_the_404_read_as_done(stored, recorded):
@@ -715,13 +711,6 @@ def test_a_place_change_by_an_owner_who_handed_the_organization_on_meanwhile_is_
     assert_one_map(stored.doc)
 
 
-
-
-def test_a_transfer_copies_the_organization_onto_the_new_owners_account(stored, recorded):
-    OrganizationPeople.transfer(ORG, OWNER.email, MEMBER.email)
-
-    assert stored.accounts.writes == [
-        ({"id": MEMBER.id}, {"$addToSet": {"organizations": ORG}})]
 
 
 def test_two_transfers_judged_on_one_read_land_once(stored, recorded):

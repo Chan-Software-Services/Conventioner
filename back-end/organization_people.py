@@ -37,7 +37,6 @@ from tombstone import live
 
 db = get_database()
 organizations_collection = db["organizations"]
-users_collection = db["users"]
 
 OWNER = OrganizationRole.OWNER.value
 ADMIN = OrganizationRole.ADMIN.value
@@ -362,18 +361,11 @@ def _judged_and_written(org: Dict[str, Any], event: Event, requester: Any,
 
 def _change(org: Dict[str, Any], event: Event, requester: Any, target_id: str,
             requesting_user_email: str, by_invitation: bool = False) -> None:
-    """Judge ``event`` on the organization as read and write it, then keep the account's copy of
-    its organizations and record it. A change that changes nothing writes and records nothing."""
+    """Judge ``event`` on the organization as read, write it and record it. A change that changes
+    nothing writes and records nothing."""
     before_place, after_place = _judged_and_written(org, event, requester, target_id)
     if before_place == after_place:
         return
-    # The account's own copy, best effort after the organization's write: no check reads it. A
-    # place changed, rather than given or taken, leaves the copy as it was.
-    if before_place is None or after_place is None:
-        users_collection.update_one(
-            {"id": target_id},
-            {"$pull" if after_place is None else "$addToSet": {"organizations": org["id"]}},
-        )
     _record_role(org["id"], requesting_user_email, target_id, before_place, after_place,
                  by_invitation)
 
@@ -524,8 +516,6 @@ def transfer(org_id: str, requesting_user_email: str, new_owner_email: str) -> N
     if not new_owner:
         raise BadRequestError("New owner user not found")
     _judged_and_written(org, Event.TRANSFER, requester, new_owner.id)
-    # The account's own copy, best effort after the organization's write, as for an add.
-    users_collection.update_one({"id": new_owner.id}, {"$addToSet": {"organizations": org_id}})
     _record_transfer(org_id, requesting_user_email, requester, new_owner)
 
 

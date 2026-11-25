@@ -165,7 +165,6 @@ class TestOneAnswerForEveryAddress:
             assert invite(OWNER, address, place=place).status_code == 200
 
         assert organization.doc == an_organization()
-        assert organization.accounts.writes == []
         assert len(invitations.documents) == 2
 
     def test_the_answer_serves_the_invitation(self, organization, invitations):

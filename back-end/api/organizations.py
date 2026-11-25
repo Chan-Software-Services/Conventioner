@@ -33,7 +33,6 @@ import utils.email as Email
 
 db = get_database()
 organizations_collection = db["organizations"]
-users_collection = db["users"]
 markets_collection = db["markets"]
 
 
@@ -73,14 +72,6 @@ def create_organization(owner_email: str, name: str) -> str:
     }
     
     organizations_collection.insert_one(org_dict)
-    
-    # Add organization id to user's organizations list
-    # By id: the account just loaded, however its owner's address was typed (E32/F03/S04).
-    users_collection.update_one(
-        {"id": owner_id},
-        {"$addToSet": {"organizations": org_id}}
-    )
-    
     return org_id
 
 
@@ -183,8 +174,8 @@ def update_organization(org_id: str, requesting_user_email: str, name: str) -> U
     """Rename an organization. Only owner can update, and never onto the name of another
     organization the owner belongs to (``_refuse_a_name_you_already_hold``).
 
-    The name is the one field an owner edits: its owner, admins, members and markets change only
-    through their own endpoints, which keep each user's ``organizations`` in step with them.
+    The name is the one field an owner edits: its people and markets change only through their own
+    endpoints.
     """
     org = organizations_collection.find_one(live({"id": org_id}))
     if not org:
@@ -546,11 +537,6 @@ def delete_organization(org_id: str, requesting_user_email: str) -> DeleteResult
     # trail above is what outlives it.
     History.delete_for_organization(org_id)
     Invitations.delete_for_organization(org_id)
-
-    users_collection.update_many(
-        {},
-        {"$pull": {"organizations": org_id}}
-    )
 
     return organizations_collection.delete_one({"id": org_id})
 

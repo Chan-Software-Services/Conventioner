@@ -926,7 +926,6 @@ class User(BaseModel):
     id: str  # UUID, immutable primary key
     email: str
     password: str
-    organizations: List[str]  # Organization ids (uuids)
     email_verified: bool = False
     # The account's sign-in secrets by kind, each one record kept hashed; ``account_secrets`` is
     # their only reader and writer.

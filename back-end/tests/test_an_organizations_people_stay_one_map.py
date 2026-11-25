@@ -21,7 +21,6 @@ from types import SimpleNamespace
 import pytest
 
 from conftest import (
-    FakeAccountCopies,
     FakeOrganizations,
     WriteCut,
     install_organizations,
@@ -135,23 +134,15 @@ def test_a_transfer_cut_after_the_pull_leaves_the_new_owner_a_place(
 # ── A cut at each write a transfer makes ─────────────────────────────────────────────────────
 
 
-class CutAccountCopies(FakeAccountCopies):
-    """The users collection, its connection lost at the account copy's write."""
-
-    def update_one(self, query, update, **_kwargs):
-        raise WriteCut("the connection was lost at the account copy's write")
-
-
 def _cut_history(*_args, **_kwargs):
     raise WriteCut("the connection was lost at the history's write")
 
 
 @pytest.mark.parametrize("new_owner", [MEMBER, ADMIN], ids=["from a member", "from an admin"])
-@pytest.mark.parametrize("cut", ["the organization's", "the account copy's", "the history's"])
+@pytest.mark.parametrize("cut", ["the organization's", "the history's"])
 def test_a_cut_at_each_write_of_a_transfer_leaves_one_owner(
         monkeypatch, accounts, new_owner, cut):
-    accounts_fake = CutAccountCopies() if cut == "the account copy's" else None
-    stored = install_organizations(monkeypatch, FakeOrganizations(FOLDED), accounts_fake)
+    stored = install_organizations(monkeypatch, FakeOrganizations(FOLDED))
     if cut == "the organization's":
         stored.cut_at = 1
     monkeypatch.setattr(

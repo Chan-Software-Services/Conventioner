@@ -1656,35 +1656,14 @@ class FakeOrganizations:
         return SimpleNamespace(deleted_count=0)
 
 
-class FakeAccountCopies:
-    """The users collection as the organization writers touch it: each account's own copy of its
-    organizations, written best effort. Records every write; stores nothing."""
-
-    def __init__(self):
-        self.writes = []
-
-    def update_one(self, query, update, **_kwargs):
-        reject_malformed_update(update)
-        self.writes.append((query, update))
-        return SimpleNamespace(matched_count=1, modified_count=1, upserted_id=None)
-
-    def update_many(self, query, update, **_kwargs):
-        return self.update_one(query, update)
-
-
-def install_organizations(monkeypatch, organizations, accounts=None):
+def install_organizations(monkeypatch, organizations):
     """Make ``organizations`` (a ``FakeOrganizations``) the organizations collection for every
-    reader and for ``organization_people``, the one writer, and ``accounts`` (by default a new
-    ``FakeAccountCopies``) the users collection both write the account's copy to. Answers
-    ``organizations``, with ``organizations.accounts`` set."""
+    reader and for ``organization_people``, the one writer. Answers ``organizations``."""
     import api.organizations as OrgsApi
     import organization_people as OrganizationPeople
 
-    accounts = FakeAccountCopies() if accounts is None else accounts
     for module in (OrgsApi, OrganizationPeople):
         monkeypatch.setattr(module, "organizations_collection", organizations)
-        monkeypatch.setattr(module, "users_collection", accounts)
-    organizations.accounts = accounts
     return organizations
 
 # app.py refuses to boot unless the market-key migration is recorded as applied, and it fails
