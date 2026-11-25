@@ -559,6 +559,22 @@ export interface Invitation {
   endsAt: string;
 }
 
+/**
+ * An invitation as the people who sent it read it (T538, ADR 0047): `POST` and `GET` of a market's
+ * `invitations` serve it, the address it waits for and the role it offers until `endsAt`.
+ */
+export interface SentInvitation {
+  id: string;
+  /** The address invited, as the server keeps every address: trimmed and in lower case. */
+  email: string;
+  /** A market's `admin`, `editor` or `viewer`; an organization's `admin` or `member`. */
+  role: string;
+  /** The inviter's address. */
+  invitedBy: string;
+  sentAt: string;
+  endsAt: string;
+}
+
 export interface VendorAttendance {
   marketId: string;
   vendorEmail: string;

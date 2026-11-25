@@ -1,9 +1,10 @@
 /**
- * The invitations waiting for the signed-in person's address (T538, ADR 0047), and their words:
- * the Invitations page reads, accepts and declines them here, and the Markets list says how many
- * wait. One module, so a screen's tests mock one import.
+ * Invitations (T538, ADR 0047), and their words: the ones waiting for the signed-in person's
+ * address, which the Invitations page reads, accepts and declines and the Markets list counts, and
+ * the ones a market's organizers send, read and withdraw in Manage market. One module, so a screen's
+ * tests mock one import.
  */
-import type { Invitation } from '@/assets/types/datatypes';
+import type { Invitation, SentInvitation } from '@/assets/types/datatypes';
 import { api } from '@/utils/api';
 import { marketPath } from '@/utils/market';
 import { MONTH_NAMES } from '@/utils/calendarMonth';
@@ -88,4 +89,60 @@ export function declinedSentence(invitation: Pick<Invitation, 'targetName'>): st
  * invitations waiting." */
 export function waitingLine(count: number): string {
   return count === 1 ? 'You have an invitation waiting.' : `You have ${count} invitations waiting.`;
+}
+
+/** What sending an invitation answers: the invitation, and whether its email went. */
+export interface Sent {
+  invitation: SentInvitation;
+  emailed: boolean;
+}
+
+/**
+ * Invite `email` to `role` on the market whose `id` is `marketId`. The answer is the same for every
+ * address: nobody is given a role until someone signed in with it accepts.
+ */
+export async function inviteToMarket(marketId: string, email: string, role: string): Promise<Sent> {
+  const response = await api.post(`/markets/${encodeURIComponent(marketId)}/invitations`, {
+    email,
+    role,
+  });
+  return response.data as Sent;
+}
+
+/** The invitations waiting on a market, newest first. */
+export async function fetchMarketInvitations(marketId: string): Promise<SentInvitation[]> {
+  const response = await api.get(`/markets/${encodeURIComponent(marketId)}/invitations`);
+  return (response.data.invitations ?? []) as SentInvitation[];
+}
+
+export async function withdrawMarketInvitation(marketId: string, id: string): Promise<void> {
+  await api.delete(
+    `/markets/${encodeURIComponent(marketId)}/invitations/${encodeURIComponent(id)}`,
+  );
+}
+
+/** Said under an invite row once the invitation went: "Invitation sent to ana@ember.test." */
+export function sentLine(address: string): string {
+  return `Invitation sent to ${address}.`;
+}
+
+/** Said in the sent line's place when the invitation was made but its email could not be sent. */
+export function notEmailedLine(address: string): string {
+  return `${address} is invited, but the email could not be sent. Invite them again to send it.`;
+}
+
+/**
+ * An invitation's line under "Invited": "Invited as Editor, until 8 December, 16:44", a market's
+ * role named as "Users with access" names it, an organization's place in lower case.
+ */
+export function invitedAs(
+  kind: Invitation['kind'],
+  invitation: Pick<SentInvitation, 'role' | 'endsAt'>,
+): string {
+  const role =
+    kind === 'market'
+      ? invitation.role.charAt(0).toUpperCase() + invitation.role.slice(1)
+      : invitation.role;
+  const until = endsOn(invitation);
+  return until ? `Invited as ${role}, until ${until}` : `Invited as ${role}`;
 }
