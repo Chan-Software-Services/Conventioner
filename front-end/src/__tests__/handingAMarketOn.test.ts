@@ -185,12 +185,12 @@ describe('handing a market on', () => {
     wrapper.unmount();
   });
 
-  it('says to add someone first, with no button, when nobody else has access', async () => {
+  it('says to invite someone first, with no button, when nobody else has access', async () => {
     served = market([OWNER]);
     const wrapper = await open();
 
     expect(text('manage-market-hand-on-nobody')).toBe(
-      'Nobody else has access to this market yet. Add someone under Users with access first.',
+      'Nobody else has access to this market yet. Invite someone under Users with access first.',
     );
     expect(byTestId('manage-market-hand-on-button')).toBeNull();
     expect(byTestId('manage-market-hand-on-line')).toBeNull();

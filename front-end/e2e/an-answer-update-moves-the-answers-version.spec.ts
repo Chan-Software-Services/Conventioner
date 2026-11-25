@@ -4,6 +4,7 @@ import { seedApplicantMarket, planSetupObject } from './helpers/seedApplicantMar
 import { oneByOnePath } from './helpers/marketScreens';
 import { mongoEval } from './helpers/mongo';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { ApplicationMonitorPage } from './pages/ApplicationMonitorPage';
 import { ApplicationsAllPage } from './pages/ApplicationsAllPage';
@@ -90,10 +91,7 @@ test('a verdict on a card opened before an organizer updated its answer is refus
 }) => {
   ensureVerifiedUser(REVIEWER.email, REVIEWER.password);
   const marketId = await imported(request);
-  const granted = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-    data: { user_email: REVIEWER.email, role: 'editor' },
-  });
-  expect(granted.ok(), await granted.text()).toBeTruthy();
+  await grantMarketRole(request, marketId, REVIEWER, 'editor');
 
   await withUser(browser, REVIEWER.email, REVIEWER.password, async (other) => {
     const review = new ApplicationMonitorPage(other);

@@ -7,6 +7,7 @@ import {
 import { seedAssignedMarket } from './helpers/seedAssignedMarket';
 import { marketScreenPath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { namelessControls } from './helpers/accessibleNames';
 import { mongoEval } from './helpers/mongo';
@@ -39,10 +40,7 @@ test('every application, filtered, held and decided from the drawer', async ({
   seedApplicationWithStatus(marketId, 'open', 'nadia@ember.test');
   const theo = seedApplicationWithStatus(marketId, 'open', 'theo@thistle.test');
   seedApplicationWithStatus(marketId, 'open', 'ines@loom.test');
-  const granted = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-    data: { user_email: SECOND.email, role: 'editor' },
-  });
-  expect(granted.ok(), await granted.text()).toBeTruthy();
+  await grantMarketRole(request, marketId, SECOND, 'editor');
   const followUp = await putVerdict(request, BACKEND_URL, marketId, theo, {
     status: 'needs_follow_up',
   });
@@ -281,10 +279,7 @@ test('a verdict on a selection: confirmed by count, held ones untickable, change
   seedApplicationWithStatus(marketId, 'open', 'theo@thistle.test');
   const ines = seedApplicationWithStatus(marketId, 'open', 'ines@loom.test');
   seedApplicationWithStatus(marketId, 'open', 'omar@kiln.test');
-  const granted = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-    data: { user_email: SECOND.email, role: 'editor' },
-  });
-  expect(granted.ok(), await granted.text()).toBeTruthy();
+  await grantMarketRole(request, marketId, SECOND, 'editor');
 
   const all = new ApplicationsAllPage(page);
   await all.goto(marketId);
@@ -345,10 +340,7 @@ test('Select all ticks the open rows shown, skipping the one held elsewhere', as
   seedApplicationWithStatus(marketId, 'open', 'theo@thistle.test');
   seedApplicationWithStatus(marketId, 'open', 'ines@loom.test');
   seedApplicationWithStatus(marketId, 'reviewer_approved', 'omar@kiln.test');
-  const granted = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-    data: { user_email: SECOND.email, role: 'editor' },
-  });
-  expect(granted.ok(), await granted.text()).toBeTruthy();
+  await grantMarketRole(request, marketId, SECOND, 'editor');
 
   const all = new ApplicationsAllPage(page);
   await withUser(browser, SECOND.email, SECOND.password, async (other) => {

@@ -306,8 +306,9 @@ a spec are the coverage map in [walking the flows](implementation/testing/walkin
 Coverage also includes tier-1 market operations journeys: public vendor check-in
 (`checkin.spec.ts`), vendor browsing with search (`vendors.spec.ts`), and table
 browsing with filtering (`tables.spec.ts`). The tier-2 suite (`tier2.spec.ts`)
-covers organization CRUD (create, add admin/member, remove member, rename,
-delete), market role management (add user with role, change role, remove user),
+covers organization CRUD (create, invite an admin and a member, withdraw an
+invitation, rename, delete), market role management (invite someone with a role,
+accepted, change role, remove user),
 assignment CSV export (download and verify columns), and publishing a market
 (verify the market's vendor page, where its vendors check in, is reachable). Tier-3 authentication and robustness
 journeys (`auth.spec.ts`) cover new-user registration, the full password reset
@@ -338,7 +339,7 @@ smuggle one past it (405). A location's layout's specs, which replaced the floor
 [the layout's E2E](implementation/testing/floorplan-e2e.md)'s.
 The access-control suite (`access-control.spec.ts`) covers who can see a market: an org
 member with no explicit market role, a user granted an explicit role but no org membership,
-membership changes taking effect (adding a user grants visibility, removing revokes it), and
+membership changes taking effect (a member who accepts an invitation gains visibility, removing revokes it), and
 org deletion revoking org-based access while explicit-role access survives. Each test pairs a
 positive assertion with a negative one **against the same market**, so a broken query that
 returns zero rows fails the positive assertion instead of vacuously satisfying an empty-list

@@ -35,11 +35,11 @@ describes:
   - back-end/api/markets.py#update_market_role
   - back-end/datatypes.py#organization_people_of
   - back-end/organization_people.py#of_person
+  - back-end/tests/test_a_persons_organizations_in_either_shape.py
+  - back-end/api/organizations.py#change_org_place
   - back-end/migrations/migrate_drop_organization_lists.py
   - back-end/tests/test_migrate_drop_organization_lists.py
   - back-end/tests/real_mongo/test_the_organization_lists_migration_on_the_server.py
-  - back-end/tests/test_a_persons_organizations_in_either_shape.py
-  - back-end/api/organizations.py#change_org_place
 verified: 2026-11-25
 sources:
   - E20/F04/S01
@@ -101,7 +101,7 @@ It serves each with what removing someone from it takes (E38/F15/S01): `marketCo
 **Who changes an organization**: only the owner renames it, invites or adds an admin, changes someone's place between admin and member, or transfers ownership; the owner or an admin invites or adds a member or changes its default table; the owner removes anyone but themselves, an admin only members.
 A person's place changes only through [the organization's people](../modules/organization-people.md), whose table says each of these and refuses the rest: "Add admin" of a member makes them an admin, the owner's `PUT /organizations/<org_id>/users/<user_id>` with `{"place": "admin" | "member"}` makes a member an admin or an admin a member (the place they hold already answers 200 and writes nothing, the owner's place is refused), "Add admin" of an admin and "Add member" of a member say they already are, 400, and adding the owner or an admin as a member is refused as before.
 **Inviting places nobody** (T538): an invitation to be an admin or a member waits in [`invitations`](../modules/invitations.md#inviting-to-an-organization), apart from this document, alike for an address with an account and one without, until someone signed in with the address accepts it, judged again then as the inviter's act through the same table; until then the document is unchanged.
-The direct adds stay beside it until every screen invites.
+Manage organization invites, and the direct add routes stay beside it, called by no screen, only until they are removed.
 Renaming is all an update does: it reads the body's `name`, a string that is not blank and is not [another of the owner's organizations' names](#an-organizations-name), and nothing else, so its people and its markets change only through the writes above.
 Transferring ownership makes one of its admins or members the organization's owner and the old owner an admin; transferring it to its own owner, or to someone outside it ("Transfer ownership only to one of the organization's admins or members."), is refused before anything is written.
 The owner cannot be removed ("They own this organization, so they can't be removed from it."), and an account that owns an organization cannot be deleted until it transfers the organization's ownership.

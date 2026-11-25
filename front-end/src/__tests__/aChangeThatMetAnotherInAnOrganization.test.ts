@@ -4,9 +4,10 @@
  * The server writes a person's place only while the places it judged still stand, and answers a
  * change that met another with one 409, `{"error": <the sentence>, "code": "organization_changed"}`,
  * having stored nothing. Manage organization shows that sentence where the control's refusal
- * shows today (under the add form, or in the Remove confirmation, which stays open) and reads the
+ * shows today (in the Remove or the place change's confirmation, which stays open) and reads the
  * organization again behind it, so the rows it shows are the ones the sentence asks the person to
- * check. Any other refusal is shown as before, with no re-read.
+ * check. Any other refusal is shown as before, with no re-read. An invitation writes none of the
+ * organization's people, so it never meets that 409; its refusals are said under its row.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
@@ -109,7 +110,7 @@ describe('Manage organization, when a change met another', () => {
     });
   }
 
-  async function add(which: 'admin' | 'member', email: string) {
+  async function invite(which: 'admin' | 'member', email: string) {
     byTestId(`manage-org-add-${which}-button`)!.click();
     await flushPromises();
     const input = byTestId(`manage-org-add-${which}-input`) as HTMLInputElement;
@@ -120,32 +121,6 @@ describe('Manage organization, when a change met another', () => {
     byTestId(`manage-org-add-${which}-submit`)!.click();
     await flushPromises();
   }
-
-  it.each(['admin', 'member'] as const)(
-    'Add %s shows the sentence under its form, keeps the address, and reads the people again',
-    async (which) => {
-      refusedAsChanged(api.post);
-      const wrapper = mountDialog();
-      await flushPromises();
-
-      await add(which, 'new@example.com');
-
-      expect(byTestId(`manage-org-add-${which}-error`)?.textContent?.trim()).toBe(CHANGED);
-      expect((byTestId(`manage-org-add-${which}-input`) as HTMLInputElement).value).toBe(
-        'new@example.com',
-      );
-      expect(api.get).toHaveBeenCalledWith('/organizations');
-      // The rows are the organization as it now stands.
-      expect(allByTestId('manage-org-admin-email')).toEqual([
-        'admin@example.com',
-        'member@example.com',
-      ]);
-      expect(allByTestId('manage-org-member-email')).toEqual([]);
-      // The list behind reads it too.
-      expect(wrapper.emitted('changed')).toHaveLength(1);
-      wrapper.unmount();
-    },
-  );
 
   it('Remove keeps its confirmation open with the sentence, the people read again behind it', async () => {
     refusedAsChanged(api.delete);
@@ -196,15 +171,19 @@ describe('Manage organization, when a change met another', () => {
 
   it('any other refusal is shown as before, with no re-read', async () => {
     api.post.mockRejectedValue(
-      failure(400, { error: 'They are already an admin of this organization.' }),
+      failure(400, { error: 'admin@example.com is already an admin of this organization.' }),
     );
     const wrapper = mountDialog();
     await flushPromises();
 
-    await add('admin', 'admin@example.com');
+    await invite('admin', 'admin@example.com');
 
+    expect(api.post).toHaveBeenCalledWith('/organizations/org-1/invitations', {
+      email: 'admin@example.com',
+      place: 'admin',
+    });
     expect(byTestId('manage-org-add-admin-error')?.textContent?.trim()).toBe(
-      'They are already an admin of this organization.',
+      'admin@example.com is already an admin of this organization.',
     );
     expect(api.get).not.toHaveBeenCalledWith('/organizations');
     expect(wrapper.emitted('changed')).toBeUndefined();

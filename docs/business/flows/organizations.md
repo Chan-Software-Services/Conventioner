@@ -5,6 +5,10 @@ describes:
   - front-end/src/views/OrganizationsView.vue
   - front-end/src/__tests__/OrganizationsView.test.ts
   - front-end/src/__tests__/theMarketsAndOrganizationsAtScale.test.ts
+  - front-end/e2e/inviting-someone-to-an-organization.spec.ts
+  - front-end/src/components/InvitationsWaiting.vue
+  - front-end/src/components/InvitationSent.vue
+  - front-end/src/utils/useInvitationsWaiting.ts
 verified: 2026-11-25
 sources:
   - E26/F06/S02
@@ -28,6 +32,7 @@ sources:
   - T352
   - T411
   - T469
+  - T538
 ---
 
 # Organizations
@@ -71,32 +76,46 @@ Covered by:
 - [`theMarketsAndOrganizationsAtScale.test.ts`](../../../front-end/src/__tests__/theMarketsAndOrganizationsAtScale.test.ts) for the field at 12 and 13 and the first 50 of 51
 - `tier2.spec.ts` ("Organization CRUD")
 
-## B2. Add an admin or a member
+## B2. Invite an admin or a member
 
-**Status:** Works (walked live); a Viewer's market pages draw no control they cannot use (bug 37).
+**Status:** Works (walked live); a Viewer's market pages draw no control they cannot use (bug 37); inviting as of T538, driven by `inviting-someone-to-an-organization.spec.ts`.
 
 1. On an organization card, "Manage"; or Manage market's "Manage organization", under its "Users with access" ([L3](ending-and-managing-a-market.md#l3-manage-who-has-access)), which opens `/organizations?manage=<id>`: the page ([`OrganizationsView.vue`](../../../front-end/src/views/OrganizationsView.vue)) opens that organization's Manage organization once its list holds it, and drops the key when the dialog closes, or at once when it names none of the reader's organizations, so a refresh or Back does not open it again.
-2. Under Admins, "Add admin", enter an existing account's email, "Add"; under Members, "Add member" likewise.
-3. Expect the person listed and the dialog still open (closing is not saving).
-   Admins and Members are each a [list frame](../../design-system.md), so 150 members never push the sections below thousands of pixels down: Members says "Showing 50 of 150", draws 50 rows and "Show 50 more", and past 12 people has a field, "Find in admins" or "Find in members", that finds by any part of an address, capitals aside, since an account holds no name.
+2. Under Admins, "Invite admin", the owner's alone; under Members, "Invite member", the owner's and the admins'.
+   Each adds a person by inviting them, since nobody joins an organization unasked ([a person accepts before they join](../rules/a-person-accepts-before-they-join.md), T538): the field "Email address", "Send invitation" and "Cancel" on one row, or on a phone the field on a line above the two buttons; under it, "They get an email, and join once they accept it signed in with this address.".
+3. Every address is answered alike, whether or not it has an account: the field empties, the row stays open for the next address, and "Invitation sent to <address>." is said beneath it, as a screen reader hears it; when the email could not be sent, "<address> is invited, but the email could not be sent. Invite them again to send it." is said in its place, in the warning's yellow rather than the sent line's green, since something was not done ([`InvitationSent.vue`](../../../front-end/src/components/InvitationSent.vue)).
+   Inviting an address already invited replaces its invitation, with the place chosen, a new email and a new 14 days, so inviting again is how it is sent again.
+   An address already in the organization is refused beneath the row in the server's words, brought into view as the row may be the last in the body: "<address> owns this organization.", "<address> is already an admin of this organization.", or "<address> is already a member of this organization.", which "Invite admin" follows with "Make them an admin from their row." ([B3a](#b3a-make-an-admin-a-member-or-a-member-an-admin)); so is an address that does not read as one, and too many invitations in a short time, with how long to wait; the address is kept.
+4. "Invited", after Members, for the owner and the admins and only while an invitation waits, lists each invitation newest first: its address, "Invited as admin, until 8 December, 16:44" or "Invited as member, until ..." (the moment it ends in the reader's own time), and "Withdraw" where the reader may invite to that place: the owner on every row, an admin on the member ones.
+   A member sees no "Invited", and their dialog makes no read of it.
+   It is Manage market's "Invited" ([L3](ending-and-managing-a-market.md#l3-manage-who-has-access)): [`InvitationsWaiting.vue`](../../../front-end/src/components/InvitationsWaiting.vue) over [`useInvitationsWaiting`](../../../front-end/src/utils/useInvitationsWaiting.ts), in a section of its own that stays mounted, hidden, while nothing waits, so withdrawing the last invitation still closes its confirmation.
+   Admins, Members and Invited are each a [list frame](../../design-system.md), so 150 members never push the sections below thousands of pixels down: Members says "Showing 50 of 150", draws 50 rows and "Show 50 more", and past 12 has a field, "Find in admins", "Find in members" or "Find in invited", that finds by any part of an address, capitals aside, since an account holds no name.
    The words last as long as the dialog and never reach the address.
-   On a list with a find field, or words in it, the field takes the address just added, so their row is the one shown; clearing the field shows the whole list.
    An address breaks before its "@" or a dot, never just after a hyphen, drawn by [`EmailAddress.vue`](../../../front-end/src/components/EmailAddress.vue).
-4. Sign in as that person: an admin runs every market of the organization as its Admin (Manage on each market's card, the rail's phase moves, the seats on Assignments), and a member sees every one as a Viewer; each market's Manage market lists them as "Admin, through <organization>" or "Viewer, through <organization>".
+   The invitations are a read of their own, made as the dialog opens and again after each invitation and withdrawal; when it fails, "Could not read the invitations." with "Try again" stands in its place, and the rest of the dialog works.
+5. Nobody invited is under Admins or Members, or in any count, until they accept on their [Invitations page](answering-an-invitation.md); the dialog then lists them in their place when it next reads the organization.
+   Signed in as that person: an admin runs every market of the organization as its Admin (Manage on each market's card, the rail's phase moves, the seats on Assignments), and a member sees every one as a Viewer; each market's Manage market lists them as "Admin, through <organization>" or "Viewer, through <organization>".
+6. "Withdraw" asks first, in a destructive confirmation that opens on Cancel: "Withdraw the invitation to <address>?", then "They can no longer accept it.".
+   Cancel and Escape change nothing and give focus back to that Withdraw; "Withdraw" ends the invitation, the list re-reads in place with the dialog open, and focus goes to "Invited", or to Members when none is left.
+   An invitation already accepted, declined, ended or withdrawn is read as withdrawn, closing the confirmation and re-reading the list and Admins and Members, so one accepted meanwhile is in its place; one sent again meanwhile, to the other place, is not withdrawn: the confirmation says "That invitation was sent again meanwhile. Read the invitations again, and withdraw it if you still mean to." and the list behind it is re-read.
 
-Each add belongs to the dialog it was sent from (T411): while "Add" and the list's re-read are out nothing closes Manage organization, and a second press sends nothing.
-An answer that lands after Manage organization was closed, or opened on another organization, writes nothing into the one open, its re-read included; the list behind still reads a change that landed.
+Each invitation and withdrawal belongs to the dialog it was sent from (T411): while "Send invitation" and the invitations' re-read are out nothing closes Manage organization, and while a withdrawal and its re-read are out nothing closes its confirmation; a second press sends nothing.
+An answer that lands after Manage organization was closed, or opened on another organization, writes nothing into the one open, its re-read of the invitations included.
+The routes that placed a person at once, `POST /organizations/<id>/admins` and `/members`, remain on the server until they are removed; no screen calls them.
 
-Branches: an email with no account, someone already in the organization, an Admin trying Owner-only actions.
+Branches: an address already in the organization, a member invited as an admin, an admin's Withdraw on an admin's invitation (not drawn, and refused by the server), an Admin trying Owner-only actions.
 Covered by:
 
 - `access-control.spec.ts`
 - [`an-address-breaks-only-before-its-at.spec.ts`](../../../front-end/e2e/an-address-breaks-only-before-its-at.spec.ts) (its rows)
-- `dialog-idiom.spec.ts`
+- `dialog-idiom.spec.ts` (two invitations in a row, and a refusal keeping the address)
 - [`everyone-with-access.spec.ts`](../../../front-end/e2e/everyone-with-access.spec.ts) (Manage organization from its address)
-- [`manageOrganizationPeople.test.ts`](../../../front-end/src/__tests__/manageOrganizationPeople.test.ts) (the shown count kept through a removal, someone just added found until the field is cleared, and each add held, sent once, and its answer kept out of Manage organization opened on another organization)
+- [`inviting-someone-to-an-organization.spec.ts`](../../../front-end/e2e/inviting-someone-to-an-organization.spec.ts) (an address with an account and one without each answered "Invitation sent to <address>." in each row and waiting under "Invited", nobody under Admins or Members; a member invited as an admin pointed at "Make admin"; a withdrawal asked first, Cancel's focus and the row gone; the invitee accepting and listed under Admins; an admin's Withdraw on the member invitations alone; at 1440 and 390, each address the run's own and what it left withdrawn after it)
+- [`manageOrganizationInvites.test.ts`](../../../front-end/src/__tests__/manageOrganizationInvites.test.ts) (the rows' words, the sent and mail lines, the limit and a refusal in the server's words, "Invited" and its rows, where it stands, its find and pages, who reads it and who may withdraw, its failed read, and the withdrawal asked first, done, read as done on a 404 with the people read again so one accepted meanwhile shows, and said on a 409, each held, sent once, and kept out of Manage organization opened on another organization)
+- [`manageOrganizationPeople.test.ts`](../../../front-end/src/__tests__/manageOrganizationPeople.test.ts) (the shown count kept through a removal, and a refusal and a re-read kept out of Manage organization opened on another organization)
 - `OrganizationsView.test.ts` for the key it opens on and drops
 - [`people-at-scale-organization.spec.ts`](../../../front-end/e2e/people-at-scale-organization.spec.ts) (Members at 150 people: a page at a time, finding one member, the place kept; on a phone at 390 and 320)
+- `screen-sweeps-*.spec.ts`, the sweeps' states "the manage-organization dialog, its people and both invite rows" and "the manage-organization dialog, invitations waiting"
 - `screens-match-roles.spec.ts` ("an organization admin with no role on the market")
 - `tier2.spec.ts`
 
@@ -133,7 +152,7 @@ Each asks first, in a confirmation that is not destructive, since another change
 Cancel and Escape change nothing and give focus back to the row's button; confirming moves them to the other list in place, where they keep their place in the organization's order, with the dialog open and focus on the list they now stand in, and the History says "<owner> changed <email> from Admin to Member" or back.
 Someone removed meanwhile is read as done, the list re-read without them; any other refusal is said in the confirmation, and one that met another change to the same people is read again behind it ([the organization's people](../../implementation/modules/organization-people.md#make-member-and-make-admin)).
 Nothing closes the confirmation while the change and its re-read are out, and a second press sends nothing (T411).
-Typing a member's address into "Add admin" still makes them an admin, listed under Admins alone.
+A member's address typed into "Invite admin" is refused, "<address> is already a member of this organization. Make them an admin from their row.", since "Make admin" is how a member becomes an admin.
 Covered by:
 
 - [`an-organizations-people-change-place.spec.ts`](../../../front-end/e2e/an-organizations-people-change-place.spec.ts) at 1440 and 390

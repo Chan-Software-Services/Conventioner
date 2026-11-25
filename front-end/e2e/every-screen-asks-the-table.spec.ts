@@ -9,6 +9,7 @@ import {
 } from './helpers/seedPhaseMarket';
 import { seedPublishedMarketWithAssignments } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { ApplicationMonitorPage } from './pages/ApplicationMonitorPage';
 import { ApplicationsAllPage } from './pages/ApplicationsAllPage';
@@ -91,10 +92,7 @@ test.beforeAll(async ({ request }) => {
   // The seeds sign the request in as the owner, who gives each person their role on each market.
   for (const marketId of Object.values(markets)) {
     for (const [role, person] of Object.entries(PEOPLE)) {
-      const res = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-        data: { user_email: person.email, role },
-      });
-      expect(res.ok(), await res.text()).toBeTruthy();
+      await grantMarketRole(request, marketId, person, role as Role);
     }
   }
 });

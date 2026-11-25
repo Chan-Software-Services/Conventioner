@@ -493,15 +493,14 @@ describe('Manage market asks before it changes a role', () => {
     wrapper.unmount();
   });
 
-  it('takes the words away once the refused person is added back, with their row', async () => {
+  it('takes the words away once the refused person is invited again, their row back only once they accept', async () => {
     api.put.mockImplementation(async () => {
       // Someone else removed them first.
       served = market([]);
       throw refusing(400, 'User does not have a role in this market');
     });
-    api.post.mockImplementation(async () => {
-      served = market([person({ role: MarketRole.Editor, marketRole: MarketRole.Editor })]);
-      return { data: {} };
+    api.post.mockResolvedValue({
+      data: { invitation: { id: 'inv-1', email: EMAIL, role: 'editor' }, emailed: true },
     });
     const wrapper = await open();
     await choose(MarketRole.Editor);
@@ -518,17 +517,20 @@ describe('Manage market asks before it changes a role', () => {
     byTestId('manage-market-add-user-submit')!.click();
     await flushPromises();
 
-    expect(select().value).toBe(MarketRole.Editor);
     expect(byTestId('manage-market-user-error')).toBeNull();
+    expect(byTestId('manage-market-role-select')).toBeNull();
+    expect(byTestId('manage-market-add-user-sent')!.textContent?.trim()).toBe(
+      `Invitation sent to ${EMAIL}.`,
+    );
     wrapper.unmount();
   });
 
-  it('keeps the words of a refusal when adding someone back is refused too', async () => {
+  it('keeps the words of a refusal when inviting them again is refused too', async () => {
     api.put.mockImplementation(async () => {
       served = market([]);
       throw refusing(400, 'User does not have a role in this market');
     });
-    api.post.mockRejectedValue(refusing(403, 'You may not add someone to this market'));
+    api.post.mockRejectedValue(refusing(403, 'You may not give a role on this market'));
     const wrapper = await open();
     await choose(MarketRole.Editor);
     byTestId('manage-market-role-change-submit-button')!.click();
@@ -544,7 +546,7 @@ describe('Manage market asks before it changes a role', () => {
     await flushPromises();
 
     expect(byTestId('manage-market-add-user-error')!.textContent?.trim()).toBe(
-      'You may not add someone to this market',
+      'You may not give a role on this market',
     );
     expect(byTestId('manage-market-user-error')!.textContent?.trim()).toBe(
       `${EMAIL}: User does not have a role in this market`,

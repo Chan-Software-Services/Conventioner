@@ -2,6 +2,7 @@ import type { APIRequestContext, Page } from '@playwright/test';
 import { test, expect, TEST_USER, BACKEND_URL, NewMarketPage, OrganizationsPage } from './fixtures';
 import { loginViaApi } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { placeInOrganization } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { ManageMarketPage } from './pages/ManageMarketPage';
 
@@ -41,16 +42,8 @@ test.beforeAll(async ({ request }) => {
     organizations: Array<{ id: string; name: string }>;
   };
   orgId = organizations.find((org) => org.name === ORG_NAME)!.id;
-  await ok(
-    await request.post(`${BACKEND_URL}/organizations/${orgId}/admins`, {
-      data: { user_email: ADMIN.email },
-    }),
-  );
-  await ok(
-    await request.post(`${BACKEND_URL}/organizations/${orgId}/members`, {
-      data: { user_email: MEMBER.email },
-    }),
-  );
+  await placeInOrganization(request, orgId, ADMIN, 'admin');
+  await placeInOrganization(request, orgId, MEMBER, 'member');
   // The market created before the default changes.
   await ok(
     await request.post(`${BACKEND_URL}/markets`, {

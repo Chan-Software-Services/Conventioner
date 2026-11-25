@@ -966,7 +966,62 @@ describe('in Manage market', () => {
     expect(historyRead().at(-1)![0]).toBe('/markets/market-1/history?vendor=cy%40ember.test');
   });
 
-  it('puts focus in the field "Add user" opens, and back on it when the row closes', async () => {
+  it('reads its first page again after an invitation sent and one withdrawn', async () => {
+    const mine = {
+      ...market(null),
+      actionRefusals: {
+        'read-history': null,
+        'manage-editors-and-viewers': null,
+        'manage-admins': null,
+      },
+    } as unknown as Market;
+    const waiting = {
+      id: 'inv-1',
+      email: 'newcomer@example.test',
+      role: 'editor',
+      invitedBy: 'owner@example.com',
+      sentAt: '2026-11-24T08:44:00Z',
+      endsAt: '2026-12-08T08:44:00Z',
+    };
+    let invited: (typeof waiting)[] = [];
+    api.get.mockImplementation(async (url: string) => {
+      if (url === '/markets/market-1') return { data: { market: mine } };
+      if (url === '/markets/market-1/invitations') return { data: { invitations: invited } };
+      return { data: { entries: [], next: null, vendorNames: {}, actors: [], groups: [] } };
+    });
+    api.post.mockImplementation(async () => {
+      invited = [waiting];
+      return { data: { invitation: waiting, emailed: true } };
+    });
+    api.delete.mockImplementation(async () => {
+      invited = [];
+      return { data: { message: 'Invitation withdrawn' } };
+    });
+    const wrapper = mount(ManageMarketOverlay, {
+      props: { manageOpen: true, market: mine },
+      global: { stubs: { Teleport: true, RouterLink: RouterLinkStub } },
+      attachTo: document.body,
+    });
+    await flushPromises();
+    await wrapper.get('[data-testid="manage-market-history-toggle"]').trigger('click');
+    await flushPromises();
+    const before = historyRead().length;
+
+    await wrapper.get('[data-testid="manage-market-add-user-button"]').trigger('click');
+    await wrapper.get('[data-testid="manage-market-add-user-input"]').setValue(waiting.email);
+    await wrapper.get('.add-user-form').trigger('submit');
+    await flushPromises();
+    expect(historyRead()).toHaveLength(before + 1);
+
+    await wrapper.get('[data-testid="manage-market-invited-withdraw"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="manage-market-withdraw-window"] form').trigger('submit');
+    await flushPromises();
+    expect(historyRead()).toHaveLength(before + 2);
+    wrapper.unmount();
+  });
+
+  it('puts focus in the field "Invite someone" opens, and back on it when the row closes', async () => {
     const mine = {
       ...market(null),
       actionRefusals: {

@@ -3,6 +3,9 @@
  * and Market Setup's failed plan save read in yellow, beside the Vendors row's red. Yellow is a
  * warning's.
  *
+ * A line saying something was not done that is no refusal, the invitation made whose email could
+ * not be sent, reads in the warning's yellow, never in the sent line's green (T597).
+ *
  * Read from the stylesheets that ship, as `primitives.test.ts` reads its own: happy-dom applies
  * none, so a mounted component would assert nothing.
  */
@@ -49,5 +52,18 @@ describe('a refusal', () => {
     ],
   ])('reads in the same red on %s', (_where, file, selector) => {
     expect(colourOf(file, selector)).toBe(red);
+  });
+});
+
+describe('an invitation whose email could not be sent', () => {
+  const file = 'components/InvitationSent.vue';
+
+  it("reads in the warning's yellow, the ink that reaches AA on the dialog's white", () => {
+    expect(colourOf(file, '.invite-not-emailed')).toBe('var(--mm-text-yellow)');
+  });
+
+  it("does not read in the sent line's green", () => {
+    expect(colourOf(file, '.invite-sent')).toBe('var(--mm-text-green)');
+    expect(colourOf(file, '.invite-not-emailed')).not.toBe(colourOf(file, '.invite-sent'));
   });
 });

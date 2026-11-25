@@ -10,6 +10,7 @@ import {
 } from './helpers/seedApplicantMarket';
 import { marketScreenPath, vendorPagePath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { hideDevToolsPanel } from './helpers/hideDevToolsPanel';
 
 /**
@@ -37,10 +38,7 @@ async function draftWithPeople(request: APIRequestContext) {
     { setupObject: planSetupObject([DATE]), draft: true },
   );
   for (const email of [ANA, BEN]) {
-    const res = await request.post(`${BACKEND_URL}/markets/${market.marketId}/roles`, {
-      data: { user_email: email, role: 'viewer' },
-    });
-    expect(res.ok(), await res.text()).toBeTruthy();
+    await grantMarketRole(request, market.marketId, { email, password: PASSWORD }, 'viewer');
   }
   return market;
 }
