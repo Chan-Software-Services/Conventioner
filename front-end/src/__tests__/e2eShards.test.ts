@@ -5,7 +5,18 @@
  * itself and runs its own hand, so the dealing must be the same on every runner and must hand every
  * spec file to exactly one shard.
  */
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -20,6 +31,7 @@ import {
   type DealRecord,
   defaultSeconds,
   fileFilter,
+  filesToDeal,
   type GitHubReads,
   parseShard,
   parseTimings,
@@ -129,6 +141,197 @@ describe('dealShards', () => {
   it('refuses a shard count below one, and a file listed twice', () => {
     expect(() => dealShards(FILES, SECONDS, 0)).toThrow();
     expect(() => dealShards([...FILES, FILES[0]!], SECONDS, 6)).toThrow(/twice/);
+  });
+});
+
+describe('filesToDeal', () => {
+  const listed = ['a.spec.ts', 'b.spec.ts', 'c.spec.ts', 'd.spec.ts'];
+
+  it('deals the whole list when no names are given', () => {
+    expect(filesToDeal(listed, undefined)).toEqual({
+      scope: 'whole',
+      files: listed,
+      unlisted: [],
+    });
+  });
+
+  it('deals the named list alone, in alphabetical order, each file once', () => {
+    expect(filesToDeal(listed, ['c.spec.ts', 'a.spec.ts', 'c.spec.ts'])).toEqual({
+      scope: 'named',
+      files: ['a.spec.ts', 'c.spec.ts'],
+      unlisted: [],
+    });
+  });
+
+  it('names every named file Playwright does not list, in order, and none when all are listed', () => {
+    // The shard fails on any of them, so each is named, not the first alone.
+    expect(
+      filesToDeal(listed, ['y.spec.ts', 'b.spec.ts', 'x.spec.ts', 'y.spec.ts']).unlisted,
+    ).toEqual(['x.spec.ts', 'y.spec.ts']);
+    expect(filesToDeal(listed, listed).unlisted).toEqual([]);
+  });
+
+  it('deals an empty named list as named, with no files, not as the whole suite', () => {
+    expect(filesToDeal(listed, [])).toEqual({ scope: 'named', files: [], unlisted: [] });
+  });
+
+  it('puts each named file in exactly one hand, and no other file in any', () => {
+    const named = FILES.filter((_, n) => n % 3 === 0);
+    const hands = dealShards(filesToDeal(FILES, named).files, SECONDS, 4);
+    expect(hands.flat().sort()).toEqual(named);
+  });
+});
+
+/**
+ * A shard run from the command line, as CI's `e2e-shard` job runs it: a copy of the script in a
+ * folder of its own, since it writes its deal record beside itself, with a stand-in for `npx` that
+ * lists the suite, or the files the filters name, and notes what Playwright was asked to run.
+ */
+describe('a shard from the command line', () => {
+  const ROOT = '/repo/front-end/e2e';
+  const SUITE = ['a.spec.ts', 'b.spec.ts', 'c.spec.ts', 'd.spec.ts'];
+  const DEALT_BY = {
+    source: 'the test timings',
+    timings: { 'a.spec.ts': 60, 'b.spec.ts': 120, 'c.spec.ts': 180, 'd.spec.ts': 240 },
+  };
+  const NPX = `#!${process.execPath}
+const args = process.argv.slice(2);
+if (args.includes('--list')) {
+  const filters = args.filter((arg) => arg.startsWith('/')).map((arg) => new RegExp(arg.slice(1, -1)));
+  const files = ${JSON.stringify(SUITE)}.filter(
+    (file) => filters.length === 0 || filters.some((filter) => filter.test('${ROOT}/' + file)),
+  );
+  console.log(JSON.stringify({ config: { rootDir: '${ROOT}' }, suites: files.map((file) => ({ file })) }));
+} else {
+  require('node:fs').appendFileSync(process.env.RAN, JSON.stringify(args) + '\\n');
+}
+`;
+
+  /** Runs the script with the arguments `args` makes of the paths of its two files: the timings,
+   * and the `--specs` file, which holds `specs` when that is given and is missing otherwise. */
+  function run(args: (files: { timings: string; specs: string }) => string[], specs?: string) {
+    const folder = mkdtempSync(join(tmpdir(), 'e2e-shards-'));
+    try {
+      const scripts = join(folder, 'scripts');
+      const bin = join(folder, 'bin');
+      mkdirSync(scripts);
+      mkdirSync(bin);
+      for (const name of ['e2e-shards.ts', 'e2e-shard-timings.json']) {
+        copyFileSync(join(dirname(timingsFile()), name), join(scripts, name));
+      }
+      writeFileSync(join(scripts, 'package.json'), '{ "type": "module" }');
+      writeFileSync(join(bin, 'npx'), NPX, { mode: 0o755 });
+      const files = {
+        timings: join(folder, 'timings.json'),
+        specs: join(folder, 'specs.json'),
+      };
+      writeFileSync(files.timings, JSON.stringify(DEALT_BY));
+      if (specs !== undefined) writeFileSync(files.specs, specs);
+      const ran = join(folder, 'ran');
+      const shard = spawnSync(process.execPath, [join(scripts, 'e2e-shards.ts'), ...args(files)], {
+        encoding: 'utf8',
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, RAN: ran },
+      });
+      const lines = (path: string) =>
+        existsSync(path) ? readFileSync(path, 'utf8').trim().split('\n') : [];
+      const [record] = lines(join(folder, 'test-results', 'e2e-deal.json'));
+      return {
+        code: shard.status,
+        said: shard.stdout + shard.stderr,
+        specsFile: files.specs,
+        record: record === undefined ? undefined : (JSON.parse(record) as DealRecord),
+        ran: lines(ran).map((line) => JSON.parse(line) as string[]),
+      };
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
+  }
+
+  const named = JSON.stringify(['d.spec.ts', 'b.spec.ts']);
+
+  it('deals the named list alone, records that it did, and runs its hand', () => {
+    const shard = run(
+      ({ timings, specs }) => [
+        '--shard=1/2',
+        `--specs=${specs}`,
+        `--timings=${timings}`,
+        '--retries=0',
+      ],
+      named,
+    );
+    expect(shard.code, shard.said).toBe(0);
+    expect(shard.said).toContain(
+      'e2e shard 1/2: 1 of the 2 named spec files (of 4 listed), ' +
+        'about 4.0 minutes of tests by the test timings',
+    );
+    expect(shard.record).toEqual({
+      shard: 1,
+      total: 2,
+      ...DEALT_BY,
+      scope: 'named',
+      listed: 4,
+      files: ['b.spec.ts', 'd.spec.ts'],
+      hand: ['d.spec.ts'],
+    });
+    expect(shard.ran).toEqual([
+      ['playwright', 'test', fileFilter(ROOT, 'd.spec.ts'), '--retries=0'],
+    ]);
+  });
+
+  it('deals every listed file without --specs, and records the whole suite', () => {
+    const shard = run(({ timings }) => ['--shard=2/2', `--timings=${timings}`]);
+    expect(shard.code, shard.said).toBe(0);
+    expect(shard.said).toContain(
+      'e2e shard 2/2: 2 of 4 spec files, about 5.0 minutes of tests by the test timings',
+    );
+    expect(shard.record).toMatchObject({
+      scope: 'whole',
+      listed: 4,
+      files: SUITE,
+      hand: ['b.spec.ts', 'c.spec.ts'],
+    });
+  });
+
+  it('fails before running anything, naming each named spec Playwright does not list', () => {
+    const shard = run(
+      ({ timings, specs }) => ['--shard=1/2', `--timings=${timings}`, `--specs=${specs}`],
+      JSON.stringify(['y.spec.ts', 'b.spec.ts', 'x.spec.ts']),
+    );
+    expect(shard.code, shard.said).toBe(1);
+    for (const file of ['x.spec.ts', 'y.spec.ts']) {
+      expect(shard.said).toContain(
+        `::error::${file} is named by the selection but Playwright does not list it`,
+      );
+    }
+    expect(shard.ran).toEqual([]);
+    // The record is what tells the `e2e` job's check what this shard was asked to deal.
+    expect(shard.record).toMatchObject({
+      scope: 'named',
+      listed: 4,
+      files: ['b.spec.ts', 'x.spec.ts', 'y.spec.ts'],
+      hand: [],
+    });
+  });
+
+  it('fails on a --specs file that is not a JSON array of strings, naming the file', () => {
+    for (const bad of [undefined, 'not json', '{}', '"a.spec.ts"', '["a.spec.ts", 1]']) {
+      const shard = run(({ specs }) => ['--shard=1/2', `--specs=${specs}`], bad);
+      expect(shard.code, `${bad}: ${shard.said}`).toBe(1);
+      expect(shard.said, String(bad)).toContain(`::error::${shard.specsFile}`);
+      expect(shard.ran, String(bad)).toEqual([]);
+    }
+  });
+
+  it('refuses a second --specs or --timings as a usage error', () => {
+    for (const flag of ['specs', 'timings'] as const) {
+      const shard = run(
+        (files) => ['--shard=1/2', `--${flag}=${files[flag]}`, `--${flag}=${files[flag]}`],
+        named,
+      );
+      expect(shard.code, shard.said).toBe(2);
+      expect(shard.said).toContain('--specs=<file>');
+      expect(shard.ran).toEqual([]);
+    }
   });
 });
 
@@ -409,7 +612,16 @@ describe('checkShards', () => {
   function shards(total = 2, source = SOURCE, dealtBy: Record<string, number> = timings) {
     return dealShards(files, dealtBy, total).map((hand, n) => ({
       shard: n + 1,
-      deal: { shard: n + 1, total, source, timings: dealtBy, files, hand } satisfies DealRecord,
+      deal: {
+        shard: n + 1,
+        total,
+        source,
+        timings: dealtBy,
+        scope: 'whole',
+        listed: files.length,
+        files,
+        hand,
+      } satisfies DealRecord,
       report: report(Object.fromEntries(hand.map((file) => [file, [[timings[file]! * 1000]]]))),
     }));
   }
@@ -475,6 +687,8 @@ describe('dealtBy', () => {
     total: 3,
     source,
     timings: {},
+    scope: 'whole',
+    listed: 0,
     files: [],
     hand: [],
   });
@@ -503,6 +717,8 @@ describe('publishedTimings', () => {
       total: 2,
       source: 'x',
       timings,
+      scope: 'whole',
+      listed: files.length,
       files,
       hand,
     });
