@@ -18,7 +18,8 @@ What it writes:
 
 It refuses, writing and dropping nothing, while any organization holds no people map (none, or one
 that is not a map), since its lists are then the only record of its people: it names each by id
-and says how to fold it first. The dry run refuses the same way.
+and says how to fold one with no ``people`` first. The fold leaves alone one whose ``people`` is
+there but not a map, which is repaired by hand. The dry run refuses the same way.
 
 Safe to run repeatedly, and beside another run: a second run finds nothing to remove and no index
 to drop. ``--dry-run`` prints what it would remove and drop, and writes nothing.
