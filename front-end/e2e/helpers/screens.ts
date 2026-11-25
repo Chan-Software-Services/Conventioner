@@ -579,9 +579,9 @@ export const SCREEN_GROUPS = {
       ),
     },
     {
-      // Its "Add user" row open (T142): on a phone the row squeezed its email field and its role
-      // to 66px each beside Add and Cancel, and no state opened it.
-      name: 'the manage-market dialog, adding a user',
+      // Its "Invite someone" row open (T142): on a phone the row squeezed its email field and its
+      // role to 66px each beside Add and Cancel, and no state opened it.
+      name: 'the manage-market dialog, inviting someone',
       who: 'organizer',
       sizes: FITS_A_PHONE,
       open: at(
@@ -590,6 +590,19 @@ export const SCREEN_GROUPS = {
         ['market-card-manage-button', 'manage-market-window'],
         ['manage-market-add-user-button', 'manage-market-add-user-input'],
       ),
+    },
+    {
+      // Two invitations waiting under "Invited" (T538), one to a long address: each row its
+      // address over its role and when it ends, beside Withdraw, or above it on a phone.
+      name: 'the manage-market dialog, two invitations waiting',
+      who: 'organizer',
+      sizes: FITS_A_PHONE,
+      open: async (page: Page, seed: TheScreensSeed) => {
+        await managing('draft')(page, seed);
+        await expect(page.getByTestId('manage-market-invited-row')).toHaveCount(2, {
+          timeout: 15000,
+        });
+      },
     },
     {
       // A second member whose address is long (T142): the row gives it its own line rather than

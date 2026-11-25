@@ -19,6 +19,7 @@ import {
   type PeopleAtScaleSeed,
 } from './helpers/seedPeopleAtScale';
 import { loginViaApi } from './helpers/seeds';
+import { grantMarketRole } from './helpers/grantMarketRole';
 
 /**
  * Manage market's people at 100+ (T204).
@@ -28,8 +29,9 @@ import { loginViaApi } from './helpers/seeds';
  * them all in one read of the accounts, and Manage market opens with as many requests as on a
  * market of one person.
  *
- * "Users with access" drew every one of the 154 people, about 4,900px before Add user at a desk. It
- * is a list frame now: a find field, a count line, 50 rows and "Show N more".
+ * "Users with access" drew every one of the 154 people, about 4,900px before "Add user", now
+ * "Invite someone", at a desk. It is a list frame now: a find field, a count line, 50 rows and
+ * "Show N more".
  *
  * The history's "Who" finds a person by typing, among however many there are.
  */
@@ -204,10 +206,12 @@ for (const size of PHONE_AND_DESK) {
       });
       try {
         await loginViaApi(api, BACKEND_URL, admin, PEOPLE_AT_SCALE_PASSWORD);
-        const granted = await api.post(`${BACKEND_URL}/markets/${seed.marketId}/roles`, {
-          data: { user_email: seed.members.at(-1)!.email, role: 'editor' },
-        });
-        expect(granted.ok(), await granted.text()).toBeTruthy();
+        await grantMarketRole(
+          api,
+          seed.marketId,
+          { email: seed.members.at(-1)!.email, password: PEOPLE_AT_SCALE_PASSWORD },
+          'editor',
+        );
       } finally {
         await api.dispose();
       }

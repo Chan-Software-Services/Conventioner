@@ -12,6 +12,7 @@ import { marketScreenPath, marketSetupPath, vendorPagePath } from './helpers/mar
 import { seedAssignedMarket } from './helpers/seedAssignedMarket';
 import { SEED_MARKET_DATE, ensureTestOrgAuthenticated } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { acceptInvitation } from './helpers/invitations';
 import { MarketsPage } from './pages/MarketsPage';
 
 const SECOND_USER = {
@@ -88,6 +89,7 @@ test.describe('Tier 2 - Organization CRUD', () => {
 
 test.describe('Tier 2 - Market role management', () => {
   let marketName: string;
+  let marketId: string;
 
   test.beforeAll(async ({ request }) => {
     ensureVerifiedUser(SECOND_USER.email, SECOND_USER.password);
@@ -114,9 +116,10 @@ test.describe('Tier 2 - Market role management', () => {
     if (!marketRes.ok()) {
       throw new Error(`Market creation failed: ${marketRes.status()} ${await marketRes.text()}`);
     }
+    marketId = ((await marketRes.json()) as { market_id: string }).market_id;
   });
 
-  test('add user, change role, and remove user from market', async ({
+  test('invite a user who accepts, change their role, and remove them from the market', async ({
     authenticatedPage: page,
   }) => {
     const markets = new MarketsPage(page);
@@ -130,8 +133,15 @@ test.describe('Tier 2 - Market role management', () => {
     const manageMarket = new ManageMarketPage(page);
     await manageMarket.waitForOverlay();
 
-    await manageMarket.addUser(SECOND_USER.email, 'editor');
+    await manageMarket.invite(SECOND_USER.email, 'editor');
+    await expect(manageMarket.addUserSent).toHaveText(`Invitation sent to ${SECOND_USER.email}.`);
+    await expect(manageMarket.invitation(SECOND_USER.email)).toBeVisible();
 
+    // They join once they accept; Manage market reads who has access again as it opens.
+    await acceptInvitation(SECOND_USER, marketId);
+    await page.getByTestId('manage-market-close-button').click();
+    await manageButton.click();
+    await manageMarket.waitForOverlay();
     await expect(page.locator('.user-card').filter({ hasText: SECOND_USER.email })).toBeVisible({
       timeout: 5000,
     });

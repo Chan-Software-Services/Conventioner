@@ -50,7 +50,10 @@ export interface SeededMarket {
 }
 
 export interface TheScreensSeed {
-  /** A draft with a 70-character name, a four-date, three-section plan and a long form. */
+  /**
+   * A draft with a 70-character name, a four-date, three-section plan and a long form, and two
+   * invitations waiting on it, one to a long address (`twoInvitationsWaiting`).
+   */
   draft: SeededMarket;
   /** A draft whose Upper Hall layout has its floorplan and no scale yet (T257, `seedLayout`). */
   layout: SeededLayout;
@@ -316,6 +319,22 @@ async function invitationsForTheInvitee(
   if (!waiting.some((invitation) => invitation.kind === 'organization')) {
     await inviteToOrganization(api, organizationId, SCREENS_INVITEE.email, 'member');
   }
+}
+
+/**
+ * Two invitations waiting on `marketId`, an Admin's to a long address and a Viewer's, so Manage
+ * market draws its "Invited" (T538). Each seed's addresses are its own: every sweep file seeds, and
+ * an address is sent at most five invitations a quarter hour. Fixture data.
+ */
+async function twoInvitationsWaiting(api: APIRequestContext, marketId: string): Promise<void> {
+  const stamp = Date.now();
+  await inviteToMarket(
+    api,
+    marketId,
+    `e2e-screens-invited-organizer-${stamp}@riverside-makers.example.test`,
+    'admin',
+  );
+  await inviteToMarket(api, marketId, `e2e-screens-invited-${stamp}@example.test`, 'viewer');
 }
 
 /** The other reviewer of `dealt`, a Viewer on that market only; fixture data. */
@@ -836,6 +855,7 @@ export async function seedTheScreens(
   const { id: organizationId, ...organization } = await organizationWithPeople(api, backend);
   const ofTheOrganization = await organizationMarket(api, backend, email, organizationId);
   await invitationsForTheInvitee(api, big.marketId, organizationId);
+  await twoInvitationsWaiting(api, draft.marketId);
 
   const layout = await seedLayout(api, backend, email, password, { layout: true });
   const laidOut = await seedLayout(api, backend, email, password, {

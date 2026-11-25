@@ -216,7 +216,7 @@ test.describe('in a window too short to show the whole body', () => {
     expect(Math.abs(inset - 24)).toBeLessThanOrEqual(1);
   });
 
-  test("Manage market's Add row scrolls into view, and its form still submits by Enter", async ({
+  test("Manage market's invite row scrolls into view, and its form still submits by Enter", async ({
     authenticatedPage: page,
   }) => {
     await openManageMarket(page);
@@ -230,8 +230,9 @@ test.describe('in a window too short to show the whole body', () => {
     await expectShownInTheBody(body, field);
     await expectShownInTheBody(body, page.getByTestId('manage-market-add-user-submit'));
 
-    // Enter runs the row's own form, whose refusal names the address, with the dialog still open.
-    await field.fill('nobody-has-this-address@example.com');
+    // Enter runs the row's own form, whose refusal names the address, with the dialog still open:
+    // an address already on the market, since any other is invited.
+    await field.fill(TEST_USER.email);
     await field.press('Enter');
     await expect(page.getByTestId('manage-market-add-user-error')).toBeVisible();
     await expect(page.getByTestId('manage-market-window')).toBeVisible();
@@ -287,12 +288,18 @@ test.describe('in a window too short to show an Add row and its refusal', () => 
    * Refused with the form's foot at the body's foot, as a person who has scrolled there has it, so
    * the refusal arrives past the foot however many people the stack holds.
    */
-  async function refuse(page: Page, body: string, button: string, input: string) {
+  async function refuse(
+    page: Page,
+    body: string,
+    button: string,
+    input: string,
+    address = 'nobody-has-this-address@example.com',
+  ) {
     const add = page.getByTestId(button);
     await add.scrollIntoViewIfNeeded();
     await add.click();
     const field = page.getByTestId(input);
-    await field.fill('nobody-has-this-address@example.com');
+    await field.fill(address);
     const scroller = page.getByTestId(body);
     const form = (await field.locator('xpath=ancestor::form').boundingBox())!;
     const foot = (await scroller.boundingBox())!;
@@ -311,6 +318,8 @@ test.describe('in a window too short to show an Add row and its refusal', () => 
       'manage-market-body',
       'manage-market-add-user-button',
       'manage-market-add-user-input',
+      // Already on the market, so refused: any other address is invited.
+      TEST_USER.email,
     );
     await expectRefusalShown(
       page,
