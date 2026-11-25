@@ -12,6 +12,10 @@
 export const SERIAL_SPECS: readonly string[] = [
   // The fixture organizer's sessions: it ends TEST_USER's sessions.
   'a-failure-says-what-to-do',
+  // The sign-in counters: it fills an address's count, then asserts the limit past it.
+  'a-vendor-signs-in-past-others-wrong-codes',
+  // The sign-in counters: it fills an address's count, then asserts the limit past it.
+  'an-organizer-signs-in-past-others-wrong-tries',
   // The fixture organizer's whole market list.
   'finding-a-market',
   // The fixture organizer's whole market list.
