@@ -43,7 +43,7 @@ sources:
 # Invitations
 
 [`back-end/invitations.py`](../../../back-end/invitations.py) is the one owner of the `invitations` collection: offers, each sent to an address, of a role on one market or a place in one organization.
-Nothing else reads or writes it.
+Nothing else in the application reads or writes it; `reset_database.py` clears it with the other collections.
 The rule it keeps is [a person accepts before they join](../../business/rules/a-person-accepts-before-they-join.md), and why is [ADR 0047](../../adr/0047-a-person-joins-only-by-accepting-an-invitation.md).
 
 ## The store
