@@ -8,6 +8,7 @@ import {
 import { seedApplicationWithStatus } from './helpers/seedPhaseMarket';
 import { marketScreenPath, vendorPagePath } from './helpers/marketScreens';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 
 /**
@@ -46,8 +47,7 @@ test('a vendor who applies after the deal goes to the next reviewer in turn', as
     seedApplicationWithStatus(market.marketId, 'open', email);
   }
   for (const email of REVIEWERS) {
-    const res = await request.post(`${api}/roles`, { data: { user_email: email, role: 'viewer' } });
-    expect(res.ok(), await res.text()).toBeTruthy();
+    await grantMarketRole(request, market.marketId, { email, password: PASSWORD }, 'viewer');
   }
   const chosen = await request.put(`${api}/reviewers`, { data: { reviewers: REVIEWERS } });
   expect(chosen.ok(), await chosen.text()).toBeTruthy();
