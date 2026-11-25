@@ -234,6 +234,7 @@ UNIT_SUITES = [
     "npm run format:check",
     "npm run lint:check",
     "npm run lint:css",
+    "npm run design-md:check",
     "npm run type-check",
     "npm run test:unit",
     "npm run build-only",
@@ -298,7 +299,9 @@ def test_skip_e2e_runs_every_other_suite_and_leaves_playwright_to_ci(stubbed):
     assert "===== All tests passed =====" in result.stdout
 
 
-@pytest.mark.parametrize("check", ["format:check", "lint:check", "lint:css", "type-check"])
+@pytest.mark.parametrize(
+    "check", ["format:check", "lint:check", "lint:css", "design-md:check", "type-check"]
+)
 def test_a_failing_front_end_check_fails_the_run_before_the_unit_tests(stubbed, check):
     run, _ = stubbed
 
