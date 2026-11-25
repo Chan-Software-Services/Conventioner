@@ -267,10 +267,11 @@ let backEnd: string | undefined;
  * (`requestKey`, at `backendOrigin`).
  *
  * The class's `get`, `post`, `put`, `patch`, `delete` and `head` all call its `fetch` (Playwright
- * 1.64), so wrapping that once counts every context's calls, the `request` fixture's,
- * `page.request`'s and each `playwright.request.newContext()`'s alike. A call that throws counts
- * for none, and so does one started with no test running; one answered after its test ended
- * counts for the test it started in.
+ * 1.65; `theTestMapRecords.test.ts` fails should `get` or `post` stop doing so), so wrapping that
+ * once counts every context's calls, the `request` fixture's, `page.request`'s and each
+ * `playwright.request.newContext()`'s alike. A call that throws counts for none, and so does one
+ * started with no test running; one answered after its test ended counts for the test it started
+ * in.
  */
 export function recordApiCalls(context: APIRequestContext, backendOrigin: string): void {
   backEnd = new URL(backendOrigin).origin;
