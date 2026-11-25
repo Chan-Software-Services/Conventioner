@@ -1,13 +1,15 @@
 """What the mails write to the log: what was sent, and never to whom.
 
-An account's verification link, password reset link and sign-in code, and the email telling an
-account's owner that someone signed up with its address, each go to the address an organizer typed,
-and a vendor's sign-in code to the address a vendor typed. All five go through one ``send_mail``.
+An account's verification link, password reset link and sign-in code, the email telling an
+account's owner that someone signed up with its address, and an invitation, each go to the address
+an organizer typed, and a vendor's sign-in code to the address a vendor typed. All six go through
+one ``send_mail``.
 The log needs to know what was sent and whether it went, not where, so it names the email's kind,
 an exception's type alone and the provider's status code, and never the address, an exception's
 text or the provider's response body, which can each carry the address back.
 """
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -29,6 +31,13 @@ SENDS = [
     (email_mod.send_password_reset_email, "password reset"),
     (email_mod.send_otp_email, "sign-in code"),
     (lambda email, _secret: email_mod.send_account_exists_email(email), "existing account"),
+    (
+        lambda email, _secret: email_mod.send_invitation_email(
+            email, "inviter-logged@example.com", "Harbour Night Market", "market", "editor",
+            datetime(2026, 12, 8, tzinfo=timezone.utc),
+        ),
+        "invitation",
+    ),
     (
         lambda email, code: _send_code_email(
             email, code, "Harbour Night Market", "harbour-night-market", 1,

@@ -48,7 +48,7 @@ The states, the table cell by cell, and the owner's callers: [payments, and what
 - The owner never writes an Admin's amount on a day nobody holds, the read shows none as a line, and the migration drops any already stored.
 - Every write of `amounts_owed` the product makes goes through the owner, and the migration's holds what it read the same way; a test that plants a record writes the release before's shape, which the read covers.
 - Dropping the mirror is a later task's, once a release with this code has run.
-- Running the migration against production is a release step ([`docs/OPERATIONS.md`](../OPERATIONS.md#starting-a-database-and-migrations)).
+- Running the migration against production is a release step ([`docs/RELEASING.md`](../RELEASING.md#migrate_owed_day_statepy)).
 
 ## Considered and rejected
 

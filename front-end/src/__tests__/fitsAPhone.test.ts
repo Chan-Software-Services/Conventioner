@@ -17,6 +17,7 @@ describe('the places that fit a phone', () => {
   it.each([
     ['the markets list', '/markets'],
     ['Organizations', '/organizations'],
+    ['Invitations', '/invitations'],
     ['the door', `${MARKET}/attendance`],
     ['Tools', `${MARKET}/tools`],
     ['the Assignments page', `${MARKET}/assignments`],

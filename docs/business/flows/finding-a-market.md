@@ -75,6 +75,8 @@ The list fits a phone, since an organizer at the door finds the market there fir
 
 **What it says first** is about the account, asked of the server, and arrives with the list, so nothing moves when the answer lands.
 
+- **Invitations waiting:** above every other line, "You have an invitation waiting." or "You have 3 invitations waiting.", with "See invitations" linking to the Invitations page ([answering an invitation](answering-an-invitation.md)).
+  The invitations are read beside the markets and again with them; when none wait, or they cannot be read, nothing is said there, and the markets load as before (T538).
 - **Previously opened:** one line above the finder names the market this browser last opened ([its pointer](../../implementation/modules/market-store.md)), with its phase badge at a desk, and at 640px and below the name keeps the room.
   The whole line is one 44px control that opens the market, on the keyboard too, and a long name is cut with an ellipsis.
   It shows when that market is among the account's markets and the account has more than one, and it is not a result of the finder, so filters do not hide it.
@@ -90,6 +92,7 @@ Covered by:
 - `access-control.spec.ts`
 - `finding-a-market.spec.ts`, whose user owns 13 markets so its search is drawn
 - `markets-opening-words.spec.ts`
+- [`marketsOpeningWords.test.ts`](../../../front-end/src/__tests__/marketsOpeningWords.test.ts) for the invitations' line
 - [`theMarketsAndOrganizationsAtScale.test.ts`](../../../front-end/src/__tests__/theMarketsAndOrganizationsAtScale.test.ts) for the search at 12 and 13 and the first 50 of 51
 
 ## C3. Open a market by its address

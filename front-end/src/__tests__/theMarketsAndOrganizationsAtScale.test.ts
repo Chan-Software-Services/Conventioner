@@ -21,6 +21,10 @@ vi.mock('@/utils/organizations', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/utils/organizations')>()),
   fetchOrganizations: () => fetchOrganizations(),
 }));
+vi.mock('@/utils/invitations', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/utils/invitations')>()),
+  fetchInvitations: () => Promise.resolve([]),
+}));
 
 import MarketsView from '@/views/MarketsView.vue';
 import OrganizationsView from '@/views/OrganizationsView.vue';

@@ -155,7 +155,7 @@ Whether a run may happen is never the allocation's to say: it is the served `ass
 Each write goes through `write_market`, holding the revision rather than counting it, since the rows are unchanged and a count would read a published market as changed; a market changed meanwhile is judged again, up to three tries, then listed as skipped.
 It prints each market's id and what it sets, never a name or an address, and a count ("would set" on a dry run).
 It is safe to run again, and has no boot marker, since an unmigrated market reads correctly through `state_of`.
-When to run it: [`docs/OPERATIONS.md`](../../OPERATIONS.md#starting-a-database-and-migrations).
+When to run it: [`docs/RELEASING.md`](../../RELEASING.md#migrate_assignment_statepy).
 
 ## Sharp edges
 
