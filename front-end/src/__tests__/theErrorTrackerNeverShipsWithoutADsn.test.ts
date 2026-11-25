@@ -36,7 +36,7 @@ async function projectConfig(dsn: string): Promise<UserConfig> {
     VITE_ALLOW_INSECURE_LOCAL_DEV: process.env.VITE_ALLOW_INSECURE_LOCAL_DEV,
   };
   process.env.VITE_SENTRY_DSN = dsn;
-  // The config refuses a production build with no reCAPTCHA site key; these are never served.
+  // The config refuses a production build with no Turnstile site key; these are never served.
   process.env.VITE_ALLOW_INSECURE_LOCAL_DEV = 'true';
   try {
     const loaded = await loadConfigFromFile(

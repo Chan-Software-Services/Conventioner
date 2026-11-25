@@ -55,7 +55,7 @@ The SDK's `LoggingIntegration` is kept for breadcrumbs alone (`event_level=None`
 
 **Every event is built from the allowlist** (`_allowed_event`), never trimmed from the SDK's: the exception's type, module and frames (file, module, function, line, whether in the app), the log line's template and formatted words with every address replaced (`without_addresses`), its level and logger, log breadcrumbs under the same rule, the request's method and the route's rule with only the named variables filled in, those as tags, the rule as the transaction, and the environment (`VERCEL_ENV`, else `development`), the release (`BUILD_COMMIT`, when set) and the SDK's name and version.
 The SDK's own `data_collection` is set to collect nothing as well, and the integrations that switch themselves on for an installed library are off, so pymongo's query breadcrumbs never start.
-`trace_propagation_targets=[]` keeps the SDK's `sentry-trace` and `baggage` headers off every request the back end makes to Resend, Discord, Google or TypeSafe, which by default would carry the release and the environment.
+`trace_propagation_targets=[]` keeps the SDK's `sentry-trace` and `baggage` headers off every request the back end makes to Resend, Discord, Cloudflare or TypeSafe, which by default would carry the release and the environment.
 
 **The suite never sends.**
 `tests/conftest.py` removes `SENTRY_DSN` before anything imports the app, so a developer's exported DSN reaches no test.
@@ -79,7 +79,7 @@ Two modules, so the SDK never weighs on the first page.
   `noErrorTrackerWithoutDsn` in `vite.config.ts` holds it: a production build with a blank `VITE_SENTRY_DSN` fails when any chunk holds `errorTrackingClient.ts` or a module of `@sentry/`, naming each.
 - **The caps.** At most `QUEUE_LIMIT`, 10, items wait for the client, and at most `MAX_EVENTS_PER_PAGE`, 20, are sent in one page load; the rest are dropped, so a page failing in a loop spends little of the month's quota.
 - **The failed fetch of a page's code is never sent**: Chromium's, Safari's and Firefox's words for it, and Vite's preload helper's `Unable to preload CSS for` before a page whose code has its own CSS, are dropped before they are queued, since `pageFailed.ts` already answers it and every deploy makes some open tab meet it.
-- **A cross-origin script's error is never sent**: the browser gives the page only `Script error.`, with no error object and no file, for an error in a script of another origin, reCAPTCHA's among them, which says nothing and would spend quota.
+- **A cross-origin script's error is never sent**: the browser gives the page only `Script error.`, with no error object and no file, for an error in a script of another origin, Turnstile's among them, which says nothing and would spend quota.
 - **A chunk that cannot be fetched** (offline, or a deploy replaced it) leaves tracking off for that page load: the queue is dropped, nothing is retried, and nothing is thrown.
 
 **The client** makes a `BrowserClient` and a `Scope` of its own, never the SDK's global `init`, so nothing else in the page reports through it.

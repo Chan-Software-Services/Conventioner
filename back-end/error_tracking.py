@@ -12,7 +12,8 @@ its qualified type and its frames, never its message; a log line by its words wi
 replaced; a request by its method and its route's rule, with only ``NAMED_VIEW_ARGS`` filled in.
 
 Vercel freezes a function once it has answered, so an event raised in a request is flushed before
-the response leaves (``install``), and a boot refusal before its import fails (``_FlushingEventHandler``).
+the response leaves (``install``), and a boot refusal before its import fails
+(``_FlushingEventHandler``).
 
 The rule, and what each field is: docs/adr/0049-what-may-be-sent-to-the-error-tracker.md; the
 module: docs/implementation/modules/error-tracking.md.
@@ -116,8 +117,9 @@ def start(dsn: Optional[str] = None, transport: Any = None) -> None:
         },
         auto_session_tracking=False,
         send_client_reports=False,
-        # No `sentry-trace` or `baggage` header on a request to Resend, Discord, Google or TypeSafe:
-        # by default every outgoing request carries one, the release and the environment in it.
+        # No `sentry-trace` or `baggage` header on a request to Resend, Discord, Cloudflare or
+        # TypeSafe: by default every outgoing request carries one, the release and the environment
+        # in it.
         trace_propagation_targets=[],
         environment=_environment,
         # Never None, which has the SDK guess one from git at boot; `_allowed_event` sends ours.

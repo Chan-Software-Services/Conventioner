@@ -394,8 +394,9 @@ class TestWhereAnEventSaysItCameFrom:
 
 class TestAnotherService:
     def test_a_request_the_back_end_makes_carries_nothing_of_the_tracker(self, tracker, monkeypatch):
-        """Resend, Discord, Google and TypeSafe are sent no trace header: the SDK's default attaches
-        `sentry-trace` and `baggage`, the release and the environment in it, to every request."""
+        """Resend, Discord, Cloudflare and TypeSafe are sent no trace header: the SDK's default
+        attaches `sentry-trace` and `baggage`, the release and the environment in it, to every
+        request."""
         monkeypatch.setenv("BUILD_COMMIT", "0123abc")
         received = []
 

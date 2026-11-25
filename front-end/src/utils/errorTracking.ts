@@ -66,7 +66,7 @@ const PAGE_CODE_NOT_FETCHED = [
 ];
 
 /**
- * All a browser tells a page of an error in a script from another origin, reCAPTCHA's among them:
+ * All a browser tells a page of an error in a script from another origin, Turnstile's among them:
  * no error object, no file, and these words, which say nothing and would spend the month's quota.
  */
 const CROSS_ORIGIN_SCRIPT_ERROR = /^Script error\.?$/;
