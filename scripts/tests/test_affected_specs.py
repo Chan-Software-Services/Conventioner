@@ -559,6 +559,27 @@ class TestRuleFourEverySpec:
         assert set(rows) == {"a.spec.ts", "b.spec.ts", "c.spec.ts"}
         assert {row["score"] for row in rows.values()} == {1}
 
+    @pytest.mark.parametrize(
+        "path",
+        [
+            ".github/workflows/test.yml",
+            ".github/actions/e2e-stack/action.yml",
+            "front-end/scripts/e2e-shards.ts",
+            "front-end/scripts/e2e-shard-timings.json",
+            "scripts/affected-specs.py",
+            "scripts/test_map.py",
+            "scripts/chromium-packages.sh",
+            "scripts/image-tags.sh",
+        ],
+    )
+    def test_the_e2e_runs_own_machinery_chooses_every_spec_and_scores_nothing(self, repo, path):
+        write(repo, {path: "changed\n"})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"a.spec.ts", "b.spec.ts", "c.spec.ts"}
+        for row in rows.values():
+            assert row["why"] == [f"{path} runs every spec"]
+            assert row["score"] == 0
+
 
 class TestAFileNoRulePlaces:
     """A changed file the map and the imports cannot place may drive any spec: a stylesheet Vite
@@ -603,12 +624,12 @@ class TestAFileNoRulePlaces:
             "front-end/.prettierignore",
             "front-end/.editorconfig",
             "back-end/pytest.ini",
-            # The scripts that deal or measure the specs, or that nothing runs.
-            "front-end/scripts/e2e-shard-timings.json",
-            "front-end/scripts/e2e-shards.ts",
+            # The front end's scripts that check the build, or that nothing in CI runs.
             "front-end/scripts/bundle-budget.ts",
             "front-end/scripts/no-eval.ts",
             "front-end/scripts/brand-icons.ts",
+            # It decides a push's and the nightly run's suite, never a pull request's E2E.
+            "scripts/ci_suite.py",
             # The back end's deploy config, which the stack does not read.
             "back-end/vercel.json",
             # The advisory scan's lock, which only CI's python-advisories job installs.
