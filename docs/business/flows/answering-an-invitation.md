@@ -72,7 +72,8 @@ Nothing of the person is left on the market or in the organization; its history 
 
 - Withdrawn, past its end, its inviter no longer able to give it, or its market or organization gone: "This invitation has ended: it was withdrawn, it ran out, or whoever sent it can no longer give it. Ask them to invite you again.", in the refusal red, and the buttons go.
 - Already holding a role on that market: "You already have a role on this market, so this invitation has ended. Ask its owner or an Admin to change your role."; already in that organization: "You are already in this organization, so this invitation has ended.". The buttons go.
-- The market or the organization changed by someone else as it was accepted: the change's own sentence under the buttons, which stay, so accepting again judges again; no connection says so, the buttons kept.
+- The market or the organization changed by someone else as it was accepted: the accept is judged again at once, and answers as above or gives what it offers.
+- No connection, or a fault on the server: said under the buttons, which stay to answer again.
 
 ## Afterwards
 

@@ -5,8 +5,8 @@
  *
  * The row keeps its place once answered, until the page is left or read again, and the focus moves
  * to what it says, since the button pressed is gone. An invitation that has ended, or that they
- * are already in, says the server's words and has nothing left to press; any other refusal (a 409,
- * no connection) is said under the buttons, which stay to answer again.
+ * are already in, says the server's words and has nothing left to press; any other refusal (a
+ * server fault, no connection) is said under the buttons, which stay to answer again.
  *
  * The Invitations page's alone, not a reusable component.
  */

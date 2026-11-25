@@ -2450,25 +2450,16 @@ def _ended(invitation: Dict[str, Any]) -> Invitations.InvitationEnded:
     return Invitations.InvitationEnded()
 
 
-def give_role_by_invitation(invitation: Dict[str, Any], invitee: Any) -> Dict[str, Any]:
-    """Give ``invitee``, the signed-in account the invitation is addressed to, the role it offers
-    (T538, ADR 0047): what they accepted, to show them.
-
-    Judged again, at the moment it is accepted, as the inviter's act, and in this order: the market
-    live, the inviter's account still the one that sent it, the row that gives the role asked of
-    the inviter again, and the invitee holding no role here yet. The first three refused end the
-    invitation and answer it ended; the last ends it and says they already have a role. Then the
-    invitation is claimed as read (``Invitations.claim``): whichever came first wins, so one
-    withdrawn, declined or sent again to another role meanwhile answers ended and gives nothing.
-    Only then is the role written holding the invitee's key absent and the inviter's role as read
-    (``_write_role``), recorded through the inviter's asking as their giving it, by an invitation
-    accepted, and its limit counts taken back. A cut between the claim and the write loses the
-    invitation, and the person is invited again.
+def _judged_for_accepting(invitation: Dict[str, Any], invitee: Any) -> Tuple[Market, Any]:
+    """The market an invitation offers a role on, and the inviter's asking of the row that gives
+    it, judged as the inviter's act at this moment, in this order: the market live, the inviter's
+    account still the one that sent it, that row asked of the inviter again, and the invitee
+    holding no role here yet.
 
     Raises:
-        Invitations.InvitationEnded: it can no longer be accepted, and is ended.
-        MarketChanged: the inviter's role or the invitee's moved since the read; the invitation is
-            put back, so accepting again judges again.
+        Invitations.InvitationEnded: one of the first three refused; the invitation is ended.
+        BadRequestError: the invitee already has a role here (``ALREADY_ON_THE_MARKET``); the
+            invitation is ended.
     """
     context = load_market_context(invitation["target_id"])
     if context is None or context.market is None:
@@ -2481,33 +2472,60 @@ def give_role_by_invitation(invitation: Dict[str, Any], invitee: Any) -> Dict[st
     if inviter is None or inviter.id != invitation["invited_by"]:
         raise _ended(invitation)
 
-    role = MarketRole(invitation["role"])
-    asked = Actions.ask(Actions.roles_row(role), inviter.email, market, context.organization)
+    asked = Actions.ask(Actions.roles_row(MarketRole(invitation["role"])), inviter.email, market,
+                        context.organization)
     if asked.refused:
         raise _ended(invitation)
 
     if invitee.id in (context.document.get('roles') or {}):
         Invitations.end(invitation)
         raise BadRequestError(ALREADY_ON_THE_MARKET)
+    return market, asked
 
+
+def give_role_by_invitation(invitation: Dict[str, Any], invitee: Any) -> Dict[str, Any]:
+    """Give ``invitee``, the signed-in account the invitation is addressed to, the role it offers
+    (T538, ADR 0047): what they accepted, to show them.
+
+    Judged again, at the moment it is accepted, as the inviter's act (``_judged_for_accepting``).
+    Then the invitation is claimed as read (``Invitations.claim``): whichever came first wins, so
+    one withdrawn, declined or sent again to another role meanwhile answers ended and gives
+    nothing. Only then is the role written holding the invitee's key absent and the inviter's role
+    as read (``_write_role``), recorded through the inviter's asking as their giving it, by an
+    invitation accepted, and its limit counts taken back.
+
+    The claim is never put back, since a withdrawal or a decline landing after it is told the
+    invitation has ended: a ``MarketChanged`` judges again and writes again in this request, up to
+    ``Invitations.ACCEPT_TRIES`` writes, and a judgement that now refuses answers as it does above.
+    A conflict that keeps coming back, like a cut between the claim and the write, loses the
+    invitation, and the person is invited again.
+
+    Raises:
+        Invitations.InvitationEnded: it can no longer be accepted, and is ended.
+        BadRequestError: the invitee already has a role on the market, and it is ended.
+    """
+    market, asked = _judged_for_accepting(invitation, invitee)
+    role = MarketRole(invitation["role"])
     if not Invitations.claim(invitation):
         raise Invitations.InvitationEnded()
-    try:
-        _write_role(market, {"$set": {_role_key(invitee.id): role.value}}, invitee.id,
-                    inviter.email, owner_count_read=False)
-    except MarketChanged:
-        Invitations.put_back(invitation)
-        raise
-    except MarketNotFoundError:
-        raise Invitations.InvitationEnded() from None
-    asked.record(
-        kind=History.ROLE_GIVEN, subject={"user_id": invitee.id, "email": invitee.email},
-        detail=lambda: {**History.changes({"role": None}, {"role": role.value}),
-                        "by_invitation": True},
-    )
-    Invitations.take_back(invitation)
-    return {"kind": Invitations.MARKET, "targetId": market.id, "targetName": market.name,
-            "role": role.value}
+    for _ in range(Invitations.ACCEPT_TRIES):
+        try:
+            _write_role(market, {"$set": {_role_key(invitee.id): role.value}}, invitee.id,
+                        asked.actor, owner_count_read=False)
+        except MarketChanged:
+            market, asked = _judged_for_accepting(invitation, invitee)
+            continue
+        except MarketNotFoundError:
+            raise Invitations.InvitationEnded() from None
+        asked.record(
+            kind=History.ROLE_GIVEN, subject={"user_id": invitee.id, "email": invitee.email},
+            detail=lambda: {**History.changes({"role": None}, {"role": role.value}),
+                            "by_invitation": True},
+        )
+        Invitations.take_back(invitation)
+        return {"kind": Invitations.MARKET, "targetId": market.id, "targetName": market.name,
+                "role": role.value}
+    raise Invitations.InvitationEnded()
 
 
 def decline_market_invitation(invitation: Dict[str, Any], invitee_address: str) -> None:

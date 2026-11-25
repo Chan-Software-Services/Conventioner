@@ -489,27 +489,16 @@ def _ended(invitation: Dict[str, Any]) -> Invitations.InvitationEnded:
     return Invitations.InvitationEnded()
 
 
-def place_by_invitation(invitation: Dict[str, Any], invitee: Any) -> Dict[str, Any]:
-    """Place ``invitee``, the signed-in account the invitation is addressed to, in the place it
-    offers (T538, ADR 0047): what they accepted, to show them.
-
-    Judged again, at the moment it is accepted, as the inviter's act, and in this order: the
-    organization live, the inviter's account still the one that sent it, the inviter's place still
-    one that may add to that place (``AUTHORITY``), and the invitee's place as the table judges
-    adding them (``TABLE``). The first three refused end the invitation and answer it ended; the
-    table refusing the invitee (the owner, an admin, a member invited as a member) ends it and
-    says they are already in it. A member accepting an invitation to be an admin becomes one, as
-    "Add admin" of a member does, recorded as their place changed. Then the invitation is
-    claimed as read (``Invitations.claim``): whichever came first wins, so one withdrawn, declined
-    or sent again to another place meanwhile answers ended and gives nothing. Only then is the
-    write made, ``_change``'s, holding both keys as read, recording the inviter's giving it, by an
-    invitation accepted, and its limit counts taken back. A cut between the claim and the write
-    loses the invitation, and the person is invited again.
+def _judged_for_placing(invitation: Dict[str, Any], invitee: Any) -> Tuple[Dict[str, Any], Any]:
+    """The organization an invitation offers a place in, and its inviter, judged as the inviter's
+    act at this moment, in this order: the organization live, the inviter's account still the one
+    that sent it, the inviter's place still one that may add to that place (``AUTHORITY``), and the
+    invitee's place as the table judges adding them (``TABLE``).
 
     Raises:
-        Invitations.InvitationEnded: it can no longer be accepted, and is ended.
-        OrganizationChanged: the inviter's place or the invitee's moved since the read; the
-            invitation is put back, so accepting again judges again.
+        Invitations.InvitationEnded: one of the first three refused; the invitation is ended.
+        BadRequestError: the table refuses the invitee (``ALREADY_IN_IT``); the invitation is
+            ended.
     """
     org = organizations_collection.find_one(live({"id": invitation["target_id"]}))
     if not org:
@@ -521,8 +510,7 @@ def place_by_invitation(invitation: Dict[str, Any], invitee: Any) -> Dict[str, A
     if inviter is None or inviter.id != invitation["invited_by"]:
         raise _ended(invitation)
 
-    place = invitation["role"]
-    event = INVITED_TO[place]
+    event = INVITED_TO[invitation["role"]]
     people = organization_people_of(org)
     try:
         may(people, event, inviter.id)
@@ -533,20 +521,50 @@ def place_by_invitation(invitation: Dict[str, Any], invitee: Any) -> Dict[str, A
     except BadRequestError:
         Invitations.end(invitation)
         raise BadRequestError(ALREADY_IN_IT) from None
+    return org, inviter
 
+
+def place_by_invitation(invitation: Dict[str, Any], invitee: Any) -> Dict[str, Any]:
+    """Place ``invitee``, the signed-in account the invitation is addressed to, in the place it
+    offers (T538, ADR 0047): what they accepted, to show them.
+
+    Judged again, at the moment it is accepted, as the inviter's act (``_judged_for_placing``); the
+    table refusing the invitee (the owner, an admin, a member invited as a member) says they are
+    already in it, and a member accepting an invitation to be an admin becomes one, as "Add admin"
+    of a member does, recorded as their place changed. Then the invitation is claimed as read
+    (``Invitations.claim``): whichever came first wins, so one withdrawn, declined or sent again to
+    another place meanwhile answers ended and gives nothing. Only then is the write made,
+    ``_change``'s, holding both keys as read, recording the inviter's giving it, by an invitation
+    accepted, and its limit counts taken back.
+
+    The claim is never put back, since a withdrawal or a decline landing after it is told the
+    invitation has ended: an ``OrganizationChanged`` judges again and writes again in this request,
+    up to ``Invitations.ACCEPT_TRIES`` writes, and a judgement that now refuses answers as it does
+    above. A conflict that keeps coming back, like a cut between the claim and the write, loses the
+    invitation, and the person is invited again.
+
+    Raises:
+        Invitations.InvitationEnded: it can no longer be accepted, and is ended.
+        BadRequestError: the invitee is already in the organization, and it is ended.
+    """
+    org, inviter = _judged_for_placing(invitation, invitee)
+    place = invitation["role"]
     if not Invitations.claim(invitation):
         raise Invitations.InvitationEnded()
-    try:
-        _change(org, event, inviter, invitee.id, inviter.email, by_invitation=True)
-    except OrganizationChanged:
-        Invitations.put_back(invitation)
-        raise
-    except NotFoundError:
-        # The organization went between the read and the write.
-        raise Invitations.InvitationEnded() from None
-    Invitations.take_back(invitation)
-    return {"kind": Invitations.ORGANIZATION, "targetId": org["id"],
-            "targetName": org.get("name") or "", "role": place}
+    for _ in range(Invitations.ACCEPT_TRIES):
+        try:
+            _change(org, INVITED_TO[place], inviter, invitee.id, inviter.email,
+                    by_invitation=True)
+        except OrganizationChanged:
+            org, inviter = _judged_for_placing(invitation, invitee)
+            continue
+        except NotFoundError:
+            # The organization went between the read and the write.
+            raise Invitations.InvitationEnded() from None
+        Invitations.take_back(invitation)
+        return {"kind": Invitations.ORGANIZATION, "targetId": org["id"],
+                "targetName": org.get("name") or "", "role": place}
+    raise Invitations.InvitationEnded()
 
 
 def remove(org_id: str, user_id: str, requesting_user_email: str) -> None:

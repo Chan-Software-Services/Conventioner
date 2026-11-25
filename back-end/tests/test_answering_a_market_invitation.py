@@ -525,47 +525,123 @@ class TestWhicheverCameFirstWins:
         assert History.ROLE_GIVEN not in kinds(history)
 
 
+def changed_after_its_read(monkeypatch, market, change):
+    """``change`` lands on the stored market once, right after the accept's first read of it."""
+    read = MarketsApi.load_market_context
+
+    def read_then_change(market_id):
+        monkeypatch.setattr(MarketsApi, "load_market_context", read)
+        context = read(market_id)
+        change(market.docs[0]["roles"])
+        return context
+    monkeypatch.setattr(MarketsApi, "load_market_context", read_then_change)
+
+
 class TestAcceptingOnAMarketChanged:
-    def test_a_role_change_between_the_read_and_the_write_keeps_the_invitation(
+    """The write meets a market changed since the read: the claim is held, and the accept judges
+    again and writes again in the same request."""
+
+    def test_an_inviter_who_can_no_longer_give_it_meanwhile_has_ended_it(
         self, monkeypatch, market, invitations, history,
     ):
         invitation = invite(ADMIN)
-        read = MarketsApi.load_market_context
-
-        def read_then_change(market_id):
-            context = read(market_id)
-            market.docs[0]["roles"][ADMIN.id] = "viewer"
-            return context
-        monkeypatch.setattr(MarketsApi, "load_market_context", read_then_change)
+        changed_after_its_read(monkeypatch, market, lambda roles: roles.update({
+            ADMIN.id: "viewer"}))
 
         response = accept(invitation)
 
-        assert (response.status_code, response.get_json()) == (
-            409, {"error": MARKET_CHANGED, "code": "market_changed"})
+        assert (response.status_code, response.get_json()) == (404, ENDED)
         assert INVITEE.id not in market.docs[0]["roles"]
-        assert len(invitations.documents) == 1
+        assert invitations.documents == []
         assert kinds(history) == [History.INVITED]
 
-    def test_the_invitation_put_back_is_judged_again_and_gives_the_role(
+    def test_an_invitee_given_a_role_meanwhile_is_told_so(
         self, monkeypatch, market, invitations, history,
     ):
         invitation = invite(OWNER)
-        read = MarketsApi.load_market_context
+        changed_after_its_read(monkeypatch, market, lambda roles: roles.update({
+            INVITEE.id: "viewer"}))
 
-        def read_then_change(market_id):
-            monkeypatch.setattr(MarketsApi, "load_market_context", read)
-            context = read(market_id)
-            market.docs[0]["roles"].update({OWNER.id: "admin", ADMIN.id: "owner"})
-            return context
-        monkeypatch.setattr(MarketsApi, "load_market_context", read_then_change)
-        assert accept(invitation).status_code == 409
-        assert [doc["id"] for doc in invitations.documents] == [invitation]
+        response = accept(invitation)
+
+        assert (response.status_code, response.get_json()) == (400, ALREADY_ON_IT)
+        assert market.docs[0]["roles"][INVITEE.id] == "viewer"
+        assert invitations.documents == []
+        assert kinds(history) == [History.INVITED]
+
+    def test_one_the_inviter_may_still_give_is_written_again_and_gives_the_role(
+        self, monkeypatch, market, invitations, history,
+    ):
+        invitation = invite(OWNER)
+        changed_after_its_read(monkeypatch, market, lambda roles: roles.update({
+            OWNER.id: "admin", ADMIN.id: "owner"}))
 
         response = accept(invitation)
 
         assert response.status_code == 200, response.get_json()
         assert market.docs[0]["roles"][INVITEE.id] == "editor"
         assert invitations.documents == []
+        assert kinds(history) == [History.INVITED, History.ROLE_GIVEN]
+
+    def test_a_change_that_keeps_coming_back_loses_the_invitation(
+        self, monkeypatch, market, invitations, history,
+    ):
+        invitation = invite(OWNER)
+        writes = []
+
+        def always_changed(*_args, **_kwargs):
+            writes.append(True)
+            raise MarketWrite.MarketChanged(market.docs[0])
+        monkeypatch.setattr(MarketsApi, "_write_role", always_changed)
+
+        response = accept(invitation)
+
+        assert (response.status_code, response.get_json()) == (404, ENDED)
+        assert len(writes) == Invitations.ACCEPT_TRIES
+        assert INVITEE.id not in market.docs[0]["roles"]
+        assert invitations.documents == []
+        assert kinds(history) == [History.INVITED]
+
+
+def on_its_own_thread(request):
+    """``request``, another request, run to its end on a thread of its own, as
+    ``landing_before_the_claim`` runs one; its answer."""
+    answers = []
+    other = threading.Thread(target=lambda: answers.append(request()))
+    other.start()
+    other.join()
+    return answers[0]
+
+
+class TestEndingWhileAnAcceptMeetsAChange:
+    @pytest.mark.parametrize("ending", ["withdrawal", "decline"])
+    def test_one_said_to_have_ended_never_waits_again(
+        self, monkeypatch, market, invitations, history, ending,
+    ):
+        """A withdrawal or a decline landing while the accept holds its claim, and its write meets
+        a role change, is told the invitation has ended: so it has, and nobody can accept it
+        later (review finding 5)."""
+        invitation = invite(OWNER)
+        write_role = MarketsApi._write_role
+        endings = []
+
+        def handed_on_and_ended_meanwhile(*args, **kwargs):
+            monkeypatch.setattr(MarketsApi, "_write_role", write_role)
+            market.docs[0]["roles"].update({OWNER.id: "admin", ADMIN.id: "owner"})
+            endings.append(on_its_own_thread(
+                (lambda: signed_in_as(ADMIN).delete(
+                    f"/markets/{MARKET_ID}/invitations/{invitation}"))
+                if ending == "withdrawal" else (lambda: decline(invitation))))
+            return write_role(*args, **kwargs)
+        monkeypatch.setattr(MarketsApi, "_write_role", handed_on_and_ended_meanwhile)
+
+        accepted = accept(invitation)
+
+        assert endings[0].status_code == 404
+        assert invitations.documents == []
+        again = accept(invitation)
+        assert (again.status_code, again.get_json()) == (404, ENDED)
+        assert (accepted.status_code, market.docs[0]["roles"][INVITEE.id]) == (200, "editor")
         assert kinds(history) == [History.INVITED, History.ROLE_GIVEN]
 
 

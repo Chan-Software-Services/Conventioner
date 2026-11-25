@@ -436,9 +436,11 @@ class TestJudgedAgainAsTheInvitersAct:
         assert invitations.documents == []
 
     @pytest.mark.parametrize("meanwhile", ["the inviter's place", "the invitee's place"])
-    def test_a_change_meanwhile_keeps_the_invitation_to_judge_again(
+    def test_a_change_meanwhile_is_judged_again_in_the_same_accept(
         self, organization, invitations, history, meanwhile,
     ):
+        """The claim is held, and the accept judges again: the inviter no longer able ends it, and
+        the invitee placed meanwhile is told they are in it."""
         invitation = invite(ADMIN)
 
         def changed():
@@ -450,16 +452,12 @@ class TestJudgedAgainAsTheInvitersAct:
 
         response = accept(invitation)
 
-        assert response.status_code == 409
-        assert response.get_json()["code"] == "organization_changed"
-        assert len(invitations.documents) == 1
+        assert (response.status_code, response.get_json()) == (
+            (404, ENDED) if meanwhile == "the inviter's place" else (400, ALREADY_IN_IT))
+        assert invitations.documents == []
         assert kinds(history) == [History.INVITED]
 
-        again = accept(invitation)
-        assert again.status_code == (404 if meanwhile == "the inviter's place" else 400)
-        assert invitations.documents == []
-
-    def test_the_invitation_put_back_is_judged_again_and_gives_the_place(
+    def test_one_the_inviter_may_still_give_is_written_again_and_gives_the_place(
         self, organization, invitations, history,
     ):
         invitation = invite(ADMIN)
@@ -467,14 +465,71 @@ class TestJudgedAgainAsTheInvitersAct:
         def handed_on():
             organization.docs[0]["people"].update({OWNER.id: "admin", ADMIN.id: "owner"})
         organization.before_write = handed_on
-        assert accept(invitation).status_code == 409
-        assert [doc["id"] for doc in invitations.documents] == [invitation]
 
         response = accept(invitation)
 
         assert response.status_code == 200, response.get_json()
         assert organization.docs[0]["people"][INVITEE.id] == "member"
         assert invitations.documents == []
+        assert kinds(history) == [History.INVITED, History.ROLE_GIVEN]
+
+    def test_a_change_that_keeps_coming_back_loses_the_invitation(
+        self, monkeypatch, organization, invitations, history,
+    ):
+        invitation = invite(OWNER)
+        writes = []
+
+        def always_changed(*_args, **_kwargs):
+            writes.append(True)
+            raise OrganizationPeople.OrganizationChanged()
+        monkeypatch.setattr(OrganizationPeople, "_change", always_changed)
+
+        response = accept(invitation)
+
+        assert (response.status_code, response.get_json()) == (404, ENDED)
+        assert len(writes) == Invitations.ACCEPT_TRIES
+        assert INVITEE.id not in organization.docs[0]["people"]
+        assert invitations.documents == []
+        assert kinds(history) == [History.INVITED]
+
+
+def on_its_own_thread(request):
+    """``request``, another request, run to its end on a thread of its own, as
+    ``landing_before_the_claim`` runs one; its answer."""
+    answers = []
+    other = threading.Thread(target=lambda: answers.append(request()))
+    other.start()
+    other.join()
+    return answers[0]
+
+
+class TestEndingWhileAnAcceptMeetsAChange:
+    @pytest.mark.parametrize("ending", ["withdrawal", "decline"])
+    def test_one_said_to_have_ended_never_waits_again(
+        self, organization, invitations, history, ending,
+    ):
+        """A withdrawal or a decline landing while the accept holds its claim, and its write meets
+        a change of place, is told the invitation has ended: so it has, and nobody can accept it
+        later (review finding 5)."""
+        invitation = invite(ADMIN)
+        endings = []
+
+        def handed_on_and_ended_meanwhile():
+            organization.docs[0]["people"].update({OWNER.id: "admin", ADMIN.id: "owner"})
+            endings.append(on_its_own_thread(
+                (lambda: signed_in_as(OWNER).delete(
+                    f"/organizations/{ORG_ID}/invitations/{invitation}"))
+                if ending == "withdrawal" else (lambda: decline(invitation))))
+        organization.before_write = handed_on_and_ended_meanwhile
+
+        accepted = accept(invitation)
+
+        assert endings[0].status_code == 404
+        assert invitations.documents == []
+        again = accept(invitation)
+        assert (again.status_code, again.get_json()) == (404, ENDED)
+        assert (accepted.status_code, organization.docs[0]["people"][INVITEE.id]) == (
+            200, "member")
         assert kinds(history) == [History.INVITED, History.ROLE_GIVEN]
 
 

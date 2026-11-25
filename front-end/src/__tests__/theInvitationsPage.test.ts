@@ -19,6 +19,7 @@ vi.mock('@/utils/invitations', async (importOriginal) => ({
 
 import router, { requireSignIn } from '@/router';
 import { loginAddress } from '@/utils/signInNext';
+import { SERVER_FAULT_MESSAGE } from '@/utils/api';
 import InvitationsView from '@/views/InvitationsView.vue';
 import type { Invitation } from '@/assets/types/datatypes';
 
@@ -46,9 +47,6 @@ const TO_AN_ORGANIZATION: Invitation = {
 const ENDED =
   'This invitation has ended: it was withdrawn, it ran out, or whoever sent it can no longer ' +
   'give it. Ask them to invite you again.';
-const MARKET_CHANGED =
-  'This market changed while you were working on it, so your change was not saved. Reload to ' +
-  'see the latest, then make your change again.';
 
 function refusal(status: number, data: unknown) {
   return Object.assign(new AxiosError('refused'), { response: { status, data } });
@@ -274,10 +272,10 @@ describe('answering an invitation', () => {
     },
   );
 
-  it('says a change that met another in its row, and keeps the buttons to answer again', async () => {
+  it('says a server fault in its row, and keeps the buttons to answer again', async () => {
     fetchInvitations.mockResolvedValue([TO_A_MARKET]);
     acceptInvitation
-      .mockRejectedValueOnce(refusal(409, { error: MARKET_CHANGED, code: 'market_changed' }))
+      .mockRejectedValueOnce(refusal(500, { error: 'Internal server error' }))
       .mockResolvedValueOnce({
         kind: 'market',
         targetId: 'market-1',
@@ -286,7 +284,9 @@ describe('answering an invitation', () => {
       });
     const wrapper = await mountPage();
     await press(wrapper, 'accept');
-    expect(row(wrapper).get('[data-testid="invitation-refused"]').text()).toBe(MARKET_CHANGED);
+    expect(row(wrapper).get('[data-testid="invitation-refused"]').text()).toBe(
+      SERVER_FAULT_MESSAGE,
+    );
     expect(row(wrapper).get('[data-testid="invitation-accept"]').attributes('disabled')).toBe(
       undefined,
     );
