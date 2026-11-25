@@ -70,7 +70,7 @@ Where a collection's correctness rests on a UNIQUE index, the module that relies
 **A new unique index is built through [`back-end/unique_indexes.py`](../../../back-end/unique_indexes.py)** (T270), beside the owners above, which stay as they are.
 `ensure_unique_index` returns at once when an index of its name stands unique, since a boot on the serverless host is every cold start; otherwise it builds it, and on any `PyMongoError` raises `UniqueIndexError`, naming the duplicates that `duplicate_groups` finds by one aggregation over the records the index covers (its partial filter, when it has one): by the fields an operator may read and each record's `_id`, never by an address, and Mongo's error by its type and code only, with no cause kept.
 Its caller in `app.py` logs "Refusing to start: ..." and re-raises, as `verify_user_indexes` does.
-`VENDOR_DAY_INDEXES` lists each collection kept one record per vendor's day, which [`migrations/check_vendor_day_duplicates.py`](../../../back-end/migrations/check_vendor_day_duplicates.py) reads before a release is promoted ([RELEASING.md](../../RELEASING.md#pre-deploy-database-migrations)).
+`VENDOR_DAY_INDEXES` lists each collection kept one record per vendor's day, which [`migrations/check_vendor_day_duplicates.py`](../../../back-end/migrations/check_vendor_day_duplicates.py) reads before a release is promoted ([RELEASING.md](../../RELEASING.md#check_vendor_day_duplicatespy)).
 
 The users' email index is deliberately not in `LOOKUP_INDEXES`: `ensure_user_indexes` is its one owner, and replaces a plain index on the same key with the unique one.
 Nor is a lookup on `attendance` or `amounts_owed`: each unique index's prefix `market_id, vendor_email` serves a vendor's records and a market's.
