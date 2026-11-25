@@ -17,21 +17,17 @@ What it writes:
   other option, whatever its name: the three the boot built for the lists. An index another run
   dropped first counts as dropped. Any other index on those fields is left alone.
 
-It refuses, writing and dropping nothing, while any organization holds no people map (none, or one
-that is not a map), since its lists are then the only record of its people: it names each by id
-and says how to fold one with no ``people`` first. The fold leaves alone one whose ``people`` is
-there but not a map, which is repaired by hand. The dry run refuses the same way.
+It refuses, writing and dropping nothing, while any organization holds no people map, since its
+lists are then the only record of its people. Safe to run repeatedly, and beside another run.
 
-Safe to run repeatedly, and beside another run: a second run finds nothing to remove and no index
-to drop. ``--dry-run`` prints what it would remove and drop, and writes nothing.
-
-Run it after the deploy of the release that ships it, whenever the operator likes, and again, dry
-run first, after any roll forward over a rollback to the release before: that release's boot builds
-the three indexes again and its writes put partial lists back.
+When to run it, its dry run, what its refusal asks and the fold are written in full in the section
+``migrate_drop_organization_lists.py`` of ``docs/RELEASING.md``.
 
 Usage, from ``back-end/`` (the production database address passed inline, never from ``.env``):
     MONGODB_URI='<production URI>' python migrations/migrate_drop_organization_lists.py --dry-run
     MONGODB_URI='<production URI>' python migrations/migrate_drop_organization_lists.py
+
+``--dry-run`` prints what a run would remove and drop, and writes nothing.
 """
 import argparse
 import os

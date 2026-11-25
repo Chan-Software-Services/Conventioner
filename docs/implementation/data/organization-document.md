@@ -64,6 +64,7 @@ sources:
   - T315
   - T352
   - T583
+  - T617
 ---
 
 # The organization document, and roles
@@ -226,9 +227,8 @@ Its people see the market, its owner and admins run it, and deleting the organiz
 [`migrations/migrate_roles.py`](../../../back-end/migrations/migrate_roles.py) turned the old `owner`/`editors`/`viewers` lists into the `roles` map and the old flat `users` list into `owner`, `admins` and `members`.
 [`migrations/migrate_to_uuid.py`](../../../back-end/migrations/migrate_to_uuid.py) gave users, organizations and markets UUID ids and moved every reference (an organization's people and markets, a market's organization and its role keys) from names and emails to ids.
 [`migrations/migrate_drop_organization_lists.py`](../../../back-end/migrations/migrate_drop_organization_lists.py) removes `owner`, `admins` and `members` from every organization and drops their three indexes (T583, [ADR 0025](../../adr/0025-an-organizations-people-are-one-map.md)), the lists T283 kept beside the map for a rollback to the release before it, which this release rules out.
-It refuses, writing and dropping nothing, while any organization holds no people map, since its lists are then the only record of its people: it names each by id and says how to fold one with no `people` first with the fold migration T283 shipped, which this release deleted ([RELEASING.md](../../RELEASING.md#migrate_drop_organization_listspy)); that fold leaves alone one whose `people` is there but not a map, which is repaired by hand.
+It refuses, writing and dropping nothing, while any organization holds no people map, since its lists are then the only record of its people.
 Its one write unsets the three lists on every organization whose `people` is a map, so an organization with no map stored during the run is left with its lists for the next run's refusal.
 It drops an index only when its key is exactly one of `owner`, `admins` or `members`, ascending, with no other option, whatever its name, and counts one another run dropped first (`IndexNotFound`) as dropped.
-Its `--dry-run` writes and drops nothing and prints the same counts and index names; a second run says it has already run.
-It runs after the deploy, whenever, since nothing reads the lists, and again after any roll forward over a rollback to the release before, whose boot builds the three indexes again and whose writes put partial lists back.
+When to run it, its dry run, what its refusal asks and the fold are written in full in [the migration's section of RELEASING.md](../../RELEASING.md#migrate_drop_organization_listspy).
 [`test_migrate_drop_organization_lists.py`](../../../back-end/tests/test_migrate_drop_organization_lists.py) pins each case on the shared fake, a run cut before its drops, an index another run dropped first and an organization with no map stored during the run among them; [`test_the_organization_lists_migration_on_the_server.py`](../../../back-end/tests/real_mongo/test_the_organization_lists_migration_on_the_server.py) runs a run, a refused run and what the release before puts back on a server, over the indexes the boot and the release before build.

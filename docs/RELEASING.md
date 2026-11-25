@@ -40,6 +40,7 @@ sources:
   - T567
   - T583
   - T539
+  - T617
 ---
 
 # Release Process
@@ -496,8 +497,10 @@ It is idempotent: a second run changes nothing, and a run that found a market ch
 [`migrate_drop_organization_lists.py`](../back-end/migrations/migrate_drop_organization_lists.py) runs **after** the deploy of the release carrying T583, whenever the operator likes, and again after any roll forward over a rollback to the release before it ([Rolling back](#rolling-back)).
 That release reads and writes an organization's people map alone ([ADR 0025](adr/0025-an-organizations-people-are-one-map.md)), so nothing waits on the script: until it runs, each organization stored before that release still holds the `owner`, `admins` and `members` lists T283 kept beside the map, and nothing reads them.
 It removes the three lists from every organization holding a people map, in one write filtered on that map, and drops the boot's three indexes on them (`owner_1`, `admins_1` and `members_1`, found by their key whatever their name), leaving every other index alone.
-**It refuses, writing and dropping nothing, while any organization holds no people map**, since that organization's lists are then the only record of its people: it names each by id, never by name, says how to fold one with no `people` first, and exits 1, the dry run too; [a backup older than 2026-11-19](#a-backup-older-than-2026-11-19) says how.
-The fold leaves alone an organization whose `people` is there but not a map, which must be repaired by hand.
+**It refuses, writing and dropping nothing, while any organization holds no people map** (no `people`, or one that is not a map), since that organization's lists are then the only record of its people: it names each by id, never by name, and exits 1, the dry run too.
+For those with no `people`, it says to fold them first with `migrate_organization_people.py` from the last commit that holds it, and prints the two commands that make a worktree of that commit; [a backup older than 2026-11-19](#a-backup-older-than-2026-11-19) gives the whole fold.
+For those whose `people` is there but not a map, it says to repair them by hand, since the fold leaves them alone.
+After either, run it again.
 Run `--dry-run` first: it writes and drops nothing and prints how many organizations it would change, how many already hold only their map, and the indexes it would drop.
 That dry run is the read-only count of what the run will change, and only its counts go into the team's records, never an id.
 Then run it without, from `back-end/` with the production address passed inline and never in `.env`, as the script's Usage says.
@@ -507,9 +510,11 @@ It is idempotent and safe beside another run: a second run says the migration ha
 
 Production's organizations were folded into their people maps on 2026-11-19, by T283's `migrate_organization_people.py`, which T583 deleted.
 A restore of a backup taken before then ([OPERATIONS.md](OPERATIONS.md#backups-and-restoring)) can hold organizations with no people map, which the release carrying T583 reads as holding nobody, so their people lose every place and every market role through them until they are folded.
-Fold them right after the restore, before anyone works on an organization, with that migration from a worktree of the last commit that holds it, run from the repository's root on `main`:
+Fold them right after the restore, before anyone works on an organization, with that migration from a worktree of the last commit that holds it.
+Run these in a checkout of `main`:
 
 ```bash
+cd "$(git rev-parse --show-toplevel)"
 git worktree add ../fold "$(git rev-list -n 1 HEAD -- back-end/migrations/migrate_organization_people.py)^"
 cd ../fold/back-end
 MONGODB_URI='<URI>' <checkout>/back-end/.venv/bin/python migrations/migrate_organization_people.py --dry-run   # writes nothing
@@ -518,7 +523,7 @@ MONGODB_URI='<URI>' <checkout>/back-end/.venv/bin/python migrations/migrate_orga
 
 `<checkout>` is the path of the checkout the worktree was added from, whose `.venv` runs the fold; the fold imports the worktree's own back end.
 It writes `people` on every organization that has none, keeping the lists beside it, and lists any it leaves alone: one that changed during the run, which a second run folds, and one with no owner or holding an id that cannot be a key of the map, which must be repaired by hand before the next step runs.
-Then, back in the checkout's `back-end/`, run `migrate_drop_organization_lists.py` with `--dry-run` and then without, as above, and remove the worktree (`git worktree remove ../fold`).
+Then, back in the checkout's `back-end/`, run `migrate_drop_organization_lists.py` with `--dry-run` and then without, as above, and remove the worktree (`git -C <checkout> worktree remove ../fold`).
 
 ### `migrate_assignment_state.py`
 
