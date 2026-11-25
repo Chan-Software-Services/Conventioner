@@ -36,7 +36,7 @@ describes:
   - front-end/src/__tests__/aDialogsWriteBelongsToItsOpening.test.ts
   - front-end/e2e/a-dialog-holds-while-it-writes.spec.ts
   - front-end/src/__tests__/everyWritingDialogUsesTheSubmit.test.ts
-verified: 2026-11-19
+verified: 2026-11-25
 sources:
   - wayfinding/the-order-of-the-work/08
   - wayfinding/the-order-of-the-work/map

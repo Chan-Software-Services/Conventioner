@@ -137,8 +137,9 @@ class TestOneWhoCanNoLongerReview:
         assert BEN not in _reviewers(world).values()
 
     def test_one_who_leaves_the_organization_is_served_not_able(self, world, monkeypatch):
-        organization = {"id": ORG_ID, "name": "Org", "owner": "user-admin", "admins": [],
-                        "members": ["user-dee"], "markets": [MARKET]}
+        organization = {"id": ORG_ID, "name": "Org",
+                        "people": {"user-admin": "owner", "user-dee": "member"},
+                        "markets": [MARKET]}
         monkeypatch.setattr(OrgsApi, "get_organization",
                             lambda org_id: dict(organization) if org_id == ORG_ID else None)
         world.markets.doc["organizationId"] = ORG_ID
@@ -146,6 +147,6 @@ class TestOneWhoCanNoLongerReview:
         _choose([ANA, DEE])
         assert {r["email"]: r["able"] for r in _read()["reviewTeam"]["reviewers"]}[DEE] is True
 
-        organization["members"] = []
+        organization["people"].pop("user-dee")
 
         assert {r["email"]: r["able"] for r in _read()["reviewTeam"]["reviewers"]}[DEE] is False

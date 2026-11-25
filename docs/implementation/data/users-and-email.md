@@ -48,7 +48,7 @@ describes:
   - back-end/api/users.py#_sign_in_refused
   - back-end/tests/test_a_strangers_requests_use_up_no_ones.py
   - back-end/tests/test_a_strangers_tries_shut_no_one_out.py
-verified: 2026-11-14
+verified: 2026-11-25
 sources:
   - E32/F03/S04
   - T85

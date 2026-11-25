@@ -464,7 +464,7 @@ def test_the_search_finds_a_check_that_names_a_role():
         "    return role == MarketRole.OWNER\n"
         "def through_the_organization(user, org):\n"
         "    return PermissionsApi.higher_role(None, PermissionsApi.organization_market_role(\n"
-        "        user, org.owner, org.admins, org.members)) == MarketRole.ADMIN\n"
+        "        user, org.people)) == MarketRole.ADMIN\n"
         "class Asker:\n"
         "    def ask(self, user, market):\n"
         "        self.role = PermissionsApi.get_user_market_role(user, market)\n"

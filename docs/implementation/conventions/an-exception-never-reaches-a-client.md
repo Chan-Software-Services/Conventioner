@@ -103,7 +103,7 @@ describes:
   - back-end/tests/test_the_hosts_request_limit.py
   - back-end/application_status.py#_upsert
   - back-end/utils/captcha.py#captcha_passes
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - T74
   - E41/F01/S01

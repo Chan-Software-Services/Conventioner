@@ -81,9 +81,6 @@ function org(table: PermissionTableRow[], userRole: OrganizationRoleType): Organ
   return {
     id: 'org-1',
     name: 'Ember Markets',
-    owner: 'user-owner',
-    admins: ['user-admin'],
-    members: ['user-member'],
     adminPeople: [{ userId: 'user-admin', email: 'admin@ember.test' }],
     memberPeople: [{ userId: 'user-member', email: 'member@ember.test' }],
     marketCount: 0,
@@ -445,7 +442,6 @@ describe("the organizations list's answer", () => {
     const parsed = parseOrgFromApi({
       id: 'org-1',
       name: 'Ember Markets',
-      owner: 'user-owner',
       defaultPermissionTable: SET,
       marketCount: 0,
       marketsWithOwnRole: {},
