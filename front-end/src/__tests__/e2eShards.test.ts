@@ -667,9 +667,10 @@ describe('checkShards', () => {
 
   it('names a shard that dealt other files than the selection named', () => {
     const [one] = namedShards();
-    const [, two] = namedShards(['a.spec.ts', 'c.spec.ts']);
+    // As many files as the selection, one of them another, so the names are what is compared.
+    const [, two] = namedShards(['a.spec.ts', 'b.spec.ts', 'c.spec.ts']);
     expect(checkShards([one!, two!], NAMED).problems).toContain(
-      'shard 2/2 dealt a.spec.ts, c.spec.ts, not the 3 spec files the selection named',
+      'shard 2/2 dealt a.spec.ts, b.spec.ts, c.spec.ts, not the 3 spec files the selection named',
     );
   });
 

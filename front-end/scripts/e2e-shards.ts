@@ -36,10 +36,10 @@
  * which fails unless every shard dealt the whole suite, all by the same timings, and their reports
  * hold every listed spec file exactly once. With `--named=<file>`, a list as `--specs` takes, it
  * demands instead that every shard dealt exactly those files, so only a run that is asked for a
- * selection passes on one. It writes what ran, each shard's seconds and the spread to the job
- * summary, and with `--publish` writes the next timings: the ones the run dealt by, blended with
- * what it measured. A run that publishes timings is never a pull request's, so the two flags never
- * come together.
+ * selection passes on one. It writes each shard's seconds and the spread to the job summary,
+ * opening with what ran when the check passes, and with `--publish` writes the next timings: the
+ * ones the run dealt by, blended with what it measured. A run that publishes timings is never a
+ * pull request's, so the two flags never come together.
  *
  * The committed file is only the fallback. Refresh it by hand from CI runs' reports, each run's
  * `e2e-results-shard-*` artifacts in a folder of their own, oldest first, the newest whole:
@@ -475,19 +475,20 @@ export function publishedTimings(shards: readonly ShardResult[]): Record<string,
 }
 
 /** The `e2e` job's summary of the deal: what ran and the timings' source, each shard's seconds, the
- * spread. With `problems` it says only where the timings came from, since what `ran` says the shards
- * dealt may never have run. */
+ * spread, the problems. With `problems` its opening names only the timings' source, since what `ran`
+ * says the shards dealt may never have run. */
 export function shardSummary(
   source: string,
   seconds: readonly number[],
   problems: readonly string[],
   ran: { scope: DealRecord['scope']; files: number; listed: number },
 ): string {
-  const files =
+  const subject =
     ran.scope === 'whole'
       ? 'Every spec file the suite lists'
       : `The ${ran.files} spec files the test map named, of the ${ran.listed} the suite lists,`;
-  const opening = problems.length > 0 ? `Dealt by ${source}.` : `${files} ran, dealt by ${source}.`;
+  const opening =
+    problems.length > 0 ? `Dealt by ${source}.` : `${subject} ran, dealt by ${source}.`;
   const lines = ['### E2E shards', '', opening, ''];
   lines.push('| Shard | Seconds of tests |', '|-------|------------------|');
   seconds.forEach((value, n) =>
