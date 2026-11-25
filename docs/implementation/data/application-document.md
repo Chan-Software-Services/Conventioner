@@ -304,7 +304,7 @@ Each write is held by the application's id on every field it read (`HELD_FIELDS`
 One gone meanwhile, its market deleted, is left gone and not listed, as it needs nothing; a market whose document stops reading as a market on a retry is left from that application on, and said, and the run goes on to the other markets.
 It prints first the count of the live markets' applications in each stored status, decision 9.6's read-only count of production when run with `--dry-run`, then market and application ids, never an address.
 **It has no boot marker**: an unmigrated application reads correctly through the owner, which applies the migration's own rules, so the migration only makes the stored values the owner's, and is safe to run again.
-When to run it is in [operations](../../OPERATIONS.md#starting-a-database-and-migrations).
+When to run it is in [releasing](../../RELEASING.md#migrate_application_statuspy).
 [`tests/test_migrate_application_status.py`](../../../back-end/tests/test_migrate_application_status.py) runs it over every stored shape and then deals its marks through a reviewer's next card, and [`tests/real_mongo/test_the_application_status_migration_on_the_server.py`](../../../back-end/tests/real_mongo/test_the_application_status_migration_on_the_server.py) runs it on the server: a dry run, a run and a second, one stopped after its first write, and a write landing between its read and its write.
 
 ### Added vendors, and what is recorded

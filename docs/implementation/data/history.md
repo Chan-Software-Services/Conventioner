@@ -474,7 +474,7 @@ The organizer reads the placements as [the assignment history](../../business/fl
 Until E40 the entries lived in the `placement_history` collection, without `action` or `subject`.
 [`back-end/migrations/migrate_placement_history.py`](../../../back-end/migrations/migrate_placement_history.py) moves each into `history` with every field it had (its `_id` too), adds `action: assign` and the subject read from its detail, and drops the old collection once it is empty.
 It writes each entry by its `_id` before deleting it from the old collection, so a second run, or one after a run that stopped part-way, moves only what is left and doubles nothing; `--dry-run` reports the count and writes nothing.
-Run it after the release that carries `history.py` is deployed, so the old build writes nothing behind it ([RELEASING.md](../../RELEASING.md#pre-deploy-database-migrations)), whenever is convenient.
+Run it after the release that carries `history.py` is deployed, so the old build writes nothing behind it ([RELEASING.md](../../RELEASING.md#migrate_placement_historypy)), whenever is convenient.
 Until it runs, `entries_page` reads `placement_history` beside `history` ([reading it](#reading-it)), so the older placements still show from the deploy on.
 An entry can be in both for a moment, since the migration writes each one to `history` before deleting it from the old collection and a run can stop between the two, so an old entry whose `id` `history` already holds is read once.
 `delete_for_market` deletes a market's entries from both.
