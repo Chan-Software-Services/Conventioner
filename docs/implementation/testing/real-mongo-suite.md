@@ -29,6 +29,7 @@ sources:
   - T318
   - T422
   - T496
+  - T452
 ---
 
 # The real-MongoDB suite
@@ -185,6 +186,7 @@ Each test's name says what it proves.
 MongoDB retries an upsert the unique index refused when its filter is equalities on exactly the index's fields, so a check-in, whose filter is the vendor's day, did not see the refusal: on 8.0, none of 600 check-in upserts, 20 at once a day, reached the client, and the check-in's own retry on `DuplicateKeyError` stays for a server that does not retry.
 An owed day's first record is an insert, whose refusal does come back, and the owner's read again is what lands it; the staged test is what makes every free meet it.
 [`real_mongo/test_the_owed_day_state_migration_on_the_server.py`](../../../back-end/tests/real_mongo/test_the_owed_day_state_migration_on_the_server.py) runs the owed day's migration as an operator does, a dry run then two runs, removes a hidden amount and a cleared record on the server with the entry, and refuses its held write on a change to each held field ([payments](../data/payments.md#the-migration)).
+[`real_mongo/test_the_application_status_migration_on_the_server.py`](../../../back-end/tests/real_mongo/test_the_application_status_migration_on_the_server.py) runs the application status migration the same way: a dry run then two runs, a run stopped after its first write then run again, a write landing between its read and its write read again or listed as skipped, and its held write refused on a change to each held field, absent, null or a whole sub-document ([the migration](../data/application-document.md#the-migration)).
 
 ## A payment entry holds what it read
 

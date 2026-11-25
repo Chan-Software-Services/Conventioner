@@ -18,6 +18,7 @@ describes:
   - back-end/migrations/migrate_owed_day_state.py
   - back-end/host_limits.py
   - back-end/organizer_sessions.py#ensure_organizer_session_indexes
+  - back-end/migrations/migrate_application_status.py
 verified: 2026-11-17
 sources:
   - E32/F03/S03
@@ -36,6 +37,7 @@ sources:
   - T315
   - T317
   - T335
+  - T452
 ---
 
 # Operations
@@ -210,6 +212,13 @@ The release carrying T335 stores each owed table-day's state ([payments](impleme
 It also drops each amount an Admin set on a day the vendor no longer holds, which no line shows, and records an `owed_dropped` entry in the market's history for each, naming the amount and who set it (Daniel's choice, T335).
 Until it runs, that release reads each record from the fields the release before wrote, so nothing refuses to boot and nothing a vendor's Payment tab shows changes; until then a hidden amount is dropped, with its entry, only when its day is next seated, which is why it runs right after the deploy.
 A record that changed between the script's read and its write on three tries is listed as skipped, and running it again sets it; a record whose fields do not parse is left alone and listed by id.
+The release that serves each application's review state (T277 ticket 02) reads every stored application by the owner's rules ([the application document](implementation/data/application-document.md#the-migration)): right after it is deployed, before any organizer uses Begin assignment, and on Daniel's word, which their word to merge it gives, run `MONGODB_URI='<URI>' .venv/bin/python migrations/migrate_application_status.py --dry-run` ([`migrate_application_status.py`](../back-end/migrations/migrate_application_status.py)), then without `--dry-run`, and again after any roll-forward past a rollback.
+Its first lines count the applications of the live markets in each stored status, missing ones included: run with `--dry-run`, that is the read-only count of production decision 9.6 of T277's report asks for, before any write.
+It then names each application it would change by market id and application id, never an address, says what it would store (a status, an origin, a mark for the deal), and counts them.
+Until it runs, that release reads each application as the migration would store it, so nothing refuses to boot, and a screen shows one thing differently: an application stored with no status (missing, null or empty) counts as open for Begin assignment's guard and for the Stats tab's "open to review", while no list serves it, so the guard holds that market with "Finish deciding" and nobody can decide the application it counts.
+The migration stores `open` on it, which is why it runs before any organizer uses Begin assignment.
+What running it changes is that the next deal on each market deals the applications it found waiting for the deal, which the market's history reads as dealt ", having waited for the deal".
+An application that changed between the script's read and its write on three tries is listed as skipped, and running it again sets it; one whose status no state names, or whose old status would read as another state, is left alone and listed by id.
 
 ### Swapping the names of two locations
 
@@ -232,7 +241,11 @@ The dry run prints each of the two locations and each section in them with the n
 The swap is one update of the market's document, so it lands whole or not at all; a market whose plan, seats or phase changed between the read and the write is refused with nothing written, and running it again reads it afresh.
 It counts the plan's revision, as every write of the plan does, so a plan or layout save that read the market before the swap is refused as a market that changed.
 If the dry run after the run refuses with a stored seat naming a location "which the plan does not put there", a seat was written by hand across the swap: stop, and put the seats' names right in the database by hand, each to its section's location.
-If a dry run says the allocation's record of the plan is "left as it is, since it already differs from the plan as read" on a market whose allocation the app shows as current, stop: the checkout computes the fingerprint differently from the release.
+Whether a dry run's line that the allocation's record of the plan is "left as it is, since it already differs from the plan as read" means stop depends on where the market stands.
+**In Assignment, before results are published**, the app compares that record with the plan while the allocation holds a seat: if the Assignments page shows no note naming the market plan, as "The market plan changed since tables were allocated.", stop, since the checkout computes the fingerprint differently from the release; if the note names it, the line is expected, so go on.
+With every seat freed, or in Applications after Back to review, the app does not compare the plan and shows no note, so the page cannot tell: go on only once the `git diff` above lists the scripts alone.
+**Once results are published, or in Offers, Market Days or Archived**, nothing the app shows or refuses turns on that record any more: it judges an allocation out of date by the plan only in Assignment before results are published, and the note shows only then; no table allocation runs once results are published or outside Assignment, and no market goes back to Assignment from those three phases.
+So there the line is no sign to stop, whichever way the record went: go on once the `git diff` above lists the scripts alone.
 It refuses, exiting 1 with nothing written, a draft, a location it does not find, and a plan or a seat whose copy of a name disagrees with the location it belongs to; its docstring lists each refusal.
 The assignment's revision and the published results are left as they are, and nothing is sent to anyone.
 A run records itself in the market's history as one change on Market Setup with no actor, which Manage market reads as "Someone changed Market Setup: locations and sections" when either location holds a section; a dry run records none, and a second run records a second entry.
@@ -263,7 +276,7 @@ git diff --name-only <production's commit> -- back-end ':!back-end/tests'   # li
 The last line is the check: the working tree differs from production's commit, outside the tests, by operator scripts alone (this one, and `swap_location_names.py` when production's commit does not hold it and the checkout does).
 The script imports nothing of the swap's, so it runs on a release from before the swap as well.
 A checkout of `dev`'s head serves as well exactly when `git diff <production's commit> HEAD -- back-end ':!back-end/tests'` lists nothing but those scripts, which holds from the deploy of a commit until the next merge into `dev` that changes the back end.
-The fingerprint and the write are computed by `assignment/made_from.py`, `market_documents.py`, `market_write.py` and `datatypes.py`, with `tombstone.py` and `assignment/utils.py`, which they import: a checkout where one of them differs from production's may compute another fingerprint, which the dry run shows as the allocation's record "left as it is" on a market whose allocation the app shows as current.
+The fingerprint and the write are computed by `assignment/made_from.py`, `market_documents.py`, `market_write.py` and `datatypes.py`, with `tombstone.py` and `assignment/utils.py`, which they import: a checkout where one of them differs from production's may compute another fingerprint, which a dry run may show as the allocation's record "left as it is", read as the stop rule below says.
 
 **Run it while no organizer is working on the market**, for the swap's reason: a seat assigned, freed or swapped by hand from a read just before the rename is not refused, and puts every seat back under the old name over the renamed plan.
 Take a `mongodump` first ([backups](#backups-and-restoring)), then:
@@ -285,7 +298,7 @@ Its docstring lists each refusal.
 The rename is one update of the market's document, so it lands whole or not at all; a market whose plan, seats or phase changed between the read and the write is refused with nothing written, and running it again reads it afresh.
 It counts the plan's revision, so a plan or layout save that read the market before the rename is refused as a market that changed.
 If the dry run of the way back refuses with a stored seat that "already names a location" of the old name, a seat was written by hand across the rename: stop, and put the seats' names right in the database by hand, each to its section's location.
-If a dry run says the allocation's record of the plan is "left as it is, since it already differs from the plan as read" on a market whose allocation the app shows as current, stop: the checkout computes the fingerprint differently from the release.
+A dry run's line that the allocation's record of the plan is "left as it is, since it already differs from the plan as read" is read as for [the swap](#swapping-the-names-of-two-locations): in Assignment before results are published, while the allocation holds a seat, stop unless the Assignments page's note names the market plan, and with every seat freed, or in Applications after Back to review, go on only once the check above lists the operator scripts alone; once results are published, or in Offers, Market Days or Archived, nothing the app shows or refuses turns on the record any more, so go on once the check above lists the operator scripts alone.
 The assignment's revision and the published results are left as they are, and nothing is sent to anyone.
 
 A run records itself in the market's history as one change on Market Setup with no actor, as a swap does, which Manage market reads as "Someone changed Market Setup: locations and sections" when the location holds a section; a dry run records none.

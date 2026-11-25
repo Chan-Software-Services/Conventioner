@@ -39,6 +39,7 @@ sources:
   - T263
   - T422
   - T411
+  - T452
 ---
 
 # The vendor drawer
@@ -54,7 +55,7 @@ The open vendor and tab are kept in the address (`?vendor=<email>&vendorTab=assi
 **Status:** Works (read from the code as of E35/F01: `the-vendor-drawer.spec.ts`, `a-seat-and-an-entry-open-the-drawer.spec.ts`; the History tab as of E40/F01/S04, `the-vendors-history.spec.ts`; Back as of E38/F13/S01, `back-closes-the-drawer.spec.ts`).
 
 1. Click a vendor where they appear; the drawer opens on its Application tab, or on Payment from the Payments page, and the page behind it holds still and cannot be reached.
-2. The head, "Vendor details", which stays while everything under it scrolls, a shade at each edge with more beyond it: the vendor's name, their address beneath it when they have a name, and their verdict with who gave it ("Approved by <email>, <date and time>"), or "Added by <email>, …" for a vendor added by hand.
+2. The head, "Vendor details", which stays while everything under it scrolls, a shade at each edge with more beyond it: the vendor's name, their address beneath it when they have a name, and their verdict with who gave it ("Approved by <email>, <date and time>"), or "Added by <email>, …" for a vendor added by hand, read from who added them (`addedBy`), so it stays once their answers arrive by an import or their own save and the Vendors list reads them as an applicant ([J11](vendors.md#j11-browse-by-vendor)).
    A vendor's business name stands under their name and before their address, whole, wrapping where the head ends, wherever the drawer opens; a vendor with none, or whose business name an organizer removed, has no such line (T502).
    Opened from the review's All view, the application's status sits under the head, with whose share it is while reviewers are chosen and who holds it open, and Reject, Needs follow-up and Approve beside it while the review is open, under a warning when it is dealt to another reviewer and not in the reader's share ([the All view](review.md#the-all-view)); everywhere else the verdict and its giver only read.
    On an application already approved or rejected those are a change, offered only to someone the row "Change a verdict, or overturn an automatic rejection" lets change one, and a reviewer it refuses reads its sentence in their place (E38/F06/S01).
@@ -91,6 +92,7 @@ The open vendor and tab are kept in the address (`?vendor=<email>&vendorTab=assi
 
 On Attendance, opening the drawer never checks anyone in, and a first note added there appears under the vendor's row.
 A market's vendors are read once, for the Vendors list and the drawer alike (`useVendorDetails` in [`front-end/src/utils/vendorDetails.ts`](../../../front-end/src/utils/vendorDetails.ts)): every application, decided or not, with its seats, reasons and overrides; a placement changed on the Assignments page reads them again.
+Each row carries the served review state and origin (`review.state`, `origin`), which the list's "Rejected only", its "Added" and the dates within reach read, beside the stored status, whose label the row shows.
 The applications stand on their own read: when the server cannot say where vendors sit, the drawer still shows the answers, says why in red on every tab (a refusal's own sentence, or which kind of failure it was), and offers no date cards, and the Vendors list says nothing of who is placed ([J11](vendors.md#j11-browse-by-vendor)); every vendor keeps their name, read from their application (T123).
 Covered by:
 

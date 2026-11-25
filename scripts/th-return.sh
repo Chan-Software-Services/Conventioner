@@ -9,6 +9,12 @@
 # own error output, and the lease is kept (exit 1) unless --force is given, in
 # which case the lease is returned anyway.
 #
+# With TEAM_STACK_DOWN=1 in its environment, which the agent team's team-close sets once its
+# team-stack down has taken the slot's stack down, it runs no teardown of its own: while a heavy run
+# holds the machine, team-stack down leaves the stack's network for its sweep, and a down here would
+# remove it at once, beside a browser that run is driving. A return run by hand, which does not set
+# it, tears down as before.
+#
 #     scripts/th-return.sh <worktree-path>
 #     scripts/th-return.sh <worktree-path> --force   # no prompts; return even if the teardown failed
 #
@@ -32,7 +38,9 @@ done
 # shell exported (`eval "$(th-compose.sh ports)"` for another stack) must not redirect it.
 # The teardown is the slot's own th-compose.sh, whose overlay is the one beside the slot's compose
 # file; this script runs from the checkout that called it (often the primary), which may be behind.
-if [ -n "$WT" ] && [ -f "$WT/docker-compose.yml" ] && command -v docker >/dev/null 2>&1; then
+# After team-stack down (TEAM_STACK_DOWN=1), the teardown is team-stack's, as the header says.
+if [ "${TEAM_STACK_DOWN:-}" != 1 ] && [ -n "$WT" ] && [ -f "$WT/docker-compose.yml" ] &&
+  command -v docker >/dev/null 2>&1; then
   compose="$WT/scripts/th-compose.sh"
   if [ ! -x "$compose" ]; then
     echo "th-return: $WT has no scripts/th-compose.sh of its own; tearing it down with $REPO/scripts/th-compose.sh" >&2

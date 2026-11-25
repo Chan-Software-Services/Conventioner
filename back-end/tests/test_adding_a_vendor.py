@@ -126,12 +126,13 @@ def test_an_added_vendor_is_never_an_input_to_the_run(monkeypatch):
 
 def test_the_organizer_reads_who_added_them():
     from api.applicants import organizer_view
+    from conftest import a_review_view
 
     view = organizer_view({
         "id": "app-2", "market_id": "market-123", "applicant_email": "walk.in@example.com",
         "form_data": {}, "status": "reviewer_approved",
         "added_by": ADDER.model_dump(), "added_at": "2026-11-18T09:00:00",
-    })
+    }, a_review_view())
 
     assert view["addedBy"] == {"userId": "user-editor", "email": "editor@market.test"}
     assert view["addedAt"] == "2026-11-18T09:00:00"

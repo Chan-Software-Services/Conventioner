@@ -1,4 +1,4 @@
-import type { ApplicationStatus, MarketRole } from '@/assets/types/datatypes';
+import type { ApplicationReview, ApplicationStatus, MarketRole } from '@/assets/types/datatypes';
 import type { DiscordShown } from '@/utils/discordCheck';
 import type { FillCounts } from '@/utils/fillGrid';
 import type { RoomCounts } from '@/utils/roomRows';
@@ -27,6 +27,8 @@ export interface LibraryFixture {
     status: ApplicationStatus;
     /** The person id of the reviewer it is dealt to. */
     reviewer: string;
+    /** Its review state, as the server serves it (`review_team.review_of`): what entries read. */
+    review: ApplicationReview;
     /** What the export's other columns and filters read of them. */
     export: {
       preferredName: string;

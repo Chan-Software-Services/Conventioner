@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 import api.market_actions as Actions
 import api.markets as MarketsApi
 
@@ -364,11 +366,49 @@ def test_get_market_tables_offers_every_applicant_saying_who_is_not_approved(mon
             "verdictBy": {"kind": "rule", "userId": None, "email": None, "rule": "Affiliation"},
             "verdictAt": "2026-01-01T10:00:00",
             "verdictReason": "Not an Example College student",
+            "undecided": False,
         },
         "inTheRun": False,
         "needsATable": False,
         "addedByHand": False,
     }]
+
+
+@pytest.mark.parametrize("status, undecided", [
+    ("needs_follow_up", True), ("under_review", True), ("cancelled", False),
+])
+def test_a_not_approved_applicant_says_whether_the_review_left_them_undecided(
+        monkeypatch, status, undecided):
+    """The place dialog's warning names a verdict's giver only for a decided applicant, and reads
+    whether one is decided off the server's review state, never off the stored status: a follow-up
+    carries who marked it, which is no verdict."""
+    from assignment.vendor_input import SolverVendor
+    from datatypes import Application
+
+    monkeypatch.setattr(
+        MarketsApi.markets_collection, "find_one", lambda query: _sample_market_doc_with_setup())
+    monkeypatch.setattr(MarketsApi.PermissionsApi, "user_has_permission", lambda *a, **k: True)
+    monkeypatch.setattr(MarketsApi, "derive_market_table_rows", lambda assigned_market: [])
+    monkeypatch.setattr(MarketsApi.ApplicationsApi, "vendor_names_for_market", lambda _id: {})
+    monkeypatch.setattr(MarketsApi, "vendors_to_show", lambda _market: [])
+    outside = SolverVendor(
+        application_id="app-2", email="dev@example.com", available_dates=frozenset({"2026-01-01"}),
+        max_dates=None, accepted_tiers_by_date={}, table_choice=None, table_share_email=None,
+        section_ranking=(), table_type_ranking=(),
+    )
+    application = Application(
+        id="app-2", market_id="market-123", applicant_email="dev@example.com",
+        status=status, form_data={},
+        verdict_by={"kind": "person", "email": "owner@example.com"},
+        verdict_at="2026-01-01T10:00:00",
+    )
+    monkeypatch.setattr(
+        MarketsApi, "outside_solver_vendors", lambda *_args: [(outside, application)])
+
+    result, _status = MarketsApi.get_market_tables("market-123", "viewer@example.com")
+
+    assert result["vendors"][0]["notApproved"]["status"] == status
+    assert result["vendors"][0]["notApproved"]["undecided"] is undecided
 
 
 def test_derive_market_table_rows_includes_unassigned_tables():

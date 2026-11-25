@@ -134,7 +134,7 @@ class TestWhoApplied:
     def test_only_when_each_applied_is_sent_never_who(self):
         counted = MarketStats.count_applicants(APPLICATIONS)
 
-        assert set(counted) == {"total", "addedByHand", "statuses", "submittedAt"}
+        assert set(counted) == {"total", "addedByHand", "statuses", "states", "submittedAt"}
 
     def test_an_application_with_no_time_is_on_no_day(self):
         undated = [_application("ines@loom.test", "open", {}, submitted_at=None)]
@@ -147,7 +147,37 @@ class TestWhoApplied:
     def test_a_market_nobody_applied_to_counts_nothing(self):
         assert MarketStats.count_applicants([]) == {
             "total": 0, "addedByHand": 0, "statuses": {}, "submittedAt": [],
+            "states": {"open": 0, "follow_up": 0, "approved": 0, "rejected": 0},
         }
+
+    def test_every_application_is_counted_by_its_served_state(self):
+        counted = MarketStats.count_applicants(APPLICATIONS)
+
+        assert counted["states"] == {"open": 1, "follow_up": 0, "approved": 3, "rejected": 1}
+
+    def test_a_stored_spelling_is_counted_under_the_state_it_reads_as(self):
+        stored = [
+            _application("ines@loom.test", "under_review", {}),
+            _application("ada@mill.test", None, {}),
+            _application("kit@yarn.test", "needs_follow_up", {}),
+            _application("bo@reed.test", "cancelled", {}),
+            _application("cy@clay.test", "assignment_sent", {}),
+        ]
+
+        counted = MarketStats.count_applicants(stored)
+
+        assert counted["states"] == {"open": 2, "follow_up": 1, "approved": 1, "rejected": 1}
+        assert counted["statuses"] == {
+            "under_review": 1, "": 1, "needs_follow_up": 1, "cancelled": 1,
+            "assignment_sent": 1,
+        }
+
+    def test_a_status_no_state_reads_is_counted_in_the_whole_and_in_no_state(self):
+        counted = MarketStats.count_applicants([_application("ines@loom.test", "mislaid", {})])
+
+        assert counted["total"] == 1
+        assert counted["statuses"] == {"mislaid": 1}
+        assert counted["states"] == {"open": 0, "follow_up": 0, "approved": 0, "rejected": 0}
 
 
 def _entry(phase, at):
@@ -364,6 +394,7 @@ class TestTheRoute:
         body = response.get_json()
         assert body["applicants"]["total"] == 5
         assert body["applicants"]["statuses"]["reviewer_approved"] == 3
+        assert body["applicants"]["states"]["approved"] == 3
         assert body["applicants"]["openedAt"] == "2026-09-01T09:00:00Z"
         assert body["applicants"]["closedAt"] == "2026-10-15T18:00:00Z"
         assert body["answers"]["groups"] == {"all": 5, "approved": 3, "assigned": 2}
@@ -373,6 +404,24 @@ class TestTheRoute:
         ]
         # The headlines' own figures are told in test_the_stats_headlines.py.
         assert set(body["headlines"]) == {"placements", "money"}
+
+    def test_the_states_count_each_stored_spelling_and_the_statuses_stay_as_stored(
+            self, monkeypatch, market, applications):
+        # An old front end reads `statuses` until the deploy promotes the front end too.
+        applications.documents += [
+            _application("ines@loom.test", "under_review", {}),
+            _application("bo@reed.test", "cancelled", {}),
+        ]
+
+        response = _signed_in(monkeypatch, "viewer@market.test").get(
+            "/markets/market-123/stats")
+
+        counted = response.get_json()["applicants"]
+        assert counted["states"] == {"open": 2, "follow_up": 0, "approved": 3, "rejected": 2}
+        assert counted["statuses"] == {
+            "open": 1, "under_review": 1, "reviewer_approved": 3, "reviewer_rejected": 1,
+            "cancelled": 1,
+        }
 
     def test_someone_who_may_not_read_the_market_is_refused(self, monkeypatch, market):
         response = _signed_in(monkeypatch, "outsider@x.test").get(

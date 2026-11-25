@@ -6,7 +6,7 @@ describes:
   - scripts/th-compose.sh
   - scripts/th-return.sh
   - docker-compose.worktree.yml
-verified: 2026-10-25
+verified: 2026-11-24
 ---
 
 # Treehouse worktrees for agents
@@ -48,7 +48,7 @@ scripts/th-return.sh "$path"
 
 ### When the teardown fails
 
-`th-return.sh` never hands a slot back with its stack still on it without saying so.
+A return run by hand never hands a slot back with its stack still on it without saying so (a `team-close` return leaves the stack to `team-stack down`, as [After team-stack down](#after-team-stack-down) says).
 When the slot's `down -v --remove-orphans` fails, it prints the teardown's own error output and
 `th-return: teardown failed for <path>; the lease is kept (use --force to return it anyway)`,
 and exits 1 without calling `treehouse return`, so the slot stays leased to you.
@@ -62,6 +62,13 @@ without one.
 
 The last step is `treehouse return`, and its exit status is the script's: treehouse v3 exits 3
 when it leaves a dirty worktree leased (commit its changes first; `--force` discards them).
+
+### After team-stack down
+
+The agent team's `team-close` takes a slot's stack down with `team-stack down`, then runs `th-return.sh` from the primary checkout with `TEAM_STACK_DOWN=1` in its environment.
+With `TEAM_STACK_DOWN=1`, `th-return.sh` runs no teardown of its own and goes straight to `treehouse return`.
+While a heavy run (an end-to-end run) holds the machine, `team-stack down` removes the stack's containers and volumes but leaves its network for its sweep, since removing a network fails every request a running browser has in flight; a `down` here would remove that network at once.
+Only `1` skips the teardown, and a return run by hand, which does not set it, tears down as before.
 
 ## Port map (per worktree slot)
 
@@ -108,7 +115,8 @@ and ports as `export` lines (`eval "$(scripts/th-compose.sh ports)"`).
   treehouse refuses every lease at 0 or a negative value, and caps an omitted key at 16.
 
 > **⚠️ `treehouse prune` and `treehouse destroy` do NOT tear down per-slot docker
-> stacks.** Docker teardown lives only in `th-return.sh`. If you `prune` (it
+> stacks.** Docker teardown lives in `th-return.sh` and in the agent team's
+> `team-stack down`. If you `prune` (it
 > auto-removes stale idle worktrees) or `destroy` a worktree whose stack is still
 > up, its offset-port containers keep running and can collide when that slot is
 > reused. Always `scripts/th-return.sh "$path"` first, or run the cleanup below.
@@ -173,6 +181,7 @@ docker ps -a --filter name=conventioner- --format '{{.ID}}\t{{.Names}}' \
   volumes. A re-leased worktree always starts with a fresh DB - this
   is intentional for per-slot isolation. If that teardown fails, the lease is kept
   (see [When the teardown fails](#when-the-teardown-fails)).
+  A `team-close` return leaves this to its `team-stack down`, which ran first and removes the volumes too (see [After team-stack down](#after-team-stack-down)).
 - **Use `th-lease.sh`, not raw `treehouse get`.** treehouse v3 runs hooks only from
   the user's `~/.config/treehouse/config.toml`, never from this repository's
   `treehouse.toml`, so a raw worktree would be missing `.env` and `node_modules`.
@@ -197,6 +206,6 @@ docker ps -a --filter name=conventioner- --format '{{.ID}}\t{{.Names}}' \
   `th-lease.sh` still hands out the slot, with its hooks set and no `front-end/node_modules`.
   Fix the lockfile on its branch and commit it.
 - If you `treehouse destroy` or `treehouse prune` a worktree without returning it
-  first, its docker stack lingers (only `th-return.sh` tears stacks down) - run
+  first, its docker stack lingers (only `th-return.sh` and `team-stack down` tear stacks down) - run
   `scripts/th-compose.sh down -v` in the worktree beforehand, or see
   [Kill lingering worktree stacks](#kill-lingering-worktree-stacks) above.

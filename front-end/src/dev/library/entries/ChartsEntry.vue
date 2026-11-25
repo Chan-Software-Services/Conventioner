@@ -11,7 +11,7 @@
  * its answers most chosen first and folded past 8, each answer one line in a card wider than 32rem
  * and stacked in a narrower one.
  */
-import { MarketPhase } from '@/assets/types/datatypes';
+import { MarketPhase, type ReviewState } from '@/assets/types/datatypes';
 import BarLedger from '@/components/BarLedger.vue';
 import ColumnChart from '@/components/charts/ColumnChart.vue';
 import FillGrid from '@/components/charts/FillGrid.vue';
@@ -30,8 +30,8 @@ import { fixture } from '../fixture';
 const { applications, question, room, fill, seats } = fixture;
 
 const submittedAt = applications.map((application) => application.submittedAt);
-const statuses: Record<string, number> = {};
-for (const { status } of applications) statuses[status] = (statuses[status] ?? 0) + 1;
+const states: Record<ReviewState, number> = { open: 0, follow_up: 0, approved: 0, rejected: 0 };
+for (const { review } of applications) states[review.state] += 1;
 
 /**
  * The file holds when each applied, not when the market opened or closed: here applications open
@@ -55,12 +55,12 @@ const byWeek = appliedOverTime(
   MarketPhase.Assignment,
 )!;
 
-// As the Stats tab counts the review, linking each status to the Applications tab's filter.
+// As the Stats tab counts the review, linking each state to the Applications tab's filter.
 const review = applicantStats(
   {
     total: applications.length,
     addedByHand: 0,
-    statuses,
+    states,
     submittedAt,
     openedAt: OPENED,
     closedAt: CLOSED,

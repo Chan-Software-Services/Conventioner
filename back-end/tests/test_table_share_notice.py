@@ -6,6 +6,7 @@ served on each application the organizer's screens already load, and is derived 
 other applications when it is read, never stored: the partner may apply, or be imported, later.
 """
 from api.applicants import list_market_applications
+from conftest import a_review_view
 from datatypes import ApplicationStatus
 
 MARKET = "market-1"
@@ -32,7 +33,7 @@ def application(email, table_choice="half", answer="", address=None, market=MARK
 
 def notices(applications, *docs):
     applications.documents = list(docs)
-    result, status = list_market_applications(MARKET)
+    result, status = list_market_applications(MARKET, a_review_view())
     assert status == 200
     return {app["applicantEmail"]: app["tableShareNotice"] for app in result["applications"]}
 
@@ -110,10 +111,14 @@ def test_the_partner_applying_later_clears_the_notice_with_nothing_else_done(app
 
 
 def test_a_partner_who_was_not_accepted_says_so(applications):
-    """The solver seats approved applicants only, so a rejected or withdrawn partner pairs nobody."""
-    for status in (ApplicationStatus.REVIEWER_REJECTED, ApplicationStatus.CANCELLED):
-        partner = application("bo@example.com")
-        partner["status"] = status.value
+    """The solver seats approved applicants only, so a rejected or withdrawn partner pairs nobody:
+    a rejection of either kind, a person's or a rule's, and one stored by the old offers flow's
+    ``cancelled``, which the review state reads as a rejection."""
+    for rejected in ({"status": ApplicationStatus.REVIEWER_REJECTED.value},
+                     {"status": ApplicationStatus.REVIEWER_REJECTED.value,
+                      "verdict_by": {"kind": "rule", "rule": "student"}},
+                     {"status": ApplicationStatus.CANCELLED.value}):
+        partner = {**application("bo@example.com"), **rejected}
 
         served = notices(applications, application("ana@example.com", answer="bo@example.com"), partner)
 
