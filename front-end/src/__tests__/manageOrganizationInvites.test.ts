@@ -214,6 +214,10 @@ describe.each([
     expect(text(`manage-org-add-${row}-not-emailed`)).toBe(
       'newcomer@example.test is invited, but the email could not be sent. Invite them again to send it.',
     );
+    // A warning, in its own ink, never the sent line's success (`aRefusalReadsRed.test.ts`).
+    expect([...byTestId(`manage-org-add-${row}-not-emailed`)!.classList]).toEqual([
+      'invite-not-emailed',
+    ]);
   });
 
   it('says the limit’s sentence when too many were sent, the address kept', async () => {
@@ -345,7 +349,7 @@ describe('Invited', () => {
       row.querySelector(selector)?.textContent?.replace(/\s+/g, ' ').trim();
     expect(
       invitedRows().map((row) => [
-        part(row, '.user-email'),
+        part(row, '.invited-email'),
         part(row, '[data-testid="manage-org-invited-as"]'),
         part(row, '[data-testid="manage-org-invited-withdraw"] .visually-hidden'),
       ]),

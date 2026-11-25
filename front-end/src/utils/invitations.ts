@@ -4,10 +4,11 @@
  * the ones a market's organizers send, read and withdraw in Manage market, and an organization's
  * owner and admins in Manage organization. One module, so a screen's tests mock one import.
  */
-import type { Invitation, SentInvitation } from '@/assets/types/datatypes';
+import type { Invitation, MarketInvitationRole, SentInvitation } from '@/assets/types/datatypes';
 import { api } from '@/utils/api';
 import { marketPath } from '@/utils/market';
 import { MONTH_NAMES } from '@/utils/calendarMonth';
+import type { OrganizationPlace } from '@/utils/organizations';
 
 /** What accepting gave, as `POST /invitations/<id>/accept` answers it. */
 export interface Accepted {
@@ -92,27 +93,47 @@ export function waitingLine(count: number): string {
 }
 
 /** What sending an invitation answers: the invitation, and whether its email went. */
-export interface Sent {
-  invitation: SentInvitation;
+export interface Sent<Role extends string = string> {
+  invitation: SentInvitation<Role>;
   emailed: boolean;
+}
+
+/**
+ * What an invite row says of the invitation it last sent, until the next is sent or the row closes:
+ * its address as the server keeps it, and whether its email went.
+ */
+export interface InviteSaid {
+  address: string;
+  emailed: boolean;
+}
+
+/** What an invite row says of `sent`, the answer to inviting the address typed as `typed`. */
+export function saidOf(sent: Sent, typed: string): InviteSaid {
+  return { address: sent.invitation?.email ?? typed, emailed: sent.emailed !== false };
 }
 
 /**
  * Invite `email` to `role` on the market whose `id` is `marketId`. The answer is the same for every
  * address: nobody is given a role until someone signed in with it accepts.
  */
-export async function inviteToMarket(marketId: string, email: string, role: string): Promise<Sent> {
+export async function inviteToMarket(
+  marketId: string,
+  email: string,
+  role: string,
+): Promise<Sent<MarketInvitationRole>> {
   const response = await api.post(`/markets/${encodeURIComponent(marketId)}/invitations`, {
     email,
     role,
   });
-  return response.data as Sent;
+  return response.data as Sent<MarketInvitationRole>;
 }
 
 /** The invitations waiting on a market, newest first. */
-export async function fetchMarketInvitations(marketId: string): Promise<SentInvitation[]> {
+export async function fetchMarketInvitations(
+  marketId: string,
+): Promise<SentInvitation<MarketInvitationRole>[]> {
   const response = await api.get(`/markets/${encodeURIComponent(marketId)}/invitations`);
-  return (response.data.invitations ?? []) as SentInvitation[];
+  return (response.data.invitations ?? []) as SentInvitation<MarketInvitationRole>[];
 }
 
 export async function withdrawMarketInvitation(marketId: string, id: string): Promise<void> {
@@ -128,19 +149,21 @@ export async function withdrawMarketInvitation(marketId: string, id: string): Pr
 export async function inviteToOrganization(
   orgId: string,
   email: string,
-  place: 'admin' | 'member',
-): Promise<Sent> {
+  place: OrganizationPlace,
+): Promise<Sent<OrganizationPlace>> {
   const response = await api.post(`/organizations/${encodeURIComponent(orgId)}/invitations`, {
     email,
     place,
   });
-  return response.data as Sent;
+  return response.data as Sent<OrganizationPlace>;
 }
 
 /** The invitations waiting on an organization, to either place, newest first. */
-export async function fetchOrganizationInvitations(orgId: string): Promise<SentInvitation[]> {
+export async function fetchOrganizationInvitations(
+  orgId: string,
+): Promise<SentInvitation<OrganizationPlace>[]> {
   const response = await api.get(`/organizations/${encodeURIComponent(orgId)}/invitations`);
-  return (response.data.invitations ?? []) as SentInvitation[];
+  return (response.data.invitations ?? []) as SentInvitation<OrganizationPlace>[];
 }
 
 export async function withdrawOrganizationInvitation(orgId: string, id: string): Promise<void> {

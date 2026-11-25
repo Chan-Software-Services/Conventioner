@@ -21,6 +21,7 @@ import {
   MarketPhase,
   MarketRole,
   type PermissionTableRow,
+  type MarketInvitationRole,
   type PersonWithAccess,
   type SentInvitation,
 } from '@/assets/types/datatypes';
@@ -34,9 +35,10 @@ import EmailAddress from '@/components/EmailAddress.vue';
 import HandOnMarketDialog from '@/components/HandOnMarketDialog.vue';
 import MarketPermissions from '@/components/MarketPermissions.vue';
 import HistorySection from '@/components/HistorySection.vue';
+import InvitationSent from '@/components/InvitationSent.vue';
+import InvitationsWaiting from '@/components/InvitationsWaiting.vue';
 import ListFrame, { LIST_FIND_FROM } from '@/components/ListFrame.vue';
 import MarketHistory from '@/components/MarketHistory.vue';
-import ReadFailed from '@/components/ReadFailed.vue';
 import {
   getRoleDisplayName,
   canManageRoles,
@@ -57,12 +59,12 @@ import {
 } from '@/utils/peopleWithAccess';
 import {
   fetchMarketInvitations,
-  invitedAs,
   inviteToMarket,
-  notEmailedLine,
-  sentLine,
+  saidOf,
   withdrawMarketInvitation,
+  type InviteSaid,
 } from '@/utils/invitations';
+import { useInvitationsWaiting } from '@/utils/useInvitationsWaiting';
 
 const props = defineProps<{
   manageOpen: boolean;
@@ -78,11 +80,8 @@ const showAddUserForm = ref(false);
 const newUserEmail = ref('');
 const newUserRole = ref<MarketRole>(MarketRole.Editor);
 const addUserErrorLine = ref<HTMLElement | null>(null);
-/**
- * What the invite row says of the invitation it last sent, until the next is sent or the row closes:
- * the address, and whether its email went.
- */
-const inviteSent = ref<{ address: string; emailed: boolean } | null>(null);
+/** What the invite row says of the invitation it last sent, until the next is sent or the row closes. */
+const inviteSent = ref<InviteSaid | null>(null);
 const deleteConfirming = ref(false);
 /** Counts the changes this dialog has made, so its History reads them as they land. */
 const changesMade = ref(0);
@@ -116,14 +115,6 @@ const roleChange = ref<
     } & ReturnType<typeof marketRoleChange>)
   | null
 >(null);
-/**
- * The invitation a Withdraw is asking about, until it is confirmed or cancelled, with the words its
- * confirmation says, taken when it opens, as Remove's are.
- */
-const withdrawing = ref<{ id: string; email: string } | null>(null);
-const invitedList = ref<HTMLElement | null>(null);
-/** What finds in "Invited", for as long as the dialog is open. */
-const invitedWords = ref('');
 /** Whether "Transfer ownership" is asking whom to, until it lands or is cancelled (T283). */
 const handingOn = ref(false);
 
@@ -210,10 +201,6 @@ const removal = useDialogSubmit({
   opening: over(() => removing.value),
   failure: 'The person was not removed.',
 });
-const withdrawal = useDialogSubmit({
-  opening: over(() => withdrawing.value),
-  failure: 'The invitation was not withdrawn.',
-});
 /** A refused role change is said beneath its row, and the confirmation closes on it. */
 const roleChanging = useDialogSubmit({
   opening: over(() => roleChange.value),
@@ -238,9 +225,7 @@ watch(
       inviteSent.value = null;
       deleteConfirming.value = false;
       removing.value = null;
-      withdrawing.value = null;
       peopleWords.value = '';
-      invitedWords.value = '';
       roleChange.value = null;
       handingOn.value = false;
       userError.value = null;
@@ -312,30 +297,22 @@ const grantableRoles = computed(() =>
  * the server serves them only to such a reader; keyed by the market Manage market is open on, so an
  * answer for the market it was open on never lands in another opening.
  */
-const invitations = useServerRead<string, SentInvitation[]>(
-  () => (grantableRoles.value.length ? read.key.value : null),
-  fetchMarketInvitations,
-  { failure: 'Could not read the invitations.' },
+const invitations = useInvitationsWaiting({
+  key: () => (grantableRoles.value.length ? read.key.value : null),
+  fetch: fetchMarketInvitations,
+  withdraw: withdrawMarketInvitation,
+});
+// Each opening starts with nothing finding in "Invited".
+watch(
+  () => [props.manageOpen, props.market] as const,
+  ([open, market]) => {
+    if (open && market) invitations.reset();
+  },
+  { immediate: true },
 );
-const invitedRows = computed(() => invitations.data.value ?? []);
-const invitationsFailed = computed(
-  () => invitations.phase.value === 'failed' || invitations.phase.value === 'refresh_failed',
-);
-const INVITATION = { one: 'invitation', many: 'invitations' };
-const findsInvitation = (invitation: SentInvitation, words: string) =>
-  invitation.email.includes(words.toLowerCase());
-const keyOfInvitation = (invitation: SentInvitation) => invitation.id;
 /** Whoever may give an invitation's role may withdraw it, as the server asks that role's row. */
-const mayWithdraw = (invitation: SentInvitation) =>
-  canManageRoles(marketData.value, invitation.role as MarketRole);
-
-/**
- * Reads the invitations again after a write sent in this opening, as `rereadAfterAWrite` reads the
- * market: once Manage market has moved on, nothing is read.
- */
-async function rereadInvitations(isCurrent: () => boolean) {
-  if (isCurrent()) await invitations.reread();
-}
+const mayWithdraw = (invitation: SentInvitation<MarketInvitationRole>) =>
+  canManageRoles(marketData.value, invitation.role);
 
 /** Transferring a market's ownership is the table's "Transfer ownership" row, its Owner's alone (T283). */
 const canHandOn = computed(() => mayTake(marketData.value, MarketAction.HandOnMarket));
@@ -378,8 +355,8 @@ async function handleAddUser() {
   await addUser.submit(
     async (isCurrent) => {
       const sent = await inviteToMarket(marketId, email, role);
-      await rereadInvitations(isCurrent);
-      return { address: sent.invitation?.email ?? email, emailed: sent.emailed !== false };
+      await invitations.reread(isCurrent);
+      return saidOf(sent, email);
     },
     {
       done: (sent) => {
@@ -457,53 +434,6 @@ async function handleRemoveUser() {
         // Once the confirmation has closed and the page behind it is no longer inert.
         await nextTick();
         peopleList.value?.focus();
-      },
-    },
-  );
-}
-
-/** Withdraw asks first: a mistyped address must not be able to join, nor a typed one lose it by a slip. */
-function askToWithdraw(invitation: SentInvitation) {
-  withdrawing.value = { id: invitation.id, email: invitation.email };
-}
-
-/** Cancel, Escape and the backdrop change nothing; the shell gives focus back to the row's Withdraw. */
-function cancelWithdraw() {
-  withdrawing.value = null;
-}
-
-/**
- * Confirmed: the invitation is withdrawn, and the invitations re-read in place with Manage market
- * still open; the Withdraw that opened the confirmation is gone with it, so focus goes to the list,
- * or to "Users with access" when none is left. A 404 is an invitation already accepted, declined,
- * ended or withdrawn: nobody can accept it any more, which is what was asked, so it is read as done.
- * A 409 is one sent again meanwhile, to another role: it is said in the confirmation, and the list
- * behind it re-read, so what was sent again is in sight before it is withdrawn.
- */
-async function handleWithdraw() {
-  const target = withdrawing.value;
-  const marketId = read.key.value;
-  if (!marketId || !target) return;
-  await withdrawal.submit(
-    async (isCurrent) => {
-      try {
-        await withdrawMarketInvitation(marketId, target.id);
-      } catch (err) {
-        if (getApiErrorStatus(err) !== 404) {
-          if (getApiErrorStatus(err) === 409) await rereadInvitations(isCurrent);
-          throw err;
-        }
-      }
-      // Held until the confirmation closes: during the re-read its Withdraw would send again.
-      await rereadInvitations(isCurrent);
-    },
-    {
-      done: async () => {
-        changesMade.value++;
-        withdrawing.value = null;
-        // Once the confirmation has closed and the page behind it is no longer inert.
-        await nextTick();
-        (invitedList.value ?? peopleList.value)?.focus();
       },
     },
   );
@@ -870,56 +800,15 @@ async function closeAddUser() {
         </p>
         <!-- The invitations waiting, for a reader who may give some role: nobody in them has access
              until they accept, so they are their own list, after the people who have it. -->
-        <ReadFailed
-          v-if="invitationsFailed"
-          name="manage-market-invited"
-          message="Could not read the invitations."
-          @retry="invitations.reread()"
+        <InvitationsWaiting
+          :waiting="invitations"
+          kind="market"
+          :mayWithdraw="mayWithdraw"
+          :open="manageOpen"
+          testid="manage-market"
+          :focusWhenNoneLeft="peopleList"
+          @withdrawn="changesMade++"
         />
-        <template v-if="invitedRows.length">
-          <h3 id="manage-market-invited-heading" data-testid="manage-market-invited-heading">
-            Invited
-          </h3>
-          <div
-            ref="invitedList"
-            class="users-list"
-            role="group"
-            aria-labelledby="manage-market-invited-heading"
-            tabindex="-1"
-            data-testid="manage-market-invited"
-          >
-            <ListFrame
-              v-model:words="invitedWords"
-              :items="invitedRows"
-              :finds="findsInvitation"
-              :itemKey="keyOfInvitation"
-              :noun="INVITATION"
-              findLabel="Find in invited"
-              testid="manage-market-invited-list"
-            >
-              <template #row="{ item: invitation }">
-                <div class="user-card" data-testid="manage-market-invited-row">
-                  <!-- The address and its line stacked, so a long address keeps the card's width. -->
-                  <div class="invited-who">
-                    <span class="user-email"><EmailAddress :words="invitation.email" /></span>
-                    <span class="invited-as" data-testid="manage-market-invited-as">
-                      {{ invitedAs('market', invitation) }}
-                    </span>
-                  </div>
-                  <button
-                    v-if="mayWithdraw(invitation)"
-                    type="button"
-                    class="btn btn--secondary btn--destructive"
-                    data-testid="manage-market-invited-withdraw"
-                    @click="askToWithdraw(invitation)"
-                  >
-                    Withdraw<span class="visually-hidden"> {{ invitation.email }}</span>
-                  </button>
-                </div>
-              </template>
-            </ListFrame>
-          </div>
-        </template>
         <!-- Opens the row it adds; that row carries its own Cancel. The button used to turn into a
              Cancel of its own, left alone above the row it cancelled (bug 43). -->
         <button
@@ -985,23 +874,7 @@ async function closeAddUser() {
           >
             {{ addUserSentence }}
           </p>
-          <!-- Always drawn, so a screen reader hears each line as it lands in it. -->
-          <div class="invite-said" aria-live="polite" data-testid="manage-market-add-user-said">
-            <p
-              v-if="inviteSent?.emailed"
-              class="invite-sent"
-              data-testid="manage-market-add-user-sent"
-            >
-              <EmailAddress :words="sentLine(inviteSent.address)" />
-            </p>
-            <p
-              v-else-if="inviteSent"
-              class="invite-sent"
-              data-testid="manage-market-add-user-not-emailed"
-            >
-              <EmailAddress :words="notEmailedLine(inviteSent.address)" />
-            </p>
-          </div>
+          <InvitationSent :sent="inviteSent" testid="manage-market-add-user" />
         </form>
       </section>
 
@@ -1127,23 +1000,6 @@ async function closeAddUser() {
       <template v-if="removing?.keeps">
         {{ ' ' }}<span data-testid="manage-market-remove-keeps">{{ removing.keeps }}</span>
       </template>
-    </p>
-  </AppDialog>
-
-  <!-- Destructive, as Remove's is, and opened on Cancel: the address it names can no longer join by
-       it, and only a new invitation, a new email, undoes it. -->
-  <AppDialog
-    :open="manageOpen && !!withdrawing"
-    :title="`Withdraw the invitation to ${withdrawing?.email ?? ''}?`"
-    testid="manage-market-withdraw"
-    destructive
-    confirm-label="Withdraw"
-    :submission="withdrawal"
-    @close="cancelWithdraw"
-    @submit="handleWithdraw"
-  >
-    <p class="confirm-text" data-testid="manage-market-withdraw-consequence">
-      They can no longer accept it.
     </p>
   </AppDialog>
 
@@ -1303,35 +1159,6 @@ async function closeAddUser() {
   }
 }
 
-/* An invitation's address over its role and when it ends, beside its Withdraw, with the address's
-   floor; on a phone it takes the card's width, with Withdraw beneath, as a person's row does. */
-.invited-who {
-  flex: 1;
-  min-width: min(100%, 12rem);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-hairline);
-}
-
-/* In the stack, the address takes its line's width and no more: its floor and its phone basis are
-   the stack's. */
-.invited-who .user-email {
-  flex: none;
-  min-width: 0;
-}
-
-@media (width <= 640px) {
-  .invited-who {
-    flex-basis: 100%;
-  }
-}
-
-/* An invitation's role and when it ends, in the muted ink that reaches AA on the card's beige. */
-.invited-as {
-  font-size: var(--text-xs);
-  color: var(--mm-text-muted-on-beige);
-}
-
 /* A role "through" a long organization name wraps inside the card rather than running past it. */
 .role-badge {
   display: inline-block;
@@ -1384,17 +1211,6 @@ async function closeAddUser() {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-}
-
-/* The sent line's live region, drawn while it says nothing: it then takes no gap of the form. */
-.invite-said:empty {
-  margin-top: calc(-1 * var(--space-2));
-}
-
-.invite-sent {
-  margin: 0;
-  color: var(--mm-text-green);
-  font-size: var(--text-xs);
 }
 
 /* On a phone the email field and the role each take a line of the invite row, with Send invitation

@@ -3,6 +3,9 @@ layer: business
 kind: flow
 describes:
   - front-end/src/views/ManageMarketOverlay.vue
+  - front-end/src/components/InvitationsWaiting.vue
+  - front-end/src/components/InvitationSent.vue
+  - front-end/src/utils/useInvitationsWaiting.ts
   - front-end/src/utils/peopleWithAccess.ts
   - front-end/e2e/everyone-with-access.spec.ts
   - front-end/src/components/MarketPermissions.vue
@@ -136,12 +139,13 @@ Covered by:
    Each row's Remove is the destructive intent at secondary weight, red ink on white, not a filled red button on every row ([the design language](../../design-system.md#the-primitive-layer)).
 5. Under the list, when a row comes through the organization: "Organization admins and members are managed in Manage organization.", "Manage organization" a link to `/organizations?manage=<id>`, which opens that organization's dialog, for a reader who belongs to it, and plain words for anyone else.
 6. "Invite someone", for whoever may give some role (bug 37), adds a person by inviting them, since nobody joins a market unasked ([a person accepts before they join](../rules/a-person-accepts-before-they-join.md), T538): the field "Email address", the role (Admin, Editor or Viewer, as far as the reader may give it), "Send invitation" and "Cancel" on one row, or on a phone the field and the role each on a line above the two buttons; under it, "They get an email, and join once they accept it signed in with this address.".
-   Every address is answered alike, whether or not it has an account: the field empties, the role goes back to Editor, the row stays open for the next address, and "Invitation sent to <address>." is said beneath it, as a screen reader hears it; when the email could not be sent, "<address> is invited, but the email could not be sent. Invite them again to send it." is said in its place.
+   Every address is answered alike, whether or not it has an account: the field empties, the role goes back to Editor, the row stays open for the next address, and "Invitation sent to <address>." is said beneath it, as a screen reader hears it; when the email could not be sent, "<address> is invited, but the email could not be sent. Invite them again to send it." is said in its place, in the warning's yellow rather than the sent line's green, since something was not done ([`InvitationSent.vue`](../../../front-end/src/components/InvitationSent.vue)).
    Inviting an address already invited replaces its invitation, with the role chosen, a new email and a new 14 days, so inviting again is how it is sent again.
    An address that already has a role on the market is refused beneath the row in the server's words, brought into view as the row may be the last in the body, pointing to that person's own row: adding once overwrote any role, the owner's too, around the guards a role change keeps (T15); so is an address that does not read as one, and too many invitations in a short time, with how long to wait; the address is kept.
 7. "Invited", after "Users with access" and before "Invite someone", for whoever may give some role and only while an invitation waits, lists each invitation newest first: its address, "Invited as Editor, until 8 December, 16:44" (the role as "Users with access" names it, the moment it ends in the reader's own time), and "Withdraw", where the reader may give that role.
    It is a list frame too, a page of 50 with "Find in invited" past 12, so 150 invitations never push the dialog down.
    The invitations are a read of their own, made as the dialog opens and again after each invitation and withdrawal; when it fails, "Could not read the invitations." with "Try again" stands in its place, and the rest of the dialog works.
+   Manage organization's "Invited" is the same list: [`InvitationsWaiting.vue`](../../../front-end/src/components/InvitationsWaiting.vue), with its Withdraw confirmation, over the read and the withdrawal of [`useInvitationsWaiting`](../../../front-end/src/utils/useInvitationsWaiting.ts).
    Nobody invited is under "Users with access", among the transfer's choices or in any count until they accept, as [answering an invitation](answering-an-invitation.md) says; the dialog then lists them at their role when it next reads the market.
    "Withdraw" asks first, in a destructive confirmation that opens on Cancel: "Withdraw the invitation to <address>?", then "They can no longer accept it.".
    Cancel and Escape change nothing and give focus back to that Withdraw; "Withdraw" ends the invitation, the list re-reads in place with the dialog open, and focus goes to "Invited", or to "Users with access" when none is left.

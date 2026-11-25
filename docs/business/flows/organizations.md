@@ -6,6 +6,9 @@ describes:
   - front-end/src/__tests__/OrganizationsView.test.ts
   - front-end/src/__tests__/theMarketsAndOrganizationsAtScale.test.ts
   - front-end/e2e/inviting-someone-to-an-organization.spec.ts
+  - front-end/src/components/InvitationsWaiting.vue
+  - front-end/src/components/InvitationSent.vue
+  - front-end/src/utils/useInvitationsWaiting.ts
 verified: 2026-11-25
 sources:
   - E26/F06/S02
@@ -80,11 +83,12 @@ Covered by:
 1. On an organization card, "Manage"; or Manage market's "Manage organization", under its "Users with access" ([L3](ending-and-managing-a-market.md#l3-manage-who-has-access)), which opens `/organizations?manage=<id>`: the page ([`OrganizationsView.vue`](../../../front-end/src/views/OrganizationsView.vue)) opens that organization's Manage organization once its list holds it, and drops the key when the dialog closes, or at once when it names none of the reader's organizations, so a refresh or Back does not open it again.
 2. Under Admins, "Invite admin", the owner's alone; under Members, "Invite member", the owner's and the admins'.
    Each adds a person by inviting them, since nobody joins an organization unasked ([a person accepts before they join](../rules/a-person-accepts-before-they-join.md), T538): the field "Email address", "Send invitation" and "Cancel" on one row, or on a phone the field on a line above the two buttons; under it, "They get an email, and join once they accept it signed in with this address.".
-3. Every address is answered alike, whether or not it has an account: the field empties, the row stays open for the next address, and "Invitation sent to <address>." is said beneath it, as a screen reader hears it; when the email could not be sent, "<address> is invited, but the email could not be sent. Invite them again to send it." is said in its place.
+3. Every address is answered alike, whether or not it has an account: the field empties, the row stays open for the next address, and "Invitation sent to <address>." is said beneath it, as a screen reader hears it; when the email could not be sent, "<address> is invited, but the email could not be sent. Invite them again to send it." is said in its place, in the warning's yellow rather than the sent line's green, since something was not done ([`InvitationSent.vue`](../../../front-end/src/components/InvitationSent.vue)).
    Inviting an address already invited replaces its invitation, with the place chosen, a new email and a new 14 days, so inviting again is how it is sent again.
    An address already in the organization is refused beneath the row in the server's words, brought into view as the row may be the last in the body: "<address> owns this organization.", "<address> is already an admin of this organization.", or "<address> is already a member of this organization.", which "Invite admin" follows with "Make them an admin from their row." ([B3a](#b3a-make-an-admin-a-member-or-a-member-an-admin)); so is an address that does not read as one, and too many invitations in a short time, with how long to wait; the address is kept.
 4. "Invited", after Members, for the owner and the admins and only while an invitation waits, lists each invitation newest first: its address, "Invited as admin, until 8 December, 16:44" or "Invited as member, until ..." (the moment it ends in the reader's own time), and "Withdraw" where the reader may invite to that place: the owner on every row, an admin on the member ones.
    A member sees no "Invited", and their dialog makes no read of it.
+   It is Manage market's "Invited" ([L3](ending-and-managing-a-market.md#l3-manage-who-has-access)): [`InvitationsWaiting.vue`](../../../front-end/src/components/InvitationsWaiting.vue) over [`useInvitationsWaiting`](../../../front-end/src/utils/useInvitationsWaiting.ts), in a section of its own that stays mounted, hidden, while nothing waits, so withdrawing the last invitation still closes its confirmation.
    Admins, Members and Invited are each a [list frame](../../design-system.md), so 150 members never push the sections below thousands of pixels down: Members says "Showing 50 of 150", draws 50 rows and "Show 50 more", and past 12 has a field, "Find in admins", "Find in members" or "Find in invited", that finds by any part of an address, capitals aside, since an account holds no name.
    The words last as long as the dialog and never reach the address.
    An address breaks before its "@" or a dot, never just after a hyphen, drawn by [`EmailAddress.vue`](../../../front-end/src/components/EmailAddress.vue).
