@@ -4,8 +4,9 @@
 Why: an organization keeps its people as ``people``, one map from user id to ``owner``, ``admin``
 or ``member`` (T283). The release that brought the map kept ``owner``, ``admins`` and ``members``
 beside it as an exact mirror, so a rollback to the release before it read the same people. That
-release is now two back, and this one reads and writes the map alone, so the lists are a second
-copy of who is in an organization that nothing keeps true; this is the follow-up ADR 0025 names.
+release is the one before this one, and this one reads and writes the map alone, so the lists are
+a second copy of who is in an organization that nothing keeps true; this is the follow-up ADR 0025
+names.
 
 What it writes:
 
