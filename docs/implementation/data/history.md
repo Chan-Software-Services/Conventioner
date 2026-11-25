@@ -15,6 +15,7 @@ describes:
   - back-end/api/organizations.py#get_default_permission_history
   - back-end/tests/test_the_history.py
   - back-end/tests/test_only_an_asking_writes_a_markets_history.py
+  - back-end/migrations/history_follows_location_swap.py
 verified: 2026-11-24
 sources:
   - wayfinding/readable-journey/08
@@ -126,6 +127,7 @@ One block per action, in the order of [the actions table](../modules/market-acti
   - Detail: whichever of `currency`, `half_table_percent`, `groups` (each `{name, conditions, prices}`, the whole list) and `everyone_else` (each tier's `{tier, cents}`) changed; a market never priced is the card's defaults before (CAD, 50, no group, no price), so its first price records only the prices typed
 - `floorplan`: saving a location's layout (T257)
   - Subject: `floorplan_id`, and `location`, its location's name
+  - Renamed after a swap of two locations' names by an operator's script ([`history_follows_location_swap.py`](../../../back-end/migrations/history_follows_location_swap.py)), so it names the place it was about: `location` is the name now of the location its layout (`floorplan_id`) is on, and `location_as_recorded` the name the save recorded; an entry never renamed has no `location_as_recorded`
   - Detail: what the save changed, `layout.describe_change`'s fields, with no before and after: `started` (its first save), `added` and `removed` (tables counted per section name), `moved`, `turned` (the short way round, so 359.999° to 0° is no turn) and `retyped` (given another table type; how many tables), `renumbered` (section names), `zones` (added, changed and removed counted), `image` (`"replaced"`), `scale` (metres across to the millimetre, `before` and `after`), `colours` and `labels` (section names); never a table itself, and a save that changes nothing records nothing
   - An entry the beta's save wrote, before this, has `before` and `after`: whichever of `sections`, `locations` and `floorplan_ids` changed, and the saved floorplan's `tables` and `no_go_zones` counted and its `layout_digest`, and earlier still `walls` and `table_types`; it reads as it did
 - `floorplan_image_deleted`: deleting a floorplan image
