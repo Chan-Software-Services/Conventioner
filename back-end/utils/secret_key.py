@@ -84,9 +84,9 @@ def signing_secret() -> str:
         return _ephemeral_dev_secret()
 
     raise SecretKeyNotConfiguredError(
-        f"{SECRET_KEY_VAR} is not set. It signs the Flask session cookie the organizer API "
-        f"authenticates every request with, so a process without one has no way to tell a session "
-        f"it issued from a session an attacker wrote -- and a session an attacker wrote reads and "
+        f"{SECRET_KEY_VAR} is not set. Every signing key this process uses is derived from it, the "
+        f"organizer's session cookie's among them, so a process without one has no way to tell a "
+        f"session it issued from a session an attacker wrote -- and a session an attacker wrote reads and "
         f"overwrites any organizer's markets, vendors and applications, with no password and no "
         f"login. There is deliberately no default: a fallback secret in a repository is a published "
         f"key. Set {SECRET_KEY_VAR} to a long random string (for example "
@@ -144,8 +144,8 @@ def _reject_a_secret_that_is_not_one(value: str) -> None:
     if configured and len(configured) < MINIMUM_SECRET_LENGTH:
         raise SecretKeyNotConfiguredError(
             f"{SECRET_KEY_VAR} is {len(configured)} characters long. A signing key is only worth the "
-            f"work it takes to guess: this one signs the session cookie the organizer API "
-            f"authenticates every request with, and a short one is brute-forced offline from a "
+            f"work it takes to guess: every signing key is derived from this one, the organizer's "
+            f"session cookie's among them, and a short one is brute-forced offline from a "
             f"single cookie, after which sessions for any organizer can be minted at will. At least "
             f"{MINIMUM_SECRET_LENGTH} characters, and random rather than chosen - "
             f"`python -c 'import secrets; print(secrets.token_urlsafe(48))'`."
