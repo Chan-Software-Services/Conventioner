@@ -1,8 +1,8 @@
 """
 Permission resolution and access control functions.
 """
-from typing import Any, Callable, Iterable, List, NamedTuple, Optional
-from datatypes import Market, MarketRole, Organization
+from typing import Any, Callable, List, Mapping, NamedTuple, Optional
+from datatypes import Market, MarketRole, Organization, OrganizationRole
 from db_config import get_database
 import api.users as UsersApi
 import organization_people as OrganizationPeople
@@ -21,19 +21,34 @@ ROLE_RANK = {
 
 
 def organization_market_role(
-    user_id: str, owner: Optional[str], admins: Iterable[str], members: Iterable[str],
+    user_id: str, people: Mapping[str, OrganizationRole],
 ) -> Optional[MarketRole]:
-    """What a person's place in an organization gives them on every market it holds.
+    """What a person's place in an organization, by its people map, gives them on every market it
+    holds.
 
     An organization's admins run its markets: its owner and admins hold Admin, as a market's Admin
     does, and a member reads them. Never Owner: a market has exactly one, the person named on it,
     who alone deletes it and manages its admins.
     """
-    if user_id == owner or user_id in admins:
+    place = people.get(user_id)
+    if place in (OrganizationRole.OWNER, OrganizationRole.ADMIN):
         return MarketRole.ADMIN
-    if user_id in members:
+    if place == OrganizationRole.MEMBER:
         return MarketRole.VIEWER
     return None
+
+
+#: The order an organization's people are named in: its owner, then its admins, then its members.
+_PLACES_IN_ORDER = (OrganizationRole.OWNER, OrganizationRole.ADMIN, OrganizationRole.MEMBER)
+
+
+def organization_people_in_order(organization: Organization) -> List[str]:
+    """The user ids of an organization's people: its owner, then its admins, then its members, each
+    place in its people map's order."""
+    return [
+        user_id for place in _PLACES_IN_ORDER
+        for user_id, held in organization.people.items() if held == place
+    ]
 
 
 def higher_role(*roles: Optional[MarketRole]) -> Optional[MarketRole]:
@@ -86,22 +101,21 @@ def market_role_of(
         return None
     through_organization = None
     if organization is not None and organization.id == market.organization_id:
-        through_organization = organization_market_role(
-            user_id, organization.owner, organization.admins, organization.members)
+        through_organization = organization_market_role(user_id, organization.people)
     return higher_role((market.roles or {}).get(user_id), through_organization)
 
 
 def people_with_market_role(market: Market, organization: Optional[Organization]) -> List[str]:
     """The user ids of everyone who holds any role on the market, by ``get_user_market_role``'s rule.
 
-    The people named in its roles, then its organization's owner, admins and members, each once
-    and each kept only if the rule gives them a role: everyone who can see the market, and so may
-    own a follow-up on it.
+    The people named in its roles, then its organization's owner, admins and members
+    (``organization_people_in_order``), each once and each kept only if the rule gives them a
+    role: everyone who can see the market, and so may own a follow-up on it.
     """
     roles = market.roles or {}
     if organization is None or organization.id != market.organization_id:
         return list(roles)
-    candidates = [*roles, organization.owner, *organization.admins, *organization.members]
+    candidates = [*roles, *organization_people_in_order(organization)]
     return [
         user_id for user_id in dict.fromkeys(candidates)
         if market_role_of(user_id, market, organization)
@@ -155,8 +169,7 @@ def people_with_access(
         if not of_the_organization:
             people.append(Access(user_id, email, market_role, market_role, None, False))
             continue
-        given = organization_market_role(
-            user_id, organization.owner, organization.admins, organization.members)
+        given = organization_market_role(user_id, organization.people)
         place = _PLACE_BY_ROLE.get(given)
         from_organization = given is not None and (
             market_role is None or ROLE_RANK[given] >= ROLE_RANK[market_role])
@@ -172,8 +185,7 @@ def in_market_organization(
     """Whether this person is the owner, an admin or a member of the market's organization."""
     return bool(
         user_id and organization is not None and organization.id == market.organization_id
-        and organization_market_role(
-            user_id, organization.owner, organization.admins, organization.members)
+        and organization_market_role(user_id, organization.people)
     )
 
 

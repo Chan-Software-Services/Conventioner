@@ -36,7 +36,7 @@ import api.organizations as OrgsApi
 import api.users as UsersApi
 import history as History
 from client_errors import ClientError
-from datatypes import IntakeMode, MarketPhase, User, market_name_slug
+from datatypes import IntakeMode, MarketPhase, User, market_name_slug, organization_people_of
 from db_config import require_named_database
 from market_documents import market_doc_field, market_doc_filter
 
@@ -105,7 +105,7 @@ def _test_organization(owner: User) -> str:
     existing = OrgsApi.organizations_collection.find_one({"name": TEST_ORGANIZATION})
     if existing is None:
         return OrgsApi.create_organization(owner.email, TEST_ORGANIZATION)
-    if existing.get("owner") != owner.id:
+    if organization_people_of(existing).get(owner.id) != "owner":
         raise SeedError(
             f"{TEST_ORGANIZATION!r} exists and belongs to another account. Seed as its owner."
         )

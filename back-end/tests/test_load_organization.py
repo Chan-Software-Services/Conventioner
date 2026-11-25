@@ -19,9 +19,7 @@ def _organization_doc(**overrides):
         "_id": "mongo-org-id",
         "id": ORG_ID,
         "name": "Test Org",
-        "owner": "user-9",
-        "admins": [],
-        "members": ["user-1"],
+        "people": {"user-9": "owner", "user-1": "member"},
         "markets": ["market-123"],
     }
     doc.update(overrides)
@@ -66,7 +64,10 @@ class TestLoadOrganizationContext:
         admins and members lost every role on its markets; the fold reads it, the owner winning."""
         monkeypatch.setattr(
             MarketsApi.OrgsApi, "get_organization",
-            lambda _oid: _organization_doc(admins=["user-2", "user-9"], members=["user-9", "user-1"]),
+            lambda _oid: {
+                **{key: value for key, value in _organization_doc().items() if key != "people"},
+                "owner": "user-9", "admins": ["user-2", "user-9"], "members": ["user-9", "user-1"],
+            },
         )
 
         with caplog.at_level("WARNING"):

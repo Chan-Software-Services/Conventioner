@@ -46,6 +46,21 @@ class Markets:
 
 
 def organization(org_id, owner, admins, members):
+    """An organization as it is stored, its people map holding the owner, then each admin, then
+    each member, in that order."""
+    return {
+        "_id": f"mongo-{org_id}", "id": org_id, "name": f"Example {org_id}",
+        "people": {
+            owner.id: "owner",
+            **{person.id: "admin" for person in admins},
+            **{person.id: "member" for person in members},
+        },
+        "markets": [], "theme": None,
+    }
+
+
+def stored_before_the_map(org_id, owner, admins, members):
+    """An organization stored before the people map (T283), its people in three lists alone."""
     return {
         "_id": f"mongo-{org_id}", "id": org_id, "name": f"Example {org_id}", "owner": owner.id,
         "admins": [person.id for person in admins], "members": [person.id for person in members],
@@ -187,7 +202,7 @@ def test_a_folded_organization_serves_its_people_from_the_map_in_its_order(reads
 def test_an_unfolded_organization_whose_lists_overlap_serves_each_person_once(reads):
     """Stored before the map, its owner also an admin and an admin also a member: served folded,
     the owner winning, then the admins, so nobody is listed twice."""
-    reads(organization("org-1", READER, [READER, ADA], [ADA, READER, BEA]))
+    reads(stored_before_the_map("org-1", READER, [READER, ADA], [ADA, READER, BEA]))
 
     [listed] = OrgsApi.get_organizations_for_user(READER.email)
 

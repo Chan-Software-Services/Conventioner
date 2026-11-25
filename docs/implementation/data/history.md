@@ -16,7 +16,7 @@ describes:
   - back-end/tests/test_the_history.py
   - back-end/tests/test_only_an_asking_writes_a_markets_history.py
   - back-end/migrations/history_follows_location_swap.py
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - wayfinding/readable-journey/08
   - E40/F01/S01

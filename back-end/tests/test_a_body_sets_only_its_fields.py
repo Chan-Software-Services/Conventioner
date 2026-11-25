@@ -161,8 +161,8 @@ class TestAnOrganizationUpdate:
     @pytest.fixture
     def organization(self, monkeypatch):
         return install_organizations(monkeypatch, FakeOrganizations({
-            "_id": "org-object-id", "id": ORG_ID, "name": "Night Market Society", "owner": OWNER_ID,
-            "admins": [], "members": [], "markets": ["market-1"], "theme": None,
+            "_id": "org-object-id", "id": ORG_ID, "name": "Night Market Society",
+            "people": {OWNER_ID: "owner"}, "markets": ["market-1"], "theme": None,
         }))
 
     def test_it_changes_only_the_name(self, signed_in, organization):
@@ -171,6 +171,7 @@ class TestAnOrganizationUpdate:
             "owner": "someone-else",
             "admins": ["someone-else"],
             "members": ["someone-else"],
+            "people": {"someone-else": "owner"},
             "markets": [],
             "theme": {"primary_color": "#000000", "secondary_color": "#ffffff"},
             "$where": "1",

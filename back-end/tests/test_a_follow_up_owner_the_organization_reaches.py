@@ -48,10 +48,8 @@ OUTSIDER_REFUSAL = "You can hand a follow-up only to someone named in this marke
 UNDO_OWNER_REFUSAL = (
     "This verdict can no longer be undone here: the follow-up it closed would come back to an "
     "owner you cannot see on this market. An Admin or the market's owner can change it.")
-ORGANIZATION = Organization(
-    id=ORG_ID, name="Test Org", owner="org-owner", admins=["org-admin"], members=["org-member"],
-    markets=["market-123"],
-)
+ORG_PEOPLE = {"org-owner": "owner", "org-admin": "admin", "org-member": "member"}
+ORGANIZATION = Organization(id=ORG_ID, name="Test Org", people=ORG_PEOPLE, markets=["market-123"])
 
 
 def _account(email):
@@ -232,8 +230,8 @@ def test_a_viewer_not_in_the_organization_reads_no_people(market):
 
 
 def test_someone_on_the_market_and_in_its_organization_is_served_once(monkeypatch, market):
-    org = Organization(**{**ORGANIZATION.model_dump(exclude={"people"}),
-                          "admins": ["org-admin", "user-sam"]})
+    org = Organization(**{**ORGANIZATION.model_dump(),
+                          "people": {**ORG_PEOPLE, "user-sam": "admin"}})
     monkeypatch.setattr(OrgsApi, "get_organization", lambda _org_id: org.model_dump())
 
     served = MarketsApi.get_market_for_user("org-owner@org.test", "market-123")
