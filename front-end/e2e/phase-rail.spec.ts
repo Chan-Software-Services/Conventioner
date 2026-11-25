@@ -48,17 +48,6 @@ test.describe('The phase rail', () => {
     });
   });
 
-  async function openMarket(page: import('@playwright/test').Page, path: string) {
-    const res = await page.request.get(`${APP_API}/markets/${seed.marketId}`);
-    const { market } = (await res.json()) as { market: Record<string, unknown> };
-    await page.evaluate((m) => {
-      const copy = { ...(m as Record<string, unknown>) };
-      delete copy._id;
-      localStorage.setItem('user', JSON.stringify('e2e@example.com'));
-    }, market);
-    await page.goto(path);
-  }
-
   /**
    * A CSV market of the calling test's own, its results out and in its market days. A test of this
    * describe that reads results it did not publish itself seeds them here rather than read what an
@@ -86,7 +75,7 @@ test.describe('The phase rail', () => {
       marketScreenPath(seed.marketId, 'attendance'),
       marketScreenPath(seed.marketId, 'stats'),
     ]) {
-      await openMarket(page, path);
+      await page.goto(path);
       const rail = page.getByTestId('phase-rail');
       await expect(rail, `no rail on ${path}`).toBeVisible({ timeout: 15000 });
       await expect(rail.getByTestId('phase-rail-current')).toHaveText(/Assignment/);
@@ -106,7 +95,7 @@ test.describe('The phase rail', () => {
       data: { toPhase: 'market_days' },
     });
 
-    await openMarket(page, marketSetupPath(seed.marketId, 'setup'));
+    await page.goto(marketSetupPath(seed.marketId, 'setup'));
     const chip = page.getByTestId('phase-rail-vendor-page');
     await expect(chip).toBeVisible({ timeout: 15000 });
     const url = (await page.getByTestId('phase-rail-vendor-page-link').getAttribute('href')) ?? '';
