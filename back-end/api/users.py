@@ -1,7 +1,6 @@
 import secrets
 import time
 import uuid
-from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Optional, Tuple
 from flask import request, jsonify, session
 from flask_login import UserMixin
@@ -11,7 +10,7 @@ from db_config import get_database
 from utils.email import (
     send_account_exists_email, send_verification_email, send_password_reset_email, send_otp_email
 )
-from utils.captcha import verify_recaptcha
+from utils import captcha
 from datetime import datetime, timezone
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from utils.email_address import normalized_email
@@ -186,69 +185,58 @@ def _now() -> float:
     return time.time()
 
 
-@dataclass(frozen=True)
-class _Bounds:
-    """How one sign-in route is bounded (``sign_in_limits``): a limit per caller and per address,
-    and the sentence its refusal says under the key the route's other answers use.
-
-    Every bounded route keeps one order: the caller is counted before the body is read, and the
-    normalized address before any account is looked up, so a refusal is the same for every address
-    and never depends on whether a password or a code was right. A route whose try signed in takes
-    both counts back with the ``now`` it counted them with.
-    """
-
-    per_caller: sign_in_limits.SignInLimit
-    per_address: sign_in_limits.SignInLimit
-    sentence: str
-    key: str
-
-    def caller_refusal(self, now: datetime) -> Optional[Tuple[Any, int]]:
-        """The 429 when this caller is past its limit, else None; counts the try either way."""
-        return self._refusal(self.per_caller, sign_in_limits.caller(), now)
-
-    def address_refusal(self, email: str, now: datetime) -> Optional[Tuple[Any, int]]:
-        """The 429 when this address is past its limit, else None; counts the try either way."""
-        return self._refusal(self.per_address, email, now)
-
-    def take_back(self, email: str, now: datetime) -> None:
-        """Take back a try that signed in, from the caller's count and the address's."""
-        sign_in_limits.take_back_attempt(self.per_caller, sign_in_limits.caller(), now)
-        sign_in_limits.take_back_attempt(self.per_address, email, now)
-
-    def _refusal(self, limit, subject: str, now: datetime):
-        retry_after = sign_in_limits.count_attempt(limit, subject, now)
-        return sign_in_limits.too_many(retry_after, self.sentence, key=self.key)
-
-
-_PASSWORD_SIGN_IN = _Bounds(
-    sign_in_limits.PASSWORD_PER_CALLER, sign_in_limits.PASSWORD_PER_ADDRESS,
-    SIGN_IN_TOO_MANY, "message",
+# The sign-ins that check a secret (``sign_in_limits.SecretBounds``): each counted per caller, per
+# caller and address, and per address alone, past which it asks the human check (action
+# ``sign-in``), with limits of its own.
+_PASSWORD_SIGN_IN = sign_in_limits.SecretBounds(
+    sign_in_limits.PASSWORD_PER_CALLER,
+    sign_in_limits.PASSWORD_PER_CALLER_AND_ADDRESS,
+    sign_in_limits.PASSWORD_PER_ADDRESS_CEILING,
+    captcha.SIGN_IN,
+)
+_CODE_SIGN_IN = sign_in_limits.SecretBounds(
+    sign_in_limits.ORGANIZER_CODE_PER_CALLER,
+    sign_in_limits.ORGANIZER_CODE_PER_CALLER_AND_ADDRESS,
+    sign_in_limits.ORGANIZER_CODE_PER_ADDRESS_CEILING,
+    captcha.SIGN_IN,
 )
 
 
-_CODE_SIGN_IN = _Bounds(
-    sign_in_limits.ORGANIZER_CODE_PER_CALLER, sign_in_limits.ORGANIZER_CODE_PER_ADDRESS,
-    SIGN_IN_TOO_MANY, "msg",
-)
+def _sign_in_refused(
+    refusal: Optional[sign_in_limits.Refusal], key: str,
+) -> Optional[Tuple[Any, int]]:
+    """A sign-in's answer for a refusal, ``SIGN_IN_TOO_MANY`` or the human check's 403 under the
+    route's ``key``, or None."""
+    return sign_in_limits.answer(refusal, SIGN_IN_TOO_MANY, key=key)
 
 
-_CODE_REQUEST = _Bounds(
+# The requests that mail a code or a link (``sign_in_limits.MailBounds``): each counted per caller,
+# per caller and address, and per address by the hour, each with limits of its own.
+_CODE_REQUEST = sign_in_limits.MailBounds(
     sign_in_limits.ORGANIZER_CODE_REQUEST_PER_CALLER,
-    sign_in_limits.ORGANIZER_CODE_REQUEST_PER_ADDRESS,
-    ASKED_TOO_OFTEN, "msg",
+    sign_in_limits.ORGANIZER_CODE_REQUEST_PER_CALLER_AND_ADDRESS,
+    sign_in_limits.ORGANIZER_CODE_REQUEST_PER_ADDRESS_HOUR,
 )
-_RESET_LINK = _Bounds(
-    sign_in_limits.RESET_LINK_PER_CALLER, sign_in_limits.RESET_LINK_PER_ADDRESS,
-    ASKED_TOO_OFTEN, "msg",
+_RESET_LINK = sign_in_limits.MailBounds(
+    sign_in_limits.RESET_LINK_PER_CALLER,
+    sign_in_limits.RESET_LINK_PER_CALLER_AND_ADDRESS,
+    sign_in_limits.RESET_LINK_PER_ADDRESS_HOUR,
 )
-_VERIFICATION_LINK = _Bounds(
-    sign_in_limits.VERIFICATION_LINK_PER_CALLER, sign_in_limits.VERIFICATION_LINK_PER_ADDRESS,
-    ASKED_TOO_OFTEN, "msg",
+_VERIFICATION_LINK = sign_in_limits.MailBounds(
+    sign_in_limits.VERIFICATION_LINK_PER_CALLER,
+    sign_in_limits.VERIFICATION_LINK_PER_CALLER_AND_ADDRESS,
+    sign_in_limits.VERIFICATION_LINK_PER_ADDRESS_HOUR,
 )
-_SIGN_UP = _Bounds(
-    sign_in_limits.SIGN_UP_PER_CALLER, sign_in_limits.SIGN_UP_PER_ADDRESS,
-    ASKED_TOO_OFTEN, "msg",
+_SIGN_UP = sign_in_limits.MailBounds(
+    sign_in_limits.SIGN_UP_PER_CALLER,
+    sign_in_limits.SIGN_UP_PER_CALLER_AND_ADDRESS,
+    sign_in_limits.SIGN_UP_PER_ADDRESS_HOUR,
 )
+
+
+def _asked_too_often(refusal: Optional[sign_in_limits.Refusal]) -> Optional[Tuple[Any, int]]:
+    """A mail request's answer for a refusal, ``ASKED_TOO_OFTEN`` under ``msg``, or None."""
+    return sign_in_limits.answer(refusal, ASKED_TOO_OFTEN, key="msg")
 
 
 def _limit_clock() -> datetime:
@@ -477,13 +465,14 @@ def _insert_unless_taken(user_doc: dict):
 
 
 def login(bcrypt, login_user):
-    """The password sign-in, bounded per caller and per address (``_Bounds``).
+    """The password sign-in, bounded per caller, per caller and address, and per address alone,
+    past which it asks the human check (``_PASSWORD_SIGN_IN``), all before the account is looked up.
 
     A right password takes its try back, whether it signs in or answers that the address needs
     verifying first, so only wrong passwords pile up.
     """
     now = _limit_clock()
-    refused = _PASSWORD_SIGN_IN.caller_refusal(now)
+    refused = _sign_in_refused(_PASSWORD_SIGN_IN.caller_refusal(now), "message")
     if refused:
         return refused
 
@@ -494,13 +483,14 @@ def login(bcrypt, login_user):
     if not email or not password:
         return jsonify({"message": "Email and password required"}), 400
 
-    refused = _PASSWORD_SIGN_IN.address_refusal(email, now)
+    refused = _sign_in_refused(_PASSWORD_SIGN_IN.before_the_secret(
+        email, string_field(data, "captcha_token"), now), "message")
     if refused:
         return refused
 
     user_doc = users_collection.find_one({"email": email})
     if _password_matches(bcrypt, user_doc, password):
-        _PASSWORD_SIGN_IN.take_back(email, now)
+        _PASSWORD_SIGN_IN.signed_in(email, now)
         if not user_doc.get("email_verified", False):
             return jsonify({"message": SIGN_IN_VERIFY_FIRST}), 403
 
@@ -534,8 +524,10 @@ def check_session(current_user):
 
 
 def register_user_with_captcha(bcrypt):
-    """Register a new user with CAPTCHA verification, bounded per caller and per address
-    (``_Bounds``) before the captcha is checked, so a refused sign-up spends no check.
+    """Register a new user who passed the human check (``utils.captcha``), in one order: the
+    caller is counted, then the check is asked (action ``sign-up``), then the caller and address
+    and the address by the hour are counted (``_SIGN_UP``), so a caller past its limit spends no
+    check and a sign-up that fails the check counts against the caller only.
 
     A sign-up answers alike whether or not its address has an account: the address's format and
     the password's rules are checked before the account is looked up, the password is hashed
@@ -544,7 +536,7 @@ def register_user_with_captcha(bcrypt):
     took it, is sent one email saying so instead (``_answer_a_taken_address``).
     """
     now = _limit_clock()
-    refused = _SIGN_UP.caller_refusal(now)
+    refused = _asked_too_often(_SIGN_UP.caller_refusal(now))
     if refused:
         return refused
 
@@ -556,18 +548,12 @@ def register_user_with_captcha(bcrypt):
     if not email or not password:
         return jsonify({"msg": "Email and password required"}), 400
 
-    if not captcha_token:
-        return jsonify({"msg": "CAPTCHA verification required"}), 400
+    if not captcha.captcha_passes(captcha_token, captcha.SIGN_UP):
+        return captcha.human_check_needed("msg")
 
-    refused = _SIGN_UP.address_refusal(email, now)
+    refused = _asked_too_often(_SIGN_UP.before_the_mail(email, now))
     if refused:
         return refused
-
-    # Verify CAPTCHA
-    ip_address = request.remote_addr
-    captcha_success, captcha_score = verify_recaptcha(captcha_token, ip_address)
-    if not captcha_success:
-        return jsonify({"msg": "CAPTCHA verification failed"}), 400
 
     # Validate email format
     if "@" not in email or "." not in email.split("@")[1]:
@@ -643,7 +629,8 @@ def verify_email():
 
 
 def resend_verification_email():
-    """Mail the verification link again, bounded per caller and per address (``_Bounds``).
+    """Mail the verification link again, bounded per caller, per caller and address, and per
+    address by the hour (``_VERIFICATION_LINK``).
 
     A new link replaces the last, and may be asked for at once (``account_secrets.VERIFY``), but
     while another request's link is being mailed the request mails none and answers as sent, since
@@ -651,7 +638,7 @@ def resend_verification_email():
     mailed before was replaced when this one was issued.
     """
     now = _limit_clock()
-    refused = _VERIFICATION_LINK.caller_refusal(now)
+    refused = _asked_too_often(_VERIFICATION_LINK.caller_refusal(now))
     if refused:
         return refused
 
@@ -661,7 +648,7 @@ def resend_verification_email():
     if not email:
         return jsonify({"msg": "Email required"}), 400
 
-    refused = _VERIFICATION_LINK.address_refusal(email, now)
+    refused = _asked_too_often(_VERIFICATION_LINK.before_the_mail(email, now))
     if refused:
         return refused
 
@@ -688,7 +675,8 @@ def resend_verification_email():
 
 
 def request_password_reset():
-    """Mail a reset link, bounded per caller and per address (``_Bounds``).
+    """Mail a reset link, bounded per caller, per caller and address, and per address by the hour
+    (``_RESET_LINK``).
 
     One link at a time (``account_secrets``): refused until an hour after the last mailed link
     expired, two hours after it was mailed, unless it was used, which clears its wait. The link is
@@ -696,7 +684,7 @@ def request_password_reset():
     wait. A link the provider refused is unset, so the next request may ask again at once.
     """
     now = _limit_clock()
-    refused = _RESET_LINK.caller_refusal(now)
+    refused = _asked_too_often(_RESET_LINK.caller_refusal(now))
     if refused:
         return refused
 
@@ -706,7 +694,7 @@ def request_password_reset():
     if not email:
         return jsonify({"msg": "Email required"}), 400
 
-    refused = _RESET_LINK.address_refusal(email, now)
+    refused = _asked_too_often(_RESET_LINK.before_the_mail(email, now))
     if refused:
         return refused
 
@@ -770,7 +758,8 @@ def reset_password(bcrypt):
 
 
 def request_otp():
-    """Mail a sign-in code, bounded per caller and per address (``_Bounds``).
+    """Mail a sign-in code, bounded per caller, per caller and address, and per address by the
+    hour (``_CODE_REQUEST``).
 
     One code at a time (``account_secrets``): refused until an hour after the last mailed code
     expired, unless it was used, which clears its wait; a code five wrong tries discarded keeps its
@@ -779,7 +768,7 @@ def request_otp():
     at once.
     """
     now = _limit_clock()
-    refused = _CODE_REQUEST.caller_refusal(now)
+    refused = _asked_too_often(_CODE_REQUEST.caller_refusal(now))
     if refused:
         return refused
 
@@ -789,7 +778,7 @@ def request_otp():
     if not email:
         return jsonify({"msg": "Email required"}), 400
 
-    refused = _CODE_REQUEST.address_refusal(email, now)
+    refused = _asked_too_often(_CODE_REQUEST.before_the_mail(email, now))
     if refused:
         return refused
 
@@ -817,7 +806,7 @@ def request_otp():
 
 
 def login_with_otp(login_user):
-    """The code sign-in, bounded per caller and per address (``_Bounds``) as the password is.
+    """The code sign-in, bounded as the password is (``_CODE_SIGN_IN``).
 
     A try is counted on the code in the same write that finds it (``account_secrets.try_code``),
     so no more than ``account_secrets.CODE_TRIES`` tries ever reach one code, even when they arrive
@@ -825,7 +814,7 @@ def login_with_otp(login_user):
     verifying first.
     """
     now = _limit_clock()
-    refused = _CODE_SIGN_IN.caller_refusal(now)
+    refused = _sign_in_refused(_CODE_SIGN_IN.caller_refusal(now), "msg")
     if refused:
         return refused
 
@@ -836,7 +825,8 @@ def login_with_otp(login_user):
     if not email or not otp:
         return jsonify({"msg": "Enter your email address and the code."}), 400
 
-    refused = _CODE_SIGN_IN.address_refusal(email, now)
+    refused = _sign_in_refused(_CODE_SIGN_IN.before_the_secret(
+        email, string_field(data, "captcha_token"), now), "msg")
     if refused:
         return refused
 
@@ -849,14 +839,14 @@ def login_with_otp(login_user):
 
     user_doc = tried.account
     if not user_doc.get("email_verified", False):
-        _CODE_SIGN_IN.take_back(email, now)
+        _CODE_SIGN_IN.signed_in(email, now)
         return jsonify({"msg": SIGN_IN_VERIFY_FIRST}), 403
 
     # Used only if it is still this code: of two right tries, one signs in.
     if not account_secrets.use_code(users_collection, user_doc):
         return jsonify({"msg": SIGN_IN_WRONG_CODE}), 401
 
-    _CODE_SIGN_IN.take_back(email, now)
+    _CODE_SIGN_IN.signed_in(email, now)
     return _sign_in(login_user, user_doc, flag_field(data, "remember"))
 
 

@@ -55,13 +55,6 @@ def _account(users, email):
     return next((doc for doc in users.docs if doc["email"] == email), None)
 
 
-@pytest.fixture
-def captcha(monkeypatch):
-    passing = {"yes": True}
-    monkeypatch.setattr(UsersApi, "verify_recaptcha", lambda *_a: (passing["yes"], 0.9))
-    return passing
-
-
 def _register(client, **body):
     return _post(client, "/register", {"email": NEW_EMAIL, "password": PASSWORD,
                                        "captcha_token": "fixture-captcha", **body})
@@ -71,13 +64,12 @@ class TestSigningUp:
     @pytest.mark.parametrize("body, answer", [
         ({"email": ""}, (400, {"msg": "Email and password required"})),
         ({"password": ""}, (400, {"msg": "Email and password required"})),
-        ({"captcha_token": ""}, (400, {"msg": "CAPTCHA verification required"})),
         ({"email": "fixture-no-domain"}, (400, {"msg": "Invalid email format"})),
         ({"password": "short"}, (400, {"msg": "Password must be at least 8 characters long"})),
         ({"password": "x" * 73}, (400, {"msg": UsersApi.PASSWORD_TOO_LONG})),
-    ], ids=["no address", "no password", "no captcha", "no domain", "short", "too long"])
+    ], ids=["no address", "no password", "no domain", "short", "too long"])
     def test_a_refused_sign_up_stores_nothing_and_mails_nothing(
-        self, client, users, outbox, clock, captcha, body, answer,
+        self, client, users, outbox, clock, body, answer,
     ):
         before = copy.deepcopy(users.docs)
 
@@ -85,14 +77,23 @@ class TestSigningUp:
         assert users.docs == before
         assert outbox.sent == []
 
-    def test_a_failed_captcha_is_refused(self, client, users, outbox, clock, captcha):
-        captcha["yes"] = False
+    @pytest.mark.parametrize("token, refused", [
+        ("", False), ("fixture-captcha", True),
+    ], ids=["no token", "a refused token"])
+    def test_a_sign_up_that_fails_the_human_check_is_asked_to_pass_it(
+        self, client, users, outbox, clock, human_check, token, refused,
+    ):
+        human_check.refuse = refused
+        before = copy.deepcopy(users.docs)
 
-        assert _answer(_register(client)) == (400, {"msg": "CAPTCHA verification failed"})
-        assert _account(users, NEW_EMAIL) is None
+        assert _answer(_register(client, captcha_token=token)) == (403, {
+            "msg": "Confirm you're a person, then try again.", "captcha": "required"})
+        assert human_check.actions == ["sign-up"]
+        assert users.docs == before
+        assert outbox.sent == []
 
     def test_a_new_address_is_mailed_a_link_that_verifies_it(
-        self, client, users, outbox, clock, captcha,
+        self, client, users, outbox, clock,
     ):
         assert _answer(_register(client)) == SIGNED_UP
 
@@ -110,7 +111,7 @@ class TestSigningUp:
             200, {"msg": "Email verified successfully"})
         assert _account(users, NEW_EMAIL)["email_verified"] is True
 
-    def test_a_failed_send_leaves_no_account(self, client, users, outbox, clock, captcha):
+    def test_a_failed_send_leaves_no_account(self, client, users, outbox, clock):
         outbox.failing = True
 
         assert _answer(_register(client)) == SEND_FAILED

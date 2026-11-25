@@ -26,7 +26,7 @@ let linkedConfig: UserConfig;
 
 /** The project's own `vite.config.ts`, loaded from `root` as a production build loads it. */
 async function projectConfig(root: string): Promise<UserConfig> {
-  // The config refuses a production build with no reCAPTCHA site key; these bundles are never served.
+  // The config refuses a production build with no Turnstile site key; these bundles are never served.
   const allowInsecure = process.env.VITE_ALLOW_INSECURE_LOCAL_DEV;
   process.env.VITE_ALLOW_INSECURE_LOCAL_DEV = 'true';
   try {

@@ -8,41 +8,69 @@ import vueJsx from '@vitejs/plugin-vue-jsx';
 import vueDevTools from 'vite-plugin-vue-devtools';
 
 /**
- * Refuse to build a bundle that cannot pass the captcha the back end now enforces.
- *
- * The site key is baked into the bundle at build time, and with none, `executeRecaptcha()` has no
- * widget to ask for a token. That used to be harmless: a back end with no reCAPTCHA secret took its
- * dev-bypass path and waved the placeholder token through. The secret is a boot requirement now, so
- * the back end verifies that placeholder against Google, Google says no, and `POST /register`
- * answers 400 - every organizer signup, on a deployment that looks healthy, with nothing anywhere
- * naming the variable. The back-end secret and this site key are a matched pair from one reCAPTCHA
- * property, and a deploy that sets only the first ships a product nobody can sign up for.
- *
- * So the failure lands here, at build time, where it names itself - the same shape as the back end's
- * boot refusal, and for the same reason. The escape hatch is the same one too, opt-in and by the
- * same name: a bundle built without a key only works against a back end that has also been told it
- * is a local development one (`ALLOW_INSECURE_LOCAL_DEV` + `DISABLE_CAPTCHA`).
+ * Cloudflare's published test site keys (`1x00000000000000000000AA`, `3x00000000000000000000FF`, ...):
+ * a digit, `x`, at least twenty zeros and two letters, the shape the back end refuses for a secret
+ * (`utils/configured_secret.py`). A bundle carrying one passes, fails or always asks every person,
+ * whatever the back end's secret.
  */
-function assertCaptchaSiteKey(env: Record<string, string>) {
-  if (env.VITE_RECAPTCHA_SITE_KEY?.trim()) {
+const TEST_SITE_KEY = /^\dx0{20,}[A-Za-z]{2}$/;
+
+/**
+ * Refuse to build a bundle that cannot pass the human check the back end enforces (T539).
+ *
+ * The site key is baked into the bundle at build time, and with none, `HumanCheck` renders no
+ * widget and sends a placeholder token. A back end with a Turnstile secret, which it needs to boot,
+ * checks that token with Cloudflare, which never issued it, and every organizer sign-up and vendor
+ * code request is asked for the check again, on a deployment that looks healthy, with nothing
+ * naming the variable. The back end's `TURNSTILE_SECRET_KEY` and this site key are a matched pair
+ * from one Turnstile widget, and a deploy that sets only the first ships a product nobody can sign
+ * up to or sign in with a code.
+ *
+ * So the failure lands here, at build time, where it names itself: the same shape as the back
+ * end's boot refusal, and for the same reason. The escape hatch is the same one too, opt-in and by
+ * the same name: a bundle built without a key, or with one of Cloudflare's test keys, only works
+ * against a back end that has also been told it is a local development one
+ * (`ALLOW_INSECURE_LOCAL_DEV` + `DISABLE_CAPTCHA`).
+ */
+function assertHumanCheckSiteKey(env: Record<string, string>) {
+  const siteKey = env.VITE_TURNSTILE_SITE_KEY?.trim();
+  const hatch = env.VITE_ALLOW_INSECURE_LOCAL_DEV === 'true';
+  if (siteKey && !TEST_SITE_KEY.test(siteKey)) {
     return;
   }
-  if (env.VITE_ALLOW_INSECURE_LOCAL_DEV === 'true') {
+  if (siteKey) {
+    if (hatch) {
+      console.warn(
+        "[human check] VITE_ALLOW_INSECURE_LOCAL_DEV is set: building a bundle with Cloudflare's " +
+          'test site key. Only a local development back end accepts its token. Never ' +
+          'deploy this bundle.',
+      );
+      return;
+    }
+    throw new Error(
+      "VITE_TURNSTILE_SITE_KEY is one of Cloudflare's published test site keys, which pass, fail " +
+        'or always ask every person whatever the back end checks. Set it to the site key of the ' +
+        "Turnstile widget whose secret is the back end's TURNSTILE_SECRET_KEY (Cloudflare " +
+        'dashboard, Turnstile), or set VITE_ALLOW_INSECURE_LOCAL_DEV=true if this build is only ' +
+        'ever going to talk to a local back end running with DISABLE_CAPTCHA.',
+    );
+  }
+  if (hatch) {
     console.warn(
-      '[captcha] VITE_ALLOW_INSECURE_LOCAL_DEV is set: building a bundle with no reCAPTCHA site ' +
-        'key. It sends a placeholder token, which only a back end running with DISABLE_CAPTCHA ' +
+      '[human check] VITE_ALLOW_INSECURE_LOCAL_DEV is set: building a bundle with no Turnstile ' +
+        'site key. It sends a placeholder token, which only a local development back end ' +
         'accepts. Never deploy this bundle.',
     );
     return;
   }
   throw new Error(
-    'VITE_RECAPTCHA_SITE_KEY is not set, so this bundle would carry no reCAPTCHA site key and ' +
-      'send a placeholder token instead. The back end verifies that token against Google, which ' +
-      'never issued it, and rejects every registration with a 400 that names none of this - a ' +
-      'deployment nobody can sign up for. Set VITE_RECAPTCHA_SITE_KEY to the site key that pairs ' +
-      "with the back end's RECAPTCHA_SECRET_KEY (https://www.google.com/recaptcha/admin), or set " +
-      'VITE_ALLOW_INSECURE_LOCAL_DEV=true if this build is only ever going to talk to a local ' +
-      'back end running with DISABLE_CAPTCHA.',
+    'VITE_TURNSTILE_SITE_KEY is not set, so this bundle would carry no Turnstile site key and send ' +
+      'a placeholder token instead. The back end checks that token with Cloudflare, which never ' +
+      'issued it, and asks every sign-up and vendor code request for the check again, naming none ' +
+      'of this: a deployment nobody can sign up to. Set VITE_TURNSTILE_SITE_KEY to the site key of ' +
+      "the Turnstile widget whose secret is the back end's TURNSTILE_SECRET_KEY (Cloudflare " +
+      'dashboard, Turnstile), or set VITE_ALLOW_INSECURE_LOCAL_DEV=true if this build is only ever ' +
+      'going to talk to a local back end running with DISABLE_CAPTCHA.',
   );
 }
 
@@ -75,10 +103,10 @@ function assertApiHost(env: Record<string, string>) {
 }
 
 /**
- * Refuse the hatch on a Vercel build outright (T273): it lets a bundle build with no site key and
- * no API address, and a build Vercel makes is one that may be served. Vercel's build sets
- * `VERCEL=1` while the project's "Enable access to System Environment Variables" setting is ticked,
- * and not otherwise, so the refusal is armed only with that box ticked. It is not a `VITE_`
+ * Refuse the hatch on a Vercel build outright (T273): it lets a bundle build with no site key, or
+ * one of Cloudflare's test keys, and no API address, and a build Vercel makes is one that may be
+ * served. Vercel's build sets `VERCEL=1` while the project's "Enable access to System Environment
+ * Variables" setting is ticked, and not otherwise, so the refusal is armed only with that box ticked. It is not a `VITE_`
  * variable, so it is read from the build's process environment, as `BUILD_COMMIT` is, and no `.env`
  * file can set it.
  */
@@ -88,7 +116,7 @@ function assertNoLocalHatchOnVercel(env: Record<string, string>) {
   }
   throw new Error(
     'VITE_ALLOW_INSECURE_LOCAL_DEV is set on a Vercel build. It lets a bundle build with no ' +
-      'reCAPTCHA site key or API address, which a deployed front end must never ship. Remove it ' +
+      'Turnstile site key or API address, which a deployed front end must never ship. Remove it ' +
       "from the front-end project's environment on Vercel.",
   );
 }
@@ -207,7 +235,7 @@ export default defineConfig(({ command, mode }) => {
 
   if (command === 'build') {
     assertNoLocalHatchOnVercel(env);
-    assertCaptchaSiteKey(env);
+    assertHumanCheckSiteKey(env);
     assertApiHost(env);
   }
 

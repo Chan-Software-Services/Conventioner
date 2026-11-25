@@ -116,6 +116,13 @@ export const ENTRIES: readonly LibraryEntry[] = [
     summary: "Applications over time, the review's split bar, and the answers' bars folded past 8",
     serves: 'Stats, L11',
   },
+  {
+    id: 'human-check',
+    title: 'Human check',
+    summary:
+      "Cloudflare Turnstile above a form's button: unseen until it asks for the tick, compact on a phone, and what a person is told when it cannot load",
+    serves: "Organizer sign-up, the vendor's sign-in",
+  },
 ];
 
 /** The files under `entries/`, loaded when opened. */
