@@ -59,8 +59,9 @@ class Markets(FakeMarkets):
 
 def organization(**overrides):
     return {
-        "_id": "mongo-org", "id": ORG_ID, "name": "Ember Markets", "owner": ORG_OWNER,
-        "admins": [ORG_ADMIN], "members": [ORG_MEMBER, OWNER], "markets": ["market-123"], "theme": None,
+        "_id": "mongo-org", "id": ORG_ID, "name": "Ember Markets",
+        "people": {ORG_OWNER: "owner", ORG_ADMIN: "admin", ORG_MEMBER: "member", OWNER: "member"},
+        "markets": ["market-123"], "theme": None,
         **overrides,
     }
 
@@ -147,7 +148,7 @@ class TestTheOrganizationsDefault:
         OrgsApi.set_default_permission(ORG_ID, "check-in", "admin", ORG_ADMIN)
         # The list finds a person's organizations by a dotted path of their id, which never holds
         # a dot as these addresses do: a reader whose id has none.
-        world.organizations.doc["members"].append("a-member")
+        world.organizations.doc["people"]["a-member"] = "member"
 
         [listed] = OrgsApi.get_organizations_for_user("a-member")
 

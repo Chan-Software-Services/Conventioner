@@ -16,9 +16,9 @@ import api.users as UsersApi
 
 
 ORGANIZATIONS = {
-    "org-home": {"id": "org-home", "owner": "user-1", "admins": [], "members": []},
-    "org-joined": {"id": "org-joined", "owner": "someone", "admins": [], "members": ["user-1"]},
-    "org-strangers": {"id": "org-strangers", "owner": "someone", "admins": [], "members": []},
+    "org-home": {"id": "org-home", "people": {"user-1": "owner"}},
+    "org-joined": {"id": "org-joined", "people": {"someone": "owner", "user-1": "member"}},
+    "org-strangers": {"id": "org-strangers", "people": {"someone": "owner"}},
 }
 
 

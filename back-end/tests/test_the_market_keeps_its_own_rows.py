@@ -37,7 +37,7 @@ ORG_ADMIN = "org-admin@example.com"
 ORG_OWNER = "org-owner@example.com"
 ROLES = {OWNER: "owner", ADMIN: "admin", EDITOR: "editor", VIEWER: "viewer"}
 ORGANIZATION = {
-    "id": ORG_ID, "name": "Test Org", "owner": ORG_OWNER, "admins": [ORG_ADMIN], "members": [],
+    "id": ORG_ID, "name": "Test Org", "people": {ORG_OWNER: "owner", ORG_ADMIN: "admin"},
     "markets": ["market-123", "market-456"],
 }
 

@@ -9,7 +9,7 @@ describes:
   - front-end/src/components/application/FollowUpDialog.vue
   - back-end/application_status.py#hand_on_follow_up
   - back-end/application_status.py#deal_follow_up
-verified: 2026-11-18
+verified: 2026-11-25
 sources:
   - brain-dump/2026-10-19#9
   - brain-dump/2026-10-19#21

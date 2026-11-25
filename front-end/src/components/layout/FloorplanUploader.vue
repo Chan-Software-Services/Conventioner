@@ -59,7 +59,9 @@ const pickerId = useId();
 const zoneBusy = computed(() => uploading.value || Boolean(props.busy));
 
 function isPdf(file: File): boolean {
-  // The server also takes a PDF by its .pdf extension.
+  // A file named .pdf is taken as a PDF whatever type the browser gave it, since a browser may give
+  // a PDF none: it passes the type check and is held to the PDF's 4 MB, not shrunk as an image. The
+  // server reads the file's own bytes, so the name there only chooses the sentence of its refusal.
   return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 }
 

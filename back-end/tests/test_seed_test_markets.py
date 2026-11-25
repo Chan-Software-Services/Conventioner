@@ -132,3 +132,40 @@ def test_a_database_the_environment_does_not_name_gets_no_market(monkeypatch):
         seeder.main(["--owner", "owner@example.test"])
     assert "MONGODB_HOST" in str(refused.value)
     assert seeded == []
+
+
+class _StoredOrganizations:
+    """The organizations collection as the seeder reads it: one stored test organization, found by
+    its name."""
+
+    def __init__(self, document):
+        self.document = document
+
+    def find_one(self, query):
+        assert query == {"name": seeder.TEST_ORGANIZATION}
+        return self.document
+
+
+SEEDER = SimpleNamespace(id="seeder-id", email="seeder@example.test")
+
+
+def test_a_test_organization_another_account_owns_is_refused(monkeypatch):
+    """Its people are its map, so lists left from before the map that name the seeder change
+    nothing."""
+    monkeypatch.setattr(seeder.OrgsApi, "organizations_collection", _StoredOrganizations({
+        "id": "org-1", "name": seeder.TEST_ORGANIZATION,
+        "people": {"someone-else": "owner", "seeder-id": "admin"},
+        "owner": "seeder-id", "admins": [], "members": [],
+    }))
+
+    with pytest.raises(seeder.SeedError, match="belongs to another account"):
+        seeder._test_organization(SEEDER)
+
+
+def test_a_test_organization_the_seeding_account_owns_is_reused(monkeypatch):
+    monkeypatch.setattr(seeder.OrgsApi, "organizations_collection", _StoredOrganizations({
+        "id": "org-1", "name": seeder.TEST_ORGANIZATION,
+        "people": {"seeder-id": "owner", "someone-else": "admin"},
+    }))
+
+    assert seeder._test_organization(SEEDER) == "org-1"
