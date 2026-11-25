@@ -86,10 +86,10 @@ def signing_secret() -> str:
     raise SecretKeyNotConfiguredError(
         f"{SECRET_KEY_VAR} is not set. Every signing key this process uses is derived from it, the "
         f"organizer's session cookie's among them, so a process without one has no way to tell a "
-        f"session it issued from a session an attacker wrote -- and a session an attacker wrote reads and "
-        f"overwrites any organizer's markets, vendors and applications, with no password and no "
-        f"login. There is deliberately no default: a fallback secret in a repository is a published "
-        f"key. Set {SECRET_KEY_VAR} to a long random string (for example "
+        f"session it issued from a session an attacker wrote -- and a session an attacker wrote "
+        f"reads and overwrites any organizer's markets, vendors and applications, with no password "
+        f"and no login. There is deliberately no default: a fallback secret in a repository is a "
+        f"published key. Set {SECRET_KEY_VAR} to a long random string (for example "
         f"`python -c 'import secrets; print(secrets.token_urlsafe(48))'`), or set "
         f"{INSECURE_LOCAL_DEV_VAR}=true if this really is a local development machine."
     )
