@@ -41,8 +41,7 @@ The front end may send:
 - each frame's file address (the built chunk), function, line and column, and whether it is the app's;
 - the route's pattern (`/markets/:marketId/vendors`) with only `marketId` and `marketSlug` filled in, as the request's URL on the page's origin, the pattern itself as the transaction, and the route's name, `marketId` and `marketSlug` as tags, an address in either replaced;
 - how the error was caught (`vue`, `onerror`, `unhandledrejection`, `csp`), as a tag;
-- the environment (the build's mode), the release (the build's commit, from its `version.json`), and the SDK's name and version;
-  nothing else the SDK adds to the envelope is sent, its packages and its settings (`infer_ip: never` among them) included;
+- the environment (the build's mode), the release (the build's commit, from its `version.json`), and the SDK's name and version, with the packages and settings the SDK adds as it writes the envelope, `infer_ip: never` among them;
 - for a Content-Security-Policy violation, as a warning: the effective directive, the blocked resource reduced to its origin (or the browser's own keyword, as `inline`, `eval` or `data`), whether the policy blocked it or a report-only policy only would have, the violating script's address without its query or fragment and with every address replaced (the page's route pattern, filled as above, when the violation is in the page itself), and its line and column; never the stack the SDK attaches to a message, which is only the tracker's own.
 
 Neither side ever sends a request or response body, a query string, a cookie, a header, the signed-in person or any user field, an IP address, a variable, an exception frame's source lines, a breadcrumb that is not a log line, a value of a URL variable other than the named ones, or a violation's `sample`, which may hold a script's first characters.
