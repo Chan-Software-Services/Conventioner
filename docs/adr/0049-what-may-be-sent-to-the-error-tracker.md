@@ -3,6 +3,7 @@ layer: implementation
 kind: adr
 describes:
   - back-end/error_tracking.py
+  - front-end/src/utils/errorTrackingClient.ts
 verified: 2026-11-25
 sources:
   - T255
@@ -36,11 +37,11 @@ The back end may send:
 
 The front end may send:
 
-- the error's type, and its message with every address replaced, cut at 300 characters: a browser's error is nearly always a `TypeError`, unreadable without its words, and the front end's errors quote no library's input as the back end's may;
-- each frame's file address (the built chunk), function, line and column;
-- the route's pattern (`/markets/:marketId/vendors`) with only `marketId` and `marketSlug` filled in, and the route's name;
-- how the error was caught (`vue`, `onerror`, `unhandledrejection`, `csp`);
-- the environment and the release;
+- the error's type, and its message with every address replaced and every URL's query and fragment taken off, cut at 300 characters: a browser's error is nearly always a `TypeError`, unreadable without its words, and the front end's errors quote no library's input as the back end's may;
+- each frame's file address (the built chunk), function, line and column, and whether it is the app's;
+- the route's pattern (`/markets/:marketId/vendors`) with only `marketId` and `marketSlug` filled in, as the request's URL on the page's origin, the pattern itself as the transaction, and the route's name, `marketId` and `marketSlug` as tags, an address in either replaced;
+- how the error was caught (`vue`, `onerror`, `unhandledrejection`, `csp`), as a tag;
+- the environment (the build's mode), the release (the build's commit, from its `version.json`), and the SDK's name and version, with the packages and settings the SDK adds as it writes the envelope, `infer_ip: never` among them;
 - for a policy violation: the effective directive, the blocked resource reduced to its origin (or the browser's own keyword, `inline` or `eval`), the violating script's address without its query, and its line and column.
 
 Neither side ever sends a request or response body, a query string, a cookie, a header, the signed-in person or any user field, an IP address, a variable, a frame's source lines, a breadcrumb that is not a log line, a value of a URL variable other than the named ones, or a violation's `sample`, which may hold a script's first characters.
@@ -55,6 +56,8 @@ A DSN's key is Sentry's public client key, which every browser that loads the fr
 ## Consequences
 
 - [`back-end/error_tracking.py`](../../back-end/error_tracking.py) is the only back-end file that imports `sentry_sdk`, and only once a DSN is set; it builds every event, and [the error tracking module](../implementation/modules/error-tracking.md) says where each kind of event starts and how it is sent before Vercel freezes the function.
+- [`front-end/src/utils/errorTracking.ts`](../../front-end/src/utils/errorTracking.ts) catches the browser's errors and [`front-end/src/utils/errorTrackingClient.ts`](../../front-end/src/utils/errorTrackingClient.ts), a chunk of its own, builds and sends each event; with no `VITE_SENTRY_DSN` the build drops both.
+- The front end's policy allows Sentry's US ingest hosts in `connect-src`, and a `VITE_SENTRY_DSN` on any other host fails the build.
 - A log line's words are sent, so a warning or error line names what it means to say, never a value it was not written to name; no log line formats an exception's message, and [`test_no_log_line_carries_an_exceptions_message.py`](../../back-end/tests/test_no_log_line_carries_an_exceptions_message.py) fails one that does.
 - Sentry keeps an event 30 days: what is sent outlives any log, so a new field is a change to this ADR first.
 - An event that the allowlist leaves less readable is read with the code beside it: the frames say where, the rule says which route, and the tags say which market.
@@ -72,3 +75,4 @@ A DSN's key is Sentry's public client key, which every browser that loads the fr
 
 The back end's settings were prototyped against sentry-sdk 3.0.0 with a transport that recorded every envelope item: with the defaults, a fixture address, answer, cookie and token each reached an item; with these settings and the allowlist none did, while the exception's type, its frames and the route's rule did.
 [`back-end/tests/test_the_error_tracker_is_sent_no_value.py`](../../back-end/tests/test_the_error_tracker_is_sent_no_value.py) holds the back end to that through the real app: every item a request, a log line or a boot refusal makes is serialised and searched for each fixture value.
+[`front-end/src/__tests__/theErrorTrackerIsSentNoValue.test.ts`](../../front-end/src/__tests__/theErrorTrackerIsSentNoValue.test.ts) holds the front end to it the same way, through a real app and router: every envelope an error makes is searched for a fixture address and token in the page's address and the error's message.

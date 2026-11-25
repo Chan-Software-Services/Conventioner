@@ -209,6 +209,10 @@ How each part of the code works is in the implementation layer of the [knowledge
   - Drag-and-drop functionality for UI elements
 - **A layout is drawn in SVG by the app's own component** ([`LayoutMap.vue`](../front-end/src/components/layout/LayoutMap.vue)), with no canvas library: Konva and vue-konva went with the floorplan beta (T257)
 
+### Error Tracking
+
+- **@sentry/browser 11.17** - Sends the front end's errors to Sentry, only when the build sets `VITE_SENTRY_DSN`, from a chunk of its own loaded after the first paint; unset, the build has no Sentry chunk ([error tracking](implementation/modules/error-tracking.md#the-front-end))
+
 ### Development Tools
 
 - **ESLint 10.13.0** - JavaScript/TypeScript linter

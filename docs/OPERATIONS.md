@@ -580,6 +580,7 @@ Daniel's steps, once; until they are done the code sends nothing, and nothing br
 6. Redeploy: GitHub, Actions, **Deploy**, Run workflow, from `main`.
 
 A back-end DSN Sentry cannot read leaves the back end booting with tracking off, and its log says `SENTRY_DSN is not a DSN Sentry can read`.
+A front-end DSN that is not one, or on a region's host the policy does not allow, fails the front end's build instead, naming `VITE_SENTRY_DSN`.
 A local stack and the test suite set no DSN, so neither sends anything to these projects.
 
 ## The host's limits

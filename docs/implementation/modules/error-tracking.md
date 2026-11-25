@@ -4,6 +4,10 @@ kind: module
 describes:
   - back-end/error_tracking.py
   - back-end/tests/test_the_error_tracker_is_sent_no_value.py
+  - front-end/src/utils/errorTracking.ts
+  - front-end/src/utils/errorTrackingClient.ts
+  - front-end/src/__tests__/theErrorTrackerIsSentNoValue.test.ts
+  - front-end/src/__tests__/theBuildChecksItsErrorTrackerDsn.test.ts
 verified: 2026-11-25
 sources:
   - T255
@@ -12,7 +16,7 @@ sources:
 
 # Error tracking
 
-The back end sends its errors to Sentry when `SENTRY_DSN` is set, and only what [ADR 0049](../../adr/0049-what-may-be-sent-to-the-error-tracker.md) allows.
+The back end sends its errors to Sentry when `SENTRY_DSN` is set, and the front end when its build sets `VITE_SENTRY_DSN`, each to a Sentry project of its own and only what [ADR 0049](../../adr/0049-what-may-be-sent-to-the-error-tracker.md) allows.
 With no DSN, nothing here changes how the app runs.
 
 ## The back end
@@ -52,6 +56,39 @@ The SDK's own `data_collection` is set to collect nothing as well, and the integ
 **The suite never sends.**
 `tests/conftest.py` removes `SENTRY_DSN` before anything imports the app, so a developer's exported DSN reaches no test.
 [`back-end/tests/test_the_error_tracker_is_sent_no_value.py`](../../../back-end/tests/test_the_error_tracker_is_sent_no_value.py) starts the tracker with a fixture DSN and a transport that records every envelope item and holds it until flushed, drives the real app's test client and real log lines, and searches every item for a fixture address, answer and token; it also proves the flushes, the one event per 500 and per 503, that no item but an event is ever sent, and that with no DSN a fresh process never imports the SDK.
+
+## The front end
+
+Two modules, so the SDK never weighs on the first page.
+[`front-end/src/utils/errorTracking.ts`](../../../front-end/src/utils/errorTracking.ts) is in the entry chunk: it catches each error, notes the route, and queues it.
+[`front-end/src/utils/errorTrackingClient.ts`](../../../front-end/src/utils/errorTrackingClient.ts) holds `@sentry/browser` and is reached only by the first module's `import()`, so it and the SDK are a chunk of their own, about 21 KB gzipped, never the entry and never a `modulepreload` of `index.html`.
+
+- `installErrorTracking(app, router)` sets Vue's `app.config.errorHandler` (which still calls `console.error`, as Vue's default does) and adds `error` and `unhandledrejection` listeners on `window`.
+  `main.ts` calls it before `app.use(router)`, so an error in the first navigation is caught.
+  Each error becomes an item: the error, how it was caught (`vue`, `onerror`, `unhandledrejection`), and the route at that moment (its pattern, its name, `marketId` and `marketSlug`).
+- `loadErrorTrackingAfterFirstPaint()`, called after `app.mount`, loads the client once the browser reports its `first-contentful-paint`, then one task later.
+  The shell paints nothing until its session probe has answered, well after `mount`, so a frame after `mount` came before the paint in a walk of the build; a browser with no paint timing waits one frame and a task instead.
+  An error loads the client at once, whichever comes first.
+- Both read `VITE_SENTRY_DSN` where they are called, spelled out in each rather than in a helper: a build with no DSN folds the check to `undefined` and drops the rest of each function, the `import()` with it, which it does not do through a call; such a build has no Sentry chunk and installs nothing.
+- **The caps.** At most `QUEUE_LIMIT`, 10, items wait for the client, and at most `MAX_EVENTS_PER_PAGE`, 20, are sent in one page load; the rest are dropped, so a page failing in a loop spends little of the month's quota.
+- **The failed fetch of a page's code is never sent**: Chromium's, Safari's and Firefox's words for it are dropped before they are queued, since `pageFailed.ts` already answers it and every deploy makes some open tab meet it.
+- **A chunk that cannot be fetched** (offline, or a deploy replaced it) leaves tracking off for that page load: the queue is dropped, nothing is retried, and nothing is thrown.
+
+**The client** makes a `BrowserClient` and a `Scope` of its own, never the SDK's global `init`, so nothing else in the page reports through it.
+A client made by hand has no integrations but those it is given: `linkedErrorsIntegration` and `dedupeIntegration`, so no breadcrumbs, no console capture, no handlers of the SDK's own, no sessions, no HTTP context, and no instrumentation of the page's `fetch` or `XMLHttpRequest`, so the app's own requests carry no `sentry-trace` or `baggage` header.
+Its `dataCollection` collects nothing, `sendClientReports` is off, and `beforeBreadcrumb` drops every breadcrumb.
+It reads `/version.json` once for the release, none if that fails, and sends each item, flushing it at once.
+`beforeSend` builds the event anew from the allowlist (`allowedEvent`): the exception's type, its message through `withoutAddresses` (the back end's address rule, and every URL's query taken off) cut at `MESSAGE_LIMIT`, 300, the frames' file, function, line, column and whether in the app, the route's pattern with only `marketId` and `marketSlug` filled in on the page's origin as the request's URL and the pattern as the transaction, `caught_by`, `route_name`, `market_id` and `market_slug` as tags, and the environment (`import.meta.env.MODE`), the release and the SDK's name and version.
+`location.href`, which holds a reset token or a vendor's address on some pages, is never read.
+
+**The build checks the DSN.**
+`assertErrorTrackerDsn` in [`front-end/vite.config.ts`](../../../front-end/vite.config.ts), beside the other build checks, fails a set `VITE_SENTRY_DSN` that is not `https://<key>@<host>/<project id>`, or whose host no `connect-src` source of `vercel.json`'s policy allows (an exact host, or a `*.` pattern matched as the policy matches it), naming the variable; the policy allows `https://*.ingest.us.sentry.io`, Sentry's US region.
+So the DSN, the chunk and the policy agree by construction, and a mismatch fails a build rather than every event.
+
+**How it is tested.**
+[`theErrorTrackerIsSentNoValue.test.ts`](../../../front-end/src/__tests__/theErrorTrackerIsSentNoValue.test.ts) installs the tracker on a real app and router in happy-dom with `VITE_SENTRY_DSN` stubbed and the transport replaced, through `installErrorTracking`'s test-only third argument, by one that records each envelope; it proves one event per caught error, an error before the client loaded sent once it has, no address, token or query of the page's address or the message in any envelope, the event's exact fields, the caps, the after-deploy words, the rejected chunk, the load after the first paint, and nothing installed with no DSN.
+[`theBuildChecksItsErrorTrackerDsn.test.ts`](../../../front-end/src/__tests__/theBuildChecksItsErrorTrackerDsn.test.ts) loads `vite.config.ts` as a build does with a blank, a US, a malformed and an unallowed DSN.
+A DSN in a test is built from its parts (`` `https://${KEY}@...` ``), so no line reads as an email address to the real-data hooks.
 
 ## Why
 
