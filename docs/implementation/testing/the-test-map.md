@@ -68,7 +68,7 @@ Its first job, `suite` ([`scripts/ci_suite.py`](../../../scripts/ci_suite.py)), 
    The build reads the requests and the window; the stretches are in the shard's records for a reader who wants more than the map holds, as T349's pruning did.
 2. **The shards keep the back end's log.**
    Each shard saves `docker compose logs --timestamps --no-log-prefix backend` beside its records and uploads both as `test-map-shard-<n>` (kept 90 days).
-   The log adds nothing to the map: the build audits it, in step 4, for the request lines no test recorded.
+   The log adds no spec's endpoint to the map: the build audits it, in step 4, for the request lines no test recorded.
 3. **The back end's suite runs once under coverage.**
    `test_map.py endpoints` runs `pytest tests/` in `back-end/` under `coverage run` with branch coverage of the back end's own code (not `tests/`, not `migrations/`), and loads [`back-end/tests/test_map_plugin.py`](../../../back-end/tests/test_map_plugin.py) as a plugin (`-p`), which names each test's coverage context by its node id and, while the app handles a request (`Flask.full_dispatch_request`), `<node id>|<METHOD> <rule>`.
    The plugin also writes the app's URL rules as the session ends.
