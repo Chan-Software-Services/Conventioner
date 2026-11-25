@@ -280,6 +280,8 @@ export class ManageMarketPage {
    * nothing: the caller reads the sent line or the error.
    */
   async invite(email: string, role: string): Promise<void> {
+    // Whichever is drawn once the dialog's market has loaded: the button, or the row it opened.
+    await this.addUserButton.or(this.addUserInput).first().waitFor();
     if (await this.addUserButton.isVisible()) await this.clickAddUser();
     await this.fillAddUserEmail(email);
     await this.selectAddUserRole(role);

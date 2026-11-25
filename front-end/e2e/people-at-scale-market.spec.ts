@@ -247,10 +247,12 @@ for (const size of PHONE_AND_DESK) {
       await expect(manage.historySentences).toHaveCount(everything);
       await expectLaidOut(page, 'one person found');
 
+      // The admin's two changes: inviting the member, and the role given once they accepted.
       await press(who.options.first());
       await expect(who.field).toHaveValue(admin);
-      await expect(manage.historySentences).toHaveCount(1);
-      await expect(manage.historySentences.first()).toContainText(`${admin} `);
+      await expect(manage.historySentences).toHaveCount(2);
+      await expect(manage.historySentences.nth(0)).toContainText(`${admin} `);
+      await expect(manage.historySentences.nth(1)).toContainText(`${admin} `);
 
       await manage.narrowHistoryTo('Anyone');
       await expect(who.field).toHaveValue('Anyone');
