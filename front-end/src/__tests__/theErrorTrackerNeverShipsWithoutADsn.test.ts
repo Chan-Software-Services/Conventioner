@@ -123,6 +123,9 @@ describe('a production build with no DSN', () => {
   it.each([['   ']])(
     'counts a blank DSN (%j) as none',
     async (dsn) => {
+      await expect(
+        buildEntry('loads-the-tracker-blank', LOADS_THE_TRACKER, dsn),
+      ).resolves.toBeUndefined();
       await expect(buildEntry('imports-the-client-blank', IMPORTS_THE_CLIENT, dsn)).rejects.toThrow(
         /src\/utils\/errorTrackingClient\.ts/,
       );
