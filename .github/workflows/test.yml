@@ -595,6 +595,31 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  # The e2e tests that passed only on a retry over dev's last 50 Test runs that ran the shards, its
+  # merge queue's among them (scripts/e2e_retries.py), as this job's summary, on a nightly or
+  # hand-started run alone. A test that passes only on a retry fails its shard (failOnFlakyTests),
+  # so its run went red and was run or queued again; this gathers which tests did it, across runs.
+  # It reads no `suite` word and needs no other job, reading only GitHub's API. No check requires
+  # it, and it never fails the run.
+  # The script needs only the standard library, so the runner's own Python runs it.
+  e2e-retries:
+    name: e2e-retries
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The e2e tests that passed only on a retry
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/e2e_retries.py --runs 50
+
   # The one check to require: it passes only when every shard did and the shards ran every spec
   # file exactly once, so the rules name a single job whatever the shard count becomes. It runs
   # whatever the shards' result, so a failed shard fails it, but not on a run that was cancelled,
