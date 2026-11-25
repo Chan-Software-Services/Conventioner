@@ -81,7 +81,7 @@ Telling the person who just read the code whether they have applied leaks nothin
 
 Each code request sends an email and each verify is a guess at a six-digit code, so an unbounded caller could use the product to flood any address with mail or keep guessing.
 **Both endpoints are rate limited**: a code request per caller, per caller and address, and per address alone by the hour (`request-code:*`); a verify per caller, per caller and address, and per address alone, past whose count it asks the human check (`verify-code:*`).
-Every limit is in [`back-end/sign_in_limits.py`](../../../back-end/sign_in_limits.py), and its number and window in [the one table of limits](../../implementation/data/users-and-email.md#the-sign-in-is-bounded), never copied here.
+Every limit is in [`back-end/sign_in_limits.py`](../../../back-end/sign_in_limits.py), and its number in [the one table of limits](../../implementation/data/users-and-email.md#the-sign-in-is-bounded), never copied here.
 A caller is allowed far more than an address, since vendors on one venue's wifi share a caller.
 A refused attempt still counts.
 A code request is counted per caller and address, so one caller's requests for an address leave every other caller's requests for it as they were, and nobody can use up a vendor's requests; the address's own count by the hour, several times the pair's, bounds the codes one inbox is sent, whoever asks, so a vendor who asks again from a second network is never near it.

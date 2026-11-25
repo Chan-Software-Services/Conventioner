@@ -156,7 +156,7 @@ The sign-up's bounds cap how many of these emails one address is sent, from one 
 **The organizer's password and code sign-ins, and the requests that mail an organizer a code or a link, are counted as the applicant's sign-in is**, in the one list of limits, `LIMITS` in [`back-end/sign_in_limits.py`](../../../back-end/sign_in_limits.py), in fixed clock-aligned windows, in `sign_in_attempts`, whose counters name nobody ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)).
 A sign-in is counted per caller, per caller and address, and per address alone; a request that mails, per caller, per caller and address, and per address in the hour.
 
-**Every limit's number is written here alone**: the table holds each limit in `LIMITS`, the vendor's sign-in, resume and door code and the organizer's invitation among them, and every other doc points to it rather than copy a number.
+**Every limit's number is written here**: the table holds each limit in `LIMITS`, the vendor's sign-in, resume and door code and the organizer's invitation among them, and the business, module and testing docs point to it rather than copy a number; an ADR keeps the numbers it decided.
 A limit changed in the code is changed in this table, and [`test_sign_in_limits.py`](../../../back-end/tests/test_sign_in_limits.py) (`test_the_table_holds_every_limit_in_use_once`) holds every count and window the code has.
 The vendor's routes are under `/public/markets/<slug>/applicant-login/`, and the door code's under `/public/markets/<slug>/vendor/`.
 
