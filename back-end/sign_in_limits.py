@@ -5,9 +5,9 @@ sign-ins and the requests that mail an organizer a code or a link, the sign-up a
 vendor's check-in at the door. An organizer's invitation (``invitations``) is signed in, and mails
 the address it names. A request that sends an email, left unbounded, could flood
 any address with mail, spending the sender's money and reputation; a sign-in try is a guess at a
-password or a code. Each limit here is counted per address, per caller, or per caller and address
-together, small enough to stop that and far above what a vendor or an organizer who mistypes or
-asks again ever reaches.
+password or a code. Each limit here is counted per address, per caller, per inviter, or per caller
+and address together, small enough to stop that and far above what a vendor or an organizer who
+mistypes or asks again ever reaches.
 Where a try that signs in is taken back (``take_back_attempt``), only wrong tries pile up.
 
 **The counters live in the database, never in a process.** A serverless deployment runs many

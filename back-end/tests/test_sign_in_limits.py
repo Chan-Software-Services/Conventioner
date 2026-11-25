@@ -129,6 +129,8 @@ def test_the_table_holds_every_limit_in_use_once():
         "sign-up:caller": (30, QUARTER),
         "sign-up:caller-address": (5, QUARTER),
         "sign-up:address-hour": (20, HOUR),
+        "invitation:inviter": (100, QUARTER),
+        "invitation:address": (5, QUARTER),
     }
 
 
