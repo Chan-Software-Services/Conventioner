@@ -52,7 +52,8 @@ def read(
     Returns `(value, None)`, or `(None, reason)` when it could not be read: the HTTP status, or the
     error's type. `parse` runs inside the same guard, so an answer unlike GitHub's, a missing key
     or a wrong type, is a reason too. `body` reads the answer's bytes, JSON unless told; a redirect
-    to another host is followed without the token.
+    to another host is followed without the token, and a status that host answers is named with it
+    (`403 from <host>`), so it never reads as the API's own.
     """
     address = f"{api.rstrip('/')}{path}"
     if query:
@@ -70,6 +71,9 @@ def read(
             return parse(body(response.read())), None
     except urllib.error.HTTPError as error:
         error.close()
+        host = urllib.parse.urlsplit(error.filename or address).netloc
+        if host != urllib.parse.urlsplit(address).netloc:
+            return None, f"{error.code} from {host}"
         return None, str(error.code)
     except UNREADABLE as error:
         return None, type(error).__name__

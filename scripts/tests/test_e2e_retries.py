@@ -499,6 +499,25 @@ def test_a_run_whose_artifacts_could_not_be_listed_is_named_too(stub, storage, e
     assert f"Not wholly read, so a test may be missing: [push to dev]({run_url(8)}), its artifacts (502).\n" in stdout
 
 
+def test_a_storage_refusal_of_a_zip_is_named_with_its_host_and_the_walk_goes_on(stub, storage, env):
+    stub.serve(RUNS, 200, runs_page(a_run(9), a_run(8)))
+    shards(stub, storage, 9, CLEAN, FLAKY)
+    storage.serve(f"/blob/{artifact_id(9, 1)}.zip", 403, b"", {"Content-Type": "application/xml"})
+    shards(stub, storage, 8, FLAKY)
+
+    code, stdout, _, _ = run(env, "--runs", "5")
+
+    assert code == 0
+    assert artifacts_path(8) in stub.paths()
+    assert "Stopped at" not in stdout
+    assert f"{header(2)}: 1 test passed only on a retry, in 2 of them.\n" in stdout
+    host = urlsplit(storage.origin).netloc
+    assert stdout.endswith(
+        "\n"
+        f"Not wholly read, so a test may be missing: [push to dev]({run_url(9)}), `e2e-results-shard-1` (403 from {host}).\n"
+    )
+
+
 def test_a_report_with_no_results_file_is_named(stub, storage, env):
     stub.serve(RUNS, 200, runs_page(a_run(7)))
     shards(stub, storage, 7, CLEAN)
@@ -569,6 +588,22 @@ def test_a_rate_limit_on_a_zip_stops_the_walk_and_drops_that_run(stub, storage, 
     assert artifacts_path(7) not in stub.paths()
     assert f"{header(1)}: no test passed only on a retry.\n" in stdout
     assert stdout.endswith(f"\nStopped at [push to dev]({run_url(8)}): {STOP_429}, so the report holds only the runs before it.\n")
+
+
+def test_a_rate_limit_before_any_run_was_read_says_so_and_not_that_no_run_ran_the_shards(stub, storage, env):
+    stub.serve(RUNS, 200, runs_page(a_run(9), a_run(8)))
+    stub.serve(artifacts_path(9), 403, b'{"message": "API rate limit exceeded"}', RATE_LIMITED)
+    shards(stub, storage, 8, FLAKY)
+
+    code, stdout, _, summary = run(env, "--runs", "5")
+
+    assert code == 0
+    assert stdout == summary
+    assert stdout == (
+        "### E2E tests that passed only on a retry\n"
+        "\n"
+        f"Stopped at [push to dev]({run_url(9)}): {STOP_403}, before any Test run that ran the e2e shards was read.\n"
+    )
 
 
 def test_a_rate_limit_on_a_later_page_of_runs_reports_what_the_pages_before_gave(stub, storage, env):

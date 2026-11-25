@@ -21,10 +21,13 @@ request's shard is run again, and the test is forgotten. This gathers them, over
   of the ten shards, and the list of a run passed over, about one a merge (its warm push); 20 runs
   are about 250, a quarter of the 1,000 an hour a run's GITHUB_TOKEN may make for the repository,
   which the Test, Promote and Deploy runs' reads share
-- a 403 or a 429 (the rate limit, or a 403 for a token that may not read Actions, which every later
-  read would get too) on a run's artifacts, a zip or a later page of runs stops the walk: the report
-  holds the runs read before it and names where it stopped, and the run it stopped in is left out
-  whole; on the first page of runs it fails with the reason, having read nothing
+- a 403 or a 429 from GitHub's API (the rate limit, or a 403 for a token that may not read Actions,
+  which every later read would get too) on a run's artifacts, a zip or a later page of runs stops
+  the walk: the report holds the runs read before it and names where it stopped, and the run it
+  stopped in is left out whole; on the first page of runs it fails with the reason, having read
+  nothing
+- a refusal by the storage a zip redirects to, which `github_runs.read` names with its host (`403
+  from <host>`), is that shard's alone: it is named under the table and the walk goes on
 
 It writes the report, in Markdown, to stdout and, when GITHUB_STEP_SUMMARY is set, to the run's
 summary: each test with how many of the runs it passed only on a retry in, and a link to each run,
@@ -173,7 +176,9 @@ def render(
     stopped: Optional[str],
 ) -> str:
     lines = [HEADING, ""]
-    if not read:
+    if not read and stopped:
+        lines.append(f"Stopped at {stopped}, before any Test run that ran the e2e shards was read.")
+    elif not read:
         lines.append("No Test run on `dev` or its merge queue that GitHub still lists ran the e2e shards.")
     else:
         dates = sorted(run["created_at"][:10] for run in read)
@@ -199,7 +204,7 @@ def render(
     if unread:
         named = "; ".join(f"{link(run)}, {', '.join(parts)}" for run, parts in unread)
         lines += ["", f"Not wholly read, so a test may be missing: {named}."]
-    if stopped:
+    if stopped and read:
         lines += ["", f"Stopped at {stopped}, so the report holds only the runs before it."]
     return "\n".join(lines) + "\n"
 
