@@ -1,4 +1,4 @@
-"""The key every session cookie in this product is signed with.
+"""The secret every session cookie and sign-in token in this product is signed from.
 
 A signing secret with a fallback is not a secret. The fallback that used to live here was a literal
 committed to this repository, so on any deployment that forgot ``SECRET_KEY`` the key protecting the
@@ -26,8 +26,17 @@ mints a *random* secret for the life of the process, which is the part that matt
 can predict cannot be forged against, and a value that changes every boot cannot quietly become the
 key a deployment ships with. The cost is that a restart invalidates the sessions that process issued,
 which is the correct price for a machine that has declined to configure a key.
+
+Nothing signs with ``SECRET_KEY`` as it is. Each signer takes a key of its own derived from it
+(``derived_key``): the organizer's session, and Flask-Login's remember cookie with it, with the
+``ORGANIZER_SESSIONS`` key, installed as the app's ``SECRET_KEY`` by ``app.py``, and a vendor's
+sign-in token with the ``VENDOR_TOKENS`` key (``utils.application_token``). So a value one of them
+signs is never good to the other, and there is still one secret to set and to rotate: rotating it
+rotates both keys.
 """
 
+import hashlib
+import hmac
 import logging
 import os
 import secrets
@@ -47,13 +56,17 @@ MINIMUM_SECRET_LENGTH = 32
 
 _ephemeral_secret = None
 
+#: What each key derived from the secret signs; each names one signer, and no two share a key.
+ORGANIZER_SESSIONS = "organizer sessions"
+VENDOR_TOKENS = "vendor tokens"
+
 
 class SecretKeyNotConfiguredError(RuntimeError):
     """There is no signing secret, so every token this process issued would be forgeable."""
 
 
 def signing_secret() -> str:
-    """The secret this process signs session cookies with.
+    """The secret every signing key this process uses is derived from (``derived_key``).
 
     Raises:
         SecretKeyNotConfiguredError: when no secret is configured and this is not an opted-in
@@ -71,15 +84,34 @@ def signing_secret() -> str:
         return _ephemeral_dev_secret()
 
     raise SecretKeyNotConfiguredError(
-        f"{SECRET_KEY_VAR} is not set. It signs the Flask session cookie the organizer API "
-        f"authenticates every request with, so a process without one has no way to tell a session "
-        f"it issued from a session an attacker wrote -- and a session an attacker wrote reads and "
-        f"overwrites any organizer's markets, vendors and applications, with no password and no "
-        f"login. There is deliberately no default: a fallback secret in a repository is a published "
-        f"key. Set {SECRET_KEY_VAR} to a long random string (for example "
+        f"{SECRET_KEY_VAR} is not set. Every signing key this process uses is derived from it, the "
+        f"organizer's session cookie's among them, so a process without one has no way to tell a "
+        f"session it issued from a session an attacker wrote -- and a session an attacker wrote "
+        f"reads and overwrites any organizer's markets, vendors and applications, with no password "
+        f"and no login. There is deliberately no default: a fallback secret in a repository is a "
+        f"published key. Set {SECRET_KEY_VAR} to a long random string (for example "
         f"`python -c 'import secrets; print(secrets.token_urlsafe(48))'`), or set "
         f"{INSECURE_LOCAL_DEV_VAR}=true if this really is a local development machine."
     )
+
+
+def derived_key(secret: str, purpose: str) -> str:
+    """The key ``secret`` gives one signer: HMAC-SHA256 of ``purpose``, keyed with the secret, as
+    hex.
+
+    The same secret and purpose give the same key on every instance, so nothing derived needs
+    configuring or storing; knowing one derived key tells nothing of the secret or of another.
+    """
+    return hmac.new(secret.encode(), f"conventioner {purpose}".encode(), hashlib.sha256).hexdigest()
+
+
+def vendor_token_key() -> str:
+    """The key a vendor's sign-in token is signed with, derived from ``signing_secret()`` on call.
+
+    Raises:
+        SecretKeyNotConfiguredError: as ``signing_secret`` does.
+    """
+    return derived_key(signing_secret(), VENDOR_TOKENS)
 
 
 def _reject_a_secret_that_is_not_one(value: str) -> None:
@@ -112,8 +144,8 @@ def _reject_a_secret_that_is_not_one(value: str) -> None:
     if configured and len(configured) < MINIMUM_SECRET_LENGTH:
         raise SecretKeyNotConfiguredError(
             f"{SECRET_KEY_VAR} is {len(configured)} characters long. A signing key is only worth the "
-            f"work it takes to guess: this one signs the session cookie the organizer API "
-            f"authenticates every request with, and a short one is brute-forced offline from a "
+            f"work it takes to guess: every signing key is derived from this one, the organizer's "
+            f"session cookie's among them, and a short one is brute-forced offline from a "
             f"single cookie, after which sessions for any organizer can be minted at will. At least "
             f"{MINIMUM_SECRET_LENGTH} characters, and random rather than chosen - "
             f"`python -c 'import secrets; print(secrets.token_urlsafe(48))'`."

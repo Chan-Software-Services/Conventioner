@@ -180,39 +180,6 @@ for (const size of PHONE_AND_DESK) {
       await expect(select).toHaveValue('admin');
       await expect(select).toBeFocused();
     });
-
-    test('holds the shown count through a role change and a removal', async () => {
-      const whole = seed.counts.withAccess;
-      await press(manage.peopleMore);
-      await expect(manage.peopleCount).toHaveText(`Showing 100 of ${whole}`);
-
-      const changed = manage.person(seed.editors[0]!.email);
-      await changed.getByTestId('manage-market-role-select').selectOption('viewer');
-      await manage.roleChangeConfirmButton.click();
-      await expect(manage.roleChangeConfirm).toHaveCount(0);
-      await expect(manage.peopleCount).toHaveText(`Showing 100 of ${whole}`);
-      await expect(manage.peopleRows).toHaveCount(100);
-
-      // A member given Editor: the market role goes, and they stay at the organization's.
-      await manage.removeUser(seed.editors[1]!.email);
-      await expect(manage.removeConfirm).toHaveCount(0);
-      await expect(manage.peopleCount).toHaveText(`Showing 100 of ${whole}`);
-      await expect(manage.people).toBeFocused();
-    });
-
-    test('shows someone just added as the one row, until the field is cleared', async () => {
-      const { email } = seed.members[seed.members.length - 1]!;
-      await manage.addUser(email, 'editor');
-
-      await expect(manage.peopleFind).toHaveValue(email);
-      await expect(manage.peopleRows).toHaveCount(1);
-      await expect(manage.person(email).getByTestId('manage-market-role-select')).toHaveValue(
-        'editor',
-      );
-
-      await manage.peopleFind.fill('');
-      await expect(manage.peopleCount).toHaveText(`Showing 50 of ${seed.counts.withAccess}`);
-    });
   });
 }
 

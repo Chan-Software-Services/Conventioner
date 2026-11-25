@@ -13,11 +13,13 @@ import re
 import pytest
 
 import api.market_actions as Actions
+import api.markets as MarketsApi
 import csv_import as CsvImport
 import csv_proposal as CsvProposal
 import csv_start as CsvStart
 import essential_fields as EssentialFields
-from conftest import let_in
+import market_write as MarketWrite
+from conftest import FakeMarketsCollection, let_in
 
 CORPUS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_data", "google_forms")
 YEARS = {"days-as-one-question": 2023, "four-day-grid": 2024, "no-timestamp": 2025,
@@ -112,6 +114,39 @@ def test_the_seam_keeps_ticked_boxes_and_table_choices(name):
             if answered(failure["row"], columns):
                 assert f"'{label}' is required" not in failure["error"], failure
     assert preview["validRows"] == IMPORTED[name]
+
+
+# The exports whose form never asked how many days an applicant wants.
+NEVER_ASKED_HOW_MANY_DAYS = ["days-as-one-question", "four-day-grid", "no-timestamp"]
+
+
+@pytest.mark.parametrize("name", NEVER_ASKED_HOW_MANY_DAYS)
+def test_a_form_that_never_asked_how_many_days_imports_with_no_personal_limit(
+    name, monkeypatch, applications,
+):
+    """Past the preview, where the seam tests above stop: started and then imported, each of
+    these files stores every application it takes with no personal limit, whatever ceiling the
+    market has."""
+    doc = _draft()
+    csv_text = _csv(name)
+    after = _written(doc, _confirmed_update(doc, csv_text, {"year": YEARS[name], "ceiling": 2}))
+    markets = FakeMarketsCollection(after)
+    monkeypatch.setattr(MarketWrite, "markets_collection", markets)
+    # A draft's first import moves it into Review, which reads the market through the markets API.
+    monkeypatch.setattr(MarketsApi, "markets_collection", markets)
+    saved = CsvImport.stored_mapping(after)
+    _error, headers, _rows = CsvImport.parse_csv(csv_text)
+    restored, _missing, _new = CsvImport.restore_mapping(
+        headers, saved, CsvImport.import_targets(after))
+    assert EssentialFields.MAX_DATES_KEY not in restored
+
+    body, status = CsvImport.import_applications(
+        markets, after, csv_text, restored, saved["resolutions"])
+
+    assert status == 200 and body["created"] == IMPORTED[name], body
+    stored = list(applications.find({}))
+    assert len(stored) == IMPORTED[name]
+    assert all(app["form_data"]["essential_max_dates"] is None for app in stored)
 
 
 def test_the_plan_facts_form_and_ceiling_are_written():

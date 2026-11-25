@@ -11,9 +11,10 @@ import { seedMarketDayMap, type SeededMarketDayMap } from './helpers/seedMarketD
  *
  * A press on one half picks it alone: the map outlines that half, the card names only its vendor
  * under "Left half" or "Right half", and the address carries `half` beside `table`, so a reload or
- * a shared link opens the same half. A half the table is not split into on the day, or one that is
- * no side, opens the whole table with no error. The rules themselves are proved in
- * `thePublicMapPage.test.ts`; this proves them in a real browser at a phone and a desk.
+ * a shared link opens the same half. This proves it in a real browser at a phone and a desk, its
+ * outline and the screen reader's sweep with it. The rules themselves, a vendor opened from the list
+ * opening their half, and a half the table is not split into on the day, or one that is no side,
+ * opening the whole table with no error, are proved in `thePublicMapPage.test.ts`.
  */
 
 test.describe.configure({ mode: 'serial' });
@@ -118,40 +119,6 @@ for (const size of PHONE_AND_DESK) {
       await press(map.table('Aisle A 1'));
       await expect(page).toHaveURL(new RegExp(`&table=north-table-1$`));
       await expectOutlined(map, 'whole');
-    });
-
-    test('a vendor opened from the list opens their half alone', async ({ page }) => {
-      const map = new PublicMapPage(page);
-      await map.goto(seeded.slug);
-      await press(map.vendors.filter({ hasText: 'Paper Moth Press' }));
-      await expect(page).toHaveURL(new RegExp(`&table=${SHARED}&half=right$`));
-      await expectTheRightHalfAlone(map);
-    });
-
-    test('half=right on a day Aisle A 3 is not split shows the whole table, with no error', async ({
-      page,
-    }) => {
-      const map = new PublicMapPage(page);
-      await map.goto(seeded.slug, { date: seeded.tomorrow, table: SHARED, half: 'right' });
-      await expect(map.daySelect).toHaveValue(seeded.tomorrow);
-      await expect(map.cardCode).toHaveText('Aisle A 3');
-      await expect(map.cardHalves).toHaveCount(0);
-      await expect(map.cardWhole).toHaveText(/^This table is free on \w{3} \d+ \w{3}\.$/);
-      await expectOutlined(map, 'whole');
-      await expectNoAlert(page);
-    });
-
-    test('half=middle shows the whole table, both halves, with no error', async ({ page }) => {
-      const map = new PublicMapPage(page);
-      await map.goto(seeded.slug, { table: SHARED, half: 'middle' });
-      await expect(map.cardCode).toHaveText('Aisle A 3');
-      await expect(map.cardHalves.getByRole('heading', { level: 3 })).toHaveText([
-        'Left half',
-        'Right half',
-      ]);
-      await expect(map.cardNames).toHaveText(['Loom House', 'Paper Moth Press']);
-      await expectOutlined(map, 'whole');
-      await expectNoAlert(page);
     });
   });
 }

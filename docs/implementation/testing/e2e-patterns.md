@@ -60,8 +60,9 @@ sources:
   - T501
   - T519
   - T507
-  - T539
   - T538
+  - T539
+  - T510
 ---
 
 # E2E patterns
@@ -71,7 +72,7 @@ How to run the suite is [TESTING.md](../../TESTING.md#end-to-end-e2e-tests); the
 
 ## Every E2E test says why it is one
 
-An E2E test costs CI about a second before it tests anything, on every full run, and the suite runs on every pull request, every queued merge and every push to `dev` and `main`.
+An E2E test costs CI about a second before it tests anything, on every full run, and the suite runs on every pull request, every queued merge, every push to `main`, and a push to `dev` [the queue did not test](ci-and-the-gate.md#which-suite-a-run-runs).
 So a test is E2E only when a cheaper test cannot prove it: a Vitest test in `front-end/src/__tests__/` (happy-dom, `@vue/test-utils`, a real `vue-router` where routing matters), or a pytest in `back-end/tests/`.
 
 A test must be E2E when what it proves needs one of these:
@@ -129,7 +130,7 @@ The screen sweeps' tests are registered by `sweepTheScreens()`, so Playwright re
 So does `expectInside`, the window check of the phone journeys ([`helpers/phoneWindow.ts`](../../../front-end/e2e/helpers/phoneWindow.ts)), since a box read in a slide's last frames stands a fraction of a thousandth of a pixel past where it rests, enough to fail an exact comparison with the window's edge.
 The same fixture hides the Vue DevTools floating panel (`#__vue-devtools-container__`) that the dev server injects, in every tab of its context: it overlays the app and intercepts clicks aimed at it, so a test failed on a click that hit that button instead of its own target.
 A context a test opens itself with `browser.newContext()` is outside the fixture, so it calls [`hideDevToolsPanel`](../../../front-end/e2e/helpers/hideDevToolsPanel.ts), as `withUser()` does: a click there may otherwise wait on the panel until the test times out, as the vendor's Send code did on the Google Form market's page.
-With `TEST_MAP_OUT` set, as CI's shards set it on a push to `dev` alone, `test` also records what each test's pages loaded and called, for [the test map](the-test-map.md) ([`helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts)); with it unset, no fixture of it is added.
+With `TEST_MAP_OUT` set, as CI's shards set it on [the nightly Test run](ci-and-the-gate.md#the-nightly-test-map) alone, or one started by hand, `test` also records what each test's pages loaded and called, for [the test map](the-test-map.md) ([`helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts)); with it unset, no fixture of it is added.
 
 ## Opening a market, and shelling into Mongo
 
@@ -165,7 +166,7 @@ A `csv` market enters `applications` only holding an application, so a spec that
 
 **Market dates are calendar days, not instants**: a stored `YYYY-MM-DD` renders as the same day for every viewer, wherever they are.
 [`getFormattedDate`](../../../front-end/src/utils/utils.ts) formats with pure UTC arithmetic; never parse a market date through `new Date()` with an offset.
-[`date-display-timezone.spec.ts`](../../../front-end/e2e/date-display-timezone.spec.ts) pins it in Honolulu, Los Angeles and Tokyo through Playwright's `timezoneId`.
+[`date-display-timezone.spec.ts`](../../../front-end/e2e/date-display-timezone.spec.ts) pins it in Honolulu and Tokyo, one zone each side of UTC, through Playwright's `timezoneId`; a zone at a fixed offset between them fails only as one of the two does; neither changes its offset, so daylight saving is [`utils.test.ts`](../../../front-end/src/__tests__/utils.test.ts)'s, which loops its zones, `America/Anchorage` and `America/Los_Angeles` among them, over the formatters themselves.
 
 ## Sharp edges
 
@@ -177,7 +178,7 @@ An API helper or spec that posts to `applicant-login/request-code` sends `captch
 **Applicant sign-in is rate limited** ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)): the run reaches the stack as two callers, its pages and a spec's `page.request` calls to `APP_API` through the dev server's proxy and a spec's own requests to `BACKEND_URL` directly, so one caller may ask five codes for an address per 15 minutes and twenty an hour whoever asks, try ten wrong codes at an address, and each caller 300 of each, which the whole serial run shares; a right code takes its try back.
 A spec that fills a count per caller and address with requests over the API and meets the refusal on the screen sends them to `APP_API` with `page.request`, as `sign-in-is-bounded.spec.ts` does, so both are one caller.
 [`global-setup.ts`](../../../front-end/e2e/global-setup.ts) clears the counters at the start of every run; a spec that signs the same address in more than that within one run trips the limit, so a spec that spends a code's five tries uses an address of its own.
-CI's `e2e-repeat` runs a changed spec file several times in one run ([the e2e repeat](ci-and-the-gate.md#the-e2e-repeat)), so a constant address its tests ask a code for twice a pass, or try a code on three times, is refused; a spec like that takes addresses of its own from `anApplicantEmail()` ([`seedApplicantMarket.ts`](../../../front-end/e2e/helpers/seedApplicantMarket.ts)).
+CI retries a failed test twice in the same run, on the same counters, so a constant address its tests ask a code for twice a pass is refused on its second retry; a spec like that takes addresses of its own from `anApplicantEmail()` ([`seedApplicantMarket.ts`](../../../front-end/e2e/helpers/seedApplicantMarket.ts)).
 **A spec that needs an address past its own count fills the counter** rather than sending the tries: an address's fifty wrong codes or passwords, past which a try asks the human check, are only reached from many callers.
 [`helpers/signInLimits.ts`](../../../front-end/e2e/helpers/signInLimits.ts) names such a limit and fills it for an address in the current window (`fillSignInLimit`), through `mongoEval`, by the key `sign_in_limits.py` computes, after `waitForRoomInWindow`, and reads its count back (`signInLimitCount`), as `a-vendor-signs-in-past-others-wrong-codes.spec.ts` and `an-organizer-signs-in-past-others-wrong-tries.spec.ts` do.
 A spec that fills an organizer's count signs in with an account of its own (`ensureVerifiedUser`), so no other spec's sign-in as `TEST_USER` meets the check.

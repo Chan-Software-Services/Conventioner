@@ -9,8 +9,9 @@ import { settle } from './helpers/settle';
 /**
  * The component library's `proposals` entry (T200), at a desk and on a phone: the chip's five tones
  * at both sizes beside the one-off badges each would replace, the `.data-table` scrolling sideways
- * inside its own scroller, and the `SidePanel` shell opened and closed every way, with the page
- * never scrolling sideways.
+ * inside its own scroller, and the `SidePanel` shell opened, and closed by Escape and by its scrim,
+ * with the page never scrolling sideways. Its close button and a chosen default's toggle are
+ * `sidePanel.test.ts`'s and `filterToggles.test.ts`'s.
  */
 
 const TONES = ['neutral', 'positive', 'attention', 'informational', 'destructive'];
@@ -205,12 +206,6 @@ eachWindow('the proposals entry', (size) => {
     await expectClosed(page);
   });
 
-  test('closes the panel by its close button', async ({ page }) => {
-    await openPanel(page);
-    await press(closeButton(page));
-    await expectClosed(page);
-  });
-
   test('closes the panel by a press on the scrim beside it', async ({ page }) => {
     await openPanel(page);
     const scrim = page.getByTestId('library-side-panel-background');
@@ -264,22 +259,6 @@ eachWindow('the proposals entry', (size) => {
     expect(await panel(page).evaluate((element) => element.contains(document.activeElement))).toBe(
       true,
     );
-  });
-
-  test('a chosen default stays pressed, and the other toggle returns to it', async ({ page }) => {
-    for (const [row, rest, other] of [
-      ['library-panel-side', 'right', 'left'],
-      ['library-panel-width', 'wide', 'narrow'],
-    ]) {
-      const chosen = page.getByTestId(`${row}-${rest}`);
-      await expect(chosen).toHaveAttribute('aria-pressed', 'true');
-      await press(chosen);
-      await expect(chosen).toHaveAttribute('aria-pressed', 'true');
-      await press(page.getByTestId(`${row}-${other}`));
-      await expect(chosen).toHaveAttribute('aria-pressed', 'false');
-      await press(page.getByTestId(`${row}-${other}`));
-      await expect(chosen).toHaveAttribute('aria-pressed', 'true');
-    }
   });
 
   test('takes a side and a width, leaving a gutter of scrim', async ({ page }) => {
