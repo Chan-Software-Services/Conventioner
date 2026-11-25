@@ -20,16 +20,12 @@ export const SERIAL_SPECS: readonly string[] = [
   'people-at-scale-market',
   // The profiler's database-wide read counts.
   'people-at-scale-organization',
-  // The fixture organizer's whole market list.
-  'remember-me',
   // The sign-in counters: it needs the counters it cleared.
   'remember-me-on-the-vendor-page',
   // The sign-in counters: it asks for five codes and expects the sixth refused.
   'sign-in-is-bounded',
   // The fixture organizer's whole market list.
   'sign-in-fits-a-phone',
-  // The fixture organizer's whole market list.
-  'smoke',
   // The fixture organizer's whole market list.
   'the-app-bar',
   // The sign-in counters: it asserts a limit is reached.
