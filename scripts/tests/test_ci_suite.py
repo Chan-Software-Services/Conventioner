@@ -1040,8 +1040,12 @@ def result_of(expression, context):
         left = operand()
         for op in ("==", "!="):
             if taken(op):
-                return (left == operand()) == (op == "==")
+                return (folded(left) == folded(operand())) == (op == "==")
         return left
+
+    # The runner ignores case when it compares strings.
+    def folded(compared):
+        return compared.casefold() if isinstance(compared, str) else compared
 
     def operand():
         token = tokens.pop(0)
@@ -1083,8 +1087,11 @@ def cache_hit(hit):
         ("${{ b != 'y' && (a == 'y' || (a == 'x')) }}", "true"),
         ("${{ a == 'x' && 'false' || 'true' }}", "false"),
         ("${{ (a) == 'x' }}", "true"),
+        ("${{ a == 'X' }}", "true"),
+        ("${{ a != 'X' }}", "false"),
     ],
-    ids=["and-before-or", "brackets-first", "nested-brackets", "an-operand-as-the-result", "a-bracketed-reference"],
+    ids=["and-before-or", "brackets-first", "nested-brackets", "an-operand-as-the-result", "a-bracketed-reference",
+         "equal-in-another-case", "not-unequal-in-another-case"],
 )
 def test_an_expression_results_as_the_runner_would_read_it(written, passed_on):
     assert value(written, {"a": "x", "b": "z"}) == passed_on
