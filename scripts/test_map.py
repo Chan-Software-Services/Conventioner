@@ -23,9 +23,9 @@ why). It exits 1 when the suite failed, writing nothing.
 records, every `*.jsonl` of it (front-end/e2e/helpers/testMap.ts: `records-<worker>.jsonl`, one
 line a test, with its spec file, its window on the wall clock and the requests its pages and its
 Node helpers made; a shard recorded before that, one `records.jsonl`), and `backend.log`
-(`docker compose logs --timestamps` of the back end). Each spec's endpoints are its tests' recorded `/api/` calls, each
-path matched to a Flask rule of `endpoints.json`, so `/markets/<id>` is one endpoint whatever the
-id. It writes:
+(`docker compose logs --timestamps` of the back end). Each spec's endpoints are its tests'
+recorded `/api/` calls, each path matched to a Flask rule of `endpoints.json`, so `/markets/<id>`
+is one endpoint whatever the id. It writes:
 
     {"commit": sha, "specs": {spec: {"modules": [paths], "endpoints": ["METHOD rule"]}},
      "endpoints": {"METHOD rule": {file: [functions]}},
