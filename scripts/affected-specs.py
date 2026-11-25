@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """The E2E spec files a change reaches, by the test map (T349), run in order up to a cap of CI
-minutes; CI's full run on the pull request runs the rest.
+minutes; CI's pull request run is the map's selection, uncapped, and the merge queue's run is
+whole.
 
     python3 scripts/affected-specs.py --run  [options] [-- <playwright arguments>]
     python3 scripts/affected-specs.py --list [options] [--json]
+    python3 scripts/affected-specs.py ci [options] --max-shards <n> [--github]
     python3 scripts/affected-specs.py audit [options] [--github] <playwright json report>...
 
 From the worktree root, on the worktree's stack (`team-stack up`, `team-stack seed`, and
@@ -45,19 +47,28 @@ The chosen specs run by score, the shorter first on a tie, until the next would 
 `front-end/scripts/e2e-shard-timings.json`, then the median of those; a spec the change edits runs
 whatever the cap. With no map at all (no `gh`, offline, none made yet) it says so and chooses by
 rule 1 alone, which is what Playwright's own `--only-changed` chooses.
+`ci` decides what a pull request's E2E run runs, and prints it as one JSON object on stdout: the
+specs the map names for the diff, with no cap, but for those the head lacks (`scope` `named`,
+their `specs`, and the `shards` they take by their `minutes` of the `suite_minutes`, 0 for none
+and never more than `--max-shards`, a whole run's); or the whole suite (`scope` `whole`, `shards`
+`--max-shards`), when there is no map, GitHub did not answer, the newest map is more than 7 days
+old (`MAP_MAX_AGE_DAYS`), the change names every spec, or a named spec's name holds a character
+the run cannot pass on (`SPEC_NAME`). `why` says which, `map` where the map came from, and
+`--github` also writes the decision to the run's summary.
 `audit`, which CI's `e2e` job runs on a pull request, names each spec that failed in the reports
 as ran (the selection runs it), left to CI (it chose it past the cap) or missed (it did not
 choose it); `--github` also writes them to the run's summary and, when there is a map, each miss
 as a warning annotation.
 `docs/implementation/testing/the-test-map.md` says what the map holds.
 
-Exit codes: Playwright's with `--run`, 0 with nothing to run, `--list` or `audit` (whatever it
-finds, or when it cannot audit), 2 a usage error.
+Exit codes: Playwright's with `--run`, 0 with nothing to run, `--list`, `ci` (whatever it
+decides) or `audit` (whatever it finds, or when it cannot audit), 2 a usage error.
 """
 import argparse
 import ast
 import io
 import json
+import math
 import os
 import re
 import shutil
@@ -66,6 +77,7 @@ import subprocess
 import sys
 import tokenize
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
@@ -80,6 +92,10 @@ CACHE = ".stack-logs/test-map"
 CAP_MINUTES = 30.0
 # A spec with no timing anywhere: a minute.
 UNTIMED_SECONDS = 60.0
+# CI's pull request run reads no older map: a nightly run that made none for a week is a fault.
+MAP_MAX_AGE_DAYS = 7
+# The spec names CI's run passes on, to its shards' filters and its jobs' outputs.
+SPEC_NAME = re.compile(r"[A-Za-z0-9._+/-]+\.spec\.ts")
 
 # What every spec stands on: the fixtures every test is made from, the setup and config of the
 # run, the front end's build and dependencies, and the stack and data every spec runs against:
@@ -159,9 +175,11 @@ class Tree:
                 if p.is_file() and "node_modules" not in p.parts
             ]
             return sorted(found)
-        return git(self.root, "ls-tree", "-r", "--name-only", self.rev, "--", under).split("\n")[
-            :-1
-        ]
+        # `-z`: each name as it is, since git quotes a name it finds unusual, such as one
+        # outside ASCII.
+        return git(self.root, "ls-tree", "-r", "-z", "--name-only", self.rev, "--", under).split(
+            "\0"
+        )[:-1]
 
 
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
@@ -181,10 +199,11 @@ def changed_lines(root: Path, base: str, head: Optional[str]) -> Dict[str, Tuple
     old: Optional[str] = None
     path: Optional[str] = None
     for line in git(root, *options, *sides, "--").splitlines():
+        # Git ends a name that holds a space with a tab here.
         if line.startswith("--- "):
-            old = line[6:] if line != "--- /dev/null" else None
+            old = line[6:].removesuffix("\t") if line != "--- /dev/null" else None
         elif line.startswith("+++ "):
-            path = line[6:] if line != "+++ /dev/null" else old
+            path = line[6:].removesuffix("\t") if line != "+++ /dev/null" else old
         elif line.startswith("@@") and path:
             m = HUNK.match(line)
             if not m:
@@ -764,6 +783,7 @@ def newest_map(root: Path) -> Tuple[Optional[dict], Optional[dict], Optional[Pat
     cache = root / CACHE
     listing = gh(root, "api", "repos/{owner}/{repo}/actions/artifacts?name=test-map&per_page=50")
     run_id: Optional[int] = None
+    made = ""
     if listing is not None:
         try:
             artifacts = json.loads(listing).get("artifacts", [])
@@ -779,6 +799,7 @@ def newest_map(root: Path) -> Tuple[Optional[dict], Optional[dict], Optional[Pat
         on_dev.sort(key=lambda a: a.get("created_at", ""), reverse=True)
         if on_dev:
             run_id = int(on_dev[0]["workflow_run"]["id"])
+            made = on_dev[0].get("created_at", "")
             if not (cache / str(run_id) / "test-map.json").is_file():
                 download(root, cache, run_id)
     if run_id is None or not (cache / str(run_id) / "test-map.json").is_file():
@@ -793,7 +814,7 @@ def newest_map(root: Path) -> Tuple[Optional[dict], Optional[dict], Optional[Pat
         run_id = earlier[-1]
         source = {"run": run_id, "offline": True}
     else:
-        source = {"run": run_id, "offline": False}
+        source = {"run": run_id, "offline": False, "made": made}
     folder = cache / str(run_id)
     test_map = json.loads((folder / "test-map.json").read_text())
     source["commit"] = test_map.get("commit")
@@ -851,8 +872,20 @@ def describe_source(source: Optional[dict]) -> str:
     return f"affected-specs: the test map of dev run {source['run']}, at {commit}, in {source['path']}"
 
 
+def sentence_case(text: str) -> str:
+    return text[:1].upper() + text[1:]
+
+
 def count_specs(count: int) -> str:
     return f"{count} spec" + ("" if count == 1 else "s")
+
+
+def count_spec_files(count: int) -> str:
+    return f"{count} spec file" + ("" if count == 1 else "s")
+
+
+def count_shards(count: int) -> str:
+    return f"{count} shard" + ("" if count == 1 else "s")
 
 
 def reasons(row: dict) -> str:
@@ -871,7 +904,8 @@ def print_rows(rows: Sequence[dict], absent: Set[str]) -> None:
 
 
 class Chosen:
-    """What the selection chooses for one diff: the shared work of `--list`, `--run` and `audit`."""
+    """What the selection chooses for one diff: the shared work of `--list`, `--run`, `ci` and
+    `audit`."""
 
     def __init__(self, args: argparse.Namespace, drop_absent: bool):
         self.root = Path(git(Path.cwd(), "rev-parse", "--show-toplevel").strip())
@@ -890,14 +924,14 @@ class Chosen:
         else:
             test_map, self.source, results = newest_map(self.root)
             results = args.results or results
-        seconds = Seconds(results, head.read(TIMINGS))
+        self.seconds = Seconds(results, head.read(TIMINGS))
         self.changes = changed_lines(self.root, self.base, self.head_rev)
-        selection, at_head = select(self.changes, head, base_tree, test_map)
-        self.absent = set(selection.score) - at_head
+        selection, self.at_head = select(self.changes, head, base_tree, test_map)
+        self.absent = set(selection.score) - self.at_head
         if drop_absent:
             for spec in self.absent:
                 del selection.score[spec]
-        self.run, self.left = ranked(selection, seconds, args.minutes)
+        self.run, self.left = ranked(selection, self.seconds, args.minutes)
         self.minutes = args.minutes
         self.base_named = bool(args.base)
 
@@ -907,6 +941,12 @@ class Chosen:
             f"({'--base' if self.base_named else 'the merge-base with origin/dev'}) "
             f"to {self.head_rev[:8] if self.head_rev else 'the worktree'}"
         )
+
+    def describe_basis(self) -> str:
+        """A job summary's sentence on what the selection was made from: the map, then the
+        diff."""
+        source = describe_source(self.source).replace("affected-specs: ", "", 1)
+        return f"{sentence_case(source)}; {self.describe_diff()}."
 
 
 def selection_options(parser: argparse.ArgumentParser) -> None:
@@ -1018,7 +1058,7 @@ def audit(argv: Sequence[str]) -> int:
                 else f"no test failed in the {count_reports(read)} read: no failure to audit"
             )
             print(f"affected-specs audit: {line}")
-            summary.append(f"{line[0].upper()}{line[1:]}.")
+            summary.append(f"{sentence_case(line)}.")
         else:
             # As `--run` ranks them: a spec the map names that the head lacks takes no minutes.
             chosen = Chosen(args, drop_absent=True)
@@ -1041,9 +1081,8 @@ def audit(argv: Sequence[str]) -> int:
                             f"for this change of {len(changed)} files: {some(changed)}"
                         )
                     )
-            source = describe_source(chosen.source).replace("affected-specs: ", "", 1)
             summary += [
-                f"{source[0].upper()}{source[1:]}; {chosen.describe_diff()}.",
+                chosen.describe_basis(),
                 "",
                 "| Failed spec | Verdict | Why |",
                 "|---|---|---|",
@@ -1071,9 +1110,129 @@ def audit(argv: Sequence[str]) -> int:
     if unread:
         print(f"affected-specs audit: could not read {', '.join(unread)}")
         summary += ["", f"Could not read {', '.join(f'`{path}`' for path in unread)}."]
-    if args.github and os.environ.get("GITHUB_STEP_SUMMARY"):
+    if args.github:
+        write_summary(summary)
+    return 0
+
+
+def write_summary(lines: Sequence[str]) -> None:
+    """Append a section to the job's summary, when there is one."""
+    if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as out:
-            out.write("\n".join(summary) + "\n")
+            out.write("\n".join(lines) + "\n")
+
+
+def ci_decision(chosen: Chosen, now: datetime) -> dict:
+    """Whether a pull request's E2E run runs the whole suite or the specs the map names, which,
+    and why; `chosen` has no cap. Any doubt runs the whole suite."""
+    if chosen.source is None:
+        return whole("there is no test map")
+    if chosen.source.get("offline"):
+        return whole("the test map could not be read from GitHub")
+    # A map given by `--map` carries no date, so it is never too old.
+    if "made" in chosen.source:
+        age = now - datetime.fromisoformat(chosen.source["made"].replace("Z", "+00:00"))
+        if age > timedelta(days=MAP_MAX_AGE_DAYS):
+            return whole(f"the newest test map is {age.days} days old")
+    specs = sorted(row["spec"] for row in chosen.run)
+    if set(specs) == chosen.at_head:
+        return whole("the change names every spec")
+    for spec in specs:
+        if not SPEC_NAME.fullmatch(spec):
+            return whole(f"a spec name the run cannot pass on: {spec}")
+    names = count_spec_files(len(specs)) if specs else "no spec"
+    return {"scope": "named", "why": f"the test map names {names} for this change", "specs": specs}
+
+
+def whole(why: str) -> dict:
+    return {"scope": "whole", "why": why, "specs": []}
+
+
+def named_table(chosen: Chosen, specs: Sequence[str]) -> List[str]:
+    """The named specs, folded in a job summary, each with its minutes and why it was chosen."""
+    if not specs:
+        return []
+    rows = {row["spec"]: row for row in chosen.run}
+    return [
+        "",
+        f"<details><summary>The {count_spec_files(len(specs))} named</summary>",
+        "",
+        "| Spec | Minutes | Why |",
+        "|---|---|---|",
+        *[
+            f"| `{spec}` | {rows[spec]['minutes']:.1f} | {cell(reasons(rows[spec]))} |"
+            for spec in specs
+        ],
+        "",
+        "</details>",
+    ]
+
+
+def shard_count(
+    specs: Sequence[str], seconds: Seconds, at_head: Set[str], max_shards: int
+) -> int:
+    """The shards a named run takes, so that each holds about a whole run's share of the suite, by
+    its minutes: never more than the specs or a whole run's `max_shards`, and none for no spec."""
+    if not specs:
+        return 0
+    named = sum(seconds(spec) for spec in specs)
+    suite = sum(seconds(spec) for spec in at_head)
+    return max(1, min(max_shards, len(specs), math.ceil(named / (suite / max_shards))))
+
+
+def ran_sentence(output: dict) -> str:
+    """The sentence a run's summary opens with, from what `ci` prints."""
+    if output["scope"] == "whole":
+        return f"Ran the whole suite: {output['why']}."
+    if not output["specs"]:
+        return "No E2E spec ran: the test map names none for this change."
+    return (
+        f"Ran the {count_spec_files(len(output['specs']))} the test map names for this change, "
+        f"{output['minutes']:.1f} of {output['suite_minutes']:.1f} minutes, "
+        f"on {count_shards(output['shards'])}."
+    )
+
+
+def ci(argv: Sequence[str]) -> int:
+    """What a pull request's E2E run runs, as one JSON object on stdout."""
+    parser = argparse.ArgumentParser(
+        prog="affected-specs.py ci",
+        description="What a pull request's E2E run runs, as one JSON object on stdout.",
+    )
+    selection_options(parser)
+    parser.add_argument(
+        "--max-shards", type=int, required=True, help="the shards a whole run takes"
+    )
+    parser.add_argument(
+        "--github",
+        action="store_true",
+        help="also write the decision and its reasons to $GITHUB_STEP_SUMMARY",
+    )
+    args = parser.parse_args(argv)
+    if args.max_shards < 1:
+        parser.error("--max-shards is at least 1")
+    # No cap: a pull request's run runs every spec the map names.
+    args.minutes = math.inf
+    chosen = Chosen(args, drop_absent=True)
+    decision = ci_decision(chosen, datetime.now(timezone.utc))
+    named = decision["specs"]
+    output = {
+        **decision,
+        "shards": shard_count(named, chosen.seconds, chosen.at_head, args.max_shards)
+        if decision["scope"] == "named"
+        else args.max_shards,
+        "minutes": sum(chosen.seconds(spec) for spec in named) / 60,
+        "suite_minutes": sum(chosen.seconds(spec) for spec in chosen.at_head) / 60,
+        "map": chosen.source,
+    }
+    ran = ran_sentence(output)
+    # With no map there is none to describe: `describe_source` then tells of the choice a builder's
+    # run falls back to, which this one does not make.
+    basis = chosen.describe_basis() if chosen.source else f"{chosen.describe_diff()}."
+    print(f"affected-specs ci: {ran}\naffected-specs ci: {basis}", file=sys.stderr)
+    if args.github:
+        write_summary(["### E2E selection", "", ran, "", basis, *named_table(chosen, named)])
+    print(json.dumps(output))
     return 0
 
 
@@ -1089,6 +1248,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:1] == ["audit"]:
         return audit(argv[1:])
+    if argv[:1] == ["ci"]:
+        return ci(argv[1:])
     playwright_args: List[str] = []
     if "--" in argv:
         at = argv.index("--")
@@ -1133,7 +1294,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if left:
         print(
             f"leaves {count_specs(len(left))}, {sum(r['minutes'] for r in left):.1f} CI minutes, "
-            "to CI's full run on the pull request:"
+            "to CI:"
         )
         print_rows(left, absent)
     if args.run and absent:
