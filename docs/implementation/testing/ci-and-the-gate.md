@@ -119,7 +119,7 @@ Each job is one block, what it runs one item a line ([two features never share a
 - on a pull request into `dev` alone, one step, `decide`, which asks [`affected-specs.py ci`](#what-a-pull-requests-e2e-run-runs) what the run's E2E runs, over a checkout of two commits, the merge commit and its first parent, and sets the outputs `scope`, `shards` and `specs`
 - the runner's own `python3`, since the script needs only the standard library, with the run's read-only token
 - it needs no other job, and the shards wait for it
-- skipped on every other run, whose shards then run every spec
+- skipped on every other run, whose shards, if it runs any, run every spec
 - not a required check
 
 **`e2e-shard`**
@@ -139,7 +139,7 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 - passes only when every shard did and [the shards ran every spec file exactly once](#the-timings-refresh-themselves), or, on a pull request whose scope is `named`, each file of the selection's list exactly once; the check writes what ran, the timings' source, each shard's seconds and their spread to the job summary
 - on a pull request whose selection named no spec, passes with no shard run, and says so in the job summary
-- before the check, its step "A folder of results for each of this run's shards" gives the check and the audit one folder a shard of this run: the download unpacks a lone artifact, a one-shard run's, straight into its path, so the step moves those files into that shard's folder, and the download also takes what an earlier attempt of the run uploaded, so it removes each folder numbered above this run's count of shards, as after a re-run that asked for fewer
+- its step "A folder of results for each of this run's shards", before the check, gives the check and the audit one folder a shard: it moves into shard 1's folder the files of a lone artifact, which the download unpacks straight into its path, and removes each folder numbered above this run's count of shards, left by an earlier attempt that asked for more
 - on a push to `dev` or a trial commit, whose shards all passed, it publishes the next timings (`e2e-shard-timings`, kept 90 days); a run whose shards did not all pass, or ran none, publishes nothing
 - on a pull request it then runs [the selection audit](the-test-map.md#where-a-miss-shows), which lists each spec the shards failed in the job's summary as ran, left to CI or missed by `affected-specs.py` for the pull request's diff, each miss also a warning annotation once a test map exists, its steps continuing on error so they never decide the job
 
@@ -189,6 +189,7 @@ Each word runs these jobs:
 
 `python-advisories` reads no word, so it runs beside each of them, a daily scan of `dev`'s tip on the nightly run.
 Each test job `needs: suite` and runs `if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}`, the shards on `map` too; `!cancelled()` lets them run when `suite` was skipped or failed.
+The shards need `e2e-select` too, and on a pull request into `dev` run [what it named](#what-a-pull-requests-e2e-run-runs), no shard at all when it named no spec.
 A required check whose job its `if:` skipped reports success, so a warm push's six required checks and `e2e` pass on a commit whose queue run passed them, and its run is green whatever `warm-caches` did, unless `python-advisories` fails: an advisory published since the pull request's run makes the warm push's run red, which holds Promote on that commit until the lock moves.
 [Promote](../../RELEASING.md#how-a-promotion-proves-itself) reads that run or the queue's, the newest of the two.
 
@@ -203,7 +204,7 @@ The first that applies decides (`ci_decision`):
 
 1. The whole suite, "there is no test map": no run on `dev` has an unexpired one, or GitHub could not be read or the map did not download, with none downloaded before, as on a runner.
 2. The whole suite, "the test map could not be read from GitHub": an older map was read from a machine's own downloads, which a runner never has.
-3. The whole suite, "the newest test map is <n> days old": its artifact was made more than 7 days ago (`MAP_MAX_AGE_DAYS`), since a week of nights that made none is a fault.
+3. The whole suite, "the newest test map is <n> days old": its artifact was made more than 7 days ago (`MAP_MAX_AGE_DAYS`), whether the nightly runs since failed to make one or no merge gave them a new commit.
 4. The whole suite, "the change names every spec": the map names every spec file at the head, as [rule 4 or 5](the-test-map.md#choosing-a-builders-specs) does.
 5. The whole suite, "a spec name the run cannot pass on": a named spec's name is not ASCII letters, digits and `. _ + / -` ending `.spec.ts` (`SPEC_NAME`), so no other character reaches an output, an environment variable or a filter.
 6. Otherwise the named specs: those the map names that the head holds, which may be none.
@@ -217,19 +218,14 @@ The shards' matrix falls back to a list of 1 to it, written out because `strateg
 **Every doubt runs the whole suite.**
 The step's shell passes a named decision on only from a script that exited 0 having printed one object whose `scope` is `named`, whose `specs` is a list of strings and whose `shards` is a whole number from 0 to `E2E_SHARDS`, 0 exactly when `specs` is empty: it writes the outputs `scope=named`, `shards` (the list 1 to that number) and `specs`.
 On anything else it writes `scope=whole` alone, and its log says whether the script chose the whole suite or could not decide.
-A job skipped or failed leaves every output empty, the shards' matrix reads an empty `shards` as the whole run's list and an empty `specs` as no `--specs`, and `e2e` checks for every spec file unless the event is a pull request and the scope is `named`, so the queue's run, a push's and a whole pull request's demand every spec whatever `e2e-select` printed.
-
-| The decision   | `e2e-shard`                                               | `e2e`                                                                                                                   |
-| -------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| named specs    | the shards it asked for, each dealing from the named list | passes when every shard did and [`check --named`](#the-timings-refresh-themselves) finds each named file run once       |
-| named, no spec | skipped before its matrix expands, since `shards` is `[]` | passes with "No E2E spec ran: the test map names none for this change.", only for a pull request whose scope is `named` |
-| whole, or none | ten shards, every spec                                    | passes when every shard did and every spec file ran once                                                                |
+A job skipped or failed leaves every output empty: the shards' matrix reads an empty `shards` as the whole run's list, their run step reads an empty `specs` as no `--specs`, and `e2e` checks for every spec file unless the event is a pull request and the scope is `named`, so the queue's run, a push's and a whole pull request's demand every spec whatever `e2e-select` printed.
 
 **The run's summary says why.**
 `decide` writes a section "E2E selection": the decision in one sentence, the map and the diff it was made from, and for named specs a folded table of each one's minutes and the first reasons it was chosen.
 
 **A re-run tests what the first attempt tested.**
-"Re-run failed jobs" keeps `e2e-select`'s outputs, so the shards deal the same specs, by [the same timings](#the-timings-refresh-themselves); "Re-run all jobs" decides again, and may read a newer map.
+"Re-run failed jobs" keeps the outputs of an `e2e-select` that passed, so the shards deal the same specs, by [the same timings](#the-timings-refresh-themselves).
+One that failed runs and decides again, as every job does under "Re-run all jobs", and may then read a newer map.
 
 ## The nightly test map
 
@@ -325,7 +321,6 @@ A [nightly run](#the-nightly-test-map) asks for `suite`, then the ten shards and
 That is why the five short checks (drift, the real-data scan with gitleaks, zizmor offline, zizmor online and actionlint) are steps of `knowledge-graph` and `real-data-and-workflows`: as five jobs of their own they made one run ask for 24, more than the account runs at once.
 `python-advisories` is a job of its own, since a step's failure would fail a required check, so it waits for `real-data-and-workflows` instead, and takes the runner that job leaves.
 With another run going, shards still wait: on one such run four shards queued 9 to 12 minutes, and the run ended at 23 minutes while each shard's own time was 10.5 to 12.5.
-The matrix is the list of shards `e2e-select` gave, or else 1 to `E2E_SHARDS`.
 
 ## The e2e stack and its caches
 
