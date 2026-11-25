@@ -103,7 +103,8 @@ describes:
   - back-end/host_limits.py
   - back-end/tests/test_the_hosts_request_limit.py
   - back-end/application_status.py#_upsert
-verified: 2026-11-24
+  - back-end/tests/test_no_log_line_carries_an_exceptions_message.py
+verified: 2026-11-25
 sources:
   - T74
   - E41/F01/S01
@@ -124,6 +125,7 @@ sources:
   - T335
   - T422
   - T507
+  - T584
 ---
 
 # An exception never reaches a client
@@ -253,7 +255,15 @@ An owed day the tidy after a write of the assignment could not move (`assignment
 reCAPTCHA's verification (`verify_recaptcha` in [`back-end/utils/captcha.py`](../../../back-end/utils/captcha.py)) prints nothing and logs its three failures: no secret it can use, outside the escape hatch, as an error naming `RECAPTCHA_SECRET_KEY`, a failed verification as a warning with Google's `success` and `score` and nothing the caller sent, and an exception as an error by its type's name alone.
 Two lines keep a message on purpose: `healthz`'s `logger.exception`, since the database driver's message is how an operator reads an outage and holds no request's value, and the CSV import's parse warning, since the `csv` module's messages name a limit or a character class, never a cell.
 
-No route in `app.py` answers what it caught: `healthz` alone catches, to answer 503 with `"status": "unavailable"` and its build's commit, when the database does not answer, and the floorplan blueprints keep their own catches, which answer the generic 500 and log, until they are rewritten.
+**No log line carries an exception's message.**
+A library's message may quote what it was given, an applicant's address or answer among it, and a log line may become an error-tracker event kept for 30 days, where Vercel keeps the line for an hour.
+So a logging call (`logger.<level>` or `logging.<level>`, any level) in an `except` handler never formats the exception it caught: not as an argument, not in an f-string, not through `str()`, `repr()` or `.args`, and not through `traceback.format_exc()`, which prints the message under the frames.
+It names the exception's type (`type(e).__name__`), an attribute that holds no value (`e.code`), `parse_failure_detail(e)` or `traceback_without_messages(e)`.
+The floorplan, floorplan template and PDF routes, the placement solver and its fallback, and creating and deleting a market's organization link each log the type this way; an upload or a delete of a floorplan image that fails logs its traceback without messages.
+An exception class defined in this repository may be formatted, since its message is our code's sentence: the boot refusals in `app.py` and the PDF converter's `UnreadablePdf`.
+The CSV import's `csv.Error` is the one library class allowed, for the reason above.
+
+No route in `app.py` answers what it caught: `healthz` alone catches, to answer 503 with `"status": "unavailable"` and its build's commit, when the database does not answer, and the floorplan blueprints keep their own catches, which answer the generic 500 and log the exception's type, until they are rewritten.
 
 **A body that is not an object is refused in words.**
 Every route in `app.py` that reads its body in the view reads it with `json_object` in [`back-end/utils/request_body.py`](../../../back-end/utils/request_body.py), and no view there reads `request` for a body another way.
@@ -289,13 +299,16 @@ Before that it refuses a database the environment does not name, or the primary 
   Each refusal of the modules above, raised for real where a route reaches it and spied on as it passes, is answered with exactly its own status and `body()`.
   Each refused parse above answers its own copy with nothing of the parser's message or the input in it, and its log holds the field but not the input; so does a stored organization that cannot be read.
   An unknown URL, a wrong method and a signed-out call still answer Flask's 404, 405 and Flask-Login's 401.
+- [`test_no_log_line_carries_an_exceptions_message.py`](../../../back-end/tests/test_no_log_line_carries_an_exceptions_message.py) walks the syntax of every back-end module outside `tests/` and fails on a logging call in an `except` handler that formats the exception it caught, naming each file, line and call.
+  A handler whose every class is a `class` statement the same walk finds, by its last dotted name, is passed over, and so is a (module, class) pair in its `ALLOWED`, which holds `csv_import.py`'s `csv.Error` and its reason; a test fails once a pair names a handler that is gone.
+  Its own fixture modules prove it flags an f-string, a `%s` argument, `str(e)`, `repr(e)`, `e.args` and `traceback.format_exc()`, and passes `type(e).__name__`, `e.code`, `parse_failure_detail(e)`, `traceback_without_messages(e)`, a repository class and the allowed pair, only in its own module.
 - [`test_the_hosts_request_limit.py`](../../../back-end/tests/test_the_hosts_request_limit.py) holds `MAX_CONTENT_LENGTH` to the host's 4,500,000 bytes, sends each import route a body one byte over it and finds 413 with the sentence and the file never inspected, and sends the inspect a body at it and finds it read.
 - [`test_captcha.py`](../../../back-end/tests/test_captcha.py) meets each of reCAPTCHA's three failures and finds one log record, the exception's by its type alone, nothing of the caller, the secret or a library's message in the log, and nothing printed.
 - [`test_account_emails_log_no_address.py`](../../../back-end/tests/test_account_emails_log_no_address.py) sends each of the five mails with email disabled, accepted, answered with no message id and refused by an error whose message holds the address, and finds the address, the error's text and the provider's response body in no log record.
 - CodeQL's `py/stack-trace-exposure` is the automated backstop: it is in the default suite CodeQL's workflow runs on every pull request to `dev`, every push and trial commit there and weekly ([CI and the gate](../testing/ci-and-the-gate.md#codeql)), and it flags a route that catches an exception and answers its text.
   It stops following a flow at a `raise`, so the client copy rule and these route tests hold the rest: a library's message carried into a client error's copy is invisible to it.
 
-What breaks it: a route `except` that answers what it caught, a library's message in client copy, or a 500 body with more than `error` in it.
+What breaks it: a route `except` that answers what it caught, a library's message in client copy or in a log line, or a 500 body with more than `error` in it.
 
 ## What the organizer reads
 

@@ -1386,7 +1386,7 @@ def create_market(market: Market, owner_email: str) -> tuple:
                 {"$addToSet": {"markets": market_id}}
             )
         except Exception as e:
-            logger.warning(f"Failed to add market to organization: {e}")
+            logger.warning("Failed to add market to organization: %s", type(e).__name__)
         else:
             if added.matched_count == 0:
                 # Its organization began its deletion (or went) since the request read it, and
@@ -2762,7 +2762,7 @@ def delete_market(market_id: str, requesting_user: str) -> DeleteResult:
                 {"$pull": {"markets": market_id}}
             )
         except Exception as e:
-            logger.warning(f"Failed to remove market from organization: {e}")
+            logger.warning("Failed to remove market from organization: %s", type(e).__name__)
 
     # Its applications, check-ins, sign-in codes and placement trail go with it (bug 47): each
     # names people, and leaving them behind would outlive the thing they describe.

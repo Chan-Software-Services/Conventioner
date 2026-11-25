@@ -96,14 +96,14 @@ def _render_pages_as_png(
                     try:
                         bitmap = page.render(scale=_page_scale(page, scale, max_side_px))
                     except pdfium.PdfiumError as e:
-                        logger.warning(f"Failed to draw page {index + 1}: {e}")
+                        logger.warning("Failed to draw page %d: %s", index + 1, type(e).__name__)
                         continue
                     try:
                         buf = io.BytesIO()
                         bitmap.to_pil().save(buf, format="PNG")
                         result.append(buf.getvalue())
                     except Exception as e:
-                        logger.warning(f"Failed to encode page {index + 1} as PNG: {e}")
+                        logger.warning("Failed to encode page %d as PNG: %s", index + 1, type(e).__name__)
                     finally:
                         bitmap.close()
                 finally:
