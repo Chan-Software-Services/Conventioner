@@ -10,6 +10,7 @@ import {
 import { inTheWindow, PHONE_AND_DESK } from './helpers/phoneWindow';
 import { NORTH_WING, seedMarketDayMap, type SeededMarketDayMap } from './helpers/seedMarketDayMap';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
 import { LayoutPage } from './pages/LayoutPage';
@@ -81,10 +82,7 @@ test.describe("Attendance's map offers the Layout page's floorplan choices", () 
       [EDITOR, 'editor'],
       [VIEWER, 'viewer'],
     ] as const) {
-      const given = await request.post(`${BACKEND_URL}/markets/${seeded.marketId}/roles`, {
-        data: { user_email: person.email, role },
-      });
-      expect(given.ok(), await given.text()).toBeTruthy();
+      await grantMarketRole(request, seeded.marketId, person, role);
     }
     const raised = await request.put(
       `${BACKEND_URL}/markets/${seeded.marketId}/permissions/check-in`,

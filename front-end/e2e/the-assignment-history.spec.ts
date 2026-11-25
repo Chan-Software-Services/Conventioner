@@ -4,6 +4,7 @@ import { seedAssignedMarket } from './helpers/seedAssignedMarket';
 import { marketScreenPath } from './helpers/marketScreens';
 import { SEED_MARKET_DATE } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { namelessControls } from './helpers/accessibleNames';
 import { ManageMarketPage } from './pages/ManageMarketPage';
@@ -136,11 +137,7 @@ test("its sentences are Manage market's History narrowed to Assignment, in the s
   await placeAndFree(request, seed.marketId, 2);
   // A run, and a change of another kind, which the dialog leaves out.
   await ok(await request.post(`${BACKEND_URL}/markets/${seed.marketId}/assignment`));
-  await ok(
-    await request.post(`${BACKEND_URL}/markets/${seed.marketId}/roles`, {
-      data: { user_email: VIEWER.email, role: 'viewer' },
-    }),
-  );
+  await grantMarketRole(request, seed.marketId, VIEWER, 'viewer');
 
   const tables = new TablesPage(page);
   await tables.goto(seed.marketId);
@@ -155,8 +152,11 @@ test("its sentences are Manage market's History narrowed to Assignment, in the s
   await manage.waitForOverlay();
   await manage.openHistory();
   await expect(manage.historySentences.first()).toBeVisible();
-  // The role given is there before narrowing, and is not in the dialog.
-  await expect(manage.historySentences.first()).toContainText(VIEWER.email);
+  // The role given, by the invitation the Viewer accepted, is there before narrowing, and is not
+  // in the dialog.
+  await expect(manage.historySentences.first()).toContainText(
+    `gave ${VIEWER.email} the Viewer role, which they accepted`,
+  );
   await manage.historyKind.selectOption('Assignment');
   await expect(manage.historySentences).toHaveCount(inTheDialog.length);
 
@@ -378,9 +378,7 @@ test('a viewer reads it after a run, and someone below the row is not offered it
   ensureVerifiedUser(VIEWER.email, VIEWER.password);
   const seed = await seedAssignedMarket(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
   const market = `${BACKEND_URL}/markets/${seed.marketId}`;
-  await ok(
-    await request.post(`${market}/roles`, { data: { user_email: VIEWER.email, role: 'viewer' } }),
-  );
+  await grantMarketRole(request, seed.marketId, VIEWER, 'viewer');
   await new TablesPage(page).goto(seed.marketId);
   await expect(new TablesPage(page).historyButton).toBeVisible();
 

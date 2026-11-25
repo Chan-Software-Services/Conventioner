@@ -12,6 +12,7 @@ import {
 import { inTheWindow, PHONE_AND_DESK } from './helpers/phoneWindow';
 import { loginViaApi, seedPublishedMarketWithAssignments } from './helpers/seeds';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { AttendanceStatusPage } from './pages/AttendanceStatusPage';
 
 /**
@@ -132,10 +133,7 @@ test.beforeAll(async ({ request }) => {
       namePrefix: 'E2E Door Words',
     },
   ));
-  const roles = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-    data: { user_email: LONG_ORGANIZER.email, role: 'editor' },
-  });
-  expect(roles.ok(), await roles.text()).toBeTruthy();
+  await grantMarketRole(request, marketId, LONG_ORGANIZER, 'editor');
   const organizer = await apiRequest.newContext({ ignoreHTTPSErrors: true });
   await loginViaApi(organizer, BACKEND_URL, LONG_ORGANIZER.email, LONG_ORGANIZER.password);
   for (const date of [YESTERDAY, TODAY]) {
