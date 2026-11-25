@@ -38,6 +38,7 @@ A `SECRET_KEY` shorter than 32 characters is refused too (`MINIMUM_SECRET_LENGTH
 ## Consequences
 
 - Setting `SECRET_KEY` for the first time, or rotating it, ends every session signed with the old key: organizers log in again, once.
+  Every vendor's sign-in token ends with it, since each signing key is derived from the secret, so a vendor not remembered on that device enters a new code.
   That is the price of the key not being public, and never a reason to reach for the old value.
 - A refusal says which it met: a blank value is reported as unset, a published one as published, because `FOO=` is what a forgotten variable looks like and a filled-in placeholder is not.
 - A new placeholder belongs in `PUBLISHED_VALUES`; better, no doc or template prints a usable-looking key.

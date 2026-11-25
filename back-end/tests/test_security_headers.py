@@ -2,8 +2,9 @@
 
 ``X-Content-Type-Options: nosniff`` keeps a browser from reading a JSON answer as something it can
 run, ``Referrer-Policy: no-referrer`` keeps the API's own addresses, which can carry a market's id,
-out of anything it links to, and ``Strict-Transport-Security`` keeps a browser on HTTPS to the API. One ``after_request`` adds them, so a route added later, an error
-answer and a CORS preflight carry them without doing anything.
+out of anything it links to, and ``Strict-Transport-Security`` keeps a browser on HTTPS to the API.
+One ``after_request`` adds them, so a route added later, an error answer and a CORS preflight carry
+them without doing anything.
 """
 
 import pytest
