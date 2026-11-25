@@ -25,7 +25,12 @@
  *
  * and writes its deal record (`test-results/e2e-deal.json`: the timings' source, the timings, every
  * listed file and its hand) beside Playwright's report. Without `--timings` it deals by the
- * committed file. Once every shard has passed, CI's `e2e` job runs
+ * committed file. It runs its hand in two passes, both whatever the first's result: the files of
+ * the serial list (`e2e/serialSpecs.ts`), which need the stack to themselves, at one worker, then
+ * the rest at the config's workers (`E2E_WORKERS`). Each pass keeps its own output folder and HTML
+ * report (`test-results/<pass>/`, `playwright-report/<pass>/`); `test-results/results.json` is
+ * their JSON reports merged, and `test-results/e2e-phases.json` each pass's name, file count, wall
+ * seconds and exit status. Once every shard has passed, CI's `e2e` job runs
  *
  *   node scripts/e2e-shards.ts check <dir of the shards' artifacts> [--publish=<out file>]
  *
@@ -122,13 +127,108 @@ export function fileFilter(rootDir: string, file: string): string {
 
 interface ReportSuite {
   file?: string;
-  specs?: { tests?: { results?: { duration?: number }[] }[] }[];
+  specs?: { tests?: { projectName?: string; results?: { duration?: number }[] }[] }[];
   suites?: ReportSuite[];
+}
+
+/** A Playwright JSON report's run-wide counts; `startTime` is when the run began. */
+interface ReportStats {
+  startTime?: string;
+  duration?: number;
+  expected?: number;
+  unexpected?: number;
+  flaky?: number;
+  skipped?: number;
 }
 
 interface Report {
   config?: { rootDir?: string };
   suites?: ReportSuite[];
+  errors?: unknown[];
+  stats?: ReportStats;
+}
+
+/**
+ * The Playwright project of the spec files that share state no second worker may touch while they
+ * run (`playwright.config.ts`): a shard runs them first, at one worker, then the rest at the
+ * config's workers.
+ */
+export const SERIAL_PROJECT = 'chromium-serial';
+
+/** Whether a suite, or one inside it, holds a test of `project`. */
+function holdsProject(suite: ReportSuite, project: string): boolean {
+  return (
+    (suite.specs ?? []).some((spec) => (spec.tests ?? []).some((t) => t.projectName === project)) ||
+    (suite.suites ?? []).some((inner) => holdsProject(inner, project))
+  );
+}
+
+/** The spec files a Playwright list names under the serial project, each once, in order. */
+export function serialFiles(report: Report): string[] {
+  return specFiles({
+    suites: (report.suites ?? []).filter((suite) => holdsProject(suite, SERIAL_PROJECT)),
+  });
+}
+
+/** The Playwright project of every spec file not in the serial list. */
+export const PARALLEL_PROJECT = 'chromium';
+
+/** One of a shard's runs of Playwright: its name, its project and the hand's files it runs. */
+export interface Pass {
+  name: 'serial' | 'parallel';
+  project: string;
+  files: string[];
+}
+
+/**
+ * A shard's passes over its hand: the serial files first, then the rest, each in its hand's order
+ * and each left out when it has no file, so every file of the hand runs in exactly one pass.
+ */
+export function passes(hand: readonly string[], serial: Iterable<string>): Pass[] {
+  const isSerial = new Set(serial);
+  return [
+    {
+      name: 'serial' as const,
+      project: SERIAL_PROJECT,
+      files: hand.filter((f) => isSerial.has(f)),
+    },
+    {
+      name: 'parallel' as const,
+      project: PARALLEL_PROJECT,
+      files: hand.filter((f) => !isSerial.has(f)),
+    },
+  ].filter((pass) => pass.files.length > 0);
+}
+
+/**
+ * A shard's exit status from its passes', in the order they ran: the first that failed, else 0. A
+ * pass ended by a signal has no status, and fails.
+ */
+export function shardStatus(statuses: readonly (number | null)[]): number {
+  for (const status of statuses) if (status !== 0) return status ?? 1;
+  return 0;
+}
+
+/**
+ * One report of a shard's passes, as the `e2e` job and the flaky step read it: every pass's files
+ * and errors, the counts and durations summed, the first pass's config and start.
+ */
+export function mergeReports(reports: readonly Report[]): Report {
+  const sum = (key: Exclude<keyof ReportStats, 'startTime'>) =>
+    reports.reduce((total, report) => total + (report.stats?.[key] ?? 0), 0);
+  return {
+    config: reports[0]?.config,
+    suites: reports.flatMap((report) => report.suites ?? []),
+    errors: reports.flatMap((report) => report.errors ?? []),
+    stats: {
+      startTime: reports[0]?.stats?.startTime,
+      duration: sum('duration'),
+      expected: sum('expected'),
+      unexpected: sum('unexpected'),
+      flaky: sum('flaky'),
+      skipped: sum('skipped'),
+    },
+  };
 }
 
 /** The spec files a Playwright JSON report names, each once, in alphabetical order. */
@@ -693,11 +793,54 @@ function runShard(
     writeRecord();
     return 1;
   }
-  const run = spawnSync('npx', ['playwright', 'test', ...filters, ...playwrightArgs], {
-    stdio: 'inherit',
-  });
+  // The serial project's files first, at one worker, then the rest at the config's workers, so no
+  // test of the serial project ever runs beside another, and both whatever the first's result, so
+  // one serial failure never hides the rest of the hand. Each pass keeps its own output folder,
+  // HTML report and JSON report, since Playwright empties its folders first; the shard's report is
+  // the passes' merged, at the path the config names.
+  const resultsDir = join(import.meta.dirname, '..', 'test-results');
+  const reports: Report[] = [];
+  const phases: { name: string; files: number; seconds: number; status: number | null }[] = [];
+  for (const pass of passes(hand, serialFiles(suite))) {
+    const json = join(resultsDir, `results-${pass.name}.json`);
+    const started = Date.now();
+    const run = spawnSync(
+      'npx',
+      [
+        'playwright',
+        'test',
+        `--project=${pass.project}`,
+        ...(pass.name === 'serial' ? ['--workers=1'] : []),
+        `--output=${join(resultsDir, pass.name)}`,
+        ...pass.files.map((file) => fileFilter(rootDir, file)),
+        ...playwrightArgs,
+      ],
+      {
+        stdio: 'inherit',
+        env: {
+          ...process.env,
+          E2E_JSON_OUTPUT: json,
+          PLAYWRIGHT_HTML_OUTPUT_DIR: join(
+            import.meta.dirname,
+            '..',
+            'playwright-report',
+            pass.name,
+          ),
+        },
+      },
+    );
+    const seconds = Math.round((Date.now() - started) / 100) / 10;
+    phases.push({ name: pass.name, files: pass.files.length, seconds, status: run.status });
+    console.log(
+      `e2e shard ${current}/${total}: the ${pass.name} pass, ${pass.files.length} files, took ${seconds} s`,
+    );
+    if (existsSync(json)) reports.push(JSON.parse(readFileSync(json, 'utf8')) as Report);
+  }
+  mkdirSync(resultsDir, { recursive: true });
+  writeFileSync(join(resultsDir, 'results.json'), `${JSON.stringify(mergeReports(reports))}\n`);
+  writeFileSync(join(resultsDir, 'e2e-phases.json'), `${JSON.stringify(phases)}\n`);
   writeRecord();
-  return run.status ?? 1;
+  return shardStatus(phases.map((phase) => phase.status));
 }
 
 /** Each shard's artifact under `dir`, as `actions/download-artifact` lays them out by pattern:

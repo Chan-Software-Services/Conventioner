@@ -130,7 +130,11 @@ The real-data steps of `real-data-and-workflows` are the only real-data check th
 **A flaky test fails the build.**
 Under `CI`, Playwright retries twice and sets `failOnFlakyTests` ([`front-end/playwright.config.ts`](../../../front-end/playwright.config.ts)), so a test that passes only on a retry still fails its shard.
 Every failed attempt and every retry keeps its trace, so the shard's `playwright-artifacts-shard-<n>` artifact, uploaded on that failure, holds every failed attempt's trace beside its passing retry's ([when a test fails](../../TESTING.md#when-a-test-fails)).
-Within a shard the tests share one database (`workers: 1`); never across shards.
+Within a shard the tests share one database; never across shards.
+Each shard runs its hand in two passes ([`front-end/scripts/e2e-shards.ts`](../../../front-end/scripts/e2e-shards.ts)): first the spec files of the `chromium-serial` project, the serial list's ([`front-end/e2e/serialSpecs.ts`](../../../front-end/e2e/serialSpecs.ts)), which share state a second worker would change under them, at one worker, then the rest at the config's workers (`E2E_WORKERS`, one when unset), and merges the two passes' reports into the one the `e2e` job reads.
+Both passes run whatever the first's result, so one failed serial spec never hides the rest of the hand, and the shard fails with the first pass that failed.
+Each pass keeps its own HTML report and traces, in `playwright-report/<pass>/` and `test-results/<pass>/`, so the failure artifact holds both; `test-results/e2e-phases.json` holds each pass's file count, wall seconds and exit status, and the shard's log a line for each pass (`e2e shard <n>/<total>: the serial pass, <files> files, took <s> s`).
+When a spec joins the serial list is [E2E patterns](e2e-patterns.md#specs-that-need-the-stack-to-themselves)' rule.
 
 ## A merge queue's trial commit
 

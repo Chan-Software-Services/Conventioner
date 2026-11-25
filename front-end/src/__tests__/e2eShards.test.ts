@@ -25,7 +25,12 @@ import {
   parseTimings,
   publishedTimings,
   refreshTimings,
+  mergeReports,
+  passes,
   secondsFromReports,
+  SERIAL_PROJECT,
+  serialFiles,
+  shardStatus,
   shardSummary,
   specFiles,
   TIMINGS_ARTIFACT,
@@ -719,5 +724,106 @@ describe('chooseTimings', () => {
       'the committed scripts/e2e-shard-timings.json (not in a GitHub Actions run)',
     );
     expect(gh.asked).toEqual([]);
+  });
+});
+
+describe('serialFiles', () => {
+  it("names the hand's files Playwright lists under the serial project, once each, in order", () => {
+    const listed = {
+      suites: [
+        { file: 'b.spec.ts', specs: [{ tests: [{ projectName: SERIAL_PROJECT }] }] },
+        { file: 'a.spec.ts', specs: [{ tests: [{ projectName: 'chromium' }] }] },
+        {
+          file: 'c.spec.ts',
+          suites: [{ specs: [{ tests: [{ projectName: SERIAL_PROJECT }] }] }],
+          specs: [{ tests: [{ projectName: SERIAL_PROJECT }] }],
+        },
+      ],
+    };
+    expect(serialFiles(listed)).toEqual(['b.spec.ts', 'c.spec.ts']);
+  });
+});
+
+describe('passes', () => {
+  it("runs the hand's serial files first, in the serial project, then the rest in the parallel one", () => {
+    expect(
+      passes(['a.spec.ts', 'b.spec.ts', 'c.spec.ts', 'd.spec.ts'], ['d.spec.ts', 'b.spec.ts']),
+    ).toEqual([
+      { name: 'serial', project: SERIAL_PROJECT, files: ['b.spec.ts', 'd.spec.ts'] },
+      { name: 'parallel', project: 'chromium', files: ['a.spec.ts', 'c.spec.ts'] },
+    ]);
+  });
+
+  it('leaves out a pass with no file', () => {
+    expect(passes(['a.spec.ts', 'c.spec.ts'], ['b.spec.ts'])).toEqual([
+      { name: 'parallel', project: 'chromium', files: ['a.spec.ts', 'c.spec.ts'] },
+    ]);
+    expect(passes(['b.spec.ts'], ['b.spec.ts'])).toEqual([
+      { name: 'serial', project: SERIAL_PROJECT, files: ['b.spec.ts'] },
+    ]);
+    expect(passes([], ['b.spec.ts'])).toEqual([]);
+  });
+
+  it('puts every file of the hand in exactly one pass, and no file outside it', () => {
+    const hand = ['e.spec.ts', 'a.spec.ts', 'c.spec.ts', 'b.spec.ts'];
+    const run = passes(hand, ['b.spec.ts', 'x.spec.ts', 'e.spec.ts']).flatMap((pass) => pass.files);
+    expect([...run].sort()).toEqual([...hand].sort());
+  });
+});
+
+describe('shardStatus', () => {
+  it('is 0 when every pass passed, and when no pass ran', () => {
+    expect(shardStatus([0, 0])).toBe(0);
+    expect(shardStatus([])).toBe(0);
+  });
+
+  it("is the first pass's failure, and a later pass's when the first passed", () => {
+    expect(shardStatus([2, 1])).toBe(2);
+    expect(shardStatus([0, 1])).toBe(1);
+  });
+
+  it('counts a pass ended by a signal, which has no status, as a failure', () => {
+    expect(shardStatus([0, null])).toBe(1);
+  });
+});
+
+describe('mergeReports', () => {
+  it("joins the passes' files and sums their counts, so one report holds the shard's hand", () => {
+    const serial = {
+      ...report({ 'b.spec.ts': [[100]] }),
+      errors: [{ message: 'one' }],
+      stats: {
+        startTime: '2026-11-24T00:00:00Z',
+        duration: 10,
+        expected: 1,
+        unexpected: 0,
+        flaky: 1,
+        skipped: 0,
+      },
+    };
+    const parallel = {
+      ...report({ 'a.spec.ts': [[200]] }),
+      errors: [],
+      stats: {
+        startTime: '2026-11-24T00:01:00Z',
+        duration: 20,
+        expected: 2,
+        unexpected: 1,
+        flaky: 0,
+        skipped: 3,
+      },
+    };
+    const merged = mergeReports([serial, parallel]);
+    expect(specFiles(merged)).toEqual(['a.spec.ts', 'b.spec.ts']);
+    expect(merged.config).toEqual(serial.config);
+    expect(merged.errors).toEqual([{ message: 'one' }]);
+    expect(merged.stats).toEqual({
+      startTime: '2026-11-24T00:00:00Z',
+      duration: 30,
+      expected: 3,
+      unexpected: 1,
+      flaky: 1,
+      skipped: 3,
+    });
   });
 });

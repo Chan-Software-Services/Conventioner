@@ -22,6 +22,7 @@ describes:
   - front-end/e2e/helpers/signInWindow.ts
   - front-end/e2e/helpers/mongoSession.ts
   - front-end/e2e/helpers/mongoScript.ts
+  - front-end/e2e/serialSpecs.ts
 verified: 2026-11-20
 sources:
   - E21/F02/S02
@@ -162,15 +163,27 @@ A `csv` market enters `applications` only holding an application, so a spec that
 [`getFormattedDate`](../../../front-end/src/utils/utils.ts) formats with pure UTC arithmetic; never parse a market date through `new Date()` with an offset.
 [`date-display-timezone.spec.ts`](../../../front-end/e2e/date-display-timezone.spec.ts) pins it in Honolulu, Los Angeles and Tokyo through Playwright's `timezoneId`.
 
+## Specs that need the stack to themselves
+
+CI's shards run their hand in two passes ([CI and the gate](ci-and-the-gate.md#ci)): first the spec files of the serial list, [`e2e/serialSpecs.ts`](../../../front-end/e2e/serialSpecs.ts), at one worker, then the rest at the config's workers.
+A spec file joins the list when one of its tests needs state that every test shares to stay as it left it between two of its steps.
+That is when it counts the database's reads across collections (the profiler), asserts that a shared counter reaches its limit or needs the counters it cleared, ends or counts `TEST_USER`'s or `NO_ORG_USER`'s sessions, reads `TEST_USER`'s whole market or organization list, or empties or drops a collection other specs write.
+A spec that only writes documents of its own (its own market, account, address or fake Discord server), or only clears a counter to make room, stays parallel.
+Each entry's comment names the kind of shared state that puts it there; today's are four: the profiler's database-wide read counts, the sign-in counters, the fixture organizer's sessions, and the fixture organizer's whole market list.
+The sign-in counters' limits are of two kinds, an address's and a caller's ([sharp edges](#sharp-edges)): every test of a run is one caller, in both passes, and a spec that clears the counters to make room empties them for every address, so a spec that asserts a limit is reached, or needs the counters it cleared, is serial.
+A spec that fails only beside another, as `people-at-scale-organization.spec.ts` did in `T509`, joins the list rather than gains a wait.
+Only the shard script keeps the list's files apart: a plain `npx playwright test` with `E2E_WORKERS` above one runs them beside the rest ([TESTING.md](../../TESTING.md#end-to-end-e2e-tests)).
+[`serialSpecs.test.ts`](../../../front-end/src/__tests__/serialSpecs.test.ts) fails when an entry names no spec file in `e2e/`, so a rename never moves a file into the parallel pass in silence.
+
 ## Sharp edges
 
 **Identity comes from the session cookie alone**: the helpers authenticate by logging in, and no spec or seed sends an identity header.
 That, the self-signed certificate and the other suite-wide traps are TESTING.md's [testing gotchas](../../TESTING.md#testing-gotchas).
 
-**Applicant sign-in is rate limited** ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)): an address is sent at most five codes per 15 minutes and may try ten, and a caller 300 of each, which the whole serial run shares.
+**Applicant sign-in is rate limited** ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)): an address is sent at most five codes per 15 minutes and may try ten, and a caller 300 of each, which the whole run shares, both passes.
 [`global-setup.ts`](../../../front-end/e2e/global-setup.ts) clears the counters at the start of every run; a spec that signs the same address in more than that within one run trips the limit, so a spec that spends a code's five tries uses an address of its own.
 **The organizer's password and code sign-ins are rate limited too** ([the sign-in is bounded](../data/users-and-email.md#the-sign-in-is-bounded)): ten tries per address per 15 minutes on each, and fifty per caller on the password, sixty on the code.
-A try that signs in takes its count back, so the suite's hundreds of fixture sign-ins cost nothing; wrong passwords and codes share the caller's fifty and sixty across the serial run, so a spec that goes past a limit, or tries many wrong ones, clears the counters in its `finally` (`db.sign_in_attempts.deleteMany({})`), as `the-sign-in-says-what-to-do-next.spec.ts` does.
+A try that signs in takes its count back, so the suite's hundreds of fixture sign-ins cost nothing; wrong passwords and codes share the caller's fifty and sixty across the whole run, both passes, so a spec that goes past a limit, or tries many wrong ones, clears the counters in its `finally` (`db.sign_in_attempts.deleteMany({})`), as `the-sign-in-says-what-to-do-next.spec.ts` does.
 Asking for an organizer's code, a reset link or a verification link, and signing up, take nothing back: five of each per address and thirty per caller per 15 minutes, so a spec that goes past one clears the counters in its `finally` too.
 **The counts are kept in fixed quarter hours on the clock** (`back-end/sign_in_limits.py`), so tries that straddle a quarter hour's end are counted in two windows: a spec that fills a limit and then meets it calls `waitForRoomInWindow` ([`helpers/signInWindow.ts`](../../../front-end/e2e/helpers/signInWindow.ts)) first, which waits out a window with less than a minute left, or the try past the limit can land in a fresh window and be allowed.
 Every signed-out vendor page, and every vendor request that finds its tab's sign-in ended, also asks to resume a remembered sign-in, 300 per caller per 15 minutes; a refused resume draws the sign-in as no cookie does, so only a spec that needs a resume to pass clears the counters first, as `remember-me-on-the-vendor-page.spec.ts` does.
