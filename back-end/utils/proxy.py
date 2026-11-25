@@ -4,17 +4,12 @@
 Flask. Behind a reverse proxy, a load balancer, or a serverless ingress it is the *proxy* - the same
 address for every caller in the world.
 
-Two things read it. Organizer signup hands it to Google as reCAPTCHA's ``remoteip``
-(``api/users.py`` -> ``utils.captcha.verify_recaptcha``), and the applicant sign-in rate limits count
-each caller by it (``api/applicant_auth.py`` -> ``sign_in_limits``): with the proxy's address there,
-every applicant in the world would share one caller's limit. reCAPTCHA v3 scores rather than passes or
-fails, and the address is one of the signals it scores on, so a deployment that reports its own
-ingress as the client reports the same client for every signup in the world, and scores it against
-``MIN_SCORE`` accordingly. That was survivable while the secret was optional, because a deployment
-without one took the dev-bypass path and no token was ever sent to Google. The secret is a boot
-requirement now, which is what puts every deployment on this path and makes this variable
-load-bearing: the captcha is genuinely enforced for the first time, so the address it is enforced
-against has to be the caller's.
+Two things read it. The sign-in limits count each caller by it (``sign_in_limits.caller``, for the
+vendor's and the organizer's sign-ins alike): with the proxy's address there, every caller in the
+world would share one caller's limit, so one person's tries would use up everyone's. And the human
+check hands it to Cloudflare as Turnstile's ``remoteip`` (``utils.captcha.captcha_passes``), which
+Cloudflare reads beside the token: a deployment that reports its own ingress there reports the same
+client for every caller in the world.
 
 The fix is not to trust ``X-Forwarded-For``: any caller can write that header, so trusting it whole
 lets a caller name any address it likes. Only the hops the deployment actually owns may be trusted,
@@ -64,10 +59,9 @@ def trusted_proxy_hops() -> int:
                 f"deployment's own that a request passes through before it reaches Flask (a reverse "
                 f"proxy, a load balancer, or a serverless ingress each count as one). Without it, "
                 f"the address this app takes for the caller's is the proxy's - the same address for "
-                f"every caller in the world - and that address is what organizer signup reports to "
-                f"reCAPTCHA, which scores on it, and what the applicant sign-in rate limits count "
-                f"each caller by. Set it to 0 only if Flask is exposed directly, or "
-                f"set {INSECURE_LOCAL_DEV_VAR}=true if this really is a local development machine."
+                f"every caller in the world - and that address is what the sign-in limits count "
+                f"each caller by, and what the human check reports to Cloudflare. Set it to 0 only "
+                f"if Flask is exposed directly, or set {INSECURE_LOCAL_DEV_VAR}=true if this really is a local development machine."
             )
         warn_insecure_local_dev(f"the trusted-proxy hop count ({TRUSTED_PROXY_HOPS_VAR})")
         return 0

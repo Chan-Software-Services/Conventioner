@@ -2,17 +2,17 @@
 one write (T283).
 
 An organization's people are one map, ``{user_id: "owner" | "admin" | "member"}``, written only by
-``organization_people``, its lists kept as an exact mirror. Transferring the organization's
+``organization_people``, which writes the map alone (T583). Transferring the organization's
 ownership is one conditional write filtered on the giver being owner, so no cut and no read finds
-it with two owners, none, or an owner in a list: on ``dev`` at ``279afc56`` it was four
+it with two owners or none: on ``dev`` at ``279afc56`` it was four
 unconditional writes, and the planner's probes cut between them left an organization that did not
 parse, or a new owner with no place in it at all.
 
 The property test drives random sequences of every change, by random requesters on random targets,
 a third of them with a second change landing between the first's read and its write, through the
 module over the shared organizations fake, which filters and writes as the server does; after each
-change the map holds exactly one owner and one place per person, its lists mirror it, it parses, and
-a change nothing met leaves the map ``next_people`` answers.
+change the map holds exactly one owner and one place per person, no old list stands beside it, it
+parses, and a change nothing met leaves the map ``next_people`` answers.
 """
 import copy
 import random
@@ -21,7 +21,6 @@ from types import SimpleNamespace
 import pytest
 
 from conftest import (
-    FakeAccountCopies,
     FakeOrganizations,
     WriteCut,
     install_organizations,
@@ -49,12 +48,11 @@ OUTSIDER = SimpleNamespace(id="user-out", email="outsider@example.com")
 #: The six accounts every requester and target of the property test is drawn from.
 PEOPLE = (OWNER, ADMIN, MEMBER, SECOND_ADMIN, SECOND_MEMBER, OUTSIDER)
 
-UNFOLDED = {
-    "id": ORG, "name": "Ember Markets", "owner": OWNER.id, "admins": [ADMIN.id],
-    "members": [MEMBER.id], "markets": [], "theme": None,
+FOLDED = {
+    "id": ORG, "name": "Ember Markets",
+    "people": {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"},
+    "markets": [], "theme": None,
 }
-FOLDED = {**UNFOLDED, "people": {OWNER.id: "owner", ADMIN.id: "admin", MEMBER.id: "member"}}
-SHAPES = {"folded": FOLDED, "unfolded": UNFOLDED}
 
 
 @pytest.fixture
@@ -74,19 +72,14 @@ def accounts(monkeypatch):
 
 
 def assert_one_map(doc):
-    """Every invariant of an organization's people: one owner, each value a place, the lists an
-    exact mirror of the map with no id twice, and the document parses with the same people."""
+    """Every invariant of an organization's people: one owner, each value a place, no old
+    ``owner``, ``admins`` or ``members`` list beside the map (the writer writes the map alone,
+    T583), and the document parses with the same people."""
     people = organization_people_of(doc)
     assert set(people.values()) <= {"owner", "admin", "member"}, people
     owners = [user_id for user_id, place in people.items() if place == "owner"]
     assert len(owners) == 1, people
-    admins = [user_id for user_id, place in people.items() if place == "admin"]
-    members = [user_id for user_id, place in people.items() if place == "member"]
-    assert doc["owner"] == owners[0]
-    assert len(doc["admins"]) == len(set(doc["admins"])), doc["admins"]
-    assert len(doc["members"]) == len(set(doc["members"])), doc["members"]
-    assert set(doc["admins"]) == set(admins), (doc["admins"], people)
-    assert set(doc["members"]) == set(members), (doc["members"], people)
+    assert not {"owner", "admins", "members"} & set(doc), doc
     parsed = MarketsApi._organization_from_document(copy.deepcopy(doc))
     assert parsed is not None, doc
     assert parsed.people == people
@@ -105,14 +98,13 @@ def _as_it_was_or_handed_on(doc):
     assert_one_map(doc)
 
 
-@pytest.mark.parametrize("shape", sorted(SHAPES))
 def test_a_transfer_cut_before_its_owner_write_leaves_an_organization_that_parses(
-        monkeypatch, accounts, recorded, shape):
+        monkeypatch, accounts, recorded):
     # On dev the transfer to a member wrote: the member pulled (1), the owner added to admins (2),
     # the owner set (3). Cut at the third, the owner stood in its own admins and the organization
     # did not parse, so its admin held nothing through it on any market. Now the transfer is one
     # write, and a cut where the third was finds its ownership transferred whole.
-    stored = install_organizations(monkeypatch, FakeOrganizations(SHAPES[shape]))
+    stored = install_organizations(monkeypatch, FakeOrganizations(FOLDED))
     stored.cut_at = 3
 
     try:
@@ -123,12 +115,11 @@ def test_a_transfer_cut_before_its_owner_write_leaves_an_organization_that_parse
     _as_it_was_or_handed_on(stored.doc)
 
 
-@pytest.mark.parametrize("shape", sorted(SHAPES))
 def test_a_transfer_cut_after_the_pull_leaves_the_new_owner_a_place(
-        monkeypatch, accounts, recorded, shape):
+        monkeypatch, accounts, recorded):
     # On dev a cut after the transfer's first write, the pull, left the member it was handed to
     # with no place in it at all. Now there is no write between the pull and the owner's.
-    stored = install_organizations(monkeypatch, FakeOrganizations(SHAPES[shape]))
+    stored = install_organizations(monkeypatch, FakeOrganizations(FOLDED))
     stored.cut_at = 2
 
     try:
@@ -143,24 +134,15 @@ def test_a_transfer_cut_after_the_pull_leaves_the_new_owner_a_place(
 # ── A cut at each write a transfer makes ─────────────────────────────────────────────────────
 
 
-class CutAccountCopies(FakeAccountCopies):
-    """The users collection, its connection lost at the account copy's write."""
-
-    def update_one(self, query, update, **_kwargs):
-        raise WriteCut("the connection was lost at the account copy's write")
-
-
 def _cut_history(*_args, **_kwargs):
     raise WriteCut("the connection was lost at the history's write")
 
 
-@pytest.mark.parametrize("shape", sorted(SHAPES))
 @pytest.mark.parametrize("new_owner", [MEMBER, ADMIN], ids=["from a member", "from an admin"])
-@pytest.mark.parametrize("cut", ["the organization's", "the account copy's", "the history's"])
+@pytest.mark.parametrize("cut", ["the organization's", "the history's"])
 def test_a_cut_at_each_write_of_a_transfer_leaves_one_owner(
-        monkeypatch, accounts, shape, new_owner, cut):
-    accounts_fake = CutAccountCopies() if cut == "the account copy's" else None
-    stored = install_organizations(monkeypatch, FakeOrganizations(SHAPES[shape]), accounts_fake)
+        monkeypatch, accounts, new_owner, cut):
+    stored = install_organizations(monkeypatch, FakeOrganizations(FOLDED))
     if cut == "the organization's":
         stored.cut_at = 1
     monkeypatch.setattr(
@@ -173,7 +155,7 @@ def test_a_cut_at_each_write_of_a_transfer_leaves_one_owner(
     assert_one_map(stored.doc)
     people = organization_people_of(stored.doc)
     if cut == "the organization's":
-        assert stored.doc == SHAPES[shape], "a cut write stored something"
+        assert stored.doc == FOLDED, "a cut write stored something"
     else:
         assert people[new_owner.id] == "owner" and people[OWNER.id] == "admin"
 
@@ -223,8 +205,7 @@ def _answer(run):
 @pytest.mark.parametrize("seed", SEEDS)
 def test_no_sequence_of_changes_breaks_the_map(monkeypatch, accounts, recorded, seed):
     rng = random.Random(seed)
-    stored = install_organizations(
-        monkeypatch, FakeOrganizations(SHAPES["unfolded" if seed % 2 else "folded"]))
+    stored = install_organizations(monkeypatch, FakeOrganizations(FOLDED))
     interleaved = 0
 
     for step in range(EVENTS_PER_SEED):

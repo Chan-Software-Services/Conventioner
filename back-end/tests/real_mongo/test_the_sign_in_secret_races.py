@@ -5,10 +5,14 @@ Every guarantee rests on a write conditional on the state it moves from (``accou
 hermetic suite proves the table through fakes; these run the losing branch where it lives. Each
 request goes through the route on a test client of its own.
 """
+import time
+from datetime import datetime, timezone
+
 import pytest
 
 import account_secrets
 import api.users as UsersApi
+import sign_in_limits
 from real_mongo import harness
 from real_mongo.conftest import FIXTURE_PASSWORD
 
@@ -62,7 +66,11 @@ def test_five_code_requests_at_once_mail_one_code_and_it_is_the_stored_one(
     assert account_secrets.code_matches(code["hash"], mailed[0][1])
 
 
-def test_five_right_codes_at_once_sign_in_once(account, mailed, race):
+def test_five_right_codes_at_once_sign_in_once(
+        account, mailed, race, sign_in_attempts, monkeypatch):
+    # The limits' clock held still, so every try is counted in one window.
+    now = time.time()
+    monkeypatch.setattr(UsersApi, "_now", lambda: now)
     [asked] = _clients(1)
     assert asked.post("/request-otp", json={"email": ORGANIZER}).status_code == 200
     [(_to, code)] = mailed
@@ -75,6 +83,24 @@ def test_five_right_codes_at_once_sign_in_once(account, mailed, race):
     assert sorted(answer.status_code for answer in answered) == [200, 401, 401, 401, 401]
     stored = _stored_code()
     assert (stored["state"], stored["next_allowed_at"]) == (account_secrets.USED, None)
+    # The try that signed in is taken back from all three counts; the four that lost stay.
+    at = datetime.fromtimestamp(now, tz=timezone.utc)
+    caller = "127.0.0.1"
+    counted = {
+        limit.name: _count(sign_in_attempts, limit, subject, at)
+        for limit, subject in (
+            (sign_in_limits.ORGANIZER_CODE_PER_CALLER, caller),
+            (sign_in_limits.ORGANIZER_CODE_PER_CALLER_AND_ADDRESS, f"{caller}\0{ORGANIZER}"),
+            (sign_in_limits.ORGANIZER_CODE_PER_ADDRESS_CEILING, ORGANIZER),
+        )
+    }
+    assert set(counted.values()) == {4}, counted
+
+
+def _count(attempts, limit, subject, at):
+    key, _ = sign_in_limits._window(limit, subject, at)
+    counter = attempts.find_one({"_id": key}) or {}
+    return counter.get("count", 0)
 
 
 @pytest.fixture

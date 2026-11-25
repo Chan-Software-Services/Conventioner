@@ -228,7 +228,7 @@ class TestRequestCodeIndistinguishable:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={"email": "applicant@example.com"},
+            json={"email": "applicant@example.com", "captcha_token": "test-human-check"},
         ):
             result_known = applicant_auth_module.request_login_code("test-market")
         body_known, status_known = result_known
@@ -237,7 +237,7 @@ class TestRequestCodeIndistinguishable:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={"email": "unknown@example.com"},
+            json={"email": "unknown@example.com", "captcha_token": "test-human-check"},
         ):
             result_unknown = applicant_auth_module.request_login_code("test-market")
         body_unknown, status_unknown = result_unknown
@@ -257,7 +257,7 @@ class TestRequestCodeIndistinguishable:
         with app.test_request_context(
             "/public/markets/no-such-market/request-code",
             method="POST",
-            json={"email": "someone@example.com"},
+            json={"email": "someone@example.com", "captcha_token": "test-human-check"},
         ):
             result = applicant_auth_module.request_login_code("no-such-market")
         body, status = result
@@ -277,7 +277,7 @@ class TestRequestCodeIndistinguishable:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={},
+            json={"captcha_token": "test-human-check"},
         ):
             result = applicant_auth_module.request_login_code("test-market")
         body, status = result
@@ -297,7 +297,7 @@ class TestRequestCodeIndistinguishable:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={"email": "not-an-email"},
+            json={"email": "not-an-email", "captcha_token": "test-human-check"},
         ):
             result = applicant_auth_module.request_login_code("test-market")
         body, status = result
@@ -331,7 +331,8 @@ def _post(handler, path, payload):
 
 def _request_code(mod, email=APPLICANT, slug="test-market"):
     return _post(lambda: mod.request_login_code(slug),
-                 f"/public/markets/{slug}/applicant-login/request-code", {"email": email})
+                 f"/public/markets/{slug}/applicant-login/request-code",
+                 {"email": email, "captcha_token": "test-human-check"})
 
 
 def _verify(mod, code, email=APPLICANT, slug="test-market"):
@@ -620,7 +621,7 @@ class TestCrossMarketIsolation:
         with app.test_request_context(
             f"/public/markets/{slug_a}/request-code",
             method="POST",
-            json={"email": "applicant@example.com"},
+            json={"email": "applicant@example.com", "captcha_token": "test-human-check"},
         ):
             mod.request_login_code(slug_a)
 
@@ -676,7 +677,7 @@ class TestD9LockPreservation:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={"email": "complete-stranger@example.com"},
+            json={"email": "complete-stranger@example.com", "captcha_token": "test-human-check"},
         ):
             applicant_auth_module.request_login_code("test-market")
 
@@ -697,7 +698,7 @@ class TestD9LockPreservation:
         with app.test_request_context(
             "/public/markets/no-such-market/request-code",
             method="POST",
-            json={"email": "someone@example.com"},
+            json={"email": "someone@example.com", "captcha_token": "test-human-check"},
         ):
             applicant_auth_module.request_login_code("no-such-market")
 
@@ -741,7 +742,7 @@ class TestEdgeCases:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={"email": "applicant@example.com"},
+            json={"email": "applicant@example.com", "captcha_token": "test-human-check"},
         ):
             applicant_auth_module.request_login_code("test-market")
 
@@ -755,7 +756,7 @@ class TestEdgeCases:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={"email": "applicant@example.com"},
+            json={"email": "applicant@example.com", "captcha_token": "test-human-check"},
         ):
             applicant_auth_module.request_login_code("test-market")
 
@@ -790,7 +791,7 @@ class TestEdgeCases:
         with app.test_request_context(
             f"/public/markets/{slug}/request-code",
             method="POST",
-            json={"email": "someone@example.com"},
+            json={"email": "someone@example.com", "captcha_token": "test-human-check"},
         ):
             result = mod.request_login_code(slug)
         body, status = result
@@ -828,7 +829,7 @@ class TestTheCodeIsSentWithinTheRequest:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={"email": email},
+            json={"email": email, "captcha_token": "test-human-check"},
         ):
             return applicant_auth_module.request_login_code("test-market")
 
@@ -891,7 +892,7 @@ class TestTheCodeIsSentWithinTheRequest:
         with app.test_request_context(
             "/public/markets/test-market/request-code",
             method="POST",
-            json={"email": "stranger@example.com"},
+            json={"email": "stranger@example.com", "captcha_token": "test-human-check"},
         ):
             applicant_auth_module.request_login_code("test-market")
 
@@ -1003,7 +1004,7 @@ class TestSignInIsBounded:
         return self._post(
             lambda: mod.request_login_code(slug),
             f"/public/markets/{slug}/applicant-login/request-code",
-            {"email": email},
+            {"email": email, "captcha_token": "test-human-check"},
             caller,
         )
 
@@ -1023,37 +1024,57 @@ class TestSignInIsBounded:
         assert int(body.headers["Retry-After"]) >= 1
         return body.get_json()
 
-    def test_asking_for_codes_past_the_limit_for_an_address_is_refused_and_sends_nothing(
+    def test_asking_for_codes_past_the_limit_for_a_caller_and_address_is_refused_and_sends_nothing(
         self, applicant_auth_module, test_db, monkeypatch
     ):
         sent = []
         monkeypatch.setattr(applicant_auth_module, "_send_code_email",
                             lambda *args: sent.append(args) or True)
-        allowed = sign_in_limits.REQUEST_CODE_PER_ADDRESS.attempts
-        for i in range(allowed):
-            # From different callers, so only the address is counted against.
-            assert self._request(applicant_auth_module, caller=f"198.51.100.{i}")[1] == 200
+        allowed = sign_in_limits.REQUEST_CODE_PER_CALLER_AND_ADDRESS.attempts
+        for _ in range(allowed):
+            assert self._request(applicant_auth_module)[1] == 200
         stored = test_db.challenges.find_one({"email": "applicant@example.com"})
 
-        body = self._refused(self._request(applicant_auth_module, caller="198.51.100.99"))
+        body = self._refused(self._request(applicant_auth_module))
 
         assert "Too many sign-in attempts" in body["message"]
         assert len(sent) == allowed
         assert test_db.challenges.find_one({"email": "applicant@example.com"}) == stored
+        # Another caller's request for the address is not held back by these.
+        assert self._request(applicant_auth_module, caller="198.51.100.99")[1] == 200
+
+    def test_asking_for_codes_past_the_hours_limit_for_an_address_is_refused_whoever_asks(
+        self, applicant_auth_module, test_db, monkeypatch
+    ):
+        monkeypatch.setattr(applicant_auth_module, "_limit_clock",
+                            lambda: datetime(2026, 11, 9, 12, 0, 0, tzinfo=timezone.utc))
+        sent = []
+        monkeypatch.setattr(applicant_auth_module, "_send_code_email",
+                            lambda *args: sent.append(args) or True)
+        allowed = sign_in_limits.REQUEST_CODE_PER_ADDRESS_HOUR.attempts
+        for i in range(allowed):
+            assert self._request(applicant_auth_module, caller=f"198.51.100.{i}")[1] == 200
+
+        result = self._request(applicant_auth_module, caller="198.51.100.99")
+        body = self._refused(result)
+
+        assert body["message"] == "Too many sign-in attempts. Please try again in 60 minutes."
+        assert result[0].headers["Retry-After"] == "3600"
+        assert len(sent) == allowed
 
     def test_the_address_is_counted_as_typed_or_not(self, applicant_auth_module):
-        allowed = sign_in_limits.REQUEST_CODE_PER_ADDRESS.attempts
-        for i in range(allowed):
-            self._request(applicant_auth_module, email="Applicant@Example.com ",
-                          caller=f"198.51.100.{i}")
-        self._refused(self._request(applicant_auth_module, caller="198.51.100.99"))
+        allowed = sign_in_limits.REQUEST_CODE_PER_CALLER_AND_ADDRESS.attempts
+        for _ in range(allowed):
+            self._request(applicant_auth_module, email="Applicant@Example.com ")
+        self._refused(self._request(applicant_auth_module))
 
     def test_a_venues_shared_address_may_ask_for_300_codes_in_15_minutes(self):
         """Vendors on one venue's wifi share a caller, so it is allowed far more than an address."""
         assert sign_in_limits.REQUEST_CODE_PER_CALLER == sign_in_limits.SignInLimit(
             "request-code:caller", attempts=300, window=timedelta(minutes=15),
         )
-        assert sign_in_limits.REQUEST_CODE_PER_ADDRESS.attempts == 5
+        assert sign_in_limits.REQUEST_CODE_PER_CALLER_AND_ADDRESS.attempts == 5
+        assert sign_in_limits.REQUEST_CODE_PER_ADDRESS_HOUR.attempts == 20
 
     def test_asking_for_codes_for_many_addresses_from_one_caller_is_refused(
         self, applicant_auth_module, monkeypatch
@@ -1114,29 +1135,44 @@ class TestSignInIsBounded:
         caller_count = next(e for e in events if e.startswith("count") and e.endswith(":caller"))
         assert events.index(caller_count) < events.index("read body")
 
-    def test_verifying_past_the_limit_for_an_address_is_refused_and_consumes_nothing(
+    def test_verifying_past_the_limit_for_a_caller_and_address_is_refused_and_consumes_nothing(
         self, applicant_auth_module, test_db, monkeypatch
     ):
         monkeypatch.setattr(applicant_auth_module, "_generate_code", lambda: "135790")
-        allowed = sign_in_limits.VERIFY_CODE_PER_ADDRESS.attempts
-        for i in range(allowed):
-            assert self._verify(applicant_auth_module, caller=f"198.51.100.{i}")[1] == 401
+        allowed = sign_in_limits.VERIFY_CODE_PER_CALLER_AND_ADDRESS.attempts
+        for _ in range(allowed):
+            assert self._verify(applicant_auth_module)[1] == 401
         self._request(applicant_auth_module)
 
-        body = self._refused(
-            self._verify(applicant_auth_module, code="135790", caller="198.51.100.99")
-        )
+        body = self._refused(self._verify(applicant_auth_module, code="135790"))
 
         assert "Too many sign-in attempts" in body["message"]
         challenge = test_db.challenges.find_one({"email": "applicant@example.com"})
         assert challenge["consumed"] is False
+        # Another caller's try at the address is not held back by these.
+        assert self._verify(applicant_auth_module, code="135790", caller="198.51.100.99")[1] == 200
+
+    def test_a_right_code_takes_its_try_back(self, applicant_auth_module, monkeypatch):
+        """Only wrong codes pile up, so a vendor who signs in again and again is never refused."""
+        monkeypatch.setattr(applicant_auth_module, "_generate_code", lambda: "135790")
+        for i in range(sign_in_limits.VERIFY_CODE_PER_CALLER_AND_ADDRESS.attempts + 1):
+            # Each code asked from a caller of its own, within the code request's own limits.
+            assert self._request(applicant_auth_module, caller=f"198.51.100.{i}")[1] == 200
+            assert self._verify(applicant_auth_module, code="135790")[1] == 200
 
     def test_a_venues_shared_address_may_enter_300_codes_in_15_minutes(self):
-        """Per caller only: an address may still try ten, which is what bounds a guess at a code."""
+        """Per caller only: a caller may still try ten at one address, which is what bounds a
+        guess at a code, and an address fifty from every caller before the human check is asked."""
         assert sign_in_limits.VERIFY_CODE_PER_CALLER == sign_in_limits.SignInLimit(
             "verify-code:caller", attempts=300, window=timedelta(minutes=15),
         )
-        assert sign_in_limits.VERIFY_CODE_PER_ADDRESS.attempts == 10
+        assert sign_in_limits.VERIFY_CODE_PER_CALLER_AND_ADDRESS == sign_in_limits.SignInLimit(
+            "verify-code:caller-address", attempts=10, window=timedelta(minutes=15),
+        )
+        assert sign_in_limits.VERIFY_CODE_PER_ADDRESS_CEILING == sign_in_limits.SignInLimit(
+            "verify-code:address-ceiling", attempts=50, window=timedelta(minutes=15),
+        )
+        assert not hasattr(sign_in_limits, "VERIFY_CODE_PER_ADDRESS")
 
     def test_guessing_codes_for_many_addresses_from_one_caller_is_refused(
         self, applicant_auth_module

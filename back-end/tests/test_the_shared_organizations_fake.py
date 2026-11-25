@@ -55,23 +55,25 @@ def test_a_write_whose_filter_no_longer_holds_matches_nothing_and_stores_nothing
 
 
 def test_update_many_writes_every_document_it_matches():
-    fake = FakeOrganizations({"id": "o1", "members": ["u1"]}, {"id": "o2", "members": ["u1"]},
-                             {"id": "o3", "members": []})
+    fake = FakeOrganizations({"id": "o1", "people": {"o": "owner", "u1": "member"}},
+                             {"id": "o2", "people": {"o": "owner", "u1": "admin"}},
+                             {"id": "o3", "people": {"o": "owner"}})
 
-    result = fake.update_many({"members": "u1"}, {"$pull": {"members": "u1"}})
+    result = fake.update_many({"people.u1": {"$in": ["admin", "member"]}},
+                              {"$unset": {"people.u1": ""}})
 
     assert (result.matched_count, result.modified_count) == (2, 2)
-    assert [doc["members"] for doc in fake.docs] == [[], [], []]
+    assert [doc["people"] for doc in fake.docs] == [{"o": "owner"}] * 3
 
 
 def test_a_read_is_a_copy_a_caller_cannot_change_the_store_through():
-    fake = FakeOrganizations({"id": "o1", "people": {"o": "owner"}, "admins": []})
+    fake = FakeOrganizations({"id": "o1", "people": {"o": "owner"}, "markets": []})
 
     read = fake.find_one({"id": "o1"})
     read["people"]["u1"] = "admin"
-    read["admins"].append("u1")
+    read["markets"].append("m1")
 
-    assert fake.doc == {"id": "o1", "people": {"o": "owner"}, "admins": []}
+    assert fake.doc == {"id": "o1", "people": {"o": "owner"}, "markets": []}
 
 
 def test_the_hook_runs_once_between_the_read_and_the_next_write():

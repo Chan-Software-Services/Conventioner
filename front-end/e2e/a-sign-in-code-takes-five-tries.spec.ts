@@ -1,5 +1,6 @@
 import type { APIRequestContext } from '@playwright/test';
 import { test, expect, BACKEND_URL, TEST_USER, VendorPage } from './fixtures';
+import { HUMAN_CHECK_TOKEN } from './helpers/humanCheck';
 import {
   createApplicantLoginChallenge,
   seedApplicantMarket,
@@ -30,7 +31,7 @@ test.beforeEach(async ({ request }) => {
 function askForACode(request: APIRequestContext, email: string) {
   return request.post(
     `${BACKEND_URL}/public/markets/${market.marketSlug}/applicant-login/request-code`,
-    { data: { email } },
+    { data: { email, captcha_token: HUMAN_CHECK_TOKEN } },
   );
 }
 

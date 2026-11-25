@@ -12,7 +12,6 @@ describes:
   - back-end/api/users.py#request_otp
   - back-end/api/users.py#request_password_reset
   - back-end/api/users.py#resend_verification_email
-  - back-end/api/users.py#_Bounds
   - back-end/api/users.py#_password_matches
   - back-end/api/users.py#get_user_by_login_id
   - back-end/api/users.py#signed_in_account
@@ -46,6 +45,9 @@ describes:
   - back-end/tests/real_mongo/test_the_sign_in_secret_races.py
   - back-end/tests/test_the_organizer_sessions_are_indexed.py
   - back-end/tests/real_mongo/test_organizer_sessions_on_the_server.py
+  - back-end/api/users.py#_sign_in_refused
+  - back-end/tests/test_a_strangers_requests_use_up_no_ones.py
+  - back-end/tests/test_a_strangers_tries_shut_no_one_out.py
 verified: 2026-11-25
 sources:
   - E32/F03/S04
@@ -63,6 +65,8 @@ sources:
   - T311
   - T315
   - T338
+  - T583
+  - T539
 ---
 
 # Users, and the one spelling of an address
@@ -75,18 +79,18 @@ The glossary concept: [Organization and roles](../../business/concepts/organizat
 
 ## The fields that matter
 
-| Field                                                  | What it is                                                                                                                                                                                                                                                                    |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                                                   | a UUID, the primary key, and what every role and membership names                                                                                                                                                                                                             |
-| `email`                                                | the sign-in, stored lowercased and trimmed, unique                                                                                                                                                                                                                            |
-| `password`                                             | a bcrypt hash                                                                                                                                                                                                                                                                 |
-| `organizations`                                        | the ids of the organizations the person is in ([the organization document](organization-document.md)); empty at registration, whatever the body sends, and written only by a membership change                                                                                |
-| `email_verified`                                       | false until the emailed verification link, or a reset link, is followed, or an operator verifies the account; an unverified account cannot sign in                                                                                                                            |
-| `verification_token`, `verification_token_expires`     | the verification link as it was kept before `secrets`, in clear: read for one release, upgraded to `secrets.verify` the first time `account_secrets` reads the account, and written by nothing but the old migration ([the old fields](#the-old-fields-read-for-one-release)) |
-| `password_reset_token`, `password_reset_token_expires` | the reset link as it was kept before `secrets`, in clear: read for one release, upgraded to `secrets.reset` the first time `account_secrets` reads the account, and written by nothing but the old migration ([the old fields](#the-old-fields-read-for-one-release))         |
-| `secrets`                                              | the account's sign-in secrets, one record by kind, each kept hashed: the sign-in code is `secrets.code`, the reset link `secrets.reset`, the verification link `secrets.verify` ([the sign-in secrets](#the-sign-in-secrets))                                                 |
-| `otp`, `otp_expires`, `otp_attempts`                   | the sign-in code as it was kept before `secrets`, in clear: read for one release, upgraded to `secrets.code` the first time `account_secrets` reads the account, and written by nothing but the old migration ([the old fields](#the-old-fields-read-for-one-release))        |
-| `login_id`                                             | the account a sign-in is kept under: a random value, made at the first sign-in, replaced by a reset or Sign out everywhere, so every earlier sign-in loads no one ([a sign-in is kept on the server](#a-sign-in-is-kept-on-the-server))                                       |
+| Field                                                  | What it is                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`                                                   | a UUID, the primary key, and what every role and membership names                                                                                                                                                                                                                    |
+| `email`                                                | the sign-in, stored lowercased and trimmed, unique                                                                                                                                                                                                                                   |
+| `password`                                             | a bcrypt hash                                                                                                                                                                                                                                                                        |
+| `organizations`                                        | stored as `[]` on a new account, whatever the body sends, so that a rollback to the release before T583, which loads no account without it, still signs the account in; read and changed by nothing, an older account keeping the stale ids it held, and removed by T583's follow-up |
+| `email_verified`                                       | false until the emailed verification link, or a reset link, is followed, or an operator verifies the account; an unverified account cannot sign in                                                                                                                                   |
+| `verification_token`, `verification_token_expires`     | the verification link as it was kept before `secrets`, in clear: read for one release, upgraded to `secrets.verify` the first time `account_secrets` reads the account, and written by nothing but the old migration ([the old fields](#the-old-fields-read-for-one-release))        |
+| `password_reset_token`, `password_reset_token_expires` | the reset link as it was kept before `secrets`, in clear: read for one release, upgraded to `secrets.reset` the first time `account_secrets` reads the account, and written by nothing but the old migration ([the old fields](#the-old-fields-read-for-one-release))                |
+| `secrets`                                              | the account's sign-in secrets, one record by kind, each kept hashed: the sign-in code is `secrets.code`, the reset link `secrets.reset`, the verification link `secrets.verify` ([the sign-in secrets](#the-sign-in-secrets))                                                        |
+| `otp`, `otp_expires`, `otp_attempts`                   | the sign-in code as it was kept before `secrets`, in clear: read for one release, upgraded to `secrets.code` the first time `account_secrets` reads the account, and written by nothing but the old migration ([the old fields](#the-old-fields-read-for-one-release))               |
+| `login_id`                                             | the account a sign-in is kept under: a random value, made at the first sign-in, replaced by a reset or Sign out everywhere, so every earlier sign-in loads no one ([a sign-in is kept on the server](#a-sign-in-is-kept-on-the-server))                                              |
 
 ## A sign-in is kept on the server
 
@@ -134,7 +138,7 @@ A password longer than bcrypt reads answers it too, checked against nothing ([th
 ## A sign-up answers alike
 
 **A sign-up answers the same whether or not its address has an account** (`register_user_with_captcha`).
-Its checks run in one order, all before any account is looked up: the caller's bound, an address and a password, a captcha token, the address's bound ([the sign-in is bounded](#the-sign-in-is-bounded)), the captcha, the address's format, then the password's rules (at least 8 characters, at most 72 bytes).
+Its checks run in one order, all before any account is looked up: the caller's bound, an address and a password, the human check, the bound per caller and address and then the address's hour ([the sign-in is bounded](#the-sign-in-is-bounded)), the address's format, then the password's rules (at least 8 characters, at most 72 bytes).
 So a taken address with a password too short is refused as a new one is, in the same words.
 The password is hashed next, whether or not the address is taken, so both take about the same time; a taken address's hash is dropped.
 Both then answer 201 "User registered successfully. Please check your email to verify your account." (`SIGNED_UP`).
@@ -145,44 +149,78 @@ Both then answer 201 "User registered successfully. Please check your email to v
   Its links carry no token, and a failed send answers the same 500.
 - A sign-up that a concurrent one beat to the address, refused by the unique index at the insert ([one address is one account](#one-address-is-one-account)), takes the taken address's path.
 
-The sign-up's per-address bound caps how many of these emails one address is sent: five in 15 minutes.
+The sign-up's bounds cap how many of these emails one address is sent, from one caller in a quarter hour and whoever asks in an hour (`sign-up:caller-address`, `sign-up:address-hour`, [the sign-in is bounded](#the-sign-in-is-bounded)).
 [`back-end/tests/test_one_account_per_address.py`](../../../back-end/tests/test_one_account_per_address.py) holds each.
 
 ## The sign-in is bounded
 
-**The organizer's password and code sign-ins, and the requests that mail an organizer a code or a link, are counted as the applicant's sign-in is**, in the one list of limits, `LIMITS` in [`back-end/sign_in_limits.py`](../../../back-end/sign_in_limits.py): per address and per caller, in fixed 15-minute windows, in `sign_in_attempts`, whose counters name nobody ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)).
+**The organizer's password and code sign-ins, and the requests that mail an organizer a code or a link, are counted as the applicant's sign-in is**, in the one list of limits, `LIMITS` in [`back-end/sign_in_limits.py`](../../../back-end/sign_in_limits.py), in fixed clock-aligned windows, in `sign_in_attempts`, whose counters name nobody ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)).
+A sign-in is counted per caller, per caller and address, and per address alone; a request that mails, per caller, per caller and address, and per address in the hour.
 
-| Limit                                | Name                             | Tries in 15 minutes                          |
-| ------------------------------------ | -------------------------------- | -------------------------------------------- |
-| `PASSWORD_PER_ADDRESS`               | `password:address`               | 10 for one address                           |
-| `PASSWORD_PER_CALLER`                | `password:caller`                | 50 from one caller                           |
-| `ORGANIZER_CODE_PER_ADDRESS`         | `organizer-code:address`         | 10 for one address                           |
-| `ORGANIZER_CODE_PER_CALLER`          | `organizer-code:caller`          | 60 from one caller                           |
-| `ORGANIZER_CODE_REQUEST_PER_ADDRESS` | `organizer-code-request:address` | 5 `/request-otp` for one address             |
-| `ORGANIZER_CODE_REQUEST_PER_CALLER`  | `organizer-code-request:caller`  | 30 `/request-otp` from one caller            |
-| `RESET_LINK_PER_ADDRESS`             | `reset-link:address`             | 5 `/request-password-reset` for one address  |
-| `RESET_LINK_PER_CALLER`              | `reset-link:caller`              | 30 `/request-password-reset` from one caller |
-| `VERIFICATION_LINK_PER_ADDRESS`      | `verification-link:address`      | 5 `/resend-verification` for one address     |
-| `VERIFICATION_LINK_PER_CALLER`       | `verification-link:caller`       | 30 `/resend-verification` from one caller    |
-| `SIGN_UP_PER_ADDRESS`                | `sign-up:address`                | 5 `/register` for one address                |
-| `SIGN_UP_PER_CALLER`                 | `sign-up:caller`                 | 30 `/register` from one caller               |
+**Every limit's number is written here**: the table holds each limit in `LIMITS`, the vendor's sign-in, resume and door code and the organizer's invitation among them, and the business, module and testing docs point to it rather than copy a count of tries.
+Two things are written outside it: an ADR keeps the numbers it decided, since it records a decision, and a doc may name a limit's window, a quarter hour or an hour, since the window is part of the limit's kind (an `address-hour` limit is counted by the hour).
+A limit changed in the code is changed in this table, and [`test_sign_in_limits.py`](../../../back-end/tests/test_sign_in_limits.py) (`test_the_table_holds_every_limit_in_use_once`) holds every count and window the code has.
+The vendor's routes are under `/public/markets/<slug>/applicant-login/`, and the door code's under `/public/markets/<slug>/vendor/`.
 
-Each request has its own pair, so one request's use holds back no other.
+| Limit                                           | Name                                    | Tries                                                                                              |
+| ----------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `REQUEST_CODE_PER_CALLER`                       | `request-code:caller`                   | 300 `request-code` from one caller in 15 minutes                                                   |
+| `REQUEST_CODE_PER_CALLER_AND_ADDRESS`           | `request-code:caller-address`           | 5 `request-code` from one caller for one address in 15 minutes                                     |
+| `REQUEST_CODE_PER_ADDRESS_HOUR`                 | `request-code:address-hour`             | 20 `request-code` for one address in an hour                                                       |
+| `VERIFY_CODE_PER_CALLER`                        | `verify-code:caller`                    | 300 `verify-code` from one caller in 15 minutes                                                    |
+| `VERIFY_CODE_PER_CALLER_AND_ADDRESS`            | `verify-code:caller-address`            | 10 wrong vendor codes from one caller for one address in 15 minutes                                |
+| `VERIFY_CODE_PER_ADDRESS_CEILING`               | `verify-code:address-ceiling`           | 50 wrong vendor codes for one address in 15 minutes, then the human check                          |
+| `RESUME_PER_CALLER`                             | `resume:caller`                         | 300 `resume` from one caller in 15 minutes                                                         |
+| `CHECK_IN_PER_ADDRESS`                          | `check-in:address`                      | 10 `check-in` or `check-out`, right door code or wrong, per signed-in vendor address in 15 minutes |
+| `PASSWORD_PER_CALLER`                           | `password:caller`                       | 50 from one caller in 15 minutes                                                                   |
+| `PASSWORD_PER_CALLER_AND_ADDRESS`               | `password:caller-address`               | 10 wrong from one caller for one address in 15 minutes                                             |
+| `PASSWORD_PER_ADDRESS_CEILING`                  | `password:address-ceiling`              | 50 wrong for one address in 15 minutes, then the human check                                       |
+| `ORGANIZER_CODE_PER_CALLER`                     | `organizer-code:caller`                 | 60 from one caller in 15 minutes                                                                   |
+| `ORGANIZER_CODE_PER_CALLER_AND_ADDRESS`         | `organizer-code:caller-address`         | 10 wrong from one caller for one address in 15 minutes                                             |
+| `ORGANIZER_CODE_PER_ADDRESS_CEILING`            | `organizer-code:address-ceiling`        | 50 wrong for one address in 15 minutes, then the human check                                       |
+| `ORGANIZER_CODE_REQUEST_PER_CALLER`             | `organizer-code-request:caller`         | 30 `/request-otp` from one caller in 15 minutes                                                    |
+| `ORGANIZER_CODE_REQUEST_PER_CALLER_AND_ADDRESS` | `organizer-code-request:caller-address` | 5 `/request-otp` from one caller for one address in 15 minutes                                     |
+| `ORGANIZER_CODE_REQUEST_PER_ADDRESS_HOUR`       | `organizer-code-request:address-hour`   | 20 `/request-otp` for one address in an hour                                                       |
+| `RESET_LINK_PER_CALLER`                         | `reset-link:caller`                     | 30 `/request-password-reset` from one caller in 15 minutes                                         |
+| `RESET_LINK_PER_CALLER_AND_ADDRESS`             | `reset-link:caller-address`             | 5 `/request-password-reset` from one caller for one address in 15 minutes                          |
+| `RESET_LINK_PER_ADDRESS_HOUR`                   | `reset-link:address-hour`               | 20 `/request-password-reset` for one address in an hour                                            |
+| `VERIFICATION_LINK_PER_CALLER`                  | `verification-link:caller`              | 30 `/resend-verification` from one caller in 15 minutes                                            |
+| `VERIFICATION_LINK_PER_CALLER_AND_ADDRESS`      | `verification-link:caller-address`      | 5 `/resend-verification` from one caller for one address in 15 minutes                             |
+| `VERIFICATION_LINK_PER_ADDRESS_HOUR`            | `verification-link:address-hour`        | 20 `/resend-verification` for one address in an hour                                               |
+| `SIGN_UP_PER_CALLER`                            | `sign-up:caller`                        | 30 `/register` from one caller in 15 minutes                                                       |
+| `SIGN_UP_PER_CALLER_AND_ADDRESS`                | `sign-up:caller-address`                | 5 `/register` from one caller for one address in 15 minutes                                        |
+| `SIGN_UP_PER_ADDRESS_HOUR`                      | `sign-up:address-hour`                  | 20 `/register` for one address in an hour                                                          |
+| `INVITATION_PER_INVITER`                        | `invitation:inviter`                    | 100 invitations by one inviter's account in 15 minutes                                             |
+| `INVITATION_PER_ADDRESS`                        | `invitation:address`                    | 5 invitations to one address in 15 minutes                                                         |
 
-**Every bounded route keeps one order** (`_Bounds` in `users.py`).
+Each of the organizer's sign-ins and requests has its own three counts, so one's use holds back no other.
+
+**Every bounded route keeps one order** (`sign_in_limits.SecretBounds` for a sign-in, `_PASSWORD_SIGN_IN` and `_CODE_SIGN_IN` in `users.py`, and `sign_in_limits.MailBounds` for a request that mails).
 The caller (`sign_in_limits.caller()`, the address `ProxyFix` settled by `TRUSTED_PROXY_HOPS`) is counted before the body is read, so a request that names no address still counts against its caller.
-The address, normalized, is counted next, before any account is looked up, password checked, code compared or captcha checked.
-So a refused request reads no account and sends no mail, a refused sign-up spends no captcha check, and a refusal is the same for an address with an account and without, and whether the password or the code was right.
+A caller is a network: an IPv4 address, an IPv6 address's /64 network, or an IPv4-mapped address's IPv4 address, so one machine is one caller on either protocol ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)).
+For a sign-in the caller and the normalized address together are counted next, then the address alone (`before_the_secret`), before any account is looked up, password checked or code compared.
+A try the pair refused is not counted on the address, so one caller adds to an address's count in a window at most the pair's own.
+For a request that mails, the caller and the normalized address together are counted next (`before_the_mail`), then the address alone in the hour, before any account is looked up; a sign-up asks the human check between the caller and the pair, so a sign-up refused at its caller spends no check and one that fails the check counts against its caller only.
+A request the pair refused is not counted on the address, so one caller adds to an address's hour at most the pair's count in each quarter hour ([`test_a_strangers_requests_use_up_no_ones.py`](../../../back-end/tests/test_a_strangers_requests_use_up_no_ones.py)).
+So a refused request reads no account and sends no mail, and a refusal is the same for an address with an account and without, and whether the password or the code was right.
 
-**A right password or code takes its try back** (`take_back_attempt`), from both counts, in the window it was counted in, whether it signs in or answers `SIGN_IN_VERIFY_FIRST`.
+**A right password or code takes its try back** (`signed_in`), from the caller, the pair and the address, in the window it was counted in, whether it signs in or answers `SIGN_IN_VERIFY_FIRST`.
 Only wrong tries pile up, so an organizer who signs in all day is never held back, and the E2E suite's hundreds of fixture sign-ins from one caller cost nothing.
 
-**Past a limit `/login` and `/login-otp` answer 429** with `SIGN_IN_TOO_MANY`, "Too many sign-in attempts. Try again in {wait}, or reset your password.", under `message` on `/login` and `msg` on `/login-otp`, and the seconds left of the window in `Retry-After`.
+**Past the caller's or the pair's limit `/login` and `/login-otp` answer 429** with `SIGN_IN_TOO_MANY`, "Too many sign-in attempts. Try again in {wait}, or reset your password.", under `message` on `/login` and `msg` on `/login-otp`, and the seconds left of the window in `Retry-After`.
 `{wait}` is those seconds in whole minutes, rounded up (`wait_in_words`).
 The password form puts "Forgot password?" beside it, as it does beside `SIGN_IN_DOES_NOT_MATCH` (`refusedSignIn` in `front-end/src/utils/signInNotice.ts`); the code form shows it alone.
+Only a caller's own tries at an address meet it, so no one else's wrong tries refuse an organizer's right password or code.
+
+**Past the address's own count a try asks the human check** (action `sign-in`) rather than refusing: with no token, or one that does not pass, `/login` and `/login-otp` answer 403 "Confirm you're a person, then try again." with `captcha: required`, under `message` and `msg`, the same for every address, and the try is taken back from the pair and the address; with a passing token the try goes on to the password or the code.
+Only many callers together reach it, and a person passes the check, so the organizer still signs in ([ADR 0046](../../adr/0046-a-sign-in-limit-never-shuts-out-the-person-it-protects.md)).
+The sign-in forms send no token until the server asks, so an everyday sign-in loads no script of Cloudflare's; on the 403 the form puts `HumanCheck` above its Sign in and sends once more with its token (`withHumanCheckWhenAsked` in `front-end/src/utils/captcha.ts`), and keeps it there for the page.
+A second 403 says "We couldn't confirm you're a person. Try again.", and a check that cannot load says so, each in the form's line with nothing beside it.
+[`back-end/tests/test_a_strangers_tries_shut_no_one_out.py`](../../../back-end/tests/test_a_strangers_tries_shut_no_one_out.py) holds each.
 
 **The mail requests take nothing back**: every `/request-otp`, `/request-password-reset`, `/resend-verification` and `/register` counts.
-Past a limit each answers 429 with `ASKED_TOO_OFTEN`, "You have asked several times. Try again in {wait}.", under `msg`, with `Retry-After`.
+In a quarter hour one caller's requests for an address leave every other caller's requests for it as they were, while the address's count by the hour, which a few callers together fill, bounds one inbox's mail whoever asks.
+Past a limit each answers 429 with `ASKED_TOO_OFTEN`, "You have asked several times. Try again in {wait}.", under `msg`, with `Retry-After`; past the hour's count `{wait}` is what is left of the hour, up to 60 minutes.
 Below the limits each answers as it did, `/request-otp`'s and `/request-password-reset`'s per-account waits among them.
 The sign-in page and the verification page say the 429's sentence after "Send the link again" in place of "If that address needs verifying, a new link is on its way.", with nothing beside it (`resentLink`); the reset page and the sign-up form show it as they show any 429's `msg`.
 
@@ -196,6 +234,10 @@ The try is checked against the stored hash in constant time (`code_matches`).
 - A right code that has expired answers 400 "That code has expired. You can ask for a new code in {wait}.", and is left live, its try counted.
 - A right code on an account not yet verified answers `SIGN_IN_VERIFY_FIRST` and is left live.
 - A right code otherwise is used (`state: "used"`, `next_allowed_at` cleared) by a write conditional on its hash and `live`; of two right tries only the one whose write changed the account signs in, and the other answers `SIGN_IN_WRONG_CODE`.
+
+**The organizer's one code an hour stays** ([ADR 0028](../../adr/0028-an-accounts-sign-in-secrets-are-one-machine.md), [ADR 0046](../../adr/0046-a-sign-in-limit-never-shuts-out-the-person-it-protects.md)).
+Anyone may ask for an organizer's code, which mails it to the organizer, and use up its five tries.
+The code sign-in then waits out the hour, while the password and the reset link stay open; the wait bounds guesses at a six-digit code to five an hour.
 
 `{wait}` in the expired code's sentence and in `/request-otp`'s refusal, "You can ask for a new code in {wait}.", is what is left of the code's `next_allowed_at`, an hour after it expired (`CODE_WAIT`); once it is over, the expired code's sentence ends "Ask for a new one." instead, and `/request-otp` sends a code.
 `/request-password-reset` keeps one link at a time the same way, by the reset link's `next_allowed_at`: until an hour after the last mailed link expired (`RESET_WAIT`), unless that link was used, which clears it, it answers 429 `NEXT_RESET_LATER`, "You can ask for another reset link in {wait}.", under `msg`, with no `Retry-After`.
@@ -213,7 +255,7 @@ The try is checked against the stored hash in constant time (`code_matches`).
 The write is conditional on the issued hash and `sending`, so a secret a newer request or a change meanwhile left is left as it is.
 So a verification link mailed before a resend that could not be mailed no longer verifies, since the resend replaced it when it issued its own: no link is left live, and the next resend mails one at once.
 
-The counts are not taken back: a failed send still counts against the caller and the address, so a sixth request in a quarter hour answers `ASKED_TOO_OFTEN` whether or not any mail went, and a failing provider cannot be asked without bound.
+The counts are not taken back: a failed send still counts against the caller and the address, so a request past the pair's count in a quarter hour answers `ASKED_TOO_OFTEN` whether or not any mail went, and a failing provider cannot be asked without bound.
 The vendor's code is not unset: its challenge arms no wait, and its failed send is answered as a sent one ([where it is kept](../../business/rules/a-vendor-signs-in-before-applying.md#where-it-is-kept)).
 [`back-end/tests/test_a_failed_mail_leaves_no_wait_armed.py`](../../../back-end/tests/test_a_failed_mail_leaves_no_wait_armed.py) holds each, and the reset link's wait.
 
@@ -313,7 +355,7 @@ A person deletes only their own account, and not while they own an organization 
 The body's `msg` is one sentence for each, space-joined: "Transfer ownership of <organization names> before deleting this account." and "Transfer or delete <market names> before deleting this account." (`OWNS_MARKETS`), the names comma-joined; `ownedOrganizations` and `ownedMarkets` list the names, each present only when it is not empty.
 A role below Owner on a market is not ownership, and the deletion goes ahead ([what each role may do](../../business/rules/what-each-role-may-do.md#a-chosen-reviewer-and-where-a-role-comes-from)).
 [`test_delete_user_authorization.py`](../../../back-end/tests/test_delete_user_authorization.py) pins that only the session's own account is deleted, each refusal alone and both together, and an Admin, Editor or Viewer of a market deleted.
-Deleting it takes their place in every organization's people, the map and its `admins` and `members` mirror alike ([the organization's people](../modules/organization-people.md)); a role entry naming them on a market stays in that market's `roles`.
+Deleting it takes their place in every organization's people map ([the organization's people](../modules/organization-people.md)); a role entry naming them on a market stays in that market's `roles`.
 It ends every sign-in of the account too (`organizer_sessions.end_all`), so no record of one is left.
 
 What an organizer does with their account, from registering to resetting a password, is [the accounts flows](../../business/flows/accounts.md).

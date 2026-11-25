@@ -53,8 +53,7 @@ def _hashed(password: str) -> str:
     return Bcrypt().generate_password_hash(password, rounds=FIXTURE_BCRYPT_ROUNDS).decode('utf-8')
 
 
-def _insert_verified(users_collection, email: str, hashed_password: str, organizations=None,
-                     markets=None):
+def _insert_verified(users_collection, email: str, hashed_password: str, markets=None):
     """Insert a verified account for an address already normalized; answers its id, or None."""
     # Create user document with all required fields for the Pydantic User model
     # and email_verified=True so the user can log in immediately without
@@ -62,7 +61,8 @@ def _insert_verified(users_collection, email: str, hashed_password: str, organiz
     user_doc = {
         "email": email,
         "password": hashed_password,
-        "organizations": organizations or [],
+        # No reader; the release before signs in no account without it, until T583's follow-up.
+        "organizations": [],
         "markets": markets or [],
         "email_verified": True,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -76,7 +76,7 @@ def _insert_verified(users_collection, email: str, hashed_password: str, organiz
     return user_id
 
 
-def create_test_user(email: str, password: str, organizations=None, markets=None):
+def create_test_user(email: str, password: str, markets=None):
     """Create a test user in the database ready for immediate login."""
     users_collection = _users()
     # Stored as every writer stores it (E32/F03/S04): the unique index is over this form.
@@ -89,7 +89,7 @@ def create_test_user(email: str, password: str, organizations=None, markets=None
         return False
 
     user_id = _insert_verified(
-        users_collection, email, _hashed(password), organizations, markets)
+        users_collection, email, _hashed(password), markets)
     if user_id:
         print(f"✅ Successfully created test user:")
         print(f"   Email: {email}")

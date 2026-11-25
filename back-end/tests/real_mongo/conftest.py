@@ -9,7 +9,9 @@ refused before any connection (``harness.server_refusal``).
 The four suite-wide fakes of ``tests/conftest.py`` are named again here, so inside this package
 pytest resolves ``applications``, ``market_records``, ``sign_in_attempts`` and
 ``organizer_sessions`` to the real collections and installs no fake; and since those four are used
-by every test, every test here runs on its own bound database.
+by every test, every test here runs on its own bound database. Its suite-wide stand-in for the
+human check, ``human_check``, is named again too, so no test's object is left in a back-end
+module here: no test in this package reaches the human check.
 """
 import copy
 import uuid
@@ -98,6 +100,12 @@ def organizer_sessions(real_db):
     import organizer_sessions as OrganizerSessions
 
     return OrganizerSessions.sessions_collection
+
+
+@pytest.fixture
+def human_check():
+    """No stand-in for the human check, in place of the suite-wide one."""
+    return None
 
 
 @pytest.fixture
