@@ -30,7 +30,7 @@ describes:
   - back-end/tests/test_removing_someone_already_gone.py
   - back-end/api/markets.py#create_owned_market
   - back-end/api/markets.py#organization_refusal
-  - back-end/api/markets.py#add_market_role
+  - back-end/api/markets.py#give_role_by_invitation
   - back-end/api/markets.py#remove_market_role
   - back-end/api/markets.py#update_market_role
   - back-end/datatypes.py#organization_people_of
@@ -178,7 +178,7 @@ Those changes alone are also read in the default table's dialog, through `get_de
 **A market's `roles` is a map from user id to one role**: `owner`, `admin`, `editor` or `viewer`, with exactly one `owner` (`validate_single_owner` on `Market`).
 A map, not one list per role, so nobody can hold two roles on one market.
 Whoever creates a market owns it, and only they do (`create_owned_market`): the create body's roles were once taken on trust, so a client could make a market owned by someone else or by nobody (bug 46).
-Anyone else is added afterwards by email, through `add_market_role`, which stores their user id; they must already have an account.
+Anyone else is invited afterwards by email (`invite_to_market`), and gains a role only by accepting the invitation signed in with that address (`give_role_by_invitation`), which stores their user id ([invitations](../modules/invitations.md)).
 The owner's entry cannot be changed, removed or added beside through a role write; the owner transfers the market's ownership instead (`hand_on_market`, the fixed row `hand-on-market`, T283), to anyone the market read finds with access, in one write that sets `roles.<owner>` to `admin` and `roles.<new>` to `owner`, holding both keys as read, so the market has exactly one owner before it and after it, and a second transfer on the same read answers the market write's 409 ([the market's actions](../modules/market-actions.md#transfer-ownership-hand-on-market)).
 An account that owns a market is not deleted: `delete_user` reads `{"roles.<user id>": "owner"}` and refuses while it finds one, until the owner transfers the market's ownership or deletes it ([deleting an account](users-and-email.md#deleting-an-account)).
 An owner manages every other role; an admin manages editors and viewers: the table's two rows for roles, Give and take Admin roles (Owner, fixed) and Give and take Editor and Viewer roles (Admin), which `roles_row` picks by the role given or taken ([the market's actions](../modules/market-actions.md)).

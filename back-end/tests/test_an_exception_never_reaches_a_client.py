@@ -426,8 +426,6 @@ ORGANIZATION_AND_ROLE_ROUTES = [
     ("get", f"/organizations/{ORG_ID}/invitations", None, OrgsApi, "organization_invitations"),
     ("delete", f"/organizations/{ORG_ID}/invitations/invitation-1", None,
      OrgsApi, "withdraw_organization_invitation"),
-    ("post", "/markets/market-123/roles", {"user_email": "editor@example.com", "role": "editor"},
-     MarketsApi, "add_market_role"),
     ("delete", "/markets/market-123/roles/user-2", None, MarketsApi, "remove_market_role"),
     ("put", "/markets/market-123/roles/user-2", {"role": "viewer"},
      MarketsApi, "update_market_role"),
@@ -529,7 +527,6 @@ class TestTheOrganizationAndRoleRoutes:
         assert response.get_json() == {"error": "New owner user not found"}
 
     @pytest.mark.parametrize("method, path, body", [
-        ("post", "/markets/market-missing/roles", {"user_email": OWNER_EMAIL, "role": "editor"}),
         ("delete", "/markets/market-missing/roles/user-2", None),
         ("put", "/markets/market-missing/roles/user-2", {"role": "viewer"}),
         ("post", "/markets/market-missing/invitations", {"email": OWNER_EMAIL, "role": "editor"}),
@@ -544,7 +541,8 @@ class TestTheOrganizationAndRoleRoutes:
 
     def test_a_role_that_does_not_exist(self, client):
         response = client.post(
-            "/markets/market-123/roles", json={"user_email": OWNER_EMAIL, "role": "Wizard"},
+            "/markets/market-123/invitations",
+            json={"email": "editor@example.com", "role": "Wizard"},
         )
 
         assert response.status_code == 400
@@ -1362,7 +1360,6 @@ REQUIRED_BODIES = [
     ("put", "/organizations/<org_id>/users/<user_id>", None),
     ("post", "/organizations/<org_id>/transfer", None),
     ("post", "/organizations/<org_id>/invitations", None),
-    ("post", "/markets/<market_id>/roles", None),
     ("put", "/markets/<market_id>/roles/<user_id>", None),
     ("post", "/markets/<market_id>/invitations", None),
     ("post", "/markets", None),

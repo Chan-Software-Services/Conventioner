@@ -171,6 +171,19 @@ class TestOneAnswerForEveryAddress:
         assert market.doc["roles"] == ROLES
         assert len(invitations.documents) == 2
 
+    @pytest.mark.parametrize("person", [ACCOUNT.email, NO_ACCOUNT])
+    def test_no_route_adds_someone_to_a_market_directly(
+        self, market, invitations, history, mail, person,
+    ):
+        response = signed_in_as(OWNER).post(
+            f"/markets/{MARKET_ID}/roles", json={"user_email": person, "role": "editor"})
+
+        assert response.status_code == 404
+        assert market.doc["roles"] == ROLES
+        assert invitations.documents == []
+        assert entries(history) == []
+        assert mail.messages == []
+
     def test_the_answer_serves_the_invitation(self, market, invitations):
         response = invite(OWNER, "  Someone@Example.com ", role="Viewer")
 

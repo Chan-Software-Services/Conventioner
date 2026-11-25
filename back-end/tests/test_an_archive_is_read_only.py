@@ -15,6 +15,7 @@ import api.markets as MarketsApi
 import api.permissions as PermissionsApi
 import api.placements as PlacementsApi
 import api.users as UsersApi
+import utils.email as Email
 from client_errors import ForbiddenError
 from datatypes import MarketPhase
 from guards import VALID_TRANSITIONS
@@ -150,10 +151,10 @@ ROW_WRITES = {
                     {"cents": 3500, "method": "cash", "paidOn": "2026-05-01"}),
     "check-in": ("post", "/markets/market-123/attendance",
                  {"vendorEmail": "ana@example.com", "date": "2026-05-01"}),
-    "manage-editors-and-viewers": ("post", "/markets/market-123/roles",
-                                   {"user_email": "editor@example.com", "role": "editor"}),
-    "manage-admins": ("post", "/markets/market-123/roles",
-                      {"user_email": "admin@example.com", "role": "admin"}),
+    "manage-editors-and-viewers": ("post", "/markets/market-123/invitations",
+                                   {"email": "editor@example.com", "role": "editor"}),
+    "manage-admins": ("post", "/markets/market-123/invitations",
+                      {"email": "admin@example.com", "role": "admin"}),
     "hand-on-market": ("post", "/markets/market-123/hand-on", {"userId": "user-admin"}),
     "delete-market": ("delete", "/markets/market-123", None),
     "change-the-table": ("put", "/markets/market-123/permissions/check-in", {"role": "admin"}),
@@ -203,6 +204,8 @@ class TestEveryRowOfTheTable:
         # Deleting would reach the market's other collections; only the refusal matters here.
         monkeypatch.setattr(MarketsApi.MarketDeletion, "delete_market_and_records",
                             lambda *_a, **_k: SimpleNamespace(deleted_count=1))
+        # The roles rows' write is an invitation, whose email goes nowhere here.
+        monkeypatch.setattr(Email, "send_mail", lambda *_a: True)
         method, path, body = write
 
         response = getattr(client, method)(path, json=body)

@@ -23,7 +23,7 @@ describes:
   - back-end/app.py#remove_org_user
   - back-end/app.py#transfer_org_ownership
   - back-end/app.py#_named_market_role
-  - back-end/app.py#add_market_role
+  - back-end/app.py#invite_to_market
   - back-end/app.py#remove_market_role
   - back-end/app.py#update_market_role
   - back-end/app.py#get_market

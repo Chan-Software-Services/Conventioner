@@ -953,24 +953,6 @@ def _named_market_role(name: str) -> Optional[MarketRole]:
     """The market role a request names, in any case, or None when it names none."""
     return next((role for role in MarketRole if role.value == name.lower()), None)
 
-@app.route('/markets/<market_id>/roles', methods=['POST'])
-@login_required
-def add_market_role(market_id: str) -> Response:
-    """Add a user role to a market."""
-    data = json_object(required=True)
-
-    user_email = string_field(data, 'user_email')
-    role_str = string_field(data, 'role')
-    if not user_email or not role_str:
-        return jsonify({"error": "user_email and role required"}), 400
-
-    role = _named_market_role(role_str)
-    if role is None:
-        return jsonify({"error": f"Invalid role: {role_str}"}), 400
-
-    MarketsApi.add_market_role(market_id, user_email, role, authenticated_email())
-    return jsonify({"message": "Role added successfully"}), 200
-
 #: Said of an invitation that names no address or no role, or names either as anything but text.
 EMAIL_AND_ROLE_REQUIRED = "email and role required"
 #: Said of an invitation whose address is not one: the sign-up's check, an "@" and then a domain

@@ -250,8 +250,6 @@ class TestNamingSomeoneForARole:
         ("/organizations/an-org-id/members", "user_email", {}, OrgsApi, "add_org_member"),
         ("/organizations/an-org-id/transfer", "new_owner_email", {},
          OrgsApi, "transfer_org_ownership"),
-        ("/markets/a-market-id/roles", "user_email", {"role": "editor"},
-         MarketsApi, "add_market_role"),
         ("/markets/a-market-id/invitations", "email", {"role": "editor"},
          MarketsApi, "invite_to_market"),
         ("/organizations/an-org-id/invitations", "email", {"place": "member"},
@@ -281,9 +279,6 @@ class TestNamingSomeoneForARole:
 
     @pytest.mark.parametrize("role", NOT_STRINGS)
     def test_a_role_that_is_not_a_string_is_refused(self, signed_in, asked, role):
-        added = signed_in.post(
-            "/markets/a-market-id/roles", json={"user_email": FIXTURE_EMAIL, "role": role},
-        )
         changed = signed_in.put("/markets/a-market-id/roles/a-user-id", json={"role": role})
         invited = signed_in.post(
             "/markets/a-market-id/invitations", json={"email": FIXTURE_EMAIL, "role": role},
@@ -292,9 +287,6 @@ class TestNamingSomeoneForARole:
             "/organizations/an-org-id/invitations", json={"email": FIXTURE_EMAIL, "place": role},
         )
 
-        assert (added.status_code, added.get_json()) == (
-            400, {"error": "user_email and role required"},
-        )
         assert (invited.status_code, invited.get_json()) == (
             400, {"error": "email and role required"},
         )

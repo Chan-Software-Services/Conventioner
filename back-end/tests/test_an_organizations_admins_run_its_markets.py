@@ -14,7 +14,9 @@ import api.markets as MarketsApi
 import api.organizations as OrgsApi
 import api.permissions as PermissionsApi
 import api.users as UsersApi
+import invitations as Invitations
 import market_write as MarketWrite
+import utils.email as Email
 from client_errors import BadRequestError, ForbiddenError
 from datatypes import MarketPhase, MarketRole, Organization
 
@@ -232,36 +234,57 @@ def roles_on_the_market(monkeypatch):
     return lambda: dict(markets.doc["roles"])
 
 
+@pytest.fixture
+def mail(monkeypatch):
+    """An invitation's email, sent nowhere."""
+    monkeypatch.setattr(Email, "send_mail", lambda *_a: True)
+
+
+def invited_and_accepted(role, who, person="newcomer"):
+    """``who`` invites ``person`` to ``role``, and ``person`` accepts, the one way a role is
+    gained."""
+    invitation, _emailed = MarketsApi.invite_to_market("market-123", person, role, who)
+    MarketsApi.give_role_by_invitation(
+        Invitations.addressed(invitation["id"], person), SimpleNamespace(id=person, email=person))
+
+
 @pytest.mark.parametrize("who", [ORG_OWNER, ORG_ADMIN, MARKET_ADMIN])
 @pytest.mark.parametrize("target", [MARKET_OWNER, MARKET_ADMIN, EDITOR, VIEWER])
-def test_adding_someone_already_on_the_market_changes_nothing(roles_on_the_market, who, target):
-    """"Add user" with an address already on the market would overwrite its role, the Owner's too.
-
-    Changing a role is the role change's, where the Owner and the market's Admins are guarded.
-    """
+def test_inviting_someone_already_on_the_market_changes_nothing(
+    roles_on_the_market, market_records, mail, who, target,
+):
+    """An invitation to an address already on the market would end in a second role for it, the
+    Owner's too. Changing a role is the role change's, where the Owner and the market's Admins are
+    guarded."""
     before = roles_on_the_market()
 
     with pytest.raises(BadRequestError, match="already has a role on this market"):
-        MarketsApi.add_market_role("market-123", target, MarketRole.VIEWER, who)
+        MarketsApi.invite_to_market("market-123", target, MarketRole.VIEWER, who)
 
     assert roles_on_the_market() == before
+    assert market_records.invitations.documents == []
 
 
 @pytest.mark.parametrize("who", [ORG_OWNER, ORG_ADMIN])
 @pytest.mark.parametrize("role", [MarketRole.EDITOR, MarketRole.VIEWER])
-def test_an_organization_admin_adds_an_editor_or_a_viewer(roles_on_the_market, who, role):
-    MarketsApi.add_market_role("market-123", "newcomer", role, who)
+def test_an_organization_admin_gives_an_editor_or_a_viewer_by_invitation(
+    roles_on_the_market, mail, who, role,
+):
+    invited_and_accepted(role, who)
 
     assert roles_on_the_market()["newcomer"] == role.value
 
 
 @pytest.mark.parametrize("who", [ORG_OWNER, ORG_ADMIN])
-def test_an_organization_admin_does_not_add_a_market_admin(roles_on_the_market, who):
+def test_an_organization_admin_does_not_invite_a_market_admin(
+    roles_on_the_market, market_records, mail, who,
+):
     """Raising someone to Admin stays the market owner's, as it is for the market's own Admins."""
     with pytest.raises(ForbiddenError):
-        MarketsApi.add_market_role("market-123", "newcomer", MarketRole.ADMIN, who)
+        MarketsApi.invite_to_market("market-123", "newcomer", MarketRole.ADMIN, who)
 
     assert "newcomer" not in roles_on_the_market()
+    assert market_records.invitations.documents == []
 
 
 @pytest.mark.parametrize("who", [ORG_OWNER, ORG_ADMIN])
