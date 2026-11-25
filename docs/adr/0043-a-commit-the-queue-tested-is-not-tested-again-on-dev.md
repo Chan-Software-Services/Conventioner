@@ -27,12 +27,12 @@ A per-pull-request job that ran the changed specs again had caught no flaky spec
 ## Decision
 
 **On a push to `dev`, a first job, `suite`, reads the queue's Test run on the pushed commit, and the run warms the caches or runs the whole suite.**
-[`scripts/ci_suite.py`](../../scripts/ci_suite.py) prints `warm` when the newest run of `dev`'s queue on the commit passed (or is still going with every job passed or skipped), and `full` otherwise; a warm push runs only `warm-caches`, which restores or makes the caches the pull requests read and fails nothing.
+[`scripts/ci_suite.py`](../../scripts/ci_suite.py) prints `warm` when the newest run of `dev`'s queue on the commit passed (or is still going with every job passed or skipped), and `full` otherwise; a warm push runs no test job, only `warm-caches`, which restores or makes the caches the pull requests read and fails nothing, and `python-advisories`, which reads no word, so an advisory published since the pull request's run makes the warm push's run red.
 Every doubt is `full`: no queue run, one that did not pass, GitHub unread, and any output of the script that is not one of its words, which [`.github/workflows/test.yml`](../../.github/workflows/test.yml)'s step shell turns into `full`, as the jobs read `suite` skipped or failed.
 A pull request's run, a trial commit's and a push to `main`'s skip `suite` and run as before.
 
 **Promote takes the newest Test run on the commit, from `dev`'s queue or a push to `dev`.**
-[`scripts/promote_check.py`](../../scripts/promote_check.py) decides by the newest by `run_number`, which grows across events in one workflow, so a merged commit is decided by its push run (green when warm, whatever the suite said when it ran the whole suite), and a commit the queue merged inside a batch, which has no push run of its own, by its queue run.
+[`scripts/promote_check.py`](../../scripts/promote_check.py) decides by the newest by `run_number`, which grows across events in one workflow, so a merged commit is decided by its push run (green when warm unless `python-advisories` failed, which holds Promote on that commit until the lock moves, and whatever the suite said when it ran the whole suite), and a commit the queue merged inside a batch, which has no push run of its own, by its queue run.
 A nightly run, a hand-started one and a pull request's never count.
 
 **The test map is made by a nightly Test run on `dev`'s tip**, which runs, of the test jobs, only the shards, recording, and the `test-map` job, and makes no map when that commit already has one; `gh workflow run test.yml --ref dev` makes one on demand.

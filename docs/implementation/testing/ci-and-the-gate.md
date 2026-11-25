@@ -172,7 +172,7 @@ Each word runs these jobs:
 
 `python-advisories` reads no word, so it runs beside each of them, a daily scan of `dev`'s tip on the nightly run.
 Each test job `needs: suite` and runs `if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}`, the shards on `map` too; `!cancelled()` lets them run when `suite` was skipped or failed.
-A required check whose job its `if:` skipped reports success, so a warm push's six required checks and `e2e` pass on a commit whose queue run passed them, and its run is green whatever `warm-caches` did.
+A required check whose job its `if:` skipped reports success, so a warm push's six required checks and `e2e` pass on a commit whose queue run passed them, and its run is green whatever `warm-caches` did, unless `python-advisories` fails: an advisory published since the pull request's run makes the warm push's run red, which holds Promote on that commit until the lock moves.
 [Promote](../../RELEASING.md#how-a-promotion-proves-itself) reads that run or the queue's, the newest of the two.
 
 ## The nightly test map
