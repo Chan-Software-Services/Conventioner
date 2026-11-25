@@ -143,7 +143,7 @@ const read = useServerRead<string, Market>(
   { failure: 'The market could not be loaded.' },
 );
 // The rename field takes each name a read brings that differs from the last, so a re-read after
-// an add, a role change or a refused rename leaves a name being typed alone.
+// a role change or a refused rename leaves a name being typed alone.
 watch(
   () => read.data.value?.name,
   (name) => {
@@ -189,7 +189,10 @@ const over =
   () =>
     props.manageOpen ? asked() : null;
 
-/** Invite someone's and Rename's writes, each said beside its row; Manage market holds while either sends. */
+/**
+ * Invite someone's and Rename's writes, each said beside its row; Manage market holds while either
+ * sends.
+ */
 const addUser = useDialogSubmit({
   opening: openOn,
   failure: 'The invitation was not sent.',
@@ -254,7 +257,8 @@ function refreshTheOpenMarket(marketId: string | undefined) {
 
 /**
  * Everyone with access, in the order the read serves them (E38/F12/S01): the owner first, then by
- * the role that counts, then by address, so someone just added takes their place, never the top.
+ * the role that counts, then by address, so someone who just accepted an invitation takes their
+ * place, never the top.
  */
 const accessList = computed(() =>
   (marketData.value?.peopleWithAccess ?? []).map((person) => ({
@@ -296,7 +300,7 @@ function changeableRoles(role: MarketRole): MarketRole[] {
 
 /**
  * The roles this person may grant, in the order they are offered. Empty for a Viewer or an Editor,
- * who were shown "Add user" and refused with a 403 (bug 37).
+ * who were shown "Add user" and refused with a 403 (bug 37), and who see no "Invited".
  */
 const grantableRoles = computed(() =>
   GIVEN_ROLES.filter((role) => canManageRoles(marketData.value, role)),
@@ -391,7 +395,7 @@ async function handleAddUser() {
   );
 }
 
-// A refused invitation stands under the form, which a short window's body can hold at its very foot.
+// A refused invitation stands under the form, which a short window's body can hold at its foot.
 watch(
   addUserSentence,
   (sentence) => {
@@ -419,7 +423,7 @@ function cancelRemove() {
  * open. The Remove that opened the confirmation is gone with the role, so focus goes to the list. A
  * 404 is a role another admin took first: what was asked for is true, so it is read as done. Any
  * other refusal stays in the confirmation, which said what was about to happen; one saying the
- * market changed under it re-reads the list too, as an add's does.
+ * market changed under it re-reads the list too, as a role change's does.
  */
 async function handleRemoveUser() {
   const target = removing.value;
