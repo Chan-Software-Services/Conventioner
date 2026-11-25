@@ -2,7 +2,8 @@
 
 Every sign-in endpoint is public: the applicant's code sign-in, the organizer's password and code
 sign-ins and the requests that mail an organizer a code or a link, the sign-up among them, and the
-vendor's check-in at the door. A request that sends an email, left unbounded, could flood
+vendor's check-in at the door. An organizer's invitation (``invitations``) is signed in, and mails
+the address it names. A request that sends an email, left unbounded, could flood
 any address with mail, spending the sender's money and reputation; a sign-in try is a guess at a
 password or a code. Each limit here is counted per address, per caller, or per caller and address
 together, small enough to stop that and far above what a vendor or an organizer who mistypes or
@@ -145,6 +146,15 @@ SIGN_UP_PER_CALLER = SignInLimit("sign-up:caller", attempts=30, window=timedelta
 SIGN_UP_PER_CALLER_AND_ADDRESS = SignInLimit(
     "sign-up:caller-address", attempts=5, window=timedelta(minutes=15))
 SIGN_UP_PER_ADDRESS_HOUR = SignInLimit("sign-up:address-hour", attempts=20, window=timedelta(hours=1))
+# An organizer's invitation to a market or an organization (``invitations``), which mails the address
+# it names. It is signed in, so it is counted by the inviter's account rather than by the caller,
+# once the inviter is let give the role and before the account is looked up: a hundred bound an
+# organizer inviting a whole team in a sitting, and five the mail one address is sent. An accepted
+# invitation takes both counts back, so only invitations nobody accepts pile up.
+INVITATION_PER_INVITER = SignInLimit(
+    "invitation:inviter", attempts=100, window=timedelta(minutes=15))
+INVITATION_PER_ADDRESS = SignInLimit(
+    "invitation:address", attempts=5, window=timedelta(minutes=15))
 
 LIMITS = (
     REQUEST_CODE_PER_CALLER,
@@ -173,6 +183,8 @@ LIMITS = (
     SIGN_UP_PER_CALLER,
     SIGN_UP_PER_CALLER_AND_ADDRESS,
     SIGN_UP_PER_ADDRESS_HOUR,
+    INVITATION_PER_INVITER,
+    INVITATION_PER_ADDRESS,
 )
 
 

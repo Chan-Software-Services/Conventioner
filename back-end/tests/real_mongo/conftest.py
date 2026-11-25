@@ -68,12 +68,14 @@ def market_records(real_db):
     import api.applicant_auth as ApplicantAuth
     import api.attendance as AttendanceApi
     import history as History
+    import invitations as Invitations
     import payments as Payments
     import remembered_sign_ins as RememberedSignIns
     import services.gridfs_service as GridfsService
     import vendor_notes as VendorNotes
 
     return SimpleNamespace(
+        invitations=Invitations.invitations_collection,
         attendance=AttendanceApi.attendance_collection,
         challenges=ApplicantAuth.challenges_collection,
         remembered=RememberedSignIns.remembered_collection,

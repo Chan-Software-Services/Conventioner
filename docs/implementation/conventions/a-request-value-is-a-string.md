@@ -5,7 +5,7 @@ describes:
   - back-end/utils/request_body.py
   - back-end/tests/test_a_request_value_is_a_string.py
   - back-end/tests/test_a_body_sets_only_its_fields.py
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - T66
   - T74
@@ -15,6 +15,7 @@ sources:
   - T315
   - T496
   - T539
+  - T538
 ---
 
 # A request value is a string before it reaches a query
@@ -35,7 +36,7 @@ It never raises, so each handler keeps its own words and status, and answers Non
 - a vendor's own check-out and its undo, in the same module, read theirs the same way: a date that is not a string is a day out of reach, "Check-in is open on the day itself.", 409, a door code that is not one is not this market's, and, for the undo, `date is required`, 400;
 - an organizer's check-in and check-out at the door, and the undo of each (`_door_write` in `back-end/app.py`), answer a `vendorEmail` or a `date` that is not a string as a missing one, `vendorEmail is required` or `date is required`, 400;
 - creating and renaming an organization (`back-end/app.py`) answer 400 for a name that is not a string or is blank;
-- adding an organization's admin or member, transferring its ownership, and adding or changing someone's market role (`back-end/app.py`) answer their "required" 400 for an address or a role that is not a string;
+- adding an organization's admin or member, transferring its ownership, adding or changing someone's market role, and inviting an address to a market or an organization (`back-end/app.py`) answer their "required" 400 for an address, a role or a place that is not a string;
 - saving a floorplan to a market and placing its tables (`back-end/api/floorplans_save.py`, `back-end/api/floorplans_placement.py`) answer 400 for the market id they name;
 - creating and updating a floorplan template (`back-end/api/floorplans_templates.py`) answer 400 for an `organizationId` that is neither a string nor null.
 

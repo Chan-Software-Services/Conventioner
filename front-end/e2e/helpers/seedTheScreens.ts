@@ -26,6 +26,7 @@ import {
 import { seedMarketDayMap, type SeededMarketDayMap } from './seedMarketDayMap';
 import { uniqueMarketName } from './uniqueName';
 import { ensureVerifiedUser } from './verifiedUser';
+import { invitationsWaitingFor, inviteToMarket, inviteToOrganization } from './invitations';
 import { saveApplicationForm } from './saveApplicationForm';
 
 /**
@@ -286,6 +287,36 @@ export const SCREENS_EDITOR = {
   email: 'e2e-screens-editor@example.com',
   password: 'e2epassword123',
 };
+
+/**
+ * Someone with no market and no organization, invited to `big` as an Editor and to `organization`
+ * as a member (T538), neither answered, so the Invitations page draws two rows with long names and
+ * the Markets list says two wait; fixture data.
+ */
+export const SCREENS_INVITEE = {
+  email: 'e2e-screens-invitee@example.com',
+  password: 'e2epassword123',
+};
+
+/**
+ * `SCREENS_INVITEE`'s two invitations, sent only when none of that kind waits: every sweep file
+ * seeds, and an address is sent at most five invitations a quarter hour. One sent on an earlier
+ * seed waits 14 days, to that seed's `big`, which is still there.
+ */
+async function invitationsForTheInvitee(
+  api: APIRequestContext,
+  marketId: string,
+  organizationId: string,
+): Promise<void> {
+  ensureVerifiedUser(SCREENS_INVITEE.email, SCREENS_INVITEE.password);
+  const waiting = await invitationsWaitingFor(SCREENS_INVITEE);
+  if (!waiting.some((invitation) => invitation.kind === 'market')) {
+    await inviteToMarket(api, marketId, SCREENS_INVITEE.email, 'editor');
+  }
+  if (!waiting.some((invitation) => invitation.kind === 'organization')) {
+    await inviteToOrganization(api, organizationId, SCREENS_INVITEE.email, 'member');
+  }
+}
 
 /** The other reviewer of `dealt`, a Viewer on that market only; fixture data. */
 const DEALT_REVIEWER = 'e2e-screens-reviewer@example.com';
@@ -813,6 +844,7 @@ export async function seedTheScreens(
   const applicant = { email: 'applicant0@example.com' };
   const { id: organizationId, ...organization } = await organizationWithPeople(api, backend);
   const ofTheOrganization = await organizationMarket(api, backend, email, organizationId);
+  await invitationsForTheInvitee(api, big.marketId, organizationId);
 
   const layout = await seedLayout(api, backend, email, password, { layout: true });
   const laidOut = await seedLayout(api, backend, email, password, {

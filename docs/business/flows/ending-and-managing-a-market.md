@@ -16,7 +16,7 @@ describes:
   - front-end/e2e/people-at-scale-market.spec.ts
   - front-end/src/components/HandOnMarketDialog.vue
   - front-end/e2e/handing-a-market-on.spec.ts
-verified: 2026-11-12
+verified: 2026-11-25
 sources:
   - E20/F01/S03
   - E21/F03/S04

@@ -387,6 +387,9 @@ RECORDED = {
     ("PUT", "/organizations/<org_id>/default-permissions/<action_id>"): "a default row set",
     ("DELETE", "/organizations/<org_id>/default-permissions/<action_id>"): "a default row reset",
     ("DELETE", "/organizations/<org_id>/default-permissions"): "every default row reset",
+    # Sent in ``test_inviting_someone_to_an_organization.py`` (T538).
+    ("POST", "/organizations/<org_id>/invitations"): "an address invited",
+    ("DELETE", "/organizations/<org_id>/invitations/<invitation_id>"): "an invitation withdrawn",
     # Sent in ``test_floorplan_template_access.py``; one of no organization records nothing.
     ("POST", "/floorplans/templates"): "a template added",
     ("PUT", "/floorplans/templates/<template_id>"): "a template changed",

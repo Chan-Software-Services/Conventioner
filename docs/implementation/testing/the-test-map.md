@@ -119,6 +119,7 @@ A spec is chosen by five rules:
    - the scripts in `front-end/scripts/` that deal, repeat or measure the specs, or that nothing runs: `e2e-shard-timings.json`, `e2e-shards.ts`, `e2e-repeat.ts`, `bundle-budget.ts`, `no-eval.ts` and `brand-icons.ts`
    - the back end's deploy config, `back-end/vercel.json`
    - the advisory scan's lock, `back-end/requirements-audit.in` and `requirements-audit.txt`, which only [CI's `python-advisories` job](ci-and-the-gate.md#ci) installs
+   - the migrations, `back-end/migrations/`, which an operator runs by hand and which nothing the app, the seed or a spec imports
 
 The chosen specs are ordered by score: each changed thing a spec reaches adds 1 divided by how many specs reach it, so a module every spec loads (`App.vue`) or an endpoint every spec's setup calls adds almost nothing, while one that three specs reach decides the order.
 A changed spec, and each changed file a spec imports, adds 1; a change counted for a whole back-end file, rule 4 and rule 5 add nothing, though they still choose.

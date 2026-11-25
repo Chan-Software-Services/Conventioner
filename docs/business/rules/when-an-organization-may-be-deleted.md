@@ -14,6 +14,7 @@ describes:
   - front-end/src/components/DeleteOrgDialog.vue
   - front-end/src/__tests__/deletingAnOrganization.test.ts
   - back-end/history.py#delete_for_organization
+  - back-end/invitations.py#delete_for_organization
 verified: 2026-11-13
 sources:
   - wayfinding/the-order-of-the-work/10
@@ -25,6 +26,7 @@ sources:
   - T307
   - T411
   - T469
+  - T538
 ---
 
 # When an organization may be deleted
@@ -47,6 +49,7 @@ That was weighed and kept: archived markets go with their organization, taking t
 So a count of markets does not let an organizer decide: the confirmation names, per market, its name, its phase as its intake path names it (Review on a Google Form market, Applications on one whose vendors apply on its page), whether it ran, how many assignments it holds, and, for one that ran, the two public addresses that stop resolving, its market page and its vendor page.
 What was deleted, by whom and when is recorded in the deletion trail before anything is destroyed, once however often the deletion is sent.
 **The organization's own history goes with it**, as each market's history goes with the market: who joined it, who renamed it, which markets were created in it ([the organization document](../../implementation/data/organization-document.md#the-organizations-history)).
+**So do its invitations**, and each of its markets' with the market, so nobody accepts their way into what is gone ([invitations](../../implementation/modules/invitations.md#the-store)).
 The deletion trail is what outlives both.
 
 ## Who may
@@ -66,6 +69,6 @@ The organization's owner, alone ([the organization document](../../implementatio
   **A market that entered a blocking phase after the preview is not deleted**: a draft's first import, which takes it into Review, lands between the preview and its tombstone, so the second judgment finds it live and under way, takes every tombstone of this trail id away again, the organization's included, and refuses, naming it.
   A market another deletion is taking (its own Delete) is not judged again, since it is going already.
   A live market the second judgment finds in a phase that keeps no deletion back was created into the organization after its markets were read, since a creation stores its market before it asks the organization, held live, to list it: it is given the tombstone too (`_taken`), and goes with the others rather than being named as under way.
-- Then it writes the trail under its trail id, deletes each of its markets through [market deletion](../../implementation/modules/market-deletion.md), deletes the organization's own history (`delete_for_organization` in [`back-end/history.py`](../../../back-end/history.py)), pulls the organization from its people's lists and deletes it.
+- Then it writes the trail under its trail id, deletes each of its markets through [market deletion](../../implementation/modules/market-deletion.md), deletes the organization's own history (`delete_for_organization` in [`back-end/history.py`](../../../back-end/history.py)) and its invitations (`delete_for_organization` in [`back-end/invitations.py`](../../../back-end/invitations.py)), pulls the organization from its people's lists and deletes it.
   Each step deletes what is there, so a retry cut after any of them leaves one trail entry, naming every market as it stood before any went, and nothing behind.
-- `back-end/tests/test_organization_deletion.py` and `front-end/e2e/org-deletion.spec.ts` pin it; `back-end/tests/test_the_organizations_history.py` pins that the history goes and the trail is still written; `back-end/tests/real_mongo/test_a_deletion_leaves_a_tombstone.py` cuts each step on a real server and sends it again.
+- `back-end/tests/test_organization_deletion.py` and `front-end/e2e/org-deletion.spec.ts` pin it; `back-end/tests/test_the_organizations_history.py` pins that the history goes and the trail is still written; `test_organization_deletion.py` that its invitations go, and its markets'; `back-end/tests/real_mongo/test_a_deletion_leaves_a_tombstone.py` cuts each step on a real server and sends it again.
