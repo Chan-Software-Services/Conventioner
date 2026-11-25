@@ -24,7 +24,6 @@ import { letVendorsCheckThemselvesIn } from './helpers/selfCheckIn';
  *
  * Each test seats vendors of its own: the sign-in limits count an address across every market.
  */
-const TODAY = calendarToday();
 
 function vendorsOf(name: string) {
   const at = Date.now();
@@ -34,21 +33,25 @@ function vendorsOf(name: string) {
 /**
  * A market on its days, on `marketDate` (today unless a test says), with `vendors` seated, that
  * lets its vendors check themselves in and out: the switch is off until someone turns it on (T496).
+ * Today is reckoned from one instant, `seededAt`, answered with the day (`onTheDay`) for every
+ * date a test posts and for its phones' clocks (`aPhone`).
  */
 async function aMarketOnItsDay(
   request: Parameters<typeof seedPublishedMarketWithAssignments>[0],
   vendors: string[],
-  marketDate = TODAY,
+  marketDate?: string,
 ) {
+  const seededAt = new Date();
+  const onTheDay = marketDate ?? calendarToday(seededAt);
   const seed = await seedPublishedMarketWithAssignments(
     request,
     BACKEND_URL,
     TEST_USER.email,
     TEST_USER.password,
-    { marketDate, vendors },
+    { marketDate: onTheDay, vendors },
   );
   await letVendorsCheckThemselvesIn(request, seed.marketId);
-  return seed;
+  return { ...seed, seededAt, onTheDay };
 }
 
 /** Make a door code, the first or a new one, over the organizer's API; its address, as a path. */
@@ -87,10 +90,14 @@ function checkInsSentBy(page: Page): () => number {
   return () => sent;
 }
 
-/** A vendor's phone: a browser of its own, signed in as nobody. */
-async function aPhone(browser: Browser) {
+/**
+ * A vendor's phone: a browser of its own, signed in as nobody, its clock held at the seed's
+ * `seededAt`: a run that passes midnight after the seed would find no today card on the page.
+ */
+async function aPhone(browser: Browser, seededAt: Date) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await hideDevToolsPanel(context);
+  await context.clock.setFixedTime(seededAt);
   const page = await context.newPage();
   return { context, page, vendorPage: new VendorPage(page) };
 }
@@ -115,7 +122,7 @@ test('the organizer opens the door code, and a vendor who scans it signed out la
   const scanned = new URL(url!);
 
   // The vendor's camera opens it. Signed out, the code waits through the sign-in, off the address.
-  const phone = await aPhone(browser);
+  const phone = await aPhone(browser, seed.seededAt);
   await phone.page.goto(`${scanned.pathname}${scanned.search}`);
   await expect(phone.vendorPage.doorCodeHeld).toHaveText(
     "Sign in, and you'll be checked in for today.",
@@ -151,7 +158,7 @@ test('a new door code ends the old one; a vendor types the new one, and undoes a
   expect(current.code).not.toBe(old.code);
 
   // A poster of the old code checks nobody in.
-  const phone = await aPhone(browser);
+  const phone = await aPhone(browser, seed.seededAt);
   await phone.page.goto(old.path);
   await signInOnThePage(phone.vendorPage, seed.marketId, vendor);
   await expect(phone.vendorPage.checkInError).toHaveText(
@@ -185,7 +192,7 @@ test('a scan on a day the vendor has no table says so, and checks nothing in', a
   const seed = await aMarketOnItsDay(request, [vendor], '2099-05-01');
   const { path } = await makeDoorCode(request, seed.marketId);
 
-  const phone = await aPhone(browser);
+  const phone = await aPhone(browser, seed.seededAt);
   await phone.page.goto(path);
   await signInOnThePage(phone.vendorPage, seed.marketId, vendor);
 
@@ -210,7 +217,7 @@ test('a code scanned before one vendor asked to sign in checks in no other vendo
   const seed = await aMarketOnItsDay(request, [scanner, next]);
   const { path } = await makeDoorCode(request, seed.marketId);
 
-  const phone = await aPhone(browser);
+  const phone = await aPhone(browser, seed.seededAt);
   const checkIns = checkInsSentBy(phone.page);
   await phone.page.goto(path);
   await expect(phone.vendorPage.doorCodeHeld).toBeVisible();
@@ -239,7 +246,7 @@ test('a code held through a sign-in that ran out checks in no other vendor', asy
   const seed = await aMarketOnItsDay(request, [scanner, next]);
   const { path } = await makeDoorCode(request, seed.marketId);
 
-  const phone = await aPhone(browser);
+  const phone = await aPhone(browser, seed.seededAt);
   const checkIns = checkInsSentBy(phone.page);
   await phone.vendorPage.goto(seed.marketSlug);
   await signInOnThePage(phone.vendorPage, seed.marketId, scanner);
@@ -282,13 +289,13 @@ test('a vendor is shown the seat stored for them, after a swap', async ({ browse
   };
   const before = await stored();
   const swapped = await request.post(`${BACKEND_URL}/markets/${seed.marketId}/placements/swap`, {
-    data: { emails: vendors, date: TODAY },
+    data: { emails: vendors, date: seed.onTheDay },
   });
   expect(swapped.ok(), await swapped.text()).toBeTruthy();
   const after = await stored();
   expect(after[vendors[0]]).toBe(before[vendors[1]]);
 
-  const phone = await aPhone(browser);
+  const phone = await aPhone(browser, seed.seededAt);
   await phone.vendorPage.goto(seed.marketSlug);
   await signInOnThePage(phone.vendorPage, seed.marketId, vendors[0]);
   await expect(phone.vendorPage.todayCard).toContainText(after[vendors[0]]);
@@ -313,7 +320,7 @@ test('nobody checks in at the old public check-in page, which is gone', async ({
     ['delete', `/public/markets/${seed.marketSlug}/attendance/checkin`],
   ] as const) {
     const answer = await request[method](`${BACKEND_URL}${path}`, {
-      data: { vendorEmail: vendor, date: TODAY },
+      data: { vendorEmail: vendor, date: seed.onTheDay },
     });
     expect(answer.status(), `${method} ${path}`).toBe(404);
   }
@@ -322,13 +329,16 @@ test('nobody checks in at the old public check-in page, which is gone', async ({
   const { code } = await makeDoorCode(request, seed.marketId);
   const signedOut = await request.post(
     `${BACKEND_URL}/public/markets/${seed.marketSlug}/vendor/check-in`,
-    { data: { date: TODAY, doorCode: code } },
+    { data: { date: seed.onTheDay, doorCode: code } },
   );
   expect(signedOut.status()).toBe(401);
   const token = await vendorToken(request, BACKEND_URL, seed.marketSlug, seed.marketId, vendor);
   const signedIn = await request.post(
     `${BACKEND_URL}/public/markets/${seed.marketSlug}/vendor/check-in`,
-    { data: { date: TODAY, doorCode: code }, headers: { Authorization: `Bearer ${token}` } },
+    {
+      data: { date: seed.onTheDay, doorCode: code },
+      headers: { Authorization: `Bearer ${token}` },
+    },
   );
   expect(signedIn.ok(), await signedIn.text()).toBeTruthy();
 });

@@ -174,6 +174,8 @@ So a read that fetches too little, or a write the server would apply otherwise, 
 Shared module stubs live in `back-end/tests/conftest.py`, which also points the `.env` loader at a path that does not exist.
 The suite reads no `.env`, so a stale one on your machine cannot change its result.
 It turns `ALLOW_INSECURE_LOCAL_DEV` on unless the shell set it, and clears `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` before any test runs, so a shell that exported a stack's switches cannot change its result either; a test that needs a switch sets it itself, and `test_the_suite_reads_no_switch_from_its_shell.py` keeps that true.
+It clears `MONGODB_URI`, `MONGODB_HOST` and the other `MONGODB_*` variables the back end connects by, and names a port nothing listens on in their place, so a test that reaches a collection no fake stands in for fails at server selection instead of reaching the database a shell exported; a test that needs one sets it itself, and `test_the_suite_reads_no_database_from_its_shell.py` keeps that true.
+The real-MongoDB suite below reads `REAL_MONGODB_URI` instead, which this leaves alone.
 It hashes every password at bcrypt's lowest cost, 4, where the app hashes at flask-bcrypt's default of 12, since a hash at 12 takes about 0.16 s and the tests that sign in make many: `back-end/tests/conftest.py` lowers it on flask-bcrypt's `Bcrypt` class before any module makes its own, so it holds for the app's and `create_account.py`'s, and for the stand-in hash an address with no account is checked against; `create_test_user.py` hashes its fixture accounts at 4 itself.
 `test_the_app_hashes_at_bcrypts_full_cost.py` holds the app and `create_account.py` to 12 outside that lowering, in a fresh interpreter, and the app's config to no `BCRYPT_LOG_ROUNDS`.
 
@@ -354,10 +356,13 @@ plus the organization-less user `e2e-noorg@example.com` (change via `NO_ORG_EMAI
 
 ### When a test fails
 
-Every attempt that fails keeps its Playwright trace, and so does every retry, passing or not (`trace: 'retain-on-failure-and-retries'`), so a local run with no retries keeps one too.
+Every attempt that fails keeps its Playwright trace, and on CI so does every retry, passing or not (`trace: 'retain-on-failure-and-retries'`), so a local run with no retries keeps one too.
+A local run keeps an attempt's output directory only when the attempt fails (`preserveOutput: 'failures-only'` off CI), so a passing attempt there leaves nothing behind: neither a passing retry's trace nor the screenshots a spec takes itself with `testInfo.outputPath()`; CI keeps every attempt's (`'always'`).
+To keep every attempt's output on a local run, set `CI=1`, which also turns on CI's retries, `forbidOnly`, `failOnFlakyTests` and its reporters.
+Warning: `CI=1` also turns off the suite's refusal to guess a stack (`e2e/helpers/stack.ts`), so with no treehouse slot and no exported stack the run dials the primary stack's ports: set it only where a slot or the `th-compose.sh` exports name the stack, or in the primary checkout for its own stack.
 A failed attempt's trace is `front-end/test-results/<test>/trace.zip`, and a retry's is in the same name's directory with `-retry1` or `-retry2` after it; a page of a second user's context (`withUser()`) is in the same trace as the test's own page.
-A failed attempt also keeps its video (`video.webm`) and its final screenshot (`test-failed-1.png`) beside its trace, and an attempt that passes keeps neither (`video: 'retain-on-failure'`, `screenshot: 'only-on-failure'`), so a flaky test's failed first attempt has both while its passing retry has only its trace.
-Open one with `npx playwright show-trace <path>` from `front-end/`, or from the HTML report (`npx playwright show-report`), which lists every attempt with its own trace.
+A failed attempt also keeps its video (`video.webm`) and its final screenshot (`test-failed-1.png`) beside its trace, and an attempt that passes keeps neither (`video: 'retain-on-failure'`, `screenshot: 'only-on-failure'`), so on CI a flaky test's failed first attempt has both while its passing retry has only its trace.
+Open one with `npx playwright show-trace <path>` from `front-end/`, or from the HTML report (`npx playwright show-report`), which lists every attempt; on CI each has its own trace there, while on a local run only a failed attempt's opens, since a passing retry's trace file was removed when the retry passed.
 On CI a failed shard uploads `front-end/playwright-report/` and `front-end/test-results/` as the artifact `playwright-artifacts-shard-<n>`, kept 7 days; a flaky test fails its shard, so its failing attempt's trace is there too ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)).
 A rerun empties `test-results/` before it starts, so read or copy a failure's output first, or give the rerun an output directory of its own with `--output=<a new directory>`.
 Reproducing a flake under load is [chasing a flake](implementation/testing/e2e-patterns.md#chasing-a-flake).

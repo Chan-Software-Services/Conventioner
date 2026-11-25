@@ -26,6 +26,12 @@ test.beforeAll(async ({ request }) => {
   });
 });
 
+// Held at the seed's instant: a run that passes midnight would open the map on the seed's next
+// day, where other vendors sit at other tables.
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(seeded.seededAt);
+});
+
 type Box = { x: number; y: number; width: number; height: number };
 const boxOf = async (locator: Locator): Promise<Box> => (await locator.boundingBox())!;
 const centreX = (box: Box) => box.x + box.width / 2;
