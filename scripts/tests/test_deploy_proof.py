@@ -36,7 +36,11 @@ RUNS = "/repos/owner/repo/actions/workflows/test.yml/runs"
 DROP = "drop"
 FAST = ["--timeout", "0.4", "--interval", "0.02"]
 
-BACKEND_HEADERS = {"X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"}
+BACKEND_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
+}
 FRONTEND_HEADERS = {
     "Content-Security-Policy": "default-src 'self'",
     "X-Content-Type-Options": "nosniff",
@@ -467,7 +471,7 @@ def test_a_staged_back_end_that_keeps_failing_names_its_last_answer(stub, env):
     ]
 
 
-@pytest.mark.parametrize("missing", ["X-Content-Type-Options", "Referrer-Policy"])
+@pytest.mark.parametrize("missing", list(BACKEND_HEADERS))
 def test_a_staged_back_end_missing_a_header_is_refused_by_name(stub, env, missing):
     headers = {name: value for name, value in BACKEND_HEADERS.items() if name != missing}
     stub.serve("/healthz", healthz(headers=headers))

@@ -24,9 +24,13 @@ from utils.configured_secret import PUBLISHED_VALUES
 from utils.deployment import INSECURE_LOCAL_DEV_VAR
 from utils.secret_key import (
     MINIMUM_SECRET_LENGTH,
+    ORGANIZER_SESSIONS,
     SECRET_KEY_VAR,
+    VENDOR_TOKENS,
     SecretKeyNotConfiguredError,
+    derived_key,
     signing_secret,
+    vendor_token_key,
 )
 
 PUBLISHED_FALLBACK = "TEMP_KEY_CHANGE_IN_PRODUCTION"
@@ -204,3 +208,41 @@ class TestAnOptedInLocalDevMachine:
 
         assert INSECURE_LOCAL_DEV_VAR in caplog.text
         assert SECRET_KEY_VAR in caplog.text
+
+
+class TestEachSignerHasItsOwnKey:
+    """An organizer's session and a vendor's token are each signed with a key of their own, derived
+    from the one ``SECRET_KEY``, so what one signs is never good to the other, and there is still
+    only one secret to set."""
+
+    def test_the_keys_differ_from_each_other_and_from_the_secret(self):
+        sessions = derived_key(A_REAL_SECRET, ORGANIZER_SESSIONS)
+        tokens = derived_key(A_REAL_SECRET, VENDOR_TOKENS)
+
+        assert len({sessions, tokens, A_REAL_SECRET}) == 3
+
+    def test_a_key_is_the_same_for_the_same_secret(self):
+        """Every instance of a deployment derives it, so each must derive the same one."""
+        assert derived_key(A_REAL_SECRET, VENDOR_TOKENS) == derived_key(A_REAL_SECRET, VENDOR_TOKENS)
+
+    def test_another_secret_gives_another_key(self):
+        """Rotating ``SECRET_KEY`` rotates every key derived from it."""
+        other = A_REAL_SECRET[::-1]
+
+        assert derived_key(other, ORGANIZER_SESSIONS) != derived_key(A_REAL_SECRET, ORGANIZER_SESSIONS)
+        assert derived_key(other, VENDOR_TOKENS) != derived_key(A_REAL_SECRET, VENDOR_TOKENS)
+
+    def test_a_key_is_as_long_as_the_hash_it_comes_from(self):
+        assert len(bytes.fromhex(derived_key(A_REAL_SECRET, VENDOR_TOKENS))) == 32
+
+    def test_the_vendor_token_key_is_derived_from_the_configured_secret(self, monkeypatch, deployed):
+        monkeypatch.setenv(SECRET_KEY_VAR, A_REAL_SECRET)
+
+        assert vendor_token_key() == derived_key(A_REAL_SECRET, VENDOR_TOKENS)
+
+    def test_the_vendor_token_key_refuses_as_the_secret_does(self, monkeypatch, deployed):
+        """It is read through ``signing_secret``, so a deployment with no secret signs no token."""
+        monkeypatch.delenv(SECRET_KEY_VAR, raising=False)
+
+        with pytest.raises(SecretKeyNotConfiguredError):
+            vendor_token_key()

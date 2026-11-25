@@ -10,3 +10,7 @@ b2da9299e0d4f1cc71318435aad3f9d5b9556124:back-end/tests/test_the_code_mail_carri
 # A fixture wrong password a test sends to /login, no secret.
 77ec3fcf28daddad9fa95ffb28dbe958c16810b4:back-end/tests/test_the_remember_cookie.py:generic-api-key:646
 77ec3fcf28daddad9fa95ffb28dbe958c16810b4:back-end/tests/test_the_remember_cookie.py:generic-api-key:749
+
+# The fixture signing secret test_application_token.py sets as SECRET_KEY, which dev's copy of
+# that test passed inline and this commit named as a constant; it is no secret.
+277ba8e86a4ac52d05629084f6dd2cc3c7a98b96:back-end/tests/test_application_token.py:generic-api-key:14

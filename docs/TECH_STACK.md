@@ -96,7 +96,7 @@ How each part of the code works is in the implementation layer of the [knowledge
 ### Utilities
 
 - **Python's `secrets`** - Email verification and password reset links, and sign-in codes, each stored only as its hash (`back-end/account_secrets.py`)
-- **PyJWT 2.15** - The applicant's sign-in token, signed with `SECRET_KEY`
+- **PyJWT 2.15** - The applicant's sign-in token, signed with its own key derived from `SECRET_KEY`
 - **Cryptography 50** - Lets the local stack's `flask run --cert=adhoc` make its certificate; no module imports it
 - **Requests 2.34** - HTTP library
   - Used for reCAPTCHA verification API calls
@@ -327,7 +327,7 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 - **CAPTCHA Protection**: reCAPTCHA v3 on registration
 - **Rate Limiting**: every sign-in, code, reset-link, verification-link and sign-up request is counted in the database before the account is looked up, per address and per caller, and an invitation per inviter and per address, with the limits in one table (`LIMITS` in `back-end/sign_in_limits.py`); a try that signs in, and an invitation accepted, is taken back; OTP and password reset requests also wait on the last
 - **Token Expiration**: Time-limited tokens for verification and reset
-- **Secure Sessions**: HTTP-only, `Secure`, `SameSite=Lax` cookies, signed with a `SECRET_KEY` that has no fallback
+- **Secure Sessions**: HTTP-only, `Secure`, `SameSite=Lax` cookies, signed with a key derived from a `SECRET_KEY` that has no fallback
 - **CORS Protection**: An explicit origin allowlist (`CORS_ALLOWED_ORIGINS`); `*` is refused, because the session cookie is credentialed
 - **Boot-Time Defenses**: The app refuses to start unless every variable its public surface rests on is configured (see [RELEASING.md](./RELEASING.md#pre-deploy-required-production-environment))
 - **Input Validation**: Pydantic models for type safety
@@ -341,7 +341,7 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 - `FROM_EMAIL` - Email address to send from. **Required**: outside the hatch the app refuses to boot without it or with Resend's shared `onboarding@resend.dev`, the default under the hatch
 - `RECAPTCHA_SECRET_KEY` - Google reCAPTCHA v3 secret key. **Required**: the app refuses to boot without it
 - `CORS_ALLOWED_ORIGINS` - Comma-separated browser origins allowed to make credentialed requests (e.g., `https://app.example.com`). **Required**: the app refuses to boot without it, and `*` is refused
-- `SECRET_KEY` - Signs the Flask session cookie. **Required**: there is no fallback, and the app refuses to boot without it. Must be at least 32 characters, and every value this repository has published (the old `TEMP_KEY_CHANGE_IN_PRODUCTION` fallback, the env-template and deploy-guide placeholders) is refused by name - it is readable by anyone who can read the repo. Rotating it ends every session signed with the old key
+- `SECRET_KEY` - Every signing key is derived from it: the Flask session cookie's, and the vendor's sign-in token's. **Required**: there is no fallback, and the app refuses to boot without it. Must be at least 32 characters, and every value this repository has published (the old `TEMP_KEY_CHANGE_IN_PRODUCTION` fallback, the env-template and deploy-guide placeholders) is refused by name - it is readable by anyone who can read the repo. Rotating it ends every session signed with the old key
 - `TRUSTED_PROXY_HOPS` - How many proxies of this deployment's own a request passes through before it reaches Flask (Vercel: `1`; Flask exposed directly: `0`). **Required**: there is no default, because unset is not zero but unknown. It decides whose address organizer signup reports to reCAPTCHA, which scores on it - behind an unnamed ingress that is the ingress's address, for every caller in the world
 - `ALLOW_INSECURE_LOCAL_DEV` - Local-development escape hatch for the [boot requirements](./RELEASING.md#pre-deploy-required-production-environment) (default OFF; set `true`/`1`). Never set it on a deployment: a back end that sees a platform variable (`VERCEL`, `VERCEL_ENV`, `VERCEL_REGION`, `AWS_LAMBDA_FUNCTION_NAME`) refuses to boot with it, or with any of the three test flags below, on
 - `DISABLE_CAPTCHA` - Test-only flag to skip reCAPTCHA verification (default OFF; set `true`/`1`). Honored only when `ALLOW_INSECURE_LOCAL_DEV` is also set

@@ -203,7 +203,12 @@ The remember cookie's `__Host-` prefix holds it to the API's host, as the vendor
 
 **A sign-in is kept on the server** ([ADR 0029](../../adr/0029-an-organizers-sign-in-is-kept-on-the-server.md)): the remember cookie and the session (in its cookie, or on disk behind the cookie's random id) carry a random secret, and `organizer_sessions` keeps only its SHA-256, beside the account, its login id and when the sign-in ends, so a copy of the database signs nobody in ([a sign-in is kept on the server](../data/users-and-email.md#a-sign-in-is-kept-on-the-server)).
 Sign out ends the browser's sign-in there, so a copy of its cookies stops working too; a new sign-in in the browser ends the one it held; Sign out everywhere and a password reset, which each replace the login id, and deleting the account end every one of the account's.
-The browser cannot change what it carries either way: the session is signed into its cookie with `SECRET_KEY`, or kept on the server behind a random id, and the remember cookie is signed with `SECRET_KEY` by Flask-Login's digest.
+The browser cannot change what it carries either way: the session is signed into its cookie, or kept on the server behind a random id, and the remember cookie is signed by Flask-Login's digest, each with the app's `SECRET_KEY` config.
+
+**Each signer has a key of its own, derived from the one `SECRET_KEY`** ([`derived_key()`](../../../back-end/utils/secret_key.py)): HMAC-SHA256 of the signer's name, keyed with the secret.
+The organizer's session and remember cookies take the `ORGANIZER_SESSIONS` key, which `configure_public_endpoint_defenses()` installs as the app's `SECRET_KEY` config, and a vendor's sign-in token the `VENDOR_TOKENS` key (`vendor_token_key()`, in [`application_token.py`](../../../back-end/utils/application_token.py)); nothing signs with the secret as it is.
+So a value one signs is never good to the other, and there is still one secret to set and rotate: rotating it rotates both keys, signing every organizer out and ending every vendor's token.
+[`test_secret_key.py`](../../../back-end/tests/test_secret_key.py) pins the derivation, [`test_application_token.py`](../../../back-end/tests/test_application_token.py) refuses a token signed with the secret or the session key, and [`test_public_endpoint_defenses.py`](../../../back-end/tests/test_public_endpoint_defenses.py) reads the installed key.
 
 **Every sign-in starts a fresh session, in both stores**, so no session cookie issued before a sign-in by password or by code carries the new sign-in: `start_a_fresh_session` in [`utils/session_storage.py`](../../../back-end/utils/session_storage.py) empties the session at such a sign-in (`_sign_in`), after the browser's earlier sign-in is ended.
 When a remember cookie signs the browser back in, it empties the session that request sent the same way (`hold_a_restored_session_to_its_browser`, which keeps only what the restore wrote); the sign-in restored is the one the remember cookie names, unchanged.
@@ -302,10 +307,12 @@ VITE_ALLOW_INSECURE_LOCAL_DEV=true npm run build-only && VITE_BACKEND_URL="https
 `VITE_ALLOW_INSECURE_LOCAL_DEV` lets the build go without a site key ([the front end's half](#the-front-ends-half)); sign in at the address the preview prints.
 [`securityHeaders.test.ts`](../../../front-end/src/__tests__/securityHeaders.test.ts) pins the headers and the policy's shape, and that `vite preview` serves them on the root and a deep link; the Deploy workflow checks that the staged front end sends every one before it is promoted, and that `conventioner.io` does once it serves the new commit.
 
-**Every API answer carries `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`**, added by one `after_request`, [`install_security_headers()`](../../../back-end/utils/security_headers.py), so a route added later, an error answer and a CORS preflight carry them without doing anything.
+**Every API answer carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Strict-Transport-Security: max-age=63072000; includeSubDomains`**, added by one `after_request`, [`install_security_headers()`](../../../back-end/utils/security_headers.py), so a route added later, an error answer and a CORS preflight carry them without doing anything.
+The transport-security header is the front end's value, sent by the API itself so that its HTTPS-only stance does not rest on the `max-age=63072000` Vercel adds on its own.
+A browser ignores it on plain HTTP, on an IP address and over a certificate it does not trust, so the local stack, at `127.0.0.1` with a self-signed certificate, is untouched by it.
 The API answers JSON, a CSV export and floorplan images, never a page, so it sends no policy of its own.
 It is installed after the [error answers](an-exception-never-reaches-a-client.md), outside `configure_public_endpoint_defenses()`, because it depends on no configuration; it only adds headers, so it leaves the order of the defenses above, flask-cors's `after_request` among them, as it was.
-[`test_security_headers.py`](../../../back-end/tests/test_security_headers.py) reads both on a JSON answer, a 401, a 404 and a preflight that CORS still answers; the Deploy workflow checks `/healthz` for both on the staged back end before it is promoted, and on `api.conventioner.io` once it serves the new commit.
+[`test_security_headers.py`](../../../back-end/tests/test_security_headers.py) reads all three on a JSON answer, a 401, a 404 and a preflight that CORS still answers; the Deploy workflow checks `/healthz` for all three on the staged back end before it is promoted, and on `api.conventioner.io` once it serves the new commit.
 
 ## A mail carries a stranger's words only as words
 

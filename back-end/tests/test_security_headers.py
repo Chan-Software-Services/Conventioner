@@ -1,9 +1,10 @@
 """Every answer the API gives carries the standard security headers.
 
 ``X-Content-Type-Options: nosniff`` keeps a browser from reading a JSON answer as something it can
-run, and ``Referrer-Policy: no-referrer`` keeps the API's own addresses, which can carry a market's
-id, out of anything it links to. One ``after_request`` adds them, so a route added later, an error
-answer and a CORS preflight carry them without doing anything.
+run, ``Referrer-Policy: no-referrer`` keeps the API's own addresses, which can carry a market's id,
+out of anything it links to, and ``Strict-Transport-Security`` keeps a browser on HTTPS to the API.
+One ``after_request`` adds them, so a route added later, an error answer and a CORS preflight carry
+them without doing anything.
 """
 
 import pytest
@@ -43,6 +44,7 @@ def test_the_headers_are_the_standard_ones():
     assert SECURITY_HEADERS == {
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "no-referrer",
+        "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
     }
 
 

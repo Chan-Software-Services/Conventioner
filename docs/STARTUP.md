@@ -5,7 +5,7 @@ describes:
   - docker-compose.yml
   - back-end/.env.example
   - front-end/.env.example
-verified: 2026-11-13
+verified: 2026-11-25
 sources:
   - T251
   - T263
