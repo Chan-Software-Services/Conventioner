@@ -25,7 +25,8 @@ _POINTS_PER_INCH = 72
 
 
 class UnreadablePdf(Exception):
-    """The bytes are not a PDF PDFium can open, or it drew none of its pages."""
+    """The bytes are not a PDF PDFium can open, or it drew none of its pages. Its message is always
+    this module's own sentence, never PDFium's, since the route logs it."""
 
 
 class TooManyPages(Exception):
@@ -85,7 +86,9 @@ def _render_pages_as_png(
         try:
             document = pdfium.PdfDocument(pdf_bytes)
         except pdfium.PdfiumError as e:
-            raise UnreadablePdf(str(e)) from e
+            # Our sentence, naming only the error's type: its message is PDFium's words, and the
+            # route logs this one (ADR 0049).
+            raise UnreadablePdf(f"PDFium could not open it ({type(e).__name__})") from e
         try:
             if max_pages is not None and len(document) > max_pages:
                 raise TooManyPages(f"{len(document)} pages")
