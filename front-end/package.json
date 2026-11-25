@@ -25,6 +25,7 @@
     "lint:css": "stylelint --max-warnings 0 \"src/**/*.{css,vue}\""
   },
   "dependencies": {
+    "@sentry/browser": "^11.17.0",
     "@vueuse/core": "^15.0.0",
     "axios": "^1.21.0",
     "pinia": "^4.1.0",

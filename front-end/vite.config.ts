@@ -107,6 +107,51 @@ function deployedHeaders(): Record<string, string> {
   return Object.fromEntries((everyPath?.headers ?? []).map(({ key, value }) => [key, value]));
 }
 
+/** Whether the policy source `source`, of a `connect-src` list, allows an HTTPS request to `host`. */
+function sourceAllowsHost(source: string, host: string): boolean {
+  const match = /^https:\/\/([^/:]+)\/?$/.exec(source);
+  if (!match) return false;
+  const allowed = match[1]!.toLowerCase();
+  if (allowed.startsWith('*.')) return host.endsWith(allowed.slice(1));
+  return host === allowed;
+}
+
+/**
+ * Refuse an error tracker DSN the browser could not send to (T584).
+ *
+ * `VITE_SENTRY_DSN` is optional: blank, the bundle has no Sentry chunk and tracking is off. Set, it
+ * must be a Sentry DSN, and its host one the policy's `connect-src` in `vercel.json` allows, read as
+ * `vite preview` reads it, an exact host or a `*.` pattern matched as the policy matches one;
+ * otherwise every event would be refused by the policy, and nothing would say why. So the
+ * mistake fails the build, naming the variable. There is no hatch: a blank one builds.
+ */
+function assertErrorTrackerDsn(env: Record<string, string>) {
+  const dsn = env.VITE_SENTRY_DSN?.trim();
+  if (!dsn) return;
+  const parts = /^https:\/\/[A-Za-z0-9]+@([A-Za-z0-9.-]+)\/\d+$/.exec(dsn);
+  if (!parts) {
+    throw new Error(
+      'VITE_SENTRY_DSN is not a Sentry DSN (https://<key>@<host>/<project id>). Copy it from the ' +
+        "front-end Sentry project's Client Keys page, or leave it blank to build with error " +
+        'tracking off.',
+    );
+  }
+  const host = parts[1]!.toLowerCase();
+  const policy = deployedHeaders()['Content-Security-Policy'] ?? '';
+  const connect =
+    policy
+      .split(';')
+      .map((directive) => directive.trim().split(/\s+/))
+      .find(([name]) => name === 'connect-src')
+      ?.slice(1) ?? [];
+  if (connect.some((source) => sourceAllowsHost(source, host))) return;
+  throw new Error(
+    `VITE_SENTRY_DSN names the host ${host}, which the Content-Security-Policy's connect-src in ` +
+      'vercel.json does not allow, so the browser would refuse every event. Use a DSN of a ' +
+      'project in the region connect-src allows, or add its ingest host there.',
+  );
+}
+
 /**
  * vuedraggable's own ES source, which it publishes beside its builds. Its builds are webpack UMD
  * bundles carrying core-js, whose global lookup runs `Function('return this')()`: a string
@@ -209,6 +254,7 @@ export default defineConfig(({ command, mode }) => {
     assertNoLocalHatchOnVercel(env);
     assertCaptchaSiteKey(env);
     assertApiHost(env);
+    assertErrorTrackerDsn(env);
   }
 
   return {

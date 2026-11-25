@@ -73,6 +73,8 @@ describe('the headers vercel.json sends on every path', () => {
       "'self'",
       'https://api.conventioner.io',
       'https://www.google.com/recaptcha/',
+      // The front end's error tracker, in Sentry's US region (ADR 0049).
+      'https://*.ingest.us.sentry.io',
     ]);
     expect(policy().get('frame-src')).toEqual([
       'https://www.google.com/recaptcha/',
