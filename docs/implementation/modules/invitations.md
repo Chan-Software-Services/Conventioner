@@ -168,7 +168,7 @@ Any other id, one past its end, withdrawn, declined, accepted, or whose market i
 8. Its limit counts taken back.
 
 The claim comes before the role is written, so a withdrawn invitation gives nothing; a cut between the claim and the write loses the invitation, and the person is invited again.
-Of two accepts at once, one claims and writes and the other finds the invitation gone.
+Of two accepts at once, one claims and writes, and the other finds the invitation gone or the role written.
 
 **Declining** (`decline_market_invitation`) ends the invitation, writing nothing on the market, and records `invitation_declined` through the unasked door `AN_INVITEE_ANSWERS`, under the row that gives its role, its actor the invitee's address: the invitee holds no role, and their sign-in with the invited address is the check.
 A declined invitation keeps its limit counts.
