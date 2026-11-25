@@ -75,7 +75,7 @@ Two upserts that both match nothing race on the unique index; the refused one is
 
 **Every read asks for one still waiting**, `expires_at` after now, since the TTL monitor removes a document up to a minute late: `waiting_for` (a target's list, newest `sent_at` first), `waiting` (one by id on its target), `waiting_for_address` (an invitee's list, newest first) and `addressed` (one by id and address, which raises `InvitationEnded` for any other).
 
-**An answered invitation ends**: `end` deletes it by id and address, on an accept, a decline, or once it can no longer be accepted.
+**An answered invitation ends**: `end` deletes it by id and address, on a decline or once it can no longer be accepted; a successful accept claims it instead (`claim`, step 5 below).
 An accepted one's two limit counts are taken back (`take_back`) in the window of its `counted_at`, read as UTC since the driver hands a stored time back without its zone, so only invitations nobody accepts pile up against the limits.
 
 **A withdrawal holds the role it read**: `withdraw` deletes by id, target and role, so an invitation sent again to another role between the read and the delete is left, and the withdrawal answers 409 `CHANGED_MEANWHILE`; one gone meanwhile answers 404 `ALREADY_ENDED`, "That invitation has already ended."

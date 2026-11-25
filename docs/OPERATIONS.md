@@ -396,7 +396,8 @@ The back end checks the database as it starts and refuses to serve one it cannot
 - one account per address, `user_email` ([`api/users.py`](../back-end/api/users.py));
 - one attendance record per vendor's day, `attendance_vendor_day_unique` ([`api/attendance.py`](../back-end/api/attendance.py), through [`unique_indexes.py`](../back-end/unique_indexes.py));
 - one owed record per vendor's day, `amounts_owed_vendor_day_unique` ([`payments.py`](../back-end/payments.py), through [`unique_indexes.py`](../back-end/unique_indexes.py));
-- one payment per press of Record, `payments_request_key_unique` ([`payments.py`](../back-end/payments.py), through [`unique_indexes.py`](../back-end/unique_indexes.py)).
+- one payment per press of Record, `payments_request_key_unique` ([`payments.py`](../back-end/payments.py), through [`unique_indexes.py`](../back-end/unique_indexes.py));
+- one invitation per address and target, `invitation_target_email_unique` ([`invitations.py`](../back-end/invitations.py), through [`unique_indexes.py`](../back-end/unique_indexes.py)).
 
 It refuses too when it cannot build the indexes an organizer's sign-ins rest on, in `organizer_sessions` ([`organizer_sessions.py`](../back-end/organizer_sessions.py)), which carry no unique rule.
 
@@ -461,6 +462,13 @@ This is not duplicates: the request key is the press of Record payment an entry 
 Read the database's answer in the refusal, its type and code: code 85 or 86 is an index of that name with other options or keys, to drop (`db.payments.dropIndex('payments_request_key_unique')`) before redeploying; anything else is the database's own trouble (reachability, the user's rights, Atlas's status).
 The index only stops an entry recorded twice by one press, so dropping it loses nothing, and the next boot builds it again.
 
+**"The unique index invitation_target_email_unique on invitations ... could not be built ... Records sharing one address's invitation to one target, by target_kind, target_id and record id: ..."**.
+Two invitations to one address for one target stored two records, so one withdrawal could leave the other to be accepted ([invitations](implementation/modules/invitations.md#the-store)).
+The refusal names each target holding two, never the address.
+Take a `mongodump` first, then in each group keep the record with the latest `sent_at` and delete the others by `_id` (`db.invitations.deleteOne({_id: ObjectId('<id>')})`).
+Then redeploy, or restart the local back end.
+Code 85 or 86 is an index of that name with other options or keys, to drop (`db.invitations.dropIndex('invitation_target_email_unique')`) before redeploying.
+
 **"The indexes on applicant_login_challenges, sign_in_attempts and vendor_remembered_sign_ins could not be built"**.
 The log names Mongo's error by its type and code only, never its words, since a duplicate key error quotes a vendor's address: code 11000 is duplicate challenges, and 85 or 86 an index of the same name with other options or keys.
 These are applicants' sign-in codes, used once and expiring within ten minutes, and the sign-in rate-limit counters, which last fifteen, so nothing lasting is lost by clearing them: drop a conflicting index of the same name (`db.applicant_login_challenges.dropIndex('<name>')`, `db.sign_in_attempts.dropIndex('<name>')`), or remove duplicate challenges (`db.applicant_login_challenges.deleteMany({})`), then redeploy.
@@ -469,6 +477,11 @@ The third holds vendors' remembered sign-ins ("Remember me" on the vendor page);
 **"Could not build the indexes on organizer_sessions"**.
 The log names Mongo's error by its type and code only: 85 or 86 is an index of the same name with other options or keys, or another index on `expires_at` without the expiry, which the TTL index cannot stand beside.
 The collection holds organizers' sign-ins ([ADR 0029](adr/0029-an-organizers-sign-in-is-kept-on-the-server.md)), and its indexes are the TTL index `organizer_session_ttl` on `expires_at` and `organizer_session_user` on `user_id`, so drop the conflicting index (`db.organizer_sessions.dropIndex('<name>')`) and keep the documents, then redeploy; anything else is the database's own trouble (reachability, the user's rights, Atlas's status).
+
+**"Could not build the indexes on invitations"**.
+The log names Mongo's error by its type and code only, and the refusal says that without the indexes an ended invitation is never removed and an invitee's list scans every invitation.
+The indexes are `invitation_email` on `email`, which the invitee's list reads by, and the TTL index `invitation_ttl` on `expires_at` ([invitations](implementation/modules/invitations.md#the-store)).
+Code 85 or 86 is an index of the same name with other options or keys, or another index on `expires_at` without the expiry: drop the conflicting index (`db.invitations.dropIndex('<name>')`) and keep the documents, then redeploy; anything else is the database's own trouble.
 
 **"Refusing to start: ... are not as a deployment needs them"**, naming variables.
 A configuration refusal, not a database one: set each variable it names ([RELEASING.md](RELEASING.md#pre-deploy-required-production-environment)), remove each local-development switch it names ([a deployed host refuses local switches](RELEASING.md#a-deployed-host-refuses-local-switches)), and redeploy.
