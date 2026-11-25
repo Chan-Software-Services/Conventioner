@@ -609,7 +609,7 @@ jobs:
 
   # The e2e tests that passed only on a retry over dev's last 20 Test runs that ran the shards, its
   # merge queue's among them (scripts/e2e_retries.py), as this job's summary, on a nightly or
-  # hand-started run alone. 20 runs are about 250 of the 1,000 API requests an hour the run's token
+  # hand-started run alone. 20 runs are about 150 of the 1,000 API requests an hour the run's token
   # may make for the repository, which the other runs' reads share; a rate limit stops the walk.
   # A test that passes only on a retry fails its shard (failOnFlakyTests), so its run went red and
   # was run or queued again; this gathers which tests did it, across runs.
