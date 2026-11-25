@@ -5,6 +5,7 @@ import {
   transitionMarket,
 } from './helpers/seedPhaseMarket';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { withUser } from './helpers/withUser';
 import { ApplicationMonitorPage } from './pages/ApplicationMonitorPage';
 
@@ -36,10 +37,7 @@ test.beforeAll(async ({ request }) => {
   seedApplicationWithStatus(marketId, 'open', 'ana@thistle.test', {
     essential_full_name: 'Ana Rivera',
   });
-  const res = await request.post(`${BACKEND_URL}/markets/${marketId}/roles`, {
-    data: { user_email: EDITOR.email, role: 'editor' },
-  });
-  expect(res.ok(), await res.text()).toBeTruthy();
+  await grantMarketRole(request, marketId, EDITOR, 'editor');
 });
 
 test.use({ viewport: { width: 1440, height: 900 } });
