@@ -493,7 +493,7 @@ def test_a_report_with_no_results_file_is_named(stub, storage, env):
 
 @pytest.mark.parametrize(
     ("status", "body", "reason"),
-    [(503, b"{}", "503"), (200, b"not json", "JSONDecodeError"), (200, b'{"runs": []}', "KeyError")],
+    [(503, b"{}", "503"), (403, b"{}", "403"), (200, b"not json", "JSONDecodeError"), (200, b'{"runs": []}', "KeyError")],
 )
 def test_runs_it_could_not_list_fail_with_the_reason_and_no_report(stub, storage, env, status, body, reason):
     stub.serve(RUNS, status, body)
@@ -504,6 +504,67 @@ def test_runs_it_could_not_list_fail_with_the_reason_and_no_report(stub, storage
     assert stdout == ""
     assert stderr == f"GitHub's list of the Test runs could not be read ({reason}).\n"
     assert summary == f"GitHub's list of the Test runs could not be read ({reason}).\n"
+
+
+# GitHub's rate limit
+
+RATE_LIMITED = {"Content-Type": "application/json", "x-ratelimit-remaining": "0"}
+STOP_403 = "GitHub answered 403, its rate limit or a token that may not read Actions"
+STOP_429 = "GitHub answered 429, its rate limit"
+
+
+def test_a_rate_limit_on_a_run_s_artifacts_stops_the_walk_and_reports_what_it_read(stub, storage, env):
+    stub.serve(RUNS, 200, runs_page(a_run(9), a_run(8), a_run(7)))
+    shards(stub, storage, 9, FLAKY)
+    stub.serve(artifacts_path(8), 403, b'{"message": "API rate limit exceeded"}', RATE_LIMITED)
+    stub.serve(artifacts_path(7), 403, b'{"message": "API rate limit exceeded"}', RATE_LIMITED)
+
+    code, stdout, _, summary = run(env, "--runs", "5")
+
+    assert code == 0
+    assert stdout == summary
+    assert artifacts_path(7) not in stub.paths()
+    assert stdout == (
+        "### E2E tests that passed only on a retry\n"
+        "\n"
+        f"{header(1)}: 1 test passed only on a retry, in 1 of them.\n"
+        "\n"
+        "| Spec file | Test | Runs | Which |\n"
+        "| --- | --- | --- | --- |\n"
+        f"| `the-tabs.spec.ts` | The market frame › scrolls the tabs | 1 | [push to dev]({run_url(9)}) |\n"
+        "\n"
+        f"Stopped at [push to dev]({run_url(8)}): {STOP_403}, so the report holds only the runs before it.\n"
+    )
+
+
+def test_a_rate_limit_on_a_zip_stops_the_walk_and_drops_that_run(stub, storage, env):
+    stub.serve(RUNS, 200, runs_page(a_run(9), a_run(8), a_run(7)))
+    shards(stub, storage, 9, CLEAN)
+    shards(stub, storage, 8, FLAKY, CLEAN)
+    stub.serve(zip_path(8, 2), 429, b"{}", RATE_LIMITED)
+    shards(stub, storage, 7, FLAKY)
+
+    code, stdout, _, _ = run(env, "--runs", "5")
+
+    assert code == 0
+    assert artifacts_path(7) not in stub.paths()
+    assert f"{header(1)}: no test passed only on a retry.\n" in stdout
+    assert stdout.endswith(f"\nStopped at [push to dev]({run_url(8)}): {STOP_429}, so the report holds only the runs before it.\n")
+
+
+def test_a_rate_limit_on_a_later_page_of_runs_reports_what_the_pages_before_gave(stub, storage, env):
+    page_1 = [a_run(7)] + [a_run(1000 + n, event="pull_request") for n in range(99)]
+    stub.serve(RUNS, 200, runs_page(*page_1), page=1)
+    stub.serve(RUNS, 403, b'{"message": "API rate limit exceeded"}', RATE_LIMITED, page=2)
+    shards(stub, storage, 7, FLAKY)
+
+    code, stdout, stderr, _ = run(env, "--runs", "5")
+
+    assert code == 0
+    assert stderr == ""
+    assert f"{header(1)}: 1 test passed only on a retry, in 1 of them.\n" in stdout
+    assert "Only 1 of the 5" not in stdout
+    assert stdout.endswith(f"\nStopped at page 2 of GitHub's list of runs: {STOP_403}, so the report holds only the runs before it.\n")
 
 
 # The command line
@@ -530,13 +591,13 @@ def test_it_needs_the_repository_and_a_token(stub, env, missing):
     assert stub.requests == []
 
 
-def test_it_reads_fifty_runs_unless_told(stub, storage, env):
+def test_it_reads_twenty_runs_unless_told(stub, storage, env):
     stub.serve(RUNS, 200, runs_page(a_run(7)))
     shards(stub, storage, 7, CLEAN)
 
     _, stdout, _, _ = run(env)
 
-    assert "Only 1 of the 50 asked for was found.\n" in stdout
+    assert "Only 1 of the 20 asked for was found.\n" in stdout
 
 
 def test_without_a_summary_file_it_prints_alone(stub, storage, env):

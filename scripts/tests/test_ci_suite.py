@@ -865,7 +865,7 @@ def test_the_retry_report_runs_only_nightly_or_by_hand_reading_actions_and_never
     assert checkout["uses"].startswith("actions/checkout@")
     assert checkout["with"] == {"persist-credentials": "false"}
     assert report["env"] == {"GITHUB_TOKEN": "${{ github.token }}"}
-    assert report["run"] == "python3 scripts/e2e_retries.py --runs 50\n"
+    assert report["run"] == "python3 scripts/e2e_retries.py --runs 20\n"
 
 
 def test_only_a_nightly_or_hand_started_run_s_shards_record():

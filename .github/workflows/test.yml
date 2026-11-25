@@ -595,9 +595,10 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  # The e2e tests that passed only on a retry over dev's last 50 Test runs that ran the shards, its
+  # The e2e tests that passed only on a retry over dev's last 20 Test runs that ran the shards, its
   # merge queue's among them (scripts/e2e_retries.py), as this job's summary, on a nightly or
-  # hand-started run alone. A test that passes only on a retry fails its shard (failOnFlakyTests),
+  # hand-started run alone. 20 runs are about 250 of the 1,000 API requests an hour the run's token
+  # may make for the repository, which the other runs' reads share; a rate limit stops the walk. A test that passes only on a retry fails its shard (failOnFlakyTests),
   # so its run went red and was run or queued again; this gathers which tests did it, across runs.
   # It reads no `suite` word and needs no other job, reading only GitHub's API. No check requires
   # it, and it never fails the run.
@@ -618,7 +619,7 @@ jobs:
       - name: The e2e tests that passed only on a retry
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: python3 scripts/e2e_retries.py --runs 50
+        run: python3 scripts/e2e_retries.py --runs 20
 
   # The one check to require: it passes only when every shard did and the shards ran every spec
   # file exactly once, so the rules name a single job whatever the shard count becomes. It runs

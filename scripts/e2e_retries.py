@@ -7,7 +7,7 @@ nightly job `e2e-retries`.
 Under CI Playwright retries a failed test twice and sets `failOnFlakyTests`, so a test that passes
 only on a retry fails its shard and its run: a red trial commit is queued again, a red pull
 request's shard is run again, and the test is forgotten. This gathers them, over the newest N
-(50 unless told) Test runs on `dev` and its merge queue that ran the e2e shards:
+(20 unless told) Test runs on `dev` and its merge queue that ran the e2e shards:
 
 - a run counts when it completed, on a push to `dev`, a nightly or hand-started run on `dev`, or a
   trial commit of `dev`'s merge queue (an event `merge_group` whose head branch starts
@@ -17,6 +17,13 @@ request's shard is run again, and the test is forgotten. This gathers them, over
   is `flaky` passed only on a retry; a test is named by the spec file Playwright loaded and its
   title under that file, as Playwright joins it
 - GitHub's list of runs is read 100 at a time, ten pages at most
+- each counted run costs about a dozen requests of GitHub's API: its artifacts' list, a zip for each
+  of the ten shards, and the list of a run passed over, about one a merge (its warm push); 20 runs
+  are about 250, a quarter of the 1,000 an hour a run's GITHUB_TOKEN may make for the repository,
+  which the Test, Promote and Deploy runs' reads share
+- a 403 or a 429 (the rate limit, or a 403 for a token that may not read Actions, which every later
+  read would get too) stops the walk: the report holds the runs read before it and names where it
+  stopped; the run it stopped in is left out whole
 
 It writes the report, in Markdown, to stdout and, when GITHUB_STEP_SUMMARY is set, to the run's
 summary: each test with how many of the runs it passed only on a retry in, and a link to each run,
@@ -26,9 +33,10 @@ since a test may be missing from it.
 Every read goes through `github_runs.read`, fails closed with its reason and is never retried; an
 artifact's zip redirects to storage off GitHub's API, which is never sent the token. Needs
 GITHUB_REPOSITORY and GITHUB_TOKEN (a token that may read the repository's Actions, as `gh auth
-token` gives); GITHUB_API_URL defaults to https://api.github.com. Exit codes: 0 reported, 1 the
-list of runs could not be read, 2 a usage error, with nothing on stdout. Nothing printed holds the
-token.
+token` gives, whose own budget is 5,000 requests an hour); GITHUB_API_URL defaults to
+https://api.github.com. Exit codes: 0 reported, 1 the list of runs could not be read (past its
+first page a 403 or a 429 stops the walk instead), 2 a usage error, with nothing on stdout. Nothing
+printed holds the token.
 """
 import argparse
 import json
@@ -39,7 +47,12 @@ from typing import Dict, List, Optional, Tuple
 
 import github_runs
 
-DEFAULT_RUNS = 50
+DEFAULT_RUNS = 20
+#: The answers that stop the walk: GitHub's rate limit, or a token that may not read Actions.
+STOPS = {
+    "403": "GitHub answered 403, its rate limit or a token that may not read Actions",
+    "429": "GitHub answered 429, its rate limit",
+}
 PER_PAGE = 100
 MAX_PAGES = 10
 RESULTS = "results.json"
@@ -78,8 +91,8 @@ def link(run: dict) -> str:
 
 
 def runs_on_dev(api: str, repository: str, token: str):
-    """The completed runs on `dev` and its queue, newest first, page by page; yields `(None,
-    reason)` once and stops when a page could not be read."""
+    """The completed runs on `dev` and its queue, newest first, page by page, as `(run, None,
+    page)`; yields `(None, reason, page)` once and stops when a page could not be read."""
     for page in range(1, MAX_PAGES + 1):
 
         def parse(data):
@@ -96,11 +109,11 @@ def runs_on_dev(api: str, repository: str, token: str):
             {"status": "completed", "per_page": PER_PAGE, "page": page},
         )
         if reason:
-            yield None, reason
+            yield None, reason, page
             return
         listed, kept = answer
         for run in kept:
-            yield run, None
+            yield run, None, page
         if len(listed) < PER_PAGE:
             return
 
@@ -146,7 +159,13 @@ def plural(count: int, one: str, many: str) -> str:
     return f"{count} {one if count == 1 else many}"
 
 
-def render(asked: int, read: List[dict], tests: Dict[Tuple[str, str], List[dict]], unread: List[Tuple[dict, List[str]]]) -> str:
+def render(
+    asked: int,
+    read: List[dict],
+    tests: Dict[Tuple[str, str], List[dict]],
+    unread: List[Tuple[dict, List[str]]],
+    stopped: Optional[str],
+) -> str:
     lines = [HEADING, ""]
     if not read:
         lines.append("No Test run on `dev` or its merge queue that GitHub still lists ran the e2e shards.")
@@ -162,7 +181,7 @@ def render(asked: int, read: List[dict], tests: Dict[Tuple[str, str], List[dict]
             f"The last {counted} on `dev` and its merge queue that ran the e2e shards, "
             f"{dates[0]} to {dates[-1]}: {found}"
         )
-        if len(read) < asked:
+        if len(read) < asked and not stopped:
             verb = "was" if len(read) == 1 else "were"
             lines.append(f"Only {len(read)} of the {asked} asked for {verb} found.")
         if tests:
@@ -174,6 +193,8 @@ def render(asked: int, read: List[dict], tests: Dict[Tuple[str, str], List[dict]
     if unread:
         named = "; ".join(f"{link(run)}, {', '.join(parts)}" for run, parts in unread)
         lines += ["", f"Not wholly read, so a test may be missing: {named}."]
+    if stopped:
+        lines += ["", f"Stopped at {stopped}, so the report holds only the runs before it."]
     return "\n".join(lines) + "\n"
 
 
@@ -181,35 +202,47 @@ def report(asked: int, api: str, repository: str, token: str) -> Tuple[Optional[
     read: List[dict] = []
     tests: Dict[Tuple[str, str], List[dict]] = {}
     unread: List[Tuple[dict, List[str]]] = []
-    for run, reason in runs_on_dev(api, repository, token):
+    stopped = None
+    for run, reason, page in runs_on_dev(api, repository, token):
         if reason:
+            if page > 1 and reason in STOPS:
+                stopped = f"page {page} of GitHub's list of runs: {STOPS[reason]}"
+                break
             return None, reason
         artifacts, reason = shard_artifacts(api, repository, run, token)
+        if reason in STOPS:
+            stopped = f"{link(run)}: {STOPS[reason]}"
+            break
         if reason:
             unread.append((run, [f"its artifacts ({reason})"]))
             continue
         if not artifacts:
             continue
         missed = []
+        found: List[Tuple[str, str]] = []
         for artifact in artifacts:
             data, reason = github_runs.artifact_file(api, repository, artifact["id"], RESULTS, token)
+            if reason in STOPS:
+                break
             if reason is None:
                 try:
-                    found = retried(json.loads(data))
+                    found += retried(json.loads(data))
                 except (ValueError, KeyError, TypeError, AttributeError) as error:
                     reason = type(error).__name__
             if reason:
                 missed.append(f"`{artifact['name']}` ({reason})")
-                continue
-            for key in found:
-                if run not in tests.setdefault(key, []):
-                    tests[key].append(run)
+        if reason in STOPS:
+            stopped = f"{link(run)}: {STOPS[reason]}"
+            break
+        for key in found:
+            if run not in tests.setdefault(key, []):
+                tests[key].append(run)
         if missed:
             unread.append((run, missed))
         read.append(run)
         if len(read) == asked:
             break
-    return render(asked, read, tests, unread), None
+    return render(asked, read, tests, unread, stopped), None
 
 
 def whole_number(text: str) -> int:
