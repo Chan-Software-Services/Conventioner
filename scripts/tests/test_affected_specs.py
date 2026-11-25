@@ -604,6 +604,21 @@ class TestAFileNoRulePlaces:
         assert {row["score"] for row in rows.values()} == {0}
         assert rows["a.spec.ts"]["why"] == [f"{path} is not in the map"]
 
+    # Git quotes a name holding a quote even where it leaves other names alone.
+    @pytest.mark.parametrize("committed", [False, True])
+    def test_a_name_git_quotes_is_read_as_it_is(self, repo, committed):
+        path = 'front-end/src/assets/a"quote.css'
+        write(repo, {path: "changed\n"})
+        head = []
+        if committed:
+            git(repo, "add", "-A")
+            git(repo, "commit", "-qm", "the change")
+            head = ["--head", "HEAD"]
+        result = choose(repo, *head)
+        assert result["changed"] == [path]
+        assert set(chosen(result)) == {"a.spec.ts", "b.spec.ts", "c.spec.ts"}
+        assert chosen(result)["a.spec.ts"]["why"] == [f"{path} is not in the map"]
+
     @pytest.mark.parametrize(
         "path",
         [
@@ -1165,18 +1180,19 @@ class TestTheCiDecision:
         assert decision["why"] == "the test map could not be read from GitHub"
         assert decision["map"]["offline"] is True
 
-    def test_a_map_more_than_seven_days_old_cannot_slim_the_run(self, repo, tmp_path):
+    @pytest.mark.parametrize("days", [7, 8])
+    def test_a_map_more_than_seven_days_old_cannot_slim_the_run(self, repo, tmp_path, days):
         self.commit(repo, {"front-end/src/views/Door.vue": "<p />\n"})
-        env = self.gh_lists_a_map(repo, tmp_path, timedelta(days=8, hours=1))
+        env = self.gh_lists_a_map(repo, tmp_path, timedelta(days=days, hours=1))
         decision = self.decide(repo, env=env, fixture_map=False)
         assert decision["scope"] == "whole"
-        assert decision["why"] == "the newest test map is 8 days old"
+        assert decision["why"] == f"the newest test map is {days} days old"
         assert decision["specs"] == []
         assert decision["shards"] == 10
 
     def test_a_map_made_six_days_ago_slims_the_run(self, repo, tmp_path):
         self.commit(repo, {"front-end/src/views/Door.vue": "<p />\n"})
-        env = self.gh_lists_a_map(repo, tmp_path, timedelta(days=6))
+        env = self.gh_lists_a_map(repo, tmp_path, timedelta(days=6, hours=23))
         decision = self.decide(repo, env=env, fixture_map=False)
         assert decision["scope"] == "named"
         assert decision["specs"] == ["a.spec.ts"]
@@ -1245,7 +1261,7 @@ class TestTheCiDecision:
         self.commit(repo, {"front-end/src/App.vue": "<p />\n"})
         results = seconds_file(tmp_path, seconds)
         decision = self.decide(repo, "--results", str(results), max_shards=max_shards)
-        # Sorted by name, not by the selection's rank, which puts c.spec.ts first here.
+        # Sorted by name, whatever the selection ranks first.
         assert decision["specs"] == ["a.spec.ts", "b.spec.ts", "c.spec.ts"]
         assert decision["shards"] == shards
 
@@ -1254,7 +1270,16 @@ class TestTheCiDecision:
         results = seconds_file(tmp_path, {"a.spec.ts": 100, "b.spec.ts": 1, "c.spec.ts": 1})
         assert self.decide(repo, "--results", str(results))["shards"] == 1
 
-    @pytest.mark.parametrize("name", ["with space.spec.ts", "café.spec.ts"])
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "with space.spec.ts",
+            "café.spec.ts",
+            'a"quote.spec.ts',
+            "a\\backslash.spec.ts",
+            "a\ttab.spec.ts",
+        ],
+    )
     def test_a_spec_name_the_run_cannot_pass_on_runs_the_whole_suite(self, repo, name):
         self.commit(repo, {f"front-end/e2e/{name}": "import { test } from './fixtures';\n"})
         decision = self.decide(repo)
@@ -1262,14 +1287,21 @@ class TestTheCiDecision:
         assert decision["why"] == f"a spec name the run cannot pass on: {name}"
         assert decision["specs"] == []
 
-    @pytest.mark.parametrize("max_shards", [None, "0"])
-    def test_without_a_whole_runs_shard_count_it_is_a_usage_error(self, repo, max_shards):
-        given = [] if max_shards is None else ["--max-shards", max_shards]
+    @pytest.mark.parametrize(
+        "given, named",
+        [
+            ([], "--max-shards"),
+            (["--max-shards", "0"], "--max-shards"),
+            # A pull request's run has no cap of minutes, so it takes none.
+            (["--max-shards", "10", "--minutes", "5"], "--minutes"),
+        ],
+    )
+    def test_a_usage_error_exits_2_and_decides_nothing(self, repo, given, named):
         done = subprocess.run(
             [sys.executable, str(SCRIPT), "ci", *given], cwd=repo, capture_output=True, text=True
         )
         assert done.returncode == 2, done.stdout + done.stderr
-        assert "--max-shards" in done.stderr
+        assert named in done.stderr
         assert done.stdout == ""
 
     def summarize(self, repo, tmp_path, *args, **options):
@@ -1323,7 +1355,7 @@ class TestTheCiDecision:
         self.commit(repo, {"docs/a-node.md": "words\n"})
         written, _ = self.summarize(repo, tmp_path)
         assert "No E2E spec ran: the test map names none for this change." in written
-        assert "1 files changed from " in written
+        assert "1 file changed from " in written
         assert "<details>" not in written
 
     def test_the_summary_says_why_the_whole_suite_ran(self, repo, tmp_path):
@@ -1348,7 +1380,7 @@ class TestTheCiDecision:
         written = summary.read_text()
         assert "Ran the whole suite: there is no test map." in written
         assert "only-changed" not in written + done.stderr
-        assert "1 files changed from " in written
+        assert "1 file changed from " in written
 
     def test_without_github_it_writes_no_summary(self, repo, tmp_path):
         self.commit(repo, {"docs/a-node.md": "words\n"})

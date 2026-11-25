@@ -11,11 +11,11 @@ whole.
 From the worktree root, on the worktree's stack (`team-stack up`, `team-stack seed`, and
 `eval "$(~/agent-team/bin/team-stack env)"`, so Playwright reaches it). The change is the diff from
 the merge-base with `origin/dev` to the worktree, uncommitted and untracked files included
-(`--base` and `--head` name two commits instead, for `--list`). The map is the newest `test-map`
-artifact of a run on `dev`, which the nightly Test run makes on `dev`'s tip (or one started by hand,
-`gh workflow run test.yml --ref dev`), so up to a day behind `dev`; it is downloaded once a run to
-`.stack-logs/test-map/<run id>/` beside that run's shard results (`--map` and `--results` name
-files instead). A spec is chosen:
+(`--base` and `--head` name two commits instead, for `--list`, `ci` and `audit`). The map is the
+newest `test-map` artifact of a run on `dev`, which the nightly Test run makes on `dev`'s tip (or
+one started by hand, `gh workflow run test.yml --ref dev`), so up to a day behind `dev`; it is
+downloaded once a run to `.stack-logs/test-map/<run id>/` beside that run's shard results (`--map`
+and `--results` name files instead). A spec is chosen:
 
 1. when the change edits it, or a file it imports, transitively, or deletes a file it imported at
    the base (scores 1);
@@ -141,6 +141,12 @@ def git(root: Path, *args: str) -> str:
     return done.stdout
 
 
+def git_names(root: Path, command: str, *args: str) -> List[str]:
+    """The paths a git command lists, each as it is: without `-z` git quotes a name it finds
+    unusual, such as one outside ASCII or holding a quote."""
+    return git(root, command, "-z", *args).split("\0")[:-1]
+
+
 class Tree:
     """The files at one side of the diff: a commit's, or the worktree's when `rev` is None."""
 
@@ -175,14 +181,20 @@ class Tree:
                 if p.is_file() and "node_modules" not in p.parts
             ]
             return sorted(found)
-        # `-z`: each name as it is, since git quotes a name it finds unusual, such as one
-        # outside ASCII.
-        return git(self.root, "ls-tree", "-r", "-z", "--name-only", self.rev, "--", under).split(
-            "\0"
-        )[:-1]
+        return git_names(self.root, "ls-tree", "-r", "--name-only", self.rev, "--", under)
 
 
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+
+
+def header_path(line: str) -> Optional[str]:
+    """The path on a diff's `---` or `+++` line; None for no file, and for a name git quotes
+    there (one holding a quote, a backslash or a control character), which the listings of names
+    give as it is, so its change has no lines and counts whole."""
+    if line[4:] == "/dev/null" or line[4:].startswith('"'):
+        return None
+    # Git ends a name that holds a space with a tab.
+    return line[6:].removesuffix("\t")
 
 
 def changed_lines(root: Path, base: str, head: Optional[str]) -> Dict[str, Tuple[Set[int], Set[int]]]:
@@ -199,11 +211,10 @@ def changed_lines(root: Path, base: str, head: Optional[str]) -> Dict[str, Tuple
     old: Optional[str] = None
     path: Optional[str] = None
     for line in git(root, *options, *sides, "--").splitlines():
-        # Git ends a name that holds a space with a tab here.
         if line.startswith("--- "):
-            old = line[6:].removesuffix("\t") if line != "--- /dev/null" else None
+            old = header_path(line)
         elif line.startswith("+++ "):
-            path = line[6:].removesuffix("\t") if line != "+++ /dev/null" else old
+            path = header_path(line) if line != "+++ /dev/null" else old
         elif line.startswith("@@") and path:
             m = HUNK.match(line)
             if not m:
@@ -213,13 +224,11 @@ def changed_lines(root: Path, base: str, head: Optional[str]) -> Dict[str, Tuple
             out[path][0].update(range(start, start + count))
             out[path][1].update(range(ostart, ostart + ocount))
     # A change with no hunk (a binary file, a change of mode) is a path with no lines.
-    for name in git(root, "-c", "core.quotePath=false", "diff", "--name-only", "--no-renames",
-                    *sides, "--").splitlines():  # fmt: skip
+    for name in git_names(root, "diff", "--name-only", "--no-renames", *sides, "--"):
         out[name]
     if head is None:
         worktree = Tree(root, None)
-        for name in git(root, "-c", "core.quotePath=false", "ls-files", "--others",
-                        "--exclude-standard").splitlines():  # fmt: skip
+        for name in git_names(root, "ls-files", "--others", "--exclude-standard"):
             text = worktree.read(name) or ""
             out[name][0].update(range(1, len(text.splitlines()) + 1))
     return dict(out)
@@ -872,20 +881,12 @@ def describe_source(source: Optional[dict]) -> str:
     return f"affected-specs: the test map of dev run {source['run']}, at {commit}, in {source['path']}"
 
 
-def sentence_case(text: str) -> str:
+def capitalize_first(text: str) -> str:
     return text[:1].upper() + text[1:]
 
 
-def count_specs(count: int) -> str:
-    return f"{count} spec" + ("" if count == 1 else "s")
-
-
-def count_spec_files(count: int) -> str:
-    return f"{count} spec file" + ("" if count == 1 else "s")
-
-
-def count_shards(count: int) -> str:
-    return f"{count} shard" + ("" if count == 1 else "s")
+def counted(count: int, noun: str) -> str:
+    return f"{count} {noun}" + ("" if count == 1 else "s")
 
 
 def reasons(row: dict) -> str:
@@ -937,24 +938,29 @@ class Chosen:
 
     def describe_diff(self) -> str:
         return (
-            f"{len(self.changes)} files changed from {self.base[:8]} "
+            f"{counted(len(self.changes), 'file')} changed from {self.base[:8]} "
             f"({'--base' if self.base_named else 'the merge-base with origin/dev'}) "
             f"to {self.head_rev[:8] if self.head_rev else 'the worktree'}"
         )
 
     def describe_basis(self) -> str:
-        """A job summary's sentence on what the selection was made from: the map, then the
-        diff."""
+        """What the selection was made from, as a sentence: the map, then the diff."""
         source = describe_source(self.source).replace("affected-specs: ", "", 1)
-        return f"{sentence_case(source)}; {self.describe_diff()}."
+        return f"{capitalize_first(source)}; {self.describe_diff()}."
 
 
-def selection_options(parser: argparse.ArgumentParser) -> None:
+def selection_options(parser: argparse.ArgumentParser, capped: bool = True) -> None:
+    """The options that name a selection's diff and map, and its cap unless it has none."""
     parser.add_argument("--base", help="the base of the diff (the merge-base with origin/dev)")
     parser.add_argument("--head", help="the head of the diff, a commit (the worktree)")
     parser.add_argument("--map", type=Path, help="a test-map.json in place of the newest dev's")
     parser.add_argument("--results", type=Path, help="Playwright JSON reports for the minutes")
-    parser.add_argument("--minutes", type=float, default=CAP_MINUTES, help="the cap, in CI minutes")
+    if capped:
+        parser.add_argument(
+            "--minutes", type=float, default=CAP_MINUTES, help="the cap, in CI minutes"
+        )
+    else:
+        parser.set_defaults(minutes=math.inf)
 
 
 # The outcomes of a test that fail a shard.
@@ -1055,10 +1061,10 @@ def audit(argv: Sequence[str]) -> int:
             line = (
                 "no shard report was read: nothing to audit"
                 if read == 0
-                else f"no test failed in the {count_reports(read)} read: no failure to audit"
+                else f"no test failed in the {counted(read, 'report')} read: no failure to audit"
             )
             print(f"affected-specs audit: {line}")
-            summary.append(f"{sentence_case(line)}.")
+            summary.append(f"{capitalize_first(line)}.")
         else:
             # As `--run` ranks them: a spec the map names that the head lacks takes no minutes.
             chosen = Chosen(args, drop_absent=True)
@@ -1067,8 +1073,8 @@ def audit(argv: Sequence[str]) -> int:
             print(describe_source(chosen.source))
             print(f"affected-specs: {chosen.describe_diff()}")
             print(
-                f"affected-specs audit: {failed_count(len(found))}, "
-                f"in {count_reports(read)}:"
+                f"affected-specs audit: {counted(len(found), 'failed spec')}, "
+                f"in {counted(read, 'report')}:"
             )
             for spec, verdict, why in found:
                 print(f"  {verdict}: {spec}: {why}")
@@ -1126,25 +1132,25 @@ def ci_decision(chosen: Chosen, now: datetime) -> dict:
     """Whether a pull request's E2E run runs the whole suite or the specs the map names, which,
     and why; `chosen` has no cap. Any doubt runs the whole suite."""
     if chosen.source is None:
-        return whole("there is no test map")
+        return whole_suite("there is no test map")
     if chosen.source.get("offline"):
-        return whole("the test map could not be read from GitHub")
+        return whole_suite("the test map could not be read from GitHub")
     # A map given by `--map` carries no date, so it is never too old.
     if "made" in chosen.source:
         age = now - datetime.fromisoformat(chosen.source["made"].replace("Z", "+00:00"))
         if age > timedelta(days=MAP_MAX_AGE_DAYS):
-            return whole(f"the newest test map is {age.days} days old")
+            return whole_suite(f"the newest test map is {age.days} days old")
     specs = sorted(row["spec"] for row in chosen.run)
     if set(specs) == chosen.at_head:
-        return whole("the change names every spec")
+        return whole_suite("the change names every spec")
     for spec in specs:
         if not SPEC_NAME.fullmatch(spec):
-            return whole(f"a spec name the run cannot pass on: {spec}")
-    names = count_spec_files(len(specs)) if specs else "no spec"
+            return whole_suite(f"a spec name the run cannot pass on: {spec}")
+    names = counted(len(specs), "spec file") if specs else "no spec"
     return {"scope": "named", "why": f"the test map names {names} for this change", "specs": specs}
 
 
-def whole(why: str) -> dict:
+def whole_suite(why: str) -> dict:
     return {"scope": "whole", "why": why, "specs": []}
 
 
@@ -1155,7 +1161,7 @@ def named_table(chosen: Chosen, specs: Sequence[str]) -> List[str]:
     rows = {row["spec"]: row for row in chosen.run}
     return [
         "",
-        f"<details><summary>The {count_spec_files(len(specs))} named</summary>",
+        f"<details><summary>The {counted(len(specs), 'spec file')} named</summary>",
         "",
         "| Spec | Minutes | Why |",
         "|---|---|---|",
@@ -1180,16 +1186,16 @@ def shard_count(
     return max(1, min(max_shards, len(specs), math.ceil(named / (suite / max_shards))))
 
 
-def ran_sentence(output: dict) -> str:
+def summary_sentence(output: dict) -> str:
     """The sentence a run's summary opens with, from what `ci` prints."""
     if output["scope"] == "whole":
         return f"Ran the whole suite: {output['why']}."
     if not output["specs"]:
         return "No E2E spec ran: the test map names none for this change."
     return (
-        f"Ran the {count_spec_files(len(output['specs']))} the test map names for this change, "
-        f"{output['minutes']:.1f} of {output['suite_minutes']:.1f} minutes, "
-        f"on {count_shards(output['shards'])}."
+        f"Ran the {counted(len(output['specs']), 'spec file')} the test map names for this "
+        f"change, {output['minutes']:.1f} of {output['suite_minutes']:.1f} minutes, "
+        f"on {counted(output['shards'], 'shard')}."
     )
 
 
@@ -1199,7 +1205,8 @@ def ci(argv: Sequence[str]) -> int:
         prog="affected-specs.py ci",
         description="What a pull request's E2E run runs, as one JSON object on stdout.",
     )
-    selection_options(parser)
+    # A pull request's run runs every spec the map names.
+    selection_options(parser, capped=False)
     parser.add_argument(
         "--max-shards", type=int, required=True, help="the shards a whole run takes"
     )
@@ -1211,8 +1218,6 @@ def ci(argv: Sequence[str]) -> int:
     args = parser.parse_args(argv)
     if args.max_shards < 1:
         parser.error("--max-shards is at least 1")
-    # No cap: a pull request's run runs every spec the map names.
-    args.minutes = math.inf
     chosen = Chosen(args, drop_absent=True)
     decision = ci_decision(chosen, datetime.now(timezone.utc))
     named = decision["specs"]
@@ -1225,7 +1230,7 @@ def ci(argv: Sequence[str]) -> int:
         "suite_minutes": sum(chosen.seconds(spec) for spec in chosen.at_head) / 60,
         "map": chosen.source,
     }
-    ran = ran_sentence(output)
+    ran = summary_sentence(output)
     # With no map there is none to describe: `describe_source` then tells of the choice a builder's
     # run falls back to, which this one does not make.
     basis = chosen.describe_basis() if chosen.source else f"{chosen.describe_diff()}."
@@ -1234,14 +1239,6 @@ def ci(argv: Sequence[str]) -> int:
         write_summary(["### E2E selection", "", ran, "", basis, *named_table(chosen, named)])
     print(json.dumps(output))
     return 0
-
-
-def count_reports(count: int) -> str:
-    return f"{count} report" + ("" if count == 1 else "s")
-
-
-def failed_count(count: int) -> str:
-    return f"{count} failed spec" + ("" if count == 1 else "s")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -1287,14 +1284,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     else:
         verb = "runs" if args.run else "would run"
         print(
-            f"{verb} {count_specs(len(run))}, {minutes_run:.1f} CI minutes "
+            f"{verb} {counted(len(run), 'spec')}, {minutes_run:.1f} CI minutes "
             f"(the cap is {args.minutes:g}; a changed spec runs past it):"
         )
         print_rows(run, absent)
     if left:
         print(
-            f"leaves {count_specs(len(left))}, {sum(r['minutes'] for r in left):.1f} CI minutes, "
-            "to CI:"
+            f"leaves {counted(len(left), 'spec')}, "
+            f"{sum(r['minutes'] for r in left):.1f} CI minutes, to CI:"
         )
         print_rows(left, absent)
     if args.run and absent:
@@ -1306,7 +1303,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
     e2e = (chosen.root / E2E).resolve()
     filters = ["/^" + escape(f"{e2e}/{row['spec']}") + "$/" for row in run]
-    print(f"affected-specs: npx playwright test <the {count_specs(len(run))} above>", flush=True)
+    above = counted(len(run), "spec")
+    print(f"affected-specs: npx playwright test <the {above} above>", flush=True)
     return subprocess.run(
         ["npx", "playwright", "test", *filters, *playwright_args], cwd=chosen.root / "front-end"
     ).returncode
