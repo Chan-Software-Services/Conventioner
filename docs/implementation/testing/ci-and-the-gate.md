@@ -22,7 +22,7 @@ describes:
   - scripts/chromium-packages.sh
   - scripts/ci_suite.py
   - scripts/nm-lint.sh
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - T47
   - T53
@@ -119,7 +119,8 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 **`warm-caches`**
 
-- on a warm push alone: the setup-node step with npm's cache, `npm ci` so that cache is full to save on a miss, then both [shared actions](#the-e2e-stack-and-its-caches) saving, the stack's with `start: "false"`, so it restores or makes each cache a pull request reads and runs no test, no stack and no build of the front end
+- on a warm push alone: the setup-node step with npm's cache, then both [shared actions](#the-e2e-stack-and-its-caches) saving, the stack's with `start: "false"`, so it restores or makes each cache a pull request reads and runs no test, no stack and no build of the front end
+- it installs the front end once at most: on npm's cache's miss front-end-deps is given `fill-npm-cache`, so its `npm ci` runs whatever `front-end/node_modules`' cache holds and fills npm's cache for the setup-node post step to save, while its restore only looks the key up; otherwise it installs only on `front-end/node_modules`' miss, and a hit restores it for the stack's action, which reads Playwright's version from it
 - it continues on error (`continue-on-error: true`), so a cache it could not save costs the next pull requests a cold start, never a red run on a commit the queue passed
 
 **`e2e`**
@@ -272,6 +273,7 @@ The matrix lists the shards and their `total`, which move together.
 
 Two composite actions set an `e2e-shard` runner up for Playwright, and fill the caches on a [warm push](#which-suite-a-run-runs)'s `warm-caches`.
 [`.github/actions/front-end-deps/action.yml`](../../../.github/actions/front-end-deps/action.yml) sets up the Node `.nvmrc` pins and fills `front-end/node_modules`; it runs first, since with no `front-end/node_modules` on the host Docker (as root) creates the anonymous volume's mountpoint there root-owned, and a later `npm ci` fails with `EACCES`.
+Its input `fill-npm-cache`, `"false"` unless given, is `"true"` for `warm-caches` alone, on npm's cache's miss: `npm ci` then runs on a hit too, and the restore only looks the key up, so a hit downloads nothing for `npm ci` to install over.
 [`.github/actions/e2e-stack/action.yml`](../../../.github/actions/e2e-stack/action.yml) installs Chromium and [the system packages it needs](#chromiums-system-packages), gets the stack's two images, pulls `mongo:7` and `mongo-express:latest` from Docker Hub, retrying only that pull a handful of times, because a transient registry 500 once failed a shard outright, so a stack that genuinely fails to start fails the job at once, then starts the stack and seeds it.
 Its input `start`, `"true"` unless given, is `"false"` for `warm-caches` alone: the three restores then only look their key up (`lookup-only`), so a hit downloads nothing; Chromium is installed on a miss, and the system packages only on a miss too, since installing them is how [`chromium-packages.sh`](#chromiums-system-packages) makes their files and marks them fit to save, and the images' load, the registry pull, the stack and its seed are skipped, while the build of the images and the three saves run on a miss as they do on a shard.
 Each `uses:` line calls an action by its path (`./.github/actions/...`) with a `zizmor: ignore[self-repository]`: zizmor asks for GitHub's newer `$/` form, which actionlint 1.7.12, the latest, refuses.

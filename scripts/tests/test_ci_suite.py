@@ -5,7 +5,7 @@ GitHub API, and read what the step reads: the one word on stdout, the sentence o
 summary file, and the exit code. The stub answers each API path with a scripted sequence and records
 every request, in the pattern of test_promote_check.py's, which this file does not import.
 
-The workflow's tests read .github/workflows/test.yml and .github/actions/e2e-stack/action.yml as
+The workflow's tests read .github/workflows/test.yml and the two actions under .github/actions/ as
 text, and run the `decide` step's shell as the runner runs it (`bash -e`) with a fake `python3`.
 """
 import json
@@ -666,6 +666,7 @@ def test_it_needs_an_event_and_a_commit(stub, env, given, needed):
 
 WORKFLOW = ROOT / ".github" / "workflows" / "test.yml"
 E2E_STACK = ROOT / ".github" / "actions" / "e2e-stack" / "action.yml"
+FRONT_END_DEPS = ROOT / ".github" / "actions" / "front-end-deps" / "action.yml"
 
 JOBS = [
     "suite",
@@ -885,21 +886,24 @@ def test_the_advisory_scan_reads_no_word_so_a_warm_push_and_every_nightly_run_sc
 
 def test_warm_caches_fills_npm_s_cache_node_modules_and_the_stack_s_caches_and_runs_nothing_else():
     warm = workflow_jobs()["warm-caches"]
-    checkout, node, fill, deps, stack = warm["steps"]
+    checkout, node, deps, stack = warm["steps"]
 
     assert checkout["uses"].startswith("actions/checkout@")
     assert checkout["with"] == {"persist-credentials": "false"}
     assert node["uses"].startswith("actions/setup-node@")
+    assert node["id"] == "node"
     assert node["with"] == {
         "node-version-file": ".nvmrc",
         "cache": "npm",
         "cache-dependency-path": "front-end/package-lock.json",
     }
-    assert fill["name"] == "Fill npm's cache"
-    assert fill["working-directory"] == "front-end"
-    assert fill["run"] == "npm ci\n"
+    # One install at most: front-end-deps runs `npm ci` itself when npm's cache missed, so the
+    # setup-node post step has it full to save, and otherwise only on its own cache's miss.
     assert deps["uses"] == "./.github/actions/front-end-deps"
-    assert deps["with"] == {"save-cache": "true"}
+    assert deps["with"] == {
+        "save-cache": "true",
+        "fill-npm-cache": "${{ steps.node.outputs.cache-hit != 'true' }}",
+    }
     assert stack["uses"] == "./.github/actions/e2e-stack"
     assert stack["with"] == {"save-caches": "true", "start": '"false"'}
 
@@ -1003,8 +1007,8 @@ NOT_STARTING = [
 ]
 
 
-def action():
-    lines = E2E_STACK.read_text().splitlines()
+def action(path=E2E_STACK):
+    lines = path.read_text().splitlines()
     inputs = block(lines, lines.index("inputs:"), 0)
     steps = steps_of(block(lines, lines.index("  steps:"), 2), 4)
     return {
@@ -1066,3 +1070,33 @@ def test_chromium_s_system_packages_install_when_starting_or_on_a_miss():
 )
 def test_the_builds_and_saves_ignore_start(name):
     assert "inputs.start" not in action()["steps"][name].get("if", "")
+
+
+# The front-end-deps action's `fill-npm-cache`: by default it installs only on its own cache's miss.
+
+
+def test_fill_npm_cache_is_an_input_that_defaults_to_false():
+    fill = action(FRONT_END_DEPS)["inputs"]["fill-npm-cache"]
+
+    assert fill["required"] == "false"
+    assert fill["default"] == '"false"'
+
+
+def test_filling_npm_s_cache_installs_whatever_the_restore_found_and_the_restore_only_looks():
+    steps = action(FRONT_END_DEPS)["steps"]
+
+    assert steps["Restore front-end/node_modules"]["with"]["lookup-only"] == "${{ inputs.fill-npm-cache == 'true' }}"
+    assert steps["Install with npm ci"]["if"] == (
+        "inputs.fill-npm-cache == 'true' || steps.modules.outputs.cache-hit != 'true'"
+    )
+    assert steps["Install with npm ci"]["run"] == "npm ci\n"
+
+
+def test_node_modules_is_saved_only_on_its_own_cache_s_miss():
+    save = action(FRONT_END_DEPS)["steps"]["Save front-end/node_modules"]
+
+    assert save["if"] == "inputs.save-cache == 'true' && steps.modules.outputs.cache-hit != 'true'"
+    assert save["with"] == {
+        "path": "front-end/node_modules",
+        "key": "${{ steps.modules.outputs.cache-primary-key }}",
+    }
