@@ -31,11 +31,15 @@
  * Playwright does not list; CI passes it on a pull request whose selection named specs. Once every
  * shard has passed, CI's `e2e` job runs
  *
- *   node scripts/e2e-shards.ts check <dir of the shards' artifacts> [--publish=<out file>]
+ *   node scripts/e2e-shards.ts check <dir of the shards' artifacts> [--publish=<file> | --named=<file>]
  *
- * which fails unless every shard dealt by the same timings and their reports hold every listed spec
- * file exactly once, writes each shard's seconds and the spread to the job summary, and with
- * `--publish` writes the next timings: the ones the run dealt by, blended with what it measured.
+ * which fails unless every shard dealt the whole suite, all by the same timings, and their reports
+ * hold every listed spec file exactly once. With `--named=<file>`, a list as `--specs` takes, it
+ * demands instead that every shard dealt exactly those files, so only a run that is asked for a
+ * selection passes on one. It writes what ran, each shard's seconds and the spread to the job
+ * summary, and with `--publish` writes the next timings: the ones the run dealt by, blended with
+ * what it measured. A run that publishes timings is never a pull request's, so the two flags never
+ * come together.
  *
  * The committed file is only the fallback. Refresh it by hand from CI runs' reports, each run's
  * `e2e-results-shard-*` artifacts in a folder of their own, oldest first, the newest whole:
@@ -370,12 +374,16 @@ export interface ShardResult {
 }
 
 /**
- * The check that the shards dealt alike and ran every spec file once: every shard of the total its
- * deal records name uploaded a deal record and a report, every deal record holds the same timings
- * and the same files, each report holds exactly its shard's hand, and every listed file is in
+ * The check that the shards dealt what the run must run, alike, and ran every file of it once: every
+ * shard of the total its deal records name uploaded a deal record and a report, every deal record is
+ * of the whole suite, or with `named` of exactly those files, every one holds the same timings and
+ * the same files, each report holds exactly its shard's hand, and every file dealt from is in
  * exactly one report. Also each shard's seconds of tests, by its report, 0 for none.
  */
-export function checkShards(shards: readonly ShardResult[]): {
+export function checkShards(
+  shards: readonly ShardResult[],
+  named?: readonly string[],
+): {
   problems: string[];
   seconds: number[];
 } {
@@ -385,6 +393,25 @@ export function checkShards(shards: readonly ShardResult[]): {
   if (deals.length === 0) return { problems: ['no shard uploaded a deal record'], seconds: [] };
   const problems: string[] = [];
   const total = Math.max(...deals.map((deal) => deal.total));
+  const selection = named && sorted(named);
+  for (const deal of deals) {
+    const shard = `shard ${deal.shard}/${total}`;
+    if (!selection) {
+      if (deal.scope !== 'whole') {
+        problems.push(`${shard} dealt the test map's selection, but this run must run every spec`);
+      }
+      continue;
+    }
+    if (deal.scope !== 'named') {
+      problems.push(`${shard} dealt the whole suite, but this run ran the test map's selection`);
+    }
+    const dealt = sorted(deal.files);
+    if (JSON.stringify(dealt) !== JSON.stringify(selection)) {
+      problems.push(
+        `${shard} dealt ${dealt.join(', ')}, not the ${selection.length} spec files the selection named`,
+      );
+    }
+  }
   // What decides the hands, not the words of the source: shards that fell back to the committed file
   // for different reasons dealt alike.
   const key = (deal: DealRecord) => JSON.stringify([deal.timings, deal.total, deal.files]);
@@ -447,13 +474,21 @@ export function publishedTimings(shards: readonly ShardResult[]): Record<string,
   return blendTimings(deal.timings, secondsFromReports(reports), deal.files);
 }
 
-/** The `e2e` job's summary of the deal: the timings' source, each shard's seconds, the spread. */
+/** The `e2e` job's summary of the deal: what ran and the timings' source, each shard's seconds, the
+ * spread. With `problems` it says only where the timings came from, since what `ran` says the shards
+ * dealt may never have run. */
 export function shardSummary(
   source: string,
   seconds: readonly number[],
   problems: readonly string[],
+  ran: { scope: DealRecord['scope']; files: number; listed: number },
 ): string {
-  const lines = ['### E2E shards', '', `Dealt by ${source}.`, ''];
+  const files =
+    ran.scope === 'whole'
+      ? 'Every spec file the suite lists'
+      : `The ${ran.files} spec files the test map named, of the ${ran.listed} the suite lists,`;
+  const opening = problems.length > 0 ? `Dealt by ${source}.` : `${files} ran, dealt by ${source}.`;
+  const lines = ['### E2E shards', '', opening, ''];
   lines.push('| Shard | Seconds of tests |', '|-------|------------------|');
   seconds.forEach((value, n) =>
     lines.push(`| ${n + 1}/${seconds.length} | ${Math.round(value)} |`),
@@ -782,12 +817,30 @@ function shardResults(dir: string): ShardResult[] {
     });
 }
 
-/** The `e2e` job's check of the deal, its summary, and with `publish` the next timings. */
-function checkCommand(dir: string, publish: string | undefined): number {
+/** The `e2e` job's check of the deal, of the whole suite or of the files `--named` names, its
+ * summary, and with `publish` the next timings. */
+function checkCommand(
+  dir: string,
+  publish: string | undefined,
+  namedPath: string | undefined,
+): number {
+  let named: string[] | undefined;
+  try {
+    if (namedPath !== undefined) named = readSpecList(namedPath);
+  } catch (error) {
+    console.log(`::error::${(error as Error).message}`);
+    return 1;
+  }
   const shards = shardResults(dir);
-  const { problems, seconds } = checkShards(shards);
-  const source = dealtBy(shards.flatMap((shard) => (shard.deal ? [shard.deal] : [])));
-  const summary = shardSummary(source, seconds, problems);
+  const { problems, seconds } = checkShards(shards, named);
+  const deals = shards.flatMap((shard) => (shard.deal ? [shard.deal] : []));
+  // With no deal record the check has failed, and the summary says nothing of what ran.
+  const [deal] = deals;
+  const summary = shardSummary(dealtBy(deals), seconds, problems, {
+    scope: deal?.scope ?? 'whole',
+    files: deal?.files.length ?? 0,
+    listed: deal?.listed ?? 0,
+  });
   console.log(summary);
   const summaryFile = process.env.GITHUB_STEP_SUMMARY;
   if (summaryFile) appendFileSync(summaryFile, summary);
@@ -859,19 +912,28 @@ function shardArguments(args: readonly string[]) {
   return { ...flags, playwright: args.slice(first) };
 }
 
+/** `check`'s arguments: the folder, then at most one of `--publish=<file>` and `--named=<file>`,
+ * since a run that publishes timings is never a pull request's. Undefined for anything else. */
+function checkArguments(args: readonly string[]) {
+  const [dir, flag, ...more] = args;
+  if (dir === undefined || more.length > 0) return undefined;
+  if (flag === undefined) return { dir };
+  // An empty `--named=` is a file that cannot be read, never a check without the flag.
+  const match = /^--(?:publish=(?<publish>.+)|named=(?<named>.*))$/.exec(flag);
+  return match ? { dir, publish: match.groups!.publish, named: match.groups!.named } : undefined;
+}
+
 if (import.meta.main) {
   const [first, ...rest] = process.argv.slice(2);
   const shardArgs = first?.startsWith('--shard=') ? shardArguments(rest) : undefined;
+  const checkArgs = first === 'check' ? checkArguments(rest) : undefined;
   if (first === 'refresh' && rest.length > 0) {
     process.exitCode = refresh(rest);
   } else if (first === 'timings' && rest.length === 1) {
     process.exitCode = await timingsCommand(rest[0]!);
-  } else if (first === 'check' && (rest.length === 1 || rest.length === 2)) {
-    const publish = rest[1]?.startsWith('--publish=')
-      ? rest[1].slice('--publish='.length)
-      : undefined;
-    if (rest.length === 2 && !publish) process.exitCode = 2;
-    else process.exitCode = checkCommand(rest[0]!, publish);
+  } else if (checkArgs) {
+    const { dir, publish, named } = checkArgs;
+    process.exitCode = checkCommand(dir, publish, named);
   } else if (shardArgs) {
     const { timings, specs, playwright } = shardArgs;
     process.exitCode = runShard(first!.slice('--shard='.length), timings, specs, playwright);
@@ -879,7 +941,7 @@ if (import.meta.main) {
     console.error(
       'Usage: node scripts/e2e-shards.ts --shard=<current>/<total> [--timings=<file>] [--specs=<file>] [playwright args]\n' +
         '       node scripts/e2e-shards.ts timings <out file>\n' +
-        "       node scripts/e2e-shards.ts check <dir of the shards' artifacts> [--publish=<out file>]\n" +
+        "       node scripts/e2e-shards.ts check <dir of the shards' artifacts> [--publish=<file> | --named=<file>]\n" +
         "       node scripts/e2e-shards.ts refresh <dir of one run's Playwright JSON reports>...",
     );
   }
