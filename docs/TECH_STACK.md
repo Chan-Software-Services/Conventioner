@@ -10,7 +10,7 @@ describes:
   - .nvmrc
   - docker-compose.yml
   - front-end/vite.config.ts
-verified: 2026-11-16
+verified: 2026-11-25
 sources:
   - T254
   - T251
@@ -18,6 +18,7 @@ sources:
   - T273
   - T317
   - T345
+  - T584
 ---
 
 # Technology Stack
@@ -91,6 +92,11 @@ How each part of the code works is in the implementation layer of the [knowledge
   - Used on registration endpoint
   - Secret key configured via `RECAPTCHA_SECRET_KEY` environment variable, which the app refuses to boot without
   - Test-only bypass via `DISABLE_CAPTCHA`, honored only under `ALLOW_INSECURE_LOCAL_DEV` (see Environment Variables)
+
+### Error Tracking
+
+- **sentry-sdk 3.0** - Sends the back end's errors to Sentry, only when `SENTRY_DSN` is set; unset, it is never imported ([error tracking](implementation/modules/error-tracking.md))
+  - Every event is built from [ADR 0049](adr/0049-what-may-be-sent-to-the-error-tracker.md)'s allowlist, with the Flask integration and the logging integration's breadcrumbs, and no integration that switches itself on
 
 ### Utilities
 

@@ -10,6 +10,7 @@ sources:
   - T251
   - T263
   - T273
+  - T584
 ---
 
 # Conventioner - Development Startup Guide
@@ -584,6 +585,12 @@ It is **optional**: without its values the card says Discord is not set up, and 
 To walk it locally, set `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` and `DISCORD_BOT_TOKEN` from the Discord Developer Portal in the root `.env` (forwarded by `docker-compose.yml`), with `FRONTEND_URL=http://127.0.0.1:5173`, the address you sign in at (an existing `FRONTEND_URL` line in `.env` overrides compose's default, so it must read that too): the redirect Discord is sent is `FRONTEND_URL` + `/discord/connected`, and a `localhost` one brings you back without your session.
 In the Developer Portal, add `http://127.0.0.1:5173/discord/connected` to the application's OAuth2 redirects, and switch on "Requires OAuth2 Code Grant" on the Bot page.
 Without an application of your own, `DISCORD_FAKE=true` answers for Discord from fake servers written to the database ([a fake Discord](TESTING.md#a-fake-discord)); a worktree's stack sets it unless you pass `DISCORD_FAKE=false`, which you must to use the values above there.
+
+### Error Tracking (Off Locally)
+
+The back end and the front end send their errors to Sentry only with a DSN ([error tracking](implementation/modules/error-tracking.md)).
+`back-end/.env.example` leaves `SENTRY_DSN` blank and the compose file sets neither DSN, so a local stack sends nothing, and the test suite removes an exported `SENTRY_DSN` before any test runs.
+Leave both unset locally: a DSN is production's project, and a local error sent there is an error Daniel is emailed about.
 
 ### Backend Structure
 

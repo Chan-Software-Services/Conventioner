@@ -53,6 +53,7 @@ sources:
   - T338
   - T318
   - T422
+  - T584
 ---
 
 # Security invariants
@@ -77,6 +78,7 @@ A requirement with nothing behind it teaches operators to work around the check.
 The applicant's and the organizer's sign-in limits count each caller by the same address (`sign_in_limits.caller()`, [a vendor signs in before applying](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)), so a wrong hop count would put every applicant, and every organizer, behind one caller's limit.
 Make a requirement follow its caller, not the module it was first written for.
 The converse holds too: a value that turns on a feature and defends nothing is optional, read through `configured_secret` when asked for, and never a boot requirement: `TYPESAFE_API_KEY`, and the three Discord values, without which the Discord card says Discord is not set up ([the Discord connection](../modules/discord.md)).
+`SENTRY_DSN` is optional too, though read once at boot, by the error tracker: none means the SDK is never imported, and a DSN Sentry cannot read logs one warning and leaves tracking off rather than stopping the boot ([error tracking](../modules/error-tracking.md), [ADR 0049](../../adr/0049-what-may-be-sent-to-the-error-tracker.md)).
 
 ## The one escape hatch
 
