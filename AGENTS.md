@@ -73,7 +73,7 @@ Conventioner runs a vendor market from applications to the door, in production a
 - Before changing the market bar, its tabs or a market screen's layout, read [the market frame](docs/implementation/modules/market-frame.md).
 - Before changing what a screen says in a phase or on an intake path, read [the market guide](docs/implementation/modules/market-guide.md).
 - Before a screen holds work the server does not have yet, read [unsaved work asks before it is dropped](docs/implementation/conventions/unsaved-work-asks-before-it-is-dropped.md).
-- Before changing styles, tokens or a control's look, read [the design language](docs/design-system.md) and [every control is named](docs/implementation/conventions/every-control-is-named.md).
+- Before changing styles, tokens or a control's look, read [`DESIGN.md`](DESIGN.md), generated from the CSS (run `npm run design-md` in `front-end/` after changing `base.css` or `primitives.css`), then [the design language](docs/design-system.md) and [every control is named](docs/implementation/conventions/every-control-is-named.md).
 - Before adding or changing a reusable component, read [the component library](docs/implementation/modules/component-library.md).
 - Before writing or changing a dialog, read [dialogs](docs/implementation/conventions/dialogs.md).
 - Before changing what Market Setup may change after draft, read [the setup settles on leaving draft](docs/business/rules/the-setup-settles-on-leaving-draft.md).

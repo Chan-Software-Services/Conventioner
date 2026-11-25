@@ -237,6 +237,7 @@ git diff --exit-code -- package-lock.json ||
 npm run format:check
 npm run lint:check
 npm run lint:css
+npm run design-md:check
 npm run type-check
 echo "Frontend lint and types: OK"
 
