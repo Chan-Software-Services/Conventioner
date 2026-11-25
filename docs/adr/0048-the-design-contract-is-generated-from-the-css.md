@@ -37,7 +37,7 @@ A hand-kept contract would drift from the CSS the first time a token moved.
 
 - A change to a token or a primitive needs `npm run design-md` and the regenerated file in the same commit, or CI fails, naming the command and the first line that differs.
 - Nobody edits `DESIGN.md`: a hand edit is drift, the comment under its front matter says where its words live, and its last Don't says not to edit it.
-- A new rule of `primitives.css` is in the file at once, in an entry when one ends on its selector, else whole under "Rules no entry ends on"; a selector beside an entry's selector in a rule's list is written on the entry's line, after "with".
+- A new rule of `primitives.css` is in the file at once, in an entry when one ends on its selector, else whole under "Rules no entry ends on"; a selector beside an entry's last selector in a rule's list is written on the entry's line, after "with".
 - A bump of `@google/design.md`, which Dependabot proposes, is a reviewed change: a new rule or a changed severity fails the bump's own pull request, and is answered in the generator, the content module or by holding the pin.
 - The linter's contrast check reads a colour without its alpha, so `contrast.test.ts` stays the contrast guard.
 
