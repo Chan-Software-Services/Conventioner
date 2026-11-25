@@ -278,6 +278,15 @@ if (args.includes('--list')) {
     ]);
   });
 
+  it('words a one-file named list in the singular', () => {
+    const shard = run(
+      ({ timings, specs }) => ['--shard=1/1', `--specs=${specs}`, `--timings=${timings}`],
+      JSON.stringify(['d.spec.ts']),
+    );
+    expect(shard.code, shard.said).toBe(0);
+    expect(shard.said).toContain('e2e shard 1/1: 1 of the 1 named spec file (of 4 listed), ');
+  });
+
   it('deals every listed file without --specs, and records the whole suite', () => {
     const shard = run(({ timings }) => ['--shard=2/2', `--timings=${timings}`]);
     expect(shard.code, shard.said).toBe(0);
@@ -674,6 +683,13 @@ describe('checkShards', () => {
     );
   });
 
+  it('words a selection of one file in the singular', () => {
+    const [, two] = namedShards();
+    expect(checkShards([two!], ['a.spec.ts']).problems).toContain(
+      'shard 2/2 dealt a.spec.ts, c.spec.ts, d.spec.ts, not the 1 spec file the selection named',
+    );
+  });
+
   it('names a spec file of the selection run twice or by no shard', () => {
     const [one, two] = namedShards();
     const twice = { ...two!, report: report({ 'a.spec.ts': [[1]], 'd.spec.ts': [[1]] }) };
@@ -939,6 +955,12 @@ describe('shardSummary', () => {
     expect(shardSummary("run 5's e2e-shard-timings", [600], [], named)).toContain(
       'The 23 spec files the test map named, of the 287 the suite lists, ran, ' +
         "dealt by run 5's e2e-shard-timings.",
+    );
+  });
+
+  it('opens in the singular when the test map named one file', () => {
+    expect(shardSummary('x', [1], [], { scope: 'named', files: 1, listed: 287 })).toContain(
+      'The 1 spec file the test map named, of the 287 the suite lists, ran, dealt by x.',
     );
   });
 

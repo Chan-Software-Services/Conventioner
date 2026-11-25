@@ -228,6 +228,9 @@ const tenth = (seconds: number) => Math.round(seconds * 10) / 10;
 /** A list's spec files in alphabetical order, each once. */
 const sorted = (files: Iterable<string>) => [...new Set(files)].sort();
 
+/** The noun after a count of spec files: "1 spec file", "2 spec files". */
+const specFileNoun = (count: number) => (count === 1 ? 'spec file' : 'spec files');
+
 /** Timings read from JSON, refusing anything but a non-empty object of finite, non-negative seconds. */
 export function parseTimings(text: string): Timings {
   const value: unknown = JSON.parse(text);
@@ -408,7 +411,8 @@ export function checkShards(
     const dealt = sorted(deal.files);
     if (JSON.stringify(dealt) !== JSON.stringify(selection)) {
       problems.push(
-        `${shard} dealt ${dealt.join(', ')}, not the ${selection.length} spec files the selection named`,
+        `${shard} dealt ${dealt.join(', ')}, not the ${selection.length} ` +
+          `${specFileNoun(selection.length)} the selection named`,
       );
     }
   }
@@ -486,7 +490,8 @@ export function shardSummary(
   const subject =
     ran.scope === 'whole'
       ? 'Every spec file the suite lists'
-      : `The ${ran.files} spec files the test map named, of the ${ran.listed} the suite lists,`;
+      : `The ${ran.files} ${specFileNoun(ran.files)} the test map named, ` +
+        `of the ${ran.listed} the suite lists,`;
   const opening =
     problems.length > 0 ? `Dealt by ${source}.` : `${subject} ran, dealt by ${source}.`;
   const lines = ['### E2E shards', '', opening, ''];
@@ -771,7 +776,7 @@ function runShard(
   const dealtFrom =
     scope === 'whole'
       ? `${files.length} spec files`
-      : `the ${files.length} named spec files (of ${listed.length} listed)`;
+      : `the ${files.length} named ${specFileNoun(files.length)} (of ${listed.length} listed)`;
   console.log(
     `e2e shard ${current}/${total}: ${hand.length} of ${dealtFrom}, ` +
       `about ${minutes.toFixed(1)} minutes of tests by ${source}`,
