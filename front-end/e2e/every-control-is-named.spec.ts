@@ -347,15 +347,19 @@ test("every field of a vendor's check-in has a name", async ({ page, request }) 
   // On their vendor page, on the market's day (ADR 0022): the door code is typed in a field.
   forgetSignInAttempts();
   const vendor = `named-check-in-${Date.now()}@example.com`;
+  // Its day is reckoned from one instant, at which the page's clock is held: a run that passes
+  // midnight after the seed would find no today card, and so no door code's field.
+  const seededAt = new Date();
   const seed = await seedPublishedMarketWithAssignments(
     request,
     BACKEND_URL,
     TEST_USER.email,
     TEST_USER.password,
-    { marketDate: calendarToday(), vendors: [vendor] },
+    { marketDate: calendarToday(seededAt), vendors: [vendor] },
   );
   // The check-in's field stands only where the market lets vendors check themselves in (T496).
   await letVendorsCheckThemselvesIn(request, seed.marketId);
+  await page.clock.setFixedTime(seededAt);
   const vendorPage = new VendorPage(page);
   await vendorPage.goto(seed.marketSlug);
   await signInOnThePage(vendorPage, seed.marketId, vendor);

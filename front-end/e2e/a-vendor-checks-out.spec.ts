@@ -20,13 +20,17 @@ import { letVendorsCheckThemselvesIn } from './helpers/selfCheckIn';
  */
 const PHONE = PHONE_AND_DESK[0];
 const onThePhone = inTheWindow(PHONE);
-const TODAY = calendarToday();
 const TIME = String.raw`\d{1,2}:\d{2}\s[AP]M`;
 
-/** A vendor's phone: a browser of its own under a phone's emulation, signed in as nobody. */
-async function aPhone(browser: Browser) {
+/**
+ * A vendor's phone: a browser of its own under a phone's emulation, signed in as nobody, its clock
+ * held at the seed's `seededAt`: a run that passes midnight after the seed would find no today card
+ * on the page.
+ */
+async function aPhone(browser: Browser, seededAt: Date) {
   const context = await browser.newContext(PHONE.use);
   await hideDevToolsPanel(context);
+  await context.clock.setFixedTime(seededAt);
   const page = await context.newPage();
   return { context, page, vendorPage: new VendorPage(page) };
 }
@@ -81,18 +85,20 @@ test('a vendor checks in, then out, with the door code, and undoes the check-out
   request,
 }) => {
   const vendor = `check-out-${Date.now()}@example.com`;
+  // Its day is reckoned from one instant, at which the phone's clock is held (`aPhone`).
+  const seededAt = new Date();
   const seed = await seedPublishedMarketWithAssignments(
     request,
     BACKEND_URL,
     TEST_USER.email,
     TEST_USER.password,
-    { marketDate: TODAY, vendors: [vendor] },
+    { marketDate: calendarToday(seededAt), vendors: [vendor] },
   );
   await letVendorsCheckThemselvesIn(request, seed.marketId);
   const door = await makeDoorCode(request, seed.marketId);
   const typed = `${door.code.slice(0, 3)} ${door.code.slice(3)}`.toLowerCase();
 
-  const phone = await aPhone(browser);
+  const phone = await aPhone(browser, seededAt);
   await phone.vendorPage.goto(seed.marketSlug);
   await signInOnThePage(phone.vendorPage, seed.marketId, vendor);
 
@@ -146,18 +152,21 @@ test('with the switch off the page offers no check-in or check-out, and answers 
   request,
 }) => {
   const vendor = `door-is-ours-${Date.now()}@example.com`;
+  // Its day is reckoned from one instant, at which the phone's clock is held (`aPhone`).
+  const seededAt = new Date();
+  const onTheDay = calendarToday(seededAt);
   // A market nobody turned the switch on for: off, as every market is until someone does.
   const seed = await seedPublishedMarketWithAssignments(
     request,
     BACKEND_URL,
     TEST_USER.email,
     TEST_USER.password,
-    { marketDate: TODAY, vendors: [vendor] },
+    { marketDate: onTheDay, vendors: [vendor] },
   );
   const door = await makeDoorCode(request, seed.marketId);
 
   // Scanned signed out: said at once, over the sign-in, and nothing waits for a sign-in.
-  const phone = await aPhone(browser);
+  const phone = await aPhone(browser, seededAt);
   await phone.page.goto(door.path);
   await expect(phone.vendorPage.selfCheckInOff).toHaveText(
     'Vendors are checked in and out by an organizer at this market. Ask at the door.',
@@ -175,7 +184,7 @@ test('with the switch off the page offers no check-in or check-out, and answers 
 
   // The organizer checks them in at the door; the page reads it, and who checks them out.
   const checkedIn = await request.post(`${BACKEND_URL}/markets/${seed.marketId}/attendance`, {
-    data: { vendorEmail: vendor, date: TODAY },
+    data: { vendorEmail: vendor, date: onTheDay },
   });
   expect(checkedIn.ok(), await checkedIn.text()).toBeTruthy();
   await phone.page.reload();
