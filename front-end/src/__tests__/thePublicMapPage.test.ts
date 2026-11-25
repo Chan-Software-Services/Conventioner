@@ -437,6 +437,10 @@ describe('the page', () => {
     await locationSelect().setValue('loc-lower');
     await flushPromises();
     expect(items().map((item) => item.text())).toEqual(['Silver aisle']);
+    // Tomorrow nobody sits there: "Free table" comes back.
+    await daySelect().setValue(TOMORROW);
+    await flushPromises();
+    expect(items().map((item) => item.text())).toEqual(['Silver aisle', 'Free table']);
   });
 
   it('marks <html> as filling the window while it is mounted', async () => {

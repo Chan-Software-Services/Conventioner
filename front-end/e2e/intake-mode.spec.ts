@@ -12,20 +12,6 @@ const SCREENSHOT_DIR = 'e2e-screenshots/intake-mode';
 const UNKNOWN_SLUG = 'no-such-market-at-all';
 const SIGNED_IN_VENDOR = 'signed-in-vendor@example.com';
 
-/**
- * What a visitor is shown at a route, with the slug they typed masked out.
- *
- * The slug is the one thing a gated market and an absent one legitimately differ by: every
- * applicant page falls back to printing what the visitor typed when it has no market name, and
- * it has no market name in either case. Masking it is what makes the rest comparable.
- */
-async function renderedFor(page: Page, slug: string, suffix: string): Promise<string> {
-  await page.goto(`/${slug}${suffix}`);
-  await page.waitForLoadState('networkidle');
-  const text = (await page.locator('body').innerText()).trim();
-  return text.split(slug).join('<slug>');
-}
-
 async function finalPath(page: Page, slug: string, suffix: string): Promise<string> {
   await page.goto(`/${slug}${suffix}`);
   await page.waitForLoadState('networkidle');
@@ -38,11 +24,13 @@ async function finalPath(page: Page, slug: string, suffix: string): Promise<stri
  * ("a draft and a Google Form market before its results read as a slug naming nothing, at both
  * addresses"), which a CSV draft reads as too, since the server refuses a draft before it reads
  * the intake mode.
+ *
+ * Nothing under them is a page, the old `/applicant-login` and `/applicant/dashboard` among them
+ * (ADR 0022): those addresses ask no server, and land on the router's "Page not found" whatever
+ * the slug and whoever is signed in, which `theMarketsTwoAddresses.test.ts` proves on the app's
+ * router; `every-market-page-has-an-address.spec.ts` renders that page at a removed market page.
  */
 const PAGE_SUFFIXES = ['', '/vendor'];
-/** Addresses under them that name no page, old and new. */
-const UNDER_PAGE_SUFFIXES = ['/apply', '/applicant-login', '/applicant/dashboard', '/vendor/apply'];
-const GATED_SUFFIXES = [...PAGE_SUFFIXES, ...UNDER_PAGE_SUFFIXES];
 
 test.describe('Intake mode - a CSV market has no public applicant surface', () => {
   let csvMarket: ApplicantMarketSeed;
@@ -57,36 +45,12 @@ test.describe('Intake mode - a CSV market has no public applicant surface', () =
     );
   });
 
-  for (const suffix of UNDER_PAGE_SUFFIXES) {
-    test(`a stranger at /<slug>${suffix} is shown what an unknown market shows`, async ({
-      page,
-    }) => {
-      const gated = await renderedFor(page, csvMarket.marketSlug, suffix);
-      const absent = await renderedFor(page, UNKNOWN_SLUG, suffix);
-
-      expect(gated).toBe(absent);
-    });
-  }
-
-  for (const suffix of GATED_SUFFIXES) {
+  for (const suffix of PAGE_SUFFIXES) {
     test(`/<slug>${suffix} lands a stranger where an unknown market lands them`, async ({
       page,
     }) => {
       const gated = await finalPath(page, csvMarket.marketSlug, suffix);
       const absent = await finalPath(page, UNKNOWN_SLUG, suffix);
-
-      expect(gated).toBe(absent);
-    });
-  }
-
-  // "Page not found" offers an organizer who is signed in another way onward. It decides on the
-  // person and never on the address, so the market's own owner reads the two alike too.
-  for (const suffix of UNDER_PAGE_SUFFIXES) {
-    test(`an organizer signed in at /<slug>${suffix} is shown what an unknown market shows`, async ({
-      authenticatedPage: page,
-    }) => {
-      const gated = await renderedFor(page, csvMarket.marketSlug, suffix);
-      const absent = await renderedFor(page, UNKNOWN_SLUG, suffix);
 
       expect(gated).toBe(absent);
     });
@@ -168,31 +132,6 @@ test.describe('Intake mode - a form market keeps its applicant surface', () => {
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/03-form-market-home.png`, fullPage: true });
   });
-
-  // The separate sign-in page and "Your application" are gone, not redirected (ADR 0022).
-  for (const suffix of ['/applicant-login', '/applicant/dashboard']) {
-    test(`its old address /<slug>${suffix} reads as any page that is not there`, async ({
-      page,
-    }) => {
-      await page.goto(`/${formMarket.marketSlug}${suffix}`);
-
-      await expect(page.getByTestId('page-not-found')).toBeVisible({ timeout: 10000 });
-      await expect(page.getByTestId('vendor-sign-in-email-input')).toHaveCount(0);
-      await expect(page).toHaveURL(new RegExp(`/${formMarket.marketSlug}${suffix}$`));
-    });
-  }
-
-  // Its two pages are `/<slug>` and `/<slug>/vendor` (T469): nothing under them is a page.
-  for (const suffix of ['/vendor/apply', '/apply', '/check-in']) {
-    test(`/<slug>${suffix} reads as any page that is not there`, async ({ page }) => {
-      await page.goto(`/${formMarket.marketSlug}${suffix}`);
-
-      await expect(page.getByTestId('page-not-found')).toBeVisible({ timeout: 10000 });
-      await expect(page.getByTestId('vendor-sign-in-email-input')).toHaveCount(0);
-      await expect(page.getByTestId('market-page-call')).toHaveCount(0);
-      await expect(page).toHaveURL(new RegExp(`/${formMarket.marketSlug}${suffix}$`));
-    });
-  }
 });
 
 test.describe('Intake mode - a market that stops serving applicants', () => {

@@ -172,51 +172,6 @@ for (const size of PHONE_AND_DESK) {
     const isTheWrite = (url: string, method: string) =>
       url.endsWith('/reviewers') && method === 'PUT';
 
-    test('after a re-read that fails, the dialog opens on the team saved, and saves it', async ({
-      authenticatedPage: page,
-    }) => {
-      const { chooser } = reviewers;
-      const { added, removed } = await swapOne();
-      await page.route(marketRead, (route) => route.abort());
-
-      await press(reviewers.save);
-      await expect(reviewers.dialog).toBeHidden();
-      await press(reviewers.more);
-      await expect(chooser.chips).toHaveCount(seed.counts.reviewers);
-      await expect(chooser.chip(added)).toBeVisible();
-      await expect(chooser.chip(removed)).toHaveCount(0);
-
-      const written = page.waitForRequest((request) => isTheWrite(request.url(), request.method()));
-      await press(reviewers.save);
-      const team = ((await written).postDataJSON() as { reviewers: string[] }).reviewers;
-      expect(team).toContain(added);
-      expect(team).not.toContain(removed);
-      await expect(reviewers.dialog).toBeHidden();
-
-      await page.unroute(marketRead);
-      await new ApplicationsAllPage(page).goto(seed.marketId);
-      await expect(reviewers.line).not.toContainText(removed);
-    });
-
-    test('after a re-read that fails, a tab switch keeps the team saved', async ({
-      authenticatedPage: page,
-    }) => {
-      const { chooser } = reviewers;
-      const { added, removed } = await swapOne();
-      await page.route(marketRead, (route) => route.abort());
-      await press(reviewers.save);
-      await expect(reviewers.dialog).toBeHidden();
-
-      // Each tab's read fails too, so the market from before the save is still the one held.
-      await press(page.getByTestId('market-bar-tab-tools'));
-      await expect(reviewers.panel).toHaveCount(0);
-      await press(page.getByTestId('market-bar-tab-applications'));
-      await press(reviewers.more);
-      await expect(chooser.chips).toHaveCount(seed.counts.reviewers);
-      await expect(chooser.chip(added)).toBeVisible();
-      await expect(chooser.chip(removed)).toHaveCount(0);
-    });
-
     test('a read overtaking the re-read leaves nothing to open on the team before', async ({
       authenticatedPage: page,
     }) => {

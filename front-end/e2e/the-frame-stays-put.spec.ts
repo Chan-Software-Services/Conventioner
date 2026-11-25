@@ -35,10 +35,19 @@ async function frameGeometry(page: Page) {
 }
 
 async function scrollToBottom(page: Page) {
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  // Scrolled again on every poll: the rail shows before a tab's own rows arrive, and a scroll made
+  // while Applications still waits on its list finds a page shorter than the window, moves nothing,
+  // and stays put once the rows grow the page under it.
   // Bounded: a screen shorter than the window does not scroll, and the caller says whether it must.
   await page
-    .waitForFunction(() => window.scrollY > 0, null, { timeout: 2000 })
+    .waitForFunction(
+      () => {
+        window.scrollTo(0, document.documentElement.scrollHeight);
+        return window.scrollY > 0;
+      },
+      null,
+      { timeout: 2000 },
+    )
     .catch(() => undefined);
 }
 

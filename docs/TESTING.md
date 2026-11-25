@@ -322,11 +322,11 @@ none exist). The applicant-facing suites cover a market whose vendors apply on i
 `applicant.spec.ts` (the public applicant login's anti-oracle behaviour: identical answers for
 known and unknown emails, an identical 401 whatever the failure, and single-use codes),
 `essential-fields.spec.ts` (the essential questions as an applicant answers them), and
-`intake-mode.spec.ts` (a CSV market's applicant endpoints answering exactly as a market that does
-not exist - the gated and absent renders are asserted to be identical, rather than each alone).
+`intake-mode.spec.ts` (a CSV market's applicant pages answering exactly as a market that does
+not exist - the gated and absent addresses are asserted to land alike, rather than each alone).
 `section-preference.spec.ts` covers a vendor being placed in the section they ranked first, and
 `date-display-timezone.spec.ts` pins a market date rendering as the same calendar day in
-Honolulu, Los Angeles and Tokyo.
+Honolulu and Tokyo, one zone each side of UTC.
 The application-form suite (`application-form.spec.ts`) drives the
 market-setup Application Form tab: an organizer builds a form (keys auto-slugged from the
 labels) on a market created through the API path, watches the live preview, saves it, and

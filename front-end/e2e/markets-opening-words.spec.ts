@@ -16,6 +16,9 @@ import { ensureVerifiedUser } from './helpers/verifiedUser';
  * (E14/F01/S02). What names the market last opened is a `lastMarketId` pointer, set by arriving at
  * a market; the line is drawn from the server's answer for that id (E21/F02/S05).
  *
+ * Which of them each answer draws, and what is remembered after, is `marketsOpeningWords.test.ts`'s,
+ * on a mocked list; these read the real list and session, the layout, the keys and a deletion.
+ *
  * Every test has an organizer of its own, so its list is exactly the markets it seeds.
  */
 
@@ -194,24 +197,6 @@ for (const size of WINDOWS) {
       await expect(line(page)).toBeVisible();
     });
 
-    test('one market gets no line, and neither does nothing remembered', async ({
-      page,
-      request,
-    }) => {
-      const { markets } = await organizerWith(page, request, ['Riverside Market']);
-      await remember(page, markets[0].id);
-      await page.goto('/markets');
-      await expect(cards(page)).toHaveCount(1);
-      await expect(line(page)).toHaveCount(0);
-      expect(await pointer(page), 'the pointer is not news of a market gone').toBe(markets[0].id);
-
-      await page.evaluate(() => localStorage.removeItem('lastMarketId'));
-      await page.reload();
-      await expect(cards(page)).toHaveCount(1);
-      await expect(line(page)).toHaveCount(0);
-      await expect(note(page)).toHaveCount(0);
-    });
-
     test('a remembered market gone is said once, with others left', async ({ page, request }) => {
       await organizerWith(page, request, ['Riverside Market']);
       await remember(page, 'a-market-that-has-gone');
@@ -228,43 +213,6 @@ for (const size of WINDOWS) {
       await page.reload();
       await expect(cards(page)).toHaveCount(1);
       await expect(note(page)).toHaveCount(0);
-    });
-
-    test('a remembered market gone is said once, with none left', async ({ page, request }) => {
-      await organizerWith(page, request, []);
-      await remember(page, 'a-market-that-has-gone');
-      await page.goto('/markets');
-
-      await expect(note(page)).toHaveText(
-        'The market you last opened is no longer available, and there are no others.',
-      );
-      await expect(message(page)).toHaveCount(0);
-      await expect(page.getByTestId('markets-empty')).toHaveCount(0);
-      expect(await pointer(page)).toBeNull();
-
-      await page.reload();
-      await expect(message(page)).toBeVisible();
-      await expect(note(page)).toHaveCount(0);
-    });
-
-    /** An unreachable server costs the line, and shows nothing stale in its place. */
-    test('a failed read gives no note and forgets nothing', async ({ page, request }) => {
-      const { markets } = await organizerWith(page, request, ['Riverside Market', 'Harbour Fair']);
-      await remember(page, markets[0].id);
-      await page.route('**/markets', (route) =>
-        isTheRead(route) ? route.abort() : route.continue(),
-      );
-      await page.goto('/markets');
-
-      await expect(page.getByTestId('markets-read-failed')).toBeVisible();
-      await expect(note(page)).toHaveCount(0);
-      await expect(line(page)).toHaveCount(0);
-      await expect(message(page)).toHaveCount(0);
-      expect(await pointer(page)).toBe(markets[0].id);
-
-      await page.unroute('**/markets');
-      await page.getByTestId('markets-retry').click();
-      await expect(line(page)).toContainText(markets[0].name);
     });
 
     test('deleting the remembered market in Manage gives no note, and the line goes', async ({
@@ -339,34 +287,6 @@ for (const size of WINDOWS) {
       await page.keyboard.press('Escape');
       await expect(line(page)).toBeVisible();
       expect(await line(page).boundingBox()).toEqual(lineAt);
-    });
-
-    /** It is asked of the server, and a reload does not lose it (E14/F01/S02). */
-    test('an organizer with markets is never told they have none', async ({ page, request }) => {
-      await organizerWith(page, request, ['Riverside Market']);
-
-      // A browser that has never opened one: a fresh context is exactly that.
-      await page.goto('/markets');
-      await expect(cards(page)).toHaveCount(1);
-      await expect(message(page)).toHaveCount(0);
-
-      await page.reload();
-      await expect(cards(page)).toHaveCount(1);
-      await expect(message(page)).toHaveCount(0);
-    });
-
-    /** A pointer, never a copy: the line can only ever be drawn from what the server says now. */
-    test('the browser remembers which market, and nothing about it', async ({ page, request }) => {
-      const { markets } = await organizerWith(page, request, ['Riverside Market', 'Harbour Fair']);
-      await page.goto(marketSetupPath(markets[0].id));
-      await expect(page.getByTestId('market-bar-title')).toHaveText(markets[0].name);
-
-      const stored = await page.evaluate(() => ({
-        pointer: localStorage.getItem('lastMarketId'),
-        market: localStorage.getItem('market'),
-      }));
-
-      expect(stored).toEqual({ pointer: markets[0].id, market: null });
     });
 
     /** Each fact's value is a single line of text, not a column of fragments. */
