@@ -10,11 +10,12 @@ import { ROOM_IN_WINDOW_WAIT_MS } from './helpers/signInWindow';
 /**
  * Why E2E: the stack together, the screen's Sign in meeting the server's sign-in limits.
  *
- * A vendor's code sign-in counts wrong codes per caller and address, and per address alone up to
- * fifty, which only many callers together reach; past that a try asks the human check rather than
- * refusing (T539). The vendor's sign-in sends the check's token with every Sign in, so a vendor
- * whose address others have tried signs in with their right code and sees nothing new. The address's
- * count is filled as fifty other callers' wrong codes would leave it (`helpers/signInLimits.ts`).
+ * A vendor's code sign-in counts wrong codes per caller and address, and per address alone up to a
+ * ceiling (`VERIFY_CODE_PER_ADDRESS_CEILING`), which only many callers together reach; past that a
+ * try asks the human check rather than refusing (T539). The vendor's sign-in sends the check's
+ * token with every Sign in, so a vendor whose address others have tried signs in with their right
+ * code and sees nothing new. The address's count is filled as other callers' wrong codes would
+ * leave it (`helpers/signInLimits.ts`).
  */
 
 const ASKED = { message: "Confirm you're a person, then try again.", captcha: 'required' };

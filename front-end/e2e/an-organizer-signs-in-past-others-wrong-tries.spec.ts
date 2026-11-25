@@ -15,12 +15,14 @@ import { ensureVerifiedUser } from './helpers/verifiedUser';
  * Why E2E: the stack together, the organizer's sign-in screen meeting the server's sign-in limits.
  *
  * An organizer's password and code sign-ins count wrong tries per caller and address, and per
- * address alone up to fifty, which only many callers together reach; past that a try asks the
- * human check rather than refusing (T539). The organizer's forms send no token until the server
- * asks, so an everyday sign-in loads no script of Cloudflare's; asked, the form puts the check on
- * the page and sends once more with its token, and the organizer is signed in. The address's count
- * is filled as fifty other callers' wrong tries would leave it (`helpers/signInLimits.ts`), on an
- * account of the spec's own, so no other spec's sign-in meets the check.
+ * address alone up to a ceiling (`PASSWORD_PER_ADDRESS_CEILING`,
+ * `ORGANIZER_CODE_PER_ADDRESS_CEILING`), which only many callers together reach; past that a try
+ * asks the human check rather than refusing (T539). The organizer's forms send no token until the
+ * server asks, so an everyday sign-in loads no script of Cloudflare's; asked, the form puts the
+ * check on the page and sends once more with its token, and the organizer is signed in. The
+ * address's count is filled as other callers' wrong tries would leave it
+ * (`helpers/signInLimits.ts`), on an account of the spec's own, so no other spec's sign-in meets
+ * the check.
  */
 
 const PASSWORD = 'E2eTriedByOthers123!';
