@@ -33,7 +33,7 @@ describes:
   - front-end/src/utils/useUpdatedWords.ts
   - front-end/src/components/attendance/laidOutLocations.ts
   - back-end/migrations/add_check_outs_from_sheet.py
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - wayfinding/real-market-readiness/map
   - wayfinding/claims-and-room/map
