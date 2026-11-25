@@ -19,6 +19,7 @@ import { PEOPLE_CAP } from '@/utils/personChoice';
 import FollowUpDialog from '@/components/application/FollowUpDialog.vue';
 import ApplicationMonitor from '@/components/application/ApplicationMonitor.vue';
 import { useDialogSubmit } from '@/utils/useDialogSubmit';
+import { answeredWith, servedReview } from './support/servedReview';
 
 const fetchMarketApplications = vi.fn();
 const reviewApplication = vi.fn();
@@ -42,20 +43,34 @@ vi.mock('@/utils/applicantApi', async (importOriginal) => {
   };
 });
 
-const app = (id: string, status: ApplicationStatus, submittedAt: string): Application =>
-  ({ id, applicantEmail: `${id}@x.test`, status, submittedAt, formData: {} }) as Application;
+const app = (
+  id: string,
+  status: ApplicationStatus,
+  submittedAt: string,
+  served: ReturnType<typeof servedReview>,
+): Application =>
+  ({
+    id,
+    applicantEmail: `${id}@x.test`,
+    status,
+    submittedAt,
+    formData: {},
+    ...served,
+  }) as Application;
 
 const APPS = [
-  app('late', ApplicationStatus.Open, '2026-05-03'),
-  app('chase', ApplicationStatus.NeedsFollowUp, '2026-05-01'),
-  app('early', ApplicationStatus.Open, '2026-05-02'),
-  app('done', ApplicationStatus.ReviewerApproved, '2026-05-01'),
+  app('late', ApplicationStatus.Open, '2026-05-03', servedReview('open')),
+  app('chase', ApplicationStatus.NeedsFollowUp, '2026-05-01', servedReview('follow_up')),
+  app('early', ApplicationStatus.Open, '2026-05-02', servedReview('open')),
+  app('done', ApplicationStatus.ReviewerApproved, '2026-05-01', servedReview('approved')),
+  // Stored before the migration at an old spelling of open, which the server serves as open.
+  app('old', ApplicationStatus.UnderReview, '2026-05-04', servedReview('open')),
 ];
 
 describe('the review queue', () => {
   it('leaves follow-ups out unless asked, then takes them after the rest', () => {
-    expect(reviewQueue(APPS, false).map((a) => a.id)).toEqual(['early', 'late']);
-    expect(reviewQueue(APPS, true).map((a) => a.id)).toEqual(['early', 'late', 'chase']);
+    expect(reviewQueue(APPS, false).map((a) => a.id)).toEqual(['early', 'late', 'old']);
+    expect(reviewQueue(APPS, true).map((a) => a.id)).toEqual(['early', 'late', 'old', 'chase']);
   });
 
   it('keeps follow-ups out of what was reviewed', () => {
@@ -231,7 +246,9 @@ describe('marking a follow-up on the card', () => {
     localStorage.setItem('user', JSON.stringify('alex@market.test'));
     fetchMarketApplications
       .mockReset()
-      .mockResolvedValue([app('early', ApplicationStatus.Open, '2026-05-02')]);
+      .mockResolvedValue([
+        app('early', ApplicationStatus.Open, '2026-05-02', servedReview('open')),
+      ]);
     reviewApplication.mockReset();
   });
   afterEach(() => {
@@ -261,7 +278,7 @@ describe('marking a follow-up on the card', () => {
     reviewApplication.mockImplementationOnce(
       (_m: string, held: Application, status: string) =>
         new Promise((resolve, reject) => {
-          answer = () => resolve({ application: { ...held, status }, undoSeconds: 0 });
+          answer = () => resolve({ application: answeredWith(held, status), undoSeconds: 0 });
           refuse = reject;
         }),
     );

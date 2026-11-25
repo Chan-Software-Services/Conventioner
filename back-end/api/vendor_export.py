@@ -44,7 +44,7 @@ import payments as Payments
 import pricing as Pricing
 from assignment.csv_output import as_text_cell
 from client_errors import BadRequestError
-from datatypes import Application, ApplicationStatus, DiscordConnection, FormField, Market
+from datatypes import Application, DiscordConnection, FormField, Market
 from utils.email_address import normalized_email
 from utils.request_body import string_field
 
@@ -72,27 +72,27 @@ STATUSES: List[Tuple[str, str]] = [
 ]
 _STATUS_LABELS = dict(STATUSES)
 
-_STATUS_OF = {
-    ApplicationStatus.OPEN: "open",
-    ApplicationStatus.UNDER_REVIEW: "open",
-    ApplicationStatus.NEEDS_FOLLOW_UP: "follow_up",
-    ApplicationStatus.REVIEWER_APPROVED: "approved",
-    ApplicationStatus.REVIEWER_REJECTED: "rejected",
+#: Which of ``STATUSES`` each state of the review is.
+_STATUS_BY_STATE = {
+    ReviewState.State.OPEN: "open",
+    ReviewState.State.FOLLOW_UP: "follow_up",
+    ReviewState.State.APPROVED_BY_A_PERSON: "approved",
+    ReviewState.State.APPROVED_ADDED: "added",
+    ReviewState.State.REJECTED_BY_A_PERSON: "rejected",
+    ReviewState.State.REJECTED_BY_A_RULE: "rejected",
 }
 
 
-def status_of(application: Application) -> Optional[str]:
-    """Which of ``STATUSES`` an application is, or None for a status the review no longer gives."""
-    if ReviewState.is_added(application.model_dump()):
-        return "added"
-    return _STATUS_OF.get(application.status)
+def status_of(application: Application) -> str:
+    """Which of ``STATUSES`` an application is, by the review state's one rule
+    (``ReviewState.state_of``), so the file says what the screens say of each vendor: an added
+    vendor whose answers arrived since is an applicant, approved, and every stored spelling reads
+    as the state it stands for."""
+    return _STATUS_BY_STATE[ReviewState.state_of(application.model_dump())]
 
 
 def _status_text(application: Application) -> str:
-    status = status_of(application)
-    if status:
-        return _STATUS_LABELS[status]
-    return application.status.value.replace("_", " ").capitalize()
+    return _STATUS_LABELS[status_of(application)]
 
 
 # ── columns ───────────────────────────────────────────────────────────────────

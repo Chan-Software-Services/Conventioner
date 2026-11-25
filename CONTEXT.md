@@ -125,20 +125,25 @@ It lives on the market rather than on the form because the form freezes at the f
 _Avoid_: Important field, priority (means the solver's ordering rules)
 See [Review highlight](docs/business/concepts/review-highlight.md).
 
+**Review state**:
+Where an application stands in its review: open, follow-up, approved or rejected. The server reads it off the stored status and serves it on every application an organizer reads; screens read it, never the status, to decide anything.
+_Avoid_: Status for the state (the stored status keeps old spellings: `under_review`, a missing status, the old offers flow's)
+See [the served review state](docs/implementation/data/application-document.md#the-served-review-state).
+
 **Reviewer**:
 Someone chosen to review a market's applications, by an Admin or the owner. Chosen from the people with a role on the market or through its organization (only the market's own, to a chooser from outside the organization), and kept only for this review: being chosen is not a role. With none chosen, everyone reviews first come, first served.
 _Avoid_: Assignee (an assignment is a table), the reviewer for whoever happens to have a card open (that is who holds it)
 See [The review is dealt among chosen reviewers](docs/business/rules/the-review-is-dealt-among-chosen-reviewers.md).
 
 **Share**:
-The applications dealt to one reviewer, and the follow-ups they own wherever those were dealt. An application stays in the share it was dealt to after it is decided, as the record of whose it was. One that comes back to open or to a follow-up (a verdict undone, a rule's rejection returned, an applicant's edit or a re-import sending a verdict back to review) stays in that share only while its reviewer may still review, or, for a follow-up, while its owner still holds a role on the market; otherwise it is dealt again.
+The applications dealt to one reviewer, and the follow-ups they own wherever those were dealt. An application stays in the share it was dealt to after it is decided, as the record of whose it was. One that comes back to open or to a follow-up (a verdict undone, a rule's rejection returned, an applicant's edit or a re-import sending a verdict back to review) stays in that share only while its reviewer may still review, or, for a follow-up, while its owner still holds a role on the market; otherwise it is dealt again. A chosen reviewer who may no longer review here keeps their share until an Admin removes them, which deals it again; nothing removes it silently.
 
 **Deal**:
 Handing the open applications out among the reviewers, round robin in the order they arrived. Any change of reviewers deals the open applications again; a decided application stays where it is, and so does a follow-up, unless its owner is a reviewer the change removed. Every application that comes into open, or back into a follow-up by an undo, or whose follow-up is handed on, waits for the next deal, which keeps it with its reviewer while they may review, or a follow-up with its owner while they may still own one, deals it to the next reviewer in turn otherwise, and hands a follow-up on as its owner too.
 _Avoid_: Assign (means giving a vendor a table)
 
 **Waiting**:
-An open application, or a follow-up, that the write moving it into open or back into a follow-up, or handing its follow-up on, marked for the deal, and that no deal has taken yet, while reviewers are chosen: the next deal keeps it with an able reviewer, or a follow-up with an owner who still holds a role here, or deals it to the next reviewer in turn. With nobody chosen able to review, it keeps waiting until someone is, and a reviewer's next card deals it then.
+An undecided application the next deal would move, while reviewers are chosen: open with a reviewer who is not one of the chosen reviewers (none, or a removed one), which is in nobody's share, or a follow-up whose owner holds no role on the market, which stays in its reviewer's share while they are chosen. Served on every application an organizer reads. The write that moves an application into open or back into a follow-up, or hands its follow-up on, marks it for the deal, so the next deal takes it: it keeps it with an able reviewer, or a follow-up with an owner who still holds a role here, or deals it to the next reviewer in turn. With nobody chosen able to review, a marked one keeps waiting until someone is, and a reviewer's next card deals it then. One stored waiting before every such write marked it is marked by the status migration, so the next deal takes it too.
 _Avoid_: Unassigned, stranded (what waiting replaced: an application left in nobody's share for good)
 
 **Solver-relevant answer**:

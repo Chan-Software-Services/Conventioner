@@ -92,6 +92,7 @@ The map is the newest `test-map` artifact of a push to `dev`, which it downloads
 A spec is chosen by five rules:
 
 1. **The change edits it, or a file it imports**, transitively: a helper two levels down counts, and so does a `front-end/src/` file a spec imports itself.
+   A spec whose imports at the base reached a file the change deletes counts too, since its imports at the head no longer name that file; its reason is "imported `<path>`, which the change deletes".
 2. **Its pages loaded a changed file under `front-end/src/`.**
    A `.ts` or `.vue` file there whose change is to its comments alone, a `//` or `/* */` in a script or a `<!-- -->` in a template, runs nothing new, so it reaches no spec by any rule.
    Comments alone means the file reads the same at both sides of the diff with its comments taken out, each run of white space, or a script's comment, read as one space, or as one line break when it holds one, and a template's comment read as nothing; strings, templates, regexes, a tag's values, an interpolation `{{ }}` and the text of a `<style>`, `<pre>`, `<textarea>` or `<title>` are kept whole, so a `//` inside one is code.
@@ -108,6 +109,7 @@ A spec is chosen by five rules:
 5. **Every spec, for a file under `front-end/` or `back-end/` that no rule places**: not a spec, not imported by one at the head or the base, in no spec's modules and no endpoint's files.
    Such a file can drive any spec: a stylesheet `main.css` pulls in by `@import`, which Vite inlines so no page requests it, a back-end module no endpoint ran in the suite, or a file no rule reads, such as `back-end/docker-entrypoint.sh` or `front-end/tsconfig.app.json`.
    Its reason is "`<path>` is not in the map".
+   A file the change deletes is placed by its deletion and chooses nothing here, since whatever read it, an importer, a stylesheet's `@import` or a config naming it, changes with it and is placed on its own; a deleted file a rule does place still chooses what that rule chooses.
    These drive no spec and choose nothing, since neither the stack nor a page reads them:
    - the docs and any Markdown
    - the suites that are not E2E: `back-end/tests/`, `scripts/tests/`, `front-end/src/__tests__/`, a `*.test.ts`, and a `*.test.ts(x)` or `*.spec.ts(x)` under `front-end/src/`
@@ -117,6 +119,7 @@ A spec is chosen by five rules:
    - the scripts in `front-end/scripts/` that deal, repeat or measure the specs, or that nothing runs: `e2e-shard-timings.json`, `e2e-shards.ts`, `e2e-repeat.ts`, `bundle-budget.ts`, `no-eval.ts` and `brand-icons.ts`
    - the back end's deploy config, `back-end/vercel.json`
    - the advisory scan's lock, `back-end/requirements-audit.in` and `requirements-audit.txt`, which only [CI's `python-advisories` job](ci-and-the-gate.md#ci) installs
+   - the migrations, `back-end/migrations/`, which an operator runs by hand and which nothing the app, the seed or a spec imports
 
 The chosen specs are ordered by score: each changed thing a spec reaches adds 1 divided by how many specs reach it, so a module every spec loads (`App.vue`) or an endpoint every spec's setup calls adds almost nothing, while one that three specs reach decides the order.
 A changed spec, and each changed file a spec imports, adds 1; a change counted for a whole back-end file, rule 4 and rule 5 add nothing, though they still choose.

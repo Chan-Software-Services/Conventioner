@@ -36,6 +36,7 @@ import {
   TIER_PREFERENCE_KEY,
 } from '@/utils/essentialFields';
 import { tryEveryClose } from './support/dialogCloses';
+import { servedReview } from './support/servedReview';
 
 const sent: { url: string; body: unknown }[] = [];
 /** A write still out, when a test holds one; otherwise the server answers at once. */
@@ -90,6 +91,7 @@ function application(overrides: Partial<Application> = {}): Application {
     applicantEmail: 'nadia@ember.test',
     formData: { shop: 'Ember Ceramcs', student: 'No', [FULL_NAME_KEY]: 'Nadia Okonkwo' },
     status: ApplicationStatus.Open,
+    ...servedReview('open'),
     applicationType: ApplicationType.Main,
     updatedAt: '2026-10-01T00:00:00Z',
     ...overrides,

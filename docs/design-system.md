@@ -50,7 +50,7 @@ describes:
   - front-end/src/components/ToolRow.vue
   - front-end/src/components/ToolGroup.vue
   - front-end/src/components/PinnedTools.vue
-verified: 2026-11-19
+verified: 2026-11-24
 sources:
   - wayfinding/claims-and-room/map
   - wayfinding/claims-and-room/01
@@ -414,7 +414,7 @@ The other fills such a control is drawn in step once, on hover: `--mm-yellow-hov
 The deep focus border reads less on a darker fill: 3.17:1 on `--mm-green-hover`, 2.80 on `--mm-green-pressed`, 2.68 on `--mm-red-hover` and 2.37 on `--mm-red-pressed`, against 3.26, 2.74, 2.68 and 2.28 under the opacity it replaced.
 
 **A mark that carries no text is held to the non-text bar, 3:1**: the bar's current-tab dot, `--mm-green` on `--mm-black`, measures 3.39:1, and the test pins it, so a bar retinted darker or a green lightened for a light ground cannot take it under unnoticed.
-A chart's marks are held to the same 3:1 on the white card they are drawn on (T201): the review's split bar fills Open, Needs follow-up, Approved and Rejected with `--mm-blue`, `--mm-chart-yellow`, `--mm-green` and `--mm-red`, a status no filter lists with `--mm-chart-grey`, a grey of its own, each part set apart by a 2px white gap so neighbouring fills need no contrast with each other.
+A chart's marks are held to the same 3:1 on the white card they are drawn on (T201): the review's split bar fills Open, Needs follow-up, Approved and Rejected with `--mm-blue`, `--mm-chart-yellow`, `--mm-green` and `--mm-red`, every application in one of the four, each part set apart by a 2px white gap so neighbouring fills need no contrast with each other.
 `--mm-yellow` is 2.15:1 on white, too faint for a mark, so a chart's yellow is its own token, `--mm-chart-yellow` (`#bd8619`, 3.19:1), darker and never under text; `contrast.test.ts` lists the chart marks and holds each to 3:1 on white.
 A meter bar (`MeterBar`, the Stats tab's room, money and check-in) fills its value in `--mm-green` up to its mark and in `--mm-chart-yellow`, the charts' attention fill, past it, on a `--mm-beige` track; the mark is a 2px `--mm-black` line standing a hairline over and under the track, and a row's bars in one card share one scale, the card's largest value or mark.
 Room marks the tables on every row; Money marks owed only when more was paid, and Check-in a day's expected only when that day is short of the card's largest, since a mark at the track's end says nothing the end does not.
@@ -645,7 +645,7 @@ With `wrapsOnAPhone`, at 640px and under the options wrap `--space-1` apart, eac
 From 1024px, the market frame's own break, the block is `position: sticky` at `calc(var(--banner-h) + var(--market-frame-h))`, white, at `z-index` 10, under the frame's 20 and over the rows, so it never moves as the page scrolls and only the list or the map passes under it; under 1024px it scrolls away with the page, as the frame's rail does.
 It draws no rule: its last row's is the block's bottom rule.
 A screen puts it where it spans the card's whole width with nothing between it and the frame, so at rest it already stands where it pins.
-It measures the block with a `ResizeObserver`, as `MarketFrame` measures itself, and publishes the height as `--pinned-tools-h` on its root (`0px` before the first measure and with no observer, and outside a block, where `base.css` defines it), so a second sticky row in the screen stands under it at `calc(var(--banner-h) + var(--market-frame-h) + var(--pinned-tools-h))`, read only inside its own `width >= 1024px` rule; the block grows with a failed refresh's line or a wrapped row, and the height follows.
+It measures the block with a `ResizeObserver`, as `MarketFrame` measures itself, and publishes the height, unrounded as the frame's is, as `--pinned-tools-h` on its root (`0px` before the first measure and with no observer, and outside a block, where `base.css` defines it), so a second sticky row in the screen stands under it at `calc(var(--banner-h) + var(--market-frame-h) + var(--pinned-tools-h))`, read only inside its own `width >= 1024px` rule; the block grows with a failed refresh's line or a wrapped row, and the height follows.
 A field in a toolbar, a select, a text field or a search, takes `.field--compact`, which gives it `--control-height-compact`, so it stands as tall as the `.btn--compact` beside it; its text stays the field's `--text-sm`.
 
 A list that can grow with a market is [`ListFrame.vue`](../front-end/src/components/ListFrame.vue) (T200), generic over the row: a find field once the whole list passes `findFrom` rows (12), the screen's own filters beside it, a count line, the first `pageSize` rows (50) and "Show N more".

@@ -27,6 +27,12 @@ test.beforeAll(async ({ request }) => {
   });
 });
 
+// Held at the seed's instant: a run that passes midnight would open the map on the seed's next
+// day, where other vendors sit at other tables.
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(seeded.seededAt);
+});
+
 const SHARED = 'north-table-3';
 
 /** The map's one outline, round a half (a path) or round the whole table (a rect). */

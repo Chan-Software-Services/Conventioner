@@ -25,7 +25,8 @@ export function datesWithinReach(
 
 /**
  * How many of the market's dates a vendor needs a table on (E38/F08/S02): a vendor added by hand
- * answered nothing and needs one on every market day; anyone who applied, the dates within reach.
+ * who never applied (served `origin` `added`) answered nothing and needs one on every market day;
+ * anyone whose answers arrived, an added vendor imported since included, the dates within reach.
  */
 export function datesTheyNeed(
   vendor: { answers: Record<string, unknown>; added: boolean },
