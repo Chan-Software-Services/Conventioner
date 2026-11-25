@@ -26,11 +26,11 @@ ORG_MEMBER = "org-member"
 OUTSIDER = "outsider"
 
 
-def organization(org_id=ORG_ID):
-    return Organization(
-        id=org_id, name="Test Org", owner=ORG_OWNER, admins=[ORG_ADMIN], members=[ORG_MEMBER],
-        markets=["market-123"],
-    )
+ORG_PEOPLE = {ORG_OWNER: "owner", ORG_ADMIN: "admin", ORG_MEMBER: "member"}
+
+
+def organization(org_id=ORG_ID, people=ORG_PEOPLE):
+    return Organization(id=org_id, name="Test Org", people=people, markets=["market-123"])
 
 
 def market(roles=None, phase=MarketPhase.MARKET_DAYS):
@@ -70,8 +70,7 @@ def test_the_higher_of_the_two_roles_is_the_one_held(who, on_the_market, held):
 
 
 def test_the_market_owner_is_still_its_owner_when_also_an_organization_admin():
-    org = organization()
-    org.admins.append(MARKET_OWNER)
+    org = organization(people={**ORG_PEOPLE, MARKET_OWNER: "admin"})
 
     assert PermissionsApi.get_user_market_role(MARKET_OWNER, market(), org) == MarketRole.OWNER
 
@@ -80,6 +79,28 @@ def test_an_admin_of_another_organization_gets_nothing_here():
     other = organization("org-2")
 
     assert PermissionsApi.get_user_market_role(ORG_ADMIN, market(), other) is None
+
+
+# A map stored in another order than its places: a member first, the owner last, and two admins.
+OUT_OF_ORDER_PEOPLE = {
+    ORG_MEMBER: "member", ORG_ADMIN: "admin", "org-admin-2": "admin", ORG_OWNER: "owner",
+}
+
+
+def test_an_organizations_people_are_named_owner_then_admins_then_members():
+    org = organization(people=OUT_OF_ORDER_PEOPLE)
+
+    assert PermissionsApi.organization_people_in_order(org) == [
+        ORG_OWNER, ORG_ADMIN, "org-admin-2", ORG_MEMBER,
+    ]
+
+
+def test_everyone_with_a_role_is_named_the_markets_roles_first_then_the_organizations_in_order():
+    org = organization(people=OUT_OF_ORDER_PEOPLE)
+
+    assert PermissionsApi.people_with_market_role(market({"market-editor": "editor"}), org) == [
+        MARKET_OWNER, "market-editor", ORG_OWNER, ORG_ADMIN, "org-admin-2", ORG_MEMBER,
+    ]
 
 
 def served(who):

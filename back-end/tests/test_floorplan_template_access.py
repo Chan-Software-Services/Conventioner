@@ -33,9 +33,12 @@ ORG_ID = "org-123"
 ORGANIZATION = {
     "id": ORG_ID,
     "name": "Hall Collective",
-    "owner": "user-org-owner",
-    "admins": ["user-org-admin"],
-    "members": ["user-creator", "user-org-member"],
+    "people": {
+        "user-org-owner": "owner",
+        "user-org-admin": "admin",
+        "user-creator": "member",
+        "user-org-member": "member",
+    },
 }
 TEMPLATE_ID = "template-123"
 

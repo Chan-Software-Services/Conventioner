@@ -200,8 +200,7 @@ def organization(monkeypatch):
     """One organization, owned by whoever ``owner`` names, holding the markets given."""
     def install(owner=OWNER_ID, markets=()):
         install_organizations(monkeypatch, FakeOrganizations({
-            "_id": "org-object-id", "id": ORG_ID, "name": ORG_NAME, "owner": owner,
-            "admins": [], "members": [],
+            "_id": "org-object-id", "id": ORG_ID, "name": ORG_NAME, "people": {owner: "owner"},
         }))
         monkeypatch.setattr(OrgsApi, "markets_collection", FakeOrganizationMarkets(*markets))
     return install
@@ -497,7 +496,7 @@ class TestTheOrganizationAndRoleRoutes:
             id="user-member", email=email) if email == "member@example.com" else owner(email))
         stored = OrgsApi.organizations_collection
         # The owner's own place changes between the read and the write.
-        stored.before_write = lambda: stored.doc.update(owner="someone-else")
+        stored.before_write = lambda: stored.doc.update(people={"someone-else": "owner"})
         raised = refusals_raised_by(monkeypatch, OrgsApi, "add_org_member")
 
         response = client.post(
@@ -2049,7 +2048,7 @@ class TestTheCopyIsOurs:
     ):
         use_market(monkeypatch, stored_market(phase=MarketPhase.APPLICATIONS, organizationId=ORG_ID))
         unreadable = FakeOrganizations({
-            "_id": "mongo-org", "id": ORG_ID, "name": ORG_NAME, "owner": "user-9",
+            "_id": "mongo-org", "id": ORG_ID, "name": ORG_NAME, "people": {"user-9": "owner"},
             "markets": "unreadable-markets",
         })
         monkeypatch.setattr(OrgsApi, "organizations_collection", unreadable)

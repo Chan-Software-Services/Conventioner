@@ -33,8 +33,9 @@ CHOSEN_ROW_AT_EDITOR = {"review-when-chosen": {"role": "editor", "source": "mark
 def organization(world, monkeypatch):
     """The market belongs to an organization the Admin runs and Dee is a member of, and Dee holds
     no role on the market itself."""
-    stored = {"id": ORG_ID, "name": "Org", "owner": "user-owner", "admins": ["user-admin"],
-              "members": ["user-dee"], "markets": [MARKET]}
+    stored = {"id": ORG_ID, "name": "Org",
+              "people": {"user-owner": "owner", "user-admin": "admin", "user-dee": "member"},
+              "markets": [MARKET]}
     monkeypatch.setattr(OrgsApi, "get_organization",
                         lambda org_id: dict(stored) if org_id == ORG_ID else None)
     world.markets.doc["organizationId"] = ORG_ID
