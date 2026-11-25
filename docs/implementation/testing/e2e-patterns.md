@@ -24,7 +24,7 @@ describes:
   - front-end/e2e/helpers/mongoScript.ts
   - front-end/e2e/helpers/humanCheck.ts
   - front-end/e2e/helpers/signInLimits.ts
-verified: 2026-11-25
+verified: 2026-11-26
 sources:
   - E21/F02/S02
   - E22/F04/S02
@@ -178,7 +178,7 @@ An API helper or spec that posts to `applicant-login/request-code` sends `captch
 **Applicant sign-in is rate limited** ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)): the run reaches the stack as two callers, its pages and a spec's `page.request` calls to `APP_API` through the dev server's proxy and a spec's own requests to `BACKEND_URL` directly, so the `request-code:*` and `verify-code:*` counts of those two callers, and of each address, whose numbers are in [the one table of limits](../data/users-and-email.md#the-sign-in-is-bounded), are shared by the whole serial run; a right code takes its try back.
 A spec that fills a count per caller and address with requests over the API and meets the refusal on the screen sends them to `APP_API` with `page.request`, as `sign-in-is-bounded.spec.ts` does, so both are one caller.
 [`global-setup.ts`](../../../front-end/e2e/global-setup.ts) clears the counters at the start of every run; a spec that signs the same address in more than those counts allow within one run trips the limit, so a spec that spends a code's five tries uses an address of its own.
-CI retries a failed test twice in the same run, on the same counters, so a constant address its tests ask a code for twice a pass is refused on its second retry; a spec like that takes addresses of its own from `anApplicantEmail()` ([`seedApplicantMarket.ts`](../../../front-end/e2e/helpers/seedApplicantMarket.ts)).
+CI retries a failed test twice in the same run, on the same counters, so a constant address its tests ask codes for can pass its limit on a retry; a spec like that takes addresses of its own from `anApplicantEmail()` ([`seedApplicantMarket.ts`](../../../front-end/e2e/helpers/seedApplicantMarket.ts)).
 **A spec that needs an address past its own count fills the counter** rather than sending the tries: an address's own count of wrong codes or passwords, past which a try asks the human check, is only reached from many callers.
 [`helpers/signInLimits.ts`](../../../front-end/e2e/helpers/signInLimits.ts) names such a limit and fills it for an address in the current window (`fillSignInLimit`), through `mongoEval`, by the key `sign_in_limits.py` computes, after `waitForRoomInWindow`, and reads its count back (`signInLimitCount`), as `a-vendor-signs-in-past-others-wrong-codes.spec.ts` and `an-organizer-signs-in-past-others-wrong-tries.spec.ts` do.
 A spec that fills an organizer's count signs in with an account of its own (`ensureVerifiedUser`), so no other spec's sign-in as `TEST_USER` meets the check.

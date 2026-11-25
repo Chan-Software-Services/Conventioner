@@ -34,7 +34,7 @@ describes:
   - front-end/e2e/helpers/seeds.ts#allocateThenFreeEverySeat
   - front-end/e2e/helpers/seedMarketDayMap.ts
   - front-end/e2e/helpers/seedAPricedVendor.ts
-verified: 2026-11-24
+verified: 2026-11-26
 sources:
   - E02
   - E11/F01/S01

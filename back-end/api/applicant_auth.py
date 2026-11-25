@@ -16,10 +16,10 @@ constraints:
    (``sign_in_limits``) count every address and every caller alike, before the
    market is looked up, so their refusal leaks nothing. They bound one caller's
    guesses at an address's six-digit code
-   (``VERIFY_CODE_PER_CALLER_AND_ADDRESS``), so no one else's wrong tries refuse the
-   vendor's right one; past the address's own count of wrong tries from every caller
-   together (``VERIFY_CODE_PER_ADDRESS_CEILING``), a try asks the human check, one 403
-   for every address and market. A right code takes its try back.
+   (``VERIFY_CODE_PER_CALLER_AND_ADDRESS``), so no other caller's wrong tries make a
+   limit tell the vendor to wait; past the address's own count of wrong tries from
+   every caller together (``VERIFY_CODE_PER_ADDRESS_CEILING``), a try asks the human
+   check, one 403 for every address and market. A right code takes its try back.
 
 2. **Requesting a code is indistinguishable, always.** Same HTTP status, shape
    and body whether or not the address is known. Every request asks the human
