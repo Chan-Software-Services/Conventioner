@@ -2,6 +2,7 @@ import { test, expect, TEST_USER, BACKEND_URL } from './fixtures';
 import { seedPublishedMarketWithAssignments } from './helpers/seeds';
 import { mongoEval } from './helpers/mongo';
 import { ensureVerifiedUser } from './helpers/verifiedUser';
+import { grantMarketRole } from './helpers/grantMarketRole';
 import { marketScreenPath } from './helpers/marketScreens';
 import { calendarToday } from './helpers/vendorSignIn';
 
@@ -153,10 +154,7 @@ test.describe("One record for a vendor's day", () => {
       { marketDate: ON_THE_DAY },
     );
     ensureVerifiedUser(EDITOR.email, EDITOR.password);
-    const granted = await request.post(`${BACKEND_URL}/markets/${seed.marketId}/roles`, {
-      data: { user_email: EDITOR.email, role: 'editor' },
-    });
-    expect(granted.ok(), await granted.text()).toBeTruthy();
+    await grantMarketRole(request, seed.marketId, EDITOR, 'editor');
     const editor = await playwright.request.newContext({
       baseURL: BACKEND_URL,
       ignoreHTTPSErrors: true,
