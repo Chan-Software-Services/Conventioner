@@ -141,3 +141,12 @@ describe('a production build with a DSN', () => {
     ).resolves.toBeUndefined();
   }, 60_000);
 });
+
+describe('the suite', () => {
+  // `support/setup.ts` blanks it before any test runs, so a DSN a developer exported, or set in a
+  // `.env`, reaches no test: run it with `VITE_SENTRY_DSN` exported to see it hold.
+  it('reads no DSN from the shell or a .env', () => {
+    expect(process.env.VITE_SENTRY_DSN).toBe('');
+    expect(import.meta.env.VITE_SENTRY_DSN).toBe('');
+  });
+});
