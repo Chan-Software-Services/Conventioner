@@ -8,6 +8,7 @@ describes:
 verified: 2026-11-24
 sources:
   - T510
+  - T612
 status: accepted
 ---
 
@@ -18,7 +19,7 @@ It narrows [ADR 0027](0027-main-moves-only-through-promote.md), "`main` moves on
 
 ## Context
 
-Every pull request merged into `dev` ran the whole Test suite three times: on its head, on the merge queue's trial commit, and on the push to `dev`.
+When this was decided, a pull request merged into `dev` ran the whole Test suite three times: on its head, on the merge queue's trial commit, and on the push to `dev`.
 The queue merges by the very trial commit it tested, so the third run tested the same tree again: on PR 375's `3c1d7e14`, queue run 44308245312 and push run 44324061105, both green, about 165 runner minutes for nothing new.
 On GitHub Free's 20 jobs at once, that run also made every other pull request's and queue entry's shards wait for runners.
 It could not simply go, because Promote read only the push run, and the push run alone recorded the test map.
@@ -29,7 +30,8 @@ A per-pull-request job that ran the changed specs again had caught no flaky spec
 **On a push to `dev`, a first job, `suite`, reads the queue's Test run on the pushed commit, and the run warms the caches or runs the whole suite.**
 [`scripts/ci_suite.py`](../../scripts/ci_suite.py) prints `warm` when the newest run of `dev`'s queue on the commit passed (or is still going with every job passed or skipped), and `full` otherwise; a warm push runs no test job, only `warm-caches`, which restores or makes the caches the pull requests read and fails nothing, and `python-advisories`, which reads no word, so an advisory published since the pull request's run makes the warm push's run red.
 Every doubt is `full`: no queue run, one that did not pass, GitHub unread, and any output of the script that is not one of its words, which [`.github/workflows/test.yml`](../../.github/workflows/test.yml)'s step shell turns into `full`, as the jobs read `suite` skipped or failed.
-A pull request's run, a trial commit's and a push to `main`'s skip `suite` and run as before.
+A pull request's run, a trial commit's and a push to `main`'s skip `suite`.
+A trial commit's and a push to `main`'s run the whole suite, as does a pull request's, except that since [ADR 0050](0050-a-pull-requests-e2e-run-is-the-test-maps-selection.md) the E2E shards of one into `dev` run only the specs the test map names.
 
 **Promote takes the newest Test run on the commit, from `dev`'s queue or a push to `dev`.**
 [`scripts/promote_check.py`](../../scripts/promote_check.py) decides by the newest by `run_number`, which grows across events in one workflow, so a merged commit is decided by its push run (green when warm unless `python-advisories` failed, which holds Promote on that commit until the lock moves, and whatever the suite said when it ran the whole suite), and a commit the queue merged inside a batch, which has no push run of its own, by its queue run.

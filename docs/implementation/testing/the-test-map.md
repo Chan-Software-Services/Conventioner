@@ -16,9 +16,10 @@ sources:
 # The test map
 
 **The test map says, for each E2E spec file, which app modules its pages loaded and which back-end endpoints it called, and for each endpoint, which back-end functions it runs.**
-It is made to tell which E2E specs a change reaches, without running all of them, which `scripts/affected-specs.py` does for a builder ([choosing a builder's specs](#choosing-a-builders-specs)).
+It is made to tell which E2E specs a change reaches, without running all of them, which `scripts/affected-specs.py` does for a builder ([choosing a builder's specs](#choosing-a-builders-specs)) and for [a pull request's CI run](ci-and-the-gate.md#what-a-pull-requests-e2e-run-runs).
 CI's `test-map` job writes it on the nightly Test run on `dev`'s tip, as the artifact `test-map` of that run, kept 90 days ([CI and the gate](ci-and-the-gate.md#which-suite-a-run-runs)).
-No other run records or has a `test-map` job: not a pull request's, not the merge queue's, not a push's; when a pull request's shard test failed, its `e2e` job reads the newest map, to [name a miss of the selection](#where-a-miss-shows).
+No other run records or has a `test-map` job: not a pull request's, not the merge queue's, not a push's.
+A run of a pull request into `dev` reads the newest map to [choose its E2E specs](ci-and-the-gate.md#what-a-pull-requests-e2e-run-runs), and when a shard test failed its `e2e` job reads it again, to [name a miss of the selection](#where-a-miss-shows).
 
 ## What it holds
 
@@ -57,7 +58,7 @@ Its first job, `suite` ([`scripts/ci_suite.py`](../../../scripts/ci_suite.py)), 
 1. **The shards record each test.**
    On the nightly run, or one started by hand, each `e2e-shard` job sets `TEST_MAP_OUT`, and [`front-end/e2e/helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts), which `fixtures.ts` wraps Playwright's `test` in, appends one JSON line per test to it: its spec file, its start and end on the wall clock, every request its browser contexts made under `/src/` and `/api/`, and the V8 block coverage of its pages' modules (a DevTools session of each page's own, Chromium) as the stretches of each module that ran.
    A retry is a line of its own; a context a `beforeAll` opens records nothing, since no test is running then.
-   The recording makes each test slower (on `3c1d7e14`, the push run that recorded spent 127 minutes in tests across its ten shards, the queue's run that did not 99, +28%), and only the nightly run records, so a test near its timeout can pass on every pull request and the queue and fail only while recording.
+   The recording makes each test slower (on `3c1d7e14`, the push run that recorded spent 127 minutes in tests across its ten shards, the queue's run that did not 99, +28%), and only the nightly run records, so a test near its timeout can pass on pull requests and the queue and fail only while recording.
    Then the nightly run fails, which no rule reads and which never holds back a merge; its shard still recorded, so the map is still made.
    When a nightly run makes no map (it was cancelled, a shard recorded nothing, or the back end's suite failed under coverage), the next night tries again, since that commit still has none, and the map's readers keep the older one meanwhile.
    It takes no script's source: Playwright's `page.coverage` fetched the source of every module Vite serves, and a run recorded through it took some 40% longer in CI than one that recorded nothing.
@@ -95,6 +96,7 @@ python3 scripts/affected-specs.py --list [--json]
 The diff is from the merge-base with `origin/dev` to the worktree, uncommitted and untracked files included, both sides of every hunk read.
 The map is the newest `test-map` artifact of a run on `dev`, the nightly run's, which it downloads once a run, beside that run's shard reports, to `.stack-logs/test-map/<run id>/`, removing the ones it downloaded before; offline, it reads the one it has.
 `--map`, `--results`, `--base` and `--head` (with `--list`) name a map, shard reports and commits instead, as for replaying a merged pull request.
+CI makes the same choice for a pull request into `dev`, with no cap and without the specs the head lacks ([what a pull request's E2E run runs](ci-and-the-gate.md#what-a-pull-requests-e2e-run-runs)).
 
 A spec is chosen by five rules:
 
@@ -139,8 +141,9 @@ It prints what it runs and what it leaves to CI, each with its reasons, and with
 
 With no map at all (no `gh`, offline with none downloaded, or no run on `dev` has made one in 90 days), it says so and chooses by rule 1 alone, which is what Playwright's own `--only-changed` chooses.
 
-The selection is a builder's, never a gate's or a merge's: CI's full run on every pull request runs every spec, so a spec the cap or the map left out still runs before anything merges, and its failure comes back as a red check.
-A spec can fail through the data its setup seeds, where no map of the code a spec runs tells it from the other specs seeding the same way; that is the miss the full run is for.
+A pull request's E2E run is the map's selection, and the merge queue's run is whole and is the net.
+So a spec the cap left out of a builder's run still runs on the pull request, and a spec the map left out still runs before anything merges, on the queue, where its failure drops the pull request from the queue.
+A spec can fail through the data its setup seeds, where no map of the code a spec runs tells it from the other specs seeding the same way; that is the miss the whole run is for.
 
 `scripts/tests/test_affected_specs.py` holds each rule, the order and the cap, the download and the fallback, and [the audit](#where-a-miss-shows), to a small repository, a fixture map and fixture shard reports.
 
@@ -160,7 +163,8 @@ It takes the pull request's diff from its merge commit's first parent, hence two
 
 A test failed when it failed every attempt, or passed only on a retry, which under `failOnFlakyTests` fails its shard too.
 The job's summary lists the specs under "E2E selection audit", a chosen one with its rank and reasons, or says "no failure to audit" when no test failed, and "nothing to audit" when it read no shard report, as when the reports' download failed.
-Each miss is also a warning annotation on the run, "A miss of the selection", naming the spec and the changed files, so a map that drifted, or a dependency the rules cannot see, shows on the first pull request it costs.
+Each miss is also a warning annotation on the run, "A miss of the selection", naming the spec and the changed files, so it shows a map that drifted, or a dependency the rules cannot see.
+A pull request's run into `dev` that is [slimmed](ci-and-the-gate.md#what-a-pull-requests-e2e-run-runs) runs only specs the selection names, so a miss can show there only when the run was whole; a spec the run left out first fails on the merge queue.
 With no map, the selection is rule 1 alone: a failure outside it is listed as missed, with no annotation, since there is no map to have drifted.
 
 The audit never fails the job: it exits 0 whatever it finds, or when it cannot audit at all, saying why in the summary, and its steps continue on error, so `e2e` passes or fails on its shards alone.
