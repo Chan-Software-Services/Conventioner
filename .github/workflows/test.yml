@@ -525,7 +525,9 @@ jobs:
   # whole-suite run would, and runs no test. npm's cache is frontend-unit's and
   # frontend-lint-and-types', which `npm ci` fills for the setup-node post step to save on a miss;
   # front-end/node_modules, Playwright's browser, Chromium's system packages and the stack's images
-  # are the shards'. It never fails the run: the queue's run already proved the commit, and a cache
+  # are the shards'. The front end installs once at most: on npm's cache's miss front-end-deps runs
+  # `npm ci` whatever its own cache holds, only looking that key up, and otherwise only on its own
+  # cache's miss. It never fails the run: the queue's run already proved the commit, and a cache
   # it could not save only costs the next pull requests a cold start, until the next warm push saves
   # it, or, for front-end/node_modules, the browser, the packages and the images, a nightly run's
   # shard 1.
@@ -540,16 +542,15 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        id: node
         with:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: front-end/package-lock.json
-      - name: Fill npm's cache
-        working-directory: front-end
-        run: npm ci
       - uses: ./.github/actions/front-end-deps # zizmor: ignore[self-repository] actionlint 1.7.12, the latest, refuses the $/ form
         with:
           save-cache: true
+          fill-npm-cache: ${{ steps.node.outputs.cache-hit != 'true' }}
       - uses: ./.github/actions/e2e-stack # zizmor: ignore[self-repository] actionlint 1.7.12, the latest, refuses the $/ form
         with:
           save-caches: true
@@ -598,6 +599,33 @@ jobs:
           path: ${{ runner.temp }}/test-map.json
           if-no-files-found: error
           retention-days: 90
+
+  # The e2e tests that passed only on a retry over dev's last 20 Test runs that ran the shards, its
+  # merge queue's among them (scripts/e2e_retries.py), as this job's summary, on a nightly or
+  # hand-started run alone. 20 runs are about 250 of the 1,000 API requests an hour the run's token
+  # may make for the repository, which the other runs' reads share; a rate limit stops the walk.
+  # A test that passes only on a retry fails its shard (failOnFlakyTests), so its run went red and
+  # was run or queued again; this gathers which tests did it, across runs.
+  # It reads no `suite` word and needs no other job, reading only GitHub's API. No check requires
+  # it, and it never fails the run.
+  # The script needs only the standard library, so the runner's own Python runs it.
+  e2e-retries:
+    name: e2e-retries
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The e2e tests that passed only on a retry
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/e2e_retries.py --runs 20
 
   # The one check to require: it passes only when every shard did and the shards ran every spec
   # file exactly once, so the rules name a single job whatever the shard count becomes. It runs

@@ -95,9 +95,6 @@ def mail(monkeypatch):
 def an_organization(org_id=ORG_ID, name="Ember Markets", places=PLACES, **overrides):
     return {
         "id": org_id, "name": name, "people": dict(places),
-        "owner": next(user for user, place in places.items() if place == "owner"),
-        "admins": [user for user, place in places.items() if place == "admin"],
-        "members": [user for user, place in places.items() if place == "member"],
         "markets": [], "theme": None, **overrides,
     }
 
@@ -159,7 +156,6 @@ def place_directly(organization, user_id, place):
     """Someone placed in the organization by another door since the invitation was sent."""
     doc = organization.docs[0]
     doc["people"][user_id] = place
-    doc["admins" if place == "admin" else "members"].append(user_id)
 
 
 class TestTheList:
@@ -235,10 +231,7 @@ class TestAccepting:
             "role": "member"}}
         doc = organization.docs[0]
         assert doc["people"] == {**PLACES, INVITEE.id: "member"}
-        assert doc["members"] == [MEMBER.id, INVITEE.id]
         assert invitations.documents == []
-        assert organization.accounts.writes[-1] == (
-            {"id": INVITEE.id}, {"$addToSet": {"organizations": ORG_ID}})
 
     def test_the_entry_is_the_inviter_giving_the_place_by_an_invitation_accepted(
         self, organization, history,
@@ -255,8 +248,7 @@ class TestAccepting:
     def test_accepting_an_invitation_to_be_an_admin(self, organization, history):
         accept(invite(OWNER, place="admin"))
 
-        assert organization.docs[0]["people"][INVITEE.id] == "admin"
-        assert organization.docs[0]["admins"] == [ADMIN.id, INVITEE.id]
+        assert organization.docs[0]["people"] == {**PLACES, INVITEE.id: "admin"}
         given = entries(history)[-1]
         assert (given["action"], given["kind"], given["detail"]) == (
             History.MANAGE_ORGANIZATION_ADMINS, History.ROLE_GIVEN,
@@ -273,8 +265,7 @@ class TestAccepting:
 
         assert response.status_code == 200
         doc = organization.docs[0]
-        assert doc["people"][INVITEE.id] == "admin"
-        assert INVITEE.id in doc["admins"] and INVITEE.id not in doc["members"]
+        assert doc["people"] == {**PLACES, INVITEE.id: "admin"}
         changed = entries(history)[-1]
         assert (changed["actor"], changed["action"], changed["kind"], changed["detail"]) == (
             OWNER.email, History.MANAGE_ORGANIZATION_ADMINS, History.ROLE_CHANGED,
@@ -612,7 +603,6 @@ class TestDeclining:
         assert response.get_json() == {"message": "Invitation declined"}
         assert invitations.documents == []
         assert organization.docs[0]["people"] == PLACES
-        assert organization.accounts.writes == []
         declined = entries(history)[-1]
         assert (declined["actor"], declined["action"], declined["kind"], declined["subject"],
                 declined["detail"]) == (

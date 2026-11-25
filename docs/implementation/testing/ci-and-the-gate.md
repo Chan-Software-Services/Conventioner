@@ -22,6 +22,7 @@ describes:
   - scripts/chromium-packages.sh
   - scripts/nm-lint.sh
   - scripts/ci_suite.py
+  - scripts/e2e_retries.py
 verified: 2026-11-25
 sources:
   - T47
@@ -47,6 +48,7 @@ sources:
   - T528
   - T582
   - T510
+  - T606
 ---
 
 # CI and the gate
@@ -58,7 +60,7 @@ What each suite covers is [TESTING.md](../../TESTING.md); how a commit reaches p
 ## CI
 
 [`.github/workflows/test.yml`](../../../.github/workflows/test.yml) runs on pushes and pull requests to `dev` and `main`, on [a merge queue's trial commit](#a-merge-queues-trial-commit) for `dev`, and [nightly on `dev`'s tip, or by hand](#the-nightly-test-map), for the test map.
-Its token is read-only (`permissions: contents: read`, and on the `suite` job `actions: read` too, for the queue's run and the test maps, and on the `e2e-shard` and `e2e` jobs, for [the timings artifact](#the-timings-refresh-themselves) and the newest `test-map` artifact, other runs'), every action is pinned by its full commit SHA with the version in a comment beside it, which [Dependabot](#dependabot) bumps together, and no checkout keeps its git credentials (`persist-credentials: false`), since no job pushes.
+Its token is read-only (`permissions: contents: read`, and on the `suite` job `actions: read` too, for the queue's run and the test maps, and on the `e2e-shard` and `e2e` jobs, for [the timings artifact](#the-timings-refresh-themselves) and the newest `test-map` artifact, other runs', and on the `e2e-retries` job, for other runs' shard reports), every action is pinned by its full commit SHA with the version in a comment beside it, which [Dependabot](#dependabot) bumps together, and no checkout keeps its git credentials (`persist-credentials: false`), since no job pushes.
 No `${{ }}` expression is written inside a `run:` script: a value reaches the shell through the step's `env:` and is read as a variable.
 A push to a pull request's branch cancels the run of its earlier head (`concurrency`); a push to `dev` or `main` never cancels one, since each commit there keeps the checks a promotion reads, and neither does a trial commit, whose group is its own queue branch and commit.
 Every job but `e2e-shard` (whose checks are `e2e shard <n>/10`) sets `name:` to its id, the name `dev`'s and `main`'s rules require its check by, so renaming a job drops a required check.
@@ -120,7 +122,8 @@ Each job is one block, what it runs one item a line ([two features never share a
 
 **`warm-caches`**
 
-- on a warm push alone: the setup-node step with npm's cache, `npm ci` so that cache is full to save on a miss, then both [shared actions](#the-e2e-stack-and-its-caches) saving, the stack's with `start: "false"`, so it restores or makes each cache a pull request reads and runs no test, no stack and no build of the front end
+- on a warm push alone: the setup-node step with npm's cache, then both [shared actions](#the-e2e-stack-and-its-caches) saving, the stack's with `start: "false"`, so it restores or makes each cache a pull request reads and runs no test, no stack and no build of the front end
+- it installs the front end once at most: on npm's cache's miss front-end-deps is given `fill-npm-cache`, so its `npm ci` runs whatever `front-end/node_modules`' cache holds and fills npm's cache for the setup-node post step to save, while its restore only looks the key up; otherwise it installs only on `front-end/node_modules`' miss, and a hit restores it for the stack's action, which reads Playwright's version from it
 - it continues on error (`continue-on-error: true`), so a cache it could not save costs the next pull requests a cold start, never a red run on a commit the queue passed
 
 **`e2e`**
@@ -134,6 +137,17 @@ Each job is one block, what it runs one item a line ([two features never share a
 - on a nightly or hand-started run alone whose shards ran (not one whose commit [had a map](#the-nightly-test-map)), once they are done, whatever their result: the back end's suite once under coverage and the build of [the test map](the-test-map.md) from it and the shards' records, uploaded as `test-map` (kept 90 days)
 - not a required check, and never run on a push, a trial commit or a pull request
 - it continues on error (`continue-on-error: true`), so a map that fails is not made but never decides the run's conclusion
+
+**`e2e-retries`**
+
+- on a nightly or hand-started run alone, at its start, reading no [`suite` word](#which-suite-a-run-runs) and needing no other job: [`scripts/e2e_retries.py`](../../../scripts/e2e_retries.py) `--runs 20`, which writes to the job summary the tests that passed only on a retry ([a flaky test fails the build](#ci)) over `dev`'s last 20 Test runs that ran the shards
+- a run counts when it completed on a push to `dev`, a nightly or hand-started run on `dev`, or a trial commit of `dev`'s merge queue, and left an unexpired `e2e-results-shard-<n>` artifact, so a warm push and a night whose commit had a map are passed over; it reads each such artifact's `results.json`, GitHub's list of runs a page of 100 at a time, ten pages at most
+- the summary is a table of each such test, by its spec file and title, how many of the runs it passed only on a retry in, and a link to each run, most first; a run whose artifacts it could not all read is named under the table with the reason
+- the runner's own `python3`, since the script needs only the standard library, with the run's read-only token, which it never sends to the storage an artifact's zip redirects to
+- each counted run costs about a dozen requests of GitHub's API (its artifacts' list and a zip for each of the ten shards), and a run passed over costs its artifacts' list alone, about one for each merge (its warm push), so 20 runs are about 250, a quarter of the 1,000 an hour the run's token may make for the repository, which the Test, Promote and Deploy runs' reads share: more would leave those reads rate-limited, and they fail closed, a push's `suite` to `full` and Promote's and Deploy's checks to a refusal, until the hour resets
+- a 403 or a 429 from GitHub's API (the rate limit, or a token that may not read Actions) on a run's artifacts, a zip or a later page of runs stops the walk, and the summary holds the runs read before it and names where it stopped; on the first page of runs the script fails with the reason
+- a refusal by the storage a zip redirects to (a signed address expired or refused, which no other read shares) is named under the table with its host, like any report it could not read, and the walk goes on
+- it continues on error (`continue-on-error: true`), so a report it could not make never decides the run's conclusion, and it is not a required check
 
 **`dev`'s ruleset requires eleven checks, and `main`'s rulesets six.**
 Both require `backend`, `frontend-unit`, `frontend-lint-and-types`, `docker-build`, `e2e` and `real-data-and-workflows`.
@@ -150,6 +164,8 @@ The real-data steps of `real-data-and-workflows` are the only real-data check th
 **A flaky test fails the build.**
 Under `CI`, Playwright retries twice and sets `failOnFlakyTests` ([`front-end/playwright.config.ts`](../../../front-end/playwright.config.ts)), so a test that passes only on a retry still fails its shard.
 Every failed attempt and every retry keeps its trace, so the shard's `playwright-artifacts-shard-<n>` artifact, uploaded on that failure, holds every failed attempt's trace beside its passing retry's ([when a test fails](../../TESTING.md#when-a-test-fails)).
+Such a run is red, so a trial commit is queued again or a shard run again, and the test is easily forgotten: the nightly [`e2e-retries`](#ci) job's summary lists each test that passed only on a retry over `dev`'s last 20 runs that ran the shards, the merge queue's among them.
+Anyone with a token that may read the repository's Actions makes the same report for more runs, up to those among the newest 1,000 Test runs GitHub lists, a personal token from its own budget of 5,000 requests an hour, with `GITHUB_REPOSITORY=Chan-Software-Services/Conventioner GITHUB_TOKEN=<token> python3 scripts/e2e_retries.py --runs <n>`.
 Within a shard the tests share one database (`workers: 1`); never across shards.
 
 ## Which suite a run runs
@@ -174,6 +190,7 @@ Each word runs these jobs:
 | `none`           | none                                                                                                                                                                         |
 
 `python-advisories` reads no word, so it runs beside each of them, a daily scan of `dev`'s tip on the nightly run.
+`e2e-retries` reads none either, and runs on every nightly and hand-started run, whichever word it gets.
 Each test job `needs: suite` and runs `if: ${{ !cancelled() && (needs.suite.outputs.run == '' || needs.suite.outputs.run == 'full') }}`, the shards on `map` too; `!cancelled()` lets them run when `suite` was skipped or failed.
 A required check whose job its `if:` skipped reports success, so a warm push's six required checks and `e2e` pass on a commit whose queue run passed them, and its run is green whatever `warm-caches` did, unless `python-advisories` fails: an advisory published since the pull request's run makes the warm push's run red, which holds Promote on that commit until the lock moves.
 [Promote](../../RELEASING.md#how-a-promotion-proves-itself) reads that run or the queue's, the newest of the two.
@@ -182,8 +199,8 @@ A required check whose job its `if:` skipped reports success, so a warm push's s
 
 **A nightly Test run on `dev`'s tip makes [the test map](the-test-map.md), and makes none when that commit already has one.**
 `schedule` runs it at 19:17 UTC (`17 19 * * *`, off the hour GitHub's scheduler is busiest at), and `workflow_dispatch` the same on demand, `gh workflow run test.yml --ref dev`.
-Its `suite` asks GitHub for the `test-map` artifacts (`/actions/artifacts?name=test-map`): an unexpired one whose run is on `dev` at the commit, whichever run made it, is `none`, so a night with no merge costs only `suite` and [`python-advisories`](#ci), the daily advisory scan (a map made on another branch does not count, since [`affected-specs.py`](../../../scripts/affected-specs.py) never reads it); none such is `map`, and so is GitHub unread, since a map made twice costs only runner minutes.
-On `map` the run runs the ten shards, each recording (`RECORD_TEST_MAP`), and then `test-map`, about 170 runner minutes; no other test job, `python-advisories` aside, so it posts the required checks on `dev`'s tip only as skipped, which read as passing, never a red one.
+Its `suite` asks GitHub for the `test-map` artifacts (`/actions/artifacts?name=test-map`): an unexpired one whose run is on `dev` at the commit, whichever run made it, is `none`, so a night with no merge costs only `suite`, [`python-advisories`](#ci), the daily advisory scan, and [`e2e-retries`](#ci), the report of the tests that passed only on a retry (a map made on another branch does not count, since [`affected-specs.py`](../../../scripts/affected-specs.py) never reads it); none such is `map`, and so is GitHub unread, since a map made twice costs only runner minutes.
+On `map` the run runs the ten shards, each recording (`RECORD_TEST_MAP`), and then `test-map`, about 170 runner minutes; no other test job, `python-advisories` aside, and `e2e-retries` beside them, so it posts the required checks on `dev`'s tip only as skipped, which read as passing, never a red one.
 Recording is the nightly run's alone, so its slowdown is on no pull request's or queue's path: a test that fails only while recording fails the nightly run, which no rule reads, never a merge, and its shard's records still make the map.
 A nightly run whose `suite` job itself fails (a runner or checkout failure, since `ci_suite.py` says `map` on any doubt) runs the whole suite instead, as any empty word does, and posts the required checks on `dev`'s tip under their names, newer than the queue's; a red one among them may lead `main`'s rule to refuse the App's fast-forward of that commit though Promote's own check passes, so `main` stays unmoved until a re-run of that run's failed jobs passes and Promote runs again.
 A nightly run's ref is `refs/heads/dev` and its commit `dev`'s tip, so its concurrency group is the push run's of that commit, behind which it waits while that run is going.
@@ -263,7 +280,7 @@ That holds while runners are free: the account is on GitHub Free, which runs 20 
 A pull request's run asks for 20, so it fits alone: 16 Test jobs at its start (`backend`, `knowledge-graph`, `real-data-and-workflows`, `frontend-unit`, `frontend-lint-and-types`, `docker-build` and the ten shards), `python-advisories` only once `real-data-and-workflows`, under a minute, is done, `e2e` only once the shards are done, and CodeQL's three; a push to `main` asks for the same.
 A trial commit's run asks for the same with no `python-advisories`, 19 in all.
 A [warm push](#which-suite-a-run-runs) to `dev` asks for three, `suite` then `warm-caches` and `python-advisories`, and CodeQL's three; a whole-suite push to `dev` asks for `suite` first, then the same 16, then `python-advisories` once `real-data-and-workflows` is done and `e2e` once the shards are done.
-A [nightly run](#the-nightly-test-map) asks for `suite`, then the ten shards and `python-advisories`, then `test-map`, eleven at once at most; one whose commit has a map asks for `suite`, then `python-advisories`.
+A [nightly run](#the-nightly-test-map) asks for `suite` and `e2e-retries`, then the ten shards and `python-advisories`, then `test-map`, twelve at once at most; one whose commit has a map asks for `suite` and `e2e-retries`, then `python-advisories`.
 That is why the five short checks (drift, the real-data scan with gitleaks, zizmor offline, zizmor online and actionlint) are steps of `knowledge-graph` and `real-data-and-workflows`: as five jobs of their own they made one run ask for 24, more than the account runs at once.
 `python-advisories` is a job of its own, since a step's failure would fail a required check, so it waits for `real-data-and-workflows` instead, and takes the runner that job leaves.
 With another run going, shards still wait: on one such run four shards queued 9 to 12 minutes, and the run ended at 23 minutes while each shard's own time was 10.5 to 12.5.
@@ -273,6 +290,7 @@ The matrix lists the shards and their `total`, which move together.
 
 Two composite actions set an `e2e-shard` runner up for Playwright, and fill the caches on a [warm push](#which-suite-a-run-runs)'s `warm-caches`.
 [`.github/actions/front-end-deps/action.yml`](../../../.github/actions/front-end-deps/action.yml) sets up the Node `.nvmrc` pins and fills `front-end/node_modules`; it runs first, since with no `front-end/node_modules` on the host Docker (as root) creates the anonymous volume's mountpoint there root-owned, and a later `npm ci` fails with `EACCES`.
+Its input `fill-npm-cache`, `"false"` unless given, is `"true"` for `warm-caches` alone, on npm's cache's miss: `npm ci` then runs on a hit too, and the restore only looks the key up, so a hit downloads nothing for `npm ci` to install over.
 [`.github/actions/e2e-stack/action.yml`](../../../.github/actions/e2e-stack/action.yml) installs Chromium and [the system packages it needs](#chromiums-system-packages), gets the stack's two images, pulls `mongo:7` and `mongo-express:latest` from Docker Hub, retrying only that pull a handful of times, because a transient registry 500 once failed a shard outright, so a stack that genuinely fails to start fails the job at once, then starts the stack and seeds it.
 Its input `start`, `"true"` unless given, is `"false"` for `warm-caches` alone: the three restores then only look their key up (`lookup-only`), so a hit downloads nothing; Chromium is installed on a miss, and the system packages only on a miss too, since installing them is how [`chromium-packages.sh`](#chromiums-system-packages) makes their files and marks them fit to save, and the images' load, the registry pull, the stack and its seed are skipped, while the build of the images and the three saves run on a miss as they do on a shard.
 Each `uses:` line calls an action by its path (`./.github/actions/...`) with a `zizmor: ignore[self-repository]`: zizmor asks for GitHub's newer `$/` form, which actionlint 1.7.12, the latest, refuses.

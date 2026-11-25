@@ -5,29 +5,55 @@ first job on a push to `dev` (scripts/ci_suite.py) each decide from the Test wor
 which runs count is read here, once, and every request goes through the one authenticated GET
 below. A read fails closed: any error, an HTTP status, no answer
 or an answer unlike GitHub's, comes back as the reason it could not be read, never retried, so the
-caller refuses rather than guesses.
+caller refuses rather than guesses. The nightly report of the e2e tests that needed a retry
+(scripts/e2e_retries.py) reads its runs and their artifacts' files through the same GET.
 
 Nothing here prints, and the reason never holds the token.
 """
 import http.client
+import io
 import json
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from typing import Any, Callable, Optional, Tuple
 
 TIMEOUT = 30
 
 #: What a read may raise; any of them means GitHub was not read.
-UNREADABLE = (OSError, http.client.HTTPException, ValueError, KeyError, TypeError)
+UNREADABLE = (OSError, http.client.HTTPException, ValueError, KeyError, TypeError, zipfile.BadZipFile)
 
 
-def read(api: str, path: str, token: str, parse: Callable[[Any], Any] = lambda data: data, query=None):
+class _TokenStaysOnTheHost(urllib.request.HTTPRedirectHandler):
+    """Follows a redirect, dropping the token when it leads to another host: an artifact's zip
+    redirects to storage that is not GitHub's API, which must never be sent the token."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        follow = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if follow is not None and urllib.parse.urlsplit(newurl).netloc != urllib.parse.urlsplit(req.full_url).netloc:
+            follow.remove_header("Authorization")
+        return follow
+
+
+_OPENER = urllib.request.build_opener(_TokenStaysOnTheHost)
+
+
+def read(
+    api: str,
+    path: str,
+    token: str,
+    parse: Callable[[Any], Any] = lambda data: data,
+    query=None,
+    body: Callable[[bytes], Any] = json.loads,
+):
     """One authenticated GET of `<api><path>`, its JSON passed through `parse`.
 
     Returns `(value, None)`, or `(None, reason)` when it could not be read: the HTTP status, or the
     error's type. `parse` runs inside the same guard, so an answer unlike GitHub's, a missing key
-    or a wrong type, is a reason too.
+    or a wrong type, is a reason too. `body` reads the answer's bytes, JSON unless told; a redirect
+    to another host is followed without the token, and a status that host answers is named with it
+    (`403 from <host>`), so it never reads as the API's own.
     """
     address = f"{api.rstrip('/')}{path}"
     if query:
@@ -41,10 +67,13 @@ def read(api: str, path: str, token: str, parse: Callable[[Any], Any] = lambda d
         },
     )
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-            return parse(json.load(response)), None
+        with _OPENER.open(request, timeout=TIMEOUT) as response:
+            return parse(body(response.read())), None
     except urllib.error.HTTPError as error:
         error.close()
+        host = urllib.parse.urlsplit(error.filename or address).netloc
+        if host != urllib.parse.urlsplit(address).netloc:
+            return None, f"{error.code} from {host}"
         return None, str(error.code)
     except UNREADABLE as error:
         return None, type(error).__name__
@@ -105,3 +134,15 @@ def dev_runs(sha: str, api: str, repository: str, token: str) -> Tuple[Optional[
 
     query = {"head_sha": sha, "per_page": 100}
     return read(api, f"/repos/{repository}/actions/workflows/test.yml/runs", token, kept, query)
+
+
+def artifact_file(api: str, repository: str, artifact_id: int, name: str, token: str) -> Tuple[Optional[bytes], Optional[str]]:
+    """The file `name` inside an artifact's zip (T606), as `read` answers: `(data, None)`, or
+    `(None, reason)`, a missing file a `KeyError` and a zip that is not one a `BadZipFile`. GitHub
+    answers the zip with a redirect to its storage, which is followed without the token."""
+
+    def member(data: bytes) -> bytes:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            return archive.read(name)
+
+    return read(api, f"/repos/{repository}/actions/artifacts/{artifact_id}/zip", token, body=member)

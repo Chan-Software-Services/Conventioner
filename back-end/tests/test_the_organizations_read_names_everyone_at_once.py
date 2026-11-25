@@ -8,8 +8,9 @@ name in one ``get_users_by_ids``.
 It serves each organization's admins and members as ``{userId, email}`` pairs, ``adminPeople`` and
 ``memberPeople``, in the stored order, an account that is gone left out. Manage organization paired
 ``adminEmails[idx]`` with ``admins[idx]``, so one deleted account shifted every later row onto the
-next person's id, and Remove named one person and removed another. The address lists stay, for a tab
-on the old bundle, built from the same read.
+next person's id, and Remove named one person and removed another. The address lists kept for a
+tab on the old bundle went with the old ``owner``, ``admins`` and ``members`` lists (T583): every
+person is served from the people map alone.
 """
 import copy
 from types import SimpleNamespace
@@ -59,23 +60,13 @@ def organization(org_id, owner, admins, members):
     }
 
 
-def stored_before_the_map(org_id, owner, admins, members):
-    """An organization stored before the people map (T283), its people in three lists alone."""
-    return {
-        "_id": f"mongo-{org_id}", "id": org_id, "name": f"Example {org_id}", "owner": owner.id,
-        "admins": [person.id for person in admins], "members": [person.id for person in members],
-        "markets": [], "theme": None,
-    }
-
-
-def folded(org_id, people, **lists):
-    """An organization stored with its people map (T283), ``lists`` what its old lists hold."""
+def folded(org_id, people):
+    """An organization stored with its people map (T283), ``people`` its (person, place) pairs in
+    the map's order."""
     return {
         "_id": f"mongo-{org_id}", "id": org_id, "name": f"Example {org_id}",
         "people": {person.id: place for person, place in people},
         "markets": [], "theme": None,
-        **{key: [person.id for person in value] if isinstance(value, list) else value.id
-           for key, value in lists.items()},
     }
 
 
@@ -138,10 +129,10 @@ def test_an_organization_serves_its_people_with_their_ids_in_the_stored_order(re
     assert listed["memberPeople"] == [
         {"userId": CAL.id, "email": CAL.email}, {"userId": BEA.id, "email": BEA.email},
     ]
-    # Deprecated, for a tab on the old bundle: the same people, by address alone.
     assert listed["ownerEmail"] == listed["owner_email"] == OWNER.email
-    assert listed["adminEmails"] == listed["admin_emails"] == [READER.email, ADA.email]
-    assert listed["memberEmails"] == listed["member_emails"] == [CAL.email, BEA.email]
+    # Neither the old lists nor the addresses kept for the old bundle are served (T583).
+    assert not {"owner", "admins", "members", "adminEmails", "admin_emails", "memberEmails",
+                "member_emails"} & set(listed)
 
 
 def test_a_deleted_admin_leaves_every_other_admin_with_their_own_id(reads):
@@ -149,14 +140,13 @@ def test_a_deleted_admin_leaves_every_other_admin_with_their_own_id(reads):
 
     [listed] = OrgsApi.get_organizations_for_user(READER.email)
 
-    # The stored ids still name the gone account; the pairs leave it out and shift no one.
-    assert listed["admins"] == [ADA.id, GONE.id, BEA.id, CAL.id]
+    # The stored map still names the gone account; the pairs leave it out and shift no one.
+    assert listed["people"][GONE.id] == "admin"
     assert listed["adminPeople"] == [
         {"userId": ADA.id, "email": ADA.email},
         {"userId": BEA.id, "email": BEA.email},
         {"userId": CAL.id, "email": CAL.email},
     ]
-    assert listed["adminEmails"] == [ADA.email, BEA.email, CAL.email]
 
 
 def test_a_deleted_owner_serves_no_owner_address(reads):
@@ -176,19 +166,21 @@ def test_a_reader_in_no_organization_reads_no_account_by_id(reads):
     assert not any(counted.batches)
 
 
-def test_a_folded_organization_serves_its_people_from_the_map_in_its_order(reads):
-    """Its lists only mirror the map, so a stale one is never served: a member made an admin
-    keeps their place in the map's order and is listed once, among the admins (T283)."""
-    reads(folded(
-        "org-1", [(CAL, "member"), (OWNER, "owner"), (ADA, "admin"), (READER, "member"),
-                  (BEA, "admin")],
-        owner=OWNER, admins=[ADA], members=[CAL, READER, BEA],
-    ))
+def test_an_organization_with_stale_lists_serves_its_people_from_the_map_in_its_order(reads):
+    """Lists it still stores until the migration removes them, which disagree with its map, are
+    never read: its owner, admins and members are served from the map alone, in the map's order,
+    and a member made an admin is listed once, among the admins (T283, T583)."""
+    stale = {"owner": DEV.id, "admins": [ADA.id, DEV.id], "members": [CAL.id, READER.id, BEA.id]}
+    reads({
+        **folded("org-1", [(CAL, "member"), (OWNER, "owner"), (ADA, "admin"), (READER, "member"),
+                           (BEA, "admin")]),
+        **stale,
+    })
 
     [listed] = OrgsApi.get_organizations_for_user(READER.email)
 
-    assert (listed["owner"], listed["admins"], listed["members"]) == (
-        OWNER.id, [ADA.id, BEA.id], [CAL.id, READER.id])
+    # Served as stored until the migration removes them, never derived again; no screen reads them.
+    assert {key: listed[key] for key in stale} == stale
     assert listed["adminPeople"] == [
         {"userId": ADA.id, "email": ADA.email}, {"userId": BEA.id, "email": BEA.email},
     ]
@@ -197,16 +189,3 @@ def test_a_folded_organization_serves_its_people_from_the_map_in_its_order(reads
     ]
     assert listed["ownerEmail"] == OWNER.email
     assert listed["userRole"] == "member"
-
-
-def test_an_unfolded_organization_whose_lists_overlap_serves_each_person_once(reads):
-    """Stored before the map, its owner also an admin and an admin also a member: served folded,
-    the owner winning, then the admins, so nobody is listed twice."""
-    reads(stored_before_the_map("org-1", READER, [READER, ADA], [ADA, READER, BEA]))
-
-    [listed] = OrgsApi.get_organizations_for_user(READER.email)
-
-    assert (listed["owner"], listed["admins"], listed["members"]) == (READER.id, [ADA.id], [BEA.id])
-    assert listed["adminPeople"] == [{"userId": ADA.id, "email": ADA.email}]
-    assert listed["memberPeople"] == [{"userId": BEA.id, "email": BEA.email}]
-    assert listed["userRole"] == "owner"

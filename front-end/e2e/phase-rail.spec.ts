@@ -48,15 +48,23 @@ test.describe('The phase rail', () => {
     });
   });
 
-  async function openMarket(page: import('@playwright/test').Page, path: string) {
-    const res = await page.request.get(`${APP_API}/markets/${seed.marketId}`);
-    const { market } = (await res.json()) as { market: Record<string, unknown> };
-    await page.evaluate((m) => {
-      const copy = { ...(m as Record<string, unknown>) };
-      delete copy._id;
-      localStorage.setItem('user', JSON.stringify('e2e@example.com'));
-    }, market);
-    await page.goto(path);
+  /**
+   * A CSV market of the calling test's own, its results out and in its market days. A test of this
+   * describe that reads results it did not publish itself seeds them here rather than read what an
+   * earlier test did to `seed`: a retry runs in a new worker, whose `beforeAll` seeds that market
+   * with nothing published. The seed signs in on `page.request`, which ends the sign-in the page
+   * held, so call this before the test opens a page: a read the page still had out would answer 401
+   * and take it to sign in.
+   */
+  async function seedPublishedMarket(page: import('@playwright/test').Page) {
+    return seedPublishedMarketWithAssignments(
+      page.request,
+      APP_API,
+      TEST_USER.email,
+      TEST_USER.password,
+      // A long name, so the rail's addresses are long ones.
+      { intakeMode: 'csv', namePrefix: 'Example Holiday Makers Fair December' },
+    );
   }
 
   test('is below the header on every market screen', async ({ authenticatedPage: page }) => {
@@ -67,7 +75,7 @@ test.describe('The phase rail', () => {
       marketScreenPath(seed.marketId, 'attendance'),
       marketScreenPath(seed.marketId, 'stats'),
     ]) {
-      await openMarket(page, path);
+      await page.goto(path);
       const rail = page.getByTestId('phase-rail');
       await expect(rail, `no rail on ${path}`).toBeVisible({ timeout: 15000 });
       await expect(rail.getByTestId('phase-rail-current')).toHaveText(/Assignment/);
@@ -87,7 +95,7 @@ test.describe('The phase rail', () => {
       data: { toPhase: 'market_days' },
     });
 
-    await openMarket(page, marketSetupPath(seed.marketId, 'setup'));
+    await page.goto(marketSetupPath(seed.marketId, 'setup'));
     const chip = page.getByTestId('phase-rail-vendor-page');
     await expect(chip).toBeVisible({ timeout: 15000 });
     const url = (await page.getByTestId('phase-rail-vendor-page-link').getAttribute('href')) ?? '';
@@ -112,7 +120,8 @@ test.describe('The phase rail', () => {
     authenticatedPage: page,
   }) => {
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-    await openMarket(page, marketSetupPath(seed.marketId, 'setup'));
+    const published = await seedPublishedMarket(page);
+    await page.goto(marketSetupPath(published.marketId, 'setup'));
     // Vendors check in on the vendor page, with the door code: the check-in page is gone.
     await expect(page.getByTestId('phase-rail-checkin')).toHaveCount(0);
 
@@ -127,8 +136,8 @@ test.describe('The phase rail', () => {
 
     const urls: Record<string, string> = {};
     for (const [testId, label, path] of [
-      ['phase-rail-market-page', 'Market page', marketPagePath(seed.slug)],
-      ['phase-rail-vendor-page', 'Vendor page', vendorPagePath(seed.slug)],
+      ['phase-rail-market-page', 'Market page', marketPagePath(published.marketSlug)],
+      ['phase-rail-vendor-page', 'Vendor page', vendorPagePath(published.marketSlug)],
     ] as const) {
       const chip = page.getByTestId(testId);
       await expect(chip).toContainText(label);
@@ -158,22 +167,11 @@ test.describe('The phase rail', () => {
   test("a CSV market carries the market's chips once its results are out, and a form market from applications", async ({
     authenticatedPage: page,
   }) => {
-    // The seeded market takes its vendors by import, and published its results earlier in the
-    // file, so its pages answer and the chips point at them (ADR 0022, T469). Before its results
-    // it shows none (`a-google-form-markets-vendor-page.spec.ts`).
-    await openMarket(page, marketSetupPath(seed.marketId, 'setup'));
-    await expect(page.getByTestId('phase-rail')).toBeVisible({ timeout: 15000 });
-    await expect(page.getByTestId('phase-rail-market-page-link')).toHaveAttribute(
-      'href',
-      new RegExp(`${marketPagePath(seed.slug)}$`),
-    );
-    await expect(page.getByTestId('phase-rail-vendor-page-link')).toHaveAttribute(
-      'href',
-      new RegExp(`${vendorPagePath(seed.slug)}$`),
-    );
-
-    // A market taking applications by form carries it from its first phase after draft. Intake
-    // mode is chosen while a market is a draft and fixed after, so this is a market of its own.
+    // Both markets are seeded before the test opens a page, since each seed signs in on
+    // `page.request`.
+    const csvMarket = await seedPublishedMarket(page);
+    // A market taking applications by form carries the chips from its first phase after draft.
+    // Intake mode is chosen while a market is a draft and fixed after, so this is another market.
     const formMarket = await seedPhaseMarket(
       page.request,
       APP_API,
@@ -186,6 +184,22 @@ test.describe('The phase rail', () => {
       data: { toPhase: 'applications' },
     });
     expect(opened.ok(), await opened.text()).toBeTruthy();
+
+    // The CSV market takes its vendors by import and has published its results, so its pages
+    // answer and the chips point at them (ADR 0022, T469). Before its results it shows none
+    // (`a-google-form-markets-vendor-page.spec.ts`).
+    await page.goto(marketSetupPath(csvMarket.marketId, 'setup'));
+    await expect(page.getByTestId('phase-rail')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId('phase-rail-market-page-link')).toHaveAttribute(
+      'href',
+      new RegExp(`${marketPagePath(csvMarket.marketSlug)}$`),
+    );
+    await expect(page.getByTestId('phase-rail-vendor-page-link')).toHaveAttribute(
+      'href',
+      new RegExp(`${vendorPagePath(csvMarket.marketSlug)}$`),
+    );
+
+    // The form market, from applications.
     await page.goto(marketSetupPath(formMarket.marketId, 'setup'));
 
     const chip = page.getByTestId('phase-rail-vendor-page');
@@ -202,16 +216,21 @@ test.describe('The phase rail', () => {
   });
 
   test('archiving states in words that the market is over', async ({ authenticatedPage: page }) => {
-    await page.request.post(`${APP_API}/markets/${seed.marketId}/transition`, {
-      headers: { 'Content-Type': 'application/json' },
-      data: { toPhase: 'archived' },
-    });
-    await openMarket(page, marketSetupPath(seed.marketId, 'setup'));
+    const published = await seedPublishedMarket(page);
+    const archived = await page.request.post(
+      `${APP_API}/markets/${published.marketId}/transition`,
+      {
+        headers: { 'Content-Type': 'application/json' },
+        data: { toPhase: 'archived' },
+      },
+    );
+    expect(archived.ok(), await archived.text()).toBeTruthy();
+    await page.goto(marketSetupPath(published.marketId, 'setup'));
 
     const frozen = page.getByTestId('phase-rail-frozen');
     await expect(frozen).toBeVisible({ timeout: 15000 });
     await expect(frozen).toContainText('This market is archived');
-    // This market was published earlier in the file, and its phase history says so: it ran, so
+    // This market was published and ran its market days, and its phase history says so, so
     // nothing is struck through (E26/F06/S03). Strikethrough is only ever reinforcement for the
     // words; `market-remembers-phases.spec.ts` covers a market that stopped short.
     await expect(frozen).toContainText('It was published and ran its market days.');
