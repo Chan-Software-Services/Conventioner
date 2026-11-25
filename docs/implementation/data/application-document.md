@@ -27,7 +27,7 @@ describes:
   - back-end/migrations/migrate_application_status.py
   - back-end/tests/test_migrate_application_status.py
   - back-end/tests/real_mongo/test_the_application_status_migration_on_the_server.py
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - wayfinding/v0-1-0/map
   - wayfinding/real-market-readiness/01
