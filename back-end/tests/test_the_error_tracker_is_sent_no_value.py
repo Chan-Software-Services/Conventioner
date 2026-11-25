@@ -335,10 +335,22 @@ class TestALogLine:
 
         assert tracker.items == []
 
-    def test_werkzeugs_request_lines_are_never_events(self, tracker):
+    def test_werkzeugs_request_lines_are_never_events(self, tracker, caplog):
         logging.getLogger("werkzeug").warning('"GET /markets/%s?vendor=%s" 500', MARKET_ID, ADDRESS)
 
         assert tracker.items == []
+
+        caplog.set_level(logging.INFO)
+        logging.getLogger("werkzeug").info(
+            '"GET /markets/%s?token=%s HTTP/1.1" 200', MARKET_ID, TOKEN
+        )
+        logging.getLogger("csv_import").warning("Skipped an unreadable application")
+
+        [event] = tracker.events()
+        crumbs = json.dumps(event.get("breadcrumbs", {}))
+        for value in (f"/markets/{MARKET_ID}", "token=", TOKEN):
+            assert value not in crumbs, value
+        assert_sent_no_value(tracker)
 
     def test_a_critical_line_is_delivered_when_the_call_returns(self, tracker):
         logging.getLogger("app").critical("Refusing to start: the market keys are not migrated")
