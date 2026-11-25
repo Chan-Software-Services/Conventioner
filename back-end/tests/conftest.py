@@ -6,10 +6,10 @@ once and test modules never have to care about collection order.
 A stub is installed only when the real dependency is not importable. When the full
 requirements.txt is installed (as in CI), the real modules win, so route-level tests
 can import app.py and exercise Flask endpoints through the test client. In that case
-the real pymongo driver is in play, so an unconfigured environment is pointed at a
-port nothing can listen on, with a short server selection timeout: a test that reaches
-an unpatched collection fails loudly in a fraction of a second instead of silently
-reading or writing a developer's live local database.
+the real pymongo driver is in play, so the suite is pointed at a port nothing can
+listen on, whatever database the shell's ``MONGODB_*`` variables name: a test that
+reaches an unpatched collection fails loudly once server selection times out instead
+of silently reading or writing a developer's live local database.
 """
 import copy
 import functools
@@ -44,8 +44,13 @@ MONGO_ENV_KEYS = (
 # No timeout in it: `db_config` passes its bounds as keywords, which win over the URI's.
 UNREACHABLE_MONGODB_URI = "mongodb://127.0.0.1:1/"
 
-if not any(os.getenv(key) for key in MONGO_ENV_KEYS):
-    os.environ["MONGODB_URI"] = UNREACHABLE_MONGODB_URI
+# A shell's exported database (a `MONGODB_URI` or `MONGODB_HOST` left from a one-off script, say)
+# never reaches a test: every variable is cleared and the unreachable address named in its place,
+# and a test that needs one sets it itself (test_the_suite_reads_no_database_from_its_shell.py).
+# The real-MongoDB suite reads `REAL_MONGODB_URI`, which this leaves alone.
+for _key in MONGO_ENV_KEYS:
+    os.environ.pop(_key, None)
+os.environ["MONGODB_URI"] = UNREACHABLE_MONGODB_URI
 
 # The test suite is the one place the boot check is allowed to be off: every test that asserts a
 # defense works unsets it, and every other test simply does not care about what it skips.
