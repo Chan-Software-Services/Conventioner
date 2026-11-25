@@ -158,6 +158,7 @@ def test_it_refuses_writing_and_dropping_nothing_while_an_organization_holds_no_
         "  ! org-old: no people map",
         "Fold them first with migrate_organization_people.py from the last commit that holds it, "
         "then run this again:",
+        '  cd "$(git rev-parse --show-toplevel)"',
         '  git worktree add ../fold "$(git rev-list -n 1 HEAD -- '
         'back-end/migrations/migrate_organization_people.py)^"',
     ]

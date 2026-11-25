@@ -88,6 +88,9 @@ def migrate(db, dry_run: bool = False) -> Dict[str, Any]:
             print(f"  ! {organization_id}: no people map")
         print("Fold them first with migrate_organization_people.py from the last commit that "
               "holds it, then run this again:")
+        # From the repository's root: the script runs from back-end/, where the pathspec finds
+        # nothing and ../fold would be a worktree inside the checkout.
+        print('  cd "$(git rev-parse --show-toplevel)"')
         print('  git worktree add ../fold "$(git rev-list -n 1 HEAD -- '
               'back-end/migrations/migrate_organization_people.py)^"')
         return counts
