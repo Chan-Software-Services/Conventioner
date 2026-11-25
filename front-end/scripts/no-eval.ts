@@ -3,10 +3,11 @@
  * the `Function` constructor.
  *
  * The Content-Security-Policy in `vercel.json` has no `'unsafe-eval'`, so the browser refuses such
- * a call. A refusal in production reaches Sentry as a policy violation (`errorTracking.ts`), but only
- * after it has broken the tab it ran in: this is where a new one is caught first, at build time. The first one found was
- * vuedraggable's UMD build, whose bundled core-js looks up the global object with
- * `Function('return this')()`; `vite.config.ts` resolves vuedraggable to its ES source instead.
+ * a call. A refusal in production reaches Sentry as a policy violation (`errorTracking.ts`) once
+ * the build sets `VITE_SENTRY_DSN`, and even then only after it has broken the tab it ran in: this
+ * is where a new one is caught first, at build time. The first one found was vuedraggable's UMD
+ * build, whose bundled core-js looks up the global object with `Function('return this')()`;
+ * `vite.config.ts` resolves vuedraggable to its ES source instead.
  *
  * Run it after `vite build`: `npm run build-only && npm run no-eval`. CI does, in the required
  * `frontend-lint-and-types` job, and so does `scripts/nm-test.sh`.

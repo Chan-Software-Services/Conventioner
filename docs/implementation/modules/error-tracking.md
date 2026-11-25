@@ -8,6 +8,7 @@ describes:
   - front-end/src/utils/errorTrackingClient.ts
   - front-end/src/__tests__/theErrorTrackerIsSentNoValue.test.ts
   - front-end/src/__tests__/theBuildChecksItsErrorTrackerDsn.test.ts
+  - front-end/src/__tests__/theErrorTrackerNeverShipsWithoutADsn.test.ts
   - front-end/src/__tests__/aPolicyViolationReachesTheErrorTracker.test.ts
   - front-end/src/__tests__/support/recordedEnvelopes.ts
 verified: 2026-11-25
@@ -38,6 +39,7 @@ With no DSN, nothing here changes how the app runs.
 **Where each event starts.**
 An unexpected exception is `report()`'s one event: with a handler registered for `Exception`, Flask never sends `got_request_exception`, so the Flask integration never sees one, and the `client_errors` logger is ignored for events, so its log line is not a second.
 A warning or error log line is an event, captured by a root handler at `WARNING`; the `/healthz` 503's `logger.exception` is one, of level `error`, with the exception's type and no message.
+So is a library's own warning or error line, whatever logger it names, its words sent with only every address replaced: [the guard](../../../back-end/tests/test_no_log_line_carries_an_exceptions_message.py) reads only this repository's code, and Flask-Session, for one, logs a session it could not serialise with its exception's message.
 An informational line is a breadcrumb on the next event.
 `werkzeug`'s request lines, which carry paths, queries and addresses, are never either.
 
@@ -74,8 +76,10 @@ Two modules, so the SDK never weighs on the first page.
   The shell paints nothing until its session probe has answered, well after `mount`, so a frame after `mount` came before the paint in a walk of the build; a browser with no paint timing waits one frame and a task instead.
   An error loads the client at once, whichever comes first.
 - Both read `VITE_SENTRY_DSN` where they are called, spelled out in each rather than in a helper: a build with no DSN folds the check to `undefined` and drops the rest of each function, the `import()` with it, which it does not do through a call; such a build has no Sentry chunk and installs nothing.
+  `noErrorTrackerWithoutDsn` in `vite.config.ts` holds it: a production build with a blank `VITE_SENTRY_DSN` fails when any chunk holds `errorTrackingClient.ts` or a module of `@sentry/`, naming each.
 - **The caps.** At most `QUEUE_LIMIT`, 10, items wait for the client, and at most `MAX_EVENTS_PER_PAGE`, 20, are sent in one page load; the rest are dropped, so a page failing in a loop spends little of the month's quota.
-- **The failed fetch of a page's code is never sent**: Chromium's, Safari's and Firefox's words for it are dropped before they are queued, since `pageFailed.ts` already answers it and every deploy makes some open tab meet it.
+- **The failed fetch of a page's code is never sent**: Chromium's, Safari's and Firefox's words for it, and Vite's preload helper's `Unable to preload CSS for` before a page whose code has its own CSS, are dropped before they are queued, since `pageFailed.ts` already answers it and every deploy makes some open tab meet it.
+- **A cross-origin script's error is never sent**: the browser gives the page only `Script error.`, with no error object and no file, for an error in a script of another origin, reCAPTCHA's among them, which says nothing and would spend quota.
 - **A chunk that cannot be fetched** (offline, or a deploy replaced it) leaves tracking off for that page load: the queue is dropped, nothing is retried, and nothing is thrown.
 
 **The client** makes a `BrowserClient` and a `Scope` of its own, never the SDK's global `init`, so nothing else in the page reports through it.
@@ -91,7 +95,8 @@ A violation is sent with `captureMessage` as a `warning` titled `Content-Securit
 So the DSN, the chunk and the policy agree by construction, and a mismatch fails a build rather than every event.
 
 **How it is tested.**
-[`theErrorTrackerIsSentNoValue.test.ts`](../../../front-end/src/__tests__/theErrorTrackerIsSentNoValue.test.ts) installs the tracker on a real app and router in happy-dom with `VITE_SENTRY_DSN` stubbed and the transport replaced, through `installErrorTracking`'s test-only third argument, by one that records each envelope; it proves one event per caught error, an error before the client loaded sent once it has, no address, token or query of the page's address or the message in any envelope, the event's exact fields, the caps, the after-deploy words, the rejected chunk, the load after the first paint, and nothing installed with no DSN.
+[`theErrorTrackerIsSentNoValue.test.ts`](../../../front-end/src/__tests__/theErrorTrackerIsSentNoValue.test.ts) installs the tracker on a real app and router in happy-dom with `VITE_SENTRY_DSN` stubbed and the transport replaced, through `installErrorTracking`'s test-only third argument, by one that records each envelope; it proves one event per caught error, an error before the client loaded sent once it has, no address, token or query of the page's address or the message in any envelope, the event's exact fields, the caps, the after-deploy words, a cross-origin script's `Script error.`, the rejected chunk, the load after the first paint, and nothing installed with no DSN.
+[`theErrorTrackerNeverShipsWithoutADsn.test.ts`](../../../front-end/src/__tests__/theErrorTrackerNeverShipsWithoutADsn.test.ts) builds one entry module at a time through the project's `vite.config.ts`, as production builds: with no DSN the tracker the app ships builds, and the client imported, loaded by an unguarded `import()` or the SDK imported each fails the build; with a DSN the client builds.
 [`aPolicyViolationReachesTheErrorTracker.test.ts`](../../../front-end/src/__tests__/aPolicyViolationReachesTheErrorTracker.test.ts) dispatches the event the browser would, built by hand since happy-dom has none, and proves one warning with the directive, the origin and the exact fields, no `sample`, blocked address, page address or query in any envelope, each keyword's reduction, one event for five repeats and one for each directive and origin, the count toward the 20, and no listener with no DSN.
 Both read what was sent through [`support/recordedEnvelopes.ts`](../../../front-end/src/__tests__/support/recordedEnvelopes.ts), a transport that records each envelope.
 [`theBuildChecksItsErrorTrackerDsn.test.ts`](../../../front-end/src/__tests__/theBuildChecksItsErrorTrackerDsn.test.ts) loads `vite.config.ts` as a build does with a blank, a US, a malformed and an unallowed DSN.

@@ -60,6 +60,7 @@ A DSN's key is Sentry's public client key, which every browser that loads the fr
 - The front end's policy allows Sentry's US ingest hosts in `connect-src`, and a `VITE_SENTRY_DSN` on any other host fails the build.
 - A log line's words are sent, so a warning or error line names what it means to say, never a value it was not written to name; no log line formats a library exception's message but the CSV import's `csv.Error`, whose words name a limit, never a cell, and [`test_no_log_line_carries_an_exceptions_message.py`](../../back-end/tests/test_no_log_line_carries_an_exceptions_message.py) fails one that does.
   A line that formats `traceback_without_messages`, as the floorplan upload's and deletion's do, carries the app's own code lines with its frames, which hold no value.
+  A library's own warning and error lines are events too, their words sent with only every address replaced, and the guard reads only this repository's code: Flask-Session, for one, logs a session it could not serialise with its exception's message.
 - Sentry keeps an event 30 days: what is sent outlives any log, so a new field is a change to this ADR first.
 - An event that the allowlist leaves less readable is read with the code beside it: the frames say where, the rule says which route, and the tags say which market.
 - Each Sentry project has "Prevent Storing of IP Addresses" ticked ([operations](../OPERATIONS.md#setting-up-sentry)), so Sentry's own ingestion records none either.

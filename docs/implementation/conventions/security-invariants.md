@@ -312,7 +312,7 @@ VITE_ALLOW_INSECURE_LOCAL_DEV=true npm run build-only && VITE_BACKEND_URL="https
 ```
 
 `VITE_ALLOW_INSECURE_LOCAL_DEV` lets the build go without a site key ([the front end's half](#the-front-ends-half)); sign in at the address the preview prints.
-[`securityHeaders.test.ts`](../../../front-end/src/__tests__/securityHeaders.test.ts) pins the headers and the policy's shape, and that `vite preview` serves them on the root and a deep link; the Deploy workflow checks that the staged front end sends every one before it is promoted, and that `conventioner.io` does once it serves the new commit.
+[`securityHeaders.test.ts`](../../../front-end/src/__tests__/securityHeaders.test.ts) pins the headers and the policy's shape, its directives exactly, so a `report-uri` or `report-to` fails it, and that `vite preview` serves them on the root and a deep link; the Deploy workflow checks that the staged front end sends every one before it is promoted, and that `conventioner.io` does once it serves the new commit.
 
 **Every API answer carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Strict-Transport-Security: max-age=63072000; includeSubDomains`**, added by one `after_request`, [`install_security_headers()`](../../../back-end/utils/security_headers.py), so a route added later, an error answer and a CORS preflight carry them without doing anything.
 The transport-security header is the front end's value, sent by the API itself so that its HTTPS-only stance does not rest on the `max-age=63072000` Vercel adds on its own.
