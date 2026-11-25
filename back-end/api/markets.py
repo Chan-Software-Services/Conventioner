@@ -1121,13 +1121,13 @@ def get_markets_by_owner_email(owner_email: str) -> List[Dict[str, Any]]:
 
 def _named_by_the_read(market: Market, organization: Optional[Organization]) -> List[str]:
     """Every user id the market read can name: the market's roles, and its organization's owner,
-    admins and members when it is the market's. ``people_with_market_role``,
-    ``follow_up_owners_for`` and ``reviewer_candidate_ids`` only ever name ids from these, so the
-    read needs no account beyond them. Reading an account here serves it to no one: each list keeps
-    its own rule on whom a reader is served."""
+    admins and members when it is the market's (``organization_people_in_order``).
+    ``people_with_market_role``, ``follow_up_owners_for`` and ``reviewer_candidate_ids`` only ever
+    name ids from these, so the read needs no account beyond them. Reading an account here serves
+    it to no one: each list keeps its own rule on whom a reader is served."""
     named = list(market.roles or {})
     if organization is not None and organization.id == market.organization_id:
-        named += [organization.owner, *organization.admins, *organization.members]
+        named += PermissionsApi.organization_people_in_order(organization)
     return named
 
 
