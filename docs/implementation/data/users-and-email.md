@@ -156,7 +156,8 @@ The sign-up's bounds cap how many of these emails one address is sent, from one 
 **The organizer's password and code sign-ins, and the requests that mail an organizer a code or a link, are counted as the applicant's sign-in is**, in the one list of limits, `LIMITS` in [`back-end/sign_in_limits.py`](../../../back-end/sign_in_limits.py), in fixed clock-aligned windows, in `sign_in_attempts`, whose counters name nobody ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)).
 A sign-in is counted per caller, per caller and address, and per address alone; a request that mails, per caller, per caller and address, and per address in the hour.
 
-**Every limit's number is written here**: the table holds each limit in `LIMITS`, the vendor's sign-in, resume and door code and the organizer's invitation among them, and the business, module and testing docs point to it rather than copy a number; an ADR keeps the numbers it decided.
+**Every limit's number is written here**: the table holds each limit in `LIMITS`, the vendor's sign-in, resume and door code and the organizer's invitation among them, and the business, module and testing docs point to it rather than copy a count of tries.
+Two things are written outside it: an ADR keeps the numbers it decided, since it records a decision, and a doc may name a limit's window, a quarter hour or an hour, since the window is part of the limit's kind (an `address-hour` limit is counted by the hour).
 A limit changed in the code is changed in this table, and [`test_sign_in_limits.py`](../../../back-end/tests/test_sign_in_limits.py) (`test_the_table_holds_every_limit_in_use_once`) holds every count and window the code has.
 The vendor's routes are under `/public/markets/<slug>/applicant-login/`, and the door code's under `/public/markets/<slug>/vendor/`.
 
@@ -217,7 +218,7 @@ A second 403 says "We couldn't confirm you're a person. Try again.", and a check
 [`back-end/tests/test_a_strangers_tries_shut_no_one_out.py`](../../../back-end/tests/test_a_strangers_tries_shut_no_one_out.py) holds each.
 
 **The mail requests take nothing back**: every `/request-otp`, `/request-password-reset`, `/resend-verification` and `/register` counts.
-One caller's requests for an address leave every other caller's requests for it as they were, so nobody can use up an organizer's requests, while the address's count by the hour, several times the pair's, bounds one inbox's mail whoever asks.
+In a quarter hour one caller's requests for an address leave every other caller's requests for it as they were, while the address's count by the hour, which a few callers together fill, bounds one inbox's mail whoever asks.
 Past a limit each answers 429 with `ASKED_TOO_OFTEN`, "You have asked several times. Try again in {wait}.", under `msg`, with `Retry-After`; past the hour's count `{wait}` is what is left of the hour, up to 60 minutes.
 Below the limits each answers as it did, `/request-otp`'s and `/request-password-reset`'s per-account waits among them.
 The sign-in page and the verification page say the 429's sentence after "Send the link again" in place of "If that address needs verifying, a new link is on its way.", with nothing beside it (`resentLink`); the reset page and the sign-up form show it as they show any 429's `msg`.

@@ -84,8 +84,8 @@ Each code request sends an email and each verify is a guess at a six-digit code,
 Every limit is in [`back-end/sign_in_limits.py`](../../../back-end/sign_in_limits.py), and its number in [the one table of limits](../../implementation/data/users-and-email.md#the-sign-in-is-bounded), never copied here.
 A caller is allowed far more than an address, since vendors on one venue's wifi share a caller.
 A refused attempt still counts.
-A code request is counted per caller and address, so one caller's requests for an address leave every other caller's requests for it as they were, and nobody can use up a vendor's requests; the address's own count by the hour, several times the pair's, bounds the codes one inbox is sent, whoever asks, so a vendor who asks again from a second network is never near it.
-A request the pair refused is not counted on the address, so one caller adds to it at most the pair's count in a window.
+A code request is counted per caller and address, so in a quarter hour one caller's requests for an address leave every other caller's requests for it as they were; the address's own count by the hour, which a few callers together fill, bounds the codes one inbox is sent, whoever asks, so a vendor who asks again from a second network is never near it.
+A request the pair refused is not counted on the address, so one caller adds to it at most the pair's count in each quarter hour.
 A verify is counted the same two ways (`SecretBounds` in `sign_in_limits.py`), so no one else's wrong codes refuse a vendor's right one ([ADR 0046](../../adr/0046-a-sign-in-limit-never-shuts-out-the-person-it-protects.md)).
 The pair's count bounds one caller's guesses at an address and is the only count that says to wait; the address's own count, which only many callers together reach, asks the human check instead, which the vendor's sign-in already sends with every Sign in, so a vendor sees nothing new.
 A try refused for want of the check is taken back from the pair and the address, a try the pair refused is not counted on the address, and a right code is taken back from all three, so only wrong codes pile up.
