@@ -872,6 +872,17 @@ def test_warm_caches_runs_only_on_warm_and_never_fails_the_run():
     assert warm["continue-on-error"] == "true"
 
 
+def test_the_advisory_scan_reads_no_word_so_a_warm_push_and_every_nightly_run_scan_too():
+    advisories = workflow_jobs()["python-advisories"]
+
+    # Daniel's choice: a daily scan of dev's tip, a nightly run whose commit has a map included,
+    # and every push; only a trial commit skips it. gitleaks, in real-data-and-workflows, stays
+    # skipped on a warm push, as each of the six above is.
+    assert advisories["needs"] == "real-data-and-workflows"
+    assert advisories["if"] == "${{ !cancelled() && github.event_name != 'merge_group' }}"
+    assert "suite" not in advisories["needs"] + advisories["if"]
+
+
 def test_warm_caches_fills_npm_s_cache_node_modules_and_the_stack_s_caches_and_runs_nothing_else():
     warm = workflow_jobs()["warm-caches"]
     checkout, node, fill, deps, stack = warm["steps"]

@@ -13,7 +13,8 @@ on:
     branches: [dev]
   # The nightly test map (docs/implementation/testing/the-test-map.md), on dev's tip at 19:17 UTC,
   # off the hour GitHub's scheduler is busiest at: the shards record and `test-map` builds it, and
-  # the run does nothing when that commit already has a map, as on a night with no merge.
+  # the run makes no map when that commit already has one, as on a night with no merge.
+  # python-advisories, which reads no `suite` word, scans the Python locks every night either way.
   schedule:
     - cron: "17 19 * * *"
   # The same on demand, with `gh workflow run test.yml --ref dev`.
@@ -45,10 +46,11 @@ jobs:
   # by hand. A commit dev's merge queue already passed is the commit the queue tested, so its push
   # only warms the caches the pull requests read (`warm`); every other commit, or any doubt, runs
   # the whole suite (`full`). A nightly or hand-started run makes the test map (`map`: the shards,
-  # recording, and `test-map`), or nothing when the commit has one (`none`). Every other run skips
-  # this job and starts every job at once. The step's shell makes anything but one of the script's
-  # words `full`, and the jobs read an empty output, this job skipped or failed, as `full` too, so
-  # nothing here can skip a test it should not.
+  # recording, and `test-map`), or no test job when the commit has one (`none`); python-advisories
+  # reads no word, so it runs on each of them. Every other run skips this job and starts every job
+  # at once. The step's shell makes anything but one of the script's words `full`, and the jobs read
+  # an empty output, this job skipped or failed, as `full` too, so nothing here can skip a test it
+  # should not.
   suite:
     name: suite
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -123,10 +125,12 @@ jobs:
   # locked: each pinned version with its hashes, resolving and installing nothing. Any known
   # advisory fails the job, whose summary names each finding and the version that fixes it. Not a
   # required check, so an advisory published overnight never holds an unrelated pull request: the
-  # red job on a push to dev is the alert. It waits for real-data-and-workflows, which ends in under
-  # a minute, so a pull request's run never asks for more than the account's 20 jobs at once
-  # (docs/implementation/testing/ci-and-the-gate.md#the-e2e-shards). A trial commit skips it, as it
-  # skips test-map.
+  # red job on a push to dev, or on the nightly run on dev's tip, is the alert, so an advisory
+  # published on a day with no merge is seen that night. It reads no `suite` word, so a warm push
+  # and a nightly run whose commit has a map run it too. It waits for real-data-and-workflows, which
+  # ends in under a minute, so a pull request's run never asks for more than the account's 20 jobs
+  # at once (docs/implementation/testing/ci-and-the-gate.md#the-e2e-shards). A trial commit skips
+  # it, as it skips test-map.
   python-advisories:
     name: python-advisories
     needs: real-data-and-workflows
@@ -206,9 +210,10 @@ jobs:
   # branch is published before any job runs. The protection is the same checker in the git hooks
   # and the gate, before anything leaves the PC
   # (docs/implementation/conventions/security-invariants.md). These steps only keep a PR that got
-  # past them from merging. gitleaks also reads each push to dev and main, so a secret that reached
-  # one other than through a pull request's scan (a Release PR, merged with --admin, gets no CI)
-  # fails a run there.
+  # past them from merging. gitleaks also reads each push to main, and each push to dev that runs
+  # the whole suite, so a secret that reached one other than through a pull request's scan (a
+  # Release PR, merged with --admin, gets no CI) fails a run there. A warm push to dev skips this
+  # job: the queue merged it from pull requests whose own runs scanned each of its commits.
   # zizmor reads the repository's workflows and Dependabot config, offline, so it needs no token.
   # Every finding fails the job; an accepted one is ignored on the line zizmor reports, with its
   # audit and the reason after it.

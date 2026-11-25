@@ -35,7 +35,7 @@ A pull request's run, a trial commit's and a push to `main`'s skip `suite` and r
 [`scripts/promote_check.py`](../../scripts/promote_check.py) decides by the newest by `run_number`, which grows across events in one workflow, so a merged commit is decided by its push run (green when warm, whatever the suite said when it ran the whole suite), and a commit the queue merged inside a batch, which has no push run of its own, by its queue run.
 A nightly run, a hand-started one and a pull request's never count.
 
-**The test map is made by a nightly Test run on `dev`'s tip**, which runs only the shards, recording, and the `test-map` job, and does nothing when that commit already has a map; `gh workflow run test.yml --ref dev` makes one on demand.
+**The test map is made by a nightly Test run on `dev`'s tip**, which runs, of the test jobs, only the shards, recording, and the `test-map` job, and makes no map when that commit already has one; `gh workflow run test.yml --ref dev` makes one on demand.
 No other run records any more, so recording, which slowed the suite, is never on the path to a merge.
 
 **The per-pull-request repeat of the changed specs is removed whole**: its job, its script and its test.
