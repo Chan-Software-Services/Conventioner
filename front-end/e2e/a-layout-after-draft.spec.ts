@@ -19,9 +19,10 @@ import { ensureVerifiedUser } from './helpers/verifiedUser';
  * A layout after Draft (T257 ticket 11). Past Draft, until the market is archived, where a table
  * stands still changes: a move saves and a reload keeps it. What would move a seat does not: Add
  * table, Row of tables, Fill an area, Duplicate, Remove, the Section and Table type fields and
- * Renumber are disabled under the setup-settled sentence, and the server refuses a save that adds
- * a table. An archived market's layout and a Viewer's read only, with no toolbar; and a market
- * whose results are published keeps every vendor's table through a move and a turn.
+ * Renumber are disabled under the setup-settled sentence. An archived market's layout and a
+ * Viewer's read only, with no toolbar; and a market whose results are published keeps every
+ * vendor's table through a move and a turn. The server's refusal of a save that adds, removes or
+ * renumbers a table is proved in `test_a_floorplan_save_keeps_the_market_readable.py`.
  */
 const VIEWER = { email: 'e2e-layout-viewer@example.com', password: 'e2epassword123' };
 
@@ -119,43 +120,6 @@ test.describe('A layout after Draft', () => {
     await expect(layout.tables).toHaveCount(SECTIONED.length);
     await layout.table(GOLD_1).click();
     await expect(layout.selectionPosition).toHaveText(where);
-  });
-
-  test('a save that adds, removes or renumbers a table is refused with the settled sentence', async ({
-    request,
-  }) => {
-    const seeded = await aLaidOutMarketIn(request, 'applications');
-    const read = await request.get(`${BACKEND_URL}/markets/${seeded.marketId}`);
-    const { market } = (await read.json()) as {
-      market: {
-        setupLockReason: string;
-        setupObject: { floorplans: { revision: number; tables: { number: number | null }[] }[] };
-      };
-    };
-    const [stored] = market.setupObject.floorplans;
-    const [first, second, ...rest] = stored.tables;
-    const changes = {
-      added: [...stored.tables, { ...first, id: 'table-new', number: SECTIONED.length + 1 }],
-      removed: [first, ...rest],
-      renumbered: [
-        { ...first, number: second.number },
-        { ...second, number: first.number },
-        ...rest,
-      ],
-    };
-
-    for (const [change, tables] of Object.entries(changes)) {
-      const saved = await request.post(`${BACKEND_URL}/floorplans/save-to-market`, {
-        data: {
-          market_id: seeded.marketId,
-          floorplan: { ...stored, tables },
-          revision: stored.revision,
-        },
-      });
-      expect(saved.status(), change).toBe(409);
-      expect(await saved.json(), change).toEqual({ error: market.setupLockReason });
-    }
-    expect(market.setupLockReason).toContain('The setup is settled');
   });
 
   test("an archived market's layout reads only, with no toolbar", async ({

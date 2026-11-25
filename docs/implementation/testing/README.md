@@ -19,5 +19,5 @@ One line per node, sorted by file name.
 - [The real-MongoDB suite](real-mongo-suite.md) - `back-end/tests/real_mongo/`, pytest on a real MongoDB server: the server it takes and refuses, each test's own database, the bound handles, the fixtures
 - [Test data](test-data.md) - where each kind of test data lives, the fictional "Example" vocabulary, the rule for adding more, and what the real-data check enforces
 - [The market journey spec](the-market-journey-spec.md) - the one spec that walks the whole journey; the slices; where a new test belongs
-- [The test map](the-test-map.md) - which modules and endpoints each E2E spec reaches, and the back-end functions each endpoint runs; recorded by CI on every push to `dev`, its build, how old it can be, and the script that chooses a builder's specs from it
+- [The test map](the-test-map.md) - which modules and endpoints each E2E spec reaches, and the back-end functions each endpoint runs; recorded by a nightly CI run on `dev`'s tip, its build, how old it can be, and the script that chooses a builder's specs from it
 - [Walking the flows](walking-the-flows.md) - the stack, accounts and fixtures a walk needs, the gaps the specs leave in each flow, the test data recipes

@@ -94,9 +94,9 @@ Covered by:
 - [`an-address-breaks-only-before-its-at.spec.ts`](../../../front-end/e2e/an-address-breaks-only-before-its-at.spec.ts) (its rows)
 - `dialog-idiom.spec.ts`
 - [`everyone-with-access.spec.ts`](../../../front-end/e2e/everyone-with-access.spec.ts) (Manage organization from its address)
-- [`manageOrganizationPeople.test.ts`](../../../front-end/src/__tests__/manageOrganizationPeople.test.ts) (and each add held, sent once, and its answer kept out of Manage organization opened on another organization)
+- [`manageOrganizationPeople.test.ts`](../../../front-end/src/__tests__/manageOrganizationPeople.test.ts) (the shown count kept through a removal, someone just added found until the field is cleared, and each add held, sent once, and its answer kept out of Manage organization opened on another organization)
 - `OrganizationsView.test.ts` for the key it opens on and drops
-- [`people-at-scale-organization.spec.ts`](../../../front-end/e2e/people-at-scale-organization.spec.ts) (Admins and Members at 150 people: a page at a time, finding one member, the place kept, someone just added; on a phone at 390 and 320)
+- [`people-at-scale-organization.spec.ts`](../../../front-end/e2e/people-at-scale-organization.spec.ts) (Members at 150 people: a page at a time, finding one member, the place kept; on a phone at 390 and 320)
 - `screens-match-roles.spec.ts` ("an organization admin with no role on the market")
 - `tier2.spec.ts`
 

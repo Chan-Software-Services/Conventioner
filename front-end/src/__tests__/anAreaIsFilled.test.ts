@@ -609,6 +609,24 @@ describe("Fill an area's write, in the editor", () => {
     expect(editor.emitted('status')).toEqual([[saidFilled(1, 30, false, 30)]]);
   });
 
+  it('closes on an answer that ran out of time, and says so with what it placed', async () => {
+    const answer: FillAnswer = {
+      placed_tables: Array.from({ length: 24 }, (_, i) =>
+        placed(2915 + (i % 10) * 1830, 3380 + Math.floor(i / 10) * 1960),
+      ),
+      timed_out: true,
+    };
+    const editor = await fillTheView(vi.fn(() => Promise.resolve(answer)));
+
+    await pressFill();
+
+    expect(byTestId('layout-fill-window')).toBeNull();
+    expect(editor.emitted('status')).toEqual([
+      ['Placed 24 of 30 - Fill an area ran out of time before the rest.'],
+    ]);
+    expect(document.querySelectorAll('[data-testid="layout-table"]')).toHaveLength(24);
+  });
+
   it('keeps a refusal in the dialog until a choice changes, and out of the next opening', async () => {
     const fill = vi.fn(() =>
       Promise.reject({

@@ -8,6 +8,11 @@ What an answer does need:
   answer that echoes an applicant's words is never sniffed into a script or a page.
 - ``Referrer-Policy: no-referrer``: an API address can carry a market's id, and nothing the API
   answers should hand it on.
+- ``Strict-Transport-Security: max-age=63072000; includeSubDomains``: a browser that has reached the
+  API once reaches it only over HTTPS for two years, whatever the host in front of it adds. The value
+  is the front end's. A browser ignores it on plain HTTP, on an IP address and on a certificate it
+  does not trust, so the local stack, served at ``127.0.0.1`` with a self-signed certificate, is
+  untouched by it.
 """
 
 from flask import Flask, Response
@@ -15,6 +20,7 @@ from flask import Flask, Response
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
 }
 
 
