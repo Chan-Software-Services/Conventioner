@@ -323,7 +323,7 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 - **Password Hashing**: Bcrypt with secure salt generation
 - **Email Verification**: Required before account activation
 - **CAPTCHA Protection**: reCAPTCHA v3 on registration
-- **Rate Limiting**: every sign-in, code, reset-link, verification-link and sign-up request is counted in the database before the account is looked up, per address and per caller, and an invitation per inviter and per address, with the limits in one table (`LIMITS` in `back-end/sign_in_limits.py`); a try that signs in, and an invitation accepted, is taken back
+- **Rate Limiting**: every sign-in, code, reset-link, verification-link and sign-up request is counted in the database before the account is looked up, per address and per caller, and an invitation per inviter and per address, with the limits in one table (`LIMITS` in `back-end/sign_in_limits.py`); a try that signs in, and an invitation accepted, is taken back; OTP and password reset requests also wait on the last
 - **Token Expiration**: Time-limited tokens for verification and reset
 - **Secure Sessions**: HTTP-only, `Secure`, `SameSite=Lax` cookies, signed with a `SECRET_KEY` that has no fallback
 - **CORS Protection**: An explicit origin allowlist (`CORS_ALLOWED_ORIGINS`); `*` is refused, because the session cookie is credentialed
