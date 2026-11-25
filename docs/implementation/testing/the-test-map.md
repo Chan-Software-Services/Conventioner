@@ -6,7 +6,7 @@ describes:
   - back-end/tests/test_map_plugin.py
   - front-end/e2e/helpers/testMap.ts
   - scripts/affected-specs.py
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - T349
   - T510
@@ -74,7 +74,7 @@ Its first job, `suite` ([`scripts/ci_suite.py`](../../../scripts/ci_suite.py)), 
    The plugin also writes the app's URL rules as the session ends.
    Nothing else loads it as a plugin: the suite's own runs collect only the tests in it.
 4. **The build makes each spec's endpoints from its tests' records, and audits the logs.**
-   `test_map.py build` reads every `*.jsonl` of each shard's directory, so a shard recorded before records were a file a worker, with one `records.jsonl`, still builds.
+   `test_map.py build` reads every `*.jsonl` of each shard's directory, so a shard recorded before each worker had a file of its own, with one `records.jsonl`, still builds.
    Each spec's endpoints are the `/api/` calls its tests recorded, each path matched to its rule, so what a `beforeAll`, the global setup or the seed does counts for no spec.
    It then audits each shard's log: a request line inside some test's window whose endpoint no record whose window holds it recorded, a test's or a `"between"` one, is unclaimed, the mark of a way of reaching the back end the recorder does not see, such as Node's own `fetch`.
    The `"between"` lines are what keeps the audit clean at two workers, where one worker's `beforeAll` reaches the back end inside the other worker's test: without them, eight specs at two workers left 16 such lines unclaimed.
