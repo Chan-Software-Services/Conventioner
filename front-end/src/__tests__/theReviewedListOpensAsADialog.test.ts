@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import ApplicationMonitor from '@/components/application/ApplicationMonitor.vue';
 import { ApplicationStatus, type Application, type Market } from '@/assets/types/datatypes';
+import { answeredWith, servedReview } from './support/servedReview';
 
 const fetchMarketApplications = vi.fn();
 const reviewApplication = vi.fn();
@@ -50,6 +51,7 @@ const REFUSING_A_CHANGE = {
   actionRefusals: { 'give-verdicts': null, 'change-verdicts': CHANGE_REFUSED },
 } as unknown as Market;
 
+/** Open unless `extra` serves it otherwise (`servedReview`). */
 function application(id: string, status = ApplicationStatus.Open, extra = {}): Application {
   return {
     id,
@@ -58,13 +60,16 @@ function application(id: string, status = ApplicationStatus.Open, extra = {}): A
     status,
     formData: { shop: `${id}'s shop` },
     submittedAt: '2026-09-15T14:20:18.000Z',
+    ...servedReview('open'),
     ...extra,
   } as unknown as Application;
 }
 
+/** Rejected unless `extra` serves it otherwise (`servedReview`). */
 const reviewedAt = (minute: number, status = ApplicationStatus.ReviewerRejected, extra = {}) =>
   application(`vendor-${String(minute).padStart(3, '0')}`, status, {
     verdictAt: new Date(Date.UTC(2026, 9, 1, 10, minute)).toISOString(),
+    ...servedReview('rejected'),
     ...extra,
   });
 
@@ -81,6 +86,7 @@ describe('Show N reviewed', () => {
       application('jane'),
       application('kim'),
       reviewedAt(1, ApplicationStatus.ReviewerApproved, {
+        ...servedReview('approved'),
         verdictBy: { kind: 'person', email: 'ana@example.com' },
         formData: { essential_preferred_name: 'Ola Fern' },
       }),
@@ -92,13 +98,14 @@ describe('Show N reviewed', () => {
     fetchMarketApplications.mockImplementation(async () => list.map((app) => ({ ...app })));
     handOut.mockReset();
     handOut.mockImplementation(async (want: string | null) =>
-      want
-        ? list.find((app) => app.id === want)
-        : list.find((app) => app.status === ApplicationStatus.Open),
+      want ? list.find((app) => app.id === want) : list.find((app) => app.review.state === 'open'),
     );
     reviewApplication.mockReset();
     reviewApplication.mockImplementation(async (_m: string, app: Application, status: string) => {
-      const written = { ...app, status, verdictAt: '2026-11-01T10:00:00+00:00' } as Application;
+      const written = {
+        ...answeredWith(app, status),
+        verdictAt: '2026-11-01T10:00:00+00:00',
+      } as Application;
       list = list.map((held) => (held.id === app.id ? written : held));
       return { application: written, undoSeconds: 0 };
     });
@@ -242,6 +249,7 @@ describe('Show N reviewed', () => {
           ? {
               ...app,
               status: ApplicationStatus.ReviewerApproved,
+              ...servedReview('approved'),
               verdictAt: '2026-10-01T09:00:00Z',
             }
           : app,
@@ -398,7 +406,10 @@ describe('Show N reviewed', () => {
           new Promise((resolve) => {
             answer = () =>
               resolve({
-                application: { ...app, status, verdictAt: '2026-11-01T10:00:00+00:00' },
+                application: {
+                  ...answeredWith(app, status),
+                  verdictAt: '2026-11-01T10:00:00+00:00',
+                },
                 undoSeconds: 0,
               });
           }),
@@ -442,7 +453,11 @@ describe('Show N reviewed', () => {
           status: 409,
           data: {
             error: 'kai@example.com approved this application since you opened it.',
-            application: { ...seen, status: ApplicationStatus.ReviewerApproved },
+            application: {
+              ...seen,
+              status: ApplicationStatus.ReviewerApproved,
+              ...servedReview('approved'),
+            },
           },
         },
       });
@@ -494,7 +509,10 @@ describe('Show N reviewed', () => {
           new Promise((resolve) => {
             answer = () =>
               resolve({
-                application: { ...app, status, verdictAt: '2026-11-01T10:00:00+00:00' },
+                application: {
+                  ...answeredWith(app, status),
+                  verdictAt: '2026-11-01T10:00:00+00:00',
+                },
                 undoSeconds: 0,
               });
           }),
@@ -572,7 +590,11 @@ describe('Show N reviewed', () => {
             status: 409,
             data: {
               error: 'kai@example.com approved this application since you opened it.',
-              application: { ...seen, status: ApplicationStatus.ReviewerApproved },
+              application: {
+                ...seen,
+                status: ApplicationStatus.ReviewerApproved,
+                ...servedReview('approved'),
+              },
             },
           },
         });
@@ -612,7 +634,11 @@ describe('Show N reviewed', () => {
             data: {
               error: 'kai@example.com approved this application since you opened it.',
               application: {
-                ...application('jane', ApplicationStatus.ReviewerApproved),
+                ...application(
+                  'jane',
+                  ApplicationStatus.ReviewerApproved,
+                  servedReview('approved'),
+                ),
                 verdictAt: '2026-10-31T10:00:00+00:00',
               },
             },
@@ -653,7 +679,12 @@ describe('Show N reviewed', () => {
           status: 409,
           data: {
             error: 'kai@example.com undid this verdict since you opened it.',
-            application: { ...seen, status: ApplicationStatus.Open, verdictAt: null },
+            application: {
+              ...seen,
+              status: ApplicationStatus.Open,
+              ...servedReview('open'),
+              verdictAt: null,
+            },
           },
         },
       });
@@ -675,7 +706,7 @@ describe('Show N reviewed', () => {
           data: {
             error: 'kai@example.com approved this application since you opened it.',
             application: {
-              ...application('jane', ApplicationStatus.ReviewerApproved),
+              ...application('jane', ApplicationStatus.ReviewerApproved, servedReview('approved')),
               verdictAt: '2026-10-31T10:00:00+00:00',
             },
           },
@@ -705,7 +736,7 @@ describe('Show N reviewed', () => {
           data: {
             error: 'kai@example.com approved this application since you opened it.',
             application: {
-              ...application('jane', ApplicationStatus.ReviewerApproved),
+              ...application('jane', ApplicationStatus.ReviewerApproved, servedReview('approved')),
               verdictAt: '2026-10-31T10:00:00+00:00',
             },
           },
@@ -727,7 +758,7 @@ describe('Show N reviewed', () => {
       list = [application('jane'), application('kim'), reviewedAt(1)];
       await monitor();
       reviewApplication.mockImplementationOnce(async (_m: string, app: Application, s: string) => ({
-        application: { ...app, status: s, verdictAt: '2026-11-01T09:00:00+00:00' },
+        application: { ...answeredWith(app, s), verdictAt: '2026-11-01T09:00:00+00:00' },
         undoSeconds: 120,
       }));
       await press('r');
@@ -809,7 +840,7 @@ describe('Show N reviewed', () => {
   describe('the card behind it', () => {
     it('takes none of A, R, S, N and Z', async () => {
       reviewApplication.mockImplementationOnce(async (_m: string, app: Application, s: string) => ({
-        application: { ...app, status: s, verdictAt: '2026-11-01T09:00:00+00:00' },
+        application: { ...answeredWith(app, s), verdictAt: '2026-11-01T09:00:00+00:00' },
         undoSeconds: 120,
       }));
       await monitor();
@@ -838,7 +869,10 @@ describe('Show N reviewed', () => {
           new Promise((resolve) => {
             answer = () =>
               resolve({
-                application: { ...app, status, verdictAt: '2026-11-01T09:00:00+00:00' },
+                application: {
+                  ...answeredWith(app, status),
+                  verdictAt: '2026-11-01T09:00:00+00:00',
+                },
                 undoSeconds: 120,
               });
           }),

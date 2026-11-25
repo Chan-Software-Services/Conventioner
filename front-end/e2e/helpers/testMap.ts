@@ -1,9 +1,10 @@
 /**
  * The test map's recording (T349): what each E2E test reached, written beside a normal run.
  *
- * On only when `TEST_MAP_OUT` names a directory, which CI's shards set on a push to `dev` alone;
- * with it unset `withTheTestMap` hands back the `test` it was given, so every other run is
- * untouched. When on, every spec's `test` (through `fixtures.ts`) also records, per test:
+ * On only when `TEST_MAP_OUT` names a directory, which CI's shards set on the nightly Test run
+ * alone (or one started by hand); with it unset `withTheTestMap` hands back the `test` it was
+ * given, so every other run, a pull request's, the merge queue's and a push's, is untouched.
+ * When on, every spec's `test` (through `fixtures.ts`) also records, per test:
  *
  *  - every request each browser context makes under `/src/` (the app's modules, which Vite's dev
  *    server serves one by one, each at its file's path) and `/api/` (the pages' own API calls);

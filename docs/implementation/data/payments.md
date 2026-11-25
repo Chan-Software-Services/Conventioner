@@ -172,7 +172,7 @@ Anyone else frees the seat with no such question, and the line stays owed for an
 
 Each write holds the record as read (its `_id` and the fields its owner writes, `OWNED_FIELDS`: `state`, the legacy fields and `revision`) and counts `revision` up from the one read; a record that changed meanwhile is read again with the assignment, up to three tries, then listed as skipped, and a record that cannot be read is left and listed.
 It prints each record it changes by market id, date and record id with what it sets, never a name or an address, and a count ("would set" on a dry run), and is safe to run again.
-It runs right after the deploy, `--dry-run` first, and again after any roll-forward past a rollback ([operations](../../OPERATIONS.md#starting-a-database-and-migrations)): until it runs, such a hidden amount is dropped only when its day is next seated.
+It runs right after the deploy, `--dry-run` first, and again after any roll-forward past a rollback ([releasing](../../RELEASING.md#migrate_owed_day_statepy)): until it runs, such a hidden amount is dropped only when its day is next seated.
 
 ## The amount paid
 

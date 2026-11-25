@@ -100,14 +100,20 @@ function retry(): void {
  * screen's own sticky column sits under the frame at `top: calc(var(--banner-h) +
  * var(--market-frame-h))`. The rail grows (blockers, errors), so a fixed number would be wrong. Up
  * to 1023px the frame gives up its box and only the bar is pinned, so the bar's height is measured.
+ * The height is the unrounded one: `offsetHeight` rounds a 138.2px frame to 138, and a row pinned
+ * under it would rise 0.2px from where it stood at rest.
  */
 const card = ref<HTMLElement | null>(null);
 const frame = ref<HTMLElement | null>(null);
 const bar = ref<InstanceType<typeof MarketBar> | null>(null);
 const barEl = computed(() => (bar.value?.$el as HTMLElement | undefined) ?? null);
 let observer: ResizeObserver | null = null;
+/** A box-less element (the frame up to 1023px) measures 0. */
+function heightOf(el: HTMLElement | null | undefined): number {
+  return el?.getBoundingClientRect().height ?? 0;
+}
 function measure(): void {
-  const pinned = frame.value?.offsetHeight || barEl.value?.offsetHeight || 0;
+  const pinned = heightOf(frame.value) || heightOf(barEl.value);
   card.value?.style.setProperty('--market-frame-h', `${pinned}px`);
 }
 onMounted(() => {

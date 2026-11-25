@@ -4,6 +4,7 @@ import {
   seedApplicantMarket,
   seedApplicationDoc,
   createApplicantLoginChallenge,
+  anApplicantEmail,
   type ApplicantMarketSeed,
 } from './helpers/seedApplicantMarket';
 
@@ -30,10 +31,12 @@ import {
  * the test needs to verify the successful path - the 5d back end hashes
  * codes immediately on generation, so the test cannot read them from the
  * database after requesting one.
+ *
+ * Each test signs in on addresses of its own (`anApplicantEmail`): the sign-in limits count per
+ * address across every market, so one address shared by the file's tests, run again and again,
+ * would be refused within a run.
  */
 
-const APPLICANT_EMAIL = 'applicant-e2e@example.com';
-const UNKNOWN_EMAIL = 'nobody@example.com';
 const KNOWN_CODE = '123456';
 
 /** The exact body the back end returns on every request-code call. */
@@ -55,9 +58,14 @@ const SPENT = {
 
 test.describe('Public applicant login - anti-oracle', () => {
   let market: ApplicantMarketSeed;
+  // An applicant, and an address that never applied.
+  let applicantEmail: string;
+  let unknownEmail: string;
 
   test.beforeEach(async ({ request }) => {
     market = await seedApplicantMarket(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
+    applicantEmail = anApplicantEmail();
+    unknownEmail = anApplicantEmail('nobody');
   });
 
   // ── Request-code anti-oracle ──────────────────────────────────────────
@@ -66,11 +74,11 @@ test.describe('Public applicant login - anti-oracle', () => {
     request,
   }) => {
     // Create an application document so the back end considers this email known.
-    seedApplicationDoc(market.marketId, APPLICANT_EMAIL);
+    seedApplicationDoc(market.marketId, applicantEmail);
 
     const knownRes = await request.post(
       `${BACKEND_URL}/public/markets/${market.marketSlug}/applicant-login/request-code`,
-      { data: { email: APPLICANT_EMAIL } },
+      { data: { email: applicantEmail } },
     );
     expect(knownRes.status()).toBe(200);
     const knownBody = await knownRes.json();
@@ -78,7 +86,7 @@ test.describe('Public applicant login - anti-oracle', () => {
     // Same call for an email that has never applied.
     const unknownRes = await request.post(
       `${BACKEND_URL}/public/markets/${market.marketSlug}/applicant-login/request-code`,
-      { data: { email: UNKNOWN_EMAIL } },
+      { data: { email: unknownEmail } },
     );
     expect(unknownRes.status()).toBe(200);
     const unknownBody = await unknownRes.json();
@@ -98,16 +106,16 @@ test.describe('Public applicant login - anti-oracle', () => {
         `${BACKEND_URL}/public/markets/${market.marketSlug}/applicant-login/verify-code`,
         { data: { email, code } },
       );
-    createApplicantLoginChallenge(market.marketId, APPLICANT_EMAIL, KNOWN_CODE);
+    createApplicantLoginChallenge(market.marketId, applicantEmail, KNOWN_CODE);
 
-    const wrongRes = await verify(APPLICANT_EMAIL, '000001');
+    const wrongRes = await verify(applicantEmail, '000001');
     expect(wrongRes.status()).toBe(401);
     expect(await wrongRes.json()).toEqual(RETRY);
 
     // Used: the right code signs in once, then answers as a code never asked for does.
-    expect((await verify(APPLICANT_EMAIL, KNOWN_CODE)).status()).toBe(200);
-    const usedRes = await verify(APPLICANT_EMAIL, KNOWN_CODE);
-    const neverAskedRes = await verify(UNKNOWN_EMAIL, KNOWN_CODE);
+    expect((await verify(applicantEmail, KNOWN_CODE)).status()).toBe(200);
+    const usedRes = await verify(applicantEmail, KNOWN_CODE);
+    const neverAskedRes = await verify(unknownEmail, KNOWN_CODE);
 
     expect(usedRes.status()).toBe(401);
     expect(neverAskedRes.status()).toBe(401);
@@ -116,14 +124,11 @@ test.describe('Public applicant login - anti-oracle', () => {
   });
 
   test('(c) after five wrong tries even the right code fails', async ({ request }) => {
-    // An address of its own: six tries here would leave the others under the per-address limit's
-    // ten in a quarter of an hour with too few to run.
-    const vendor = `five-tries-${Date.now()}@example.com`;
-    createApplicantLoginChallenge(market.marketId, vendor, KNOWN_CODE);
+    createApplicantLoginChallenge(market.marketId, applicantEmail, KNOWN_CODE);
     const verify = (code: string) =>
       request.post(
         `${BACKEND_URL}/public/markets/${market.marketSlug}/applicant-login/verify-code`,
-        { data: { email: vendor, code } },
+        { data: { email: applicantEmail, code } },
       );
 
     for (const wrong of ['000001', '000002', '000003', '000004']) {
@@ -145,13 +150,13 @@ test.describe('Public applicant login - anti-oracle', () => {
     await expect(login.emailInput).toBeVisible();
     await expect(login.requestButton).toBeVisible();
 
-    await login.requestCode(APPLICANT_EMAIL);
+    await login.requestCode(applicantEmail);
 
     // After requesting a code the page transitions to the code input step, saying the same thing
     // to every address - and true of every address, since each is sent a code (E26/F07/S01).
     await expect(login.codeInput).toBeVisible({ timeout: 5000 });
     await expect(
-      page.getByText(`We've sent a code to ${APPLICANT_EMAIL}. Only the newest one works.`),
+      page.getByText(`We've sent a code to ${applicantEmail}. Only the newest one works.`),
     ).toBeVisible();
   });
 
@@ -161,7 +166,7 @@ test.describe('Public applicant login - anti-oracle', () => {
     const login = new VendorPage(page);
 
     await login.goto(market.marketSlug);
-    await login.requestCode(APPLICANT_EMAIL);
+    await login.requestCode(applicantEmail);
     await expect(login.codeInput).toBeVisible({ timeout: 5000 });
 
     // A wrong code, and another: each says the same, and neither says whether the address applied.
@@ -179,8 +184,8 @@ test.describe('Public applicant login - anti-oracle', () => {
 
     // Seed a challenge with a known code so the test can verify end-to-end
     // without reading a hashed code out of the database.
-    seedApplicationDoc(market.marketId, APPLICANT_EMAIL);
-    createApplicantLoginChallenge(market.marketId, APPLICANT_EMAIL, knownCode);
+    seedApplicationDoc(market.marketId, applicantEmail);
+    createApplicantLoginChallenge(market.marketId, applicantEmail, knownCode);
 
     // Intercept the request-code API call. The real backend call would
     // overwrite our manually inserted challenge with a random hashed code,
@@ -194,7 +199,7 @@ test.describe('Public applicant login - anti-oracle', () => {
     });
 
     await login.goto(market.marketSlug);
-    await login.requestCode(APPLICANT_EMAIL);
+    await login.requestCode(applicantEmail);
     await expect(login.codeInput).toBeVisible({ timeout: 5000 });
 
     // The page calls request-code and transitions to the code step. The
@@ -202,7 +207,7 @@ test.describe('Public applicant login - anti-oracle', () => {
     await login.enterCode(knownCode);
 
     // On success the page signs them in where they are, at the vendor page's address.
-    await expect(login.signedInAs).toContainText(APPLICANT_EMAIL, { timeout: 5000 });
+    await expect(login.signedInAs).toContainText(applicantEmail, { timeout: 5000 });
     await expect(page).toHaveURL(new RegExp(`${vendorPagePath(market.marketSlug)}$`));
     await expect(login.status).toContainText('Submitted');
   });

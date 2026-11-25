@@ -120,6 +120,19 @@ function out(email: string, tableCode: string, by: string | null): Row {
   };
 }
 
+/**
+ * The server's answer to a check-out: the day's check-out, made now by the organizer looking, or
+ * one stored before by another organizer, or by the vendor's own scan when `by` is null.
+ */
+function checkedOut(by: string | null) {
+  return {
+    message: 'Checked out',
+    checkedOutAt: LEFT,
+    checkedOutBy: by,
+    checkedOutVia: by ? null : 'door_code',
+  };
+}
+
 /** Checked in with no table today, after a free. */
 function seatless(email: string): Row {
   return {
@@ -330,7 +343,7 @@ describe("each row's buttons", () => {
     expect(offers(wrapper, CY)).toEqual(HERE_OFFERS);
 
     holdTheRereads();
-    api.post.mockResolvedValue({ data: { message: 'Checked out', checkedOutAt: LEFT } });
+    api.post.mockResolvedValue({ data: checkedOut(ORGANIZER) });
     await button(wrapper, CY, 'attendance-check-out').trigger('click');
     await flushPromises();
 
@@ -454,7 +467,7 @@ describe('a check-out and its undo', () => {
     expect(rosterReads()).toBe(1);
     holdTheRereads();
 
-    api.post.mockResolvedValue({ data: { message: 'Checked out', checkedOutAt: LEFT } });
+    api.post.mockResolvedValue({ data: checkedOut(ORGANIZER) });
     await button(wrapper, ANA, 'attendance-check-out').trigger('click');
     await flushPromises();
 
@@ -480,12 +493,32 @@ describe('a check-out and its undo', () => {
     expect(rosterReads()).toBe(3);
   });
 
+  it.each([
+    [
+      'another organizer',
+      'door@example.com',
+      /^Checked out \d{1,2}:\d{2}\s[AP]M by door@example\.com$/,
+    ],
+    ["the vendor's own scan", null, /^Scanned out at \d{1,2}:\d{2}\s[AP]M$/],
+  ])('a check-out made after %s shows theirs at once, never "by you"', async (_who, by, said) => {
+    serve(here(ANA, 'A1'));
+    const wrapper = await open();
+    holdTheRereads();
+
+    api.post.mockResolvedValue({ data: checkedOut(by) });
+    await button(wrapper, ANA, 'attendance-check-out').trigger('click');
+    await flushPromises();
+
+    expect(outSaid(wrapper, ANA)).toMatch(said);
+    expect(offers(wrapper, ANA)).toEqual(OUT_OFFERS);
+  });
+
   it("the undo of a vendor's own check-out clears how it was made", async () => {
     serve(out(ANA, 'A1', null));
     const wrapper = await open();
     holdTheRereads();
     api.delete.mockResolvedValue({ data: { message: 'Check-out undone' } });
-    api.post.mockResolvedValue({ data: { message: 'Checked out', checkedOutAt: LEFT } });
+    api.post.mockResolvedValue({ data: checkedOut(ORGANIZER) });
 
     await button(wrapper, ANA, 'attendance-undo-check-out').trigger('click');
     await flushPromises();
@@ -507,7 +540,7 @@ describe('a check-out and its undo', () => {
     expect(button(wrapper, ANA, 'attendance-undo').attributes('disabled')).toBeDefined();
     expect(button(wrapper, BEN, 'attendance-check-out').attributes('disabled')).toBeUndefined();
 
-    settle({ data: { message: 'Checked out', checkedOutAt: LEFT } });
+    settle({ data: checkedOut(ORGANIZER) });
     await flushPromises();
     expect(
       button(wrapper, ANA, 'attendance-undo-check-out').attributes('disabled'),

@@ -111,7 +111,6 @@ export class LayoutPage {
   readonly fillInView: Locator;
   readonly fillSubmit: Locator;
   readonly fillCancel: Locator;
-  readonly fillError: Locator;
   /** The panel's status line: what Fill an area did, or why an area did not close. */
   readonly status: Locator;
   readonly guides: Locator;
@@ -308,7 +307,6 @@ export class LayoutPage {
     this.fillInView = page.getByTestId('layout-fill-in-view');
     this.fillSubmit = page.getByTestId('layout-fill-submit-button');
     this.fillCancel = page.getByTestId('layout-fill-cancel-button');
-    this.fillError = page.getByTestId('layout-fill-error');
     this.status = page.getByTestId('layout-status');
     this.guides = this.map.getByTestId('layout-map-guide');
     this.selectionFrame = this.map.getByTestId('layout-selection-frame');

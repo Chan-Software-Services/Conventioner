@@ -17,7 +17,7 @@
  *   node scripts/e2e-shards.ts timings <out file>
  *
  * which picks the newest `e2e-shard-timings` artifact made at least ten minutes before its own run
- * was created, by a Test run on a push to `dev`, a schedule on `dev` or a merge queue trial commit.
+ * was created, by a Test run on a push to `dev` or a merge queue trial commit.
  * A run's creation time stays the same on every re-run, and an artifact never changes once made,
  * so every shard of a run, and every re-run of one, picks the same artifact. With no such artifact,
  * a corrupt one, or GitHub's API failing, it falls back to the committed `e2e-shard-timings.json`
@@ -335,8 +335,7 @@ export function timingsFromReports(
  * a fifth from run to run. */
 export const BLEND_WEIGHT = 0.3;
 
-/** The artifact every passing push to `dev`, scheduled run on `dev` and merge queue trial commit
- * publishes. */
+/** The artifact every passing push to `dev` and merge queue trial commit publishes. */
 export const TIMINGS_ARTIFACT = 'e2e-shard-timings';
 
 /** How long before its own run was created an artifact must have been made for a shard to take it:
@@ -463,17 +462,15 @@ export function chooseTimingsArtifacts(
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.id - a.id);
 }
 
-/** A run whose timings a shard trusts: the Test workflow's, in this repository, on a push to `dev`,
- * a scheduled run on `dev` or a merge queue trial commit, never a pull request's, whose code no one
- * has merged. */
+/** A run whose timings a shard trusts: the Test workflow's, in this repository, on a push to `dev`
+ * or a merge queue trial commit, never a pull request's, whose code no one has merged. */
 export function trustedRun(run: WorkflowRun, repositoryId: number): boolean {
   return (
     run.path === '.github/workflows/test.yml' &&
     run.repository.id === repositoryId &&
     run.head_repository?.id === repositoryId &&
     publishingBranch(run.head_branch) &&
-    (((run.event === 'push' || run.event === 'schedule') && run.head_branch === 'dev') ||
-      run.event === 'merge_group')
+    ((run.event === 'push' && run.head_branch === 'dev') || run.event === 'merge_group')
   );
 }
 

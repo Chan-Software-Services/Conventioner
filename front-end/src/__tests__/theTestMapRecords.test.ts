@@ -1,11 +1,12 @@
 // @vitest-environment node
 /**
- * The test map's recording (T349, `e2e/helpers/testMap.ts`): on a push to `dev`, CI's shards write
- * one line per test naming the app modules its pages loaded and the API calls its pages and its
- * Node helpers made, and the stretches of each module that ran, each worker to a file of its own.
- * These are the pure parts (which requests count, which file a worker writes, how V8's nested
- * block counts become the stretches that ran) and the wrapped API request context, against a
- * real one from `playwright-core` and a local server. In Node, since the request context is.
+ * The test map's recording (T349, `e2e/helpers/testMap.ts`): on the nightly Test run of `dev`'s tip
+ * (or one started by hand), CI's shards write one line per test naming the app modules its pages
+ * loaded and the API calls its pages and its Node helpers made, and the stretches of each module
+ * that ran, each worker to a file of its own. These are the pure parts (which requests count,
+ * which file a worker writes, how V8's nested block counts become the stretches that ran) and the
+ * wrapped API request context, against a real one from `playwright-core` and a local server. In
+ * Node, since the request context is.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';

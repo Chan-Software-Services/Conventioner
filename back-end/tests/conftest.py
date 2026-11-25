@@ -6,10 +6,10 @@ once and test modules never have to care about collection order.
 A stub is installed only when the real dependency is not importable. When the full
 requirements.txt is installed (as in CI), the real modules win, so route-level tests
 can import app.py and exercise Flask endpoints through the test client. In that case
-the real pymongo driver is in play, so an unconfigured environment is pointed at a
-port nothing can listen on, with a short server selection timeout: a test that reaches
-an unpatched collection fails loudly in a fraction of a second instead of silently
-reading or writing a developer's live local database.
+the real pymongo driver is in play, so the suite is pointed at a port nothing can
+listen on, whatever database the shell's ``MONGODB_*`` variables name: a test that
+reaches an unpatched collection fails loudly once server selection times out instead
+of silently reading or writing a developer's live local database.
 """
 import copy
 import functools
@@ -44,8 +44,13 @@ MONGO_ENV_KEYS = (
 # No timeout in it: `db_config` passes its bounds as keywords, which win over the URI's.
 UNREACHABLE_MONGODB_URI = "mongodb://127.0.0.1:1/"
 
-if not any(os.getenv(key) for key in MONGO_ENV_KEYS):
-    os.environ["MONGODB_URI"] = UNREACHABLE_MONGODB_URI
+# A shell's exported database (a `MONGODB_URI` or `MONGODB_HOST` left from a one-off script, say)
+# never reaches a test: every variable is cleared and the unreachable address named in its place,
+# and a test that needs one sets it itself (test_the_suite_reads_no_database_from_its_shell.py).
+# The real-MongoDB suite reads `REAL_MONGODB_URI`, which this leaves alone.
+for _key in MONGO_ENV_KEYS:
+    os.environ.pop(_key, None)
+os.environ["MONGODB_URI"] = UNREACHABLE_MONGODB_URI
 
 # The test suite is the one place the boot check is allowed to be off: every test that asserts a
 # defense works unsets it, and every other test simply does not care about what it skips.
@@ -1342,6 +1347,16 @@ def seen_as_stored(app_id: str) -> dict:
             "updatedAt": doc.get("updated_at")}
 
 
+def a_review_view(chosen=(), may_own=(), intake=None):
+    """A view of a market built by hand (``review_team.ReviewView``), for a test calling an
+    organizer read directly: with nobody chosen by default, so every application is in no share
+    and none waits, as on a market whose reviewers were never chosen."""
+    import review_team as ReviewTeam
+
+    return ReviewTeam.ReviewView(chosen=frozenset(chosen), may_own=frozenset(may_own),
+                                 intake=intake)
+
+
 def applicant_form_version_now(slug: str) -> str:
     """The form version a vendor's page opened now reads with the form, as every save carries it
     (T507): read through the public form route, so from whichever database the test configured."""
@@ -1382,12 +1397,14 @@ def market_records(monkeypatch):
     import api.attendance as AttendanceApi
     import deletion_trail as DeletionTrail
     import history as History
+    import invitations as Invitations
     import payments as Payments
     import remembered_sign_ins as RememberedSignIns
     import services.gridfs_service as GridfsService
     import vendor_notes as VendorNotes
 
     fakes = SimpleNamespace(
+        invitations=FakeApplicationsCollection(),
         attendance=FakeApplicationsCollection(), challenges=FakeApplicationsCollection(),
         remembered=FakeApplicationsCollection(),
         history=FakeApplicationsCollection(), notes=FakeApplicationsCollection(),
@@ -1396,9 +1413,9 @@ def market_records(monkeypatch):
         # Not a market's record but what outlives one: an organization's deletion asks it first.
         trail=FakeApplicationsCollection(),
     )
-    # The boot builds these three's unique indexes (T270), so a test that runs app.py afresh
+    # The boot builds these four's unique indexes (T270, T538), so a test that runs app.py afresh
     # builds against them: none stands yet.
-    for built_at_boot in (fakes.attendance, fakes.payments, fakes.amounts_owed):
+    for built_at_boot in (fakes.attendance, fakes.payments, fakes.amounts_owed, fakes.invitations):
         built_at_boot.index_information = lambda: {}
     monkeypatch.setattr(GridfsService, "_fs", fakes.images)
     monkeypatch.setattr(Payments, "payments_collection", fakes.payments)
@@ -1408,6 +1425,7 @@ def market_records(monkeypatch):
     monkeypatch.setattr(ApplicantAuth, "challenges_collection", fakes.challenges)
     monkeypatch.setattr(RememberedSignIns, "remembered_collection", fakes.remembered)
     monkeypatch.setattr(History, "history_collection", fakes.history)
+    monkeypatch.setattr(Invitations, "invitations_collection", fakes.invitations)
     monkeypatch.setattr(History, "legacy_placement_collection", fakes.placement_history)
     monkeypatch.setattr(DeletionTrail, "deletion_trail_collection", fakes.trail)
     return fakes
@@ -1791,6 +1809,13 @@ if not STUBBED_MODULES:
     _payments_fake = FakeApplicationsCollection()
     _payments_fake.index_information = lambda: {}
     _stand_in(_payments_module, "payments_collection", _payments_fake)
+
+    # And the invitations, whose unique, invitee and expiry indexes the boot builds (T538).
+    import invitations as _invitations_module
+
+    _invitations_fake = FakeApplicationsCollection()
+    _invitations_fake.index_information = lambda: {}
+    _stand_in(_invitations_module, "invitations_collection", _invitations_fake)
 
 
 def a_solver_vendor(application_id: str = "app-1", **overrides):

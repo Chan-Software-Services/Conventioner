@@ -6,6 +6,10 @@ from typing import NamedTuple, Tuple
 
 import pytest
 
+# At collection, as the suite imports it, so its boot builds against the suite's stand-ins: imported
+# inside a test, the boot would build every unique index on that test's database before it plants
+# the duplicates, and the first case run alone would fail at its insert.
+import app as app_module
 from real_mongo import harness
 
 DUPLICATE_ADDRESS = "planted-duplicate@example.com"
@@ -66,6 +70,13 @@ DUPLICATES = (
          {"id": "pay-2", "market_id": "market-1", "vendor_email": DUPLICATE_ADDRESS,
           "request_key": "request-key-1"}),
         "verify_payment_indexes", "unique_indexes.UniqueIndexError"),
+    Duplicates(
+        "invitations", "invitation_target_email_unique",
+        ({"id": "invitation-1", "target_kind": "market", "target_id": "market-1",
+          "email": DUPLICATE_ADDRESS},
+         {"id": "invitation-2", "target_kind": "market", "target_id": "market-1",
+          "email": DUPLICATE_ADDRESS}),
+        "verify_invitation_indexes", "unique_indexes.UniqueIndexError"),
 )
 
 
@@ -112,7 +123,6 @@ class TestEachUniqueBootIndexRefusesOverDuplicates:
     @pytest.mark.parametrize("case", DUPLICATES, ids=lambda case: case.index)
     def test_planted_duplicates_make_the_boot_refuse_to_start(
             self, case, real_db, monkeypatch, caplog):
-        import app as app_module
 
         real_db[case.collection].insert_many([dict(document) for document in case.documents])
         _unbuilt(monkeypatch)
@@ -140,7 +150,6 @@ class TestTheOrganizerSessionIndexes:
 
     def test_an_index_the_ttl_index_conflicts_with_makes_the_boot_refuse_to_start(
             self, real_db, monkeypatch, caplog):
-        import app as app_module
         import organizer_sessions as OrganizerSessions
 
         # The same key, built without the expiry: the server refuses the TTL index beside it.

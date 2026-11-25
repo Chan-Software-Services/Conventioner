@@ -56,9 +56,10 @@ class TestACheckOut:
 
         assert answer.status_code == 200, answer.get_json()
         body = answer.get_json()
-        assert body["message"] == "Checked out"
         [record] = here.attendance.documents
-        assert record["checked_out_at"] == body["checkedOutAt"]
+        assert body == {
+            "message": "Checked out", "checkedOutAt": record["checked_out_at"],
+            "checkedOutBy": OWNER, "checkedOutVia": None}
         assert record["checked_out_by"] == OWNER
         assert record["checked_out_via"] is None
         # The check-in is as it was: one record for the vendor's day.
@@ -122,14 +123,42 @@ class TestACheckOut:
 
 class TestASecondCheckOut:
     def test_it_answers_the_stored_time_and_records_nothing(self, client, here):
-        first = check_out(client).get_json()["checkedOutAt"]
+        first = check_out(client).get_json()
 
         again = check_out(client)
 
         assert again.status_code == 200, again.get_json()
-        assert again.get_json() == {"message": "Checked out", "checkedOutAt": first}
-        assert row_of(client)["checkedOutAt"] == first
+        assert again.get_json() == first
+        assert row_of(client)["checkedOutAt"] == first["checkedOutAt"]
         assert kinds(here) == [History.CHECKED_OUT]
+
+    def test_after_another_organizers_it_answers_who_made_the_stored_one(self, client, here):
+        """The row shows the answer at once, so a check-out made after another organizer's says
+        theirs, never "by you"."""
+        stored, _status = AttendanceApi.record_check_out(
+            at_the_door(MARKET, "door@example.com"), VENDOR, DATE)
+
+        again = check_out(client)
+
+        assert again.status_code == 200, again.get_json()
+        assert again.get_json() == {
+            "message": "Checked out", "checkedOutAt": stored["checkedOutAt"],
+            "checkedOutBy": "door@example.com", "checkedOutVia": None}
+        [record] = here.attendance.documents
+        assert record["checked_out_by"] == "door@example.com"
+        assert kinds(here) == [History.CHECKED_OUT]
+
+    def test_after_the_vendors_own_it_answers_the_door_code(self, client, here):
+        """The vendor scanned out first: the row reads "Scanned out at <time>", by nobody."""
+        stored, _status = AttendanceApi.record_check_out(
+            at_the_door(MARKET), VENDOR, DATE, via=AttendanceApi.VIA_DOOR_CODE)
+
+        again = check_out(client)
+
+        assert again.status_code == 200, again.get_json()
+        assert again.get_json() == {
+            "message": "Checked out", "checkedOutAt": stored["checkedOutAt"],
+            "checkedOutBy": None, "checkedOutVia": AttendanceApi.VIA_DOOR_CODE}
 
     def test_two_at_once_leave_one_time_and_one_entry(self, here):
         first, status = AttendanceApi.record_check_out(at_the_door(MARKET, OWNER), VENDOR, DATE)
@@ -137,7 +166,8 @@ class TestASecondCheckOut:
             at_the_door(MARKET, "door@example.com"), VENDOR, DATE)
 
         assert (status, also) == (200, 200)
-        assert second["checkedOutAt"] == first["checkedOutAt"]
+        assert second == first
+        assert (second["checkedOutBy"], second["checkedOutVia"]) == (OWNER, None)
         [record] = here.attendance.documents
         assert (record["checked_out_at"], record["checked_out_by"]) == (
             first["checkedOutAt"], OWNER)
@@ -162,7 +192,9 @@ class TestASecondCheckOut:
 
         assert status == 200
         [record] = here.attendance.documents
-        assert answer == {"message": "Checked out", "checkedOutAt": record["checked_out_at"]}
+        assert answer == {
+            "message": "Checked out", "checkedOutAt": record["checked_out_at"],
+            "checkedOutBy": OWNER, "checkedOutVia": None}
         assert answer["checkedOutAt"] is not None
         assert kinds(here) == [History.CHECKED_OUT]
 

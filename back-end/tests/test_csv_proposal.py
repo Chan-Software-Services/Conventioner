@@ -157,6 +157,16 @@ ANSWER_KEY = {
     },
 }
 
+# Each file's grid, by its stem's first words and the columns it spans: those columns are one group,
+# so one row of the organizer's ledger, and every other column is a row of its own.
+GRIDS = {
+    "five-day-grid": ("For each market day, tick every table tier", range(19, 24)),
+    "four-day-grid": ("For each day of the fair, choose the table", range(18, 22)),
+    "no-timestamp": ("For each day, choose every table tier", range(18, 23)),
+    "days-as-one-question": None,
+    "team-status-column": ("Which tables would you take on each day", range(24, 29)),
+}
+
 # Google's collected address and the asked one: either may be the applicant's email, as long as
 # the other is the duplicate.
 EITHER_EMAIL = {"five-day-grid": (2, 5), "team-status-column": (2, 5)}
@@ -193,6 +203,16 @@ class TestTheAnswerKey:
             assert len(proposal["columns"]) == len(key) == len(headers), name
             for index, (prefix, _) in key.items():
                 assert " ".join(headers[index].split()).startswith(prefix), (name, index)
+
+    def test_a_grid_is_one_group_and_every_other_column_alone(self):
+        for name, _, _, proposal in _proposals():
+            grid = GRIDS[name]
+            stem, spans = grid if grid else ("", range(0))
+            groups = [column["group"] for column in proposal["columns"]]
+            if grid:
+                assert len({groups[index] for index in spans}) == 1, name
+                assert (groups[spans[0]] or "").startswith(stem), name
+            assert [i for i, group in enumerate(groups) if group is not None] == list(spans), name
 
     def test_every_columns_kind_is_right(self):
         wrong = []
@@ -738,3 +758,39 @@ def test_a_plain_common_answer_is_kept_and_its_question_unchecked():
     assert _option(column, "In person") == {
         "value": "In person", "count": 6, "rare": False, "namesSomeone": False, "keep": True}
     assert CsvProposal.CHECK_NAMES_SOMEONE not in column["check"]
+
+
+# --- Each reading carries the option checks its options earn ---------------------------------------
+
+LINK = "See https://example.com/shop"
+# 13 different answers are too many for one choice, so the rules propose Text; read as a choice, the
+# link names someone and each one-off is rare.
+SELLS = (["Pottery"] * 15 + ["Prints"] * 10 + [LINK] * 3
+         + [f"Oneoff item {letter}" for letter in "ABCDEFGHIJ"])
+
+
+def test_a_question_proposed_as_text_checks_nothing_but_its_choice_readings_check_their_options():
+    column = _question_answering(SELLS)
+    by_type = column["field"]["optionsByType"]
+
+    assert column["field"]["type"] == "text"
+    assert column["check"] == []
+    assert by_type["select"]["check"] == [
+        CsvProposal.CHECK_RARE_OPTIONS, CsvProposal.CHECK_NAMES_SOMEONE]
+    assert by_type["multi_select"]["check"] == [
+        CsvProposal.CHECK_RARE_OPTIONS, CsvProposal.CHECK_NAMES_SOMEONE]
+
+
+def test_a_question_proposed_as_a_choice_checks_its_readings_option_checks():
+    column = _question_answering(["In person"] * 24 + ["Instagram"] * 12 + [LINK] * 3 + ["Etsy"])
+    field = column["field"]
+
+    assert field["type"] == "select"
+    assert column["check"] == field["optionsByType"]["select"]["check"] == [
+        CsvProposal.CHECK_RARE_OPTIONS, CsvProposal.CHECK_NAMES_SOMEONE]
+
+
+def test_a_reading_of_plain_common_answers_checks_nothing():
+    column = _question_answering(["In person"] * 6 + ["Instagram"] * 4)
+
+    assert column["field"]["optionsByType"]["select"]["check"] == []

@@ -77,6 +77,8 @@ import api.market_actions as Actions
 import api.permissions as PermissionsApi
 import market_deletion as MarketDeletion
 import history as History
+import invitations as Invitations
+import utils.email as Email
 import floorplan_limits as FloorplanLimits
 import layout as Layout
 import pricing as Pricing
@@ -1679,12 +1681,16 @@ _HISTORY_GROUPS_LEFT_OUT = frozenset({"Reading"})
 #: A row no entry is recorded under: who may be chosen as a reviewer changes nothing itself, the
 #: choice is Choose reviewers' and a chosen reviewer's verdicts are Give verdicts' (E38/F07/S03).
 _HISTORY_ROWS_LEFT_OUT = frozenset({Actions.REVIEW_WHEN_CHOSEN})
-#: Entries recorded under another group's row that a group reads too, as (action, kind): a free's
-#: $0 taken back as the day is seated again, and an Admin's amount dropped with a day a run drops,
-#: are recorded under Assign, the row the seating or the run asked, and each undoes a change to
-#: what is owed, so Payments reads it beside that change (E44/F01/S02, T335).
+#: Entries recorded under another group's row, or under none, that a group reads too, as (action,
+#: kind): a free's $0 taken back as the day is seated again, and an Admin's amount dropped with a
+#: day a run drops, are recorded under Assign, the row the seating or the run asked, and each undoes
+#: a change to what is owed, so Payments reads it beside that change (E44/F01/S02, T335). And the
+#: deal of an application the status migration found waiting for the deal, recorded under no row of
+#: the table, is a deal of applications, so Applications reads it beside the others (T277 ticket
+#: 02).
 _HISTORY_GROUP_ALSO_READS = {"Payments": ((Actions.ASSIGN.id, History.OWED_TAKEN_BACK),
-                                          (Actions.ASSIGN.id, History.OWED_DROPPED))}
+                                          (Actions.ASSIGN.id, History.OWED_DROPPED)),
+                             "Applications": ((History.REVIEW_STATE_MIGRATED, History.DEALT),)}
 
 
 def history_groups() -> List[Dict[str, Any]]:
@@ -1917,8 +1923,9 @@ def outside_the_run(
 
 def _placeable(vendor: SolverVendor, outside: Optional[Application]) -> Dict[str, Any]:
     """One vendor the place dialog may offer: what they answered, whether the run reads them, and -
-    for an applicant outside it - their status and who gave it, which the dialog's "Not approved"
-    warning words, or that they were added by hand with nothing answered to check a seat against."""
+    for an applicant outside it - their status, who gave it and whether the review left them
+    undecided, which the dialog's "Not approved" warning words, or that they were added by hand
+    with nothing answered to check a seat against."""
     not_approved = None
     if outside is not None and is_not_approved(outside):
         not_approved = {
@@ -1926,6 +1933,8 @@ def _placeable(vendor: SolverVendor, outside: Optional[Application]) -> Dict[str
             "verdictBy": ApplicantsApi.giver_payload(outside.verdict_by),
             "verdictAt": outside.verdict_at,
             "verdictReason": outside.verdict_reason,
+            # Whether the review left them undecided, which the warning reads, never the status.
+            "undecided": ReviewState.is_undecided(outside.model_dump()),
         }
     return {
         # Said, never inferred (E36/F02/S04): a vendor added by hand is approved and still outside
@@ -2267,6 +2276,13 @@ ALREADY_HAS_AN_OWNER = (
     "This market already has an Owner. To make someone else its Owner, transfer ownership to them.")
 
 
+def _already_has_a_role(address: str) -> str:
+    """Said of adding or inviting someone who already has a role here: the inviter reads them in
+    "Users with access", so it tells nothing they cannot see."""
+    return (f"{address} already has a role on this market. Change it in their row under Users "
+            "with access.")
+
+
 def add_market_role(market_id: str, user_email: str, role: MarketRole, requesting_user: str) -> None:
     """Add a user role to a market. Asks the row that gives the role (``Actions.roles_row``).
 
@@ -2301,13 +2317,242 @@ def add_market_role(market_id: str, user_email: str, role: MarketRole, requestin
     # Adding never changes a role: overwriting one here would skip update_market_role's guards and
     # let an Admin demote the Owner.
     if user.id in roles:
-        raise BadRequestError(
-            f"{user.email} already has a role on this market. Change it in their row under Users with access."
-        )
+        raise BadRequestError(_already_has_a_role(user.email))
 
     _write_role(market, {"$set": {_role_key(user.id): role.value}}, user.id, requesting_user,
                 owner_count_read=role == MarketRole.OWNER)
     _record_role([asked], History.ROLE_GIVEN, user.id, None, role)
+
+
+def _people_context(market_id: str) -> MarketContext:
+    """The live market and its organization, for a change to who has access to it."""
+    context = load_market_context(market_id)
+    if context is None:
+        raise MarketNotFoundError("Market not found")
+    if context.market is None:
+        raise BadRequestError("Invalid market data")
+    return context
+
+
+def _refused_every_role(requesting_user: str, context: MarketContext) -> Optional[str]:
+    """The Editor and Viewer row's refusal when neither roles row lets this person through, so
+    one who may give no role is refused in one sentence, before anything else is read."""
+    refusals = [Actions.refusal(row, requesting_user, context.market, context.organization)
+                for row in (Actions.MANAGE_EDITORS_AND_VIEWERS, Actions.MANAGE_ADMINS)]
+    return refusals[0] if all(refusals) else None
+
+
+def invite_to_market(
+    market_id: str, address: str, role: MarketRole, requesting_user: str,
+) -> Tuple[Dict[str, Any], bool]:
+    """Invite ``address``, a normalized address, to ``role`` on the market (T538, ADR 0047):
+    the invitation as its organizers read it, and whether its email was sent.
+
+    Asks the row that gives the role (``Actions.roles_row``), which an archived market still takes.
+    The answer depends only on the address typed, the role, the inviter and the time: both limits
+    are counted before the account is looked up, and an address with an account and one without
+    are sent the same email and recorded alike, the entry's subject the address alone. Only an
+    address whose account already has a role here is refused, pointing at their row.
+
+    Gives nothing: the market's roles are not written, and the invitation waits in
+    ``invitations`` until someone signed in with the address accepts it.
+
+    Raises:
+        Invitations.TooManyInvitations: either limit refused it.
+    """
+    context = _people_context(market_id)
+    market = context.market
+
+    asked = Actions.ask(Actions.roles_row(role), requesting_user, market, context.organization)
+    if asked.refused:
+        raise ForbiddenError(asked.refused)
+
+    inviter = UsersApi.get_user(requesting_user)
+    at = Invitations.now()
+    Invitations.count(inviter.id, address, at)
+
+    person = UsersApi.get_user(address)
+    if person is not None and person.id in (context.document.get('roles') or {}):
+        raise BadRequestError(_already_has_a_role(address))
+
+    invitation = Invitations.invite(
+        Invitations.MARKET, market.id, address, role.value, inviter.id, inviter.email, at)
+    MarketDeletion.kept_only_while_live(markets_collection, market.id)
+    asked.record(kind=History.INVITED, subject={"email": address}, detail={"role": role.value})
+    emailed = Email.send_invitation_email(
+        address, inviter.email, market.name, Invitations.MARKET, role.value,
+        Invitations.ends_at(invitation))
+    return Invitations.served(invitation), emailed
+
+
+def market_invitations(market_id: str, requesting_user: str) -> List[Dict[str, Any]]:
+    """The invitations waiting on the market, newest first, for a reader whom either roles row lets
+    through: whoever may give some role sees every invitation, as they see everyone with access."""
+    context = _people_context(market_id)
+    refused = _refused_every_role(requesting_user, context)
+    if refused:
+        raise ForbiddenError(refused)
+    return [Invitations.served(invitation)
+            for invitation in Invitations.waiting_for(Invitations.MARKET, context.market.id)]
+
+
+def withdraw_market_invitation(market_id: str, invitation_id: str, requesting_user: str) -> None:
+    """Withdraw a waiting invitation, as whoever may give its role (``Actions.roles_row``).
+
+    One that has already ended - withdrawn, accepted, declined or past its 14 days - is a 404
+    saying so, written and recorded as nothing. A requester
+    whom neither roles row lets through is refused first, in one sentence, whether or not the
+    invitation waits. One sent again to another role between the read and the delete is
+    left, and answers 409: the withdrawal asked the row of the role it read.
+    """
+    context = _people_context(market_id)
+    market = context.market
+    refused = _refused_every_role(requesting_user, context)
+    if refused:
+        raise ForbiddenError(refused)
+
+    invitation = Invitations.waiting(Invitations.MARKET, market.id, invitation_id)
+    if invitation is None:
+        raise NotFoundError(Invitations.ALREADY_ENDED)
+
+    role = MarketRole(invitation["role"])
+    asked = Actions.ask(Actions.roles_row(role), requesting_user, market, context.organization)
+    if asked.refused:
+        raise ForbiddenError(asked.refused)
+
+    if not Invitations.withdraw(invitation):
+        if Invitations.waiting(Invitations.MARKET, market.id, invitation_id) is None:
+            raise NotFoundError(Invitations.ALREADY_ENDED)
+        raise ConflictError(Invitations.CHANGED_MEANWHILE)
+    asked.record(kind=History.INVITATION_WITHDRAWN, subject={"email": invitation["email"]},
+                 detail={"role": role.value})
+
+
+#: Said to an invitee accepting an invitation to a market they already have a role on: accepting
+#: never changes a role, so the invitation ends.
+ALREADY_ON_THE_MARKET = (
+    "You already have a role on this market, so this invitation has ended. Ask its owner or an "
+    "Admin to change your role.")
+
+#: Why a decline is recorded under a row no request asked: the invitee holds no role on the market,
+#: and their sign-in with the address it was sent to is the check. Its actor is that address.
+AN_INVITEE_ANSWERS = (
+    "the person invited declines their own invitation: they hold no role on the market, and "
+    "their sign-in with the address it was sent to is the check")
+
+
+def live_market_names(market_ids: Iterable[str]) -> Dict[str, str]:
+    """The names of the live markets among ``market_ids``, by id, in one read: the markets an
+    invitee's waiting invitations are to. A market gone or being deleted is not among them."""
+    wanted = sorted(set(market_ids))
+    if not wanted:
+        return {}
+    return {doc["id"]: doc.get("name") or "" for doc in markets_collection.find(
+        live({"id": {"$in": wanted}}), {"_id": 0, "id": 1, "name": 1})}
+
+
+def _ended(invitation: Dict[str, Any]) -> Invitations.InvitationEnded:
+    """End an invitation that can no longer be accepted, and the refusal that says so."""
+    Invitations.end(invitation)
+    return Invitations.InvitationEnded()
+
+
+def _judged_for_accepting(invitation: Dict[str, Any], invitee: Any) -> Tuple[Market, Any]:
+    """The market an invitation offers a role on, and the inviter's asking of the row that gives
+    it, judged as the inviter's act at this moment, in this order: the market live, the inviter's
+    account still the one that sent it, that row asked of the inviter again, and the invitee
+    holding no role here yet.
+
+    Raises:
+        Invitations.InvitationEnded: one of the first three refused; the invitation is ended.
+        BadRequestError: the invitee already has a role here (``ALREADY_ON_THE_MARKET``); the
+            invitation is ended.
+    """
+    context = load_market_context(invitation["target_id"])
+    if context is None or context.market is None:
+        raise _ended(invitation)
+    market = context.market
+
+    # By the address it was sent from, and the id it was sent by: an account deleted, or deleted
+    # and made again, is no longer the one that invited.
+    inviter = UsersApi.get_user(invitation["invited_by_email"])
+    if inviter is None or inviter.id != invitation["invited_by"]:
+        raise _ended(invitation)
+
+    asked = Actions.ask(Actions.roles_row(MarketRole(invitation["role"])), inviter.email, market,
+                        context.organization)
+    if asked.refused:
+        raise _ended(invitation)
+
+    if invitee.id in (context.document.get('roles') or {}):
+        Invitations.end(invitation)
+        raise BadRequestError(ALREADY_ON_THE_MARKET)
+    return market, asked
+
+
+def give_role_by_invitation(invitation: Dict[str, Any], invitee: Any) -> Dict[str, Any]:
+    """Give ``invitee``, the signed-in account the invitation is addressed to, the role it offers
+    (T538, ADR 0047): what they accepted, to show them.
+
+    Judged again, at the moment it is accepted, as the inviter's act (``_judged_for_accepting``).
+    Then the invitation is claimed as read (``Invitations.claim``): whichever came first wins, so
+    one withdrawn, declined or sent again to another role meanwhile answers ended and gives
+    nothing. Only then is the role written holding the invitee's key absent and the inviter's role
+    as read (``_write_role``), recorded through the inviter's asking as their giving it, by an
+    invitation accepted, and its limit counts taken back.
+
+    The claim is never put back, since a withdrawal or a decline landing after it is told the
+    invitation has ended: a ``MarketChanged`` judges again and writes again in this request, up to
+    ``Invitations.ACCEPT_TRIES`` writes, and a judgement that now refuses answers as it does above.
+    A conflict that keeps coming back, like a cut between the claim and the write, loses the
+    invitation, and the person is invited again.
+
+    Raises:
+        Invitations.InvitationEnded: it can no longer be accepted, and is ended.
+        BadRequestError: the invitee already has a role on the market, and it is ended.
+    """
+    market, asked = _judged_for_accepting(invitation, invitee)
+    role = MarketRole(invitation["role"])
+    if not Invitations.claim(invitation):
+        raise Invitations.InvitationEnded()
+    for _ in range(Invitations.ACCEPT_TRIES):
+        try:
+            _write_role(market, {"$set": {_role_key(invitee.id): role.value}}, invitee.id,
+                        asked.actor, owner_count_read=False)
+        except MarketChanged:
+            market, asked = _judged_for_accepting(invitation, invitee)
+            continue
+        except MarketNotFoundError:
+            raise Invitations.InvitationEnded() from None
+        asked.record(
+            kind=History.ROLE_GIVEN, subject={"user_id": invitee.id, "email": invitee.email},
+            detail=lambda: {**History.changes({"role": None}, {"role": role.value}),
+                            "by_invitation": True},
+        )
+        Invitations.take_back(invitation)
+        return {"kind": Invitations.MARKET, "targetId": market.id, "targetName": market.name,
+                "role": role.value}
+    raise Invitations.InvitationEnded()
+
+
+def decline_market_invitation(invitation: Dict[str, Any], invitee_address: str) -> None:
+    """End an invitation to a market, as the person it was sent to, and record that they declined,
+    under the row that gives its role (``AN_INVITEE_ANSWERS``). Nothing of them is written to the
+    market.
+
+    Raises:
+        Invitations.InvitationEnded: the market is gone, or the invitation ended meanwhile.
+    """
+    if markets_collection.find_one(live({"id": invitation["target_id"]}), {"_id": 1}) is None:
+        raise _ended(invitation)
+    if not Invitations.end(invitation):
+        raise Invitations.InvitationEnded()
+    role = MarketRole(invitation["role"])
+    History.unasked(
+        invitation["target_id"], invitee_address, Actions.roles_row(role),
+        because=AN_INVITEE_ANSWERS,
+    ).record(kind=History.INVITATION_DECLINED, subject={"email": invitee_address},
+             detail={"role": role.value})
 
 
 NO_LONGER_ON_THE_MARKET = "They no longer have a role on this market."

@@ -19,6 +19,7 @@ import api.applications as ApplicationsApi
 import api.attendance as AttendanceApi
 import deletion_trail as DeletionTrail
 import history as History
+import invitations as Invitations
 import payments as Payments
 import remembered_sign_ins as RememberedSignIns
 import services.gridfs_service as GridfsService
@@ -56,6 +57,7 @@ def delete_records(market_id: str) -> None:
     ApplicantAuth.delete_challenges_for_market(market_id)
     RememberedSignIns.delete_for_market(market_id)
     History.delete_for_market(market_id)
+    Invitations.delete_for_market(market_id)
     VendorNotes.delete_for_market(market_id)
     Payments.delete_for_market(market_id)
     GridfsService.delete_images_for_market(market_id)

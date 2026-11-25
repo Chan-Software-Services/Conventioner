@@ -7,7 +7,7 @@ describes:
   - front-end/src/components/csvProposal/ProposalLedger.vue
   - front-end/src/components/market/DraftedFrom.vue
   - front-end/src/utils/draftedFrom.ts
-verified: 2026-11-18
+verified: 2026-11-25
 sources:
   - wayfinding/the-form-started-from-a-csv/05
   - wayfinding/the-form-started-from-a-csv/map
@@ -95,6 +95,7 @@ The review is the import's own ledger, a table of "CSV column", "First answers" 
    Every one of the organizer's questions is proposed not required; only the organizer ticks Required ([no question is inferred required](../rules/no-question-is-inferred-required.md)).
 3. "Essential questions no column answers": each proposed as not asked, with why.
 4. Rows with a yellow edge are worth a second look, each with its reason ("Could allow several answers", "Read as a column your team added", "Has options few applicants chose", "Has an option that names someone", "Couldn't reach TypeSafe" among them); none of them blocks confirm.
+   A change to a row takes its reasons away, since the organizer has looked at it, except a change of type: a question turned to Select or Multi-Select lists answers the organizer has not seen yet, so it shows the reasons that reading's answers earn ("Has options few applicants chose", "Has an option that names someone") until the organizer changes the row again, and turned back to a type with no options, none (`checksOf` in [`csvProposal.ts`](../../../front-end/src/utils/csvProposal.ts)).
    Rare options are unticked by default ("chosen by 2 - keep?").
    Rare means fewer than 3 applicants, or, for a multi-select, under a set share of its answers, so an option chosen by 4 can be unticked too.
    An option that names someone (a link, an address, a handle, a phone number) is unticked by default however many chose it, in the rare option's muted look, and says so ("names someone, chosen by 3 - keep?"), since the start publishes what is ticked as an option of the market's form for every later applicant to read (T352); one tick keeps it, as the organizer's choice.

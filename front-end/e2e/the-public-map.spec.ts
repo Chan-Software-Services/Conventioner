@@ -14,7 +14,10 @@ import { seedMarketDayMap, type SeededMarketDayMap } from './helpers/seedMarketD
  *
  * The page is one sheet filling the window under the app bar (T465): it never scrolls, the day and
  * the hall are two selects at the map side's top right, and the legend names the open hall's
- * sections. The list of the day's vendors is proved in `the-public-map-vendors.spec.ts`.
+ * sections. The list of the day's vendors is proved in `the-public-map-vendors.spec.ts`; a half of
+ * the shared table pressed, in `the-public-map-half.spec.ts`. What the card reads for each half, the
+ * legend's items on each day and hall, and a link's day, location and table and their fallback are
+ * proved in `thePublicMapPage.test.ts`.
  *
  * The allowlist on the page: whatever a visitor presses, the page's text and its links hold no
  * email address and none of the seeded personal markers, and every request goes to the market
@@ -43,6 +46,12 @@ test.beforeAll(async ({ request }) => {
     publicMap: true,
   });
   closed = await seedMarketDayMap(request, BACKEND_URL, TEST_USER.email, TEST_USER.password);
+});
+
+// Held at the seed's instant: a run that passes midnight would open the map on the seed's next
+// day, where other vendors sit at other tables.
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(seeded.seededAt);
 });
 
 /** Every request the page makes from here on, by its address. */
@@ -148,36 +157,6 @@ for (const size of PHONE_AND_DESK) {
       await expect(map.cardWhole).toHaveText(/^This table is free on \w{3} \d+ \w{3}\.$/);
     });
 
-    test('each half of the shared table is pressed on its own, and the card reads that half', async ({
-      page,
-      expectAccessible,
-    }) => {
-      const map = new PublicMapPage(page);
-      await map.goto(seeded.slug);
-      await press(map.table('Aisle A 3', 'left'));
-      await expect(map.card).toContainText('Aisle A 3');
-      await expect(map.cardHalves.getByRole('heading', { level: 3 })).toHaveText(['Left half']);
-      await expect(map.cardHalves).toContainText('Loom House');
-      await expect(map.cardHalves.getByTestId('public-map-card-instagram')).toHaveText(
-        '@example_loom',
-      );
-      await expect(map.card).not.toContainText('Paper Moth Press');
-      await press(map.table('Aisle A 3', 'right'));
-      await expect(map.cardHalves.getByRole('heading', { level: 3 })).toHaveText(['Right half']);
-      await expect(map.cardHalves).toContainText('Paper Moth Press');
-      await expect(map.cardHalves.getByTestId('public-map-card-website')).toHaveText(
-        'paper-moth.test',
-      );
-      await expect(map.card).not.toContainText('Loom House');
-      await expect(map.table('Aisle A 3', 'left')).toHaveAccessibleName(
-        'Aisle A 3, Standard 6 ft, left half, Loom House',
-      );
-      await expect(map.table('Aisle A 3', 'right')).toHaveAccessibleName(
-        'Aisle A 3, Standard 6 ft, right half, Paper Moth Press',
-      );
-      await expectAccessible('the public map, a shared table picked');
-    });
-
     test('a change of day and of location redraws the map, the address keeping them', async ({
       page,
     }) => {
@@ -227,55 +206,6 @@ for (const size of PHONE_AND_DESK) {
         'A vendor is at this table. Their details are not listed.',
       );
       await expect(map.card.getByRole('link')).toHaveCount(0);
-    });
-
-    test("the legend names the open hall's sections, and a free table only on a day it has one", async ({
-      page,
-    }) => {
-      const map = new PublicMapPage(page);
-      await map.goto(seeded.slug);
-      await expect(map.sectionLegend).toHaveAccessibleName('Legend');
-      // Today North Wing's Aisle A 4 is free.
-      await expect(map.sectionLegendItems).toHaveText(['Aisle A', 'Free table']);
-      expect(
-        await map.sectionLegendItems.evaluateAll((items) =>
-          items.map((item) => item.getAttribute('data-kind')),
-        ),
-      ).toEqual(['section', 'free']);
-      // The stage is drawn and labelled on the map, and is no item of the legend.
-      await expect(map.map.getByTestId('layout-map-zone-label')).toHaveText('Stage');
-      await expect(map.sectionLegend).not.toContainText('Stage');
-      // No "Taken" and no "Free": the day map draws no legend of its own here.
-      await expect(map.legend).toHaveCount(0);
-
-      // Every table of South Wing is taken today: no "Free table".
-      await map.locationSelect.selectOption({ label: seeded.south.name });
-      await expect(map.sectionLegendItems).toHaveText(['Aisle B']);
-      // Tomorrow nobody sits there.
-      await map.daySelect.selectOption(seeded.tomorrow);
-      await expect(map.sectionLegendItems).toHaveText(['Aisle B', 'Free table']);
-    });
-
-    test('a link opens its day, location and table, and an unknown value falls back', async ({
-      page,
-    }) => {
-      const map = new PublicMapPage(page);
-      await map.goto(seeded.slug, {
-        date: seeded.tomorrow,
-        location: seeded.north.id,
-        table: 'north-table-1',
-      });
-      await expect(map.daySelect).toHaveValue(seeded.tomorrow);
-      await expect(map.card).toContainText('Aisle A 1');
-      await expect(map.card).toContainText('Loom House');
-      await page.reload();
-      await expect(map.card).toContainText('Loom House');
-
-      await map.goto(seeded.slug, { date: '2001-01-01', location: 'no-such-hall', table: 'x' });
-      await expect(map.daySelect).toHaveValue(seeded.today);
-      await expect(map.map).toHaveAccessibleName(/^North Wing layout/);
-      await expect(map.card).toHaveCount(0);
-      await expect(page.getByRole('alert')).toHaveCount(0);
     });
 
     // At the market's own address a map that is off is a notice of the market page (T469); an

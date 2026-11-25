@@ -8,10 +8,11 @@ event lands another write between the event's read and its own, and the event wr
 over it. The pure ``move`` is checked over the same grid, so a preview reads the table the writes
 do. The table itself is stated once, in ``docs/implementation/data/application-document.md``.
 
-Every move into open, and a follow-up's hand-on, marks the application for the deal by the write
-it came by (``arriving``), and every cell asserts the mark it leaves. Changed answers are one event whoever
-changes them (decision 9.1): the applicant's save, an import row and an organizer's update each
-have a column, and the "(none)" row is the applicant's first save and an import's new row.
+Every move into open, an undo back into a follow-up, and a follow-up's hand-on mark the
+application for the deal by the write they came by (``arriving``), and every cell asserts the mark
+it leaves. Changed answers are one event whoever changes them (decision 9.1): the applicant's
+save, an import row and an organizer's update each have a column, and the "(none)" row is the
+applicant's first save and an import's new row.
 
 The Editor gives verdicts but may not change one; the Admin and the owner may. ``app-v1`` answers
 that it is not a student and did not tick the no-shows box, so rule A (affiliation) and rule B (no

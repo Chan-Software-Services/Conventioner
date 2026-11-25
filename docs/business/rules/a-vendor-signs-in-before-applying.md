@@ -59,7 +59,7 @@ Telling the person who just read the code whether they have applied leaks nothin
   The page then hides the field and "Sign in", and "Send a new code", after its wait, is the step's one action.
   A "retry" says only that someone asked for a code for this address in the last ten minutes, which anyone can make true by asking: it says nothing of whether the address applied, so the login ruling holds.
   The count is on the code, which every address that asks is given alike, never on an application.
-- **The token** ([`back-end/utils/application_token.py`](../../../back-end/utils/application_token.py)) names the market and the address, never an application, lasts 30 minutes and creates no session; it is signed with the app's one signing secret, which has no fallback.
+- **The token** ([`back-end/utils/application_token.py`](../../../back-end/utils/application_token.py)) names the market and the address, never an application, lasts 30 minutes and creates no session; it is signed with a key derived from the app's one signing secret for vendor tokens alone, so no organizer's session stands for one, and that secret has no fallback.
   An applicant's application is found by market and address, its identity.
 - **Remember me spares the code on one device** ([ADR 0022](../../adr/0022-the-vendor-page-is-signed-in.md)): a right code sent with `remember: true` also leaves a remembered sign-in, whose cookie and stored hash are described at [the cookies](../../implementation/conventions/security-invariants.md#the-cookies).
   `resume_sign_in` answers a live one exactly as a right code does, with the same 30-minute token.

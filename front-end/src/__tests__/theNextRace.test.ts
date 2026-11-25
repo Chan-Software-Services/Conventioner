@@ -12,6 +12,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import ApplicationMonitor from '@/components/application/ApplicationMonitor.vue';
 import { ApplicationStatus, type Application, type Market } from '@/assets/types/datatypes';
 import { pressRefresh } from './support/reviewViewTools';
+import { servedReview } from './support/servedReview';
 
 const fetchMarketApplications = vi.fn();
 const api = vi.hoisted(() => ({
@@ -37,6 +38,7 @@ function application(name: string): Application {
     marketId: 'm1',
     applicantEmail: `${name}@example.com`,
     status: ApplicationStatus.Open,
+    ...servedReview('open'),
     formData: {},
     submittedAt: '2026-09-15T14:20:18.000Z',
   } as unknown as Application;
@@ -194,7 +196,13 @@ describe('a verdict on the card', () => {
     const wrapper = mount(ApplicationMonitor, { props: { market, visible: true } });
     await flushPromises();
     api.put.mockResolvedValueOnce({
-      data: { application: { ...AMY, status: ApplicationStatus.ReviewerApproved } },
+      data: {
+        application: {
+          ...AMY,
+          status: ApplicationStatus.ReviewerApproved,
+          ...servedReview('approved'),
+        },
+      },
     });
     // The server hands out Cal, not Ben, who is next in the list: someone else may hold Ben.
     api.post.mockResolvedValueOnce({ data: { application: CAL } });
@@ -224,7 +232,11 @@ describe('a verdict on the card', () => {
 
 describe('taking the follow-ups out', () => {
   it('hands out the next card when the one held leaves the walk', async () => {
-    const fay = { ...application('fay'), status: ApplicationStatus.NeedsFollowUp };
+    const fay = {
+      ...application('fay'),
+      status: ApplicationStatus.NeedsFollowUp,
+      ...servedReview('follow_up'),
+    };
     fetchMarketApplications.mockResolvedValue([fay, BEN]);
     api.post.mockResolvedValueOnce({ data: { application: BEN } });
     const wrapper = mount(ApplicationMonitor, { props: { market, visible: true } });
@@ -260,7 +272,11 @@ describe('taking the follow-ups in', () => {
     await flushPromises();
     expect(shown(wrapper)).toBe('amy@example.com');
 
-    const amyFollowedUp = { ...AMY, status: ApplicationStatus.NeedsFollowUp };
+    const amyFollowedUp = {
+      ...AMY,
+      status: ApplicationStatus.NeedsFollowUp,
+      ...servedReview('follow_up'),
+    };
     api.put.mockResolvedValueOnce({ data: { application: amyFollowedUp } });
     const afterMarking = handOut();
     api.post.mockReturnValueOnce(afterMarking.pending);

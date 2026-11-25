@@ -6,17 +6,18 @@ describes:
   - back-end/tests/test_map_plugin.py
   - front-end/e2e/helpers/testMap.ts
   - scripts/affected-specs.py
-verified: 2026-11-16
+verified: 2026-11-24
 sources:
   - T349
+  - T510
 ---
 
 # The test map
 
 **The test map says, for each E2E spec file, which app modules its pages loaded and which back-end endpoints it called, and for each endpoint, which back-end functions it runs.**
 It is made to tell which E2E specs a change reaches, without running all of them, which `scripts/affected-specs.py` does for a builder ([choosing a builder's specs](#choosing-a-builders-specs)).
-CI's `test-map` job writes it on every push to `dev`, as the artifact `test-map` of that run, kept 90 days ([CI and the gate](ci-and-the-gate.md)).
-A pull request's run records nothing and has no `test-map` job; when a shard's test failed, its `e2e` job reads the newest map, to [name a miss of the selection](#where-a-miss-shows).
+CI's `test-map` job writes it on the nightly Test run on `dev`'s tip, as the artifact `test-map` of that run, kept 90 days ([CI and the gate](ci-and-the-gate.md#which-suite-a-run-runs)).
+No other run records or has a `test-map` job: not a pull request's, not the merge queue's, not a push's; when a pull request's shard test failed, its `e2e` job reads the newest map, to [name a miss of the selection](#where-a-miss-shows).
 
 ## What it holds
 
@@ -48,17 +49,21 @@ One JSON file, `test-map.json`:
 
 ## Where it comes from
 
-Each push to `dev` records three things and builds the map from them, the last two steps by [`scripts/test_map.py`](../../../scripts/test_map.py):
+The nightly Test run, at 19:17 UTC on `dev`'s tip, records three things and builds the map from them, the last two steps by [`scripts/test_map.py`](../../../scripts/test_map.py).
+Its first job, `suite` ([`scripts/ci_suite.py`](../../../scripts/ci_suite.py)), finds whether that commit already has an unexpired `test-map` artifact made by a run on `dev`, whichever run made it: then the run makes no map, as on a night with no merge; else it runs only the five shards, recording, and the `test-map` job, and when GitHub cannot be read it records too.
+`gh workflow run test.yml --ref dev` starts the same run by hand, to have a map of a large change before the night.
 
 1. **The shards record each test.**
-   On a push to `dev`, each `e2e-shard` job sets `TEST_MAP_OUT` to a directory, and [`front-end/e2e/helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts), which `fixtures.ts` wraps Playwright's `test` in, has each worker append one JSON line per test to a file of its own there, `records-<worker index>.jsonl`, so two workers' lines never interleave.
+   On the nightly run, or one started by hand, each `e2e-shard` job sets `TEST_MAP_OUT` to a directory, and [`front-end/e2e/helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts), which `fixtures.ts` wraps Playwright's `test` in, has each worker append one JSON line per test to a file of its own there, `records-<worker index>.jsonl`, so two workers' lines never interleave.
    A line holds the test's spec file, its start and end on the wall clock, every request its browser contexts made under `/src/` and `/api/`, every call its Node helpers made through an API request context, and the V8 block coverage of its pages' modules (a DevTools session of each page's own, Chromium) as the stretches of each module that ran.
    The Node calls are counted by wrapping, once a worker, the `fetch` of Playwright's API request context class, which its `get`, `post`, `put`, `patch`, `delete` and `head` all call, so the `request` fixture, `page.request`, `context.request` and each `playwright.request.newContext()` count alike.
    A call counts for the test running when it started, even when it is answered after that test ended, and a call that throws counts for none.
    A call straight to the back end's address (`BACKEND_URL`) is keyed `METHOD /api<path>`, as the dev server's proxy keys a page's call to the same endpoint.
    A retry is a line of its own.
    What a worker's contexts and calls reach between two of its tests, such as a `beforeAll` seeding a market, counts for no test: the worker writes it as a `"between"` line of its own, with its window, for the build's audit alone.
-   The recording makes each test slower, and only a push to `dev` records, so a test near its timeout can pass on every pull request and fail only on that push.
+   The recording makes each test slower (on `3c1d7e14`, the push run that recorded spent 127 minutes in tests across its ten shards, the queue's run that did not 99, +28%), and only the nightly run records, so a test near its timeout can pass on every pull request and the queue and fail only while recording.
+   Then the nightly run fails, which no rule reads and which never holds back a merge; its shard still recorded, so the map is still made.
+   When a nightly run makes no map (it was cancelled, a shard recorded nothing, or the back end's suite failed under coverage), the next night tries again, since that commit still has none, and the map's readers keep the older one meanwhile.
    It takes no script's source: Playwright's `page.coverage` fetched the source of every module Vite serves, and a run recorded through it took some 40% longer in CI than one that recorded nothing.
    The build reads the requests and the window; the stretches are in the shard's records for a reader who wants more than the map holds, as T349's pruning did.
 2. **The shards keep the back end's log.**
@@ -84,7 +89,8 @@ Code that runs before the app dispatches a request, such as the session's loadin
 
 ## How old it can be
 
-The newest map is the newest push to `dev` whose run made one, which is `dev`'s last push unless that run was cancelled, a shard recorded nothing, or the back end's suite failed under coverage; then it is the push before.
+The newest map is the newest run on `dev` that made one, which is the last night's on `dev`'s tip of then, so at most a day behind a merge, unless that run was cancelled, a shard recorded nothing, or the back end's suite failed under coverage; then it is an older night's.
+A map made by hand on another branch is never read, since its run's branch is not `dev`; a map a push to `dev` made, before the map was made nightly, is read until a nightly run makes a newer one.
 A branch is ahead of it by its own commits and by what `dev` took since its run, and an artifact goes after 90 days.
 So a spec, a module or a function that is newer than the map is not in it, and a reader of the map takes a branch's own diff from its merge-base for what the map cannot know.
 
@@ -98,29 +104,40 @@ python3 scripts/affected-specs.py --list [--json]
 ```
 
 The diff is from the merge-base with `origin/dev` to the worktree, uncommitted and untracked files included, both sides of every hunk read.
-The map is the newest `test-map` artifact of a push to `dev`, which it downloads once a run, beside that run's shard reports, to `.stack-logs/test-map/<run id>/`, removing the ones it downloaded before; offline, it reads the one it has.
+The map is the newest `test-map` artifact of a run on `dev`, the nightly run's, which it downloads once a run, beside that run's shard reports, to `.stack-logs/test-map/<run id>/`, removing the ones it downloaded before; offline, it reads the one it has.
 `--map`, `--results`, `--base` and `--head` (with `--list`) name a map, shard reports and commits instead, as for replaying a merged pull request.
 
 A spec is chosen by five rules:
 
 1. **The change edits it, or a file it imports**, transitively: a helper two levels down counts, and so does a `front-end/src/` file a spec imports itself.
+   A spec whose imports at the base reached a file the change deletes counts too, since its imports at the head no longer name that file; its reason is "imported `<path>`, which the change deletes".
 2. **Its pages loaded a changed file under `front-end/src/`.**
+   A `.ts` or `.vue` file there whose change is to its comments alone, a `//` or `/* */` in a script or a `<!-- -->` in a template, runs nothing new, so it reaches no spec by any rule.
+   Comments alone means the file reads the same at both sides of the diff with its comments taken out, each run of white space, or a script's comment, read as one space, or as one line break when it holds one, and a template's comment read as nothing; strings, templates, regexes, a tag's values, an interpolation `{{ }}` and the text of a `<style>`, `<pre>`, `<textarea>` or `<title>` are kept whole, so a `//` inside one is code.
+   So is a template comment with white space beside it on its line and no line break there, as in `<b>x</b> <!-- c --> <i>y</i>`: Vue's dev build, which the E2E stack runs, keeps the comment and drops the white space between it and an element, so taking it out changes the page.
+   A file the scanner cannot read for sure (an unclosed string, comment, template literal, regex, tag or interpolation, a script whose `lang` is not `ts`, a template with a `lang`) counts whole.
 3. **It called an endpoint whose requests ran a changed back-end function.**
-   The function is the one holding a changed line on either side of the hunk, so a deleted function is found by its old name; a blank or comment-only line names none.
+   The function is the one holding a changed line on either side of the hunk, so a deleted function is found by its old name.
+   A line that runs nothing names none: a blank line, a comment, or the text of a docstring, the string that opens a module, class or function body.
+   A `#` inside any other string is code, and so is a docstring's line once the change moves its quotes over a line it leaves that ran at the other side, or that it cannot pair with one there (when the two sides leave different numbers of lines, none pairs).
+   When either side of the change does not parse, every line on both sides counts but a blank or `#` one.
    A change outside every function, such as an import or a constant, or in a function the map does not list, counts for every function of its file, choosing every spec that reaches the file.
    The back end's own tests reach no spec.
-4. **Every spec, for a file the whole suite stands on**: `e2e/fixtures.ts`, `e2e/global-setup.ts`, `playwright.config.ts`, `package-lock.json`, `vite.config.ts` and `index.html` in `front-end/`, a compose file, a Dockerfile, a back-end lock, or `scripts/seed_fixture.sh` or the stack rule it sources, `scripts/lib/stack-identity.sh`.
+4. **Every spec, for a file the whole suite stands on**: `e2e/fixtures.ts`, `e2e/global-setup.ts`, `playwright.config.ts`, `package-lock.json`, `vite.config.ts` and `index.html` in `front-end/`, a compose file, a Dockerfile, a back-end lock but the advisory scan's, or `scripts/seed_fixture.sh` or the stack rule it sources, `scripts/lib/stack-identity.sh`.
 5. **Every spec, for a file under `front-end/` or `back-end/` that no rule places**: not a spec, not imported by one at the head or the base, in no spec's modules and no endpoint's files.
    Such a file can drive any spec: a stylesheet `main.css` pulls in by `@import`, which Vite inlines so no page requests it, a back-end module no endpoint ran in the suite, or a file no rule reads, such as `back-end/docker-entrypoint.sh` or `front-end/tsconfig.app.json`.
    Its reason is "`<path>` is not in the map".
+   A file the change deletes is placed by its deletion and chooses nothing here, since whatever read it, an importer, a stylesheet's `@import` or a config naming it, changes with it and is placed on its own; a deleted file a rule does place still chooses what that rule chooses.
    These drive no spec and choose nothing, since neither the stack nor a page reads them:
    - the docs and any Markdown
    - the suites that are not E2E: `back-end/tests/`, `scripts/tests/`, `front-end/src/__tests__/`, a `*.test.ts`, and a `*.test.ts(x)` or `*.spec.ts(x)` under `front-end/src/`
    - the unit suite's config: `front-end/vitest.config.ts` and `front-end/tsconfig.vitest.json`
    - the back end's pytest config, `back-end/pytest.ini`
    - the lint and format configs: `eslint.config.ts`, `stylelint.config.js`, `.prettierrc.json`, `.prettierignore` and `.editorconfig` in `front-end/`
-   - the scripts in `front-end/scripts/` that deal, repeat or measure the specs, or that nothing runs: `e2e-shard-timings.json`, `e2e-shards.ts`, `e2e-repeat.ts`, `bundle-budget.ts`, `no-eval.ts` and `brand-icons.ts`
+   - the scripts in `front-end/scripts/` that deal or measure the specs, or that nothing runs: `e2e-shard-timings.json`, `e2e-shards.ts`, `bundle-budget.ts`, `no-eval.ts` and `brand-icons.ts`
    - the back end's deploy config, `back-end/vercel.json`
+   - the advisory scan's lock, `back-end/requirements-audit.in` and `requirements-audit.txt`, which only [CI's `python-advisories` job](ci-and-the-gate.md#ci) installs
+   - the migrations, `back-end/migrations/`, which an operator runs by hand and which nothing the app, the seed or a spec imports
 
 The chosen specs are ordered by score: each changed thing a spec reaches adds 1 divided by how many specs reach it, so a module every spec loads (`App.vue`) or an endpoint every spec's setup calls adds almost nothing, while one that three specs reach decides the order.
 A changed spec, and each changed file a spec imports, adds 1; a change counted for a whole back-end file, rule 4 and rule 5 add nothing, though they still choose.
@@ -130,7 +147,7 @@ They run in that order until the next would pass the cap, 30 CI minutes (`--minu
 A spec the change edits runs whatever the cap.
 It prints what it runs and what it leaves to CI, each with its reasons, and with `--run` leaves out a spec the map names that the worktree does not have yet, saying so, and answers with Playwright's exit code.
 
-With no map at all (no `gh`, offline with none downloaded, or no push to `dev` has made one yet), it says so and chooses by rule 1 alone, which is what Playwright's own `--only-changed` chooses.
+With no map at all (no `gh`, offline with none downloaded, or no run on `dev` has made one in 90 days), it says so and chooses by rule 1 alone, which is what Playwright's own `--only-changed` chooses.
 
 The selection is a builder's, never a gate's or a merge's: CI's full run on every pull request runs every spec, so a spec the cap or the map left out still runs before anything merges, and its failure comes back as a red check.
 A spec can fail through the data its setup seeds, where no map of the code a spec runs tells it from the other specs seeding the same way; that is the miss the full run is for.
@@ -145,7 +162,7 @@ On a pull request, once the shards have run, CI's `e2e` job audits the selection
 python3 scripts/affected-specs.py audit --github --base HEAD^1 --head HEAD <each shard's results.json>
 ```
 
-It takes the pull request's diff from its merge commit's first parent, as `e2e-repeat` does, and the newest map and its minutes as a builder's run does, and names each spec file with a failed test in the shards' reports, a test a helper registers counting under the spec file that calls it, as one of three:
+It takes the pull request's diff from its merge commit's first parent, hence two commits, and the newest map and its minutes as a builder's run does, and names each spec file with a failed test in the shards' reports, a test a helper registers counting under the spec file that calls it, as one of three:
 
 - **ran**: the selection runs it, so a builder's `--run` would have shown the failure;
 - **left to CI**: the selection chose it, but past the cap;

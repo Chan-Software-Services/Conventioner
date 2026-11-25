@@ -29,6 +29,8 @@ export default defineConfig({
   // The serial project's files (e2e/serialSpecs.ts) run at one worker all the same, but only the
   // shard script keeps them apart from the rest: a plain run at more than one runs them beside it.
   workers: workers(process.env.E2E_WORKERS),
+  // A local run keeps a test's output only when it fails, explicit screenshots included; CI keeps it all, for a failed shard's upload.
+  preserveOutput: process.env.CI ? 'always' : 'failures-only',
   reporter: process.env.CI
     ? ciReporters
     : [['list'] as const, ['html', { open: 'never' }] as const],

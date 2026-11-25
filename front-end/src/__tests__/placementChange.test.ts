@@ -264,6 +264,7 @@ describe('placing someone who is not approved (E36/F02/S02)', () => {
       verdictBy: { kind: 'person', userId: 'u-1', email: 'alex@market.test', rule: null },
       verdictAt: '2026-10-19T10:00:00',
       verdictReason: null,
+      undecided: false,
     },
   });
   const byRule = vendor({
@@ -273,6 +274,7 @@ describe('placing someone who is not approved (E36/F02/S02)', () => {
       verdictBy: { kind: 'rule', userId: null, email: null, rule: 'Affiliation' },
       verdictAt: '2026-10-19T10:00:00',
       verdictReason: 'Not an Example College student, staff or alumnus',
+      undecided: false,
     },
   });
 
@@ -295,10 +297,25 @@ describe('placing someone who is not approved (E36/F02/S02)', () => {
         verdictBy: null,
         verdictAt: null,
         verdictReason: null,
+        undecided: false,
       },
     });
 
     expect(placementWarnings(undated, at())[0]).toBe('Not approved: Rejected.');
+  });
+
+  it('names no giver of a follow-up, which is marked, not decided', () => {
+    const followedUp = vendor({
+      notApproved: {
+        status: ApplicationStatus.NeedsFollowUp,
+        verdictBy: { kind: 'person', userId: 'u-1', email: 'alex@market.test', rule: null },
+        verdictAt: '2026-10-19T10:00:00',
+        verdictReason: null,
+        undecided: true,
+      },
+    });
+
+    expect(placementWarnings(followedUp, at())[0]).toBe('Not approved: Needs follow-up.');
   });
 
   it('keeps the usual warnings after it', () => {

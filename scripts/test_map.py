@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """The test map (T349): which app modules and back-end endpoints each E2E spec file reaches, and
-which back-end functions each endpoint runs. CI's `test-map` job writes it on every push to `dev`;
+which back-end functions each endpoint runs. CI's `test-map` job writes it on the nightly Test run
+on `dev`'s tip, or one started by hand, when that commit has no map yet;
 `docs/implementation/testing/the-test-map.md` says what it is for.
 
     test_map.py endpoints --out <endpoints.json> [-- <pytest arguments, in place of tests/>]

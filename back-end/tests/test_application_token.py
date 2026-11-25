@@ -9,12 +9,14 @@ import jwt
 import pytest
 
 from utils.application_token import generate_application_token, verify_application_token
-from utils.secret_key import signing_secret
+from utils.secret_key import ORGANIZER_SESSIONS, derived_key, vendor_token_key
+
+SECRET = "a-test-signing-secret-that-is-long-enough-for-hs256"
 
 
 @pytest.fixture(autouse=True)
 def a_secret(monkeypatch):
-    monkeypatch.setenv("SECRET_KEY", "a-test-signing-secret-that-is-long-enough-for-hs256")
+    monkeypatch.setenv("SECRET_KEY", SECRET)
 
 
 def test_it_names_the_market_and_the_address_and_no_application():
@@ -30,16 +32,26 @@ def test_a_token_that_does_not_say_who_and_where_is_refused(missing):
     claims = {"market_id": "market-1", "email": "v@example.com", "exp": int(time.time()) + 60}
     del claims[missing]
 
-    assert verify_application_token(jwt.encode(claims, signing_secret(), algorithm="HS256")) is None
+    assert verify_application_token(jwt.encode(claims, vendor_token_key(), algorithm="HS256")) is None
 
 
 def test_an_expired_token_is_refused():
     claims = {"market_id": "market-1", "email": "v@example.com", "exp": int(time.time()) - 1}
 
-    assert verify_application_token(jwt.encode(claims, signing_secret(), algorithm="HS256")) is None
+    assert verify_application_token(jwt.encode(claims, vendor_token_key(), algorithm="HS256")) is None
 
 
 def test_a_token_signed_with_another_key_is_refused():
     claims = {"market_id": "market-1", "email": "v@example.com", "exp": int(time.time()) + 60}
 
     assert verify_application_token(jwt.encode(claims, "not-our-key-" * 4, algorithm="HS256")) is None
+
+
+@pytest.mark.parametrize("key", ["the secret itself", "the organizer session key"])
+def test_a_token_signed_with_any_key_but_its_own_is_refused(key):
+    """Its key is derived from ``SECRET_KEY`` for vendor tokens alone, so neither the secret nor the
+    key an organizer's session is signed with makes one."""
+    signer = SECRET if key == "the secret itself" else derived_key(SECRET, ORGANIZER_SESSIONS)
+    claims = {"market_id": "market-1", "email": "v@example.com", "exp": int(time.time()) + 60}
+
+    assert verify_application_token(jwt.encode(claims, signer, algorithm="HS256")) is None

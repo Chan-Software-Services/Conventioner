@@ -260,6 +260,75 @@ describe('what an entry says', () => {
     ).toBe('dana@ember.test changed priya@ember.test from Viewer to Editor');
   });
 
+  it('words an invitation by its address and role, under either roles row (T538)', () => {
+    const invited = (action: string, role: string) =>
+      sentence({
+        action,
+        kind: 'invited',
+        vendors: [],
+        subject: { email: 'priya@ember.test' },
+        detail: { role },
+      });
+    expect(invited('manage-editors-and-viewers', 'editor')).toBe(
+      'dana@ember.test invited priya@ember.test as an Editor',
+    );
+    expect(invited('manage-editors-and-viewers', 'viewer')).toBe(
+      'dana@ember.test invited priya@ember.test as a Viewer',
+    );
+    expect(invited('manage-admins', 'admin')).toBe(
+      'dana@ember.test invited priya@ember.test as an Admin',
+    );
+  });
+
+  it('words an invitation withdrawn by its address, and one declined by its invitee', () => {
+    for (const action of ['manage-editors-and-viewers', 'manage-admins']) {
+      expect(
+        sentence({
+          action,
+          kind: 'invitation_withdrawn',
+          vendors: [],
+          subject: { email: 'priya@ember.test' },
+          detail: { role: 'editor' },
+        }),
+      ).toBe('dana@ember.test withdrew the invitation to priya@ember.test');
+    }
+    expect(
+      sentence({
+        action: 'manage-admins',
+        kind: 'invitation_declined',
+        actor: 'priya@ember.test',
+        vendors: [],
+        subject: { email: 'priya@ember.test' },
+        detail: { role: 'admin' },
+      }),
+    ).toBe('priya@ember.test declined the Admin role');
+    expect(
+      sentence({
+        action: 'manage-editors-and-viewers',
+        kind: 'invitation_declined',
+        actor: 'priya@ember.test',
+        vendors: [],
+        subject: { email: 'priya@ember.test' },
+        detail: { role: 'viewer' },
+      }),
+    ).toBe('priya@ember.test declined the Viewer role');
+  });
+
+  it('words a role given by an invitation accepted as the inviter’s, which they accepted', () => {
+    const given = (detail: Record<string, unknown>) =>
+      sentence({
+        action: 'manage-editors-and-viewers',
+        kind: 'role_given',
+        vendors: [],
+        subject: { user_id: 'u1', email: 'priya@ember.test' },
+        detail: { before: { role: null }, after: { role: 'editor' }, ...detail },
+      });
+    expect(given({ by_invitation: true })).toBe(
+      'dana@ember.test gave priya@ember.test the Editor role, which they accepted',
+    );
+    expect(given({})).toBe('dana@ember.test gave priya@ember.test the Editor role');
+  });
+
   it('words a phase move by both phases, as the market’s path names them', () => {
     const move = entry({
       action: 'move-phase',
@@ -670,6 +739,64 @@ describe('who reviews which application (E38/F07/S02)', () => {
     ).toEqual([
       { field: 'Reviewer', before: KAI, after: SAM },
       { field: 'Follow-up owner', before: KAI, after: SAM },
+    ]);
+  });
+
+  /**
+   * The deal of what the status migration found waiting for the deal (T277 ticket 02): recorded
+   * under the migration's action, with no actor, since an operator's migration, not a person,
+   * marked it. Some were in nobody's share, a follow-up whose owner left in its reviewer's, so the
+   * line says only that it waited.
+   */
+  function afterTheMigration(entry: MarketHistoryEntry): MarketHistoryEntry {
+    return {
+      ...entry,
+      action: 'review_state_migrated',
+      actor: null,
+      detail: { ...(entry.detail as object), cause: 'arrived' },
+    } as MarketHistoryEntry;
+  }
+
+  it('words the deal of a migrated application as having waited, in the vendor’s own history too', () => {
+    const one = afterTheMigration(dealt([SAM], [KAI]));
+
+    expect(said(entryParts(one, { names: NAMES }))).toBe(
+      `The application of [Ana Rivera] was dealt to ${SAM}, having waited for the deal`,
+    );
+    expect(
+      said(entryParts(one, { names: NAMES, path: IntakeMode.Csv, own: 'ana@ember.test' })),
+    ).toBe(`The application was dealt to ${SAM}, having waited for the deal`);
+    expect(entryChanges(one, { path: IntakeMode.Csv, own: 'ana@ember.test' }).changed).toEqual([
+      { field: 'Reviewer', before: KAI, after: SAM },
+    ]);
+  });
+
+  it('words the deal of a migrated follow-up as having waited, in the vendor’s own history too', () => {
+    const many = afterTheMigration(handedOn());
+    const one = { ...many, vendors: ['ben@ember.test'], subject: { application_ids: ['app-1'] } };
+
+    expect(said(entryParts(one, { names: NAMES }))).toBe(
+      `The follow-up of [Ben Okafor] was dealt to ${SAM}, having waited for the deal`,
+    );
+    expect(
+      said(entryParts(many, { names: NAMES, path: IntakeMode.Csv, own: 'ben@ember.test' })),
+    ).toBe(`The follow-up was dealt to ${SAM}, having waited for the deal`);
+    expect(entryChanges(many, { path: IntakeMode.Csv, own: 'ben@ember.test' }).changed).toEqual([
+      { field: 'Reviewer', before: KAI, after: SAM },
+      { field: 'Follow-up owner', before: KAI, after: SAM },
+    ]);
+  });
+
+  it('words the deal of several migrated ones by how many, follow-ups among them', () => {
+    expect(said(entryParts(afterTheMigration(dealt([SAM, KAI, SAM])), { names: NAMES }))).toBe(
+      '3 open applications were dealt among 2 reviewers, having waited for the deal',
+    );
+    expect(said(entryParts(afterTheMigration(handedOn()), { names: NAMES }))).toBe(
+      '1 open application and 1 follow-up were dealt among 1 reviewer, having waited for the deal',
+    );
+    expect(entryChanges(afterTheMigration(dealt([SAM, KAI]))).changed).toEqual([
+      { field: 'ana@ember.test', before: 'none', after: SAM },
+      { field: 'ben@ember.test', before: 'none', after: KAI },
     ]);
   });
 

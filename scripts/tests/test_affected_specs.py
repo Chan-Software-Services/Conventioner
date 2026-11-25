@@ -95,6 +95,10 @@ BASE_FILES = {
     "back-end/api/door.py": DOOR_PY,
     "back-end/api/markets.py": MARKETS_PY,
     "back-end/api/stats.py": "def stats():\n    return 1\n",
+    # Files no rule places: no spec imports them, no page loaded them, no endpoint ran them.
+    "front-end/src/assets/old.css": "p { margin: 0; }\n",
+    "front-end/tools/old-tool.ts": "export const tool = 1;\n",
+    "back-end/utils/old_module.py": "def old():\n    return 1\n",
 }
 
 
@@ -287,9 +291,240 @@ class TestRuleThreeBackEndFunctions:
         rows = chosen(choose(repo))
         assert set(rows) == {"a.spec.ts", "b.spec.ts"}
 
+    def test_a_hash_line_inside_a_string_is_code(self, repo):
+        quoted = DOOR_PY.replace(
+            'vendor["here"] = True', 'vendor["here"] = """\n# yes\n"""'
+        )
+        base(repo, {"back-end/api/door.py": quoted})
+        write(repo, {"back-end/api/door.py": quoted.replace("# yes", "# no")})
+        assert set(chosen(choose(repo))) == {"b.spec.ts"}
+
     def test_the_back_ends_tests_reach_no_spec(self, repo):
         write(repo, {"back-end/tests/test_door.py": "def test_door():\n    assert True\n"})
         assert chosen(choose(repo)) == {}
+
+
+DOCUMENTED_PY = '"""The door.\n\nIt lets vendors in.\n"""\n' + DOOR_PY.replace(
+    "def check_in(vendor):\n",
+    'def check_in(vendor):\n    """Mark the vendor here.\n\n    Once a day.\n    """\n',
+)
+
+
+def base(repo, files):
+    """Move the base, and `origin/dev` with it, to the fixture's files with these."""
+    write(repo, files)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "a new base")
+    git(repo, "update-ref", "refs/remotes/origin/dev", "HEAD")
+
+
+class TestWordsOnly:
+    """A change to words alone, a docstring's or a comment's, changes nothing that runs, so it
+    chooses no spec; a change beside it to what runs still chooses as before."""
+
+    @pytest.fixture
+    def documented(self, repo):
+        base(repo, {"back-end/api/door.py": DOCUMENTED_PY})
+        return repo
+
+    def test_a_module_docstring_chooses_nothing(self, documented):
+        write(documented, {"back-end/api/door.py": DOCUMENTED_PY.replace("lets vendors", "lets every vendor")})
+        assert chosen(choose(documented)) == {}
+
+    def test_a_function_docstring_chooses_nothing(self, documented):
+        write(documented, {"back-end/api/door.py": DOCUMENTED_PY.replace("Once a day.", "Once a day,\n    or twice.")})
+        assert chosen(choose(documented)) == {}
+
+    def test_a_docstring_added_or_removed_chooses_nothing(self, repo):
+        write(repo, {"back-end/api/door.py": DOCUMENTED_PY})
+        assert chosen(choose(repo)) == {}
+
+    def test_code_beside_a_docstring_still_chooses_its_function(self, documented):
+        changed = DOCUMENTED_PY.replace("Once a day.", "Twice a day.").replace("= True", "= 'yes'")
+        write(documented, {"back-end/api/door.py": changed.replace("lets vendors", "lets every vendor")})
+        rows = chosen(choose(documented))
+        assert set(rows) == {"b.spec.ts"}
+        assert rows["b.spec.ts"]["why"] == ["back-end/api/door.py:check_in via POST /checkin (1/1)"]
+
+    def test_a_comment_line_inside_a_function_chooses_nothing(self, repo):
+        write(repo, {"back-end/api/door.py": DOOR_PY.replace('    vendor["here"]', '    # here\n    vendor["here"]')})
+        assert chosen(choose(repo)) == {}
+
+    def test_code_on_a_line_with_a_comment_still_chooses_its_function(self, repo):
+        commented = DOOR_PY.replace("= True", "= True  # here")
+        base(repo, {"back-end/api/door.py": commented})
+        write(repo, {"back-end/api/door.py": commented.replace("= True", "= 'yes'")})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"b.spec.ts"}
+        assert rows["b.spec.ts"]["why"] == ["back-end/api/door.py:check_in via POST /checkin (1/1)"]
+
+    def test_a_string_that_does_not_open_its_body_is_code(self, repo):
+        loose = DOOR_PY.replace("LIMIT = 3\n", 'LIMIT = 3\n"""A note."""\n')
+        base(repo, {"back-end/api/door.py": loose})
+        write(repo, {"back-end/api/door.py": loose.replace("A note", "Another note")})
+        assert set(chosen(choose(repo))) == {"a.spec.ts", "b.spec.ts"}
+
+    def test_a_docstring_that_swallows_code_is_code(self, repo):
+        # The docstring's quotes move so that it holds `LIMIT = 3`, a line the change leaves.
+        base(repo, {"back-end/api/door.py": '"""The door."""\n' + DOOR_PY.replace("LIMIT = 3\n", "LIMIT = 3\n# the end\n")})
+        write(repo, {"back-end/api/door.py": '"""The door.\n' + DOOR_PY.replace("LIMIT = 3\n", 'LIMIT = 3\n# the end"""\n')})
+        assert set(chosen(choose(repo))) == {"a.spec.ts", "b.spec.ts"}
+
+    def test_a_file_that_does_not_parse_counts_its_docstring(self, repo):
+        broken = DOCUMENTED_PY + "\ndef (:\n"
+        base(repo, {"back-end/api/door.py": broken})
+        write(repo, {"back-end/api/door.py": broken.replace("lets vendors", "lets every vendor")})
+        assert set(chosen(choose(repo))) == {"a.spec.ts", "b.spec.ts"}
+
+    def test_a_docstring_removed_from_a_file_it_breaks_is_code(self, repo):
+        # The class's only body is its docstring, so the head left without it does not parse.
+        gone = DOOR_PY + '\n\nclass Gone(Exception):\n    """Gone."""\n'
+        base(repo, {"back-end/api/door.py": gone})
+        write(repo, {"back-end/api/door.py": gone.replace('    """Gone."""\n', "")})
+        assert set(chosen(choose(repo))) == {"a.spec.ts", "b.spec.ts"}
+
+    SCRIPT_TS = textwrap.dedent(
+        """\
+        // The door's rows.
+        /* Each row
+         * is a vendor. */
+        export const door = (rows: string[]) => rows.map((r) => r.trim()) // trimmed
+        export const path = /\\/door\\/*/g
+        export const note = '// not a comment' + `/* nor ${'this'} */`
+        """
+    )
+    DOOR_VUE = textwrap.dedent(
+        """\
+        <script setup lang="ts">
+        // The door.
+        const rows = ['a'] /* one row */
+        </script>
+
+        <template>
+          <!-- Each vendor at the door. -->
+          <p title="<!-- kept -->">{{ rows.join('<!--') }}</p>
+        </template>
+        """
+    )
+
+    @pytest.fixture
+    def scripted(self, repo):
+        base(repo, {"front-end/src/views/Door.vue": self.DOOR_VUE, "front-end/src/door.ts": self.SCRIPT_TS})
+        mapped = json.loads((repo.parent / "test-map.json").read_text())
+        mapped["specs"]["a.spec.ts"]["modules"].append("front-end/src/door.ts")
+        (repo.parent / "test-map.json").write_text(json.dumps(mapped))
+        return repo
+
+    @pytest.mark.parametrize(
+        "old, new",
+        [
+            ("// The door's rows.", "// The rows at the door."),
+            ("// The door's rows.\n", ""),
+            ("is a vendor. */", "is a vendor,\n * or a helper. */"),
+            ("// trimmed", "// trimmed\n// and mapped"),
+            ("rows.map((r) => r.trim())", "rows.map((r) => r.trim()) /* each */"),
+        ],
+    )
+    def test_a_script_comment_chooses_nothing(self, scripted, old, new):
+        assert old in self.SCRIPT_TS
+        write(scripted, {"front-end/src/door.ts": self.SCRIPT_TS.replace(old, new)})
+        assert chosen(choose(scripted)) == {}
+
+    @pytest.mark.parametrize(
+        "old, new",
+        [
+            ("r.trim()", "r.trimEnd()"),
+            # Words in a string, a template or a regex that look like a comment are code.
+            ("'// not a comment'", "'// not a comment, still'"),
+            ("/* nor ${'this'} */", "/* nor ${'that'} */"),
+            ("\\/door\\/*/g", "\\/door\\/*/gi"),
+            # A comment that opens over code takes the code out.
+            ("/* Each row", "/* Each row */ export const x = 1 /*"),
+            ("export const path", "// export const path"),
+        ],
+    )
+    def test_code_in_a_script_still_chooses_its_specs(self, scripted, old, new):
+        assert old in self.SCRIPT_TS
+        write(scripted, {"front-end/src/door.ts": self.SCRIPT_TS.replace(old, new)})
+        assert set(chosen(choose(scripted))) == {"a.spec.ts"}
+
+    def test_a_comment_that_opens_over_unchanged_code_is_code(self, scripted):
+        # `/*` and `*/` added on lines of their own take out the line between, which the change
+        # leaves alone.
+        text = self.SCRIPT_TS.replace("export const door", "/*\nexport const door").replace(
+            "export const path", "*/\nexport const path"
+        )
+        write(scripted, {"front-end/src/door.ts": text})
+        assert set(chosen(choose(scripted))) == {"a.spec.ts"}
+
+    @pytest.mark.parametrize(
+        "unclosed",
+        ["'a string", "`a template", "/* a comment", "/a regex"],
+    )
+    def test_a_script_that_does_not_scan_counts_its_comments(self, scripted, unclosed):
+        broken = self.SCRIPT_TS + f"export const open = {unclosed}\n"
+        base(scripted, {"front-end/src/door.ts": broken})
+        write(scripted, {"front-end/src/door.ts": broken.replace("// trimmed", "// trimmed rows")})
+        assert set(chosen(choose(scripted))) == {"a.spec.ts"}
+
+    @pytest.mark.parametrize(
+        "old, new",
+        [
+            ("// The door.", "// The door's rows."),
+            ("/* one row */", "/* a row */"),
+            ("<!-- Each vendor at the door. -->", "<!-- Each vendor\n       at the door. -->"),
+            ("  <!-- Each vendor at the door. -->\n", ""),
+        ],
+    )
+    def test_a_vue_comment_chooses_nothing(self, scripted, old, new):
+        assert old in self.DOOR_VUE
+        write(scripted, {"front-end/src/views/Door.vue": self.DOOR_VUE.replace(old, new)})
+        assert chosen(choose(scripted)) == {}
+
+    @pytest.mark.parametrize(
+        "old, new",
+        [
+            ("['a']", "['b']"),
+            ('"<!-- kept -->"', '"<!-- changed -->"'),
+            ("join('<!--')", "join('<!-- -->')"),
+            ("<p title", "<span /><p title"),
+            ("<!-- Each vendor at the door. -->", "<!-- Each vendor --> at the door."),
+        ],
+    )
+    def test_code_in_a_vue_file_still_chooses_its_specs(self, scripted, old, new):
+        assert old in self.DOOR_VUE
+        write(scripted, {"front-end/src/views/Door.vue": self.DOOR_VUE.replace(old, new)})
+        assert set(chosen(choose(scripted))) == {"a.spec.ts"}
+
+    @pytest.mark.parametrize(
+        "between",
+        ["<b>x</b> <!-- c --> <i>y</i>", "<b>x</b> <!-- c --><i>y</i>", "<b>x</b><!-- c --> <i>y</i>"],
+    )
+    def test_a_template_comment_inline_between_elements_is_code(self, scripted, between):
+        # Vue's dev build keeps the comment, and drops the white space between it and an element,
+        # so `x y` without it renders `xy` with it.
+        inline = self.DOOR_VUE.replace("<p title", between + "<p title")
+        base(scripted, {"front-end/src/views/Door.vue": inline})
+        write(scripted, {"front-end/src/views/Door.vue": inline.replace(between, "<b>x</b> <i>y</i>")})
+        assert set(chosen(choose(scripted))) == {"a.spec.ts"}
+
+    @pytest.mark.parametrize(
+        "old, new",
+        [
+            ('<script setup lang="ts">', '<script setup lang="tsx">'),
+            ("<template>", '<template lang="pug">'),
+            ("</template>\n", '</template>\n<p title="an unclosed tag"\n'),
+        ],
+    )
+    def test_a_vue_file_it_cannot_read_counts_its_comments(self, scripted, old, new):
+        unread = self.DOOR_VUE.replace(old, new)
+        base(scripted, {"front-end/src/views/Door.vue": unread})
+        write(scripted, {"front-end/src/views/Door.vue": unread.replace("// The door.", "// The door's rows.")})
+        assert set(chosen(choose(scripted))) == {"a.spec.ts"}
+
+    def test_a_comment_in_an_e2e_helper_still_chooses_its_specs(self, repo):
+        write(repo, {"front-end/e2e/helpers/seeds.ts": "export const seedMarket = 1;\n// the seed\n"})
+        assert set(chosen(choose(repo))) == {"a.spec.ts"}
 
 
 class TestRuleFourEverySpec:
@@ -368,15 +603,19 @@ class TestAFileNoRulePlaces:
             "front-end/.prettierignore",
             "front-end/.editorconfig",
             "back-end/pytest.ini",
-            # The scripts that deal, repeat or measure the specs, or that nothing runs.
+            # The scripts that deal or measure the specs, or that nothing runs.
             "front-end/scripts/e2e-shard-timings.json",
             "front-end/scripts/e2e-shards.ts",
-            "front-end/scripts/e2e-repeat.ts",
             "front-end/scripts/bundle-budget.ts",
             "front-end/scripts/no-eval.ts",
             "front-end/scripts/brand-icons.ts",
             # The back end's deploy config, which the stack does not read.
             "back-end/vercel.json",
+            # The advisory scan's lock, which only CI's python-advisories job installs.
+            "back-end/requirements-audit.in",
+            "back-end/requirements-audit.txt",
+            # The migrations, which an operator runs by hand and nothing the stack loads imports.
+            "back-end/migrations/migrate_door.py",
         ],
     )
     def test_docs_and_the_suites_that_are_not_e2e_choose_nothing(self, repo, path):
@@ -400,6 +639,42 @@ class TestAFileNoRulePlaces:
         env = TestWhereTheMapComesFrom().fake_gh(tmp_path, "import sys\nsys.exit(1)\n")
         write(repo, {"front-end/src/assets/base.css": "changed\n"})
         assert chosen(choose(repo, env=env, fixture_map=False)) == {}
+
+
+class TestAFileTheChangeDeletes:
+    """A deleted file is placed by its deletion: what read it changes with it, and is placed on its
+    own, so a deleted file no spec reached drives none, and one a spec reached drives that spec."""
+
+    UNPLACED = ["front-end/src/assets/old.css", "front-end/tools/old-tool.ts", "back-end/utils/old_module.py"]
+
+    @pytest.mark.parametrize("path", UNPLACED)
+    def test_a_deleted_file_no_spec_reached_chooses_nothing(self, repo, path):
+        write(repo, {path: None})
+        assert chosen(choose(repo)) == {}
+
+    @pytest.mark.parametrize("path", UNPLACED)
+    def test_a_committed_deletion_chooses_nothing_either(self, repo, path):
+        git(repo, "rm", "-q", path)
+        git(repo, "commit", "-qm", "delete it")
+        assert chosen(choose(repo, "--head", "HEAD")) == {}
+
+    def test_a_file_no_rule_places_beside_a_deletion_still_chooses_every_spec(self, repo):
+        write(repo, {"front-end/src/assets/old.css": None, "front-end/src/assets/base.css": "new\n"})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"a.spec.ts", "b.spec.ts", "c.spec.ts"}
+        assert rows["a.spec.ts"]["why"] == ["front-end/src/assets/base.css is not in the map"]
+
+    def test_a_deleted_helper_a_spec_imported_still_chooses_that_spec(self, repo):
+        # seat.ts still imports the deleted seeds: the spec that imported it at the base breaks.
+        write(repo, {"front-end/e2e/helpers/seeds.ts": None})
+        rows = chosen(choose(repo))
+        assert set(rows) == {"a.spec.ts"}
+        assert rows["a.spec.ts"]["why"] == ["imported helpers/seeds.ts, which the change deletes"]
+        assert rows["a.spec.ts"]["score"] == 1
+
+    def test_a_deleted_module_a_page_loaded_still_chooses_its_specs(self, repo):
+        write(repo, {"front-end/src/views/Door.vue": None})
+        assert set(chosen(choose(repo))) == {"a.spec.ts"}
 
 
 class TestTheOrderAndTheCap:
@@ -764,7 +1039,7 @@ class TestTheAudit:
         assert "no-such-commit" in summary.read_text()
 
     def test_with_no_map_a_spec_outside_rule_one_is_missed_but_not_annotated(self, repo, tmp_path):
-        # Before any push to dev has made a map, the selection is rule 1 alone, so a spec outside
+        # Before any run on dev has made a map, the selection is rule 1 alone, so a spec outside
         # it is listed, but is no sign of a drifted map or of a rule that cannot see a dependency.
         env = TestWhereTheMapComesFrom().fake_gh(tmp_path, "import sys\nsys.exit(1)\n")
         write(repo, {"front-end/e2e/c.spec.ts": "// edit\n", "front-end/src/views/Door.vue": "<p />\n"})

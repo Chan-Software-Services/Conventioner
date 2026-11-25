@@ -3,7 +3,7 @@
  * sections it shows a signed-in vendor in each state of the market. The market page at `/<slug>`
  * (T469) reads the same answer, and chooses here what it shows.
  */
-import type { ApplicantSeat, Application, Market } from '@/assets/types/datatypes';
+import type { ApplicantApplication, ApplicantSeat, Market } from '@/assets/types/datatypes';
 import { IntakeMode, MarketPhase } from '@/assets/types/datatypes';
 import { api } from '@/utils/api';
 import { APPLICANT_READ_TIMEOUT_MS } from '@/utils/applicantApi';
@@ -95,7 +95,7 @@ export type ApplicationSection = 'apply' | 'edit' | 'answers' | 'closed' | 'none
 
 export function applicationSection(
   page: Pick<VendorPageInfo, 'intakeMode' | 'takesApplications'>,
-  application: Application | null,
+  application: ApplicantApplication | null,
 ): ApplicationSection {
   if (page.intakeMode !== IntakeMode.Form) return 'none';
   if (!application) return page.takesApplications ? 'apply' : 'closed';
@@ -106,7 +106,7 @@ export function applicationSection(
  * The status a signed-in vendor reads at the top: "Submitted" until results are published, then
  * their outcome; null when they have no application to have a status.
  */
-export function statusHeadline(application: Application | null): string | null {
+export function statusHeadline(application: ApplicantApplication | null): string | null {
   if (!application) return null;
   return outcomeHeadline(application) ?? 'Submitted';
 }
@@ -181,7 +181,7 @@ export interface CheckInSection {
 
 export function checkInSection(
   page: Pick<VendorPageInfo, 'phase' | 'ended'>,
-  application: Pick<Application, 'seats'> | null,
+  application: Pick<ApplicantApplication, 'seats'> | null,
   today: string,
 ): CheckInSection {
   const seats = [...(application?.seats ?? [])].sort((a, b) => a.date.localeCompare(b.date));
@@ -256,7 +256,7 @@ export const NO_TABLE_TODAY = 'You have no table today, so you are not checked i
  */
 export function scannedCodeRefusal(
   page: Pick<VendorPageInfo, 'phase'>,
-  application: Pick<Application, 'seats'> | null,
+  application: Pick<ApplicantApplication, 'seats'> | null,
   today: string,
 ): string | null {
   if (page.phase === MarketPhase.Archived) return CHECK_IN_ENDED;

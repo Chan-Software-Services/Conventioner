@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DOMWrapper, flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import ApplicationMonitor from '@/components/application/ApplicationMonitor.vue';
 import { ApplicationStatus, type Application, type Market } from '@/assets/types/datatypes';
+import { answeredWith, servedReview } from './support/servedReview';
 
 const fetchMarketApplications = vi.fn();
 const reviewApplication = vi.fn();
@@ -39,7 +40,11 @@ vi.mock('@/utils/applicantApi', async (importOriginal) => {
   };
 });
 
-function application(id: string, status = ApplicationStatus.Open): Application {
+function application(
+  id: string,
+  status = ApplicationStatus.Open,
+  served = servedReview('open'),
+): Application {
   return {
     id,
     marketId: 'm1',
@@ -47,6 +52,7 @@ function application(id: string, status = ApplicationStatus.Open): Application {
     status,
     formData: { shop: `${id}'s shop` },
     submittedAt: '2026-09-15T14:20:18.000Z',
+    ...served,
   } as unknown as Application;
 }
 
@@ -68,13 +74,11 @@ describe('Choose what leads the card', () => {
     fetchMarketApplications.mockImplementation(async () => list.map((app) => ({ ...app })));
     handOut.mockReset();
     handOut.mockImplementation(async (want: string | null) =>
-      want
-        ? list.find((app) => app.id === want)
-        : list.find((app) => app.status === ApplicationStatus.Open),
+      want ? list.find((app) => app.id === want) : list.find((app) => app.review.state === 'open'),
     );
     reviewApplication.mockReset();
     reviewApplication.mockImplementation(async (_m: string, app: Application, status: string) => {
-      const written = { ...app, status, verdictAt: '2026-11-01T10:00:00+00:00' } as Application;
+      const written = { ...answeredWith(app, status), verdictAt: '2026-11-01T10:00:00+00:00' };
       list = list.map((held) => (held.id === app.id ? written : held));
       return { application: written, undoSeconds: 120 };
     });
@@ -82,6 +86,7 @@ describe('Choose what leads the card', () => {
     undoVerdict.mockImplementation(async (_m: string, item: { application: Application }) => ({
       ...item.application,
       status: ApplicationStatus.Open,
+      ...servedReview('open'),
       verdictAt: null,
     }));
     putHighlights.mockReset();
@@ -263,7 +268,11 @@ describe('Choose what leads the card', () => {
           status: 409,
           data: {
             error: REFUSAL,
-            application: application('jane', ApplicationStatus.ReviewerApproved),
+            application: application(
+              'jane',
+              ApplicationStatus.ReviewerApproved,
+              servedReview('approved'),
+            ),
           },
         },
       });
@@ -320,7 +329,11 @@ describe('Choose what leads the card', () => {
             status: 409,
             data: {
               error: REFUSAL,
-              application: application('jane', ApplicationStatus.ReviewerApproved),
+              application: application(
+                'jane',
+                ApplicationStatus.ReviewerApproved,
+                servedReview('approved'),
+              ),
             },
           },
         });

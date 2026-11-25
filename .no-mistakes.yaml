@@ -1,5 +1,10 @@
 allow_repo_commands: true
 commands:
+  # The front end's locked dependencies, from the machine's npm cache, once a run before its first
+  # command, since the run's worktree holds tracked files only.
+  prepare: ./scripts/nm-lint.sh --prepare
   # The real-data checks alone, which must pass before the gate pushes to this public repository;
   # every suite runs in CI's required jobs (docs/implementation/testing/ci-and-the-gate.md).
   test: ./scripts/nm-test.sh --real-data-only
+  # Prettier, ESLint and Stylelint on the branch's changed front-end, docs and root Markdown files.
+  lint: ./scripts/nm-lint.sh

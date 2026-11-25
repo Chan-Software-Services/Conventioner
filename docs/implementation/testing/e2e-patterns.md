@@ -23,7 +23,7 @@ describes:
   - front-end/e2e/helpers/mongoSession.ts
   - front-end/e2e/helpers/mongoScript.ts
   - front-end/e2e/serialSpecs.ts
-verified: 2026-11-20
+verified: 2026-11-25
 sources:
   - E21/F02/S02
   - E22/F04/S02
@@ -59,6 +59,8 @@ sources:
   - T501
   - T519
   - T507
+  - T510
+  - T538
 ---
 
 # E2E patterns
@@ -68,7 +70,7 @@ How to run the suite is [TESTING.md](../../TESTING.md#end-to-end-e2e-tests); the
 
 ## Every E2E test says why it is one
 
-An E2E test costs CI about a second before it tests anything, on every full run, and the suite runs on every pull request, every queued merge and every push to `dev` and `main`.
+An E2E test costs CI about a second before it tests anything, on every full run, and the suite runs on every pull request, every queued merge, every push to `main`, and a push to `dev` [the queue did not test](ci-and-the-gate.md#which-suite-a-run-runs).
 So a test is E2E only when a cheaper test cannot prove it: a Vitest test in `front-end/src/__tests__/` (happy-dom, `@vue/test-utils`, a real `vue-router` where routing matters), or a pytest in `back-end/tests/`.
 
 A test must be E2E when what it proves needs one of these:
@@ -97,7 +99,8 @@ Everything else on the page is found by its `data-testid`.
 **A page object wraps one screen** ([`front-end/e2e/pages/`](../../../front-end/e2e/pages/)): it holds `getByTestId()` locators and exposes action methods, and a spec calls those methods rather than reaching for locators of its own.
 `LoginPage.login` opens a bare `/login` first; `signIn` signs in on the page as it stands, so a spec about where signing in returns to keeps the address's `next`.
 `waitForMarkets` waits for where signing in lands by the path, since `/login?next=/markets` ends in `/markets` too and a glob would be met before the sign-in had happened; a spec asserts a landing the same way.
-`signInToMarkets`, the sign-in of the `authenticatedPage` fixture and of `withUser()`, returns only once Markets has the answers to its two reads, the account's markets and its organizations ([a seed's sign-in ends the page's](#sharp-edges)).
+A move on the phase rail shows the new phase before it lands on that phase's page, so a spec that uses the rail again after a move first waits for the page the move lands on to draw: a menu opened in between is gone once the landing draws its page, as [`phase-state-machine.spec.ts`](../../../front-end/e2e/phase-state-machine.spec.ts)'s full walk waits for the door after publishing.
+`signInToMarkets`, the sign-in of the `authenticatedPage` fixture and of `withUser()`, returns only once Markets has the answers to its three reads, the account's markets, its organizations and the invitations waiting for it ([a seed's sign-in ends the page's](#sharp-edges)).
 A new page follows the existing ones (`LoginPage`, `MarketsPage`, `NewMarketPage`, `MarketSetupPage`, `ResultPage`, `OrganizationsPage`, `ManageMarketPage`); TESTING.md lists them all.
 `MarketSetupPage` holds more than the plan: the market's tabs and the phase rail are there too, because every market page stands in the same frame, and `publishResults`, which a walk into market days takes on either path.
 `VendorPage` is the one object for a market's vendor page, `/<slug>/vendor`, signed out and in, the application form on it included, with a refused save's box (`formError`) and the Reload a changed form offers there (`reloadButton`, T507); `MarketPage` is the one for the market page, `/<slug>`, its application call and its notice, and `PublicMapPage` for the map it shows while open.
@@ -125,7 +128,7 @@ The screen sweeps' tests are registered by `sweepTheScreens()`, so Playwright re
 So does `expectInside`, the window check of the phone journeys ([`helpers/phoneWindow.ts`](../../../front-end/e2e/helpers/phoneWindow.ts)), since a box read in a slide's last frames stands a fraction of a thousandth of a pixel past where it rests, enough to fail an exact comparison with the window's edge.
 The same fixture hides the Vue DevTools floating panel (`#__vue-devtools-container__`) that the dev server injects, in every tab of its context: it overlays the app and intercepts clicks aimed at it, so a test failed on a click that hit that button instead of its own target.
 A context a test opens itself with `browser.newContext()` is outside the fixture, so it calls [`hideDevToolsPanel`](../../../front-end/e2e/helpers/hideDevToolsPanel.ts), as `withUser()` does: a click there may otherwise wait on the panel until the test times out, as the vendor's Send code did on the Google Form market's page.
-With `TEST_MAP_OUT` set to a directory, as CI's shards set it on a push to `dev` alone, `test` also records what each test's pages loaded and called and the API calls the Node helpers made for it, each worker to a file of its own there, for [the test map](the-test-map.md) ([`helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts)); with it unset, no fixture of it is added.
+With `TEST_MAP_OUT` set to a directory, as CI's shards set it on [the nightly Test run](ci-and-the-gate.md#the-nightly-test-map) alone, or one started by hand, `test` also records what each test's pages loaded and called and the API calls the Node helpers made for it, each worker to a file of its own there, for [the test map](the-test-map.md) ([`helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts)); with it unset, no fixture of it is added.
 
 ## Opening a market, and shelling into Mongo
 
@@ -161,7 +164,7 @@ A `csv` market enters `applications` only holding an application, so a spec that
 
 **Market dates are calendar days, not instants**: a stored `YYYY-MM-DD` renders as the same day for every viewer, wherever they are.
 [`getFormattedDate`](../../../front-end/src/utils/utils.ts) formats with pure UTC arithmetic; never parse a market date through `new Date()` with an offset.
-[`date-display-timezone.spec.ts`](../../../front-end/e2e/date-display-timezone.spec.ts) pins it in Honolulu, Los Angeles and Tokyo through Playwright's `timezoneId`.
+[`date-display-timezone.spec.ts`](../../../front-end/e2e/date-display-timezone.spec.ts) pins it in Honolulu and Tokyo, one zone each side of UTC, through Playwright's `timezoneId`; a zone at a fixed offset between them fails only as one of the two does; neither changes its offset, so daylight saving is [`utils.test.ts`](../../../front-end/src/__tests__/utils.test.ts)'s, which loops its zones, `America/Anchorage` and `America/Los_Angeles` among them, over the formatters themselves.
 
 ## Specs that need the stack to themselves
 
@@ -181,7 +184,8 @@ Only the shard script keeps the list's files apart: a plain `npx playwright test
 That, the self-signed certificate and the other suite-wide traps are TESTING.md's [testing gotchas](../../TESTING.md#testing-gotchas).
 
 **Applicant sign-in is rate limited** ([sign-in is bounded](../../business/rules/a-vendor-signs-in-before-applying.md#sign-in-is-bounded)): an address is sent at most five codes per 15 minutes and may try ten, and a caller 300 of each, which the whole run shares, both passes.
-[`global-setup.ts`](../../../front-end/e2e/global-setup.ts) clears the counters at the start of every run; a spec that signs the same address in more than that within one run trips the limit, so a spec that spends a code's five tries uses an address of its own.
+[`global-setup.ts`](../../../front-end/e2e/global-setup.ts) clears the counters at the start of every run; a spec that signs the same address in more than that within one run trips the limit.
+CI retries a failed test twice in the same run, on the same counters, so a constant address its tests ask a code for twice a pass is refused on its second retry; a spec like that takes addresses of its own from `anApplicantEmail()` ([`seedApplicantMarket.ts`](../../../front-end/e2e/helpers/seedApplicantMarket.ts)).
 **The organizer's password and code sign-ins are rate limited too** ([the sign-in is bounded](../data/users-and-email.md#the-sign-in-is-bounded)): ten tries per address per 15 minutes on each, and fifty per caller on the password, sixty on the code.
 A try that signs in takes its count back, so the suite's hundreds of fixture sign-ins cost nothing; wrong passwords and codes share the caller's fifty and sixty across the whole run, both passes, so a spec that goes past a limit, or tries many wrong ones, clears the counters in its `finally` (`db.sign_in_attempts.deleteMany({})`), as `the-sign-in-says-what-to-do-next.spec.ts` does.
 Asking for an organizer's code, a reset link or a verification link, and signing up, take nothing back: five of each per address and thirty per caller per 15 minutes, so a spec that goes past one clears the counters in its `finally` too.
@@ -250,7 +254,7 @@ Note `uptime` before and during each run in the report, and report a run that ra
 
 **A cold stack**, for a flake seen on a stack's first spec: stop the worktree's stack and start it again (a team worker with `team-stack stop` and `team-stack up`), then run the spec as the first thing after it is up.
 
-**The run.** From `front-end/`, `npx playwright test <files> --retries=0 --repeat-each=<k> --output=<a new directory>`, with `<k>` 20 for a single test or file; a fresh `--output` per run keeps each run's traces apart, since a rerun empties the last one's.
+**The run.** From `front-end/`, `npx playwright test <files> --retries=0 --repeat-each=<k> --output=<a new directory>`, with `<k>` 20 for a single test or file; a fresh `--output` per run keeps each run's traces apart, since a rerun empties the last one's, and holds only the failed attempts' output, since a local run removes a passing attempt's ([when a test fails](../../TESTING.md#when-a-test-fails)).
 Before a fix the run must fail at least once; one that does not fail in 20 repeats under load, and 3 cold starts where a cold stack applies, is reported with what was tried, not fixed and not called fixed.
 After the fix the same run passes 30 of 30 under the same load.
 

@@ -17,14 +17,6 @@ import { PHONE } from './helpers/screens';
  */
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CORPUS = join(HERE, '..', '..', 'back-end', 'tests', 'test_data', 'google_forms');
-const FIXTURES: Record<string, number> = {
-  'days-as-one-question': 2023,
-  'four-day-grid': 2024,
-  'no-timestamp': 2025,
-  'five-day-grid': 2025,
-  'team-status-column': 2026,
-};
-
 /** The ledger's rows, from the file itself: a run of bracketed columns under one stem is one. */
 function expectedRows(file: string): number {
   const text = readFileSync(join(CORPUS, `${file}.csv`), 'utf8');
@@ -112,85 +104,90 @@ test.describe('What the start says it does', () => {
 });
 
 test.describe('Draft this market from a Google Form', () => {
-  for (const [file, year] of Object.entries(FIXTURES)) {
-    test(`${file}: the ledger shows every column once, and nothing is written`, async ({
-      authenticatedPage: page,
+  // One export walks the page here: team-status-column, the widest, with a grid and the team's own
+  // status column, from upload through the ledger to a Cancel that writes nothing. Every export's
+  // columns, grids and year are the back end's (test_csv_proposal.py, test_csv_proposal_plan.py),
+  // and the ledger's rows and count to check csvProposal.test.ts's.
+  test('team-status-column: the ledger shows every column once, and nothing is written', async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    const file = 'team-status-column';
+    const { marketId } = await seedDraftMarket(
       request,
-    }) => {
-      const { marketId } = await seedDraftMarket(
-        request,
-        BACKEND_URL,
-        TEST_USER.email,
-        TEST_USER.password,
-      );
-      const before = await marketState(request, marketId);
-      const flow = new StartFromCsvPage(page);
-      await flow.open(marketId);
-      await flow.chooseFile(join(CORPUS, `${file}.csv`));
+      BACKEND_URL,
+      TEST_USER.email,
+      TEST_USER.password,
+    );
+    const before = await marketState(request, marketId);
+    const flow = new StartFromCsvPage(page);
+    await flow.open(marketId);
+    await flow.chooseFile(join(CORPUS, `${file}.csv`));
 
-      await expect(flow.yearDialog).toBeVisible();
-      await expect(flow.yearInput).toHaveValue(String(year));
-      await flow.answerYear();
+    await expect(flow.yearDialog).toBeVisible();
+    await expect(flow.yearInput).toHaveValue('2026');
+    await flow.answerYear();
 
-      await expect(flow.ledger).toBeVisible();
-      await expect(flow.rows).toHaveCount(expectedRows(file));
-      const planChecked = await page
-        .locator('[data-testid="proposal-plan-ceiling"].checking')
-        .count();
-      await expect(flow.toCheck).toHaveText(String((await flow.checkedRows.count()) + planChecked));
+    await expect(flow.ledger).toBeVisible();
+    await expect(flow.rows).toHaveCount(expectedRows(file));
+    const planChecked = await page
+      .locator('[data-testid="proposal-plan-ceiling"].checking')
+      .count();
+    await expect(flow.toCheck).toHaveText(String((await flow.checkedRows.count()) + planChecked));
 
-      await flow.cancel.click();
-      await expect(page).toHaveURL(marketSetupPath(marketId));
-      expect(await marketState(request, marketId)).toBe(before);
-    });
-  }
+    await flow.cancel.click();
+    await expect(page).toHaveURL(marketSetupPath(marketId));
+    expect(await marketState(request, marketId)).toBe(before);
+  });
 
   // Three of the five exports never asked how many days an applicant wants (bug 24). They used to
-  // stop at the mapping with "Still unmapped: Number of dates you want" and no way through.
-  for (const file of ['days-as-one-question', 'four-day-grid', 'no-timestamp']) {
-    test(`${file}: a form that never asked how many days is imported with no personal limit`, async ({
-      authenticatedPage: page,
+  // stop at the mapping with "Still unmapped: Number of dates you want" and no way through. One of
+  // them walks the page here, from start to a stored null limit: days-as-one-question, whose
+  // proposal's wording test_csv_proposal.py reads. That each of the three, started and imported,
+  // stores every application with no limit is test_csv_start.py's.
+  test('days-as-one-question: a form that never asked how many days is imported with no personal limit', async ({
+    authenticatedPage: page,
+    request,
+  }) => {
+    const file = 'days-as-one-question';
+    const { marketId } = await seedDraftMarket(
       request,
-    }) => {
-      const { marketId } = await seedDraftMarket(
-        request,
-        BACKEND_URL,
-        TEST_USER.email,
-        TEST_USER.password,
-      );
-      const flow = new StartFromCsvPage(page);
-      await flow.open(marketId);
-      await flow.chooseFile(join(CORPUS, `${file}.csv`));
-      await flow.answerYear(UPCOMING_YEAR[file]);
+      BACKEND_URL,
+      TEST_USER.email,
+      TEST_USER.password,
+    );
+    const flow = new StartFromCsvPage(page);
+    await flow.open(marketId);
+    await flow.chooseFile(join(CORPUS, `${file}.csv`));
+    await flow.answerYear(UPCOMING_YEAR[file]);
 
-      // Said on the proposal, where the organizer decides - not discovered at the import.
-      const limit = flow.notAsked.filter({ hasText: 'Number of dates you want' });
-      await expect(limit).toContainText('No personal limit');
-      await page.getByTestId('proposal-confirm').click();
-      await expect(page).toHaveURL(marketSetupPath(marketId, 'form'));
+    // Said on the proposal, where the organizer decides - not discovered at the import.
+    const limit = flow.notAsked.filter({ hasText: 'Number of dates you want' });
+    await expect(limit).toContainText('No personal limit');
+    await page.getByTestId('proposal-confirm').click();
+    await expect(page).toHaveURL(marketSetupPath(marketId, 'form'));
 
-      await finishStartedPlan(request, BACKEND_URL, TEST_USER.email, marketId);
-      await decideReviewSetup(request, BACKEND_URL, marketId);
-      const importer = new CsvImportPage(page);
-      await importer.open({ id: marketId });
-      await importer.chooseFile(readFileSync(join(CORPUS, `${file}.csv`), 'utf8'));
-      await expect(importer.allMapped).toBeVisible();
-      await importer.clickPreview();
-      await expect(importer.previewCounts).toBeVisible();
-      const counts = (await importer.previewCounts.innerText()).match(/(\d+) of (\d+) rows/);
-      const imported = Number(counts![1]);
-      expect(imported).toBeGreaterThan(0);
+    await finishStartedPlan(request, BACKEND_URL, TEST_USER.email, marketId);
+    await decideReviewSetup(request, BACKEND_URL, marketId);
+    const importer = new CsvImportPage(page);
+    await importer.open({ id: marketId });
+    await importer.chooseFile(readFileSync(join(CORPUS, `${file}.csv`), 'utf8'));
+    await expect(importer.allMapped).toBeVisible();
+    await importer.clickPreview();
+    await expect(importer.previewCounts).toBeVisible();
+    const counts = (await importer.previewCounts.innerText()).match(/(\d+) of (\d+) rows/);
+    const imported = Number(counts![1]);
+    expect(imported).toBeGreaterThan(0);
 
-      await importer.clickConfirm();
-      await expect(importer.resultSummary).toContainText(`Imported ${imported} new applications`);
-      const res = await request.get(`${BACKEND_URL}/markets/${marketId}/applications`);
-      const { applications } = (await res.json()) as {
-        applications: { formData: Record<string, unknown> }[];
-      };
-      expect(applications).toHaveLength(imported);
-      expect(applications.every((a) => a.formData.essential_max_dates == null)).toBe(true);
-    });
-  }
+    await importer.clickConfirm();
+    await expect(importer.resultSummary).toContainText(`Imported ${imported} new applications`);
+    const res = await request.get(`${BACKEND_URL}/markets/${marketId}/applications`);
+    const { applications } = (await res.json()) as {
+      applications: { formData: Record<string, unknown> }[];
+    };
+    expect(applications).toHaveLength(imported);
+    expect(applications.every((a) => a.formData.essential_max_dates == null)).toBe(true);
+  });
 
   test('keeping every answer of a question keeps every applicant who gave one', async ({
     authenticatedPage: page,
@@ -379,8 +376,12 @@ test.describe('Draft this market from a Google Form', () => {
       clubs.getByTestId('proposal-check').filter({ hasText: 'Could allow several answers' }),
     ).toHaveCount(1);
     await clubs.getByTestId('proposal-row-type').selectOption('multi_select');
-    await expect(clubs.getByTestId('proposal-check')).toHaveCount(0);
-    await expect(flow.toCheck).toHaveText(String(toCheck - 2));
+    // The options inside the answers have one-offs of their own, which the server checks for that
+    // reading: the row stays one to check, for them alone.
+    await expect(clubs.getByTestId('proposal-check')).toHaveText([
+      'Has options few applicants chose',
+    ]);
+    await expect(flow.toCheck).toHaveText(String(toCheck - 1));
 
     // A rare option kept.
     const student = flow.row('Are you an Example College student, alum or staff member?');
@@ -388,7 +389,27 @@ test.describe('Draft this market from a Google Form', () => {
     await rare.locator('input').check();
     await expect(rare.locator('input')).toBeChecked();
     await expect(student.getByTestId('proposal-check')).toHaveCount(0);
-    await expect(flow.toCheck).toHaveText(String(toCheck - 3));
+    await expect(flow.toCheck).toHaveText(String(toCheck - 2));
+
+    // A question read as words turned into one choice gains the checks its options earn, and turned
+    // back, loses them.
+    const portfolio = flow.row('Please share a link to your portfolio');
+    // The yellow edge is a painted border, so only a browser can say it shows.
+    const edge = portfolio.locator('td').first();
+    const NO_EDGE = 'rgba(0, 0, 0, 0)';
+    await expect(portfolio.getByTestId('proposal-check')).toHaveCount(0);
+    await expect(edge).toHaveCSS('border-left-color', NO_EDGE);
+    await portfolio.getByTestId('proposal-row-type').selectOption('select');
+    await expect(portfolio.getByTestId('proposal-check')).toHaveText([
+      'Has options few applicants chose',
+      'Has an option that names someone',
+    ]);
+    await expect(edge).not.toHaveCSS('border-left-color', NO_EDGE);
+    await expect(flow.toCheck).toHaveText(String(toCheck - 1));
+    await portfolio.getByTestId('proposal-row-type').selectOption('text');
+    await expect(portfolio.getByTestId('proposal-check')).toHaveCount(0);
+    await expect(edge).toHaveCSS('border-left-color', NO_EDGE);
+    await expect(flow.toCheck).toHaveText(String(toCheck - 2));
   });
 
   test('the seam: confirm, add a left-out column, and the import of the same file asks nothing', async ({

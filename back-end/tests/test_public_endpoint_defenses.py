@@ -54,7 +54,7 @@ from utils.email import (
 )
 from utils.env_file import BACK_END_DIR
 from utils.proxy import TRUSTED_PROXY_HOPS_VAR
-from utils.secret_key import SECRET_KEY_VAR
+from utils.secret_key import ORGANIZER_SESSIONS, SECRET_KEY_VAR, VENDOR_TOKENS, derived_key
 from utils.session_storage import IN_COOKIE, ON_DISK, SESSION_TYPE_VAR
 
 LOCAL_DEV_TEMPLATE = BACK_END_DIR / ".env.example"
@@ -290,7 +290,10 @@ def test_configuring_is_what_installs_the_policy(configured):
     app_module.configure_public_endpoint_defenses(app, defenses)
 
     assert len(app.after_request_funcs.get(None, [])) == 1
-    assert app.config["SECRET_KEY"] == A_REAL_SECRET
+    # The organizer's session, and Flask-Login's remember cookie with it, signs with its own key,
+    # derived from the secret, never the secret a vendor's token key comes from as it is.
+    assert app.config["SECRET_KEY"] == derived_key(A_REAL_SECRET, ORGANIZER_SESSIONS)
+    assert app.config["SECRET_KEY"] not in (A_REAL_SECRET, derived_key(A_REAL_SECRET, VENDOR_TOKENS))
     # On disk, as declared: cachelib's file cache is flask-session's store for it.
     assert type(app.session_interface).__name__ == "CacheLibSessionInterface"
     assert isinstance(app.wsgi_app, ProxyFix), (

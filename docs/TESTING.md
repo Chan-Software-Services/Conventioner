@@ -6,7 +6,7 @@ describes:
   - scripts/seed_fixture.sh
   - scripts/lib/stack-identity.sh
   - scripts/nm-test.sh
-verified: 2026-11-14
+verified: 2026-11-24
 sources:
   - E34/F03/S02
   - E35/F02/S01
@@ -22,6 +22,7 @@ sources:
   - T381
   - T375
   - T349
+  - T510
 ---
 
 # Testing Conventioner
@@ -29,7 +30,7 @@ sources:
 How to run each suite, and what each covers.
 The testing nodes of the [knowledge graph](implementation/testing/README.md) hold the sharp edges of each; the [Google Form corpus](../back-end/tests/test_data/README.md) is the suite's realistic data.
 The sharp edges are in the testing nodes: [E2E patterns](implementation/testing/e2e-patterns.md), [E2E seeds](implementation/testing/e2e-seeds.md), [the market journey spec](implementation/testing/the-market-journey-spec.md), [the layout's E2E](implementation/testing/floorplan-e2e.md), [CI and the gate](implementation/testing/ci-and-the-gate.md), [the assignment behaviour suite](implementation/testing/assignment-behaviour-suite.md) and [the real-MongoDB suite](implementation/testing/real-mongo-suite.md).
-The stack is seeded by [`scripts/seed_fixture.sh`](../scripts/seed_fixture.sh), Playwright is configured in [`front-end/playwright.config.ts`](../front-end/playwright.config.ts), and [`scripts/nm-test.sh`](../scripts/nm-test.sh) runs every suite on a stack of its own; the no-mistakes gate runs only its real-data checks (`--real-data-only`).
+The stack is seeded by [`scripts/seed_fixture.sh`](../scripts/seed_fixture.sh), Playwright is configured in [`front-end/playwright.config.ts`](../front-end/playwright.config.ts), and [`scripts/nm-test.sh`](../scripts/nm-test.sh) runs every suite on a stack of its own; the no-mistakes gate runs only its real-data checks (`--real-data-only`) and [a lint of the front-end, docs and root Markdown files a branch changes](implementation/testing/ci-and-the-gate.md#the-gates-lint-step).
 Before a merge, the suites run only in CI's required jobs: Playwright on the laptop was most of every gate run and the heaviest load the machine saw, and CI ran every suite again anyway ([CI and the gate](implementation/testing/ci-and-the-gate.md#the-no-mistakes-gate)).
 
 ## What a builder runs
@@ -41,7 +42,7 @@ Before it delivers, a builder runs only the tests its change reaches:
 - **E2E**: on the worktree's stack (`scripts/th-compose.sh up -d` then `./scripts/seed_fixture.sh`, a team worker's with `team-stack up` then `team-stack seed`), `python3 scripts/affected-specs.py --run` from the worktree root.
 - **The knowledge graph**: `python3 scripts/knowledge_graph.py check` when you changed any Markdown.
 
-It never runs a whole suite, which CI runs on every pull request's head and every push to `dev` and `main` ([CI and the gate](implementation/testing/ci-and-the-gate.md)).
+It never runs a whole suite, which CI runs on every pull request's head, every merge queue trial commit and every push to `main`, and on a push to `dev` only when the queue did not test it ([CI and the gate](implementation/testing/ci-and-the-gate.md#which-suite-a-run-runs)).
 That is Daniel's rule (2026-11-15): a whole suite run on the machine every worktree shares repeats what CI runs anyway, beside every other task's work.
 The E2E specs are chosen by `affected-specs.py`, since the whole suite takes about an hour and a half locally, while CI's [test map](implementation/testing/the-test-map.md#choosing-a-builders-specs) says which specs a change reaches, and the script runs them by score up to 30 of CI's minutes, a spec the change edits whatever the cap, and leaves the rest to CI's full run.
 
@@ -174,6 +175,8 @@ So a read that fetches too little, or a write the server would apply otherwise, 
 Shared module stubs live in `back-end/tests/conftest.py`, which also points the `.env` loader at a path that does not exist.
 The suite reads no `.env`, so a stale one on your machine cannot change its result.
 It turns `ALLOW_INSECURE_LOCAL_DEV` on unless the shell set it, and clears `DISABLE_CAPTCHA`, `DISABLE_EMAIL` and `DISCORD_FAKE` before any test runs, so a shell that exported a stack's switches cannot change its result either; a test that needs a switch sets it itself, and `test_the_suite_reads_no_switch_from_its_shell.py` keeps that true.
+It clears `MONGODB_URI`, `MONGODB_HOST` and the other `MONGODB_*` variables the back end connects by, and names a port nothing listens on in their place, so a test that reaches a collection no fake stands in for fails at server selection instead of reaching the database a shell exported; a test that needs one sets it itself, and `test_the_suite_reads_no_database_from_its_shell.py` keeps that true.
+The real-MongoDB suite below reads `REAL_MONGODB_URI` instead, which this leaves alone.
 It hashes every password at bcrypt's lowest cost, 4, where the app hashes at flask-bcrypt's default of 12, since a hash at 12 takes about 0.16 s and the tests that sign in make many: `back-end/tests/conftest.py` lowers it on flask-bcrypt's `Bcrypt` class before any module makes its own, so it holds for the app's and `create_account.py`'s, and for the stand-in hash an address with no account is checked against; `create_test_user.py` hashes its fixture accounts at 4 itself.
 `test_the_app_hashes_at_bcrypts_full_cost.py` holds the app and `create_account.py` to 12 outside that lowering, in a fresh interpreter, and the app's config to no `BCRYPT_LOG_ROUNDS`.
 
@@ -320,11 +323,11 @@ none exist). The applicant-facing suites cover a market whose vendors apply on i
 `applicant.spec.ts` (the public applicant login's anti-oracle behaviour: identical answers for
 known and unknown emails, an identical 401 whatever the failure, and single-use codes),
 `essential-fields.spec.ts` (the essential questions as an applicant answers them), and
-`intake-mode.spec.ts` (a CSV market's applicant endpoints answering exactly as a market that does
-not exist - the gated and absent renders are asserted to be identical, rather than each alone).
+`intake-mode.spec.ts` (a CSV market's applicant pages answering exactly as a market that does
+not exist - the gated and absent addresses are asserted to land alike, rather than each alone).
 `section-preference.spec.ts` covers a vendor being placed in the section they ranked first, and
 `date-display-timezone.spec.ts` pins a market date rendering as the same calendar day in
-Honolulu, Los Angeles and Tokyo.
+Honolulu and Tokyo, one zone each side of UTC.
 The application-form suite (`application-form.spec.ts`) drives the
 market-setup Application Form tab: an organizer builds a form (keys auto-slugged from the
 labels) on a market created through the API path, watches the live preview, saves it, and
@@ -351,7 +354,7 @@ frontend port via `stack().frontendPort`).
 The config has two projects: `chromium-serial`, the spec files of the serial list (`front-end/e2e/serialSpecs.ts`), which need the stack to themselves, at one worker, and `chromium`, every other spec file.
 Its `workers` is `E2E_WORKERS`, one when it is unset or not a positive integer.
 `E2E_WORKERS` is for CI's shard script (`front-end/scripts/e2e-shards.ts`), which runs the serial project first and alone, then the other at the config's workers, two on CI's shards ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)); a plain `npx playwright test` with `E2E_WORKERS` above one would run the serial files beside the rest.
-A local run, `scripts/nm-test.sh` and CI's `e2e-repeat` set none, so they run at one worker, the serial files among the rest.
+A local run and `scripts/nm-test.sh` set none, so they run at one worker, the serial files among the rest.
 
 **Prerequisite**: Docker stack running with seeded test users.
 Email: `e2e@example.com` (default, change via `TEST_EMAIL` env var when seeding),
@@ -359,10 +362,13 @@ plus the organization-less user `e2e-noorg@example.com` (change via `NO_ORG_EMAI
 
 ### When a test fails
 
-Every attempt that fails keeps its Playwright trace, and so does every retry, passing or not (`trace: 'retain-on-failure-and-retries'`), so a local run with no retries keeps one too.
+Every attempt that fails keeps its Playwright trace, and on CI so does every retry, passing or not (`trace: 'retain-on-failure-and-retries'`), so a local run with no retries keeps one too.
+A local run keeps an attempt's output directory only when the attempt fails (`preserveOutput: 'failures-only'` off CI), so a passing attempt there leaves nothing behind: neither a passing retry's trace nor the screenshots a spec takes itself with `testInfo.outputPath()`; CI keeps every attempt's (`'always'`).
+To keep every attempt's output on a local run, set `CI=1`, which also turns on CI's retries, `forbidOnly`, `failOnFlakyTests` and its reporters.
+Warning: `CI=1` also turns off the suite's refusal to guess a stack (`e2e/helpers/stack.ts`), so with no treehouse slot and no exported stack the run dials the primary stack's ports: set it only where a slot or the `th-compose.sh` exports name the stack, or in the primary checkout for its own stack.
 A failed attempt's trace is `front-end/test-results/<test>/trace.zip`, and a retry's is in the same name's directory with `-retry1` or `-retry2` after it; a page of a second user's context (`withUser()`) is in the same trace as the test's own page.
-A failed attempt also keeps its video (`video.webm`) and its final screenshot (`test-failed-1.png`) beside its trace, and an attempt that passes keeps neither (`video: 'retain-on-failure'`, `screenshot: 'only-on-failure'`), so a flaky test's failed first attempt has both while its passing retry has only its trace.
-Open one with `npx playwright show-trace <path>` from `front-end/`, or from the HTML report (`npx playwright show-report`), which lists every attempt with its own trace.
+A failed attempt also keeps its video (`video.webm`) and its final screenshot (`test-failed-1.png`) beside its trace, and an attempt that passes keeps neither (`video: 'retain-on-failure'`, `screenshot: 'only-on-failure'`), so on CI a flaky test's failed first attempt has both while its passing retry has only its trace.
+Open one with `npx playwright show-trace <path>` from `front-end/`, or from the HTML report (`npx playwright show-report`), which lists every attempt; on CI each has its own trace there, while on a local run only a failed attempt's opens, since a passing retry's trace file was removed when the retry passed.
 On CI a failed shard uploads `front-end/playwright-report/` and `front-end/test-results/` as the artifact `playwright-artifacts-shard-<n>`, kept 7 days; a flaky test fails its shard, so its failing attempt's trace is there too ([CI and the gate](implementation/testing/ci-and-the-gate.md#ci)).
 A shard runs its hand in two passes, so in that artifact each pass's report and traces are under its name: `playwright-report/serial/` and `test-results/serial/`, `playwright-report/parallel/` and `test-results/parallel/`.
 A rerun empties `test-results/` before it starts, so read or copy a failure's output first, or give the rerun an output directory of its own with `--output=<a new directory>`.
@@ -427,7 +433,7 @@ still reaches the back-end where the `DISABLE_CAPTCHA` bypass applies.
 
 Similarly, set `DISABLE_EMAIL=true` (or `1`) so the Resend-backed
 `send_verification_email`, `send_account_exists_email`, `send_password_reset_email`,
-and `send_otp_email` helpers skip the actual send and report success. This is also
+`send_otp_email` and `send_invitation_email` helpers skip the actual send and report success. This is also
 honored only under `ALLOW_INSECURE_LOCAL_DEV`, defaults OFF in the back end, and is forwarded by
 `docker-compose.yml`; the CI e2e job and `scripts/nm-test.sh` set it, and a worktree's
 stack (`scripts/th-compose.sh`) defaults it to `true` (pass `DISABLE_EMAIL=false` to send).
@@ -453,7 +459,7 @@ Connecting through the card skips Discord's approval screen under it, and connec
 
 ## CI Pipeline
 
-Pushes and PRs to `main` or `dev`, and a merge queue's trial commit for `dev`, run `.github/workflows/test.yml` and CodeQL's `.github/workflows/codeql.yml`, which also runs weekly on `dev`.
+Pushes and PRs to `main` or `dev` and a merge queue's trial commit for `dev` run `.github/workflows/test.yml` and CodeQL's `.github/workflows/codeql.yml`, which also runs weekly on `dev`; `test.yml` also runs nightly on `dev`'s tip, or when started by hand, to make [the test map](implementation/testing/the-test-map.md).
 [CI and the gate](implementation/testing/ci-and-the-gate.md) says what each job runs, which checks
 the rules require (eleven on `dev`, CodeQL's three `Analyze (<language>)` among them, and six on `main`, `real-data-and-workflows` on both), why a flaky test fails the build, and what the no-mistakes gate
 runs through `scripts/nm-test.sh` (the real-data checks alone, since CI runs every suite before a merge).
