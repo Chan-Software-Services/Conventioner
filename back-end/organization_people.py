@@ -499,15 +499,17 @@ def place_by_invitation(invitation: Dict[str, Any], invitee: Any) -> Dict[str, A
     adding them (``TABLE``). The first three refused end the invitation and answer it ended; the
     table refusing the invitee (the owner, an admin, a member invited as a member) ends it and
     says they are already in it. A member accepting an invitation to be an admin becomes one, as
-    "Add admin" of a member does, recorded as their place changed. The write is ``_change``'s,
-    holding both keys as read, and records the inviter's giving it, by an invitation accepted;
-    only then is the invitation ended and its limit counts taken back, so a cut between the write
-    and the delete leaves an invitation the next accept ends as already in it.
+    "Add admin" of a member does, recorded as their place changed. Then the invitation is
+    claimed as read (``Invitations.claim``): whichever came first wins, so one withdrawn, declined
+    or sent again to another place meanwhile answers ended and gives nothing. Only then is the
+    write made, ``_change``'s, holding both keys as read, recording the inviter's giving it, by an
+    invitation accepted, and its limit counts taken back. A cut between the claim and the write
+    loses the invitation, and the person is invited again.
 
     Raises:
         Invitations.InvitationEnded: it can no longer be accepted, and is ended.
         OrganizationChanged: the inviter's place or the invitee's moved since the read; the
-            invitation is kept, so accepting again judges again.
+            invitation is put back, so accepting again judges again.
     """
     org = organizations_collection.find_one(live({"id": invitation["target_id"]}))
     if not org:
@@ -532,12 +534,16 @@ def place_by_invitation(invitation: Dict[str, Any], invitee: Any) -> Dict[str, A
         Invitations.end(invitation)
         raise BadRequestError(ALREADY_IN_IT) from None
 
+    if not Invitations.claim(invitation):
+        raise Invitations.InvitationEnded()
     try:
         _change(org, event, inviter, invitee.id, inviter.email, by_invitation=True)
+    except OrganizationChanged:
+        Invitations.put_back(invitation)
+        raise
     except NotFoundError:
         # The organization went between the read and the write.
-        raise _ended(invitation) from None
-    Invitations.end(invitation)
+        raise Invitations.InvitationEnded() from None
     Invitations.take_back(invitation)
     return {"kind": Invitations.ORGANIZATION, "targetId": org["id"],
             "targetName": org.get("name") or "", "role": place}

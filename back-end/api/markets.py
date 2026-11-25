@@ -2458,15 +2458,17 @@ def give_role_by_invitation(invitation: Dict[str, Any], invitee: Any) -> Dict[st
     live, the inviter's account still the one that sent it, the row that gives the role asked of
     the inviter again, and the invitee holding no role here yet. The first three refused end the
     invitation and answer it ended; the last ends it and says they already have a role. Then the
-    role is written holding the invitee's key absent and the inviter's role as read
+    invitation is claimed as read (``Invitations.claim``): whichever came first wins, so one
+    withdrawn, declined or sent again to another role meanwhile answers ended and gives nothing.
+    Only then is the role written holding the invitee's key absent and the inviter's role as read
     (``_write_role``), recorded through the inviter's asking as their giving it, by an invitation
-    accepted, and only then is the invitation ended and its limit counts taken back: a cut between
-    the write and the delete leaves an invitation the next accept ends as already on the market.
+    accepted, and its limit counts taken back. A cut between the claim and the write loses the
+    invitation, and the person is invited again.
 
     Raises:
         Invitations.InvitationEnded: it can no longer be accepted, and is ended.
         MarketChanged: the inviter's role or the invitee's moved since the read; the invitation is
-            kept, so accepting again judges again.
+            put back, so accepting again judges again.
     """
     context = load_market_context(invitation["target_id"])
     if context is None or context.market is None:
@@ -2488,17 +2490,21 @@ def give_role_by_invitation(invitation: Dict[str, Any], invitee: Any) -> Dict[st
         Invitations.end(invitation)
         raise BadRequestError(ALREADY_ON_THE_MARKET)
 
+    if not Invitations.claim(invitation):
+        raise Invitations.InvitationEnded()
     try:
         _write_role(market, {"$set": {_role_key(invitee.id): role.value}}, invitee.id,
                     inviter.email, owner_count_read=False)
+    except MarketChanged:
+        Invitations.put_back(invitation)
+        raise
     except MarketNotFoundError:
-        raise _ended(invitation) from None
+        raise Invitations.InvitationEnded() from None
     asked.record(
         kind=History.ROLE_GIVEN, subject={"user_id": invitee.id, "email": invitee.email},
         detail=lambda: {**History.changes({"role": None}, {"role": role.value}),
                         "by_invitation": True},
     )
-    Invitations.end(invitation)
     Invitations.take_back(invitation)
     return {"kind": Invitations.MARKET, "targetId": market.id, "targetName": market.name,
             "role": role.value}

@@ -10,6 +10,7 @@ gone answers one sentence that it has ended.
 
 Pinned through the test client against the real app, over collections that apply the writes.
 """
+import threading
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -425,30 +426,42 @@ class TestAnInvitationThatHasEnded:
         assert invitations.documents == []
         assert kinds(history) == [History.INVITED]
 
-    def test_a_role_written_before_its_invitation_was_ended_ends_it_on_the_next_accept(
+    def test_a_cut_between_the_claim_and_the_write_loses_the_invitation(
         self, monkeypatch, market, invitations, history,
     ):
-        """A cut between the role's write and the invitation's delete loses neither."""
+        """The claim comes first: a cut before the role's write leaves neither, and the person is
+        invited again."""
         invitation = invite(OWNER)
+        write_role = MarketsApi._write_role
 
-        end, cutting = Invitations.end, [True]
-
-        def cut(invitation):
-            if cutting[0]:
-                raise RuntimeError("the request was cut here")
-            return end(invitation)
-        monkeypatch.setattr(Invitations, "end", cut)
+        def cut(*_args, **_kwargs):
+            raise RuntimeError("the request was cut here")
+        monkeypatch.setattr(MarketsApi, "_write_role", cut)
         assert accept(invitation).status_code == 500
-        cutting[0] = False
-        assert market.docs[0]["roles"][INVITEE.id] == "editor"
-        assert len(invitations.documents) == 1
+        monkeypatch.setattr(MarketsApi, "_write_role", write_role)
+        assert INVITEE.id not in market.docs[0]["roles"]
+        assert invitations.documents == []
 
         response = accept(invitation)
 
-        assert (response.status_code, response.get_json()) == (400, ALREADY_ON_IT)
-        assert market.docs[0]["roles"][INVITEE.id] == "editor"
-        assert invitations.documents == []
-        assert kinds(history) == [History.INVITED, History.ROLE_GIVEN]
+        assert (response.status_code, response.get_json()) == (404, ENDED)
+        assert INVITEE.id not in market.docs[0]["roles"]
+        assert kinds(history) == [History.INVITED]
+
+
+def landing_before_the_claim(monkeypatch, meanwhile):
+    """``meanwhile``, another request, lands once the accept has read the invitation and judged
+    it, before its claim. It runs on its own thread, as a request of its own: one made inside the
+    accept's would share its app context, and so its signed-in account."""
+    claim = Invitations.claim
+
+    def after_meanwhile(invitation):
+        monkeypatch.setattr(Invitations, "claim", claim)
+        other = threading.Thread(target=meanwhile)
+        other.start()
+        other.join()
+        return claim(invitation)
+    monkeypatch.setattr(Invitations, "claim", after_meanwhile)
 
 
 class TestAcceptingAndWithdrawing:
@@ -473,6 +486,45 @@ class TestAcceptingAndWithdrawing:
         assert kinds(history) == [History.INVITED, History.ROLE_GIVEN]
 
 
+class TestWhicheverCameFirstWins:
+    def test_a_withdrawal_meanwhile_gives_nothing(self, monkeypatch, market, invitations, history):
+        invitation = invite(OWNER)
+        landing_before_the_claim(monkeypatch, lambda: signed_in_as(ADMIN).delete(
+            f"/markets/{MARKET_ID}/invitations/{invitation}"))
+
+        response = accept(invitation)
+
+        assert (response.status_code, response.get_json()) == (404, ENDED)
+        assert INVITEE.id not in market.docs[0]["roles"]
+        assert invitations.documents == []
+        assert kinds(history) == [History.INVITED, History.INVITATION_WITHDRAWN]
+
+    def test_a_decline_meanwhile_gives_nothing(self, monkeypatch, market, invitations, history):
+        invitation = invite(OWNER)
+        landing_before_the_claim(monkeypatch, lambda: decline(invitation))
+
+        response = accept(invitation)
+
+        assert (response.status_code, response.get_json()) == (404, ENDED)
+        assert INVITEE.id not in market.docs[0]["roles"]
+        assert invitations.documents == []
+        assert kinds(history) == [History.INVITED, History.INVITATION_DECLINED]
+
+    def test_a_resend_to_another_role_meanwhile_gives_nothing_and_still_waits(
+        self, monkeypatch, market, invitations, history,
+    ):
+        invitation = invite(OWNER)
+        landing_before_the_claim(monkeypatch, lambda: invite(OWNER, role="viewer"))
+
+        response = accept(invitation)
+
+        assert (response.status_code, response.get_json()) == (404, ENDED)
+        assert INVITEE.id not in market.docs[0]["roles"]
+        assert [(doc["id"], doc["role"]) for doc in invitations.documents] == [
+            (invitation, "viewer")]
+        assert History.ROLE_GIVEN not in kinds(history)
+
+
 class TestAcceptingOnAMarketChanged:
     def test_a_role_change_between_the_read_and_the_write_keeps_the_invitation(
         self, monkeypatch, market, invitations, history,
@@ -493,6 +545,28 @@ class TestAcceptingOnAMarketChanged:
         assert INVITEE.id not in market.docs[0]["roles"]
         assert len(invitations.documents) == 1
         assert kinds(history) == [History.INVITED]
+
+    def test_the_invitation_put_back_is_judged_again_and_gives_the_role(
+        self, monkeypatch, market, invitations, history,
+    ):
+        invitation = invite(OWNER)
+        read = MarketsApi.load_market_context
+
+        def read_then_change(market_id):
+            monkeypatch.setattr(MarketsApi, "load_market_context", read)
+            context = read(market_id)
+            market.docs[0]["roles"].update({OWNER.id: "admin", ADMIN.id: "owner"})
+            return context
+        monkeypatch.setattr(MarketsApi, "load_market_context", read_then_change)
+        assert accept(invitation).status_code == 409
+        assert [doc["id"] for doc in invitations.documents] == [invitation]
+
+        response = accept(invitation)
+
+        assert response.status_code == 200, response.get_json()
+        assert market.docs[0]["roles"][INVITEE.id] == "editor"
+        assert invitations.documents == []
+        assert kinds(history) == [History.INVITED, History.ROLE_GIVEN]
 
 
 class TestDeclining:

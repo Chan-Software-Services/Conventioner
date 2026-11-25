@@ -9,6 +9,7 @@ accepted, and it takes the invitation's limit counts back.
 
 Pinned through the test client against the real app, over collections that apply the writes.
 """
+import threading
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -17,7 +18,6 @@ import pytest
 from conftest import (
     FakeOrganizations,
     FakeSlugMarketsCollection,
-    WriteCut,
     install_organizations,
     sessions_load_through_get_user,
     skip_without_real_dependencies,
@@ -328,26 +328,39 @@ class TestAlreadyInIt:
         assert (response.status_code, response.get_json()) == (400, ALREADY_IN_IT)
         assert invitations.documents == []
 
-    def test_a_cut_between_the_place_and_the_invitations_end_is_ended_by_the_next_accept(
-        self, organization, invitations, monkeypatch,
+    def test_a_cut_between_the_claim_and_the_place_loses_the_invitation(
+        self, organization, invitations, history,
     ):
+        """The claim comes first: a cut before the place's write leaves neither, and the person
+        is invited again."""
         invitation = invite(OWNER)
-        end = Invitations.end
-
-        def cut(_invitation):
-            raise WriteCut("the connection was lost before the invitation ended")
-        monkeypatch.setattr(Invitations, "end", cut)
+        organization.cut_at = 1
         assert accept(invitation).status_code == 500
-        monkeypatch.setattr(Invitations, "end", end)
+        organization.cut_at = None
 
-        assert organization.docs[0]["people"][INVITEE.id] == "member"
-        assert len(invitations.documents) == 1
+        assert INVITEE.id not in organization.docs[0]["people"]
+        assert invitations.documents == []
 
         response = accept(invitation)
 
-        assert (response.status_code, response.get_json()) == (400, ALREADY_IN_IT)
-        assert invitations.documents == []
-        assert organization.docs[0]["people"][INVITEE.id] == "member"
+        assert (response.status_code, response.get_json()) == (404, ENDED)
+        assert INVITEE.id not in organization.docs[0]["people"]
+        assert kinds(history) == [History.INVITED]
+
+
+def landing_before_the_claim(monkeypatch, meanwhile):
+    """``meanwhile``, another request, lands once the accept has read the invitation and judged
+    it, before its claim. It runs on its own thread, as a request of its own: one made inside the
+    accept's would share its app context, and so its signed-in account."""
+    claim = Invitations.claim
+
+    def after_meanwhile(invitation):
+        monkeypatch.setattr(Invitations, "claim", claim)
+        other = threading.Thread(target=meanwhile)
+        other.start()
+        other.join()
+        return claim(invitation)
+    monkeypatch.setattr(Invitations, "claim", after_meanwhile)
 
 
 class TestJudgedAgainAsTheInvitersAct:
@@ -446,6 +459,24 @@ class TestJudgedAgainAsTheInvitersAct:
         assert again.status_code == (404 if meanwhile == "the inviter's place" else 400)
         assert invitations.documents == []
 
+    def test_the_invitation_put_back_is_judged_again_and_gives_the_place(
+        self, organization, invitations, history,
+    ):
+        invitation = invite(ADMIN)
+
+        def handed_on():
+            organization.docs[0]["people"].update({OWNER.id: "admin", ADMIN.id: "owner"})
+        organization.before_write = handed_on
+        assert accept(invitation).status_code == 409
+        assert [doc["id"] for doc in invitations.documents] == [invitation]
+
+        response = accept(invitation)
+
+        assert response.status_code == 200, response.get_json()
+        assert organization.docs[0]["people"][INVITEE.id] == "member"
+        assert invitations.documents == []
+        assert kinds(history) == [History.INVITED, History.ROLE_GIVEN]
+
 
 class TestAcceptAndWithdrawal:
     def test_a_withdrawal_first_has_ended_it(self, organization, invitations):
@@ -465,6 +496,49 @@ class TestAcceptAndWithdrawal:
         assert (response.status_code, response.get_json()) == (
             404, {"error": "That invitation has already ended."})
         assert organization.docs[0]["people"][INVITEE.id] == "member"
+
+
+class TestWhicheverCameFirstWins:
+    def test_a_withdrawal_meanwhile_gives_nothing(
+        self, monkeypatch, organization, invitations, history,
+    ):
+        invitation = invite(OWNER)
+        landing_before_the_claim(monkeypatch, lambda: signed_in_as(OWNER).delete(
+            f"/organizations/{ORG_ID}/invitations/{invitation}"))
+
+        response = accept(invitation)
+
+        assert (response.status_code, response.get_json()) == (404, ENDED)
+        assert INVITEE.id not in organization.docs[0]["people"]
+        assert invitations.documents == []
+        assert kinds(history) == [History.INVITED, History.INVITATION_WITHDRAWN]
+
+    def test_a_decline_meanwhile_gives_nothing(
+        self, monkeypatch, organization, invitations, history,
+    ):
+        invitation = invite(OWNER)
+        landing_before_the_claim(monkeypatch, lambda: decline(invitation))
+
+        response = accept(invitation)
+
+        assert (response.status_code, response.get_json()) == (404, ENDED)
+        assert INVITEE.id not in organization.docs[0]["people"]
+        assert invitations.documents == []
+        assert kinds(history) == [History.INVITED, History.INVITATION_DECLINED]
+
+    def test_a_resend_to_another_place_meanwhile_gives_nothing_and_still_waits(
+        self, monkeypatch, organization, invitations, history,
+    ):
+        invitation = invite(OWNER)
+        landing_before_the_claim(monkeypatch, lambda: invite(OWNER, place="admin"))
+
+        response = accept(invitation)
+
+        assert (response.status_code, response.get_json()) == (404, ENDED)
+        assert INVITEE.id not in organization.docs[0]["people"]
+        assert [(doc["id"], doc["role"]) for doc in invitations.documents] == [
+            (invitation, "admin")]
+        assert History.ROLE_GIVEN not in kinds(history)
 
 
 class TestDeclining:

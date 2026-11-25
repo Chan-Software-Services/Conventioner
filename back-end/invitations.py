@@ -224,6 +224,34 @@ def end(invitation: Dict[str, Any]) -> bool:
         {"id": invitation["id"], "email": invitation["email"]}).deleted_count == 1
 
 
+def claim(invitation: Dict[str, Any]) -> bool:
+    """Take the invitation as it was read, in one step, before an accept gives what it offers;
+    whether it took one.
+
+    Its id, address, target and role as read, and still waiting: whichever came first wins, so a
+    withdrawal, a decline or a re-send to another role that landed meanwhile leaves nothing to take,
+    and a withdrawn invitation gives nothing.
+    """
+    return invitations_collection.find_one_and_delete(_waiting({
+        "id": invitation["id"], "email": invitation["email"],
+        "target_kind": invitation["target_kind"], "target_id": invitation["target_id"],
+        "role": invitation["role"],
+    }), projection={"_id": 1}) is not None
+
+
+def put_back(invitation: Dict[str, Any]) -> None:
+    """Restore an invitation ``claim`` took, once the accept's write was refused, so accepting
+    again judges again. An invitation sent to the address meanwhile is kept, never overwritten."""
+    stored = {field: value for field, value in invitation.items() if field != "_id"}
+    try:
+        invitations_collection.update_one(
+            {field: invitation[field] for field in TARGET_FIELDS},
+            {"$setOnInsert": stored}, upsert=True)
+    except DuplicateKeyError:
+        # A re-send inserted the address's invitation between the match and the insert: it stands.
+        pass
+
+
 def take_back(invitation: Dict[str, Any]) -> None:
     """Take back the two counts an accepted invitation was counted with, at its ``counted_at``,
     so only invitations nobody accepts pile up against the limits."""
