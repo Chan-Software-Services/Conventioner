@@ -1,0 +1,1175 @@
+// @vitest-environment node
+/**
+ * The design contract (T582): `DESIGN.md` is generated from `base.css` and `primitives.css` in
+ * Google's DESIGN.md format, so it never drifts from the CSS, and the pinned `@google/design.md`
+ * linter reads it as the format means.
+ */
+import { afterEach, describe, expect, it } from 'vitest';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { lint } from '@google/design.md/linter';
+import postcss, { type Rule } from 'postcss';
+
+import { CONTENT, type Content } from '../../scripts/design-md-content';
+import {
+  checkDesignMd,
+  drift,
+  lintPolicy,
+  readSources,
+  render,
+  Refusal,
+  writeDesignMd,
+  type Sources,
+} from '../../scripts/design-md';
+
+/**
+ * Words naming nothing, so a fixture's few tokens pass the hand-kept guard, and one component for the
+ * fixture's one primitive, so no entry names a selector the fixture's primitives lack.
+ */
+const PLAIN: Content = {
+  ...CONTENT,
+  overview: ['The overview.'],
+  colors: ['The colours.'],
+  typography: ['The type.'],
+  layout: ['The layout.'],
+  elevation: ['The elevation.'],
+  shapes: ['The shapes.'],
+  components: ['The components.'],
+  componentGroups: [{ name: 'Buttons', words: ['The buttons.'] }],
+  componentEntries: [{ key: 'btn', group: 'Buttons', selectors: ['.btn'] }],
+  dosAndDonts: ['- Do one thing.'],
+};
+
+const MAIN = `@layer global {
+  @font-face {
+    font-family: 'Merge One';
+    src: url('/fonts/MergeOne-Regular.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Outfit';
+    src: url('/fonts/Outfit-VariableFont_wght.woff2') format('woff2');
+  }
+}
+`;
+
+const PRIMITIVES = `.btn {
+  height: var(--control-height);
+}
+`;
+
+const BASE = `/* The palette. */
+:root {
+  /* Ink. A comment on lines of its own is history,
+     and is left out. */
+  --mm-black: #272323; /* 15.54 on white,
+     12.49 on beige */
+  --mm-text-muted: rgba(39, 35, 35, 0.63);
+  --mm-green: #36826f; /* white text on it: 4.59 */
+  --focus-border: var(--mm-green);
+
+  --text-xs: 12px; /* captions */
+  --text-sm: 14px;
+  --leading: 1.6;
+
+  --space-1: 4px;
+  --space-3: 12px;
+  --edge-shade-depth: var(--space-3);
+  --control-height: 36px;
+  --target-min: 24px;
+
+  --radius-control: 6px; /* buttons, inputs */
+
+  --shadow-card:
+    0 0 0 1px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.07);
+  --focus-halo: 0 0 0 2px white, 0 0 0 5px rgba(54, 130, 111, 0.35);
+}
+
+@media (width <= 640px) {
+  :root {
+    --control-height: 44px;
+    --target-min: 44px;
+  }
+}
+
+:root {
+  --color-text: #2c3e50; /* 10.35 on white */
+}
+
+body {
+  font-family:
+    Outfit,
+    -apple-system,
+    sans-serif;
+}
+`;
+
+const FIXTURE: Sources = { base: BASE, primitives: PRIMITIVES, main: MAIN };
+
+function frontMatter(text: string): string {
+  return text.slice(0, text.indexOf('\n---\n', 4) + 5);
+}
+
+function refusal(run: () => unknown): string {
+  try {
+    run();
+  } catch (error) {
+    if (error instanceof Refusal) return error.message;
+    throw error;
+  }
+  throw new Error('it did not refuse');
+}
+
+describe('the tokens, on fixture CSS', () => {
+  const { text } = render(FIXTURE, PLAIN);
+  const yaml = frontMatter(text);
+
+  it('puts a hex, an rgba() and a var() colour in colors, the last as a reference', () => {
+    expect(yaml).toContain(
+      'colors:\n' +
+        '  primary: "{colors.mm-green}" # the format\'s name for --mm-green; the CSS has no --primary\n' +
+        '  mm-black: "#272323" # 15.54 on white, 12.49 on beige\n' +
+        '  mm-text-muted: "rgba(39, 35, 35, 0.63)"\n' +
+        '  mm-green: "#36826f" # white text on it: 4.59\n' +
+        '  focus-border: "{colors.mm-green}"\n' +
+        '  color-text: "#2c3e50" # 10.35 on white\n' +
+        'typography:\n',
+    );
+  });
+
+  it('puts a --radius-* in rounded, a px token in spacing, and a var() of one as a reference', () => {
+    expect(yaml).toContain('rounded:\n  radius-control: "6px" # buttons, inputs\nspacing:\n');
+    expect(yaml).toContain(
+      'spacing:\n' +
+        '  space-1: "4px"\n' +
+        '  space-3: "12px"\n' +
+        '  edge-shade-depth: "{spacing.space-3}"\n' +
+        '  control-height: "36px"\n' +
+        '  target-min: "24px"\n' +
+        'components:\n',
+    );
+  });
+
+  it('keeps the shadows and the halos out of the YAML, in the Elevation and the no-group tables', () => {
+    expect(yaml).not.toContain('shadow-card');
+    expect(yaml).not.toContain('focus-halo');
+    const elevation = text.slice(text.indexOf('## Elevation & Depth'), text.indexOf('## Shapes'));
+    expect(elevation).toContain(
+      '| Token | Value |\n| --- | --- |\n' +
+        '| `--shadow-card` | `0 0 0 1px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.07)` |\n',
+    );
+    expect(elevation).not.toContain('focus-halo');
+    const components = text.slice(
+      text.indexOf('## Components'),
+      text.indexOf("## Do's and Don'ts"),
+    );
+    expect(components).toContain(
+      '### Tokens the format has no group for\n\n| Token | Value |\n| --- | --- |\n' +
+        '| `--focus-halo` | `0 0 0 2px white, 0 0 0 5px rgba(54, 130, 111, 0.35)` |\n',
+    );
+    expect(components).not.toContain('shadow-card');
+  });
+
+  it('writes a same-line comment as the YAML comment, and leaves out a comment on lines above', () => {
+    expect(yaml).toContain('# 15.54 on white, 12.49 on beige\n');
+    expect(text).not.toContain('history');
+    expect(text).not.toContain('The palette.');
+  });
+
+  it("makes a phone override the Layout table's row, with both values", () => {
+    const layout = text.slice(text.indexOf('## Layout'), text.indexOf('## Elevation & Depth'));
+    expect(layout).toContain(
+      'At `(width <= 640px)`:\n\n| Token | Otherwise | Here |\n| --- | --- | --- |\n' +
+        '| `--control-height` | `36px` | `44px` |\n' +
+        '| `--target-min` | `24px` | `44px` |\n',
+    );
+  });
+
+  it('makes three levels of each --text-* step, with --leading as their line height', () => {
+    expect(yaml).toContain(
+      'typography:\n' +
+        '  text-xs:\n    fontFamily: "Outfit"\n    fontSize: "12px" # captions\n' +
+        '    fontWeight: 400\n    lineHeight: 1.6\n' +
+        '  text-xs-strong:\n    fontFamily: "Outfit"\n    fontSize: "12px" # captions\n' +
+        '    fontWeight: 600\n    lineHeight: 1.6\n' +
+        '  heading-xs:\n    fontFamily: "Merge One"\n    fontSize: "12px" # captions\n' +
+        '    fontWeight: 400\n    lineHeight: 1.6\n' +
+        '  text-sm:\n    fontFamily: "Outfit"\n    fontSize: "14px"\n' +
+        '    fontWeight: 400\n    lineHeight: 1.6\n' +
+        '  text-sm-strong:\n    fontFamily: "Outfit"\n    fontSize: "14px"\n' +
+        '    fontWeight: 600\n    lineHeight: 1.6\n' +
+        '  heading-sm:\n    fontFamily: "Merge One"\n    fontSize: "14px"\n' +
+        '    fontWeight: 400\n    lineHeight: 1.6\n' +
+        'rounded:\n',
+    );
+  });
+
+  it('starts with the format keys in order, and the body with its generated-file line', () => {
+    expect(text.startsWith('---\nversion: alpha\nname: Conventioner\ndescription: "')).toBe(true);
+    expect(text.slice(yaml.length)).toMatch(
+      /^<!-- Generated by front-end\/scripts\/design-md\.ts .* -->\n\n# Conventioner's design contract\n\n## Overview\n/,
+    );
+  });
+
+  it('renders the same text twice, ending in one newline', () => {
+    expect(render(FIXTURE, PLAIN).text).toBe(text);
+    expect(text.endsWith('\n')).toBe(true);
+    expect(text.endsWith('\n\n')).toBe(false);
+  });
+
+  it('counts what it wrote', () => {
+    expect(render(FIXTURE, PLAIN).counts).toEqual({
+      colors: 6,
+      typography: 6,
+      rounded: 1,
+      spacing: 5,
+      components: 1,
+    });
+  });
+});
+
+describe('the guards', () => {
+  it('refuses a token declared twice in the top-level :root rules', () => {
+    const base = BASE + ':root {\n  --space-1: 8px;\n}\n';
+    expect(refusal(() => render({ ...FIXTURE, base }, PLAIN))).toBe(
+      '--space-1 is declared twice in base.css',
+    );
+  });
+
+  it('refuses a token whose value holds a backslash, which no table cell shows as written', () => {
+    const message =
+      '--mark in base.css holds a backslash, which a DESIGN.md table cannot show as written';
+    const top = BASE.replace('  --leading: 1.6;\n', "  --leading: 1.6;\n  --mark: '\\2014';\n");
+    expect(refusal(() => render({ ...FIXTURE, base: top }, PLAIN))).toBe(message);
+    const phone = BASE.replace(
+      '    --target-min: 44px;\n',
+      "    --target-min: 44px;\n    --mark: '\\2014';\n",
+    );
+    expect(refusal(() => render({ ...FIXTURE, base: phone }, PLAIN))).toBe(message);
+  });
+
+  it('escapes a pipe in a table cell, so the cell stays whole', () => {
+    const base = BASE.replace('  --leading: 1.6;\n', "  --leading: 1.6;\n  --mark: 'a|b';\n");
+    expect(render({ ...FIXTURE, base }, PLAIN).text).toContain("| `--mark` | `'a\\|b'` |\n");
+  });
+
+  it('refuses a body family that main.css loads no face of', () => {
+    const main = MAIN.replace("'Outfit'", "'Another Face'");
+    expect(refusal(() => render({ ...FIXTURE, main }, PLAIN))).toBe(
+      'Outfit is not a face main.css loads',
+    );
+  });
+
+  it('refuses a heading family that main.css loads no face of', () => {
+    expect(refusal(() => render(FIXTURE, { ...PLAIN, headingFamily: 'Merge Two' }))).toBe(
+      'Merge Two is not a face main.css loads',
+    );
+  });
+
+  it('refuses words naming a token base.css does not have, alone or in a var()', () => {
+    expect(refusal(() => render(FIXTURE, { ...PLAIN, colors: ['Ink is `--mm-pink`.'] }))).toBe(
+      'the words of Colors name --mm-pink, which base.css does not have',
+    );
+    expect(
+      refusal(() => render(FIXTURE, { ...PLAIN, dosAndDonts: ['- Do write `var(--space-5)`.'] })),
+    ).toBe("the words of Do's and Don'ts name --space-5, which base.css does not have");
+  });
+
+  it('refuses words naming a class primitives.css does not have', () => {
+    expect(
+      refusal(() => render(FIXTURE, { ...PLAIN, layout: ['A grid is `.btn.card-grid`.'] })),
+    ).toBe('the words of Layout name .card-grid, which primitives.css does not have');
+  });
+
+  it('leaves a span that is neither a token nor classes unchecked', () => {
+    const words = ['The `--mm-text-*` inks, `contrast.test.ts`, `.btn` and `var(--space-1)`.'];
+    expect(() => render(FIXTURE, { ...PLAIN, colors: words })).not.toThrow();
+  });
+
+  describe('writing', () => {
+    let dir: string | undefined;
+
+    afterEach(() => {
+      if (dir) rmSync(dir, { recursive: true });
+      dir = undefined;
+    });
+
+    function frontEnd(sources: Sources): string {
+      dir = mkdtempSync(join(tmpdir(), 'design-md-'));
+      mkdirSync(join(dir, 'src/assets'), { recursive: true });
+      writeFileSync(join(dir, 'src/assets/base.css'), sources.base);
+      writeFileSync(join(dir, 'src/assets/primitives.css'), sources.primitives);
+      writeFileSync(join(dir, 'src/assets/main.css'), sources.main);
+      return dir;
+    }
+
+    it('writes the rendered file and says what it holds', () => {
+      const root = frontEnd(FIXTURE);
+      const target = join(root, 'DESIGN.md');
+      expect(writeDesignMd(root, target, PLAIN)).toBe(
+        'Wrote DESIGN.md: 6 colours, 6 typography levels, 1 rounded, 5 spacing, 1 components.',
+      );
+      expect(readFileSync(target, 'utf8')).toBe(render(FIXTURE, PLAIN).text);
+    });
+
+    it('writes nothing when a guard refuses', () => {
+      const root = frontEnd({ ...FIXTURE, base: BASE + ':root {\n  --space-1: 8px;\n}\n' });
+      const target = join(root, 'DESIGN.md');
+      writeFileSync(target, 'the old file\n');
+      expect(refusal(() => writeDesignMd(root, target, PLAIN))).toBe(
+        '--space-1 is declared twice in base.css',
+      );
+      expect(readFileSync(target, 'utf8')).toBe('the old file\n');
+    });
+  });
+});
+
+/** The primitives of the components' fixture: a button, its intent, a state of it, a title. */
+const COMPONENT_PRIMITIVES = `.btn {
+  display: inline-flex;
+  height: var(--control-height);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-control);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.btn--primary {
+  --focus-border: var(--focus-border);
+  background: var(--mm-green);
+  color: white;
+  font-weight: 600;
+}
+
+.btn--primary:hover:not(:disabled),
+.btn--quiet:hover {
+  background: var(--color-text);
+}
+
+.btn--quiet {
+  background: none;
+}
+
+.title {
+  font-family: 'Merge One', serif;
+  font-size: var(--text-xs);
+  width: 100%;
+}
+
+@media print {
+  .title {
+    color: black;
+  }
+}
+`;
+
+const COMPONENTS: Content = {
+  ...PLAIN,
+  componentGroups: [
+    { name: 'Buttons', words: ['The buttons.'] },
+    { name: 'Titles', words: ['The titles.'] },
+  ],
+  componentEntries: [
+    { key: 'btn', group: 'Buttons', selectors: ['.btn'] },
+    { key: 'btn-primary', group: 'Buttons', selectors: ['.btn', '.btn--primary'] },
+    {
+      key: 'btn-primary-hover',
+      group: 'Buttons',
+      selectors: ['.btn', '.btn--primary', '.btn--primary:hover:not(:disabled)'],
+    },
+    { key: 'btn-quiet', group: 'Buttons', selectors: ['.btn', '.btn--quiet'] },
+    { key: 'title', group: 'Titles', selectors: ['.title'] },
+  ],
+};
+
+const COMPONENT_FIXTURE: Sources = { ...FIXTURE, primitives: COMPONENT_PRIMITIVES };
+
+describe('the components, on fixture CSS', () => {
+  const { text, counts } = render(COMPONENT_FIXTURE, COMPONENTS);
+  const yaml = frontMatter(text);
+  const components = text.slice(text.indexOf('## Components'), text.indexOf("## Do's and Don'ts"));
+
+  it("gives a state its own fill and its base's ink, the type and the box", () => {
+    expect(yaml).toContain(
+      '  btn-primary-hover:\n' +
+        '    backgroundColor: "{colors.color-text}"\n' +
+        '    textColor: "white"\n' +
+        '    typography: "{typography.text-sm-strong}"\n' +
+        '    rounded: "{rounded.radius-control}"\n' +
+        '    padding: "0 var(--space-3)"\n' +
+        '    height: "{spacing.control-height}"\n',
+    );
+  });
+
+  it('references the -strong level at weight 600, the heading level in Merge One, else the plain one', () => {
+    expect(yaml).toContain('  btn:\n    typography: "{typography.text-sm}"\n');
+    expect(yaml).toContain('  btn-primary:\n    backgroundColor: "{colors.mm-green}"\n');
+    expect(yaml).toMatch(
+      / {2}btn-primary:\n(?: {4}.*\n)*? {4}typography: "\{typography\.text-sm-strong\}"\n/,
+    );
+    expect(yaml).toContain(
+      '  title:\n    typography: "{typography.heading-xs}"\n    width: "100%"\n---\n',
+    );
+  });
+
+  it('takes the fill away on `background: none`, and leaves @media rules out of the entries', () => {
+    expect(yaml).toContain('  btn-quiet:\n    typography: "{typography.text-sm}"\n');
+    expect(yaml).not.toMatch(/ {2}btn-quiet:\n(?: {4}.*\n)*? {4}backgroundColor/);
+    expect(yaml).not.toContain('"black"');
+  });
+
+  it("lists the last selector's declarations no sub-token carries, under its group", () => {
+    expect(components).toContain(
+      '### Buttons\n\nThe buttons.\n\n' +
+        '- **`btn`** (`.btn`): `display: inline-flex`, `font-weight: 400`, `cursor: pointer`.\n' +
+        '- **`btn-primary`** (`.btn`, `.btn--primary`): `--focus-border: var(--focus-border)`.\n' +
+        '- **`btn-primary-hover`** (`.btn`, `.btn--primary`, `.btn--primary:hover:not(:disabled)` with `.btn--quiet:hover`).\n' +
+        '- **`btn-quiet`** (`.btn`, `.btn--quiet`): `background: none`.\n' +
+        '\n### Titles\n\nThe titles.\n\n' +
+        // Merge One is carried by the heading level the entry references.
+        '- **`title`** (`.title`).\n' +
+        '\n### Tokens the format has no group for\n',
+    );
+  });
+
+  it('writes an entry with no sub-token as an empty map', () => {
+    const quiet: Content = {
+      ...COMPONENTS,
+      componentEntries: [
+        ...COMPONENTS.componentEntries,
+        { key: 'btn-quiet-hover', group: 'Buttons', selectors: ['.btn--quiet:hover'] },
+      ],
+    };
+    expect(render(COMPONENT_FIXTURE, quiet).text).toContain(
+      '  btn-quiet-hover:\n    backgroundColor: "{colors.color-text}"\n',
+    );
+    const bare = `${COMPONENT_PRIMITIVES}\n.bare {\n  display: grid;\n}\n`;
+    const withBare: Content = {
+      ...COMPONENTS,
+      componentEntries: [
+        ...COMPONENTS.componentEntries,
+        { key: 'bare', group: 'Titles', selectors: ['.bare'] },
+      ],
+    };
+    expect(
+      frontMatter(render({ ...COMPONENT_FIXTURE, primitives: bare }, withBare).text),
+    ).toContain('  bare: {}\n---\n');
+  });
+
+  it('gives an element inside an earlier selector only what CSS inherits from it', () => {
+    const nested = `${COMPONENT_PRIMITIVES}
+.note {
+  padding: var(--space-3);
+  width: 100%;
+  border-radius: var(--radius-control);
+  background: var(--mm-black);
+  color: var(--mm-black);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  --focus-border: var(--mm-green);
+}
+
+.note a {
+  color: var(--mm-green);
+}
+
+.note :is(th, td) {
+  padding: 0 var(--space-1);
+}
+
+.note tbody :is(th, td) {
+  height: var(--control-height);
+}
+`;
+    const withNote: Content = {
+      ...COMPONENTS,
+      componentEntries: [
+        ...COMPONENTS.componentEntries,
+        { key: 'note-link', group: 'Titles', selectors: ['.note', '.note a'] },
+        {
+          key: 'note-cell',
+          group: 'Titles',
+          selectors: ['.note', '.note :is(th, td)', '.note tbody :is(th, td)'],
+        },
+      ],
+    };
+    const { text: nestedText } = render({ ...COMPONENT_FIXTURE, primitives: nested }, withNote);
+    // The ink and the type follow the element in; the box, the corners and the fill stay outside,
+    // and so does the weight, which base.css's reset sets on every element.
+    expect(frontMatter(nestedText)).toContain(
+      '  note-link:\n' +
+        '    textColor: "{colors.mm-green}"\n' +
+        '    typography: "{typography.text-sm}"\n' +
+        '  note-cell:\n' +
+        '    textColor: "{colors.mm-black}"\n' +
+        '    typography: "{typography.text-sm}"\n' +
+        // A later selector on the same cell, not inside it, still takes the cell's padding.
+        '    padding: "0 var(--space-1)"\n' +
+        '    height: "{spacing.control-height}"\n' +
+        '---\n',
+    );
+  });
+
+  it('carries a font-weight only as the -strong level, so a 400 stays on the line', () => {
+    const heading = `${COMPONENT_PRIMITIVES}
+.t th {
+  font-size: var(--text-sm);
+  font-weight: 400;
+}
+`;
+    const withHeading: Content = {
+      ...COMPONENTS,
+      componentEntries: [
+        ...COMPONENTS.componentEntries,
+        { key: 't-heading', group: 'Titles', selectors: ['.t th'] },
+      ],
+    };
+    const rendered = (primitives: string) =>
+      render({ ...COMPONENT_FIXTURE, primitives }, withHeading).text;
+    const text = rendered(heading);
+    expect(text).toContain('- **`t-heading`** (`.t th`): `font-weight: 400`.\n');
+    // Losing the 400 is drift, as losing any declaration is.
+    expect(rendered(heading.replace('  font-weight: 400;\n', ''))).not.toBe(text);
+    // Merge One's level carries the family, never a weight it does not write.
+    expect(components).toContain('- **`title`** (`.title`).\n');
+    expect(components).toContain(
+      '- **`btn`** (`.btn`): `display: inline-flex`, `font-weight: 400`',
+    );
+  });
+
+  it('lists whole each rule no entry ends on, and each @media rule under its query', () => {
+    const chip = `${COMPONENT_PRIMITIVES}
+.chip {
+  display: inline-flex;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+}
+
+.chip--neutral {
+  background: var(--mm-green);
+}
+`;
+    const withChip: Content = {
+      ...COMPONENTS,
+      componentEntries: [
+        ...COMPONENTS.componentEntries,
+        { key: 'chip-neutral', group: 'Titles', selectors: ['.chip', '.chip--neutral'] },
+      ],
+    };
+    const rendered = (primitives: string) =>
+      render({ ...COMPONENT_FIXTURE, primitives }, withChip).text;
+    const chipText = rendered(chip);
+    expect(chipText.slice(chipText.indexOf('### Rules no entry ends on'))).toBe(
+      '### Rules no entry ends on\n\n' +
+        '- `.chip`: `display: inline-flex`, `gap: var(--space-1)`, `font-size: var(--text-xs)`.\n' +
+        '\nUnder `@media print`:\n\n' +
+        '- `.title`: `color: black`.\n' +
+        "\n## Do's and Don'ts\n\n- Do one thing.\n",
+    );
+    // A rule only an entry's earlier selector names is drift when it changes.
+    expect(rendered(chip.replace('gap: var(--space-1)', 'gap: var(--space-3)'))).not.toBe(chipText);
+  });
+
+  it('counts the components', () => {
+    expect(counts.components).toBe(5);
+  });
+
+  it('guards the words of each group as it guards a section', () => {
+    const words: Content = {
+      ...COMPONENTS,
+      componentGroups: [
+        { name: 'Buttons', words: ['`.btn--ghost`.'] },
+        COMPONENTS.componentGroups[1]!,
+      ],
+    };
+    expect(refusal(() => render(COMPONENT_FIXTURE, words))).toBe(
+      'the words of Components name .btn--ghost, which primitives.css does not have',
+    );
+  });
+
+  it('refuses an entry of a group that has no words', () => {
+    const lost: Content = { ...COMPONENTS, componentGroups: [COMPONENTS.componentGroups[0]!] };
+    expect(refusal(() => render(COMPONENT_FIXTURE, lost))).toBe(
+      "title's group Titles has no words in scripts/design-md-content.ts",
+    );
+  });
+
+  describe('its refusals write nothing', () => {
+    let dir: string | undefined;
+
+    afterEach(() => {
+      if (dir) rmSync(dir, { recursive: true });
+      dir = undefined;
+    });
+
+    const cases: [string, Sources, Content, string][] = [
+      [
+        'an unknown selector',
+        COMPONENT_FIXTURE,
+        {
+          ...COMPONENTS,
+          componentEntries: [
+            ...COMPONENTS.componentEntries,
+            { key: 'btn-ghost', group: 'Buttons', selectors: ['.btn', '.btn--ghost'] },
+          ],
+        },
+        '.btn--ghost (component btn-ghost in scripts/design-md-content.ts) is in no rule of primitives.css',
+      ],
+      [
+        'a raw font size',
+        {
+          ...COMPONENT_FIXTURE,
+          primitives: COMPONENT_PRIMITIVES.replace('var(--text-xs)', '13px'),
+        },
+        COMPONENTS,
+        "title's font-size is not a --text-* token",
+      ],
+      [
+        'a font size of a token off the type scale',
+        {
+          ...COMPONENT_FIXTURE,
+          primitives: COMPONENT_PRIMITIVES.replace('var(--text-xs)', 'var(--space-3)'),
+        },
+        COMPONENTS,
+        "title's font-size is not a --text-* token",
+      ],
+      [
+        'a rule nested in a rule, whose declarations no line writes',
+        {
+          ...COMPONENT_FIXTURE,
+          primitives: COMPONENT_PRIMITIVES.replace(
+            '  width: 100%;\n}',
+            '  width: 100%;\n\n  & .badge {\n    color: red;\n  }\n}',
+          ),
+        },
+        COMPONENTS,
+        '.title in primitives.css nests & .badge, which DESIGN.md never writes: make it a rule of its own',
+      ],
+      [
+        'an at-rule nested in a rule',
+        {
+          ...COMPONENT_FIXTURE,
+          primitives: COMPONENT_PRIMITIVES.replace(
+            '  width: 100%;\n}',
+            '  width: 100%;\n\n  @media print {\n    color: black;\n  }\n}',
+          ),
+        },
+        COMPONENTS,
+        '.title in primitives.css nests @media print, which DESIGN.md never writes: make it a rule of its own',
+      ],
+    ];
+
+    it.each(cases)('refuses %s', (_, sources, content, message) => {
+      dir = mkdtempSync(join(tmpdir(), 'design-md-'));
+      mkdirSync(join(dir, 'src/assets'), { recursive: true });
+      writeFileSync(join(dir, 'src/assets/base.css'), sources.base);
+      writeFileSync(join(dir, 'src/assets/primitives.css'), sources.primitives);
+      writeFileSync(join(dir, 'src/assets/main.css'), sources.main);
+      const target = join(dir, 'DESIGN.md');
+      writeFileSync(target, 'the old file\n');
+      expect(refusal(() => writeDesignMd(dir!, target, content))).toBe(message);
+      expect(readFileSync(target, 'utf8')).toBe('the old file\n');
+    });
+  });
+});
+
+describe('the real files', () => {
+  const sources = readSources(process.cwd());
+  const { text } = render(sources);
+  const report = lint(text);
+
+  /** Every custom property a top-level `:root` rule of base.css declares, with its value. */
+  function tokens(): Map<string, string> {
+    const found = new Map<string, string>();
+    for (const [, body] of sources.base.matchAll(/^:root \{\n([\s\S]*?)^\}/gm)) {
+      const stripped = body!.replace(/\/\*[\s\S]*?\*\//g, '');
+      for (const [, name, value] of stripped.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)) {
+        found.set(name!, value!.replace(/\s+/g, ' ').trim());
+      }
+    }
+    return found;
+  }
+
+  /** The `#rrggbb` (or `#rrggbbaa`) a CSS colour means, alpha rounded to the nearest 1/255. */
+  function hexOf(value: string, all: Map<string, string>): string {
+    const ref = /^var\((--[a-z0-9-]+)\)$/.exec(value);
+    if (ref) return hexOf(all.get(ref[1]!)!, all);
+    if (value === 'white') return '#ffffff';
+    const rgba = /^rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)$/.exec(value);
+    if (rgba) {
+      const [, r, g, b, a] = rgba;
+      const hex = [r, g, b].map((n) => Number(n).toString(16).padStart(2, '0')).join('');
+      const alpha =
+        a === undefined
+          ? ''
+          : Math.round(Number(a) * 255)
+              .toString(16)
+              .padStart(2, '0');
+      return `#${hex}${alpha === 'ff' ? '' : alpha}`;
+    }
+    const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(value);
+    if (short)
+      return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`.toLowerCase();
+    return value.toLowerCase();
+  }
+
+  it('names every custom property of base.css, as a YAML key or a table row', () => {
+    const missing = [...tokens().keys()].filter(
+      (name) =>
+        !new RegExp(`^  ${name.slice(2)}:`, 'm').test(text) && !text.includes(`| \`${name}\` |`),
+    );
+    // `--leading` is every level's lineHeight rather than a key, and the Typography words name it.
+    expect(missing).toEqual(['--leading']);
+    expect(text).toContain(`lineHeight: ${tokens().get('--leading')}\n`);
+    expect(text).toContain("Running text's line height is `--leading`");
+  });
+
+  it("is read by the format's own parser with the colour each CSS value means", () => {
+    const all = tokens();
+    const colours = report.designSystem.colors;
+    const read = Object.fromEntries([...colours].map(([name, colour]) => [name, colour.hex]));
+    const meant = Object.fromEntries(
+      [...colours.keys()].map((name) => [
+        name,
+        hexOf(name === 'primary' ? 'var(--mm-green)' : all.get(`--${name}`)!, all),
+      ]),
+    );
+    expect(read).toEqual(meant);
+    expect(colours.size).toBeGreaterThan(70);
+  });
+
+  it('names every class primitives.css names, as a selector or in the words', () => {
+    const classes = new Set<string>();
+    postcss.parse(sources.primitives).walkRules((rule) => {
+      for (const [, name] of rule.selector.matchAll(/\.([a-zA-Z_][\w-]*)/g)) classes.add(name!);
+    });
+    const named = new Set([...text.matchAll(/\.([a-zA-Z_][\w-]*)/g)].map(([, name]) => name!));
+    expect(classes.size).toBeGreaterThan(25);
+    expect([...classes].filter((name) => !named.has(name))).toEqual([]);
+  });
+
+  it('writes every component of the content, in its order', () => {
+    const keys = [...frontMatter(text).matchAll(/^ {2}([a-z0-9-]+):(?: \{\})?$/gm)]
+      .map(([, key]) => key!)
+      .filter((key) => !/^(?:text|heading)-/.test(key));
+    expect(keys).toEqual(CONTENT.componentEntries.map(({ key }) => key));
+  });
+
+  it('states each count and range of the words as base.css has it', () => {
+    const names = [...tokens().keys()];
+    const steps = (prefix: string) =>
+      names.filter((name) => name.startsWith(prefix) && /^\d+$/.test(name.slice(prefix.length)));
+    const phone: string[] = [];
+    postcss.parse(sources.base).each((node) => {
+      if (node.type === 'atrule' && /width\s*<=/.test(node.params)) {
+        node.walkDecls((decl) => void phone.push(decl.prop));
+      }
+    });
+    const sections = names.filter((name) => /^--layout-section-\d+-fill$/.test(name));
+    // Each: the words' line, what it says, and what base.css has; a change to either fails here.
+    const claims: [readonly string[], string, unknown, unknown][] = [
+      [
+        CONTENT.shapes,
+        'Five radii',
+        names.filter((name) => name.startsWith('--radius-')).length,
+        5,
+      ],
+      [
+        CONTENT.elevation,
+        'Two shadows',
+        names.filter((name) => name.startsWith('--shadow-')).length,
+        2,
+      ],
+      [
+        CONTENT.typography,
+        'Six sizes, `--text-xs` to `--text-2xl`',
+        names.filter((name) => name.startsWith('--text-')),
+        ['--text-xs', '--text-sm', '--text-md', '--text-lg', '--text-xl', '--text-2xl'],
+      ],
+      [
+        CONTENT.dosAndDonts,
+        'a font size off the six steps',
+        names.filter((name) => name.startsWith('--text-')).length,
+        6,
+      ],
+      [
+        CONTENT.colors,
+        '(`--layout-section-1-fill` to `--layout-section-8-fill`)',
+        sections,
+        [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `--layout-section-${n}-fill`),
+      ],
+      [
+        CONTENT.layout,
+        '`--space-1` to `--space-12`',
+        [steps('--space-')[0], steps('--space-').at(-1)],
+        ['--space-1', '--space-12'],
+      ],
+      [
+        CONTENT.layout,
+        'on a phone all three grow',
+        phone,
+        ['--control-height', '--control-height-compact', '--target-min'],
+      ],
+    ];
+    for (const [words, says, has, expected] of claims) {
+      expect(
+        words.some((line) => line.includes(says)),
+        `scripts/design-md-content.ts no longer says "${says}"`,
+      ).toBe(true);
+      expect(
+        has,
+        `base.css no longer bears out "${says}": change that line of scripts/design-md-content.ts`,
+      ).toEqual(expected);
+    }
+  });
+
+  it('shows every declaration of primitives.css, @media rules too, so changing one is drift', () => {
+    const entries = new Map(
+      [...frontMatter(text).matchAll(/^ {2}([a-z0-9-]+):\n((?: {4}.*\n)*)/gm)].map(
+        ([, key, body]) => [key!, body!],
+      ),
+    );
+    const subTokens: Record<string, string> = {
+      background: 'backgroundColor',
+      'background-color': 'backgroundColor',
+      color: 'textColor',
+      'font-size': 'typography',
+      'font-weight': 'typography',
+      'font-family': 'typography',
+      'border-radius': 'rounded',
+      padding: 'padding',
+      height: 'height',
+      width: 'width',
+    };
+    // The level an entry names carries its size's step, Merge One as `heading-*`, and 600 as
+    // `-strong`; any other weight or family has to be on the entry's line.
+    const carriesType = (body: string, prop: string, value: string) => {
+      const level = /^ {4}typography: "\{typography\.([a-z0-9-]+)\}"$/m.exec(body)?.[1];
+      if (level === undefined) return false;
+      if (prop === 'font-size') {
+        const step = /^var\(--text-([a-z0-9-]+)\)$/.exec(value)?.[1];
+        return level.replace(/^(?:text|heading)-/, '').replace(/-strong$/, '') === step;
+      }
+      if (prop === 'font-weight') return value === '600' && level.endsWith('-strong');
+      return level.startsWith('heading-') && value.includes(CONTENT.headingFamily);
+    };
+    const tidy = (raw: string) =>
+      raw.replace(/\s+/g, ' ').trim().replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
+    const lines = text.split('\n');
+    const lineOf = (key: string) =>
+      lines.find((line) => line.startsWith(`- **\`${key}\`** `)) ?? '';
+    const block = text
+      .slice(text.indexOf('### Rules no entry ends on'), text.indexOf("## Do's and Don'ts"))
+      .split('\n');
+    const missing: string[] = [];
+    let seen = 0;
+    // Each declaration is on its own rule's line: every entry ending on the rule shows it, on the
+    // entry's line or as a sub-token (as written or as a reference), else the block lists the rule.
+    postcss.parse(sources.primitives).walkDecls((decl) => {
+      seen++;
+      const value = tidy(decl.value);
+      const shown = `\`${decl.prop}: ${value}\``;
+      const rule = decl.parent as Rule;
+      const subToken = subTokens[decl.prop];
+      const ref = /^var\(--([\w-]+)\)$/.exec(value)?.[1];
+      const carriedBy = (body: string) =>
+        subToken !== undefined &&
+        (subToken === 'typography'
+          ? carriesType(body, decl.prop, value)
+          : body.includes(`    ${subToken}: "${value}"`) ||
+            (ref !== undefined &&
+              body.includes(`    ${subToken}: "{`) &&
+              body.includes(`.${ref}}"`)));
+      const keys =
+        rule.parent?.type === 'root'
+          ? CONTENT.componentEntries
+              .filter(({ selectors }) => rule.selectors.includes(selectors.at(-1)!))
+              .map(({ key }) => key)
+          : [];
+      const ok = keys.length
+        ? keys.every((key) => lineOf(key).includes(shown) || carriedBy(entries.get(key) ?? ''))
+        : block.some(
+            (line) => line.startsWith(`- \`${tidy(rule.selector)}\``) && line.includes(shown),
+          );
+      if (!ok) missing.push(`${tidy(rule.selector)} { ${decl.prop}: ${value} }`);
+    });
+    expect(seen).toBeGreaterThan(200);
+    expect(missing).toEqual([]);
+  });
+
+  it('shows every selector of every rule of primitives.css, @media rules too', () => {
+    const tidy = (raw: string) =>
+      raw.replace(/\s+/g, ' ').trim().replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
+    const missing: string[] = [];
+    postcss.parse(sources.primitives).walkRules((rule) => {
+      for (const selector of rule.selectors) {
+        const shown = tidy(selector);
+        const escaped = shown.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (!new RegExp(`(?:\`|, )${escaped}(?:\`|,)`).test(text)) missing.push(shown);
+      }
+    });
+    expect(missing).toEqual([]);
+  });
+
+  it("gives a table's cells and a note's link none of the box around them", () => {
+    const entries = new Map(
+      [...frontMatter(text).matchAll(/^ {2}([a-z0-9-]+):\n((?: {4}.*\n)*)/gm)].map(
+        ([, key, body]) => [key!, body!],
+      ),
+    );
+    for (const key of ['data-table-cell', 'data-table-column-heading', 'data-table-row-heading']) {
+      expect(entries.get(key)).toContain('padding: "var(--space-2) var(--space-3)"');
+      expect(entries.get(key)).not.toContain('width:');
+    }
+    expect(entries.get('note-link')).toContain('textColor: "{colors.mm-text-link}"');
+    expect(entries.get('note-link')).not.toContain('padding:');
+  });
+
+  it('lints with no error, and no warning but orphaned-tokens', () => {
+    const findings = report.findings.filter(
+      (finding) => finding.severity !== 'info' && finding.rule !== 'orphaned-tokens',
+    );
+    expect(findings).toEqual([]);
+    expect(report.findings.filter((finding) => finding.severity === 'error')).toEqual([]);
+  });
+
+  it('allows as orphans exactly the colours no component uses', () => {
+    const yaml = frontMatter(text);
+    const colours = yaml.slice(yaml.indexOf('\ncolors:\n'), yaml.indexOf('\ntypography:\n'));
+    const aliases = new Map<string, string | undefined>(
+      [...colours.matchAll(/^ {2}([a-z0-9-]+): "(.*?)"/gm)].map(([, name, value]) => [
+        name!,
+        /^\{colors\.([a-z0-9-]+)\}$/.exec(value!)?.[1],
+      ]),
+    );
+    const block = yaml.slice(yaml.indexOf('\ncomponents:\n'));
+    const used = new Set(
+      [...block.matchAll(/"\{colors\.([a-z0-9-]+)\}"/g)].map(([, name]) => name!),
+    );
+    // A colour is used when a component references it, when it names a used colour, or when a used
+    // colour names it: the linter resolves an alias to the colour it names.
+    for (let grown = true; grown;) {
+      grown = false;
+      for (const [name, target] of aliases) {
+        if (!target) continue;
+        for (const [from, to] of [
+          [name, target],
+          [target, name],
+        ] as const) {
+          if (used.has(from) && !used.has(to)) {
+            used.add(to);
+            grown = true;
+          }
+        }
+      }
+    }
+    const unused = [...aliases.keys()].filter((name) => !used.has(name)).sort();
+    const allowed = report.findings
+      .filter((finding) => finding.rule === 'orphaned-tokens')
+      .map((finding) => finding.path!.replace(/^colors\./, ''))
+      .sort();
+    expect(allowed).toEqual(unused);
+    expect(allowed.length).toBeGreaterThan(0);
+    expect(
+      report.findings.every((f) => f.rule !== 'orphaned-tokens' || f.severity === 'warning'),
+    ).toBe(true);
+  });
+});
+
+describe('the check', () => {
+  const sources = readSources(process.cwd());
+  const generated = render(sources).text;
+  const STALE =
+    'DESIGN.md is not what front-end/scripts/design-md.ts writes from base.css and ' +
+    'primitives.css: run `npm run design-md` in front-end/ and commit it.';
+
+  /** The line of `text` (1-based) that holds `needle`. */
+  const lineOf = (text: string, needle: string) =>
+    text.split('\n').findIndex((line) => line.includes(needle)) + 1;
+
+  it('finds no drift in what the generator writes', () => {
+    expect(drift(generated, generated)).toEqual([]);
+  });
+
+  it('reports a hand edit as drift, at its line', () => {
+    const edited = generated.replace('The look is quiet', 'The look is loud');
+    const line = lineOf(generated, 'The look is quiet');
+    expect(drift(edited, generated)).toEqual([
+      STALE,
+      `First difference at line ${line}:`,
+      `committed: ${edited.split('\n')[line - 1]}`,
+      `generated: ${generated.split('\n')[line - 1]}`,
+    ]);
+  });
+
+  it('reports a changed token as drift, at its line', () => {
+    const moved = render({
+      ...sources,
+      base: sources.base.replace('--space-1: 4px;', '--space-1: 5px;'),
+    }).text;
+    const line = lineOf(generated, '  space-1: "4px"');
+    expect(line).toBeGreaterThan(0);
+    expect(drift(generated, moved)).toEqual([
+      STALE,
+      `First difference at line ${line}:`,
+      'committed:   space-1: "4px"',
+      'generated:   space-1: "5px"',
+    ]);
+  });
+
+  it('reports a missing file as drift', () => {
+    expect(drift(undefined, generated)).toEqual([
+      STALE,
+      'First difference at line 1:',
+      'committed: (no DESIGN.md)',
+      `generated: ${generated.split('\n')[0]}`,
+    ]);
+  });
+
+  it('reports an extra or a missing last newline as drift, at its line', () => {
+    const last = generated.split('\n').length - 1;
+    expect(drift(generated + '\n', generated).slice(1)).toEqual([
+      `First difference at line ${last + 1}:`,
+      'committed: ',
+      'generated: (end of file)',
+    ]);
+    const end = generated.split('\n')[last - 1];
+    expect(drift(generated.slice(0, -1), generated).slice(1)).toEqual([
+      `First difference at line ${last}:`,
+      `committed: ${end} (no newline at the end of the file)`,
+      `generated: ${end}`,
+    ]);
+  });
+
+  describe('the lint policy', () => {
+    const orphan = (name: string) => ({
+      severity: 'warning' as const,
+      rule: 'orphaned-tokens',
+      path: `colors.${name}`,
+      message: `'${name}' is defined but never referenced by any component.`,
+    });
+
+    it('allows orphaned-tokens warnings and ignores info, and counts them', () => {
+      expect(
+        lintPolicy([
+          orphan('mm-beige'),
+          orphan('mm-border'),
+          { severity: 'info', rule: 'token-summary', message: 'Design system defines 2 colors.' },
+        ]),
+      ).toEqual({
+        failing: [],
+        summary:
+          'DESIGN.md lint: 0 errors, 0 warnings; 2 orphaned-tokens warnings allowed ' +
+          '(colours no component uses).',
+      });
+    });
+
+    it('fails an error, a contrast warning and a warning with no rule', () => {
+      expect(
+        lintPolicy([
+          orphan('mm-beige'),
+          {
+            severity: 'error',
+            rule: 'broken-ref',
+            path: 'components.btn.textColor',
+            message: 'Reference {colors.gone} does not resolve.',
+          },
+          {
+            severity: 'warning',
+            rule: 'contrast-ratio',
+            path: 'components.btn',
+            message: 'textColor on backgroundColor is 2.1:1.',
+          },
+          { severity: 'warning', message: 'Unexpected key in the front matter.' },
+          { severity: 'error', message: 'The YAML does not parse.' },
+        ]),
+      ).toEqual({
+        failing: [
+          'error broken-ref components.btn.textColor: Reference {colors.gone} does not resolve.',
+          'warning contrast-ratio components.btn: textColor on backgroundColor is 2.1:1.',
+          'warning parser -: Unexpected key in the front matter.',
+          'error parser -: The YAML does not parse.',
+        ],
+        summary:
+          'DESIGN.md lint: 2 errors, 2 warnings; 1 orphaned-tokens warnings allowed ' +
+          '(colours no component uses).',
+      });
+    });
+
+    it('fails an orphaned-tokens finding raised to an error', () => {
+      const raised = { ...orphan('mm-beige'), severity: 'error' as const };
+      expect(lintPolicy([raised]).failing).toEqual([
+        "error orphaned-tokens colors.mm-beige: 'mm-beige' is defined but never referenced by any component.",
+      ]);
+    });
+  });
+
+  describe('on a file', () => {
+    let dir: string | undefined;
+
+    afterEach(() => {
+      if (dir) rmSync(dir, { recursive: true });
+      dir = undefined;
+    });
+
+    function target(text?: string): string {
+      dir = mkdtempSync(join(tmpdir(), 'design-md-check-'));
+      const file = join(dir, 'DESIGN.md');
+      if (text !== undefined) writeFileSync(file, text);
+      return file;
+    }
+
+    const summary = (lines: string[]) => lines.filter((line) => line.startsWith('DESIGN.md lint:'));
+
+    it('passes the generated file, saying how many orphans it allowed', () => {
+      const { ok, lines } = checkDesignMd(process.cwd(), target(generated));
+      expect(ok).toBe(true);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toMatch(
+        /^DESIGN\.md lint: 0 errors, 0 warnings; [1-9]\d* orphaned-tokens warnings allowed \(colours no component uses\)\.$/,
+      );
+    });
+
+    it('fails a hand edit, and still lints it', () => {
+      const edited = generated.replace('The look is quiet', 'The look is loud');
+      const { ok, lines } = checkDesignMd(process.cwd(), target(edited));
+      expect(ok).toBe(false);
+      expect(lines.slice(0, 4)).toEqual(drift(edited, generated));
+      expect(summary(lines)).toHaveLength(1);
+    });
+
+    it('fails a file that lints unclean, saying each finding', () => {
+      const unclean = generated
+        .replace('    backgroundColor: "{colors.mm-green}"', '    backgroundColor: "{colors.gone}"')
+        .replace(/^ {2}primary: .*\n/m, '');
+      const { ok, lines } = checkDesignMd(process.cwd(), target(unclean));
+      expect(ok).toBe(false);
+      expect(lines.filter((line) => /^(?:error|warning) /.test(line))).toEqual([
+        'error broken-ref components.btn-primary: Reference {colors.gone} does not resolve to ' +
+          'any defined token.',
+        "warning missing-primary colors: No 'primary' color defined. The agent will " +
+          'auto-generate key colors, reducing your control over the palette.',
+      ]);
+      expect(summary(lines)[0]).toMatch(/^DESIGN\.md lint: 1 errors, 1 warnings; [1-9]\d* /);
+    });
+
+    it('fails a missing file, with nothing to lint', () => {
+      const { ok, lines } = checkDesignMd(process.cwd(), target());
+      expect(ok).toBe(false);
+      expect(lines[0]).toBe(STALE);
+      expect(summary(lines)).toEqual([]);
+    });
+
+    it('says why a refused render cannot be generated, and still lints the file', () => {
+      const words = { ...CONTENT, shapes: ['Use `--radius-gone`.'] };
+      const { ok, lines } = checkDesignMd(process.cwd(), target(generated), words);
+      expect(ok).toBe(false);
+      expect(lines[0]).toBe(
+        'DESIGN.md cannot be generated: the words of Shapes name --radius-gone, which base.css ' +
+          'does not have',
+      );
+      expect(summary(lines)).toHaveLength(1);
+    });
+  });
+});

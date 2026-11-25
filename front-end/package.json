@@ -15,6 +15,8 @@
     "brand-icons": "node scripts/brand-icons.ts",
     "bundle-budget": "node scripts/bundle-budget.ts",
     "no-eval": "node scripts/no-eval.ts",
+    "design-md": "node scripts/design-md.ts",
+    "design-md:check": "node scripts/design-md.ts --check",
     "type-check": "vue-tsc --build",
     "lint": "eslint . --fix",
     "lint:check": "eslint . --max-warnings 0",
@@ -35,6 +37,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
+    "@google/design.md": "0.4.0",
     "@playwright/test": "^1.65.1",
     "@tsconfig/node24": "^24.0.6",
     "@types/node": "^24.19.2",

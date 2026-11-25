@@ -19,6 +19,7 @@ sources:
   - T317
   - T345
   - T588
+  - T582
 ---
 
 # Technology Stack
@@ -212,9 +213,11 @@ How each part of the code works is in the implementation layer of the [knowledge
   - ESLint and `@eslint/config-array` ask for minimatch 11 themselves, but typescript-eslint's `@typescript-eslint/typescript-estree` and js-beautify's `editorconfig` and `glob` still ask for 10, so the override holds every copy at `^11.0.8`, the line that has upstream's hardening
   - Drop the entry once `@typescript-eslint/typescript-estree` and js-beautify's `editorconfig` and `glob` all ask for 11
 - **Prettier 3.10.1** - Code formatter, configured in `front-end/.prettierrc.json` (semicolons, single quotes, a 100-character line, trailing commas everywhere)
-  - `npm run format` fixes and `npm run format:check` verifies; both cover `front-end/`, `docs/` and the Markdown files at the repository's root (`"../*.md"`) with that config, leaving out the generated `docs/schema.d.ts`, which its test compares byte for byte, and `CHANGELOG.md`, which release-please writes (`front-end/.prettierignore`); the root glob is quoted so Prettier expands it, passing over the `CLAUDE.md` link to `AGENTS.md`, which it refuses when the shell names it; CI runs the check in `frontend-lint-and-types`, so unformatted front-end code or docs fail the build: run `npm run format` before committing
+  - `npm run format` fixes and `npm run format:check` verifies; both cover `front-end/`, `docs/` and the Markdown files at the repository's root (`"../*.md"`) with that config, leaving out the generated `docs/schema.d.ts`, which its test compares byte for byte, the root `DESIGN.md`, which its generator writes and its check compares byte for byte, and `CHANGELOG.md`, which release-please writes (`front-end/.prettierignore`); the root glob is quoted so Prettier expands it, passing over the `CLAUDE.md` link to `AGENTS.md`, which it refuses when the shell names it; CI runs the check in `frontend-lint-and-types`, so unformatted front-end code or docs fail the build: run `npm run format` before committing
   - The one-time reformat commits, of the front end, of `docs/` and of the root Markdown, are listed in `.git-blame-ignore-revs`, which `git blame` skips once `git config blame.ignoreRevsFile .git-blame-ignore-revs` is set
 - **Stylelint 17** - The design language's gate (`npm run lint:css`, which refuses a warning as it does an error), configured in `stylelint.config.js`
+- **@google/design.md 0.4.0** (pinned exactly; the format is alpha) - The DESIGN.md linter, whose `lint()` checks the [design contract](design-system.md#the-contract-agents-read-designmd) at the repository's root
+  - `npm run design-md` writes `DESIGN.md` from `base.css` and `primitives.css`; `npm run design-md:check` fails when the committed file is not what it writes, or lints with an error or any warning but `orphaned-tokens`, and CI's `frontend-lint-and-types` and `scripts/nm-test.sh` run it
 - **Vue TSC 3.3.14** - TypeScript type checker for Vue
   - Type checking for Vue components
 
