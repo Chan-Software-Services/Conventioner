@@ -262,9 +262,6 @@ function serve(...pages: Array<{ entries: MarketHistoryEntry[]; next: string | n
 const ORG: Organization = {
   id: 'org-1',
   name: 'Ember Fairs',
-  owner: 'user-olive',
-  admins: [],
-  members: [],
   marketCount: 0,
   marketsWithOwnRole: {},
   ownerEmail: 'olive@ember.test',
@@ -472,7 +469,6 @@ describe('the History section of Manage organization', () => {
 describe('Manage organization holds together as Manage market does', () => {
   const WITH_AN_ADMIN: Organization = {
     ...ORG,
-    admins: ['user-ada'],
     adminPeople: [{ userId: 'user-ada', email: 'ada@ember.test' }],
   };
 

@@ -520,12 +520,9 @@ export interface OrganizationPerson {
 export interface Organization {
   id: string;
   name: string;
-  owner: string; // User id (uuid)
-  admins: string[]; // 0+ admin user ids
-  members: string[]; // 0+ member user ids
   ownerEmail?: string; // Resolved display (from API)
   /** Its admins and members, each with their id, in the stored order, an account that is gone left
-   *  out (T204): a row is keyed and removed by its own `userId`, never by its place in `admins`. */
+   *  out (T204): a row is keyed and removed by its own `userId`, never by its place in the list. */
   adminPeople: OrganizationPerson[];
   memberPeople: OrganizationPerson[];
   theme?: ThemeObject; // Organization theming
@@ -763,7 +760,6 @@ export interface TransitionBlockedResponse {
 export interface User {
   id: string;
   email: string;
-  organizations?: string[]; // Organization ids
 }
 
 /** One of the market's table types (`setupObject.tableTypes`, T257). It has no colour: the
