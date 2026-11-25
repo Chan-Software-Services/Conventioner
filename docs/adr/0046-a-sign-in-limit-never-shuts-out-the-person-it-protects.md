@@ -7,7 +7,7 @@ describes:
   - back-end/api/users.py#login_with_otp
   - back-end/tests/test_a_strangers_tries_shut_no_one_out.py
   - back-end/tests/test_a_strangers_requests_use_up_no_ones.py
-verified: 2026-11-24
+verified: 2026-11-25
 sources:
   - T539
 status: accepted
