@@ -29,9 +29,6 @@ function org(overrides: Partial<Organization> = {}): Organization {
   return {
     id: 'org-1',
     name: 'Ember Makers',
-    owner: 'u-owner',
-    admins: ['u-admin'],
-    members: ['u-member'],
     ownerEmail: 'owner@example.com',
     adminPeople: [{ userId: 'u-admin', email: 'admin@example.com' }],
     memberPeople: [{ userId: 'u-member', email: 'member@example.com' }],

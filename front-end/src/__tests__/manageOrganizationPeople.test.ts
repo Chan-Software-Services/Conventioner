@@ -316,7 +316,7 @@ describe("Manage organization's writes belong to their opening", () => {
       response: { status: 400, data: { error: sentence } },
     });
 
-  const FIRST = org({ members: ['u-1'], memberPeople: [person(1)] });
+  const FIRST = org({ memberPeople: [person(1)] });
   const OTHER = org({ id: 'org-2', name: 'Lakeside Collective' });
 
   function openOn(first: Organization) {
