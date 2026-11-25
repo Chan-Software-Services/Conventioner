@@ -191,7 +191,7 @@ A dump holds every vendor's name, email and answers: keep it on your own machine
 
 A new database is started once with `MONGODB_URI='<URI>' .venv/bin/python init_database.py`: it creates the collections and indexes and records the markers the back end refuses to boot without.
 Production was started that way on 2026-10-18, so no script in `back-end/migrations/` was needed then.
-Every migration a release has needed since is in [RELEASING.md's one list](RELEASING.md#pre-deploy-database-migrations), in the order to run them, each with a section saying when it runs against production, how, and what its run prints; this runbook keeps no list of its own, so a new migration is written there alone.
+Every migration a release has needed since is in [RELEASING.md's one list](RELEASING.md#pre-deploy-database-migrations), in the order to run them, most with a section under it saying when it runs against production; this runbook keeps no list of its own, so a new migration is added to that list.
 
 ### Swapping the names of two locations
 

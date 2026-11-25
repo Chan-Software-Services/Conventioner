@@ -383,7 +383,7 @@ The application needs its OAuth2 redirect set to `FRONTEND_URL` + `/discord/conn
 
 Migrations are never run automatically - rewriting stored documents is a deliberate operator action.
 
-**This section is the one list of a release's migrations, in the order to run them, and the one place each says when and how it runs against production**: [OPERATIONS.md](OPERATIONS.md#starting-a-database-and-migrations) starts a database and points here, so a new migration is a line in the list below and a section of its own under it, in this file alone.
+**This section is the one list of a release's migrations, in the order to run them**: [OPERATIONS.md](OPERATIONS.md#starting-a-database-and-migrations) starts a database and points here, so a new migration is a line in the list below and, when it has more to say than its line, a section of its own under it.
 
 **A database created by `init_database.py` needs none of them**: it is born in the current shape and records the boot markers.
 Production was started that way on 2026-10-18, so the list below matters only for a database older than its code.
@@ -412,7 +412,7 @@ python migrations/migrate_business_name.py --list    # AFTER the deploy, once pe
 ```
 
 Each line runs from `back-end/` against production with the address passed inline and never in `.env`: `MONGODB_URI='<URI>' .venv/bin/python migrations/<script>`.
-The sections below follow the list's order and say, for each migration they name, when it runs, what it does and what its run prints.
+The sections below follow the list's order, and each says when its migration runs and what it does; a migration whose list line says all there is to say has none.
 
 ### `migrate_market_keys.py`
 
