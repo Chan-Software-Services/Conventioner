@@ -199,7 +199,7 @@
 
   /* A 4px grid. The largest migration cost is here: 10px was the second most-used spacing value in
      the product (87 uses) and is on no grid, so each one goes to 8 or 12 by judgement. */
-  --space-1: 5px;
+  --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
