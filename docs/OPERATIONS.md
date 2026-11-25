@@ -555,7 +555,7 @@ In short (the detail is [RELEASING.md](RELEASING.md)):
 | Database load and connections | Atlas, the cluster's Metrics                                                                                                                                                                                                 |
 
 Vercel's Hobby plan keeps runtime logs for about an hour, so read them while the problem is happening.
-Sentry keeps each error for 30 days, without its message or any applicant's value ([ADR 0049](adr/0049-what-may-be-sent-to-the-error-tracker.md)): it says what failed and where, and the log, while it lasts, says more.
+Sentry keeps each error for 30 days, without the back end's exception messages, bar the CSV import's parse warning, or any applicant's value ([ADR 0049](adr/0049-what-may-be-sent-to-the-error-tracker.md)): it says what failed and where, and the log, while it lasts, says more.
 
 Deploy run 42487768583 (2026-11-08) went red at a front-end check that read the old build 0.44 seconds after the alias, before the workflow waited for each domain to serve the new commit ([how a deploy proves itself](RELEASING.md#how-a-deploy-proves-itself)).
 It deployed all the same: on 2026-11-10 both projects' Production deployments were read, and each domain served that run's build of `18ad1d84` (v1.1.0's code), the newest, with no rollback.

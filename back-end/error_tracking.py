@@ -12,7 +12,7 @@ its qualified type and its frames, never its message; a log line by its words wi
 replaced; a request by its method and its route's rule, with only ``NAMED_VIEW_ARGS`` filled in.
 
 Vercel freezes a function once it has answered, so an event raised in a request is flushed before
-the response leaves (``install``), and a boot refusal before its import fails (``_EventHandler``).
+the response leaves (``install``), and a boot refusal before its import fails (``_FlushingEventHandler``).
 
 The rule, and what each field is: docs/adr/0049-what-may-be-sent-to-the-error-tracker.md; the
 module: docs/implementation/modules/error-tracking.md.
@@ -100,7 +100,7 @@ def start(dsn: Optional[str] = None, transport: Any = None) -> None:
         integrations=[
             FlaskIntegration(),
             # Breadcrumbs only. `level=None` turns Sentry Logs off: at its default, every line from
-            # INFO up would be sent as one, the user agent with it. Events come from `_EventHandler`.
+            # INFO up would be sent as one, the user agent with it. Events come from `_FlushingEventHandler`.
             LoggingIntegration(level=None, event_level=None, breadcrumb_level=logging.INFO),
         ],
         data_collection={

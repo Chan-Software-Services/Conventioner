@@ -23,7 +23,7 @@ With no DSN, nothing here changes how the app runs.
 
 ## The back end
 
-[`back-end/error_tracking.py`](../../../back-end/error_tracking.py) is the only back-end file that imports `sentry_sdk`, and only inside `start()` once a DSN is set: importing the SDK costs Active CPU on every cold start.
+[`back-end/error_tracking.py`](../../../back-end/error_tracking.py) is the only back-end file that imports `sentry_sdk`, and only once `start()` has found a DSN: importing the SDK costs Active CPU on every cold start.
 
 - `start()` reads `SENTRY_DSN` through `configured_secret`, so a blank or published placeholder is no DSN and it returns having imported nothing.
   A DSN the SDK cannot read logs one warning naming `SENTRY_DSN` and the exception's type, and tracking stays off: the DSN is optional, so it never stops a boot.

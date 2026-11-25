@@ -373,12 +373,12 @@ A failure, a rate limit or a wait past 5 seconds leaves the rules' answer, marke
 
 ### Optional: error tracking
 
-| Variable          | What it is                                                                                                                                          | What an unset value does                                                                              |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `SENTRY_DSN`      | The back-end Sentry project's DSN. Every unexpected exception, warning and error log line, `/healthz` 503 and boot refusal is sent to it.           | Nothing breaks: the back end never imports the SDK, and errors are only in Vercel's hour of logs.     |
-| `VITE_SENTRY_DSN` | The front-end Sentry project's DSN, **build time**. Every error in an organizer's or a vendor's browser, and every policy violation, is sent to it. | Nothing breaks: the build has no Sentry chunk, and a browser's errors stay in that browser's console. |
+| Variable          | What it is                                                                                                                                                                                                       | What an unset value does                                                                              |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `SENTRY_DSN`      | The back-end Sentry project's DSN. Every unexpected exception, warning and error log line, `/healthz` 503 and boot refusal is sent to it.                                                                        | Nothing breaks: the back end never imports the SDK, and errors are only in Vercel's hour of logs.     |
+| `VITE_SENTRY_DSN` | The front-end Sentry project's DSN, **build time**. Errors in an organizer's or a vendor's browser, and the first policy violation of each directive and blocked origin, are sent to it, at most 20 a page load. | Nothing breaks: the build has no Sentry chunk, and a browser's errors stay in that browser's console. |
 
-Neither is a boot or build requirement, and a blank or placeholder value counts as unset (`back-end/utils/configured_secret.py`); a back-end DSN Sentry cannot read logs a warning and leaves tracking off.
+Neither is a boot or build requirement; a blank or placeholder `SENTRY_DSN` counts as unset (`back-end/utils/configured_secret.py`), as does a blank `VITE_SENTRY_DSN`, and a back-end DSN Sentry cannot read logs a warning and leaves tracking off.
 A set `VITE_SENTRY_DSN` that is not a DSN, or whose host the Content-Security-Policy's `connect-src` in `front-end/vercel.json` does not allow (today `https://*.ingest.us.sentry.io`, Sentry's US region), fails the build, naming the variable.
 A DSN's key is Sentry's public client key, which every browser receives anyway, so neither is a secret.
 What an event may hold, and never holds, is [ADR 0049](adr/0049-what-may-be-sent-to-the-error-tracker.md); setting the projects up is [Setting up Sentry](OPERATIONS.md#setting-up-sentry).
