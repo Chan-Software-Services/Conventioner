@@ -9,7 +9,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, defineComponent, h, type App } from 'vue';
 import { createMemoryHistory, createRouter, type Router } from 'vue-router';
-import { createTransport, type Event, type Exception } from '@sentry/browser';
 import {
   MAX_EVENTS_PER_PAGE,
   QUEUE_LIMIT,
@@ -18,7 +17,14 @@ import {
   type ErrorTrackingForTests,
   type InstalledErrorTracking,
 } from '@/utils/errorTracking';
-import type { Transport } from '@/utils/errorTrackingClient';
+import {
+  envelopes,
+  events,
+  expectNowhere,
+  firstException,
+  recording,
+  sent,
+} from './support/recordedEnvelopes';
 
 const KEY = 'fixturepublickey';
 // Built from its parts, so no line reads as an email address.
@@ -26,58 +32,6 @@ const DSN = `https://${KEY}@o1.ingest.us.sentry.io/7`;
 const ADDRESS = 'Vendor.Fixture+market@Mail.Example.COM';
 const TOKEN = 'fixture-reset-token-4f1c9a';
 const COMMIT = 'fixturecommit0123456789';
-
-interface Envelope {
-  header: Record<string, unknown>;
-  items: { header: { type: string }; payload: Record<string, unknown> }[];
-}
-
-let sent: string[] = [];
-
-const recording: Transport = (options) =>
-  createTransport(options, async (request) => {
-    sent.push(
-      typeof request.body === 'string' ? request.body : new TextDecoder().decode(request.body),
-    );
-    return { statusCode: 200 };
-  });
-
-function envelopes(): Envelope[] {
-  return sent.map((body) => {
-    const [header, ...rest] = body.split('\n').filter(Boolean);
-    const items: Envelope['items'] = [];
-    for (let i = 0; i < rest.length; i += 2) {
-      items.push({ header: JSON.parse(rest[i]!), payload: JSON.parse(rest[i + 1]!) });
-    }
-    return { header: JSON.parse(header!), items };
-  });
-}
-
-function events(): Event[] {
-  return envelopes().flatMap((each) =>
-    each.items.filter((item) => item.header.type === 'event').map((item) => item.payload as Event),
-  );
-}
-
-/** The first exception an event names. */
-function firstException(event: Event): Exception {
-  return event.exception!.values![0]!;
-}
-
-/** Each spelling of `value` an envelope could hold it in. */
-function spellings(value: string): string[] {
-  return [
-    value,
-    value.toLowerCase(),
-    encodeURIComponent(value),
-    encodeURIComponent(value).toLowerCase(),
-  ];
-}
-
-function expectNowhere(value: string) {
-  const everything = sent.join('\n');
-  for (const spelling of spellings(value)) expect(everything).not.toContain(spelling);
-}
 
 const Page = defineComponent({ render: () => h('div') });
 
@@ -122,7 +76,7 @@ function dispatchRejection(reason: unknown) {
 }
 
 beforeEach(() => {
-  sent = [];
+  sent.length = 0;
   installed = null;
   vi.stubEnv('VITE_SENTRY_DSN', DSN);
   vi.stubGlobal(
@@ -213,7 +167,7 @@ describe('an error caught in the page', () => {
     expect(events()[0]!.environment).toBe('test');
 
     installed!.remove();
-    sent = [];
+    sent.length = 0;
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => Promise.reject(new TypeError('offline'))),

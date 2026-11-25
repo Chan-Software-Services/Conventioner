@@ -3,8 +3,8 @@
  * the `Function` constructor.
  *
  * The Content-Security-Policy in `vercel.json` has no `'unsafe-eval'`, so the browser refuses such
- * a call. It has no reporting endpoint, so a refusal in production shows only in the console of the
- * tab it broke: this is where a new one is caught, at build time. The first one found was
+ * a call. A refusal in production reaches Sentry as a policy violation (`errorTracking.ts`), but only
+ * after it has broken the tab it ran in: this is where a new one is caught first, at build time. The first one found was
  * vuedraggable's UMD build, whose bundled core-js looks up the global object with
  * `Function('return this')()`; `vite.config.ts` resolves vuedraggable to its ES source instead.
  *

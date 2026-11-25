@@ -11,7 +11,7 @@ import {
   type Exception,
   type StackFrame,
 } from '@sentry/browser';
-import type { TrackedItem, TrackedRoute } from '@/utils/errorTracking';
+import type { TrackedItem, TrackedRoute, TrackedViolation } from '@/utils/errorTracking';
 
 /**
  * The SDK's side of the front end's error tracking (docs/implementation/modules/error-tracking.md),
@@ -29,7 +29,10 @@ import type { TrackedItem, TrackedRoute } from '@/utils/errorTracking';
 export type Transport = NonNullable<ConstructorParameters<typeof BrowserClient>[0]['transport']>;
 
 export interface ErrorTrackingClient {
-  /** Sends one caught error; resolves once it is sent or dropped, and never rejects. */
+  /**
+   * Sends one caught error, or a policy violation as a warning titled by `violationTitle`;
+   * resolves once it is sent or dropped, and never rejects.
+   */
   send(item: TrackedItem): Promise<void>;
 }
 
@@ -68,6 +71,44 @@ function routePath(route: TrackedRoute): string | null {
   return filled;
 }
 
+/** `text` with its percent-escapes read, so an escaped address is found too. */
+function decoded(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
+
+/** A violation's title, which Sentry groups its events by: one issue per directive and origin. */
+export function violationTitle(violation: TrackedViolation): string {
+  const verb = violation.disposition === 'report' ? 'would block' : 'blocked';
+  return `Content-Security-Policy ${verb} ${violation.directive} from ${violation.blocked}`;
+}
+
+/**
+ * Where the violation happened: the script's address, or the page's route for the page itself,
+ * and its line and column; `null` when the browser named no file.
+ */
+function violationContext(item: TrackedItem & { caughtBy: 'csp' }): Record<string, unknown> | null {
+  const { violation } = item;
+  const path = routePath(item.route);
+  const sourceFile = violation.inPage
+    ? path === null
+      ? null
+      : `${window.location.origin}${path}`
+    : violation.sourceFile === null
+      ? null
+      : withoutAddresses(decoded(violation.sourceFile));
+  // A line and a column say nothing without the file they are in.
+  if (sourceFile === null) return null;
+  return {
+    source_file: sourceFile,
+    ...(violation.line !== null ? { line: violation.line } : {}),
+    ...(violation.column !== null ? { column: violation.column } : {}),
+  };
+}
+
 function allowedFrame(frame: StackFrame): StackFrame {
   return {
     filename: frame.filename === undefined ? undefined : withoutAddresses(frame.filename),
@@ -95,10 +136,15 @@ function definedTags(tags: Record<string, string | null>): Record<string, string
   );
 }
 
-/** The event ADR 0049 allows, built anew from the SDK's and the item it was caught as. */
+/**
+ * The event ADR 0049 allows, built anew from the SDK's and the item it was caught as; a policy
+ * violation adds its directive and blocked origin as tags and where it happened as a context.
+ */
 export function allowedEvent(event: Event, item: TrackedItem): ErrorEvent {
   const path = routePath(item.route);
-  const values = event.exception?.values;
+  // A violation's stack, which the browser client attaches to a message, is only the tracker's.
+  const values = item.caughtBy === 'csp' ? undefined : event.exception?.values;
+  const context = item.caughtBy === 'csp' ? violationContext(item) : null;
   return {
     type: undefined,
     event_id: event.event_id,
@@ -115,7 +161,11 @@ export function allowedEvent(event: Event, item: TrackedItem): ErrorEvent {
       route_name: item.route.name,
       market_id: item.route.marketId,
       market_slug: item.route.marketSlug,
+      ...(item.caughtBy === 'csp'
+        ? { csp_directive: item.violation.directive, csp_blocked: item.violation.blocked }
+        : {}),
     }),
+    ...(context !== null ? { contexts: { violation: context } } : {}),
     environment: event.environment,
     ...(event.release ? { release: event.release } : {}),
     ...(event.sdk ? { sdk: { name: event.sdk.name, version: event.sdk.version } } : {}),
@@ -168,7 +218,11 @@ export async function startErrorTrackingClient(
 
   return {
     async send(item) {
-      scope.captureException(item.error, { data: item });
+      if (item.caughtBy === 'csp') {
+        scope.captureMessage(violationTitle(item.violation), 'warning', { data: item });
+      } else {
+        scope.captureException(item.error, { data: item });
+      }
       try {
         await client.flush(SEND_TIMEOUT_MS);
       } catch {
