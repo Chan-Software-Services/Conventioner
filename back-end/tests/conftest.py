@@ -58,6 +58,10 @@ from utils.deployment import INSECURE_LOCAL_DEV_VAR, LOCAL_SWITCHES
 for _switch in LOCAL_SWITCHES:
     if _switch != INSECURE_LOCAL_DEV_VAR:
         os.environ.pop(_switch, None)
+# Nor does a DSN the shell exported reach the app it imports, so no test run sends Sentry an event: a
+# test that tracks errors starts the tracker with a DSN and a transport of its own
+# (test_the_error_tracker_is_sent_no_value.py).
+os.environ.pop("SENTRY_DSN", None)
 # Sessions in the signed cookie, so the suite writes nothing into the source tree. On disk they went
 # to `back-end/flask_session`, which a container that ran the back end leaves owned by root, and
 # every signed-in test then answered 401 on that checkout.

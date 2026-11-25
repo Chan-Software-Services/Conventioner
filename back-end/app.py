@@ -107,6 +107,7 @@ from utils.proxy import (
 from utils.request_origin import install_request_origin_check
 from utils.security_headers import install_security_headers
 from client_errors import BadRequestError, install_error_answers
+import error_tracking as ErrorTracking
 from utils.secret_key import (
     SecretKeyNotConfiguredError,
     signing_secret,
@@ -125,6 +126,8 @@ from utils.session_storage import (
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+# Before the first boot check, so a refusal below reaches Sentry before its import fails.
+ErrorTracking.start()
 
 
 def verify_market_key_migration() -> None:
@@ -486,6 +489,7 @@ app.config["VENDOR_REMEMBER_COOKIE_HTTPONLY"] = True
 
 configure_public_endpoint_defenses(app, check_public_endpoint_defenses())
 install_error_answers(app)
+ErrorTracking.install(app)
 install_security_headers(app)
 
 # The host's own limit, so a local stack refuses what production refuses (host_limits.py).
