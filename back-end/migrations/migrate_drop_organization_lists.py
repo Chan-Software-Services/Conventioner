@@ -20,8 +20,9 @@ What it writes:
 It refuses, writing and dropping nothing, while any organization holds no people map, since its
 lists are then the only record of its people. Safe to run repeatedly, and beside another run.
 
-When to run it, its dry run, what its refusal asks and the fold are written in full in the section
-``migrate_drop_organization_lists.py`` of ``docs/RELEASING.md``.
+When to run it, its dry run, what its refusal asks and the fold of an organization with no
+``people`` (by T283's ``migrate_organization_people.py``, which T583 deleted) are written in full
+in the section ``migrate_drop_organization_lists.py`` of ``docs/RELEASING.md``.
 
 Usage, from ``back-end/`` (the production database address passed inline, never from ``.env``):
     MONGODB_URI='<production URI>' python migrations/migrate_drop_organization_lists.py --dry-run
