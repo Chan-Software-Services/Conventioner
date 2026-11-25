@@ -38,15 +38,14 @@ MARKET_ROLES = {
     "user-1": "owner", "user-admin": "admin", "user-editor": "editor",
     "user-viewer": "viewer", "org-admin": "editor",
 }
-ORGANIZATION = Organization(
-    id=ORG_ID, name="Test Org", owner="org-owner", admins=["org-admin"], members=["org-member"],
-    markets=["market-123"],
-)
 
 
-def _with_lists(**lists):
-    """The organization with these lists in place of its own, its people map folded from them."""
-    return Organization(**{**ORGANIZATION.model_dump(exclude={"people"}), **lists})
+def _organization(people):
+    """The market's organization, these its people."""
+    return Organization(id=ORG_ID, name="Test Org", people=people, markets=["market-123"])
+
+
+ORGANIZATION = _organization({"org-owner": "owner", "org-admin": "admin", "org-member": "member"})
 
 
 def _person(user_id, role, market_role, organization_role, from_organization=False):
@@ -177,10 +176,10 @@ def test_someone_in_both_is_listed_once_at_the_higher_role(lookups):
 @pytest.mark.parametrize(("market_role", "organization", "served_as"), [
     # A tie: the market's Admin adds nothing to the organization's, so the organization counts.
     ("admin", ORGANIZATION, _person("org-admin", "admin", "admin", "admin", True)),
-    ("viewer", _with_lists(admins=[], members=["org-admin"]),
+    ("viewer", _organization({"org-owner": "owner", "org-admin": "member"}),
      _person("org-admin", "viewer", "viewer", "member", True)),
     # The market's role is the higher: it counts, and the place is still named.
-    ("editor", _with_lists(admins=[], members=["org-admin"]),
+    ("editor", _organization({"org-owner": "owner", "org-admin": "member"}),
      _person("org-admin", "editor", "editor", "member", False)),
 ])
 def test_the_organization_counts_when_its_role_reaches_the_markets(

@@ -26,11 +26,11 @@ ORG_MEMBER = "org-member"
 OUTSIDER = "outsider"
 
 
-def organization(org_id=ORG_ID):
-    return Organization(
-        id=org_id, name="Test Org", owner=ORG_OWNER, admins=[ORG_ADMIN], members=[ORG_MEMBER],
-        markets=["market-123"],
-    )
+ORG_PEOPLE = {ORG_OWNER: "owner", ORG_ADMIN: "admin", ORG_MEMBER: "member"}
+
+
+def organization(org_id=ORG_ID, people=ORG_PEOPLE):
+    return Organization(id=org_id, name="Test Org", people=people, markets=["market-123"])
 
 
 def market(roles=None, phase=MarketPhase.MARKET_DAYS):
@@ -70,8 +70,7 @@ def test_the_higher_of_the_two_roles_is_the_one_held(who, on_the_market, held):
 
 
 def test_the_market_owner_is_still_its_owner_when_also_an_organization_admin():
-    org = organization()
-    org.admins.append(MARKET_OWNER)
+    org = organization(people={**ORG_PEOPLE, MARKET_OWNER: "admin"})
 
     assert PermissionsApi.get_user_market_role(MARKET_OWNER, market(), org) == MarketRole.OWNER
 

@@ -159,8 +159,9 @@ def test_the_markets_list_never_carries_them(monkeypatch, email):
     markets = _EveryFindKept([by_role, by_organization])
     monkeypatch.setattr(MarketsApi, "markets_collection", markets)
     monkeypatch.setattr(OrgsApi, "organization_documents_of", lambda _user_id: [{
-        "id": ORG, "_id": "mongo-org-1", "name": "Test Org", "owner": "user-other",
-        "admins": [], "members": list(PEOPLE.values()), "markets": [ORG_MARKET]}])
+        "id": ORG, "_id": "mongo-org-1", "name": "Test Org",
+        "people": {"user-other": "owner", **{user_id: "member" for user_id in PEOPLE.values()}},
+        "markets": [ORG_MARKET]}])
 
     listed = MarketsApi.get_markets_for_user(email)
 
