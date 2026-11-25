@@ -44,7 +44,13 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("a vendor's sign-in", () => {
   it('survives a reload, which is a fresh store reading what the last one kept', async () => {
-    await freshStore().verifyCode('spring-market', 'vendor@example.com', '123456');
+    await freshStore().verifyCode(
+      'spring-market',
+      'vendor@example.com',
+      '123456',
+      false,
+      'a-human-check-token',
+    );
 
     const afterReload = freshStore();
 
@@ -54,14 +60,26 @@ describe("a vendor's sign-in", () => {
   });
 
   it('is for the market it was made at, and no other', async () => {
-    await freshStore().verifyCode('spring-market', 'vendor@example.com', '123456');
+    await freshStore().verifyCode(
+      'spring-market',
+      'vendor@example.com',
+      '123456',
+      false,
+      'a-human-check-token',
+    );
 
     expect(freshStore().isAuthenticatedFor('autumn-market')).toBe(false);
   });
 
   it('is gone after signing out', async () => {
     const store = freshStore();
-    await store.verifyCode('spring-market', 'vendor@example.com', '123456');
+    await store.verifyCode(
+      'spring-market',
+      'vendor@example.com',
+      '123456',
+      false,
+      'a-human-check-token',
+    );
 
     await store.signOut('spring-market');
 
@@ -77,10 +95,19 @@ describe("a vendor's sign-in", () => {
     });
     const store = freshStore();
 
-    expect(await store.verifyCode('spring-market', 'vendor@example.com', '123456')).toEqual({
+    expect(
+      await store.verifyCode(
+        'spring-market',
+        'vendor@example.com',
+        '123456',
+        false,
+        'a-human-check-token',
+      ),
+    ).toEqual({
       ok: false,
       sentence: 'Sign-in did not complete. Please request a new code and try again.',
       codeState: null,
+      humanCheckRequired: false,
     });
     expect(sessionStorage.getItem(KEY)).toBeNull();
   });
@@ -91,17 +118,61 @@ describe("a vendor's sign-in", () => {
     const store = freshStore();
     store.error = 'Your answers could not be saved.';
 
-    expect(await store.requestCode('spring-market', 'vendor@example.com')).toEqual({
+    expect(
+      await store.requestCode('spring-market', 'vendor@example.com', 'a-human-check-token'),
+    ).toEqual({
       ok: false,
       sentence: 'Something went wrong.',
       codeState: null,
+      humanCheckRequired: false,
     });
-    expect(await store.verifyCode('spring-market', 'vendor@example.com', '123456')).toEqual({
+    expect(
+      await store.verifyCode(
+        'spring-market',
+        'vendor@example.com',
+        '123456',
+        false,
+        'a-human-check-token',
+      ),
+    ).toEqual({
       ok: false,
       sentence: 'That code no longer works. Send yourself a new code.',
       codeState: 'spent',
+      humanCheckRequired: false,
     });
     expect(store.error).toBe('Your answers could not be saved.');
+  });
+
+  it("passes the human check's token on, and marks an answer asking for the check (T539)", async () => {
+    const asked = {
+      isAxiosError: true,
+      response: {
+        status: 403,
+        data: { message: "Confirm you're a person, then try again.", captcha: 'required' },
+      },
+    };
+    vi.mocked(requestLoginCode).mockRejectedValueOnce(asked);
+    vi.mocked(verifyLoginCode).mockRejectedValueOnce(asked);
+    const store = freshStore();
+
+    expect(await store.requestCode('spring-market', 'vendor@example.com', 'a-token')).toMatchObject(
+      {
+        ok: false,
+        codeState: null,
+        humanCheckRequired: true,
+      },
+    );
+    expect(
+      await store.verifyCode('spring-market', 'vendor@example.com', '123456', true, 'b-token'),
+    ).toMatchObject({ ok: false, humanCheckRequired: true });
+    expect(requestLoginCode).toHaveBeenCalledWith('spring-market', 'vendor@example.com', 'a-token');
+    expect(verifyLoginCode).toHaveBeenCalledWith(
+      'spring-market',
+      'vendor@example.com',
+      '123456',
+      true,
+      'b-token',
+    );
   });
 
   it('ignores whatever is stored if it is not a whole sign-in', () => {
@@ -119,7 +190,15 @@ describe("a vendor's sign-in", () => {
     });
     const store = freshStore();
 
-    expect(await store.verifyCode('spring-market', 'vendor@example.com', '123456')).toEqual({
+    expect(
+      await store.verifyCode(
+        'spring-market',
+        'vendor@example.com',
+        '123456',
+        false,
+        'a-human-check-token',
+      ),
+    ).toEqual({
       ok: true,
     });
     expect(store.isAuthenticatedFor('spring-market')).toBe(true);

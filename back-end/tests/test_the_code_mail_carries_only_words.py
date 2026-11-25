@@ -65,7 +65,7 @@ def _request_code(monkeypatch, market_name):
     with Flask(__name__).test_request_context(
         f"/public/markets/{slug}/applicant-login/request-code",
         method="POST",
-        json={"email": VENDOR},
+        json={"email": VENDOR, "captcha_token": "test-human-check"},
     ):
         _body, status = applicant_auth.request_login_code(slug)
     assert status == 200

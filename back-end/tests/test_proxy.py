@@ -1,9 +1,10 @@
 """Whose address this deployment believes the caller is at, and what happens when nobody has said.
 
-Organizer signup reports that address to Google as reCAPTCHA's ``remoteip``, and reCAPTCHA v3 scores
-on it. Behind a proxy, ``remote_addr`` is the proxy - one address for every caller in the world - so
-every signup is scored as though it came from the same client. Trusting ``X-Forwarded-For`` whole is
-the opposite failure: the caller writes that header, so it would report whatever address it liked.
+The sign-in limits count each caller by that address, and the human check reports it to Cloudflare
+as Turnstile's ``remoteip``. Behind a proxy, ``remote_addr`` is the proxy - one address for every
+caller in the world - so every caller would share one caller's limit. Trusting ``X-Forwarded-For``
+whole is the opposite failure: the caller writes that header, so it would name whatever address it
+liked.
 Only the hops the deployment owns may be read, and only the deployment knows how many those are.
 """
 
@@ -57,8 +58,8 @@ class TestTrustedProxyHops:
 
     def test_a_deployment_refuses_to_guess(self, monkeypatch, deployed):
         """Unset is not zero, it is unknown, and both readings of an unknown value break: guess zero
-        behind a proxy and every signup is scored against the ingress; guess one with nothing in
-        front and the score is keyed on a header the caller writes."""
+        behind a proxy and every caller is counted as the ingress; guess one with nothing in
+        front and the count is keyed on a header the caller writes."""
         monkeypatch.delenv(TRUSTED_PROXY_HOPS_VAR, raising=False)
 
         with pytest.raises(TrustedProxyConfigError) as exc:
@@ -121,7 +122,8 @@ class TestInstallTrustedProxyFix:
 
 
 class TestTheAddressARequestIsCreditedTo:
-    """What reCAPTCHA is told, driven through the WSGI stack that decides it."""
+    """What the sign-in limits count and the human check is told, driven through the WSGI stack
+    that decides it."""
 
     def _remote_addr(self, hops, **headers):
         app = _app_reporting_the_caller()
@@ -133,7 +135,7 @@ class TestTheAddressARequestIsCreditedTo:
 
     def test_with_no_proxy_a_forged_header_is_ignored(self):
         """Any caller can send X-Forwarded-For. Believed with nothing in front of Flask, it is an
-        identity the caller mints per request, and the address reCAPTCHA scores is fiction."""
+        identity the caller mints per request, and the address a sign-in limit counts is fiction."""
         addr = self._remote_addr(0, **{"X-Forwarded-For": "198.51.100.7"})
 
         assert addr == "10.0.0.1"
@@ -143,7 +145,7 @@ class TestTheAddressARequestIsCreditedTo:
 
         assert addr == "203.0.113.5"
 
-    def test_a_caller_cannot_forge_the_address_it_is_scored_at(self):
+    def test_a_caller_cannot_forge_the_address_it_is_counted_at(self):
         """The entries to the *left* are whatever the caller chose to send; the trusted proxy appends
         the address it actually saw on the right. One trusted hop reads exactly that one, so a caller
         that pads the header with a thousand fake addresses is still reported as itself."""

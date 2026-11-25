@@ -1,17 +1,19 @@
-import { test, expect, BACKEND_URL, TEST_USER, VendorPage } from './fixtures';
+import { test, expect, APP_API, BACKEND_URL, TEST_USER, VendorPage } from './fixtures';
+import { HUMAN_CHECK_TOKEN } from './helpers/humanCheck';
 import { seedApplicantMarket } from './helpers/seedApplicantMarket';
 import { waitForRoomInWindow } from './helpers/signInWindow';
 
 /**
  * Nobody can use the applicant sign-in to flood an address with codes (T12).
  *
- * An address may be sent five codes in a quarter of an hour; past that the back end answers 429
- * with a Retry-After and sends nothing, and the sign-in screen says so in words. The limit is per
- * address whoever asks, so the first five are asked for over the API and the one past it through
- * the screen, as a vendor would meet it.
+ * One caller may ask for five codes to an address in a quarter of an hour; past that the back end
+ * answers 429 with a Retry-After and sends nothing, and the sign-in screen says so in words. The
+ * count is per caller and address, so the first five are asked for over the API through the dev
+ * server's proxy (`APP_API`), which the page's own calls take and so reach the back end as the same
+ * caller, and the one past it through the screen, as a vendor would meet it.
  */
 
-const ALLOWED_PER_ADDRESS = 5;
+const ALLOWED_PER_CALLER_AND_ADDRESS = 5;
 
 test('asking for codes past the limit says to wait, and sends nothing more', async ({
   page,
@@ -28,12 +30,12 @@ test('asking for codes past the limit says to wait, and sends nothing more', asy
   await waitForRoomInWindow();
   const address = `flooded-${Date.now()}@example.com`;
   const requestCode = () =>
-    request.post(
-      `${BACKEND_URL}/public/markets/${market.marketSlug}/applicant-login/request-code`,
-      { data: { email: address } },
+    page.request.post(
+      `${APP_API}/public/markets/${market.marketSlug}/applicant-login/request-code`,
+      { data: { email: address, captcha_token: HUMAN_CHECK_TOKEN } },
     );
 
-  for (let i = 0; i < ALLOWED_PER_ADDRESS; i += 1) {
+  for (let i = 0; i < ALLOWED_PER_CALLER_AND_ADDRESS; i += 1) {
     expect((await requestCode()).status()).toBe(200);
   }
 

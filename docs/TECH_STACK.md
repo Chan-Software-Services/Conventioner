@@ -18,8 +18,8 @@ sources:
   - T273
   - T317
   - T345
-  - T584
   - T588
+  - T584
 ---
 
 # Technology Stack
@@ -85,13 +85,11 @@ How each part of the code works is in the implementation layer of the [knowledge
   - HTML and plain text email templates
   - API key configured via `RESEND_API_KEY` environment variable
 
-### CAPTCHA Service
+### The human check
 
-- **Google reCAPTCHA v3** - Bot protection
-  - Invisible CAPTCHA verification
-  - Score-based verification (minimum 0.5)
-  - Used on registration endpoint
-  - Secret key configured via `RECAPTCHA_SECRET_KEY` environment variable, which the app refuses to boot without
+- **Cloudflare Turnstile** (managed mode), the app's one human check ([ADR 0045](adr/0045-turnstile-is-the-one-human-check.md)), checked on the server by `captcha_passes(token, action)` (`back-end/utils/captcha.py`)
+  - The contract (which routes ask it, what a failed check answers, what an outage lets through) is in [security invariants](implementation/conventions/security-invariants.md)
+  - Secret key configured via `TURNSTILE_SECRET_KEY` environment variable, which the app refuses to boot without; Cloudflare's published test secrets are refused
   - Test-only bypass via `DISABLE_CAPTCHA`, honored only under `ALLOW_INSECURE_LOCAL_DEV` (see Environment Variables)
 
 ### Error Tracking
@@ -105,7 +103,7 @@ How each part of the code works is in the implementation layer of the [knowledge
 - **PyJWT 2.15** - The applicant's sign-in token, signed with its own key derived from `SECRET_KEY`
 - **Cryptography 50** - Lets the local stack's `flask run --cert=adhoc` make its certificate; no module imports it
 - **Requests 2.34** - HTTP library
-  - Used for reCAPTCHA verification API calls
+  - Used for the human check's siteverify calls, and Discord's REST API
 - **python-dotenv 1.2** - Reads `back-end/.env` on the first line `app.py` runs
   - The real environment wins over the file, so nothing exported by hand is shadowed by it
 
@@ -296,8 +294,8 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 
 ### User Registration
 
-1. User submits registration form with CAPTCHA verification
-2. Backend validates CAPTCHA token
+1. User submits registration form with the human check's token
+2. Backend checks the token with Cloudflare Turnstile
 3. Password is hashed with bcrypt; one longer than 72 bytes, which bcrypt does not read, is refused (400) and makes no account
 4. User account created with `email_verified: false`, holding its verification link's SHA-256, never the link; the link expires in 1 hour, and asking again replaces it at once
 5. Verification email sent via Resend
@@ -310,7 +308,7 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
    - Email and password authentication
    - Requires email verification
    - Session-based authentication
-   - Rate limited: ten tries per address and fifty per caller in 15 minutes, a try that signs in taken back (429 with the wait)
+   - Rate limited, and asks the human check past an address's own count: the limits are in [the sign-in is bounded](implementation/data/users-and-email.md#the-sign-in-is-bounded)
    - A password longer than 72 bytes, which bcrypt does not read, does not match
 
 2. **Passwordless Login (OTP)**
@@ -318,15 +316,15 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
    - 6-digit code sent via Resend
    - Code expires in 5 minutes
    - Its tries are counted in the update that reads it; the fifth wrong code discards it and keeps its wait
-   - Rate limited: ten tries per address and sixty per caller in 15 minutes, a try that signs in taken back (429 with the wait); another code is refused (429 with the wait) until an hour after the last one expired, unless it was used
-   - Asking for a code is rate limited too: five requests per address and thirty per caller in 15 minutes (429 with the wait)
+   - Rate limited on asking for a code and on trying one, and a try past an address's own count asks the human check: the limits are in [the sign-in is bounded](implementation/data/users-and-email.md#the-sign-in-is-bounded)
+   - Another code is refused (429 with the wait) until an hour after the last one expired, unless it was used
 
 ### Password Reset
 
 1. User requests password reset
 2. Reset link generated, and only its SHA-256 stored
 3. Reset link sent via Resend email
-4. Token expires in 1 hour; another reset is refused (429) until an hour after it expired, and past five requests per address or thirty per caller in 15 minutes every request is refused (429 with the wait)
+4. Token expires in 1 hour; another reset is refused (429) until an hour after it expired, and past the requests' limits every request is refused (429 with the wait), the limits being in [the sign-in is bounded](implementation/data/users-and-email.md#the-sign-in-is-bounded)
 5. User sets new password; the link is used once, the address is marked verified, and a sign-in code asked for before ends
 6. Password hashed and stored; one longer than 72 bytes is refused (400) as at registration
 
@@ -334,7 +332,7 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 
 - **Password Hashing**: Bcrypt with secure salt generation
 - **Email Verification**: Required before account activation
-- **CAPTCHA Protection**: reCAPTCHA v3 on registration
+- **Human check**: Cloudflare Turnstile, the one human check ([ADR 0045](adr/0045-turnstile-is-the-one-human-check.md))
 - **Rate Limiting**: every sign-in, code, reset-link, verification-link and sign-up request is counted in the database before the account is looked up, per address and per caller, and an invitation per inviter and per address, with the limits in one table (`LIMITS` in `back-end/sign_in_limits.py`); a try that signs in, and an invitation accepted, is taken back; OTP and password reset requests also wait on the last
 - **Token Expiration**: Time-limited tokens for verification and reset
 - **Secure Sessions**: HTTP-only, `Secure`, `SameSite=Lax` cookies, signed with a key derived from a `SECRET_KEY` that has no fallback
@@ -349,12 +347,12 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 - `RESEND_API_KEY` - Resend email service API key. **Required**: the app refuses to boot without it (see [RELEASING.md](./RELEASING.md#pre-deploy-required-production-environment))
 - `FRONTEND_URL` - The address organizers sign in at: email links, and Discord's OAuth2 redirect (this plus `/discord/connected`) (e.g., `http://127.0.0.1:5173`). Has no say in CORS. **Required**: outside the hatch the app refuses to boot unless it is an `https://` origin with no path
 - `FROM_EMAIL` - Email address to send from. **Required**: outside the hatch the app refuses to boot without it or with Resend's shared `onboarding@resend.dev`, the default under the hatch
-- `RECAPTCHA_SECRET_KEY` - Google reCAPTCHA v3 secret key. **Required**: the app refuses to boot without it
+- `TURNSTILE_SECRET_KEY` - The secret of the Cloudflare Turnstile widget the human check uses. **Required**: the app refuses to boot without it, and refuses Cloudflare's published test secrets
 - `CORS_ALLOWED_ORIGINS` - Comma-separated browser origins allowed to make credentialed requests (e.g., `https://app.example.com`). **Required**: the app refuses to boot without it, and `*` is refused
 - `SECRET_KEY` - Every signing key is derived from it: the Flask session cookie's, and the vendor's sign-in token's. **Required**: there is no fallback, and the app refuses to boot without it. Must be at least 32 characters, and every value this repository has published (the old `TEMP_KEY_CHANGE_IN_PRODUCTION` fallback, the env-template and deploy-guide placeholders) is refused by name - it is readable by anyone who can read the repo. Rotating it ends every session signed with the old key
-- `TRUSTED_PROXY_HOPS` - How many proxies of this deployment's own a request passes through before it reaches Flask (Vercel: `1`; Flask exposed directly: `0`). **Required**: there is no default, because unset is not zero but unknown. It decides whose address organizer signup reports to reCAPTCHA, which scores on it - behind an unnamed ingress that is the ingress's address, for every caller in the world
+- `TRUSTED_PROXY_HOPS` - How many proxies of this deployment's own a request passes through before it reaches Flask (Vercel: `1`; Flask exposed directly: `0`). **Required**: there is no default, because unset is not zero but unknown. It decides whose address the sign-in limits count each caller by - behind an unnamed ingress that is the ingress's address, for every caller in the world
 - `ALLOW_INSECURE_LOCAL_DEV` - Local-development escape hatch for the [boot requirements](./RELEASING.md#pre-deploy-required-production-environment) (default OFF; set `true`/`1`). Never set it on a deployment: a back end that sees a platform variable (`VERCEL`, `VERCEL_ENV`, `VERCEL_REGION`, `AWS_LAMBDA_FUNCTION_NAME`) refuses to boot with it, or with any of the three test flags below, on
-- `DISABLE_CAPTCHA` - Test-only flag to skip reCAPTCHA verification (default OFF; set `true`/`1`). Honored only when `ALLOW_INSECURE_LOCAL_DEV` is also set
+- `DISABLE_CAPTCHA` - Test-only flag to pass any non-empty human check token without asking Cloudflare (default OFF; set `true`/`1`); a request with no token is still refused. Honored only when `ALLOW_INSECURE_LOCAL_DEV` is also set
 - `DISABLE_EMAIL` - Test-only flag to skip sending verification, password reset, and OTP emails via Resend, treating them as sent (default OFF; set `true`/`1`). Honored only when `ALLOW_INSECURE_LOCAL_DEV` is also set
 - `DISCORD_FAKE` - Test-only flag to answer the Discord bot's requests from the fake servers in the database instead of Discord (`back-end/discord_fake.py`; default OFF; set `true`/`1`). Honored only when `ALLOW_INSECURE_LOCAL_DEV` is also set
 - `MONGODB_URI` - A full MongoDB connection string (production's Atlas cluster); when set, the five below are not read
@@ -370,8 +368,8 @@ the ports, caps each service's memory, CPU and processes, and starts mongo-expre
 
 - `VITE_FLASK_HOST` - API base path (`/api` in the template and the compose file, `https://api.conventioner.io` in production; no default). **Required to build**: with none, every API request goes to the front end's own origin, so `vite build` refuses without it
 - `VITE_BACKEND_URL` - Backend URL for Vite proxy (default: `https://127.0.0.1:5001`; the compose file sets `https://backend:5001`)
-- `VITE_RECAPTCHA_SITE_KEY` - Google reCAPTCHA v3 site key, from the same reCAPTCHA property as the back end's `RECAPTCHA_SECRET_KEY`. **Required to build**: it is baked into the bundle, and without it the front end sends a placeholder token that the back end hands to Google, who never issued it - so every organizer signup is rejected. `vite build` refuses without it
-- `VITE_ALLOW_INSECURE_LOCAL_DEV` - the only thing that lets a bundle be built with no site key or no `VITE_FLASK_HOST` above (local development and E2E, where the back end runs with `DISABLE_CAPTCHA`, and the bundle budget's build in CI and `nm-test.sh`, which is measured and never deployed). Opt-in, warns on every build it allows, and must never be set on a deployed build: a build with Vercel's `VERCEL` set refuses it outright
+- `VITE_TURNSTILE_SITE_KEY` - The human check's Cloudflare Turnstile site key, from the same widget as the back end's `TURNSTILE_SECRET_KEY`. **Required to build**: it is baked into the bundle, and without it the front end sends a placeholder token that the back end hands to Cloudflare, who never issued it - so every organizer sign-up is asked for the check again. `vite build` refuses without it, and refuses Cloudflare's test site keys
+- `VITE_ALLOW_INSECURE_LOCAL_DEV` - the only thing that lets a bundle be built with no site key, or a test one, or no `VITE_FLASK_HOST` above (local development and E2E, where the back end runs with `DISABLE_CAPTCHA`, and the bundle budget's build in CI and `nm-test.sh`, which is measured and never deployed). Opt-in, warns on every build it allows, and must never be set on a deployed build: a build with Vercel's `VERCEL` set refuses it outright
 - `BUILD_COMMIT` - The commit the build was made from, which the build writes to `/version.json` (`null` when unset or blank). Read from the build's process environment, not through `loadEnv` and not a `VITE_` variable, so no `.env` file sets it and the bundle never holds it. Set by the Deploy workflow (`vercel deploy --build-env`), never by hand
 
 ## Project Structure
@@ -392,7 +390,7 @@ Conventioner/
 │   ├── utils/            # Utility modules
 │   │   ├── tokens.py     # Token/OTP generation
 │   │   ├── email.py      # Email service integration
-│   │   ├── captcha.py    # CAPTCHA verification
+│   │   ├── captcha.py    # the human check (Turnstile)
 │   │   └── configured_secret.py  # Whether a variable holds a secret
 │   ├── migrations/       # Database migration scripts
 │   ├── assignment/       # Assignment algorithm logic
@@ -455,12 +453,12 @@ Conventioner/
 - **Configuration**: API key required
 - **Documentation**: https://resend.com/docs
 
-### Google reCAPTCHA v3
+### Cloudflare Turnstile
 
-- **Purpose**: Bot protection and spam prevention
+- **Purpose**: The human check, whether a person, not a script, is asking
 - **Use Cases**: Registration form protection
-- **Configuration**: Site key (frontend) and secret key (backend)
-- **Documentation**: https://developers.google.com/recaptcha/docs/v3
+- **Configuration**: Site key (frontend) and secret key (backend), of one widget in Managed mode
+- **Documentation**: https://developers.cloudflare.com/turnstile/
 
 ### Discord
 
@@ -483,4 +481,4 @@ Conventioner/
 - [MongoDB Documentation](https://docs.mongodb.com/)
 - [Vite Documentation](https://vitejs.dev/)
 - [Resend Documentation](https://resend.com/docs)
-- [reCAPTCHA v3 Documentation](https://developers.google.com/recaptcha/docs/v3)
+- [Turnstile Documentation](https://developers.cloudflare.com/turnstile/)

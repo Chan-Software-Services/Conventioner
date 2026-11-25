@@ -30,10 +30,10 @@ MongoDB Atlas is not in Vercel's Marketplace; it is set up in Atlas directly.
    ```
    It creates the collections and indexes and records the markers the back end refuses to boot without; it ends with "Successfully initialized".
 
-## 2. Email and captcha
+## 2. Email and the human check
 
 - **Resend**: add and verify the sending domain (`conventioner.io`, DNS records at the registrar), create an API key, and choose the sender (`registration@conventioner.io`). Resend's shared `onboarding@resend.dev` sender only delivers to the Resend account's own address, so it cannot verify anyone else.
-- **reCAPTCHA v3**: one property, with the front end's domain on its list. Its **site key** goes to the front end and its **secret** to the back end; keys from two properties fail exactly as missing ones do.
+- **Cloudflare Turnstile**: one widget in Managed mode, with the front end's hostname (`conventioner.io`) on its list. Its **site key** goes to the front end and its **secret** to the back end; keys from two widgets fail exactly as missing ones do, and Cloudflare's published test keys are refused on both sides.
 - **TypeSafe** (optional): an API key from its console.
 
 ## 3. The two Vercel projects
@@ -61,7 +61,7 @@ That is why the floorplan solver `pyckingsolver` lives in `requirements-floorpla
 ## 4. Environment variables
 
 Set on each project's **Production** environment (Settings, Environment Variables); [OPERATIONS.md](OPERATIONS.md#configuration-and-secrets) lists every one with its value or source.
-The back end needs `MONGODB_URI`, `SECRET_KEY`, `SESSION_TYPE=null`, `CORS_ALLOWED_ORIGINS`, `TRUSTED_PROXY_HOPS=1`, `FRONTEND_URL`, `FROM_EMAIL`, `RESEND_API_KEY` and `RECAPTCHA_SECRET_KEY` (and optionally `TYPESAFE_API_KEY`, `SENTRY_DSN`, and `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` and `DISCORD_BOT_TOKEN` together); the front end needs `VITE_FLASK_HOST` and `VITE_RECAPTCHA_SITE_KEY` at build time (and optionally `VITE_SENTRY_DSN`, [error tracking](RELEASING.md#optional-error-tracking)).
+The back end needs `MONGODB_URI`, `SECRET_KEY`, `SESSION_TYPE=null`, `CORS_ALLOWED_ORIGINS`, `TRUSTED_PROXY_HOPS=1`, `FRONTEND_URL`, `FROM_EMAIL`, `RESEND_API_KEY` and `TURNSTILE_SECRET_KEY` (and optionally `TYPESAFE_API_KEY`, `SENTRY_DSN`, and `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` and `DISCORD_BOT_TOKEN` together); the front end needs `VITE_FLASK_HOST` and `VITE_TURNSTILE_SITE_KEY` at build time (and optionally `VITE_SENTRY_DSN`, [error tracking](RELEASING.md#optional-error-tracking)).
 Nothing reads `FLASK_ENV`, `USE_HTTPS`, `MONGODB_DB` or the separate `MONGODB_HOST`/`MONGODB_USER`/`MONGODB_PASSWORD` variables in production; do not set them.
 
 Each variable [RELEASING.md](./RELEASING.md#pre-deploy-required-production-environment) lists is a **boot-time requirement**: the function refuses to start without it, so a deployment that is missing one serves nothing at all; that table says what each one defends and what an unset value would do.
@@ -69,7 +69,7 @@ Never set `ALLOW_INSECURE_LOCAL_DEV`, `DISABLE_CAPTCHA`, `DISABLE_EMAIL` or `DIS
 Tick "Enable access to System Environment Variables" in the back-end project's Environment Variables settings, so its runtime sees `VERCEL` and `VERCEL_ENV`; the Deploy workflow refuses a back end that does not.
 
 `TRUSTED_PROXY_HOPS=1` is the right answer on Vercel: a request reaches the function through Vercel's own ingress, so the peer address Flask sees is the ingress, not the caller.
-That address is what organizer signup reports to Google as reCAPTCHA's `remoteip`, and reCAPTCHA v3 scores on it - so a function that has not been told about the hop in front of it reports the same client for every signup in the world.
+That address is what the sign-in limits count each caller by, and what the human check reports to Cloudflare as Turnstile's `remoteip` - so a function that has not been told about the hop in front of it counts every caller in the world as one.
 Do not raise it above the number of proxies you actually own: `X-Forwarded-For` is written by the caller, and a hop you do not own is a hop the caller fills in.
 
 The three secrets above are written as `<...>` on purpose, and pasting one of those brackets in verbatim is refused: **every value this repository has printed where a secret goes is rejected by name**, along with anything shaped like a placeholder (a run of x's, a `your-` prefix).
@@ -85,12 +85,12 @@ Nothing keys on `FLASK_ENV` any more - it defaulted to `development` in our own 
 
 ### The front end's site key
 
-This is set on the **front end's** Vercel project, not this one, and it is the other half of the back end's `RECAPTCHA_SECRET_KEY`: the two must come from the same reCAPTCHA property.
+`VITE_TURNSTILE_SITE_KEY` is set on the **front end's** Vercel project, not this one, and it is the other half of the back end's `TURNSTILE_SECRET_KEY`: the two must come from the same Turnstile widget.
 Vite bakes it into the bundle at build time, so setting it later does nothing until the front end is rebuilt.
 
-A front end deployed without it ships a bundle that has no captcha to solve and sends a placeholder token.
-The back end no longer waves that through - it has a real secret now, and Google never issued that token - so `POST /register` answers 400 and **no organizer can sign up**, on a deployment that otherwise looks healthy.
-`vite build` refuses to produce such a bundle for exactly that reason; the refusal names the variable.
+A front end deployed without it ships a bundle that renders no human check and sends a placeholder token.
+The back end does not wave that through - it has a real secret, and Cloudflare never issued that token - so every sign-up is asked for the check again and **no organizer can sign up**, on a deployment that otherwise looks healthy.
+`vite build` refuses to produce such a bundle for exactly that reason, and one carrying a Cloudflare test site key; the refusal names the variable.
 
 ## 5. Deploying
 
@@ -108,5 +108,5 @@ The back end no longer waves that through - it has a real secret now, and Google
 - **"Refusing to start: N of the things this app's public surface rests on are not as a deployment needs them"**: one or more of the [boot requirements](./RELEASING.md#pre-deploy-required-production-environment) is unset or unusable, or a local switch is on. The log names every one of them, and each names what it defends, delivers or stores. Set them and redeploy; do not work around it by setting `ALLOW_INSECURE_LOCAL_DEV`, which turns all of that off. See [RELEASING.md](./RELEASING.md#pre-deploy-required-production-environment).
 - **"This process runs on a deployed host (`VERCEL` is set, and only the platform sets it), and ... on"**: `ALLOW_INSECURE_LOCAL_DEV`, `DISABLE_CAPTCHA`, `DISABLE_EMAIL` or `DISCORD_FAKE` is on in the back-end project's environment, or a `back-end/.env` was deployed. Remove each one it names and redeploy ([RELEASING.md](./RELEASING.md#a-deployed-host-refuses-local-switches)).
 - **"`SECRET_KEY` is set to a value this repository has published"**: the key you set is one of the placeholders or fallbacks that appear in this repo (or its history), so it is readable by anyone who can read the repo. Generate a real one with `python -c 'import secrets; print(secrets.token_urlsafe(48))'`. This ends every session signed with the old key, so organizers log in again once - that is the cost of the key not being public.
-- **"`RECAPTCHA_SECRET_KEY` / `RESEND_API_KEY` is set to a placeholder this repository has printed"**: the value you set is one of the example strings from an env template or an older version of this guide (`6Lcxxxxx...`, `re_xxxxx...`, `your-...`), not a secret an issuer ever gave you. Google and Resend both reject it, so the captcha would fail every signup and no verification mail would ever be delivered - a check that passed on a value nothing works with is the failure this refusal exists to move to boot time. Set the real key from the linked console, or, if this is a local machine, clear the variable and set `ALLOW_INSECURE_LOCAL_DEV=true` with `DISABLE_CAPTCHA=true` / `DISABLE_EMAIL=true`.
+- **"`TURNSTILE_SECRET_KEY` / `RESEND_API_KEY` is set to a placeholder this repository has printed"**: the value you set is one of the example strings from an env template or an older version of this guide (`re_xxxxx...`, `your-...`), or one of Cloudflare's published Turnstile test secrets (`1x0000...AA` and its kin), not a secret an issuer ever gave you for this deployment. A test secret passes or fails every token, and Resend rejects a placeholder, so the human check would hold nothing back or refuse every sign-up and no verification mail would ever be delivered - a check that passed on a value nothing works with is the failure this refusal exists to move to boot time. Set the real key from the linked console, or, if this is a local machine, clear the variable and set `ALLOW_INSECURE_LOCAL_DEV=true` with `DISABLE_CAPTCHA=true` / `DISABLE_EMAIL=true`.
 - **"The market-document migration has not been applied to this database"**: the function is refusing to boot because it cannot confirm the migration (see step 5 above). Run `migrations/migrate_market_keys.py` against the Atlas database and redeploy. The same error appears when the marker simply cannot be read - an unknown migration state is treated as unmigrated - so check network access too.

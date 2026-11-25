@@ -382,3 +382,48 @@ describe('the code sign-in', () => {
     expect(shown(wrapper, 'login-otp-success-message')).toBe(false);
   });
 });
+
+describe('a sign-in the server asks the human check of (T539)', () => {
+  const CHECK = "Confirm you're a person, then try again.";
+  const NOT_CONFIRMED = "We couldn't confirm you're a person. Try again.";
+
+  it('says what the resend was answered, offering the link to an address to verify', async () => {
+    post
+      .mockRejectedValueOnce(refused(403, { message: CHECK, captcha: 'required' }))
+      .mockRejectedValueOnce(refused(403, { message: VERIFY_FIRST }));
+    const wrapper = await atLogin();
+
+    await signInByPassword(wrapper);
+
+    expect(posts('/login')).toHaveLength(2);
+    expect(byTestId(wrapper, 'login-error-message').text()).toBe(VERIFY_FIRST);
+    expect(byTestId(wrapper, 'login-resend-verification-button').exists()).toBe(true);
+  });
+
+  it('says a wrong password after the check, with "Forgot password?" in the message', async () => {
+    post
+      .mockRejectedValueOnce(refused(403, { message: CHECK, captcha: 'required' }))
+      .mockRejectedValueOnce(refused(401, { message: DO_NOT_MATCH }));
+    const wrapper = await atLogin();
+
+    await signInByPassword(wrapper);
+
+    const message = byTestId(wrapper, 'login-error-message');
+    expect(message.text()).toContain(DO_NOT_MATCH);
+    expect(message.find('[data-testid="login-error-forgot-password-link"]').exists()).toBe(true);
+  });
+
+  it("says it couldn't confirm a person, offering neither the link nor the reset", async () => {
+    const wrapper = await atLogin();
+    post.mockResolvedValueOnce({ status: 200, data: { msg: CODE_SENT } });
+    await askForACode(wrapper);
+    post.mockRejectedValue(refused(403, { msg: CHECK, captcha: 'required' }));
+
+    await sendACode(wrapper, '123456');
+
+    expect(posts('/login-otp')).toHaveLength(2);
+    expect(byTestId(wrapper, 'login-otp-error-message').text()).toBe(NOT_CONFIRMED);
+    expect(byTestId(wrapper, 'login-otp-resend-verification-button').exists()).toBe(false);
+    expect(byTestId(wrapper, 'login-otp-error-forgot-password-link').exists()).toBe(false);
+  });
+});

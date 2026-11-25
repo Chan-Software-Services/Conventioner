@@ -249,7 +249,8 @@ docker run -d \
    ```bash
    cp .env.example .env
    ```
-   The template builds as it stands, and without it `npm run build` refuses: `vite build` will not produce a bundle with no `VITE_FLASK_HOST`, which would call its own origin, or with no `VITE_RECAPTCHA_SITE_KEY`, because such a bundle sends a placeholder captcha token that a deployed back end verifies against Google and Google rejects - every organizer signup a 400, on a front end that looks fine.
+   The template builds as it stands, and without it `npm run build` refuses: `vite build` will not produce a bundle with no `VITE_FLASK_HOST`, which would call its own origin, or with no `VITE_TURNSTILE_SITE_KEY`, because such a bundle sends a placeholder token for the human check that a deployed back end checks with Cloudflare and Cloudflare refuses - every organizer sign-up asked for the check again, on a front end that looks fine.
+   It refuses Cloudflare's test site keys too, unless the hatch below is on.
    The template sets `VITE_FLASK_HOST=/api`, and works with no site key because it sets `VITE_ALLOW_INSECURE_LOCAL_DEV=true`, the front-end half of the back end's `ALLOW_INSECURE_LOCAL_DEV`, and each build it lets through says so in a warning.
    A bundle built that way only works against a back end that has also been told it is a local development one (`DISABLE_CAPTCHA=true`); never deploy one.
    Vite reads `front-end/.env` only - it never reads `.env.example` - so a checkout that has not copied it has nothing set.
@@ -408,11 +409,12 @@ docker compose build --no-cache
 docker compose up
 ```
 
-**Backend crash-loops with "`SECRET_KEY` / `RESEND_API_KEY` / `RECAPTCHA_SECRET_KEY` is set to a placeholder this repository has printed"**:
+**Backend crash-loops with "`SECRET_KEY` / `RESEND_API_KEY` / `TURNSTILE_SECRET_KEY` is set to a placeholder this repository has printed"**:
 
 An `.env` you already have was copied from an older template that printed `SECRET_KEY=your-secret-key-here-change-in-production`, `RESEND_API_KEY=re_xxxxxxxx...` and `RECAPTCHA_SECRET_KEY=6Lcxxxxx...` as if they were fill-in values.
 They never worked - Resend rejects that key, Google never issued that secret, and the signing key is one `git log` away from anybody - but they are _truthy_, so the app took them for configured secrets and the failure landed at request time (a 500 per signup, a captcha verified against a key that cannot verify anything) or, for the signing key, never at all.
 They are refused by name at boot now, on a laptop as on a deployment, escape hatch or not, so the failure lands where it can be read.
+`RECAPTCHA_SECRET_KEY` is no longer read at all: the human check is Cloudflare Turnstile, and its secret is `TURNSTILE_SECRET_KEY`, whose published test secrets (`1x0000...AA` and its kin) are refused the same way.
 
 **Two files can carry them, and the message does not say which one it read.** Check both:
 
@@ -424,7 +426,7 @@ In whichever file holds them, blank the secrets and leave the bypasses beside th
 ```bash
 SECRET_KEY=
 RESEND_API_KEY=
-RECAPTCHA_SECRET_KEY=
+TURNSTILE_SECRET_KEY=
 DISABLE_EMAIL=true
 DISABLE_CAPTCHA=true
 ```

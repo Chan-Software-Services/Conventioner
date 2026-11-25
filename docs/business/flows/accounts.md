@@ -27,6 +27,7 @@ sources:
   - T338
   - T318
   - T411
+  - T539
 ---
 
 # Accounts
@@ -41,7 +42,7 @@ An account is one email address: an address differing only in case or spacing is
 ## A1. Register and verify an organizer account
 
 **Status:** Works; a signed-out person sees the confirmation at step 4 since bug 22 was fixed (`auth.spec.ts`, `account-links.spec.ts`), and since E32/F03/S04 a double click makes one account and one email, and two sign-ups racing for one address make one account (`a-signup-is-sent-once.spec.ts`).
-Steps 1 to 3 walked live as far as reCAPTCHA allows (the slot-1 stack has real keys and refuses automated browsers).
+Steps 1 to 3 were walked live as far as reCAPTCHA, the human check before Turnstile, allowed (the slot-1 stack had real keys and refused automated browsers).
 **Task:** "Create an account for yourself."
 
 1. Go to `/login` and choose the Register tab.
@@ -60,9 +61,11 @@ Branches: mismatched passwords ("Passwords do not match"), short password, a pas
 
 - A password longer than 72 bytes, which may be fewer than 72 characters since an accented letter or an emoji takes more than one, says "That password is too long. Use 72 characters or fewer; an accented letter or an emoji counts as more than one." and makes no account ([a password longer than 72 bytes](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
 
-- Past five sign-ups for one address in 15 minutes, or thirty from one caller, the next says "You have asked several times. Try again in N minutes.", the same for every address, before the reCAPTCHA check ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
+- Past thirty sign-ups from one caller in 15 minutes, the next says "You have asked several times. Try again in N minutes." before the human check is asked; past five from one caller for one address in 15 minutes, or twenty for one address in an hour whoever asks, the same, after it, the same for every address ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
 
-Depends on: reCAPTCHA (bypassed locally), Resend.
+- A sign-up whose human check does not pass (Cloudflare Turnstile, shown only when Cloudflare needs the person to tick a box) is answered "Confirm you're a person, then try again." and makes no account and sends no mail; when the server cannot reach Cloudflare, the sign-up goes on under its limits.
+
+Depends on: Cloudflare Turnstile (bypassed locally), Resend.
 Covered by:
 
 - `a-signup-is-sent-once.spec.ts`
@@ -84,7 +87,7 @@ The page asks for the address on the page itself, in a labelled field.
 "Send the link again" with nothing typed says "Type your email address." under the field and sends nothing; a double click sends one link.
 A server's fault or no answer says so, and keeps the form and the address to try again.
 Each new link replaces the one sent before, which then says "Invalid verification token", and a new one can be asked for at once; a link that could not be mailed leaves none, the one before included, and asking again sends one at once ([a failed send leaves no wait armed](../../implementation/data/users-and-email.md#a-failed-send-leaves-no-wait-armed)).
-Past five links asked for one address in 15 minutes, or thirty from one caller, the next says "You have asked several times. Try again in N minutes." in place of a link on its way, the same for every address, and keeps the form and the address.
+Past five links asked from one caller for one address in 15 minutes, twenty for one address in an hour whoever asks, or thirty from one caller, the next says "You have asked several times. Try again in N minutes." in place of a link on its way, the same for every address, and keeps the form and the address.
 "Back to sign in" under it is a link to `/login`.
 
 A sign-in refused because the address is not verified yet offers "Send the link again" too (A2), which says the same sentences (E38/F14/S02); past the limit it offers the link no more.
@@ -120,14 +123,18 @@ Every sign-in by password or by code starts a fresh session, so no session cooki
 Each form says one line at a time, the newer replacing the older, and says what to do next (E38/F14/S02):
 
 - A wrong password and an address with no account say the same, "That email and password do not match.", with "Forgot password?" in it (A4); so does a password longer than 72 bytes.
-- Past ten tries at one address in 15 minutes, or fifty from one caller, the next says "Too many sign-in attempts. Try again in N minutes, or reset your password.", with "Forgot password?" in it, the same for every address.
+- Past ten tries from one caller at one address in 15 minutes, or fifty from one caller, the next says "Too many sign-in attempts. Try again in N minutes, or reset your password.", with "Forgot password?" in it, the same for every address.
   A right password takes its own try back, so only wrong ones count, and a few mistyped passwords cost nothing ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
+  No one else's tries count against the organizer: past fifty wrong tries at one address from every caller, Sign in asks the human check, which shows above Sign in, often with nothing to tick, and sends once more; a person passes it and is signed in.
+  Asked a second time it says "We couldn't confirm you're a person. Try again.", and a check that cannot load says "The check that you're a person didn't load. Check your connection, then reload the page.".
+  Until the server asks, the sign-in loads no script of the check's.
 - A right password on an account not yet verified says "Verify your email address first: we sent you a link when you registered.", with "Send the link again" (A1a).
 
 Covered by:
 
 - `a-changed-network-keeps-the-organizer-signed-in.spec.ts`
 - `a-failure-says-what-to-do.spec.ts`
+- `an-organizer-signs-in-past-others-wrong-tries.spec.ts`, which fills the address's count as fifty others' wrong tries would, for the password and the code
 - `auth.spec.ts`
 - `remember-me.spec.ts`
 - `sign-in-fits-a-phone.spec.ts`
@@ -155,8 +162,10 @@ Branches: a wrong code ("That code is not right."), which replaces the line sayi
 - Asking for another code before then says "You can ask for a new code in N minutes.".
 - Two requests for a code at once mail one code, the one that signs in, and the other is answered "You can ask for a new code in N minutes.".
 - A code that could not be mailed says "Something went wrong on our side. Try again in a moment.", as any fault of the server does, and asking again sends one at once.
-- Past five codes asked for one address in 15 minutes, or thirty from one caller, the next says "You have asked several times. Try again in N minutes.", the same for every address.
-- Past ten tries at one address in 15 minutes, or sixty from one caller, the next says "Too many sign-in attempts. Try again in N minutes, or reset your password.", the same for every address; a right code takes its own try back, as a right password does ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
+- Past five codes asked from one caller for one address in 15 minutes, twenty for one address in an hour whoever asks, or thirty from one caller, the next says "You have asked several times. Try again in N minutes.", the same for every address.
+- Past ten tries from one caller at one address in 15 minutes, or sixty from one caller, the next says "Too many sign-in attempts. Try again in N minutes, or reset your password.", the same for every address; a right code takes its own try back, as a right password does ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
+- Past fifty wrong codes at one address from every caller, Sign in asks the human check, as the password's does (A2), and sends once more.
+- Anyone may ask for an organizer's code and use up its five tries; the code sign-in then waits out the hour, while the password and "Forgot password?" stay open (A2, A4).
 
 Covered by:
 
@@ -185,7 +194,7 @@ Branches: asking for another link before an hour has passed since the last one e
 
 - A new password longer than 72 bytes says "That password is too long. Use 72 characters or fewer; an accented letter or an emoji counts as more than one.", as at sign-up (A1), and leaves the password and the link as they were.
 
-- Past five links asked for one address in 15 minutes, or thirty from one caller, the next says "You have asked several times. Try again in N minutes.", the same for every address ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
+- Past five links asked from one caller for one address in 15 minutes, twenty for one address in an hour whoever asks, or thirty from one caller, the next says "You have asked several times. Try again in N minutes.", the same for every address ([the sign-in is bounded](../../implementation/data/users-and-email.md#the-sign-in-is-bounded)).
 
 Covered by:
 
