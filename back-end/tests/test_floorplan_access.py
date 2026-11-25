@@ -258,6 +258,113 @@ class TestUploadingAnImage:
         assert images.files == {}
 
 
+def _hall_image(format: str) -> bytes:
+    """A small real image in ``format``, as PIL writes it."""
+    out = io.BytesIO()
+    Image.new("RGB", (400, 300), "white").save(out, format=format)
+    return out.getvalue()
+
+
+NOT_A_FLOORPLAN = "This file is not a PNG, JPG, WebP or PDF."
+
+
+class TestAnUploadIsReadByItsOwnBytes:
+    """An upload's type is read from its own first bytes, never from the type or the name the
+    client sent with it: those only choose the words of a refusal."""
+
+    @pytest.mark.parametrize("data,expected", [
+        (b"\x89PNG\r\n\x1a\n", "image/png"),
+        (b"\xff\xd8\xff\xe0", "image/jpeg"),
+        (b"RIFF\x24\x00\x00\x00WEBPVP8 ", "image/webp"),
+        (b"%PDF-1.7\n", "application/pdf"),
+        (b"\xef\xbb\xbf%PDF-1.4\n", "application/pdf"),
+        (b"\n" * 1019 + b"%PDF-", "application/pdf"),
+        (b"\n" * 1020 + b"%PDF-", None),
+        (b"RIFF\x24\x00\x00\x00WAVEfmt ", None),
+        (b"<html><script>", None),
+        (b"GIF89a", None),
+        (b"\x89PNG", None),
+        (b"", None),
+    ], ids=[
+        "png", "jpeg", "webp", "pdf", "pdf-after-a-byte-order-mark", "pdf-at-the-1024th-byte",
+        "pdf-past-the-1024th-byte", "riff-but-wave", "html", "gif", "a-cut-png-signature", "empty",
+    ])
+    def test_the_type_is_the_one_its_bytes_begin_with(self, data, expected):
+        assert FloorplansApi.uploaded_type(data) == expected
+
+    @pytest.mark.parametrize("format,mimetype", [
+        ("PNG", "image/png"), ("JPEG", "image/jpeg"), ("WEBP", "image/webp"),
+    ])
+    def test_each_allowed_image_is_stored_as_it_was_sent(
+        self, sign_in, market, images, format, mimetype,
+    ):
+        image = _hall_image(format)
+
+        response = _upload(
+            sign_in("owner@example.com"), file=(io.BytesIO(image), "hall", mimetype),
+        )
+
+        assert response.status_code == 201, response.get_json()
+        body = response.get_json()
+        assert (body["width"], body["height"]) == (400, 300)
+        assert images.files[ObjectId(body["gridfs_id"])]["data"] == image
+
+    @pytest.mark.parametrize("data,name,claimed", [
+        (b"<html><script>alert(1)</script></html>", "hall.png", "image/png"),
+        (b"<svg xmlns='http://www.w3.org/2000/svg'/>", "hall.webp", "image/webp"),
+        (b"GIF89a\x01\x00\x01\x00", "hall.jpg", "image/jpeg"),
+        (b"just words", "hall.png", "application/octet-stream"),
+    ])
+    def test_a_file_whose_bytes_are_no_allowed_type_is_refused_whatever_it_is_called(
+        self, sign_in, market, images, data, name, claimed,
+    ):
+        response = _upload(sign_in("owner@example.com"), file=(io.BytesIO(data), name, claimed))
+
+        assert response.status_code == 400
+        assert response.get_json() == {"error": NOT_A_FLOORPLAN}
+        assert images.files == {}
+
+    def test_a_file_sent_as_a_pdf_whose_bytes_are_none_is_refused_as_an_unreadable_pdf(
+        self, sign_in, market, images,
+    ):
+        response = _upload(
+            sign_in("owner@example.com"),
+            file=(io.BytesIO(b"<html></html>"), "Venue plan.pdf", "application/pdf"),
+        )
+
+        assert response.status_code == 400
+        assert response.get_json() == {"error": "Venue plan.pdf could not be read as a PDF."}
+        assert images.files == {}
+
+    def test_an_image_its_client_called_a_pdf_is_stored_as_the_image_it_is(
+        self, sign_in, market, images, monkeypatch,
+    ):
+        drawn = []
+        monkeypatch.setattr(FloorplansApi, "pdf_to_images", lambda *a, **k: drawn.append(1))
+        image = _hall_image("PNG")
+
+        response = _upload(
+            sign_in("owner@example.com"),
+            file=(io.BytesIO(image), "hall.pdf", "application/pdf"),
+        )
+
+        assert response.status_code == 201, response.get_json()
+        assert drawn == []
+        assert images.files[ObjectId(response.get_json()["gridfs_id"])]["data"] == image
+
+    def test_a_pdf_its_client_called_an_image_is_drawn_as_the_pdf_it_is(
+        self, sign_in, market, images,
+    ):
+        response = _upload(
+            sign_in("owner@example.com"),
+            file=(io.BytesIO(_one_page_pdf()), "hall.png", "image/png"),
+        )
+
+        assert response.status_code == 201, response.get_json()
+        (page,) = response.get_json()["pages"]
+        assert Image.open(io.BytesIO(images.files[ObjectId(page["gridfs_id"])]["data"])).format == "PNG"
+
+
 class TestAnUploadIsHeldToItsLimits:
     """An upload larger than production's functions take, a PDF of too many pages, and a PDF that
     cannot be read are each refused with a sentence the organizer can act on (T257), never a 500."""

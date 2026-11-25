@@ -111,20 +111,3 @@ def _render_pages_as_png(
             return result
         finally:
             document.close()
-
-
-def is_pdf(content_type: str) -> bool:
-    """Check whether a Content-Type header value indicates a PDF.
-
-    Args:
-        content_type: The Content-Type string (e.g. 'application/pdf').
-
-    Returns:
-        True if the content type matches 'application/pdf' or any of its
-        common variants (case-insensitive).
-    """
-    if not content_type:
-        return False
-
-    normalized = content_type.strip().lower()
-    return normalized == "application/pdf" or normalized.endswith("/pdf")
