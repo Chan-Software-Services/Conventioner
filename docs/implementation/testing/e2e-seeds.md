@@ -195,7 +195,7 @@ Each helper is one block, what it leaves and its notes, one note a line; a new h
 
 - Leaves: the above, in `market_days`, with its slug
 - Notes:
-  - a `form` market publishes its results first
+  - its results published, on either intake path
   - its review setup decided
   - `vendors` seeds others than alice and bob, a table each
   - `namePrefix` starts its name, and so its addresses, with a long one
