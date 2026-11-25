@@ -12,7 +12,7 @@ Then `## Why`; `## Who may` when roles matter; `## Where it is kept`, linking th
 One line per node, sorted by file name.
 
 - [A gated market answers as absent](a-gated-market-answers-as-absent.md) - a draft, or a CSV market before its results, answers vendors exactly as no market at all; never a "not accepting" message
-- [A person accepts before they join](a-person-accepts-before-they-join.md) - an invited role is gained only by accepting the invitation signed in with its address; inviting gives one answer, one email and one entry for every address not already on it, whether or not it has an account, waits 14 days, and gives nothing meanwhile
+- [A person accepts before they join](a-person-accepts-before-they-join.md) - an invited role is gained only by accepting the invitation signed in with its address; inviting gives one answer, one email and one entry for every address not already on it, whether or not it has an account, waits 14 days, and gives nothing meanwhile; Manage market and Manage organization invite, and the direct add routes remain only until they are removed
 - [A price follows the table](a-price-follows-the-table.md) - an assignment costs the cheapest price group its answers put it in, or "Everyone else", for its table's tier that day, a half table a share rounded half up; set on Market Setup, optional, settled with the setup
 - [A seat only for an applicant](a-seat-only-for-an-applicant.md) - a seat goes only to someone with an application; anyone may be pinned, warned, and is held
 - [A vendor is called by their chosen name](a-vendor-is-called-by-their-chosen-name.md) - the name they chose, else their full name, with their address beside it; the address alone when there is none

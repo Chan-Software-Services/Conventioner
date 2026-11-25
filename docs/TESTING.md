@@ -305,8 +305,9 @@ a spec are the coverage map in [walking the flows](implementation/testing/walkin
 Coverage also includes tier-1 market operations journeys: public vendor check-in
 (`checkin.spec.ts`), vendor browsing with search (`vendors.spec.ts`), and table
 browsing with filtering (`tables.spec.ts`). The tier-2 suite (`tier2.spec.ts`)
-covers organization CRUD (create, add admin/member, remove member, rename,
-delete), market role management (add user with role, change role, remove user),
+covers organization CRUD (create, invite an admin and a member, withdraw an
+invitation, rename, delete), market role management (invite someone with a role,
+accepted, change role, remove user),
 assignment CSV export (download and verify columns), and publishing a market
 (verify the market's vendor page, where its vendors check in, is reachable). Tier-3 authentication and robustness
 journeys (`auth.spec.ts`) cover new-user registration, the full password reset

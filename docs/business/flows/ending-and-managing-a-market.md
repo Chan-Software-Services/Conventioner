@@ -67,7 +67,7 @@ Managing it is the "Manage market" dialog ([`ManageMarketOverlay.vue`](../../../
 It opens from `/markets`, which fits a phone (T142), so on a phone it opens inside the window like every [dialog](../../implementation/conventions/dialogs.md), and its history's before-and-after table wraps its cells within the dialog's width rather than widening it.
 Only its body scrolls, so its title and close stay in view however long the people and the history run.
 On a phone each person under "Users with access" puts their address on a line of its own, with their role and Remove beneath it, so a long address is not squeezed into a narrow column; a market role the organization's makes add nothing is said on a line of its own beneath those, with its Remove beneath that line at the start, where every other row's Remove sits.
-The "Add user" row does the same: its email field takes the row, with the role at the start of a row beneath it and "Add" and "Cancel" at that row's end; beside them the field and the role were 66px each, reading "User e" and "Edi" (T142).
+The "Invite someone" row does the same: its email field and its role each take a line, with "Send invitation" and "Cancel" at the end of a line beneath them; beside them the field and the role were 66px each, reading "User e" and "Edi" (T142).
 
 ## P6. Ending early, or not at all
 
