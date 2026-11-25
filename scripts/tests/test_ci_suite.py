@@ -754,6 +754,9 @@ def workflow_jobs():
                 key: mapping(block(body, body.index(f"    {key}:"), 4), 6) if f"    {key}:" in body else {}
                 for key in ("permissions", "outputs", "env")
             }
+            nested["matrix"] = (
+                mapping(block(body, body.index("      matrix:"), 6), 8) if "      matrix:" in body else {}
+            )
             found[named.group(1)] = {
                 **job_keys,
                 **nested,
@@ -866,16 +869,8 @@ def test_the_shards_run_on_the_whole_suite_or_the_map_unless_the_selection_named
     )
 
 
-def shard_matrix():
-    lines = WORKFLOW.read_text().splitlines()
-    jobs_block = block(lines, lines.index("jobs:"), 0)
-    shard = block(jobs_block, jobs_block.index("  e2e-shard:"), 2)
-    strategy = block(shard, shard.index("    strategy:"), 4)
-    return mapping(block(strategy, strategy.index("      matrix:"), 6), 8)
-
-
 def test_the_shard_matrix_is_the_selection_s_shards_or_else_every_shard_of_a_whole_run():
-    matrix = shard_matrix()
+    matrix = workflow_jobs()["e2e-shard"]["matrix"]
 
     assert list(matrix) == ["shard"]
     fallback = re.fullmatch(
@@ -957,6 +952,7 @@ def test_e2e_reads_the_event_and_what_the_selection_decided():
 
 
 NAMED_SPECS = '["a.spec.ts","market/b+c.spec.ts"]'
+RESULTS_STEP = "A folder of results for each of this run's shards"
 
 
 def test_the_deal_is_checked_once_every_shard_passed():
@@ -1025,6 +1021,134 @@ def test_a_check_that_fails_fails_its_step(tmp_path, event):
     )
 
     assert result.returncode == 1
+
+
+# The shards' results as `e2e` finds them. `actions/download-artifact` makes a folder for each
+# artifact its pattern matches, except that it unpacks a lone match straight into the path
+# (`artifacts.length === 1`, in its source at the pinned commit), and a run keeps the artifacts of
+# its earlier attempts, the newest of each name. These tests run the job's own steps from the
+# download to the deal's check, with the real dealer.
+
+
+def upload(folder, shard, total, scope, files, hand):
+    """The two files a shard's artifact holds, in `folder`."""
+    folder.mkdir(parents=True, exist_ok=True)
+    deal = {
+        "shard": shard, "total": total, "source": "the test timings", "timings": {},
+        "scope": scope, "listed": 20, "files": sorted(files), "hand": sorted(hand),
+    }
+    (folder / "e2e-deal.json").write_text(json.dumps(deal))
+    (folder / "results.json").write_text(json.dumps({"suites": [{"file": file} for file in hand]}))
+
+
+def whole_run_upload(results):
+    files = [f"{n:02}.spec.ts" for n in range(1, 11)]
+    for shard in range(1, 11):
+        upload(results / f"e2e-results-shard-{shard}", shard, 10, "whole", files, [files[shard - 1]])
+
+
+def check_the_downloaded_results(tmp_path, temp, scope, shards, specs):
+    """The first of the steps after the download that fails, else the deal's check."""
+    steps = workflow_jobs()["e2e"]["steps"]
+    [download] = [n for n, step in enumerate(steps) if step.get("uses", "").startswith("actions/download-artifact@")]
+    [check] = [n for n, step in enumerate(steps) if step.get("name") == "Every spec file ran on one shard"]
+    for step in steps[download + 1:check + 1]:
+        if not step["run"]:
+            continue
+        done, _ = run_step(
+            tmp_path,
+            step["run"],
+            cwd=ROOT / step.get("working-directory", "."),
+            RUNNER_TEMP=str(temp),
+            E2E_SHARDS=str(whole_run_shards()),
+            EVENT="pull_request",
+            SCOPE=scope,
+            E2E_SPECS=specs,
+            SELECTED_SHARDS=shards,
+            PUBLISHES_TIMINGS="false",
+        )
+        if done.returncode:
+            break
+    return done
+
+
+def test_the_results_are_put_in_order_between_the_download_and_the_check():
+    steps = workflow_jobs()["e2e"]["steps"]
+    names = [step.get("name") for step in steps]
+    step = steps[names.index(RESULTS_STEP)]
+
+    assert steps[names.index(RESULTS_STEP) - 1]["uses"].startswith("actions/download-artifact@")
+    assert names.index(RESULTS_STEP) < names.index("Every spec file ran on one shard")
+    assert step["env"] == {"SELECTED_SHARDS": "${{ needs.e2e-select.outputs.shards }}"}
+    # Whatever the shards' result: the audit reads the reports of a run whose shards failed.
+    assert "if" not in step
+
+
+def test_a_one_shard_run_s_lone_artifact_is_checked_as_shard_1_s(tmp_path):
+    results = tmp_path / "temp" / "e2e-results"
+    upload(results, 1, 1, "named", ["a.spec.ts", "b.spec.ts"], ["a.spec.ts", "b.spec.ts"])
+
+    done = check_the_downloaded_results(tmp_path, tmp_path / "temp", "named", "[1]", '["a.spec.ts","b.spec.ts"]')
+
+    assert done.returncode == 0, done.stdout + done.stderr
+    # Where the audit looks for reports.
+    assert (results / "e2e-results-shard-1" / "results.json").exists()
+    assert not (results / "results.json").exists()
+
+
+def test_a_lone_artifact_of_a_run_with_more_shards_still_fails_the_check(tmp_path):
+    upload(tmp_path / "temp" / "e2e-results", 1, 2, "named", ["a.spec.ts", "b.spec.ts"], ["a.spec.ts"])
+
+    done = check_the_downloaded_results(
+        tmp_path, tmp_path / "temp", "named", "[1,2]", '["a.spec.ts","b.spec.ts"]'
+    )
+
+    assert done.returncode == 1
+    assert "shard 2/2 uploaded no deal record" in done.stdout
+
+
+@pytest.mark.parametrize("asked", [1, 2])
+def test_a_re_run_that_asks_for_fewer_shards_checks_its_own_alone(tmp_path, asked):
+    results = tmp_path / "temp" / "e2e-results"
+    # The first attempt ran the whole suite; this one's shards replaced the first of its folders.
+    whole_run_upload(results)
+    named = ["a.spec.ts", "b.spec.ts"][:asked]
+    for shard, file in enumerate(named, start=1):
+        upload(results / f"e2e-results-shard-{shard}", shard, asked, "named", named, [file])
+
+    done = check_the_downloaded_results(
+        tmp_path, tmp_path / "temp", "named", json.dumps(list(range(1, asked + 1))), json.dumps(named)
+    )
+
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert sorted(folder.name for folder in results.iterdir()) == [
+        f"e2e-results-shard-{shard}" for shard in range(1, asked + 1)
+    ]
+
+
+# `e2e-select` skipped, failed or answered whole: no list of shards, and a whole run's count holds.
+@pytest.mark.parametrize("scope", ["", "whole"])
+def test_a_whole_run_keeps_every_shard_s_results(tmp_path, scope):
+    results = tmp_path / "temp" / "e2e-results"
+    whole_run_upload(results)
+
+    done = check_the_downloaded_results(tmp_path, tmp_path / "temp", scope, "", "")
+
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert len(list(results.iterdir())) == 10
+
+
+@pytest.mark.parametrize("shards", ["", "[]", "[1]"])
+def test_a_run_with_nothing_downloaded_passes_the_results_step(tmp_path, shards):
+    done, _ = run_step(
+        tmp_path,
+        step_of("e2e", "name", RESULTS_STEP)["run"],
+        RUNNER_TEMP=str(tmp_path / "temp"),
+        E2E_SHARDS="10",
+        SELECTED_SHARDS=shards,
+    )
+
+    assert done.returncode == 0, done.stderr
 
 
 NO_SPEC_RAN = "No E2E spec ran: the test map names none for this change."
@@ -1371,7 +1495,7 @@ def test_a_whole_decision_runs_the_whole_suite(tmp_path):
         (decision(specs=[], shards=2), "0"),
         (decision(specs=["a.spec.ts", 2]), "0"),
         (decision(specs="a.spec.ts"), "0"),
-        (decision(specs={"a.spec.ts": 1}), "0"),
+        (decision(specs={"first": "a.spec.ts"}), "0"),
         (decision(specs=None, shards=0), "0"),
     ],
     ids=[

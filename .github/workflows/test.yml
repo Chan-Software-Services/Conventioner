@@ -50,10 +50,10 @@ jobs:
   # only warms the caches the pull requests read (`warm`); every other commit, or any doubt, runs
   # the whole suite (`full`). A nightly or hand-started run makes the test map (`map`: the shards,
   # recording, and `test-map`), or no test job when the commit has one (`none`); python-advisories
-  # reads no word, so it runs on each of them. Every other run skips this job and starts every job
-  # at once. The step's shell makes anything but one of the script's words `full`, and the jobs read
-  # an empty output, this job skipped or failed, as `full` too, so nothing here can skip a test it
-  # should not.
+  # reads no word, so it runs on each of them. Every other run skips this job, so none of its jobs
+  # waits for a word. The step's shell makes anything but one of the script's words `full`, and the
+  # jobs read an empty output, this job skipped or failed, as `full` too, so nothing here can skip
+  # a test it should not.
   suite:
     name: suite
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -700,6 +700,32 @@ jobs:
         with:
           pattern: e2e-results-shard-*
           path: ${{ runner.temp }}/e2e-results
+      # The check below and the audit read a folder per shard of this run. The download makes one
+      # for each artifact, except that it unpacks a lone one, a one-shard run's, straight into its
+      # path. It also takes what an earlier attempt of this run left, so a re-run that asked for
+      # fewer shards drops the folders numbered above its own count: the shards `e2e-select` listed,
+      # or `E2E_SHARDS` when it listed none, a whole run.
+      - name: A folder of results for each of this run's shards
+        env:
+          SELECTED_SHARDS: ${{ needs.e2e-select.outputs.shards }}
+        run: |
+          results="$RUNNER_TEMP/e2e-results"
+          for file in results.json e2e-deal.json; do
+            if [ -f "$results/$file" ]; then
+              mkdir -p "$results/e2e-results-shard-1"
+              mv "$results/$file" "$results/e2e-results-shard-1/"
+            fi
+          done
+          count="$E2E_SHARDS"
+          if [ -n "$SELECTED_SHARDS" ]; then
+            count="$(printf '%s' "$SELECTED_SHARDS" | jq length)"
+          fi
+          shopt -s nullglob
+          for folder in "$results"/e2e-results-shard-*; do
+            if [ "${folder##*-}" -gt "$count" ]; then
+              rm -r -- "$folder"
+            fi
+          done
       # Once every shard passed: every shard dealt by the same timings and their reports hold every
       # spec file exactly once, or with `--named` each file of the selection's list exactly once, or
       # this fails the job, since a file no shard ran was never tested.
