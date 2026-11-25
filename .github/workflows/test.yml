@@ -317,7 +317,7 @@ jobs:
           SHARD: ${{ matrix.shard }}
           TOTAL: ${{ matrix.total }}
           # Empty, so off, unless this run records the test map.
-          TEST_MAP_OUT: ${{ env.RECORD_TEST_MAP == 'true' && format('{0}/test-map/records.jsonl', github.workspace) || '' }}
+          TEST_MAP_OUT: ${{ env.RECORD_TEST_MAP == 'true' && format('{0}/test-map', github.workspace) || '' }}
         run: node scripts/e2e-shards.ts "--shard=$SHARD/$TOTAL" "--timings=$RUNNER_TEMP/e2e-shard-timings.json"
       - name: Report flaky tests
         if: always()
@@ -351,8 +351,8 @@ jobs:
       - name: Docker compose logs
         if: always()
         run: docker compose logs
-      # The test map lays each line of the back end's log against the test running then, by its
-      # timestamp (scripts/test_map.py build).
+      # The test map's build audits the back end's log for request lines no running test recorded,
+      # by their timestamps (scripts/test_map.py build).
       - name: The back end's log, for the test map
         if: always() && env.RECORD_TEST_MAP == 'true'
         run: |

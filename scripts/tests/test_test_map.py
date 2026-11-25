@@ -65,22 +65,72 @@ def record(spec, start, end, requests=(), title="a test"):
     }
 
 
+def shard(records, log=(), name="test-map-shard-1"):
+    """A shard as the build reads it; `log=None` for one that saved no back-end log."""
+    return test_map.Shard(name, list(records), None if log is None else list(log))
+
+
 def specs_of(shards):
     return test_map.spec_maps(shards, test_map.Rules(RULES))
 
 
-class TestALogLineGoesToTheTestRunningThen:
-    def test_a_line_inside_a_tests_window_goes_to_that_tests_spec(self):
+def audit_of(one):
+    return test_map.audit(one, test_map.Rules(RULES))
+
+
+class TestASpecReachesWhatItsTestsRecorded:
+    def test_a_log_line_inside_a_tests_window_adds_no_endpoint(self):
+        records = [record("a.spec.ts", T0, T0 + 1000, ["GET /api/markets"])]
+        log = [log_line(T0 + 500, "GET", "/markets"), log_line(T0 + 600, "POST", "/markets")]
+        assert specs_of([shard(records, log)])["a.spec.ts"]["endpoints"] == ["GET /markets"]
+
+    def test_a_retried_test_counts_both_its_attempts(self):
         records = [
-            record("a.spec.ts", T0, T0 + 1000),
-            record("b.spec.ts", T0 + 2000, T0 + 3000),
+            record("a.spec.ts", T0, T0 + 1000, ["GET /api/markets"]),
+            record("a.spec.ts", T0 + 2000, T0 + 3000, ["PUT /api/markets/m-1"]),
         ]
-        log = [log_line(T0 + 500, "GET", "/markets"), log_line(T0 + 2500, "POST", "/markets")]
-        specs = specs_of([(records, log)])
+        assert specs_of([shard(records)])["a.spec.ts"]["endpoints"] == [
+            "GET /markets",
+            "PUT /markets/<market_id>",
+        ]
+
+    def test_two_workers_tests_at_once_each_count_for_their_own_spec(self):
+        records = [
+            record("a.spec.ts", T0, T0 + 2000, ["GET /api/markets"]),
+            record("b.spec.ts", T0 + 500, T0 + 1500, ["POST /api/markets"]),
+        ]
+        specs = specs_of([shard(records)])
         assert specs["a.spec.ts"]["endpoints"] == ["GET /markets"]
         assert specs["b.spec.ts"]["endpoints"] == ["POST /markets"]
 
-    def test_a_line_between_tests_goes_to_none(self):
+    def test_a_shard_with_no_log_still_builds(self):
+        records = [record("a.spec.ts", T0, T0 + 1000, ["GET /api/markets"])]
+        assert specs_of([shard(records, log=None)])["a.spec.ts"]["endpoints"] == ["GET /markets"]
+
+
+class TestTheLogIsAnAudit:
+    def test_a_line_inside_a_window_that_no_record_claims_is_unclaimed(self):
+        records = [record("a.spec.ts", T0, T0 + 1000, ["GET /api/markets"])]
+        log = [
+            log_line(T0 + 100, "GET", "/markets"),
+            log_line(T0 + 200, "PUT", "/markets/m-1"),
+            log_line(T0 + 300, "PUT", "/markets/m-2"),
+        ]
+        assert audit_of(shard(records, log)) == {
+            "lines": 2,
+            "endpoints": {"PUT /markets/<market_id>": 2},
+        }
+
+    def test_a_line_is_claimed_only_by_a_test_whose_window_holds_it(self):
+        # Two workers: b's window holds both lines, a's the first; only a recorded the call.
+        records = [
+            record("a.spec.ts", T0, T0 + 1000, ["GET /api/markets"]),
+            record("b.spec.ts", T0 + 500, T0 + 2000),
+        ]
+        log = [log_line(T0 + 700, "GET", "/markets"), log_line(T0 + 1500, "GET", "/markets")]
+        assert audit_of(shard(records, log)) == {"lines": 1, "endpoints": {"GET /markets": 1}}
+
+    def test_a_line_outside_every_window_is_left_out(self):
         records = [
             record("a.spec.ts", T0, T0 + 1000),
             record("b.spec.ts", T0 + 2000, T0 + 3000),
@@ -90,58 +140,59 @@ class TestALogLineGoesToTheTestRunningThen:
             log_line(T0 + 1500, "GET", "/markets/new"),
             log_line(T0 + 3500, "GET", "/markets/new"),
         ]
-        specs = specs_of([(records, log)])
-        assert specs["a.spec.ts"]["endpoints"] == []
-        assert specs["b.spec.ts"]["endpoints"] == []
+        assert audit_of(shard(records, log)) == {"lines": 0, "endpoints": {}}
 
     def test_a_line_on_the_edge_of_a_window_is_inside_it(self):
         records = [record("a.spec.ts", T0, T0 + 1000)]
         log = [log_line(T0, "GET", "/markets"), log_line(T0 + 1000, "POST", "/markets")]
-        assert specs_of([(records, log)])["a.spec.ts"]["endpoints"] == [
-            "GET /markets",
-            "POST /markets",
-        ]
+        assert audit_of(shard(records, log)) == {
+            "lines": 2,
+            "endpoints": {"GET /markets": 1, "POST /markets": 1},
+        }
+
+    def test_a_shard_with_no_log_is_not_audited(self):
+        assert audit_of(shard([record("a.spec.ts", T0, T0 + 1000)], log=None)) is None
 
     def test_each_shards_log_is_laid_against_its_own_tests_only(self):
         # Two shards run at once on two runners, so their windows overlap.
-        one = ([record("a.spec.ts", T0, T0 + 1000)], [log_line(T0 + 500, "GET", "/markets")])
-        two = ([record("b.spec.ts", T0, T0 + 1000)], [log_line(T0 + 500, "POST", "/markets")])
-        specs = specs_of([one, two])
-        assert specs["a.spec.ts"]["endpoints"] == ["GET /markets"]
-        assert specs["b.spec.ts"]["endpoints"] == ["POST /markets"]
+        one = shard(
+            [record("a.spec.ts", T0, T0 + 1000, ["GET /api/markets"])],
+            [log_line(T0 + 500, "GET", "/markets")],
+        )
+        two = shard(
+            [record("b.spec.ts", T0, T0 + 1000)],
+            [log_line(T0 + 500, "GET", "/markets")],
+            name="test-map-shard-2",
+        )
+        assert audit_of(one) == {"lines": 0, "endpoints": {}}
+        assert audit_of(two) == {"lines": 1, "endpoints": {"GET /markets": 1}}
 
-    def test_a_coloured_line_a_query_and_composes_prefix_are_read(self):
+    def test_a_line_whose_path_no_rule_has_is_left_out(self):
         records = [record("a.spec.ts", T0, T0 + 1000)]
+        log = [log_line(T0 + 100, "GET", "/"), log_line(T0 + 200, "GET", "/nowhere")]
+        assert audit_of(shard(records, log)) == {"lines": 0, "endpoints": {}}
+
+
+class TestTheLogsRequestLines:
+    def test_a_coloured_line_a_query_and_composes_prefix_are_read(self):
         log = [
             log_line(T0 + 100, "POST", "/markets", colour=True),
             log_line(T0 + 200, "GET", "/markets/m-1/history?group=Assignment"),
             log_line(T0 + 300, "PUT", "/markets/m-1", prefix="backend-1  | "),
         ]
-        assert specs_of([(records, log)])["a.spec.ts"]["endpoints"] == [
-            "GET /markets/<market_id>/history",
-            "POST /markets",
-            "PUT /markets/<market_id>",
+        assert list(test_map.log_requests(log)) == [
+            (T0 + 100, "POST", "/markets"),
+            (T0 + 200, "GET", "/markets/m-1/history"),
+            (T0 + 300, "PUT", "/markets/m-1"),
         ]
 
     def test_lines_that_are_no_request_are_left_out(self):
-        records = [record("a.spec.ts", T0, T0 + 1000)]
         log = [
             f"{stamp(T0 + 100)} INFO:werkzeug: * Restarting with stat\n",
             f"{stamp(T0 + 200)} WARNING:utils.secret_key:Signing with a random secret\n",
             "\n",
         ]
-        assert specs_of([(records, log)])["a.spec.ts"]["endpoints"] == []
-
-    def test_a_retried_test_counts_both_its_attempts(self):
-        records = [
-            record("a.spec.ts", T0, T0 + 1000),
-            record("a.spec.ts", T0 + 2000, T0 + 3000),
-        ]
-        log = [log_line(T0 + 500, "GET", "/markets"), log_line(T0 + 2500, "PUT", "/markets/m-1")]
-        assert specs_of([(records, log)])["a.spec.ts"]["endpoints"] == [
-            "GET /markets",
-            "PUT /markets/<market_id>",
-        ]
+        assert list(test_map.log_requests(log)) == []
 
 
 class TestAPathMatchesItsRule:
@@ -167,10 +218,9 @@ class TestAPathMatchesItsRule:
         assert self.rules.match("GET", "/") is None
         assert self.rules.match("GET", "/markets/m-1/history/more") is None
 
-    def test_a_line_whose_path_no_rule_has_is_left_out(self):
-        records = [record("a.spec.ts", T0, T0 + 1000)]
-        log = [log_line(T0 + 100, "GET", "/"), log_line(T0 + 200, "GET", "/nowhere")]
-        assert specs_of([(records, log)])["a.spec.ts"]["endpoints"] == []
+    def test_a_recorded_call_whose_path_no_rule_has_is_left_out(self):
+        records = [record("a.spec.ts", T0, T0 + 1000, ["GET /api/", "GET /api/nowhere"])]
+        assert specs_of([shard(records)])["a.spec.ts"]["endpoints"] == []
 
 
 class TestTheModulesASpecLoaded:
@@ -179,7 +229,7 @@ class TestTheModulesASpecLoaded:
             record("a.spec.ts", T0, T0 + 1000, ["/src/App.vue", "/src/main.ts"]),
             record("a.spec.ts", T0 + 2000, T0 + 3000, ["/src/App.vue", "/src/views/Home.vue"]),
         ]
-        assert specs_of([(records, [])])["a.spec.ts"]["modules"] == [
+        assert specs_of([shard(records)])["a.spec.ts"]["modules"] == [
             "front-end/src/App.vue",
             "front-end/src/main.ts",
             "front-end/src/views/Home.vue",
@@ -187,7 +237,7 @@ class TestTheModulesASpecLoaded:
 
     def test_the_pages_own_api_calls_count_as_endpoints_too(self):
         records = [record("a.spec.ts", T0, T0 + 1000, ["GET /api/markets/m-1", "/src/App.vue"])]
-        specs = specs_of([(records, [])])
+        specs = specs_of([shard(records)])
         assert specs["a.spec.ts"]["endpoints"] == ["GET /markets/<market_id>"]
         assert specs["a.spec.ts"]["modules"] == ["front-end/src/App.vue"]
 
@@ -306,7 +356,10 @@ class TestTheEndpointBridge:
 
 
 class TestTheCommandLine:
-    def test_build_writes_the_map_from_each_shards_records_and_log(self, tmp_path, coverage_data):
+    # A shard from before records were a file a worker: one `records.jsonl`.
+    def test_build_writes_the_map_from_an_older_shards_one_records_file(
+        self, tmp_path, coverage_data
+    ):
         data_file, back_end = coverage_data
         endpoints = tmp_path / "endpoints.json"
         endpoints.write_text(
@@ -319,7 +372,8 @@ class TestTheCommandLine:
             shard = shards / f"test-map-shard-{n}"
             shard.mkdir(parents=True)
             (shard / "records.jsonl").write_text(
-                json.dumps(record(spec, T0, T0 + 1000, ["/src/App.vue"])) + "\n"
+                json.dumps(record(spec, T0, T0 + 1000, ["/src/App.vue", f"{method} /api{path}"]))
+                + "\n"
             )
             (shard / "backend.log").write_text(log_line(T0 + 10, method, path))
         out = tmp_path / "test-map.json"
@@ -356,9 +410,14 @@ class TestTheCommandLine:
                     "back-end/routes/markets.py": ["save_market", "save_market.check"]
                 },
             },
+            "unclaimed": {
+                "test-map-shard-1": {"lines": 0, "endpoints": {}},
+                "test-map-shard-2": {"lines": 0, "endpoints": {}},
+            },
         }
         assert "2 specs" in done.stdout
         assert "2 endpoints" in done.stdout
+        assert "test-map-shard-1: 0 request lines no test recorded" in done.stdout
 
     def build(self, tmp_path, *extra):
         endpoints = tmp_path / "endpoints.json"
@@ -387,9 +446,81 @@ class TestTheCommandLine:
         shard.mkdir(parents=True)
         (shard / "backend.log").write_text("")
         if records:
-            (shard / "records.jsonl").write_text(
+            (shard / "records-0.jsonl").write_text(
                 json.dumps(record(f"s{n}.spec.ts", T0, T0 + 1000)) + "\n"
             )
+        return shard
+
+    def test_build_reads_every_records_file_of_a_shard_as_one(self, tmp_path):
+        shard = self.shard(tmp_path, 1, records=False)
+        (shard / "records-0.jsonl").write_text(
+            json.dumps(record("a.spec.ts", T0, T0 + 1000, ["GET /api/markets"])) + "\n"
+        )
+        (shard / "records-1.jsonl").write_text(
+            json.dumps(record("b.spec.ts", T0 + 200, T0 + 900, ["POST /api/markets"]))
+            + "\n"
+            + json.dumps(record("a.spec.ts", T0 + 1000, T0 + 1500, ["PUT /api/markets/m-1"]))
+            + "\n"
+        )
+        done = self.build(tmp_path)
+        assert done.returncode == 0, done.stderr
+        built = json.loads((tmp_path / "out.json").read_text())
+        assert built["specs"] == {
+            "a.spec.ts": {
+                "modules": [],
+                "endpoints": ["GET /markets", "PUT /markets/<market_id>"],
+            },
+            "b.spec.ts": {"modules": [], "endpoints": ["POST /markets"]},
+        }
+        assert "2 specs from 3 tests on 1 shards" in done.stdout
+
+    def test_build_writes_and_prints_each_shards_unclaimed_lines(self, tmp_path):
+        shard = self.shard(tmp_path, 1)
+        (shard / "backend.log").write_text(
+            "".join(
+                [log_line(T0 + 10 * i, "GET", f"/markets/m-{i}") for i in range(1, 4)]
+                + [log_line(T0 + 100, "POST", "/markets")]
+                + [log_line(T0 + 200 + i, "GET", "/markets/new") for i in range(2)]
+                + [log_line(T0 + 300, "PUT", "/markets/m-1")]
+                + [log_line(T0 + 400, "GET", "/markets/m-1/history")]
+                + [log_line(T0 + 500, "GET", "/markets")]
+                + [log_line(T0 + 5000, "GET", "/markets")]
+            )
+        )
+        done = self.build(tmp_path)
+        assert done.returncode == 0, done.stderr
+        assert json.loads((tmp_path / "out.json").read_text())["unclaimed"] == {
+            "test-map-shard-1": {
+                "lines": 9,
+                "endpoints": {
+                    "GET /markets": 1,
+                    "GET /markets/<market_id>": 3,
+                    "GET /markets/<market_id>/history": 1,
+                    "GET /markets/new": 2,
+                    "POST /markets": 1,
+                    "PUT /markets/<market_id>": 1,
+                },
+            }
+        }
+        # The five with the most lines, the most first, a tie by name.
+        assert (
+            "test-map-shard-1: 9 request lines no test recorded: GET /markets/<market_id> 3, "
+            "GET /markets/new 2, GET /markets 1, GET /markets/<market_id>/history 1, "
+            "POST /markets 1\n"
+        ) in done.stdout
+
+    def test_build_builds_a_shard_with_no_log_and_says_so(self, tmp_path):
+        (self.shard(tmp_path, 1) / "backend.log").unlink()
+        self.shard(tmp_path, 2)
+        done = self.build(tmp_path)
+        assert done.returncode == 0, done.stderr
+        built = json.loads((tmp_path / "out.json").read_text())
+        assert sorted(built["specs"]) == ["s1.spec.ts", "s2.spec.ts"]
+        assert built["unclaimed"] == {
+            "test-map-shard-1": None,
+            "test-map-shard-2": {"lines": 0, "endpoints": {}},
+        }
+        assert "test-map-shard-1: no back-end log" in done.stdout
 
     def test_build_refuses_a_shard_with_no_records(self, tmp_path):
         self.shard(tmp_path, 1, records=False)

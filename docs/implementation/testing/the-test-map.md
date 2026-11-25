@@ -51,21 +51,31 @@ One JSON file, `test-map.json`:
 Each push to `dev` records three things and builds the map from them, the last two steps by [`scripts/test_map.py`](../../../scripts/test_map.py):
 
 1. **The shards record each test.**
-   On a push to `dev`, each `e2e-shard` job sets `TEST_MAP_OUT`, and [`front-end/e2e/helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts), which `fixtures.ts` wraps Playwright's `test` in, appends one JSON line per test to it: its spec file, its start and end on the wall clock, every request its browser contexts made under `/src/` and `/api/`, and the V8 block coverage of its pages' modules (a DevTools session of each page's own, Chromium) as the stretches of each module that ran.
-   A retry is a line of its own; a context a `beforeAll` opens records nothing, since no test is running then.
+   On a push to `dev`, each `e2e-shard` job sets `TEST_MAP_OUT` to a directory, and [`front-end/e2e/helpers/testMap.ts`](../../../front-end/e2e/helpers/testMap.ts), which `fixtures.ts` wraps Playwright's `test` in, has each worker append one JSON line per test to a file of its own there, `records-<worker index>.jsonl`, so two workers' lines never interleave.
+   A line holds the test's spec file, its start and end on the wall clock, every request its browser contexts made under `/src/` and `/api/`, every call its Node helpers made through an API request context, and the V8 block coverage of its pages' modules (a DevTools session of each page's own, Chromium) as the stretches of each module that ran.
+   The Node calls are counted by wrapping, once a worker, the `fetch` of Playwright's API request context class, which its `get`, `post`, `put`, `patch`, `delete` and `head` all call, so the `request` fixture, `page.request`, `context.request` and each `playwright.request.newContext()` count alike.
+   A call counts for the test running when it started, even when it is answered after that test ended, and a call that throws counts for none.
+   A call straight to the back end's address (`BACKEND_URL`) is keyed `METHOD /api<path>`, as the dev server's proxy keys a page's call to the same endpoint.
+   A retry is a line of its own; a context a `beforeAll` opens, and a call made then, record nothing, since no test is running then.
    The recording makes each test slower, and only a push to `dev` records, so a test near its timeout can pass on every pull request and fail only on that push.
    It takes no script's source: Playwright's `page.coverage` fetched the source of every module Vite serves, and a run recorded through it took some 40% longer in CI than one that recorded nothing.
    The build reads the requests and the window; the stretches are in the shard's records for a reader who wants more than the map holds, as T349's pruning did.
 2. **The shards keep the back end's log.**
-   Each shard saves `docker compose logs --timestamps --no-log-prefix backend` beside its records and uploads both as `test-map-shard-<n>` (kept 90 days), so the calls Node's seed helpers make count as well as the pages' own.
+   Each shard saves `docker compose logs --timestamps --no-log-prefix backend` beside its records and uploads both as `test-map-shard-<n>` (kept 90 days).
+   The log adds nothing to the map: the build audits it, in step 4, for the request lines no test recorded.
 3. **The back end's suite runs once under coverage.**
    `test_map.py endpoints` runs `pytest tests/` in `back-end/` under `coverage run` with branch coverage of the back end's own code (not `tests/`, not `migrations/`), and loads [`back-end/tests/test_map_plugin.py`](../../../back-end/tests/test_map_plugin.py) as a plugin (`-p`), which names each test's coverage context by its node id and, while the app handles a request (`Flask.full_dispatch_request`), `<node id>|<METHOD> <rule>`.
    The plugin also writes the app's URL rules as the session ends.
    Nothing else loads it as a plugin: the suite's own runs collect only the tests in it.
-4. **The build lays each shard's log against that shard's tests.**
-   `test_map.py build` gives each request line of a shard's log to the test of that shard whose window holds it (one worker a shard, so at most one), and a line between two tests to none, so what a `beforeAll`, the global setup or the seed does counts for no spec.
-   It matches each path to its rule, adds the pages' own `/api/` calls, and writes the map.
-   It refuses, writing nothing, when a shard recorded no test, or when the shards that uploaded records are not the matrix's ten (`--shards-expected`), so a map is whole or not made.
+4. **The build makes each spec's endpoints from its tests' records, and audits the logs.**
+   `test_map.py build` reads every `*.jsonl` of each shard's directory, so a shard recorded before records were a file a worker, with one `records.jsonl`, still builds.
+   Each spec's endpoints are the `/api/` calls its tests recorded, each path matched to its rule, so what a `beforeAll`, the global setup or the seed does counts for no spec.
+   It then audits each shard's log: a request line inside some test's window whose endpoint no test whose window holds it recorded is unclaimed, the mark of a way of reaching the back end the recorder does not see, such as Node's own `fetch`.
+   A line outside every window is left out, as is a line whose path no rule has.
+   The build prints each shard's count of unclaimed lines and the five endpoints with the most, and writes them into the map as `"unclaimed": {"<shard>": {"lines": n, "endpoints": {"METHOD rule": n}}}`, with `null` for a shard that saved no log, which still builds.
+   It refuses, writing nothing, when a shard recorded no test, or when the shards that uploaded records are not as many as the matrix's (`--shards-expected`), so a map is whole or not made.
+
+The audit is printed and kept, never a refusal: a map with unclaimed lines is written all the same, and its lines name the endpoints some test reached without the map knowing which.
 
 The `endpoints` pass skips the real-MongoDB package, as a plain run does, since no server is given to it: a route only that package drives has no functions in the map.
 Code that runs before the app dispatches a request, such as the session's loading, counts for the test that sent it, never for the endpoint.
@@ -152,11 +162,14 @@ From the worktree root, on the worktree's stack (`team-stack up`, `team-stack se
 
 ```sh
 python3 scripts/test_map.py endpoints --out <dir>/endpoints.json
-cd front-end && TEST_MAP_OUT=<dir>/shards/test-map-shard-1/records.jsonl npx playwright test <specs>
+cd front-end && TEST_MAP_OUT=<dir>/shards/test-map-shard-1 npx playwright test <specs>
 docker logs --timestamps --since <when the run began> <the stack's back-end container> \
   ><dir>/shards/test-map-shard-1/backend.log
 python3 scripts/test_map.py build --commit "$(git rev-parse HEAD)" \
   --endpoints <dir>/endpoints.json --shards <dir>/shards --out <dir>/test-map.json
 ```
 
-`scripts/tests/test_test_map.py` holds the build to fixture records, logs and a real coverage data file; `src/__tests__/theTestMapRecords.test.ts` the recording's pure parts; the plugin's own tests are in its file.
+Any worker count records the same map, since each worker writes its own file and each test its own requests.
+The build's audit lines say what the log holds that the records do not.
+
+`scripts/tests/test_test_map.py` holds the build and the audit to fixture records, logs and a real coverage data file; `src/__tests__/theTestMapRecords.test.ts` the recording's pure parts and the wrapped API request context, against a real one and a local server; the plugin's own tests are in its file.
